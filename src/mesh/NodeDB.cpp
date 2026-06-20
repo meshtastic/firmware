@@ -1145,6 +1145,20 @@ void NodeDB::initConfigIntervals()
 #endif
 }
 
+// Always-on traffic management defaults. Only booleans are written; every
+// numeric field stays 0 and resolves to its default_traffic_mgmt_* macro at
+// use (e.g. position dedup precision/interval), so fork-wide tuning changes
+// take effect without another migration. Rate limiting and the features that
+// exhaust or reshape relayed traffic (exhaust_hop_*, drop_unknown_enabled,
+// nodeinfo_direct_response) stay opt-in.
+static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
+{
+    mc.has_traffic_management = true;
+    mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
+    mc.traffic_management.enabled = true;
+    mc.traffic_management.position_dedup_enabled = true;
+}
+
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
@@ -1261,6 +1275,8 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
+
+    installTrafficManagementDefaults(moduleConfig);
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
@@ -1613,6 +1629,25 @@ bool NodeDB::enforceSatelliteCaps()
     return trimmedAny;
 }
 
+// Classify an evicted node's hop-protected category for the warm tier. Favorite/ignored/
+// verified are local flags (rarely reach warm — they're eviction-protected — but classify
+// them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
+static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
+{
+    if (n.bitfield & (NODEINFO_BITFIELD_IS_FAVORITE_MASK | NODEINFO_BITFIELD_IS_IGNORED_MASK |
+                      NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK))
+        return static_cast<uint8_t>(WarmProtected::Flag);
+    if (IS_ONE_OF(n.role, meshtastic_Config_DeviceConfig_Role_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER))
+        return static_cast<uint8_t>(WarmProtected::Role);
+    return static_cast<uint8_t>(WarmProtected::None);
+}
+
+// The warm tier packs the device role into a 4-bit field (WARM_ROLE_MASK). Fail the build
+// loudly if a new role outgrows it, rather than silently truncating role on eviction.
+static_assert(_meshtastic_Config_DeviceConfig_Role_MAX <= WARM_ROLE_MASK,
+              "device role no longer fits the 4-bit warm metadata field");
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
@@ -1639,7 +1674,7 @@ void NodeDB::cleanupMeshDB()
                 // Keep any key we learned (e.g. via a DM before the NodeInfo
                 // exchange completed) rather than losing it with the purge.
                 if (n.public_key.size == 32)
-                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes);
+                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes, n.role, warmProtectedCategory(n));
 #endif
 
                 eraseNodeSatellites(gone);
@@ -1822,7 +1857,8 @@ void NodeDB::demoteOldestHotNodesToWarm()
             continue;
         // Keep the public key if we have one (40 B warm record); keyless nodes
         // still get a placeholder so re-admission restores last_heard.
-        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr);
+        warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
+                         warmProtectedCategory(n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) — they'd otherwise orphan until the next
         // enforceSatelliteCaps pass.
@@ -2224,6 +2260,16 @@ void NodeDB::loadFromDisk()
         } else {
             LOG_INFO("Loaded saved moduleConfig version %d", moduleConfig.version);
         }
+    }
+
+    // Always-on traffic management: a device that has NEVER configured TMM
+    // (has_traffic_management false — AdminModule always sets the has_ flag on
+    // write, even when disabling) gets the fork defaults. Explicitly configured
+    // devices keep their exact settings.
+    if (!moduleConfig.has_traffic_management) {
+        LOG_INFO("Traffic management never configured, installing always-on defaults");
+        installTrafficManagementDefaults(moduleConfig);
+        saveToDisk(SEGMENT_MODULECONFIG);
     }
 
     state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
@@ -3295,6 +3341,73 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
     return NULL;
 }
 
+ResolvedNode NodeDB::resolveLastByte(uint8_t lastByte, bool requireDirectNeighbor)
+{
+    ResolvedNode result; // defaults to {None, 0}
+
+    // 0 is the NO_RELAY_NODE / NO_NEXT_HOP_PREFERENCE sentinel (also what MQTT-sourced packets carry
+    // when hop_start==0). getLastByteOfNodeNum() never yields 0, so nothing can legitimately match.
+    if (lastByte == 0)
+        return result;
+
+    const NodeNum self = getNodeNum();
+    NodeNum firstMatch = 0;
+    uint8_t matches = 0;
+
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        const meshtastic_NodeInfoLite *node = &meshNodes->at(i);
+
+        // Candidate gate: never resolve to ourselves, the sentinels, or an ignored node.
+        if (node->num == self || node->num == 0 || node->num == NODENUM_BROADCAST)
+            continue;
+        if (nodeInfoLiteIsIgnored(node))
+            continue;
+        if (getLastByteOfNodeNum(node->num) != lastByte) // cheapest discriminator last
+            continue;
+
+        // Relevance gate: is this node a plausible relay for the requested scope?
+        bool relevant;
+        if (requireDirectNeighbor) {
+            relevant = node->has_hops_away && node->hops_away == 0 && sinceLastSeen(node) < NEXTHOP_NEIGHBOR_FRESH_SECS;
+        } else {
+            const bool directNeighbor = node->has_hops_away && node->hops_away == 0;
+            const bool routerRole =
+                IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                          meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
+            relevant = directNeighbor || nodeInfoLiteIsFavorite(node) || routerRole;
+        }
+        if (!relevant)
+            continue;
+
+        if (++matches == 1) {
+            firstMatch = node->num;
+        } else {
+            // A second relevant candidate shares this byte: ambiguous. No further scanning can
+            // change that, so stop early and report the collision.
+            result.status = LastByteResolution::Ambiguous;
+            result.num = 0;
+            return result;
+        }
+    }
+
+    if (matches == 1) {
+        result.status = LastByteResolution::Unique;
+        result.num = firstMatch;
+    }
+    return result;
+}
+
+bool NodeDB::resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor, NodeNum *outNum)
+{
+    ResolvedNode r = resolveLastByte(lastByte, requireDirectNeighbor);
+    if (r.status == LastByteResolution::Unique) {
+        if (outNum)
+            *outNum = r.num;
+        return true;
+    }
+    return false;
+}
+
 // returns true if the maximum number of nodes is reached or we are running low on memory
 bool NodeDB::isFull()
 {
@@ -3365,8 +3478,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 #if WARM_NODE_COUNT > 0
                 // Demote to the warm tier so the identity (and crucially the
                 // PKI key) outlives the hot-store slot.
-                warmStore.absorb(evicted.num, evicted.last_heard,
-                                 evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL);
+                warmStore.absorb(evicted.num, evicted.last_heard, evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL,
+                                 evicted.role, warmProtectedCategory(evicted));
 #endif
                 eraseNodeSatellites(evicted.num);
                 // Shove the remaining nodes down the chain
@@ -3395,7 +3508,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // Re-admission: restore what the warm tier kept for this node
         WarmNodeEntry warm;
         if (warmStore.take(n, warm)) {
-            lite->last_heard = warm.last_heard;
+            lite->last_heard = warmTimeOf(warm); // mask off the stolen role/protected metadata bits
+            // Restore the role the warm tier cached, so re-admission isn't stuck at CLIENT
+            // until the next NodeInfo arrives.
+            lite->role = static_cast<meshtastic_Config_DeviceConfig_Role>(warmRoleOf(warm));
             if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
