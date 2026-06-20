@@ -73,9 +73,7 @@ void onConnect(uint16_t conn_handle)
     // re-locks on every want_config too; this closes the window before that.
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     if (bluetoothPhoneAPI) {
-#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         bluetoothPhoneAPI->setAdminAuthorized(false);
-#endif
     }
 #endif
 

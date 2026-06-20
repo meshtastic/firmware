@@ -795,7 +795,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
-    bool reloadConfig = true;
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag: {
@@ -823,7 +822,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             effectiveBuzzerGpio(config.device.buzzer_gpio) == effectiveBuzzerGpio(requestedDevice.buzzer_gpio) &&
             config.device.role == requestedDevice.role && config.device.rebroadcast_mode == requestedDevice.rebroadcast_mode) {
             requiresReboot = false;
-            reloadConfig = false;
         }
         config.device = requestedDevice;
         if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
@@ -1092,7 +1090,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         disableBluetooth();
     } // end of switch case which_payload_variant
 
-    saveChanges(changes, requiresReboot, reloadConfig);
+    saveChanges(changes, requiresReboot);
 } // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -1628,15 +1626,11 @@ void AdminModule::reboot(int32_t seconds)
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool reloadConfig)
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        if (reloadConfig) {
-            service->reloadConfig(saveWhat); // Calls saveToDisk among other things
-        } else {
-            nodeDB->saveToDisk(saveWhat);
-        }
+        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delay save of changes to disk until the open transaction is committed");
     }
