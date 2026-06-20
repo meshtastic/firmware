@@ -1,0 +1,24 @@
+---
+Meta:
+  name: Femtofox E22P-915M30S
+  support: community
+  compatible:
+    - luckfox-pico-mini
+
+Lora:
+  ## Femtofox / Luckfox Pico Mini with Ebyte E22P-915M30S.
+  ## This wiring was verified stable with meshtasticd 2.7.15 on mPWRD-OS.
+  ## Unlike lora-femtofox_SX1262_TCXO.yaml, this config does not use DIO2
+  ## as the RF switch. Enabling DIO2_AS_RF_SWITCH caused hangs after setting
+  ## region US on the tested E22P-915M30S hardware.
+  Module: sx1262
+  gpiochip: 1 # subtract 32 from the gpio numbers
+  DIO2_AS_RF_SWITCH: false
+  DIO3_TCXO_VOLTAGE: true
+  CS: 16 # pin6 / GPIO48 1C0
+  IRQ: 23 # pin17 / GPIO55 1C7
+  Busy: 22 # pin16 / GPIO54 1C6
+  Reset: 25 # pin13 / GPIO57 1D1
+  RXen: 24 # pin12 / GPIO56 1D0
+  spidev: spidev0.0 # pins are CS=16, CLK=17, MOSI=18, MISO=19
+  spiSpeed: 2000000
