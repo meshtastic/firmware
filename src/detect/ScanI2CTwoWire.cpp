@@ -299,6 +299,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     for (addr.address = 8; addr.address < 120; addr.address++) {
 #if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
         bool t1000QmaFound = false;
+        bool useRegularProbe = true;
 #endif
         if (asize != 0) {
             if (!in_array(address, asize, (uint8_t)addr.address))
@@ -306,24 +307,29 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         }
 #if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
-        t1000QmaFound =
-            (addr.address == QMA6100P_ADDRESS_LOW || addr.address == QMA6100P_ADDRESS_HIGH) && t1000ProbeQMA6100P(addr.address);
-        err = t1000QmaFound ? 0 : 2;
-#else
-        i2cBus->beginTransmission(addr.address);
-#ifdef ARCH_PORTDUINO
-        err = 2;
-        if ((addr.address >= 0x30 && addr.address <= 0x37) || (addr.address >= 0x50 && addr.address <= 0x5F)) {
-            if (i2cBus->read() != -1)
-                err = 0;
-        } else {
-            err = i2cBus->writeQuick((uint8_t)0);
+        if (addr.address == QMA6100P_ADDRESS_LOW || addr.address == QMA6100P_ADDRESS_HIGH) {
+            t1000QmaFound = t1000ProbeQMA6100P(addr.address);
+            err = t1000QmaFound ? 0 : 2;
+            useRegularProbe = false;
         }
-        if (err != 0)
+        if (useRegularProbe) {
+#endif
+            i2cBus->beginTransmission(addr.address);
+#ifdef ARCH_PORTDUINO
             err = 2;
+            if ((addr.address >= 0x30 && addr.address <= 0x37) || (addr.address >= 0x50 && addr.address <= 0x5F)) {
+                if (i2cBus->read() != -1)
+                    err = 0;
+            } else {
+                err = i2cBus->writeQuick((uint8_t)0);
+            }
+            if (err != 0)
+                err = 2;
 #else
         err = i2cBus->endTransmission();
 #endif
+#if defined(TRACKER_T1000_E) && defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+        }
 #endif
         type = NONE;
         if (err == 0) {
