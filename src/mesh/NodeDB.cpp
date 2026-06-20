@@ -1155,8 +1155,12 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
 {
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
-    mc.traffic_management.enabled = true;
-    mc.traffic_management.position_dedup_enabled = true;
+#if HAS_TRAFFIC_MANAGEMENT
+    // Position dedup ships enabled at the 11-hour default window on all supported targets.
+    // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
+    // Set position_min_interval_secs=0 at runtime to disable dedup.
+    mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+#endif
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -3440,6 +3444,20 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     return false;
 }
 
+meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
+{
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (nodeInfoLiteHasUser(info))
+        return info->role;
+#if WARM_NODE_COUNT > 0
+    // Hot-store miss: fall back to the role the warm tier cached at eviction.
+    uint8_t role = 0, prot = 0;
+    if (warmStore.lookupMeta(n, role, prot))
+        return static_cast<meshtastic_Config_DeviceConfig_Role>(role);
+#endif
+    return meshtastic_Config_DeviceConfig_Role_CLIENT;
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
@@ -3662,6 +3680,8 @@ bool NodeDB::createNewIdentity()
     myNodeInfo.my_node_num = newNodeNum;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!info)
+        return false;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     return true;

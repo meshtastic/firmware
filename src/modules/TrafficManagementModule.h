@@ -22,9 +22,10 @@
  * Memory Optimization:
  * Uses one flat unified cache (plain array, linear scan) shared by all
  * per-node features instead of separate per-feature caches. Timestamps are
- * stored as 8-bit relative offsets from a rolling epoch to further reduce
- * memory footprint. LoRa packet rates are low enough that an O(n) scan of
- * ~1000 11-byte entries is negligible next to packet processing.
+ * stored as free-running modular tick counters (pos: 8-bit 360 s/tick;
+ * rate+unknown: paired 4-bit nibbles in one byte) for a 10-byte entry.
+ * LoRa packet rates are low enough that an O(n) scan of ~1000 entries is
+ * negligible next to packet processing.
  */
 class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 {
@@ -54,7 +55,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // Warm-start the next-hop cache from persisted NodeInfoLite hints so confirmed
     // hops survive later hot-store (NodeDB) eviction. Idempotent; runs once after
     // nodeDB is populated (lazily on first maintenance pass).
-    void preloadNextHopsFromNodeDB();
+    // @return true if it actually ran (prereqs met / nothing to do); false if
+    //   prerequisites (cache, nodeDB) weren't ready yet, so the caller should retry.
+    bool preloadNextHopsFromNodeDB();
 
     /**
      * Check if this packet should have its hops exhausted.
@@ -66,81 +69,90 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         return exhaustRequested && exhaustRequestedFrom == getFrom(&mp) && exhaustRequestedId == mp.id;
     }
 
+    // Injectable monotonic clock (ms). All TMM time reads go through clockMs() so unit tests can
+    // advance a virtual timebase instead of sleeping real seconds across the 6 min/360 s tick.
+    // Mirrors HopScalingModule::s_testNowMs. Writable from tests as TrafficManagementModule::s_testNowMs;
+    // ignored in production (clockMs() returns millis()).
+    inline static uint32_t s_testNowMs = 0;
+#ifdef PIO_UNIT_TESTING
+    static uint32_t clockMs() { return s_testNowMs; }
+#else
+    static uint32_t clockMs() { return millis(); }
+#endif
+
   protected:
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
     bool wantPacket(const meshtastic_MeshPacket *p) override { return true; }
     void alterReceived(meshtastic_MeshPacket &mp) override;
     int32_t runOnce() override;
-    // Protected so test shims can force epoch rollover behavior.
-    void resetEpoch(uint32_t nowMs);
-    // Sliding-epoch rebase: advance the epoch and shift live entries back by the
-    // same wall-clock amount instead of flushing, so cached state survives past the
-    // ~19h horizon. Caller must hold cacheLock.
-    void rebaseEpoch(uint32_t nowMs);
+    // Protected so test shims can flush per-node traffic state.
+    void flushCache();
+    // Introspection for tests: the cached device role for a node, or -1 if the node has
+    // no cache entry (distinguishes "not tracked / evicted" from CLIENT == 0).
+    int peekCachedRole(NodeNum node);
 
   private:
     // =========================================================================
-    // Unified Cache Entry (11 bytes) - Same for ALL platforms
+    // Unified Cache Entry (10 bytes) - Same for ALL platforms
     // =========================================================================
     //
-    // A single compact structure used across ESP32, NRF52, and all other platforms.
-    // Memory: 11 bytes × TRAFFIC_MANAGEMENT_CACHE_SIZE entries (default 1000 = 11KB)
-    //
-    // Position Fingerprinting:
-    //   Instead of storing full coordinates (8 bytes) or a computed hash,
-    //   we store an 8-bit fingerprint derived deterministically from the
-    //   truncated lat/lon. This extracts the lower 4 significant bits from
-    //   each coordinate: fingerprint = (lat_low4 << 4) | lon_low4
-    //
-    //   Benefits over hash:
-    //   - Adjacent grid cells have sequential fingerprints (no collision)
-    //   - Two positions only collide if 16+ grid cells apart in BOTH dimensions
-    //   - Deterministic: same input always produces same output
-    //
-    // Adaptive Timestamp Resolution:
-    //   All timestamps use 8-bit values with adaptive resolution calculated
-    //   from config at startup. Resolution = max(60, min(339, interval/2)).
-    //   - Min 60 seconds ensures reasonable precision
-    //   - Max 339 seconds allows ~24 hour range (255 * 339 = 86445 sec)
-    //   - interval/2 ensures at least 2 ticks per configured interval
-    //
     // Layout:
-    //   [0-3]   node            - NodeNum (4 bytes)
-    //   [4]     pos_fingerprint - 4 bits lat + 4 bits lon (1 byte)
-    //   [5]     rate_count      - Packets in current window (1 byte)
-    //   [6]     unknown_count   - Unknown packets count (1 byte)
-    //   [7]     pos_time        - Position timestamp (1 byte, adaptive resolution)
-    //   [8]     rate_time       - Rate window start (1 byte, adaptive resolution)
-    //   [9]     unknown_time    - Unknown tracking start (1 byte, adaptive resolution)
-    //   [10]    next_hop        - Last-byte relay to reach `node` (1 byte, 0 = none)
+    //   [0-3]   node               - NodeNum (4 bytes, 0 = empty slot)
+    //   [4]     pos_fingerprint    - 4 bits lat + 4 bits lon (0 = no position seen)
+    //   [5]     rate_count         - [7:6] role[3:2] | [5:0] packets in rate window (0 = no window active)
+    //   [6]     unknown_count      - [7:6] role[1:0] | [5:0] unknown packets in window (0 = no window active)
+    //   [7]     pos_time           - Position tick (uint8, free-running 360 s/tick)
+    //   [8]     rate_unknown_time  - [7:4] rate nibble (300 s/tick) | [3:0] unknown nibble (60 s/tick)
+    //   [9]     next_hop           - Last-byte relay to reach `node` (0 = none)
     //
-    // next_hop semantics:
-    //   A routing hint: the last byte of the NodeNum to use as next hop to reach
-    //   `node`. Written ONLY from NextHopRouter's ACK-confirmed decision (a
-    //   bidirectionally-verified relay), never inferred one-way from relayed
-    //   traffic. The TMM cache acts as an overflow store for confirmed next-hops
-    //   that have aged out of the hot NodeDB (NodeInfoLite). Unlike the other
-    //   fields it has no TTL of its own — it keeps its slot alive (see runOnce)
-    //   and is refreshed only on the next confirmed exchange.
+    // The 4-bit device role (bits [7:6] of rate_count paired with [7:6] of unknown_count)
+    // caches the sender's meshtastic_Config_DeviceConfig_Role as a third fallback after the
+    // hot store and warm store, for nodes evicted from both. Read/written via
+    // resolveSenderRole(). Max encodable value is 15.
     //
+    // Presence sentinels (no epoch, no +1 offset needed):
+    //   pos active:     pos_fingerprint != 0
+    //   rate active:    getRateCount() != 0     (low 6 bits only)
+    //   unknown active: getUnknownCount() != 0  (low 6 bits only)
+    //
+    // next_hop: routing hint written only from ACK-confirmed NextHopRouter decisions.
+    // No TTL — keeps the slot alive across maintenance sweeps.
+    //
+#if _meshtastic_Config_DeviceConfig_Role_MAX > 15
+#warning "Device role enum max exceeds 15 — TMM 4-bit role cache (rate_count[7:6]/unknown_count[7:6]) will truncate new values"
+#endif
     struct __attribute__((packed)) UnifiedCacheEntry {
-        NodeNum node;            // 4 bytes - Node identifier (0 = empty slot)
-        uint8_t pos_fingerprint; // 1 byte  - Lower 4 bits of lat + lon
-        uint8_t rate_count;      // 1 byte  - Packet count (saturates at 255)
-        uint8_t unknown_count;   // 1 byte  - Unknown packet count (saturates at 255)
-        uint8_t pos_time;        // 1 byte  - Position timestamp (adaptive resolution)
-        uint8_t rate_time;       // 1 byte  - Rate window start (adaptive resolution)
-        uint8_t unknown_time;    // 1 byte  - Unknown tracking start (adaptive resolution)
-        uint8_t next_hop;        // 1 byte  - Last-byte relay to reach `node` (0 = none). See note below.
+        NodeNum node;
+        uint8_t pos_fingerprint;
+        uint8_t rate_count;    // [7:6] = role[3:2], [5:0] = count (max 63)
+        uint8_t unknown_count; // [7:6] = role[1:0], [5:0] = count (max 63)
+        uint8_t pos_time;
+        uint8_t rate_unknown_time;
+        uint8_t next_hop;
+
+        uint8_t getRateCount() const { return rate_count & 0x3F; }
+        void setRateCount(uint8_t c) { rate_count = static_cast<uint8_t>((rate_count & 0xC0) | (c & 0x3F)); }
+        uint8_t getUnknownCount() const { return unknown_count & 0x3F; }
+        void setUnknownCount(uint8_t c) { unknown_count = static_cast<uint8_t>((unknown_count & 0xC0) | (c & 0x3F)); }
+        uint8_t getCachedRole() const { return static_cast<uint8_t>(((rate_count >> 6) << 2) | (unknown_count >> 6)); }
+        void setCachedRole(uint8_t role)
+        {
+            rate_count = static_cast<uint8_t>((rate_count & 0x3F) | ((role >> 2) << 6));
+            unknown_count = static_cast<uint8_t>((unknown_count & 0x3F) | ((role & 0x03) << 6));
+        }
+        uint8_t getRateTime() const { return (rate_unknown_time >> 4) & 0x0F; }
+        uint8_t getUnknownTime() const { return rate_unknown_time & 0x0F; }
+        void setRateTime(uint8_t t) { rate_unknown_time = static_cast<uint8_t>((rate_unknown_time & 0x0F) | ((t & 0x0F) << 4)); }
+        void setUnknownTime(uint8_t t) { rate_unknown_time = static_cast<uint8_t>((rate_unknown_time & 0xF0) | (t & 0x0F)); }
     };
-    static_assert(sizeof(UnifiedCacheEntry) == 11, "UnifiedCacheEntry should be 11 bytes");
+    static_assert(sizeof(UnifiedCacheEntry) == 10, "UnifiedCacheEntry should be 10 bytes");
 
     // =========================================================================
     // Flat unified cache
     // =========================================================================
     //
     // Plain array, linear scan (same idiom as WarmNodeStore). A lookup walks at
-    // most cacheSize() × 11 B — microseconds at LoRa packet rates, not worth a
+    // most cacheSize() × 10 B — microseconds at LoRa packet rates, not worth a
     // hash table. Insertion on a full cache evicts the stalest entry,
     // preferring entries without a next_hop hint (those are the long-tail
     // routing state this cache exists to keep).
@@ -154,82 +166,29 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static constexpr uint16_t nodeInfoTargetEntries() { return kNodeInfoCacheEntries; }
 
     // =========================================================================
-    // Adaptive Timestamp Resolution
+    // Free-Running Tick Counters
     // =========================================================================
     //
-    // All timestamps use 8-bit values with adaptive resolution calculated from
-    // config at startup. This allows ~24 hour range while maintaining precision.
+    // Timestamps are stored as free-running modular tick counters derived from
+    // millis(). No epoch anchor needed: modular subtraction gives correct age
+    // as long as the true age stays below the counter period.
     //
-    // Resolution formula: max(60, min(339, interval/2))
-    //   - 60 sec minimum ensures reasonable precision
-    //   - 339 sec maximum allows 24 hour range (255 * 339 ≈ 86400 sec)
-    //   - interval/2 ensures at least 2 ticks per configured interval
+    //   pos_time  : uint8  (256 ticks × 360 s = 25.6 h period; max window 12 h = 120 ticks)
+    //   rate_time : nibble (16 ticks × 300 s = 80 min period; max window 1 h = 12 ticks)
+    //   unknown_time: nibble (16 ticks × 60 s = 16 min period; max window 12 min = 12 ticks)
     //
-    // Since config changes require reboot, resolution is calculated once.
+    // Presence sentinels (no +1 offset needed; count fields serve as guards):
+    //   pos active:     pos_fingerprint != 0  (0 is reserved sentinel; computePositionFingerprint() remaps computed-0 → 0xFF)
+    //   rate active:    getRateCount() != 0   (low 6 bits; high 2 bits are cached role)
+    //   unknown active: getUnknownCount() != 0
     //
-    uint32_t cacheEpochMs = 0;
-    uint16_t posTimeResolution = 60;     // Seconds per tick for position
-    uint16_t rateTimeResolution = 60;    // Seconds per tick for rate limiting
-    uint16_t unknownTimeResolution = 60; // Seconds per tick for unknown tracking
+    static constexpr uint32_t kPosTimeTickMs = 360'000UL;    // 6 min/tick
+    static constexpr uint32_t kRateTimeTickMs = 300'000UL;   // 5 min/tick
+    static constexpr uint32_t kUnknownTimeTickMs = 60'000UL; // 1 min/tick
 
-    // Calculate resolution from configured interval (called once at startup)
-    static uint16_t calcTimeResolution(uint32_t intervalSecs)
-    {
-        // Resolution = interval/2 to ensure at least 2 ticks per interval
-        // Clamped to [60, 339] for min precision and max 24h range
-        uint32_t res = (intervalSecs > 0) ? (intervalSecs / 2) : 60;
-        if (res < 60)
-            res = 60;
-        if (res > 339)
-            res = 339;
-        return static_cast<uint16_t>(res);
-    }
-
-    // Convert to/from 8-bit relative timestamps with given resolution.
-    //
-    // All stored timestamps carry a uniform +1 "presence" offset: a value of 0 is
-    // reserved for "no timestamp recorded" (which is also the zero-initialized
-    // state), and stored values 1..255 encode raw ticks 0..254. This keeps the
-    // 0-means-empty sentinel consistent with memset/calloc zeroing across every
-    // sub-store, so the maintenance sweep's `_time != 0` presence checks are
-    // unambiguous (a timestamp recorded in the first tick after the epoch is no
-    // longer mistaken for an empty slot). The offset is applied here and removed
-    // on read, so it cancels out in all window math.
-    uint8_t toRelativeTime(uint32_t nowMs, uint16_t resolutionSecs) const
-    {
-        uint32_t ticks = (nowMs - cacheEpochMs) / (resolutionSecs * 1000UL);
-        return (ticks >= UINT8_MAX) ? UINT8_MAX : static_cast<uint8_t>(ticks + 1);
-    }
-    uint32_t fromRelativeTime(uint8_t ticks, uint16_t resolutionSecs) const
-    {
-        return (ticks == 0) ? cacheEpochMs : cacheEpochMs + (static_cast<uint32_t>(ticks - 1) * resolutionSecs * 1000UL);
-    }
-
-    // Convenience wrappers for each timestamp type (the +1 presence offset lives
-    // in the shared converters above, so these are plain pass-throughs).
-    uint8_t toRelativePosTime(uint32_t nowMs) const { return toRelativeTime(nowMs, posTimeResolution); }
-    uint32_t fromRelativePosTime(uint8_t t) const { return fromRelativeTime(t, posTimeResolution); }
-
-    uint8_t toRelativeRateTime(uint32_t nowMs) const { return toRelativeTime(nowMs, rateTimeResolution); }
-    uint32_t fromRelativeRateTime(uint8_t t) const { return fromRelativeTime(t, rateTimeResolution); }
-
-    uint8_t toRelativeUnknownTime(uint32_t nowMs) const { return toRelativeTime(nowMs, unknownTimeResolution); }
-    uint32_t fromRelativeUnknownTime(uint8_t t) const { return fromRelativeTime(t, unknownTimeResolution); }
-
-    // Coarsest of the per-feature resolutions (seconds per tick).
-    uint16_t maxResolution() const
-    {
-        uint16_t maxRes = posTimeResolution;
-        if (rateTimeResolution > maxRes)
-            maxRes = rateTimeResolution;
-        if (unknownTimeResolution > maxRes)
-            maxRes = unknownTimeResolution;
-        return maxRes;
-    }
-
-    // True when relative offsets approach 8-bit overflow.
-    // With max resolution of 339 sec, 200 ticks = ~19 hours (safe margin for 24h max).
-    bool needsEpochReset(uint32_t nowMs) const { return (nowMs - cacheEpochMs) > (200UL * maxResolution() * 1000UL); }
+    static uint8_t currentPosTick() { return static_cast<uint8_t>(clockMs() / kPosTimeTickMs); }
+    static uint8_t currentRateTick() { return static_cast<uint8_t>((clockMs() / kRateTimeTickMs) & 0x0F); }
+    static uint8_t currentUnknownTick() { return static_cast<uint8_t>((clockMs() / kUnknownTimeTickMs) & 0x0F); }
     // =========================================================================
     // Position Fingerprint
     // =========================================================================
@@ -308,6 +267,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // Find existing entry (no creation)
     UnifiedCacheEntry *findEntry(NodeNum node);
+
+    // Resolve a sender's advertised device role for the position hot path. The tier-3
+    // cache (this entry's getCachedRole) is authoritative and is kept fresh by
+    // updateCachedRoleFromNodeInfo() — updated when NodeDB learns a role, not re-derived
+    // per packet. Only on first tracking (isNew) do we scan NodeDB (hot store → warm
+    // store, via getNodeRole) to seed the cache, so a resident special-role node is
+    // correct from its first position; after that the read is O(1) and survives the node
+    // aging out of both NodeDB stores. Caller must hold cacheLock; entry may be null
+    // (→ NodeDB scan only).
+    meshtastic_Config_DeviceConfig_Role resolveSenderRole(NodeNum from, UnifiedCacheEntry *entry, bool isNew);
+
+    // Refresh the tier-3 role cache from an observed NodeInfo (the same event that updates
+    // NodeDB's role). Reads role from the packet's User payload; updates only nodes already
+    // tracked (no entry creation). Takes cacheLock.
+    void updateCachedRoleFromNodeInfo(const meshtastic_MeshPacket &mp);
 
     // NodeInfo cache operations (flat PSRAM payload array, linear scan)
     const NodeInfoPayloadEntry *findNodeInfoEntry(NodeNum node) const;
