@@ -2821,6 +2821,10 @@ HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
         return HopStartStatus::INVALID;
 
     if (p.hop_start == 0) {
+        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition —
+        // the packet was never meant to travel any hops, so no hop_start ambiguity applies.
+        if (p.hop_limit == 0)
+            return HopStartStatus::VALID;
         // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
         // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
         // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
@@ -3161,8 +3165,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
                            mp.via_mqtt); // Store if we received this packet via MQTT
 
 #if HAS_VARIABLE_HOPS
-        // Only sample packets that arrived over LoRa.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopScalingModule) {
+        // Only sample genuine RF-origin packets. The transport check excludes packets received
+        // directly from the broker (TRANSPORT_MQTT), but an MQTT-origin packet rebroadcast onto
+        // LoRa by a gateway arrives as TRANSPORT_LORA with via_mqtt set — count those would
+        // inflate the local mesh-size estimate with non-RF nodes (and they usually carry
+        // hop_start==0, landing in the hop-0 bucket that pulls the recommendation lowest), so
+        // exclude via_mqtt too.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt &&
+            hopScalingModule) {
             uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
             hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
         }
