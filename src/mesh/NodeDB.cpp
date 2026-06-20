@@ -1006,7 +1006,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(T_WATCH_ULTRA)) || defined(HELTEC_V4_R8_TFT)) &&                                              \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(T_WATCH_ULTRA) || defined(HELTEC_V4_R8_TFT)) &&                 \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;

@@ -1,5 +1,14 @@
-#include "variant.h"
-#include "Arduino.h"
+#include "configuration.h"
+
+#ifdef T_WATCH_ULTRA
+
+// Board-specific init lives here (rather than in variants/esp32s3/t-watch-ultra/variant.cpp)
+// so that PlatformIO's library dependency finder can resolve headers such as
+// input/TouchScreenImpl1.h (which transitively pulls in the ArduinoThread "Thread.h"),
+// ExtensionIOXL9555.hpp and TouchDrvCSTXXX.hpp. Files compiled from outside src/ only get
+// include paths for libraries they reference directly, so the transitive Thread.h include
+// is not found there. See src/platform/extra_variants/README.md.
+
 #include "TouchDrvCSTXXX.hpp"
 #include "input/TouchScreenImpl1.h"
 #include <ExtensionIOXL9555.hpp>
@@ -57,3 +66,4 @@ void lateInitVariant()
         }
     }
 }
+#endif
