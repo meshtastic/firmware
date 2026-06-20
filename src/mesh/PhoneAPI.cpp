@@ -43,74 +43,6 @@
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
 
-static bool readProtoVarint(const uint8_t *bytes, size_t size, size_t &pos, uint64_t &value)
-{
-    value = 0;
-    unsigned shift = 0;
-
-    while (pos < size && shift < 64) {
-        uint8_t byte = bytes[pos++];
-        value |= static_cast<uint64_t>(byte & 0x7f) << shift;
-        if ((byte & 0x80) == 0) {
-            return true;
-        }
-        shift += 7;
-    }
-
-    return false;
-}
-
-static bool skipProtoField(const uint8_t *bytes, size_t size, size_t &pos, uint8_t wireType)
-{
-    uint64_t length = 0;
-
-    switch (wireType) {
-    case 0:
-        return readProtoVarint(bytes, size, pos, length);
-    case 1:
-        if (size - pos < 8) {
-            return false;
-        }
-        pos += 8;
-        return true;
-    case 2:
-        if (!readProtoVarint(bytes, size, pos, length) || length > size - pos) {
-            return false;
-        }
-        pos += static_cast<size_t>(length);
-        return true;
-    case 5:
-        if (size - pos < 4) {
-            return false;
-        }
-        pos += 4;
-        return true;
-    default:
-        return false;
-    }
-}
-
-static bool adminPayloadHasTopLevelField(const uint8_t *bytes, size_t size, pb_size_t fieldNumber)
-{
-    size_t pos = 0;
-    while (pos < size) {
-        uint64_t key = 0;
-        if (!readProtoVarint(bytes, size, pos, key)) {
-            return false;
-        }
-
-        if ((key >> 3) == fieldNumber) {
-            return true;
-        }
-
-        if (!skipProtoField(bytes, size, pos, key & 0x07)) {
-            return false;
-        }
-    }
-
-    return false;
-}
-
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
 // Auth-slot table and status-slot table are both sized to the typical
 // SerialConsole + BluetoothPhoneAPI footprint plus room for WiFi/TCP
@@ -1699,17 +1631,6 @@ bool PhoneAPI::wasSeenRecently(uint32_t id)
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
-
-    NodeNum localNodeNum = nodeDB->getNodeNum();
-    bool isLocalAdmin = (p.from == 0 || p.from == localNodeNum) && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-                        p.decoded.portnum == meshtastic_PortNum_ADMIN_APP && p.to == localNodeNum;
-    if (state != STATE_SEND_PACKETS && isLocalAdmin) {
-        if (adminPayloadHasTopLevelField(p.decoded.payload.bytes, p.decoded.payload.size,
-                                         meshtastic_AdminMessage_set_config_tag)) {
-            LOG_WARN("Ignoring set_config while completing config handshake (state=%d)", state);
-            return false;
-        }
-    }
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
     // Local admin gating happens here, synchronously on the dispatching
