@@ -99,7 +99,67 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
+#include <cstring>
+#include <new>
 #include <vector>
+
+#ifdef FSCom
+namespace
+{
+bool pathEndsWithDot(const char *path)
+{
+    size_t length = strlen(path);
+    return length > 0 && path[length - 1] == '.';
+}
+
+void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vector<meshtastic_FileInfo> &filenames,
+                  bool *wasLimited)
+{
+    File root = FSCom.open(dirname, FILE_O_READ);
+    if (!root)
+        return;
+    if (!root.isDirectory()) {
+        root.close();
+        return;
+    }
+
+    File file = root.openNextFile();
+    while (file) {
+        if (filenames.size() >= maxCount) {
+            if (wasLimited)
+                *wasLimited = true;
+            file.close();
+            break;
+        }
+        if (file.isDirectory() && !pathEndsWithDot(file.name())) {
+            if (levels) {
+#ifdef ARCH_ESP32
+                collectFiles(file.path(), levels - 1, maxCount, filenames, wasLimited);
+#else
+                collectFiles(file.name(), levels - 1, maxCount, filenames, wasLimited);
+#endif
+            } else if (wasLimited) {
+                *wasLimited = true;
+            }
+            file.close();
+        } else {
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
+#ifdef ARCH_ESP32
+            strlcpy(fileInfo.file_name, file.path(), sizeof(fileInfo.file_name));
+#else
+            strlcpy(fileInfo.file_name, file.name(), sizeof(fileInfo.file_name));
+#endif
+            if (!pathEndsWithDot(fileInfo.file_name)) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+}
+} // namespace
+#endif
 
 /**
  * @brief Get the list of files in a directory.
@@ -109,45 +169,38 @@ bool renameFile(const char *pathFrom, const char *pathTo)
  *
  * @param dirname The name of the directory.
  * @param levels The number of levels of subdirectories to list.
- * @return A vector of strings containing the full path of each file in the directory.
+ * @param maxCount The maximum number of file entries to return.
+ * @param wasLimited Set to true if maxCount or levels prevented a complete recursive listing.
+ * @return A vector of file metadata containing the full path of each file in the directory.
  */
-std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount, bool *wasLimited)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
+    if (wasLimited)
+        *wasLimited = false;
 #ifdef FSCom
-    File root = FSCom.open(dirname, FILE_O_READ);
-    if (!root)
-        return filenames;
-    if (!root.isDirectory())
-        return filenames;
-
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
-            if (levels) {
-#ifdef ARCH_ESP32
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
-#else
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
-#endif
-                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
-                file.close();
-            }
-        } else {
-            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
-#ifdef ARCH_ESP32
-            strcpy(fileInfo.file_name, file.path());
-#else
-            strcpy(fileInfo.file_name, file.name());
-#endif
-            if (!String(fileInfo.file_name).endsWith(".")) {
-                filenames.push_back(fileInfo);
-            }
-            file.close();
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+    size_t reservedCount = maxCount;
+    while (reservedCount > 0) {
+        try {
+            filenames.reserve(reservedCount);
+            break;
+        } catch (const std::bad_alloc &) {
+            reservedCount /= 2;
         }
-        file = root.openNextFile();
     }
-    root.close();
+    if (reservedCount == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return filenames;
+    }
+    if (reservedCount < maxCount) {
+        if (wasLimited)
+            *wasLimited = true;
+        maxCount = reservedCount;
+    }
+#endif
+    collectFiles(dirname, levels, maxCount, filenames, wasLimited);
 #endif
     return filenames;
 }
