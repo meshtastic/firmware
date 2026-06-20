@@ -10,6 +10,7 @@
 #endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32)
 #include "meshUtils.h" // vformat
+
 #endif
 
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
