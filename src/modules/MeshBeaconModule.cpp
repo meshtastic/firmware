@@ -21,7 +21,9 @@ meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
 
 static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset *preset,
-                                   uint16_t *slot, bool *legacyHopOverride = nullptr)
+                                   uint16_t *slot, bool *legacyHopOverride = nullptr,
+                                   meshtastic_Config_LoRaConfig_RegionCode *region = nullptr, bool *has_channel = nullptr,
+                                   meshtastic_ChannelSettings *channel = nullptr)
 {
     if (!p)
         return false;
@@ -33,6 +35,12 @@ static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Co
                 *slot = entry.slot;
             if (legacyHopOverride)
                 *legacyHopOverride = entry.legacyHopOverride;
+            if (region)
+                *region = entry.region;
+            if (has_channel)
+                *has_channel = entry.has_channel;
+            if (channel && entry.has_channel)
+                *channel = entry.channel;
             return true;
         }
     }
@@ -52,7 +60,9 @@ MeshBeaconModule::MeshBeaconModule()
 }
 
 void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                              uint16_t slot, bool legacyHopOverride)
+                                              uint16_t slot, bool legacyHopOverride,
+                                              meshtastic_Config_LoRaConfig_RegionCode region, bool has_channel,
+                                              const meshtastic_ChannelSettings *channel)
 {
     if (!p)
         return;
@@ -72,6 +82,10 @@ void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, me
     target->preset = preset;
     target->slot = slot;
     target->legacyHopOverride = legacyHopOverride;
+    target->region = region;
+    target->has_channel = has_channel;
+    if (has_channel && channel)
+        target->channel = *channel;
 }
 
 bool MeshBeaconModule::hasTargetRadioSettings(const meshtastic_MeshPacket *p)
@@ -94,13 +108,12 @@ void MeshBeaconModule::clearTargetRadioSettings(const meshtastic_MeshPacket *p)
 bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
 {
     meshtastic_Config_LoRaConfig_ModemPreset preset;
-    if (!getTargetRadioSettings(p, &preset, nullptr))
+    meshtastic_Config_LoRaConfig_RegionCode sidecarRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    if (!getTargetRadioSettings(p, &preset, nullptr, nullptr, &sidecarRegion))
         return false; // not a beacon-switch packet — nothing to validate, normal traffic unaffected
 
-    const auto &bcfg = moduleConfig.mesh_beacon;
     const meshtastic_Config_LoRaConfig_RegionCode region =
-        (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? bcfg.broadcast_on_region
-                                                                                    : config.lora.region;
+        (sidecarRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? sidecarRegion : config.lora.region;
 
     // An unlicensed node must never key up on a ham-only (licensed-only) region. The reverse is
     // allowed: a licensed (ham) node may operate in a non-ham region — and the switch only touches
@@ -118,16 +131,16 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
 }
 
 meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtastic_ChannelSettings &base,
-                                                                   meshtastic_Config_LoRaConfig_ModemPreset preset)
+                                                                   meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                                                   const meshtastic_ChannelSettings *overrideChannel)
 {
-    const auto &bcfg = moduleConfig.mesh_beacon;
     meshtastic_ChannelSettings ch = base;
-    if (bcfg.has_broadcast_on_channel) {
-        ch.channel_num = bcfg.broadcast_on_channel.channel_num;
-        if (bcfg.broadcast_on_channel.name[0] != '\0')
-            strncpy(ch.name, bcfg.broadcast_on_channel.name, sizeof(ch.name) - 1);
-        if (bcfg.broadcast_on_channel.psk.size > 0)
-            ch.psk = bcfg.broadcast_on_channel.psk;
+    if (overrideChannel) {
+        ch.channel_num = overrideChannel->channel_num;
+        if (overrideChannel->name[0] != '\0')
+            strncpy(ch.name, overrideChannel->name, sizeof(ch.name) - 1);
+        if (overrideChannel->psk.size > 0)
+            ch.psk = overrideChannel->psk;
     } else if (ch.name[0] == '\0') {
         strncpy(ch.name, DisplayFormatters::getModemPresetDisplayName(preset, false, true), sizeof(ch.name) - 1);
     }
@@ -147,7 +160,11 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
     };
 
     bool legacyHopOverride = false;
-    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot, &legacyHopOverride)) {
+    meshtastic_Config_LoRaConfig_RegionCode sidecarRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    bool sidecarHasChannel = false;
+    meshtastic_ChannelSettings sidecarChannel = {};
+    if (p && getTargetRadioSettings(p, &targetPreset, &targetSlot, &legacyHopOverride, &sidecarRegion, &sidecarHasChannel,
+                                    &sidecarChannel)) {
 
         // Legacy compatibility: older firmware (pre-v2.7.20) drops hop_start==0 packets via the
         // pre-hop check before decryption, so they can't see has_bitfield to validate them.
@@ -156,14 +173,11 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         if (legacyHopOverride)
             p->hop_start = 1;
 
-        const auto &bcfg = moduleConfig.mesh_beacon;
-        meshtastic_Config_LoRaConfig_RegionCode targetRegion;
-        if (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-            targetRegion = bcfg.broadcast_on_region;
-        else
-            targetRegion = config.lora.region;
+        const meshtastic_Config_LoRaConfig_RegionCode targetRegion =
+            (sidecarRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? sidecarRegion : config.lora.region;
+        const meshtastic_ChannelSettings *overrideCh = sidecarHasChannel ? &sidecarChannel : nullptr;
 
-        meshtastic_ChannelSettings targetChannel = beaconChannelSettings(*c, targetPreset);
+        meshtastic_ChannelSettings targetChannel = beaconChannelSettings(*c, targetPreset, overrideCh);
 
         if (targetPreset == config.lora.modem_preset && targetSlot == config.lora.channel_num &&
             targetRegion == config.lora.region && !channelDiffers(targetChannel))
@@ -249,11 +263,11 @@ void MeshBeaconBroadcastModule::rebuildCache()
     LOG_DEBUG("Beacon: payload cache rebuilt (%u bytes)", payloadCacheSize);
 }
 
-void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset)
+void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset,
+                                                 bool has_channel, const meshtastic_ChannelSettings *overrideChannel)
 {
-    const auto &bcfg = moduleConfig.mesh_beacon;
     const bool cryptoOverride =
-        bcfg.has_broadcast_on_channel && (bcfg.broadcast_on_channel.name[0] != '\0' || bcfg.broadcast_on_channel.psk.size > 0);
+        has_channel && overrideChannel && (overrideChannel->name[0] != '\0' || overrideChannel->psk.size > 0);
     if (!cryptoOverride) {
         router->send(p);
         return;
@@ -266,7 +280,7 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, mesht
     // Meshtastic threading is cooperative (no preemption between the swap and restore).
     meshtastic_Channel &primary = channels.getByIndex(channels.getPrimaryIndex());
     const meshtastic_ChannelSettings saved = primary.settings;
-    primary.settings = beaconChannelSettings(saved, targetPreset);
+    primary.settings = beaconChannelSettings(saved, targetPreset, overrideChannel);
     channels.fixupChannel(channels.getPrimaryIndex());
 
     router->send(p); // encrypts with the beacon channel's key and stamps its hash
@@ -287,19 +301,6 @@ void MeshBeaconBroadcastModule::sendBeacon()
         LOG_DEBUG("Beacon: nothing to send (empty message, no offer), skipping");
         return;
     }
-
-    // Determine whether the TX radio config actually differs from the running config.
-    // Used to gate sidecar insertion.
-    const meshtastic_Config_LoRaConfig_ModemPreset targetPreset =
-        bcfg.has_broadcast_on_preset ? bcfg.broadcast_on_preset : config.lora.modem_preset;
-    const uint16_t targetSlot = bcfg.has_broadcast_on_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
-    const bool channelOverrideConfigured =
-        bcfg.has_broadcast_on_channel && (bcfg.broadcast_on_channel.name[0] != '\0' || bcfg.broadcast_on_channel.psk.size > 0 ||
-                                          bcfg.broadcast_on_channel.channel_num != config.lora.channel_num);
-    const bool presetDiffers = (bcfg.has_broadcast_on_preset && targetPreset != config.lora.modem_preset) ||
-                               (bcfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
-                                bcfg.broadcast_on_region != config.lora.region) ||
-                               channelOverrideConfigured;
 
     // Stamp common fields shared by every outgoing beacon packet.
     const auto stampPacket = [&](meshtastic_MeshPacket *p) {
@@ -325,7 +326,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         }
     };
 
-    // ── Main packet(s) ──────────────────────────────────────────────────────
+    // ── Packet type decisions ────────────────────────────────────────────────
     //
     // broadcast_legacy_split: when both text and offer are present, send TWO packets — A)
     //   MESH_BEACON_APP (offer only) and B) TEXT_MESSAGE_APP (text only) — both on the SAME beacon
@@ -340,8 +341,10 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const bool sendTextOnly = splitBoth || (!hasRadioContent && hasText);
     const bool sendCombined = !bcfg.broadcast_legacy_split && hasRadioContent && hasText;
 
+    // Build offer payload once — shared across all targets.
+    uint8_t offerBuf[meshtastic_MeshBeacon_size] = {};
+    pb_size_t offerSize = 0;
     if (sendOfferOnly) {
-        // Packet A: offer-only MESH_BEACON_APP (message field intentionally empty).
         meshtastic_MeshBeacon offerOnly = meshtastic_MeshBeacon_init_zero;
         if (bcfg.has_broadcast_offer_channel) {
             offerOnly.has_offer_channel = true;
@@ -350,60 +353,101 @@ void MeshBeaconBroadcastModule::sendBeacon()
         offerOnly.has_offer_preset = bcfg.has_broadcast_offer_preset;
         offerOnly.offer_preset = bcfg.broadcast_offer_preset;
         offerOnly.offer_region = bcfg.broadcast_offer_region;
-
-        uint8_t offerBuf[meshtastic_MeshBeacon_size] = {};
-        pb_size_t offerSize = (pb_size_t)pb_encode_to_bytes(offerBuf, sizeof(offerBuf), &meshtastic_MeshBeacon_msg, &offerOnly);
-
-        meshtastic_MeshPacket *pA = allocDataPacket();
-        if (!pA) {
-            LOG_WARN("Beacon: failed to allocate split-A packet");
-            return;
-        }
-        memcpy(pA->decoded.payload.bytes, offerBuf, offerSize);
-        pA->decoded.payload.size = offerSize;
-        pA->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
-        stampPacket(pA);
-        if (presetDiffers || bcfg.broadcast_legacy_split)
-            setTargetRadioSettings(pA, targetPreset, targetSlot, bcfg.broadcast_legacy_split);
-        LOG_INFO("Beacon: split-A MESH_BEACON_APP (offer only) from=%#08lx", pA->from);
-        sendBeaconPacket(pA, targetPreset);
+        offerSize = (pb_size_t)pb_encode_to_bytes(offerBuf, sizeof(offerBuf), &meshtastic_MeshBeacon_msg, &offerOnly);
     }
+    if (sendCombined && payloadCacheDirty)
+        rebuildCache();
 
-    if (sendTextOnly) {
-        // Packet B: text-only TEXT_MESSAGE_APP, sent on the same beacon radio settings as packet A.
-        meshtastic_MeshPacket *pB = allocDataPacket();
-        if (!pB) {
-            LOG_WARN("Beacon: failed to allocate split-B packet");
-            return;
-        }
-        pb_size_t msgLen = (pb_size_t)strnlen(bcfg.broadcast_message, sizeof(bcfg.broadcast_message) - 1);
-        memcpy(pB->decoded.payload.bytes, bcfg.broadcast_message, msgLen);
-        pB->decoded.payload.size = msgLen;
-        pB->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-        stampPacket(pB);
-        if (presetDiffers || bcfg.broadcast_legacy_split)
-            setTargetRadioSettings(pB, targetPreset, targetSlot, bcfg.broadcast_legacy_split);
-        LOG_INFO("Beacon: split-B TEXT_MESSAGE_APP msg='%.40s' from=%#08lx", bcfg.broadcast_message, pB->from);
-        sendBeaconPacket(pB, targetPreset);
-    }
+    // ── Per-target loop ──────────────────────────────────────────────────────
+    //
+    // If broadcast_targets is populated, iterate over those. Otherwise use the legacy
+    // single-target broadcast_on_preset / broadcast_on_region / broadcast_on_channel fields.
+    struct EffTarget {
+        meshtastic_Config_LoRaConfig_ModemPreset preset;
+        uint16_t slot;
+        meshtastic_Config_LoRaConfig_RegionCode region;
+        bool has_channel;
+        meshtastic_ChannelSettings channel;
+    };
 
-    if (sendCombined) {
-        // Combined path: MESH_BEACON_APP carrying offer + optional message text.
-        if (payloadCacheDirty)
-            rebuildCache();
-        meshtastic_MeshPacket *p = allocDataPacket();
-        if (!p) {
-            LOG_WARN("Beacon: failed to allocate beacon packet");
-            return;
+    const bool useTargetList = bcfg.broadcast_targets_count > 0;
+    const int targetCount = useTargetList ? (int)bcfg.broadcast_targets_count : 1;
+
+    for (int ti = 0; ti < targetCount; ti++) {
+        EffTarget tgt = {};
+        if (useTargetList) {
+            const auto &bt = bcfg.broadcast_targets[ti];
+            tgt.preset = bt.has_preset ? bt.preset : config.lora.modem_preset;
+            tgt.region = bt.region;
+            tgt.has_channel = bt.has_channel;
+            if (tgt.has_channel)
+                tgt.channel = bt.channel;
+            tgt.slot = tgt.has_channel ? bt.channel.channel_num : config.lora.channel_num;
+        } else {
+            tgt.preset = bcfg.has_broadcast_on_preset ? bcfg.broadcast_on_preset : config.lora.modem_preset;
+            tgt.region = bcfg.broadcast_on_region;
+            tgt.has_channel = bcfg.has_broadcast_on_channel;
+            if (tgt.has_channel)
+                tgt.channel = bcfg.broadcast_on_channel;
+            tgt.slot = tgt.has_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
         }
-        memcpy(p->decoded.payload.bytes, payloadCache, payloadCacheSize);
-        p->decoded.payload.size = payloadCacheSize;
-        p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
-        stampPacket(p);
-        if (presetDiffers || bcfg.broadcast_legacy_split)
-            setTargetRadioSettings(p, targetPreset, targetSlot, bcfg.broadcast_legacy_split);
-        LOG_INFO("Beacon: MESH_BEACON_APP offer+msg from=%#08lx msg='%.40s'", p->from, bcfg.broadcast_message);
-        sendBeaconPacket(p, targetPreset);
+
+        const bool channelOverrideConfigured = tgt.has_channel && (tgt.channel.name[0] != '\0' || tgt.channel.psk.size > 0 ||
+                                                                   tgt.channel.channel_num != config.lora.channel_num);
+        const bool presetDiffers =
+            (tgt.preset != config.lora.modem_preset) ||
+            (tgt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && tgt.region != config.lora.region) ||
+            channelOverrideConfigured;
+        const meshtastic_ChannelSettings *chPtr = tgt.has_channel ? &tgt.channel : nullptr;
+
+        const auto applyTarget = [&](meshtastic_MeshPacket *p) {
+            if (presetDiffers || bcfg.broadcast_legacy_split)
+                setTargetRadioSettings(p, tgt.preset, tgt.slot, bcfg.broadcast_legacy_split, tgt.region, tgt.has_channel, chPtr);
+            sendBeaconPacket(p, tgt.preset, tgt.has_channel, chPtr);
+        };
+
+        if (sendOfferOnly) {
+            meshtastic_MeshPacket *pA = allocDataPacket();
+            if (!pA) {
+                LOG_WARN("Beacon: failed to allocate split-A packet (target %d)", ti);
+                return;
+            }
+            memcpy(pA->decoded.payload.bytes, offerBuf, offerSize);
+            pA->decoded.payload.size = offerSize;
+            pA->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
+            stampPacket(pA);
+            LOG_INFO("Beacon: split-A MESH_BEACON_APP (offer only) from=%#08lx target=%d", pA->from, ti);
+            applyTarget(pA);
+        }
+
+        if (sendTextOnly) {
+            meshtastic_MeshPacket *pB = allocDataPacket();
+            if (!pB) {
+                LOG_WARN("Beacon: failed to allocate split-B packet (target %d)", ti);
+                return;
+            }
+            pb_size_t msgLen = (pb_size_t)strnlen(bcfg.broadcast_message, sizeof(bcfg.broadcast_message) - 1);
+            memcpy(pB->decoded.payload.bytes, bcfg.broadcast_message, msgLen);
+            pB->decoded.payload.size = msgLen;
+            pB->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+            stampPacket(pB);
+            LOG_INFO("Beacon: split-B TEXT_MESSAGE_APP msg='%.40s' from=%#08lx target=%d", bcfg.broadcast_message, pB->from, ti);
+            applyTarget(pB);
+        }
+
+        if (sendCombined) {
+            meshtastic_MeshPacket *p = allocDataPacket();
+            if (!p) {
+                LOG_WARN("Beacon: failed to allocate beacon packet (target %d)", ti);
+                return;
+            }
+            memcpy(p->decoded.payload.bytes, payloadCache, payloadCacheSize);
+            p->decoded.payload.size = payloadCacheSize;
+            p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
+            stampPacket(p);
+            LOG_INFO("Beacon: MESH_BEACON_APP offer+msg from=%#08lx msg='%.40s' target=%d", p->from, bcfg.broadcast_message, ti);
+            applyTarget(p);
+        }
     }
 }
 

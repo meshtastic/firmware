@@ -1373,6 +1373,109 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
     moduleConfig.mesh_beacon.broadcast_legacy_split = USERPREFS_MESH_BEACON_LEGACY_SPLIT;
 #endif
+// Per-preset broadcast targets (up to 4). Each TARGET_<N>_* key bumps broadcast_targets_count as needed.
+#define BEACON_TARGET_PRESET(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_preset = true;                                                       \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].preset = (VAL);                                                          \
+    } while (0)
+#define BEACON_TARGET_REGION(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].region = (VAL);                                                          \
+    } while (0)
+#define BEACON_TARGET_CH_NAME(N, VAL)                                                                                            \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel = true;                                                      \
+        strncpy(moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.name, (VAL),                                             \
+                sizeof(moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.name) - 1);                                       \
+    } while (0)
+#define BEACON_TARGET_CH_NUM(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel = true;                                                      \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.channel_num = (VAL);                                             \
+    } while (0)
+#define BEACON_TARGET_CH_PSK(N, ...)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel = true;                                                      \
+        static const uint8_t _btPsk##N[] = {__VA_ARGS__};                                                                        \
+        memcpy(moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.psk.bytes, _btPsk##N, sizeof(_btPsk##N));                 \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.psk.size = sizeof(_btPsk##N);                                    \
+    } while (0)
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
+    BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_REGION
+    BEACON_TARGET_REGION(0, USERPREFS_MESH_BEACON_TARGET_0_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NAME
+    BEACON_TARGET_CH_NAME(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NAME);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NUM
+    BEACON_TARGET_CH_NUM(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NUM);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_PSK
+    BEACON_TARGET_CH_PSK(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_PSK);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
+    BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_REGION
+    BEACON_TARGET_REGION(1, USERPREFS_MESH_BEACON_TARGET_1_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NAME
+    BEACON_TARGET_CH_NAME(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NAME);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NUM
+    BEACON_TARGET_CH_NUM(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NUM);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_PSK
+    BEACON_TARGET_CH_PSK(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_PSK);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
+    BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_REGION
+    BEACON_TARGET_REGION(2, USERPREFS_MESH_BEACON_TARGET_2_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NAME
+    BEACON_TARGET_CH_NAME(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NAME);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NUM
+    BEACON_TARGET_CH_NUM(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NUM);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_PSK
+    BEACON_TARGET_CH_PSK(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_PSK);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
+    BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_REGION
+    BEACON_TARGET_REGION(3, USERPREFS_MESH_BEACON_TARGET_3_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NAME
+    BEACON_TARGET_CH_NAME(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NAME);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NUM
+    BEACON_TARGET_CH_NUM(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NUM);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_PSK
+    BEACON_TARGET_CH_PSK(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_PSK);
+#endif
+#undef BEACON_TARGET_PRESET
+#undef BEACON_TARGET_REGION
+#undef BEACON_TARGET_CH_NAME
+#undef BEACON_TARGET_CH_NUM
+#undef BEACON_TARGET_CH_PSK
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();

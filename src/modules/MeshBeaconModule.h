@@ -16,6 +16,10 @@ typedef struct {
     // When true, reconfigureForBeaconTX sets hop_start=1 so pre-2.7.20 firmware
     // (which drops hop_start==0 packets) accepts the zero-hop beacon.
     bool legacyHopOverride;
+    // Per-target radio settings. UNSET region means use current lora.region.
+    meshtastic_Config_LoRaConfig_RegionCode region;
+    bool has_channel;
+    meshtastic_ChannelSettings channel;
 } MeshBeaconModule_TargetRadioSettings;
 
 /**
@@ -38,8 +42,11 @@ class MeshBeaconModule
      * Associate target radio settings with an outgoing packet by its ID.
      * Sidecar holds 8 entries; evicts slot 0 on overflow.
      */
-    static void setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
-                                       uint16_t slot, bool legacyHopOverride = false);
+    static void
+    setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset, uint16_t slot,
+                           bool legacyHopOverride = false,
+                           meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET,
+                           bool has_channel = false, const meshtastic_ChannelSettings *channel = nullptr);
 
     /**
      * Returns true if the sidecar table contains an entry for this packet's ID.
@@ -69,7 +76,8 @@ class MeshBeaconModule
      * key + hash are identical at both points.
      */
     static meshtastic_ChannelSettings beaconChannelSettings(const meshtastic_ChannelSettings &base,
-                                                            meshtastic_Config_LoRaConfig_ModemPreset preset);
+                                                            meshtastic_Config_LoRaConfig_ModemPreset preset,
+                                                            const meshtastic_ChannelSettings *overrideChannel = nullptr);
 
     static meshtastic_Config_LoRaConfig_ModemPreset originalModemPreset;
     static uint16_t originalLoraChannel;
@@ -107,9 +115,10 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
     void sendBeacon();
     void rebuildCache();
 
-    // Send one beacon packet. When broadcast_on_channel overrides the primary channel's name/PSK,
-    // the packet is encrypted with the beacon channel's key (not the primary's) — see definition.
-    void sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset);
+    // Send one beacon packet. When overrideChannel is set and has a name/PSK override,
+    // the packet is encrypted with that channel's key (not the primary's).
+    void sendBeaconPacket(meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset targetPreset,
+                          bool has_channel = false, const meshtastic_ChannelSettings *overrideChannel = nullptr);
 
     bool payloadCacheDirty = true;
     uint8_t payloadCache[meshtastic_MeshBeacon_size] = {};
