@@ -38,8 +38,8 @@ bool heartbeatReceived = false;
 
 namespace
 {
-constexpr uint8_t kFilesManifestLevels = 3;
-constexpr size_t kFilesManifestMaxCount = 64;
+constexpr uint8_t FILES_MANIFEST_LEVELS = 3;
+constexpr size_t FILES_MANIFEST_MAX_COUNT = 64;
 
 void releaseFilesManifest(std::vector<meshtastic_FileInfo> &filesManifest)
 {
@@ -87,11 +87,11 @@ void PhoneAPI::handleStartConfig()
         bool filesManifestLimited = false;
         {
             concurrency::LockGuard guard(spiLock);
-            filesManifest = getFiles("/", kFilesManifestLevels, kFilesManifestMaxCount, &filesManifestLimited);
+            filesManifest = getFiles("/", FILES_MANIFEST_LEVELS, FILES_MANIFEST_MAX_COUNT, &filesManifestLimited);
         }
         if (filesManifestLimited) {
-            LOG_WARN("Got %zu files in manifest (limited to %zu entries/depth %u)", filesManifest.size(), kFilesManifestMaxCount,
-                     static_cast<unsigned>(kFilesManifestLevels));
+            LOG_WARN("Got %zu files in manifest (limited to %zu entries/depth %u)", filesManifest.size(),
+                     FILES_MANIFEST_MAX_COUNT, static_cast<unsigned>(FILES_MANIFEST_LEVELS));
         } else {
             LOG_DEBUG("Got %zu files in manifest", filesManifest.size());
         }

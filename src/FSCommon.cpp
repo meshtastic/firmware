@@ -101,6 +101,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 
 #include <cstring>
 #include <new>
+#include <stdexcept>
 #include <vector>
 
 #ifdef FSCom
@@ -108,13 +109,36 @@ namespace
 {
 bool pathEndsWithDot(const char *path)
 {
+    if (!path)
+        return false;
+
     size_t length = strlen(path);
     return length > 0 && path[length - 1] == '.';
+}
+
+bool copyFilePath(char *dest, size_t destSize, const char *path, bool *wasLimited)
+{
+    if (!path || destSize == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    if (strlcpy(dest, path, destSize) >= destSize) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    return true;
 }
 
 void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vector<meshtastic_FileInfo> &filenames,
                   bool *wasLimited)
 {
+    if (!dirname)
+        return;
+
     File root = FSCom.open(dirname, FILE_O_READ);
     if (!root)
         return;
@@ -131,25 +155,30 @@ void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vec
             file.close();
             break;
         }
-        if (file.isDirectory() && !pathEndsWithDot(file.name())) {
-            if (levels) {
+        const char *fileName = file.name();
+        if (file.isDirectory() && !pathEndsWithDot(fileName)) {
+            char pathBuffer[sizeof(meshtastic_FileInfo::file_name)] = {};
 #ifdef ARCH_ESP32
-                collectFiles(file.path(), levels - 1, maxCount, filenames, wasLimited);
+            const char *subDirPath = file.path();
 #else
-                collectFiles(file.name(), levels - 1, maxCount, filenames, wasLimited);
+            const char *subDirPath = fileName;
 #endif
+            bool hasSubDirPath = copyFilePath(pathBuffer, sizeof(pathBuffer), subDirPath, wasLimited);
+            file.close();
+
+            if (levels && hasSubDirPath) {
+                collectFiles(pathBuffer, levels - 1, maxCount, filenames, wasLimited);
             } else if (wasLimited) {
                 *wasLimited = true;
             }
-            file.close();
         } else {
             meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
-            strlcpy(fileInfo.file_name, file.path(), sizeof(fileInfo.file_name));
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.path(), wasLimited);
 #else
-            strlcpy(fileInfo.file_name, file.name(), sizeof(fileInfo.file_name));
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.name(), wasLimited);
 #endif
-            if (!pathEndsWithDot(fileInfo.file_name)) {
+            if (hasFilePath && !pathEndsWithDot(fileInfo.file_name)) {
                 filenames.push_back(fileInfo);
             }
             file.close();
@@ -161,18 +190,7 @@ void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vec
 } // namespace
 #endif
 
-/**
- * @brief Get the list of files in a directory.
- *
- * This function returns a list of files in a directory. The list includes the full path of each file.
- * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
- *
- * @param dirname The name of the directory.
- * @param levels The number of levels of subdirectories to list.
- * @param maxCount The maximum number of file entries to return.
- * @param wasLimited Set to true if maxCount or levels prevented a complete recursive listing.
- * @return A vector of file metadata containing the full path of each file in the directory.
- */
+// Callers must hold the SPI lock; recursion prevents taking it here.
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount, bool *wasLimited)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
@@ -186,6 +204,8 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, s
             filenames.reserve(reservedCount);
             break;
         } catch (const std::bad_alloc &) {
+            reservedCount /= 2;
+        } catch (const std::length_error &) {
             reservedCount /= 2;
         }
     }
