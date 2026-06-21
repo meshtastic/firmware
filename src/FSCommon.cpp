@@ -122,7 +122,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
         return filenames;
 
     File file = root.openNextFile();
-    while (file) {
+    while (file && file.name()[0]) { // file.name()[0] check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
 #ifdef ARCH_ESP32
