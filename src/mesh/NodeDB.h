@@ -341,6 +341,11 @@ class NodeDB
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
+    /// Resolve a node's device role — hot store (with user) first, then the role
+    /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
+    /// nodes that have aged out of the hot store.
+    meshtastic_Config_DeviceConfig_Role getNodeRole(NodeNum n);
+
     /// last_heard of a hot-store node, or 0 if absent. Plain scan of meshNodes
     /// with no allocation side effects (unlike getOrCreateMeshNode).
     uint32_t hotNodeLastHeard(NodeNum n) const;

@@ -432,6 +432,42 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
 #define RUNONCE_INTERVAL 5000;
 
+bool PositionModule::positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision)
+{
+    if (lastGpsLatitude == 0 && lastGpsLongitude == 0)
+        return false; // no prior broadcast to compare against
+
+    // Broadcast channel = the one sendOurPosition() would pick (first with non-zero on-wire
+    // precision). Default nodes gauge movement at that on-wire (public-clamped) resolution;
+    // trackers use their own configured (unclamped) precision so finer moves still count.
+    uint32_t precisionBits = 0;
+    for (uint8_t ch = 0; ch < 8; ch++) {
+        if (getPositionPrecisionForChannel(ch) == 0)
+            continue;
+        precisionBits =
+            useConfiguredPrecision ? getPositionPrecisionForChannel(channels.getByIndex(ch)) : getPositionPrecisionForChannel(ch);
+        break;
+    }
+
+    return positionWithinPrecisionCell(selfPos.latitude_i, selfPos.longitude_i, lastGpsLatitude, lastGpsLongitude, precisionBits);
+}
+
+bool PositionModule::positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int32_t bLat, int32_t bLon, uint32_t precision)
+{
+    if (precision == 0 || precision >= 32)
+        return false; // sharing disabled or full precision: no coarse cell to hold within
+
+    return truncateCoordinate(aLat, precision) == truncateCoordinate(bLat, precision) &&
+           truncateCoordinate(aLon, precision) == truncateCoordinate(bLon, precision);
+}
+
+uint32_t PositionModule::effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs)
+{
+    if (stationary && stationaryFloorMs > configuredIntervalMs)
+        return stationaryFloorMs;
+    return configuredIntervalMs;
+}
+
 int32_t PositionModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
@@ -458,7 +494,23 @@ int32_t PositionModule::runOnce()
 
     bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
 
-    if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
+    // Hold to the 12h floor when fixed_position (every role: pinning yourself forfeits the
+    // exception) or when stationary. A real move still goes out early via smart-broadcast below.
+    // Not-fixed exceptions: lost-and-found broadcasts freely; trackers judge movement at their
+    // own (unclamped) precision rather than the on-wire one (useConfiguredPrecision).
+    const auto role = config.device.role;
+    bool stationary = config.position.fixed_position;
+    if (!stationary && role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && nodeDB->hasValidPosition(node)) {
+        const bool isTracker =
+            IS_ONE_OF(role, meshtastic_Config_DeviceConfig_Role_TRACKER, meshtastic_Config_DeviceConfig_Role_TAK_TRACKER);
+        meshtastic_PositionLite selfPos;
+        if (nodeDB->copyNodePosition(node->num, selfPos))
+            stationary = positionUnchangedSinceLastSend(selfPos, /*useConfiguredPrecision=*/isTracker);
+    }
+    uint32_t effectiveIntervalMs =
+        effectiveBroadcastIntervalMs(intervalMs, stationary, (uint32_t)default_position_stationary_broadcast_secs * 1000UL);
+
+    if (lastGpsSend == 0 || msSinceLastSend >= effectiveIntervalMs) {
         if (waitingForFreshPosition) {
 #ifdef GPS_DEBUG
             LOG_DEBUG("Skip initial position send; no fresh position since boot");
