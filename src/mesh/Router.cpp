@@ -100,19 +100,12 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         return true;
     }
 
-#if HAS_TRAFFIC_MANAGEMENT
-    // When router_preserve_hops is enabled, preserve hops for decoded packets that are not
-    // position or telemetry (those have their own exhaust_hop controls).
-    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled &&
-        moduleConfig.traffic_management.router_preserve_hops && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum != meshtastic_PortNum_POSITION_APP && p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP) {
-        LOG_DEBUG("Router hop preserved: port=%d from=0x%08x (traffic_management)", p->decoded.portnum, getFrom(p));
-        if (trafficManagementModule) {
-            trafficManagementModule->recordRouterHopPreserved();
-        }
-        return false;
-    }
-#endif
+    // router_preserve_hops: not suitable right now — removed from config until
+    // the right heuristics for when to preserve vs. exhaust hops are established.
+    // #if HAS_TRAFFIC_MANAGEMENT
+    //     if (moduleConfig.has_traffic_management &&
+    //         moduleConfig.traffic_management.router_preserve_hops && ...) { ... }
+    // #endif
 
     // For subsequent hops, preserve hop_limit only when the previous relay is UNAMBIGUOUSLY a favorite
     // router. The relay_node byte is just the last byte of a 32-bit node number, so on a dense mesh it

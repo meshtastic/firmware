@@ -99,23 +99,20 @@ static inline int get_max_num_nodes()
 #elif defined(ARCH_PORTDUINO)
 #define MAX_NUM_NODES 250 // native host: no flash/RAM constraint; match the ESP32-S3 top tier
 #else
-#define MAX_NUM_NODES 120 // nRF52840 (28 KB LittleFS) and generic ESP32
+#define MAX_NUM_NODES 120 // nRF52840 and generic ESP32 (inc. ESP32C3 etc.)
 #endif                    // platform
 #endif                    // MAX_NUM_NODES
 
 /// Per-map cap (position/telemetry/environment/status): only the freshest
 /// MAX_SATELLITE_NODES nodes keep satellite payloads, the rest just the
-/// NodeInfoLite header. RAM-bound: the four maps live in internal SRAM (not
-/// PSRAM). PSRAM-equipped ESP32-S3 (and native) keep the full 250; other ESP32
-/// (no-PSRAM, incl. S3) get 80 -- ~32 KB worst case, affordable now the warm
-/// tier is trimmed; nRF52840 and other tight parts stay at 40.
+/// NodeInfoLite header. RAM-bound (the maps are internal-SRAM, not PSRAM), so
+/// flash-rich hosts get a cap >= their hot store (satellites for every node, as
+/// before the cap existed) while constrained parts stay at 40.
 #ifndef MAX_SATELLITE_NODES
-#if defined(ARCH_PORTDUINO) || (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM))
-#define MAX_SATELLITE_NODES 250 // native / PSRAM-equipped ESP32-S3
-#elif defined(ARCH_ESP32)
-#define MAX_SATELLITE_NODES 80 // no-PSRAM ESP32 (incl. ESP32-S3)
+#if (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+#define MAX_SATELLITE_NODES 250
 #else
-#define MAX_SATELLITE_NODES 40 // nRF52840 (28 KB LittleFS) and other constrained parts
+#define MAX_SATELLITE_NODES 40 // nRF52840, generic ESP32, and ESP32-S3 without PSRAM
 #endif                         // platform
 #endif                         // MAX_SATELLITE_NODES
 
@@ -130,14 +127,12 @@ static inline int get_max_num_nodes()
 // architecture.h via configuration.h) isn't defined this early in every include
 // chain. Backed by the raw-flash ring below LittleFS — see WarmNodeStore.h.
 #define WARM_NODE_COUNT 200
-#elif defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)
-#define WARM_NODE_COUNT 2000 // ESP32-S3 with PSRAM (external); warm.dat ~80 KB
+#elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+#define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm.dat ~80 KB
 #else
-// generic ESP32 and no-PSRAM ESP32-S3: ~12.5 KB in internal heap (calloc fallback in
-// WarmNodeStore), leaving room for the BLE controller. PSRAM-equipped S3 takes the 2000 case above.
-#define WARM_NODE_COUNT 320
-#endif // platform
-#endif // WARM_NODE_COUNT
+#define WARM_NODE_COUNT 320 // Generic ESP32, ESP32-S3 without PSRAM, ESP32C3 etc.
+#endif                      // platform
+#endif                      // WARM_NODE_COUNT
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
@@ -157,18 +152,21 @@ static inline int get_max_num_nodes()
 #ifdef ARCH_STM32WL
 #define HAS_VARIABLE_HOPS 0
 #endif
+
 #ifndef HAS_VARIABLE_HOPS
 #define HAS_VARIABLE_HOPS 1
 #endif
 
 // Cache size for traffic management (number of nodes to track)
-// Can be overridden per-variant based on available memory
+// Can be overridden per-variant by defining before this header is included.
 #ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
-#if HAS_TRAFFIC_MANAGEMENT
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000
-#else
+#if !HAS_TRAFFIC_MANAGEMENT
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
-#endif // HAS_TRAFFIC_MANAGEMENT
+#elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048 // PSRAM-equipped ESP32-S3 / native host
+#else
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // Generic ESP32, ESP32-S3 without PSRAM
+#endif
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
