@@ -29,6 +29,7 @@ void configureTwim(NRF_TWIM_Type *twim)
     twim->PSEL.SCL = PIN_WIRE_SCL;
     twim->PSEL.SDA = PIN_WIRE_SDA;
     twim->FREQUENCY = TWIM_FREQUENCY_FREQUENCY_K100;
+    // cppcheck-suppress redundantAssignment
     twim->ENABLE = TWIM_ENABLE_ENABLE_Enabled;
 }
 
