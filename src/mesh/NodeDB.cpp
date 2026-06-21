@@ -590,11 +590,8 @@ NodeDB::NodeDB()
         moduleConfig.mqtt.map_report_settings.publish_interval_secs = default_map_publish_interval_secs;
     }
 
-    // Restore a configured fixed position into localPosition at boot. Without this, fixed-position
-    // nodes that have no GPS never repopulate localPosition after a reboot: hasValidPosition() for the
-    // local node only inspects localPosition, so the position broadcast (and its lazy localPosition
-    // backfill in PositionModule) never runs, and position broadcasts / MQTT map reports silently stop
-    // until a position is manually re-sent.
+    // If a fixed position is configured, restore the persisted position into localPosition at boot.
+    // This keeps position broadcasts / MQTT map reports working after reboot on GPS-less nodes.
     if (config.position.fixed_position) {
         meshtastic_PositionLite fixedPos;
         if (copyNodePosition(getNodeNum(), fixedPos) && (fixedPos.latitude_i != 0 || fixedPos.longitude_i != 0)) {
