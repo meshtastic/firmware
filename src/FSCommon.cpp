@@ -157,7 +157,7 @@ void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vec
         }
         const char *fileName = file.name();
         if (file.isDirectory() && !pathEndsWithDot(fileName)) {
-            char pathBuffer[sizeof(meshtastic_FileInfo::file_name)] = {};
+            char pathBuffer[sizeof(((meshtastic_FileInfo *)nullptr)->file_name)] = {};
 #ifdef ARCH_ESP32
             const char *subDirPath = file.path();
 #else
