@@ -1168,8 +1168,12 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
 {
     mc.has_traffic_management = true;
     mc.traffic_management = meshtastic_ModuleConfig_TrafficManagementConfig_init_zero;
-    mc.traffic_management.enabled = true;
-    mc.traffic_management.position_dedup_enabled = true;
+#if HAS_TRAFFIC_MANAGEMENT
+    // Position dedup ships enabled at the 11-hour default window on all supported targets.
+    // STM32WL is excluded at compile time (HAS_TRAFFIC_MANAGEMENT=0 in mesh-pb-constants.h).
+    // Set position_min_interval_secs=0 at runtime to disable dedup.
+    mc.traffic_management.position_min_interval_secs = default_traffic_mgmt_position_min_interval_secs;
+#endif
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -2834,6 +2838,10 @@ HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
         return HopStartStatus::INVALID;
 
     if (p.hop_start == 0) {
+        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition —
+        // the packet was never meant to travel any hops, so no hop_start ambiguity applies.
+        if (p.hop_limit == 0)
+            return HopStartStatus::VALID;
         // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
         // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
         // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
@@ -3174,8 +3182,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
                            mp.via_mqtt); // Store if we received this packet via MQTT
 
 #if HAS_VARIABLE_HOPS
-        // Only sample packets that arrived over LoRa.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && hopScalingModule) {
+        // Only sample genuine RF-origin packets. The transport check excludes packets received
+        // directly from the broker (TRANSPORT_MQTT), but an MQTT-origin packet rebroadcast onto
+        // LoRa by a gateway arrives as TRANSPORT_LORA with via_mqtt set — count those would
+        // inflate the local mesh-size estimate with non-RF nodes (and they usually carry
+        // hop_start==0, landing in the hop-0 bucket that pulls the recommendation lowest), so
+        // exclude via_mqtt too.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt &&
+            hopScalingModule) {
             uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
             hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
         }
@@ -3453,6 +3467,20 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     return false;
 }
 
+meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
+{
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (nodeInfoLiteHasUser(info))
+        return info->role;
+#if WARM_NODE_COUNT > 0
+    // Hot-store miss: fall back to the role the warm tier cached at eviction.
+    uint8_t role = 0, prot = 0;
+    if (warmStore.lookupMeta(n, role, prot))
+        return static_cast<meshtastic_Config_DeviceConfig_Role>(role);
+#endif
+    return meshtastic_Config_DeviceConfig_Role_CLIENT;
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
@@ -3675,6 +3703,8 @@ bool NodeDB::createNewIdentity()
     myNodeInfo.my_node_num = newNodeNum;
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!info)
+        return false;
     TypeConversions::CopyUserToNodeInfoLite(info, owner);
 
     return true;
