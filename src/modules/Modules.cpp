@@ -41,6 +41,9 @@
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
 #include "modules/TrafficManagementModule.h"
 #endif
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -125,10 +128,13 @@ void setupModules()
 #endif
 
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
-    // Instantiate only when enabled to avoid extra memory use and background work.
-    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled) {
+    if (moduleConfig.has_traffic_management) {
         trafficManagementModule = new TrafficManagementModule();
     }
+#endif
+
+#if HAS_VARIABLE_HOPS
+    hopScalingModule = new HopScalingModule();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN

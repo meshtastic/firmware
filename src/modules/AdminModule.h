@@ -67,7 +67,11 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
   private:
     bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
+
+  public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
+
+  private:
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);
@@ -83,6 +87,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
 static constexpr const char *licensedModeMessage =
     "Licensed mode activated, removing admin channel and encryption from all channels";
+
+static constexpr const char *publicChannelPrecisionMessage =
+    "Precise position is not allowed on a public (open / known-key) channel; reduced to coarse precision";
 
 extern AdminModule *adminModule;
 

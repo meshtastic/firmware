@@ -100,7 +100,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     char distStr[20] = "";
 
     // Get our node, to use our own position
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     // Match compass sizing/placement to favorite node screen logic.
     const int w = display->getWidth();
@@ -147,8 +147,10 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const char *statusLine2 = nullptr;
 
     // Distance only needs our own position fix; compass/bearing additionally needs heading.
-    if (hasOwnPositionFix) {
-        const meshtastic_PositionLite &op = ourNode->position;
+    meshtastic_PositionLite ownPos;
+    const bool haveOwnPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ownPos);
+    if (hasOwnPositionFix && haveOwnPos) {
+        const meshtastic_PositionLite &op = ownPos;
         const float d =
             GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
 

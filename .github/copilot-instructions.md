@@ -135,6 +135,116 @@ On top of authorization, any remote admin message that **mutates** state (not a 
 - **Channel 0 PSK change** → every peer must re-learn the channel hash; cached NodeInfo becomes temporarily unreachable until the next broadcast.
 - **`security.private_key` blanked via admin** → regenerates both halves (unless in Ham mode) and propagates the new public key via NodeInfo.
 
+## NodeDB Layout (v25)
+
+`DEVICESTATE_CUR_VER = 25`, `DEVICESTATE_MIN_VER = 24`. The on-device NodeDB was split in v25 into a slim header table plus four optional satellite stores. Older v24 saves auto-migrate at boot. Old training-data instincts (`node->user.long_name`, `node->position.latitude_i`, `node->is_favorite`, `node->device_metrics.battery_level`) are wrong now — the fields aren't there. Read this section before touching anything that walks `nodeDB->meshNodes`.
+
+### Slim `NodeInfoLite`
+
+`UserLite` is flattened onto `NodeInfoLite` (no nested sub-message); `position` and `device_metrics` are removed entirely (tags reserved). MAC address is dropped. Long names are capped at 25 chars (`max_size:25` in `deviceonly.options`); `hw_model` and `role` are `int_size:8`. Encoded size dropped from ~166 B → ~105 B per node.
+
+Booleans are bit-packed into `NodeInfoLite.bitfield`. **Do not read or write the bits directly** — use the inline helpers in `src/mesh/NodeDB.h`:
+
+```cpp
+nodeInfoLiteHasUser(n)                  // bit 5 — user fields populated
+nodeInfoLiteIsFavorite(n)               // bit 3
+nodeInfoLiteIsIgnored(n)                // bit 4
+nodeInfoLiteIsMuted(n)                  // bit 1
+nodeInfoLiteIsLicensed(n)               // bit 6 — Ham mode peer
+nodeInfoLiteIsKeyManuallyVerified(n)    // bit 0
+nodeInfoLiteHasIsUnmessagable(n)        // bit 8 — "is_unmessagable was sent"
+nodeInfoLiteIsUnmessagable(n)           // bit 7
+// via_mqtt is bit 2 (mask exposed; predicate uses the mask directly)
+
+nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);  // setter
+```
+
+### Satellite stores
+
+Four `std::unordered_map<NodeNum, …>` members on `NodeDB`, each gated by its own build flag:
+
+| Map               | Value type                      | Build flag                         |
+| ----------------- | ------------------------------- | ---------------------------------- |
+| `nodePositions`   | `meshtastic_PositionLite`       | `MESHTASTIC_EXCLUDE_POSITIONDB`    |
+| `nodeTelemetry`   | `meshtastic_DeviceMetrics`      | `MESHTASTIC_EXCLUDE_TELEMETRYDB`   |
+| `nodeEnvironment` | `meshtastic_EnvironmentMetrics` | `MESHTASTIC_EXCLUDE_ENVIRONMENTDB` |
+| `nodeStatus`      | `meshtastic_StatusMessage`      | `MESHTASTIC_EXCLUDE_STATUSDB`      |
+
+Defaults are ON (i.e., maps **excluded**) for STM32WL only — see `src/mesh/mesh-pb-constants.h`. On every other arch all four maps are present. When excluded, the map member is absent and the corresponding accessors return `false`.
+
+All four maps are guarded by **`mutable concurrency::Lock satelliteMutex`** — concurrent access from receive threads, the phone API state machine, and the renderer is the rule, not the exception.
+
+### Accessor convention
+
+**Never hand out pointers into the maps.** Use the copy-out accessors on `NodeDB`:
+
+```cpp
+bool copyNodePosition(NodeNum, meshtastic_PositionLite &out)       const;
+bool copyNodeTelemetry(NodeNum, meshtastic_DeviceMetrics &out)     const;
+bool copyNodeEnvironment(NodeNum, meshtastic_EnvironmentMetrics &out) const;
+bool copyNodeStatus(NodeNum, meshtastic_StatusMessage &out)        const;
+```
+
+Each takes the lock, copies the value if present, returns `false` if the entry is absent or the DB is excluded. Pass-by-out-param is deliberate — pointer-style accessors would invite UAF and lock-leak bugs across the renderer. The "has any X" convenience predicates (`hasValidPosition` etc.) are implemented in terms of these.
+
+Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which dispatches on `which_variant` for device vs environment metrics) — these own the lock and the eviction hooks.
+
+### Eviction
+
+Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `demoteOldestHotNodesToWarm` (the over-cap warm-tier migration), `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly. (Note: `enforceSatelliteCaps`/`evictSatelliteOverCap` call `.erase()` directly on purpose — that's a satellite-only cap trim where the node _stays_ in the header, a different operation from this chokepoint.)
+
+### Warm tier (long-tail identity)
+
+On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node — primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
+
+- **Write:** `getOrCreateMeshNode`'s eviction and `demoteOldestHotNodesToWarm` (the over-cap boot migration) call `warmStore.absorb(num, last_heard, key)` _before_ the node leaves the header.
+- **Read-back:** `getOrCreateMeshNode` calls `warmStore.take()` to rehydrate `last_heard` + key when a warm node is re-admitted; `copyPublicKey()` falls back to the warm tier so the PKI send path finds keys for evicted peers.
+- **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Everywhere else: a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
+- **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap — 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 keeps its flash-scaled 100/200/250, portduino 250). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
+
+### Satellite caps
+
+Only the freshest `MAX_SATELLITE_NODES` nodes keep satellite payloads; the rest of the header table carries just the `NodeInfoLite`. The cap is **per-platform**: 40 on RAM-constrained parts (nRF52840, generic ESP32) since the four maps live in internal SRAM (not PSRAM, ~408 B/node across the four), and 250 on flash-rich hosts (ESP32-S3, portduino) so every hot node can carry rich data as before the cap existed. `enforceSatelliteCaps()` trims each map to the cap on load (returns whether it trimmed); `evictSatelliteOverCap()` trims before each insert. Eviction is by the owning node's hot `last_heard` (stalest first, demoted/absent nodes rank as `last_heard==0`); self is never trimmed.
+
+### On-boot self-care
+
+`NodeDB::nodeDBSelfCare()` runs once identity is established (the constructor after key (re)gen, and `reloadFromDisk()` — _not_ inside `loadFromDisk`, where `getNodeNum()` is still 0). It confirms self is present (warns if a non-empty DB is missing us — a foreign/over-cap file), pins self to index 0, demotes/trims only **non-self** overflow into the warm tier, then rewrites `nodes.proto` **once** and only if it healed something — and never while encrypted storage is locked (it would persist placeholder defaults). `loadFromDisk` deliberately leaves the loaded store untrimmed for this pass.
+
+### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
+
+There is no capability flag and no special "gradient" nonce. The **default** sync flow is:
+
+1. Config / module-config / channel / metadata segments (same as before).
+2. `STATE_SEND_OWN_NODEINFO` — **our own** NodeInfo, still bundled with our position and device_metrics (because the replay snapshot excludes our own NodeNum). Emitted via `ConvertToNodeInfo(lite)`.
+3. `STATE_SEND_OTHER_NODEINFOS` — every other peer's NodeInfo, **always thin** (no `position`, no `device_metrics`). Emitted via `ConvertToNodeInfoThin(lite)`.
+4. `STATE_SEND_FILEMANIFEST` → `STATE_SEND_COMPLETE_ID` — the phone sees `config_complete_id` and treats sync as done.
+5. `STATE_SEND_PACKETS` — live mesh packets, with a trailing replay drain interleaved. The replay drain walks four cached satellite stores in order (positions → telemetry → environment → status) and emits each cached entry as an ordinary `MeshPacket` on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` device + environment variants, `NODE_STATUS_APP`). These are indistinguishable on the wire from live mesh traffic, so clients need no special handling — any code that already updates UI on `POSITION_APP` etc. works.
+
+`PhoneAPI::sendConfigComplete()` arms `replayPhase = REPLAY_PHASE_POSITIONS` for default/full sync and `SPECIAL_NONCE_ONLY_NODES`, while `SPECIAL_NONCE_ONLY_CONFIG` skips replay. The drain runs inside `STATE_SEND_PACKETS` via `popReplayPacket()`, lower priority than live traffic. When all four phases drain, `replayPhase` flips back to `REPLAY_PHASE_IDLE` and the snapshot vectors get `shrink_to_fit`ed.
+
+STM32WL and any other build with all four `MESHTASTIC_EXCLUDE_*DB` flags set produces zero replay packets — `popReplayPacket` advances through each phase in microseconds without emitting anything.
+
+Special nonces that still mean something:
+
+- `SPECIAL_NONCE_ONLY_CONFIG` (69420) — skip node sync entirely, just config.
+- `SPECIAL_NONCE_ONLY_NODES` (69421) — skip config segments, jump straight to `STATE_SEND_OWN_NODEINFO`. Still gets the post-COMPLETE_ID replay drain.
+
+There are no other reserved nonces; everything else is a fresh random `want_config_id` from the client.
+
+### v24 → v25 migration
+
+The legacy migration code lives in **`src/mesh/NodeDBLegacyMigration.cpp`**, not in `NodeDB.cpp`. It owns the `meshtastic_NodeDatabase_Legacy` callback and `NodeDB::migrateLegacyNodeDatabase()`. The legacy proto descriptor is `protobufs/meshtastic/deviceonly_legacy.proto` (only included by the migration TU). The boot path peeks the file's leading version tag, runs the migration if `version < 25`, then re-saves in v25 layout. The legacy descriptor is scheduled for removal once `DEVICESTATE_MIN_VER` is bumped.
+
+### Read-site rules of thumb
+
+- Never `node->position.X` / `node->device_metrics.X` — those fields no longer exist. Pull from the satellite map via `copyNodePosition` / `copyNodeTelemetry`.
+- Never `node->user.long_name` — `long_name`, `short_name`, `public_key`, `hw_model`, `role`, `macaddr` (gone), `is_licensed`, `is_unmessagable` are flat on `NodeInfoLite`.
+- Never `node->is_favorite` / `node->is_ignored` / `node->via_mqtt` / `node->is_key_manually_verified` — use the bitfield helpers.
+- Never assume `nodeDB->getMeshNode(num)->position.time` — call `copyNodePosition` and check the return.
+- Don't lock `satelliteMutex` yourself in renderer code; the copy-out accessors already do.
+
+Unit tests for the conversion layer live in `test/test_type_conversions/test_main.cpp` (Unity) — bitfield round-trips, `long_name` truncation, thin-vs-full conversions. Add cases there when extending the schema.
+
 ## Project Structure
 
 ```
@@ -190,12 +300,23 @@ firmware/
 
 ## Coding Conventions
 
+### Formatting & the trunk toolchain
+
+`trunk fmt` is the project formatter (`trunk_check` CI rejects unformatted code). For Claude Code users, `.claude/settings.json` ships a PostToolUse hook that runs `trunk fmt --force` on every file the agent writes or edits. The hook is pure sh/grep/sed — no python or jq required — but trunk itself must be able to run:
+
+- Trunk's launcher (`~/.cache/trunk/launcher/trunk`, or `trunk` on PATH) downloads the CLI version pinned in `.trunk/trunk.yaml` on first use and again whenever that pin is bumped. **The launcher needs `curl` or `wget`**; without one it fails with "Cannot download… please install curl or wget", and the hook surfaces that as a warning on every write.
+- No curl/wget available (e.g. a minimal WSL image)? Bootstrap by hand with any Python (PlatformIO bundles one at `~/.platformio/penv/bin/python`): download `https://trunk.io/releases/<ver>/trunk-<ver>-linux-x86_64.tar.gz` and place the `trunk` binary at `~/.cache/trunk/cli/<ver>-linux-x86_64/trunk` (chmod +x), where `<ver>` is the `cli.version` from `.trunk/trunk.yaml`.
+- The hook fails loudly by design (visible warning, non-blocking). Silent no-op formatting hooks hide real breakage — don't re-add `2>/dev/null || true` around the whole thing.
+- More generally: don't assume a stock Linux userland in hooks or helper scripts — minimal WSL/container images may lack `python3`, `curl`, `wget`, and `jq`. Prefer plain sh + coreutils, or PlatformIO's bundled Python for anything heavier.
+
 ### General Style
 
 - Follow existing code style - run `trunk fmt` before commits
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
+- **Keep code comments minimal — one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
+- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check — raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
 
 ### Naming Conventions
 
@@ -514,20 +635,35 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory with 12 test suites:
+Unit tests in `test/` directory with 17 test suites:
 
-- `test_crypto/` - Cryptography
-- `test_mqtt/` - MQTT integration
-- `test_radio/` - Radio interface
-- `test_mesh_module/` - Module framework
-- `test_meshpacket_serializer/` - Packet serialization
-- `test_transmit_history/` - Retransmission tracking
+- `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
 - `test_atak/` - ATAK integration
+- `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
 - `test_http_content_handler/` - HTTP handling
+- `test_mac_from_string/` - MAC address parsing
+- `test_mesh_module/` - Module framework
+- `test_meshpacket_serializer/` - Packet serialization
+- `test_mqtt/` - MQTT integration
+- `test_packet_history/` - Packet history tracking
+- `test_position_precision/` - Position precision helpers
+- `test_radio/` - Radio interface
 - `test_serial/` - Serial communication
+- `test_traffic_management/` - Traffic management
+- `test_transmit_history/` - Retransmission tracking
+- `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
+- `test_utf8/` - UTF-8 utilities
 
-Run with: `pio test -e native`
+Run command (preferred — avoids pipe-buffering and the Ubuntu externally-managed-environment error):
+
+```bash
+~/.platformio/penv/bin/python -m platformio test -e native -f test_your_suite > /tmp/test_out.txt 2>&1
+grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
+tail -15 /tmp/test_out.txt
+```
+
+Do **not** use `pio test … | tail -N` — it discards build errors and shows stale cached results. Do **not** use `pio test … | grep` — line-buffering makes the terminal appear hung until the process exits. Redirect to a file first, then grep.
 
 Simulation testing: `bin/test-simulator.sh`
 
