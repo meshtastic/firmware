@@ -191,24 +191,45 @@ Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which d
 
 ### Eviction
 
-Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly.
+Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `demoteOldestHotNodesToWarm` (the over-cap warm-tier migration), `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly. (Note: `enforceSatelliteCaps`/`evictSatelliteOverCap` call `.erase()` directly on purpose — that's a satellite-only cap trim where the node _stays_ in the header, a different operation from this chokepoint.)
 
-### Gradient sync (opt-in via special nonces)
+### Warm tier (long-tail identity)
 
-`client_capabilities` is **not** a thing in this branch. Phone clients opt into the new sync flow by sending one of two values in the `ToRadio.want_config_id`:
+On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node — primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
 
-- `SPECIAL_NONCE_GRADIENT_SYNC` (69422) — full config + thin NodeInfo + replay phases.
-- `SPECIAL_NONCE_GRADIENT_ONLY_NODES` (69423) — skip config segments, NodeInfo + replay only.
+- **Write:** `getOrCreateMeshNode`'s eviction and `demoteOldestHotNodesToWarm` (the over-cap boot migration) call `warmStore.absorb(num, last_heard, key)` _before_ the node leaves the header.
+- **Read-back:** `getOrCreateMeshNode` calls `warmStore.take()` to rehydrate `last_heard` + key when a warm node is re-admitted; `copyPublicKey()` falls back to the warm tier so the PKI send path finds keys for evicted peers.
+- **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Everywhere else: a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
+- **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap — 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 keeps its flash-scaled 100/200/250, portduino 250). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
 
-`PhoneAPI::clientWantsGradientSync()` is the single switch. When true, `STATE_SEND_OTHER_NODEINFOS` is followed by:
+### Satellite caps
 
-```text
-STATE_REPLAY_POSITIONS → STATE_REPLAY_TELEMETRY → STATE_REPLAY_ENVIRONMENT → STATE_REPLAY_STATUS
-```
+Only the freshest `MAX_SATELLITE_NODES` nodes keep satellite payloads; the rest of the header table carries just the `NodeInfoLite`. The cap is **per-platform**: 40 on RAM-constrained parts (nRF52840, generic ESP32) since the four maps live in internal SRAM (not PSRAM, ~408 B/node across the four), and 250 on flash-rich hosts (ESP32-S3, portduino) so every hot node can carry rich data as before the cap existed. `enforceSatelliteCaps()` trims each map to the cap on load (returns whether it trimmed); `evictSatelliteOverCap()` trims before each insert. Eviction is by the owning node's hot `last_heard` (stalest first, demoted/absent nodes rank as `last_heard==0`); self is never trimmed.
 
-Each replay phase walks the corresponding satellite map and emits synthetic `MeshPacket`s on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` for both device + environment variants, `STATUS_MESSAGE_APP`). Legacy clients (no special nonce) get the bundled-NodeInfo path with position/device_metrics joined back in by `ConvertToNodeInfo(lite, pos*, dm*)` — wire bytes are byte-identical to pre-v25 for them.
+### On-boot self-care
 
-`ConvertToNodeInfoThin(lite)` is the gradient-sync emitter (no position/telemetry).
+`NodeDB::nodeDBSelfCare()` runs once identity is established (the constructor after key (re)gen, and `reloadFromDisk()` — _not_ inside `loadFromDisk`, where `getNodeNum()` is still 0). It confirms self is present (warns if a non-empty DB is missing us — a foreign/over-cap file), pins self to index 0, demotes/trims only **non-self** overflow into the warm tier, then rewrites `nodes.proto` **once** and only if it healed something — and never while encrypted storage is locked (it would persist placeholder defaults). `loadFromDisk` deliberately leaves the loaded store untrimmed for this pass.
+
+### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
+
+There is no capability flag and no special "gradient" nonce. The **default** sync flow is:
+
+1. Config / module-config / channel / metadata segments (same as before).
+2. `STATE_SEND_OWN_NODEINFO` — **our own** NodeInfo, still bundled with our position and device_metrics (because the replay snapshot excludes our own NodeNum). Emitted via `ConvertToNodeInfo(lite)`.
+3. `STATE_SEND_OTHER_NODEINFOS` — every other peer's NodeInfo, **always thin** (no `position`, no `device_metrics`). Emitted via `ConvertToNodeInfoThin(lite)`.
+4. `STATE_SEND_FILEMANIFEST` → `STATE_SEND_COMPLETE_ID` — the phone sees `config_complete_id` and treats sync as done.
+5. `STATE_SEND_PACKETS` — live mesh packets, with a trailing replay drain interleaved. The replay drain walks four cached satellite stores in order (positions → telemetry → environment → status) and emits each cached entry as an ordinary `MeshPacket` on the matching portnum (`POSITION_APP`, `TELEMETRY_APP` device + environment variants, `NODE_STATUS_APP`). These are indistinguishable on the wire from live mesh traffic, so clients need no special handling — any code that already updates UI on `POSITION_APP` etc. works.
+
+`PhoneAPI::sendConfigComplete()` arms `replayPhase = REPLAY_PHASE_POSITIONS` for default/full sync and `SPECIAL_NONCE_ONLY_NODES`, while `SPECIAL_NONCE_ONLY_CONFIG` skips replay. The drain runs inside `STATE_SEND_PACKETS` via `popReplayPacket()`, lower priority than live traffic. When all four phases drain, `replayPhase` flips back to `REPLAY_PHASE_IDLE` and the snapshot vectors get `shrink_to_fit`ed.
+
+STM32WL and any other build with all four `MESHTASTIC_EXCLUDE_*DB` flags set produces zero replay packets — `popReplayPacket` advances through each phase in microseconds without emitting anything.
+
+Special nonces that still mean something:
+
+- `SPECIAL_NONCE_ONLY_CONFIG` (69420) — skip node sync entirely, just config.
+- `SPECIAL_NONCE_ONLY_NODES` (69421) — skip config segments, jump straight to `STATE_SEND_OWN_NODEINFO`. Still gets the post-COMPLETE_ID replay drain.
+
+There are no other reserved nonces; everything else is a fresh random `want_config_id` from the client.
 
 ### v24 → v25 migration
 
@@ -278,6 +299,15 @@ firmware/
 ```
 
 ## Coding Conventions
+
+### Formatting & the trunk toolchain
+
+`trunk fmt` is the project formatter (`trunk_check` CI rejects unformatted code). For Claude Code users, `.claude/settings.json` ships a PostToolUse hook that runs `trunk fmt --force` on every file the agent writes or edits. The hook is pure sh/grep/sed — no python or jq required — but trunk itself must be able to run:
+
+- Trunk's launcher (`~/.cache/trunk/launcher/trunk`, or `trunk` on PATH) downloads the CLI version pinned in `.trunk/trunk.yaml` on first use and again whenever that pin is bumped. **The launcher needs `curl` or `wget`**; without one it fails with "Cannot download… please install curl or wget", and the hook surfaces that as a warning on every write.
+- No curl/wget available (e.g. a minimal WSL image)? Bootstrap by hand with any Python (PlatformIO bundles one at `~/.platformio/penv/bin/python`): download `https://trunk.io/releases/<ver>/trunk-<ver>-linux-x86_64.tar.gz` and place the `trunk` binary at `~/.cache/trunk/cli/<ver>-linux-x86_64/trunk` (chmod +x), where `<ver>` is the `cli.version` from `.trunk/trunk.yaml`.
+- The hook fails loudly by design (visible warning, non-blocking). Silent no-op formatting hooks hide real breakage — don't re-add `2>/dev/null || true` around the whole thing.
+- More generally: don't assume a stock Linux userland in hooks or helper scripts — minimal WSL/container images may lack `python3`, `curl`, `wget`, and `jq`. Prefer plain sh + coreutils, or PlatformIO's bundled Python for anything heavier.
 
 ### General Style
 
@@ -605,20 +635,35 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory with 12 test suites:
+Unit tests in `test/` directory with 17 test suites:
 
-- `test_crypto/` - Cryptography
-- `test_mqtt/` - MQTT integration
-- `test_radio/` - Radio interface
-- `test_mesh_module/` - Module framework
-- `test_meshpacket_serializer/` - Packet serialization
-- `test_transmit_history/` - Retransmission tracking
+- `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
 - `test_atak/` - ATAK integration
+- `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
 - `test_http_content_handler/` - HTTP handling
+- `test_mac_from_string/` - MAC address parsing
+- `test_mesh_module/` - Module framework
+- `test_meshpacket_serializer/` - Packet serialization
+- `test_mqtt/` - MQTT integration
+- `test_packet_history/` - Packet history tracking
+- `test_position_precision/` - Position precision helpers
+- `test_radio/` - Radio interface
 - `test_serial/` - Serial communication
+- `test_traffic_management/` - Traffic management
+- `test_transmit_history/` - Retransmission tracking
+- `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
+- `test_utf8/` - UTF-8 utilities
 
-Run with: `pio test -e native`
+Run command (preferred — avoids pipe-buffering and the Ubuntu externally-managed-environment error):
+
+```bash
+~/.platformio/penv/bin/python -m platformio test -e native -f test_your_suite > /tmp/test_out.txt 2>&1
+grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
+tail -15 /tmp/test_out.txt
+```
+
+Do **not** use `pio test … | tail -N` — it discards build errors and shows stale cached results. Do **not** use `pio test … | grep` — line-buffering makes the terminal appear hung until the process exits. Redirect to a file first, then grep.
 
 Simulation testing: `bin/test-simulator.sh`
 

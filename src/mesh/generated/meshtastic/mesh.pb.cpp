@@ -57,6 +57,9 @@ PB_BIND(meshtastic_QueueStatus, meshtastic_QueueStatus, AUTO)
 PB_BIND(meshtastic_FromRadio, meshtastic_FromRadio, 2)
 
 
+PB_BIND(meshtastic_LockdownStatus, meshtastic_LockdownStatus, AUTO)
+
+
 PB_BIND(meshtastic_ClientNotification, meshtastic_ClientNotification, 2)
 
 
@@ -93,6 +96,15 @@ PB_BIND(meshtastic_Neighbor, meshtastic_Neighbor, AUTO)
 PB_BIND(meshtastic_DeviceMetadata, meshtastic_DeviceMetadata, AUTO)
 
 
+PB_BIND(meshtastic_LoRaPresetGroup, meshtastic_LoRaPresetGroup, AUTO)
+
+
+PB_BIND(meshtastic_LoRaRegionPresets, meshtastic_LoRaRegionPresets, AUTO)
+
+
+PB_BIND(meshtastic_LoRaRegionPresetMap, meshtastic_LoRaRegionPresetMap, 2)
+
+
 PB_BIND(meshtastic_Heartbeat, meshtastic_Heartbeat, AUTO)
 
 
@@ -106,6 +118,8 @@ PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
 
 
 PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
+
+
 
 
 

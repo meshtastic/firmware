@@ -10,9 +10,8 @@
 #include "target_specific.h"
 #include <WiFi.h>
 
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET && defined(ARCH_ESP32)
+#include <ETH.h>
 #endif // HAS_ETHERNET
 
 #if HAS_ETHERNET && defined(USE_CH390D)
@@ -291,10 +290,8 @@ static int32_t reconnectWiFi()
 #endif
         return 1000; // check once per second
     } else {
-#ifdef ARCH_RP2040
-        onNetworkConnected(); // will only do anything once
-#endif
-        return 300000; // every 5 minutes
+        onNetworkConnected(); // will only do anything once (guarded by APStartupComplete)
+        return 300000;        // every 5 minutes
     }
 }
 
@@ -343,9 +340,6 @@ bool initWifi()
         const char *wifiPsw = config.network.wifi_psk;
 
 #ifndef ARCH_RP2040
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
-#endif
         WiFi.persistent(false); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
@@ -370,6 +364,9 @@ bool initWifi()
 #endif
             }
 #ifdef ARCH_ESP32
+            // Register WiFi event handler BEFORE createSSLCert() to prevent race condition:
+            // Without this, WiFi can auto-reconnect during cert generation and fire GOT_IP
+            // before the handler is registered, causing onNetworkConnected() to never run.
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
@@ -391,6 +388,12 @@ bool initWifi()
                     wifiDisconnectReason = info.wifi_sta_disconnected.reason;
                 },
                 WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+#endif
+
+#ifndef ARCH_RP2040
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+            createSSLCert(); // For WebServer - called after WiFi.onEvent() to avoid race condition
+#endif
 #endif
             LOG_DEBUG("JOINING WIFI soon: ssid=%s", wifiName);
             wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
@@ -570,11 +573,14 @@ static void WiFiEvent(WiFiEvent_t event)
 #endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
-#if defined(USE_WS5500) || defined(USE_CH390D)
+#if defined(USE_CH390D)
+        // The CH390 driver's ETH class doesn't expose the IPv6 address getters
+        LOG_INFO("Obtained IP6 address");
+#elif defined(USE_WS5500)
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
-#elif defined(USE_WS5500)
+#else
         LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
 #endif
 #endif

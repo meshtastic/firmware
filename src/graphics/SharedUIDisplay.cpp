@@ -31,6 +31,12 @@ ScreenResolution determineScreenResolution(int16_t screenheight, int16_t screenw
         return ScreenResolution::UltraLow;
     }
 
+#ifdef DISPLAY_FORCE_SMALL_FONTS
+    if (screenwidth <= 160 && screenheight <= 80) {
+        return ScreenResolution::Low;
+    }
+#endif
+
     // Standard OLED screens
     if (screenwidth > 128 && screenheight <= 64) {
         return ScreenResolution::Low;
@@ -240,7 +246,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     int batteryX = 1;
     int batteryY = HEADER_OFFSET_Y + 1;
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === Battery Icons ===
     if (usbPowered && !isCharging) { // This is a basic check to determine USB Powered is flagged but not charging
         batteryX += 1;
@@ -572,7 +578,11 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 #endif
 
     display->setColor(BLACK);
+#if GRAPHICS_TFT_COLORING_ENABLED
     display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+#else
+    display->fillRect(0, footerY, connection_icon_width + 1, footerH);
+#endif
     display->setColor(WHITE);
     if (currentResolution == ScreenResolution::High) {
         const int bytesPerRow = (connection_icon_width + 7) / 8;

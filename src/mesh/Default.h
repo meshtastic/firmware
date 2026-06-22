@@ -18,6 +18,9 @@
 #define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
+// Floor for our own position broadcasts when stationary (unchanged beyond the broadcast
+// precision) or fixed_position: identical positions get deduped by traffic management anyway.
+#define default_position_stationary_broadcast_secs (12 * 60 * 60)
 #define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
@@ -31,9 +34,23 @@
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
 
+enum class TrafficType { POSITION, TELEMETRY };
+
 // Traffic management defaults
-#define default_traffic_mgmt_position_precision_bits 24               // ~10m grid cells
-#define default_traffic_mgmt_position_min_interval_secs (ONE_DAY / 2) // 12 hours between identical positions
+#define default_traffic_mgmt_position_precision_bits 19                // ~90m grid cells (±45m)
+#define default_traffic_mgmt_position_min_interval_secs (11 * 60 * 60) // 11 hours between identical positions
+// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 11h default).
+#define default_traffic_mgmt_tracker_position_min_interval_secs (60 * 60) // 1 hour
+// Role cap: lost-and-found origins may refresh a duplicate position this often, so a lost
+// device updates frequently without flooding. (Quantised to the dedup tick: ~2 ticks.)
+// Unlike before, lost-and-found is NOT exempt from the relayed precision clamp.
+#define default_traffic_mgmt_lost_and_found_position_min_interval_secs (15 * 60) // 15 minutes
+
+// Hop scaling defaults
+#define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
+#define default_hop_scaling_max_target_nodes 80          // generous extension ceiling (2 × min)
+#define default_hop_scaling_min_target_nodes_floor 5     // minimum allowed min_target_nodes
+#define default_hop_scaling_max_target_nodes_ceiling 512 // maximum allowed max_target_nodes
 
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
@@ -64,6 +81,8 @@ class Default
     // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
     // even though internal node counts use uint16_t (max 65535 nodes)
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
+    static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes,
+                                                   TrafficType type);
     static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
     static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
 
