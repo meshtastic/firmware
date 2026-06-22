@@ -128,13 +128,15 @@ static inline int get_max_num_nodes()
 // chain. Backed by the raw-flash ring below LittleFS — see WarmNodeStore.h.
 #define WARM_NODE_COUNT 200
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
-#define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm.dat ~80 KB
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define WARM_NODE_COUNT 150 // ESP32-S3 without PSRAM: ~6 KB heap, keeps BLE headroom (#10705)
+#define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm cache in PSRAM (~80 KB)
+#elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32P4)
+#define WARM_NODE_COUNT 150 // 512 KB+ SRAM, no PSRAM (S3/C6/P4): ~6 KB heap (#10705)
+#elif defined(ARCH_ESP32)
+#define WARM_NODE_COUNT 100 // classic ESP32 (520 KB) / S2 (320 KB) / C3 (400 KB): tightest free heap w/ BLE+WiFi, ~4 KB (#10705)
 #elif defined(ARCH_RP2040)
-#define WARM_NODE_COUNT 150 // RP2040/RP2350: smaller warm.dat so the second flash write fits the watchdog (#10746)
+#define WARM_NODE_COUNT 150 // RP2040 (264 KB) / RP2350 (520 KB): bounded so warm.dat write fits the 8s watchdog (#10746)
 #else
-#define WARM_NODE_COUNT 320 // Generic ESP32, ESP32C3 etc.
+#define WARM_NODE_COUNT 320 // other LittleFS-backed parts
 #endif                      // platform
 #endif                      // WARM_NODE_COUNT
 
@@ -168,10 +170,12 @@ static inline int get_max_num_nodes()
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048 // PSRAM-equipped ESP32-S3 / native host
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 500 // ESP32-S3 without PSRAM: ~5 KB heap, keeps BLE headroom (#10705)
+#elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32P4)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 500 // 512 KB+ SRAM, no PSRAM (S3/C6/P4): ~5 KB heap (#10705)
+#elif defined(ARCH_ESP32)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 400 // classic ESP32 / S2 / C3: tightest free heap, ~4 KB (#10705)
 #else
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // Generic ESP32
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // RP2040 / other
 #endif
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
 
