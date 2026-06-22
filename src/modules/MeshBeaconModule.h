@@ -132,8 +132,9 @@ class MeshBeaconBroadcastModule : private MeshBeaconModule,
 extern MeshBeaconBroadcastModule *meshBeaconBroadcastModule;
 
 /**
- * Listener: receives MESH_BEACON_APP packets, delivers text to the local inbox,
- * and caches any offered channel/preset for the client app to retrieve.
+ * Listener: receives MESH_BEACON_APP packets and caches any offered channel/preset for the client
+ * app to retrieve. It does NOT unwrap the text into a separate message — the original beacon packet
+ * already reaches the client (handler returns CONTINUE), which reads `message` from it directly.
  * Does NOT auto-apply offered settings — client app must do so explicitly.
  * Active only when the FLAG_LISTEN_ENABLED bit is set in moduleConfig.mesh_beacon.flags.
  */

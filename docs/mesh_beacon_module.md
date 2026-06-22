@@ -20,10 +20,10 @@ to the client and, ultimately, the user.
 
 ### 1.1 Two roles in one module
 
-| Role            | Class                       | Active when                  | What it does                                                                                               |
-| --------------- | --------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Broadcaster** | `MeshBeaconBroadcastModule` | `FLAG_BROADCAST_ENABLED` set | Periodically transmits `MESH_BEACON_APP` packets on the configured radio settings.                         |
-| **Listener**    | `MeshBeaconListenerModule`  | `FLAG_LISTEN_ENABLED` set    | Receives `MESH_BEACON_APP` packets, delivers the text to the local inbox, caches the offer for the client. |
+| Role            | Class                       | Active when                  | What it does                                                                                                              |
+| --------------- | --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Broadcaster** | `MeshBeaconBroadcastModule` | `FLAG_BROADCAST_ENABLED` set | Periodically transmits `MESH_BEACON_APP` packets on the configured radio settings.                                        |
+| **Listener**    | `MeshBeaconListenerModule`  | `FLAG_LISTEN_ENABLED` set    | Receives `MESH_BEACON_APP` packets and caches the offer for the client (the packet itself flows to the client unchanged). |
 
 The boolean toggles live in a single `flags` bitfield (see [§1.8](#18-settings-reference-moduleconfigmeshbeaconconfig-tag-17)) — broadcasting and
 listening can be enabled independently on the same node. The whole module compiles out under the
@@ -193,17 +193,20 @@ the modules nor the phone. When it is **on**, the packet flows normally and the 
 `wantPacket` accepts it (`has_mesh_beacon` + `FLAG_LISTEN_ENABLED` + `portnum == MESH_BEACON_APP`).
 On a valid beacon (`handleReceivedProtobuf`):
 
-1. **Text → local inbox.** If the beacon has text, the listener delivers a `TEXT_MESSAGE_APP`
-   copy to the **locally connected phone only** via `sendToPhone()` — preserving the original
-   `from` (the real beaconer). This is a _local inbox delivery, not a mesh retransmit_: it is never
-   re-injected into the mesh, so the text is neither amplified nor re-attributed to the listener.
-2. **Offer → cache.** Any offer (`offer_channel` / `offer_region` / `offer_preset`) is stored in
+1. **Offer → cache.** Any offer (`offer_channel` / `offer_region` / `offer_preset`) is stored in
    the static `lastReceivedOffer` (sender, channel, region, preset, `received_at`). `received_at`
    is `0` if the node has no RTC fix yet — **consumers must not treat `0` as a valid timestamp.**
-3. **Never auto-applied.** The firmware does not switch channel/preset/region from a received
+2. **Never auto-applied.** The firmware does not switch channel/preset/region from a received
    offer. Acting on it is the client app's job.
-4. The handler returns `CONTINUE` (not `STOP`), so the original `MESH_BEACON_APP` packet **also
-   flows to the phone** through the normal FromRadio path (see Part 2).
+3. The handler returns `CONTINUE` (not `STOP`), so the original `MESH_BEACON_APP` packet **flows to
+   the client unchanged** through the normal FromRadio path (see Part 2). The client reads the
+   `message` field directly from that packet — there is no separate copy.
+
+The firmware deliberately does **not** unwrap a combined beacon's text into a synthesized
+`TEXT_MESSAGE_APP`, and does **not** fire `EVENT_RECEIVED_MSG`: a beacon is an advisory broadcast,
+not a personal message, so it must not duplicate the text or wake the device from sleep. If a
+broadcaster needs non-beacon-aware clients to see the text, it uses `FLAG_LEGACY_SPLIT`, which sends
+a real `TEXT_MESSAGE_APP` over RF (see [§1.5](#15-legacy-split-flag_legacy_split)).
 
 ### 1.8 Settings reference (`ModuleConfig.MeshBeaconConfig`, tag 17)
 
@@ -229,7 +232,7 @@ On a valid beacon (`handleReceivedProtobuf`):
 | Bit value | Name                     | Meaning                                                                                                                                                                                                                                    |
 | --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 0         | `FLAG_NONE`              | No options enabled.                                                                                                                                                                                                                        |
-| 1         | `FLAG_LISTEN_ENABLED`    | Receive beacons; deliver text to inbox, cache offer.                                                                                                                                                                                       |
+| 1         | `FLAG_LISTEN_ENABLED`    | Receive beacons; cache the offer. The packet flows to the client, which reads `message` directly.                                                                                                                                          |
 | 2         | `FLAG_BROADCAST_ENABLED` | Periodically broadcast beacons from this node.                                                                                                                                                                                             |
 | 4         | `FLAG_LEGACY_SPLIT`      | Legacy compatibility: (a) split text+offer into separate `TEXT_MESSAGE_APP` + `MESH_BEACON_APP` packets, and (b) stamp `hop_start = 1` on every beacon so pre-2.7.20 firmware accepts it (see [§1.5](#15-legacy-split-flag_legacy_split)). |
 
@@ -297,19 +300,18 @@ returns `CONTINUE`, so the packet is **not** consumed on-device. The client must
 > physically receives the RF, but the client will not see beacons over the FromRadio stream until
 > listening is enabled.
 
-#### Text duplication — important
+#### Reading the text — no duplication
 
-For beacons that carry text, the client may observe the text **twice**:
+For a beacon-aware client the text is **simply the `message` field of the `MESH_BEACON_APP`
+packet** you already decode for the offer (step 3 above). One packet, one field — the firmware does
+**not** inject a separate `TEXT_MESSAGE_APP` copy, so there is nothing to deduplicate.
 
-- once as the original `MESH_BEACON_APP` packet (`message` field), and
-- once as a `TEXT_MESSAGE_APP` packet that firmware injects into the local inbox so it appears in
-  the normal message list (same `from`, same text).
-
-Plus, if the broadcaster used legacy split (`FLAG_LEGACY_SPLIT`), the text and offer arrive as two distinct
-RF packets to begin with. **Deduplicate** when presenting messages — e.g. key on
-`(from, text, ~timestamp)` — so a single beacon does not show as multiple chat entries. A common
-strategy: treat the `TEXT_MESSAGE_APP` copy as the chat entry, and treat `MESH_BEACON_APP` purely
-as the source of the _offer_.
+The only time a beacon's text arrives as a separate `TEXT_MESSAGE_APP` is when the broadcaster set
+`FLAG_LEGACY_SPLIT`: in that mode the `MESH_BEACON_APP` carries the **offer only** (empty `message`)
+and the text is sent as a normal `TEXT_MESSAGE_APP` over RF, so legacy/non-beacon-aware clients can
+display it. These two cases are mutually exclusive — a given beacon's text appears exactly once,
+either in `MESH_BEACON_APP.message` (combined) or as a `TEXT_MESSAGE_APP` (legacy-split) — so a
+client never needs to dedup. Render whichever it receives.
 
 ### 2.4 Acting on an offer (the core client responsibility)
 

@@ -1,9 +1,7 @@
 #include "MeshBeaconModule.h"
 #include "Default.h"
 #include "DisplayFormatters.h"
-#include "MeshService.h"
 #include "NodeDB.h"
-#include "PowerFSM.h"
 #include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
@@ -567,25 +565,14 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
     if (!b || (!hasText && !hasOfferContent))
         return false;
 
-    if (hasText) {
+    // NOTE: we deliberately do NOT unwrap the text into a synthesized TEXT_MESSAGE_APP for the
+    // phone. The original MESH_BEACON_APP packet already flows to the client (we return CONTINUE),
+    // so a beacon-aware client renders `message` directly — injecting a copy would only duplicate
+    // it. Broadcasters that need non-beacon-aware clients to see the text use FLAG_LEGACY_SPLIT,
+    // which sends a real TEXT_MESSAGE_APP over RF. We also do not fire EVENT_RECEIVED_MSG: a beacon
+    // is an advisory broadcast, not a personal message, and must not wake the device from sleep.
+    if (hasText)
         LOG_INFO("Beacon: received from %#08lx: '%.40s'", mp.from, b->message);
-        // Surface the text to the locally connected phone/client ONLY, as a TEXT_MESSAGE_APP
-        // packet. This is a local inbox delivery, NOT a mesh retransmit: we use sendToPhone()
-        // (queues toward the phone) rather than handleToRadio(), which would re-inject the
-        // packet into the mesh from this node — amplifying traffic and re-attributing the text
-        // to us. The original 'from' (the real beaconer) is preserved for the phone.
-        meshtastic_MeshPacket *txt = packetPool.allocCopy(mp);
-        if (!txt) {
-            LOG_WARN("Beacon: failed to alloc inbox copy");
-            return false;
-        }
-        txt->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-        txt->to = nodeDB->getNodeNum();
-        memset(txt->decoded.payload.bytes, 0, sizeof(txt->decoded.payload.bytes));
-        txt->decoded.payload.size = msgLen;
-        memcpy(txt->decoded.payload.bytes, b->message, txt->decoded.payload.size);
-        service->sendToPhone(txt); // takes ownership of txt — do not release
-    }
 
     // Cache any offer for the client app — never auto-applied.
     if (hasOfferContent) {
@@ -601,8 +588,6 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
         LOG_INFO("Beacon: stored offer from %#08lx (preset=%d)", mp.from, b->offer_preset);
     }
 
-    if (hasText)
-        powerFSM.trigger(EVENT_RECEIVED_MSG);
     notifyObservers(&mp);
     return false;
 }

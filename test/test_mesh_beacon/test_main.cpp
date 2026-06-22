@@ -968,11 +968,13 @@ static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
 }
 
 /**
- * Verify received beacon text is delivered to the local phone queue and NOT re-injected
- * into the mesh. Regression guard for the bug where handleToRadio() rebroadcast the text
- * from this node (amplification + re-attribution). The fix uses sendToPhone().
+ * Verify the listener does NOT unwrap a combined beacon's text into a synthesized TEXT_MESSAGE_APP.
+ * The original MESH_BEACON_APP packet already reaches the client (the handler returns CONTINUE), so
+ * a beacon-aware client reads `message` directly from it — injecting a copy would only duplicate it,
+ * and re-injecting onto the mesh would amplify/re-attribute. So: nothing onto the mesh, nothing
+ * synthesized to the phone, and the handler must not consume the packet.
  */
-static void test_listener_textMessage_deliveredToPhoneNotMesh(void)
+static void test_listener_textMessage_notUnwrapped(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
@@ -985,19 +987,17 @@ static void test_listener_textMessage_deliveredToPhoneNotMesh(void)
     strncpy(b.message, "hello mesh", sizeof(b.message) - 1);
 
     meshtastic_MeshPacket mp = makeBeaconPacket(b);
-    listener.handleReceivedProtobuf(mp, &b);
+    bool consumed = listener.handleReceivedProtobuf(mp, &b);
 
-    // The listener must NOT send anything onto the mesh.
+    // CONTINUE (not STOP): the original MESH_BEACON_APP keeps flowing to the client, which reads
+    // `message` from it — the simple path for a beacon-aware client.
+    TEST_ASSERT_FALSE_MESSAGE(consumed, "Listener must not consume the beacon; the original must reach the client");
+    // Nothing re-injected onto the mesh.
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mockRouter->sentPackets.size(),
                                      "Received beacon text must not be re-injected into the mesh");
-
-    // It must hand exactly one TEXT_MESSAGE_APP packet to the phone, preserving the real sender.
+    // No synthesized TEXT_MESSAGE_APP delivered to the phone (no duplicate of the beacon's text).
     meshtastic_MeshPacket *toPhone = service->getForPhone();
-    TEST_ASSERT_NOT_NULL_MESSAGE(toPhone, "Beacon text must be delivered to the phone queue");
-    TEST_ASSERT_EQUAL(meshtastic_PortNum_TEXT_MESSAGE_APP, toPhone->decoded.portnum);
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(kRemoteNode, toPhone->from, "Phone must see the original beaconer as sender");
-    TEST_ASSERT_EQUAL_STRING("hello mesh", (const char *)toPhone->decoded.payload.bytes);
-    service->releaseToPool(toPhone);
+    TEST_ASSERT_NULL_MESSAGE(toPhone, "Listener must not inject a duplicate text packet to the phone");
 }
 
 /**
@@ -1415,7 +1415,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_listener_offerOnly_isCached);
     RUN_TEST(test_listener_nullBeacon_isDropped);
     RUN_TEST(test_listener_receiveWithNoOffer_cacheStaysInvalid);
-    RUN_TEST(test_listener_textMessage_deliveredToPhoneNotMesh);
+    RUN_TEST(test_listener_textMessage_notUnwrapped);
     RUN_TEST(test_listener_wantPacket_falseWhenDisabled);
     RUN_TEST(test_listener_wantPacket_trueWhenEnabled);
 
