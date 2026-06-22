@@ -147,7 +147,10 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
     if (isFromUs(&p)) {
         return false; // local-originated packets should never be dropped by pre-hop drop policy
     }
-    return classifyHopStart(p) != HopStartStatus::VALID;
+    // Pre-decode: the channel-encrypted bitfield isn't readable yet, so a missing/unknown hop_start can't be
+    // distinguished from a modern packet. Only drop the provably-corrupt case here; the bitfield-dependent
+    // verdict is re-checked post-decode in Router::handleReceived.
+    return classifyHopStart(p) == HopStartStatus::INVALID;
 #endif
 }
 
