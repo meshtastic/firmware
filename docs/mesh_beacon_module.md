@@ -61,7 +61,9 @@ Every outgoing beacon packet is stamped uniformly (`sendBeacon` → `stampPacket
 - `to = NODENUM_BROADCAST`
 - `from = local node` (see [§1.6](#16-broadcast_send_as_node-currently-disabled) for the disabled spoof path)
 - **`hop_limit = 0`** — beacons are **zero-hop**. They are never rebroadcast by the mesh; only
-  direct RF neighbours hear them. This is the primary spam-control mechanism.
+  direct RF neighbours hear them. This is the primary spam-control mechanism. (`hop_start` is
+  normally `0` too, but `FLAG_LEGACY_SPLIT` raises it to `1` for old-firmware compatibility — see
+  [§1.5](#15-legacy-split-flag_legacy_split).)
 - `priority = BACKGROUND`, `want_ack = false`.
 
 Broadcasting is additionally gated at runtime by:
@@ -74,6 +76,13 @@ Broadcasting is additionally gated at runtime by:
 `broadcast_interval_secs` controls cadence. The floor is **3600 s (1 hour)**
 (`default_mesh_beacon_min_broadcast_interval_secs`); `0` means "use default". Values below the
 floor are silently raised, both at config-set time (AdminModule) and at runtime.
+
+The cadence is **reboot-safe**. Each broadcast's time is persisted to flash via `TransmitHistory`
+(keyed by `MESH_BEACON_APP`), and the broadcaster reads it back on boot — so a node that reboots
+(or crash-loops) won't re-broadcast until a full interval has elapsed since its last real send,
+rather than firing ~30 s after every boot. The timestamp is written **before** the transmit, so a
+brown-out during the high-current LoRa TX still counts as "sent." This mirrors `NodeInfoModule` /
+`PositionModule`.
 
 #### Radio switching for TX
 
@@ -115,7 +124,9 @@ deployment.
   non-empty it takes over from the scalar `broadcast_on_*` fields, and the broadcaster sends **one
   beacon copy per entry**. Each `BroadcastTarget` is `{ optional preset, region, optional channel_index }`,
   where `channel_index` references a slot in the node's own channel table (the channel must already be
-  configured locally — its key is needed to encrypt the beacon).
+  configured locally — its key is needed to encrypt the beacon). Within one cycle, targets that
+  resolve to the **same** effective preset/region/channel are de-duplicated — only the first is
+  transmitted — so an accidentally repeated entry costs no extra airtime.
 
 #### Same-settings vs. other-settings
 
@@ -135,8 +146,11 @@ settings with others on different presets/regions.
 
 ### 1.5 Legacy split (`FLAG_LEGACY_SPLIT`)
 
-A combined `MESH_BEACON_APP` packet carries both the text and the offer, but firmware that
-predates this module only decodes `TEXT_MESSAGE_APP` and would never show the text. When
+This one flag controls **two** independent legacy-compatibility behaviours. Both are about making
+beacons usable by firmware that predates this module.
+
+**(a) Text/offer packet split.** A combined `MESH_BEACON_APP` packet carries both the text and the
+offer, but old firmware only decodes `TEXT_MESSAGE_APP` and would never show the text. When
 `FLAG_LEGACY_SPLIT` is set **and both text and offer content are present**, the broadcaster
 emits **two** packets on the same beacon radio settings instead of one:
 
@@ -145,6 +159,17 @@ emits **two** packets on the same beacon radio settings instead of one:
 
 This is an independent two-packet decision, not an either/or: offer-only and text-only payloads
 still go out as a single packet in their respective cases; only the both-present case splits.
+
+**(b) `hop_start = 1` override.** When `FLAG_LEGACY_SPLIT` is set, **every** beacon packet it sends
+(combined, split-A, or split-B; even same-settings ones) is stamped with `hop_start = 1` while
+`hop_limit` stays `0`. Pre-2.7.20 firmware drops `hop_start == 0` packets in a pre-decryption check
+before it can read the bitfield, so `hop_start = 1` lets those nodes accept the beacon — and it
+remains genuinely zero-hop (`hop_limit = 0` still prevents any rebroadcast).
+
+> **Side effect for clients:** with `hop_start = 1, hop_limit = 0`, receivers compute
+> `hops_away = hop_start − hop_limit = 1`, so a legacy-split beacon reads as **1 hop away** even
+> though it arrived over direct RF. Without legacy-split it reads as direct (0). Don't treat a
+> beacon's `hops_away` as a reliable distance signal.
 
 ### 1.6 `broadcast_send_as_node` (currently disabled)
 
@@ -162,8 +187,11 @@ XEdDSA signing and receivers get an unsigned packet attributed to another node.
 
 ### 1.7 Reception behaviour (listener)
 
-`wantPacket` accepts a packet only when `has_mesh_beacon` and `FLAG_LISTEN_ENABLED` is set, and
-`portnum == MESH_BEACON_APP`. On a valid beacon (`handleReceivedProtobuf`):
+When `FLAG_LISTEN_ENABLED` is **off**, the router drops incoming `MESH_BEACON_APP` packets up front
+(`Router::handleReceived`, same pattern as a disabled NeighborInfo module) — so they reach neither
+the modules nor the phone. When it is **on**, the packet flows normally and the listener's
+`wantPacket` accepts it (`has_mesh_beacon` + `FLAG_LISTEN_ENABLED` + `portnum == MESH_BEACON_APP`).
+On a valid beacon (`handleReceivedProtobuf`):
 
 1. **Text → local inbox.** If the beacon has text, the listener delivers a `TEXT_MESSAGE_APP`
    copy to the **locally connected phone only** via `sendToPhone()` — preserving the original
@@ -198,12 +226,12 @@ XEdDSA signing and receivers get an unsigned packet attributed to another node.
 
 **`Flags` enum** (nested in `MeshBeaconConfig`; OR the values into `flags`):
 
-| Bit value | Name                     | Meaning                                                                        |
-| --------- | ------------------------ | ------------------------------------------------------------------------------ |
-| 0         | `FLAG_NONE`              | No options enabled.                                                            |
-| 1         | `FLAG_LISTEN_ENABLED`    | Receive beacons; deliver text to inbox, cache offer.                           |
-| 2         | `FLAG_BROADCAST_ENABLED` | Periodically broadcast beacons from this node.                                 |
-| 4         | `FLAG_LEGACY_SPLIT`      | Split text+offer into separate `TEXT_MESSAGE_APP` + `MESH_BEACON_APP` packets. |
+| Bit value | Name                     | Meaning                                                                                                                                                                                                                                    |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0         | `FLAG_NONE`              | No options enabled.                                                                                                                                                                                                                        |
+| 1         | `FLAG_LISTEN_ENABLED`    | Receive beacons; deliver text to inbox, cache offer.                                                                                                                                                                                       |
+| 2         | `FLAG_BROADCAST_ENABLED` | Periodically broadcast beacons from this node.                                                                                                                                                                                             |
+| 4         | `FLAG_LEGACY_SPLIT`      | Legacy compatibility: (a) split text+offer into separate `TEXT_MESSAGE_APP` + `MESH_BEACON_APP` packets, and (b) stamp `hop_start = 1` on every beacon so pre-2.7.20 firmware accepts it (see [§1.5](#15-legacy-split-flag_legacy_split)). |
 
 `BroadcastTarget`: `1 preset` (optional, falls back to running config), `2 region` (`UNSET` = running config), `4 channel_index` (optional `uint32`, index into the node's channel table; if unset, the default channel for the preset is used). Tag `3` is an unused gap — it previously held an embedded `ChannelSettings`, dropped to keep `ModuleConfig` within the BLE `FromRadio` size budget.
 
@@ -236,16 +264,17 @@ bit, read the current `flags`, set/clear the bit, and write the whole config bac
 The firmware **sanitises on write** — your value may be silently adjusted. Mirror these rules
 client-side so the UI doesn't disagree with the device:
 
-| Rule                                                                        | Firmware behaviour                                                        |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `broadcast_message` length                                                  | Truncated to 100 bytes.                                                   |
-| `broadcast_interval_secs`                                                   | If non-zero and `< 3600`, raised to 3600.                                 |
-| `broadcast_on_preset` invalid for `broadcast_on_region` (or current region) | Cleared, **and `broadcast_on_channel` cleared too.**                      |
-| `broadcast_offer_preset` invalid for offer/current region                   | Cleared.                                                                  |
-| `broadcast_offer_region` not a known region                                 | Cleared to `UNSET`.                                                       |
-| `broadcast_targets[i].region` not a known region                            | That entry's region cleared to `UNSET` (TX falls back to running config). |
-| `broadcast_targets[i].preset` invalid for that entry's region               | That entry's `preset` and `channel` cleared.                              |
-| `broadcast_send_as_node` ≠ sender's node ID (remote admin)                  | Rejected, reset to stored value.                                          |
+| Rule                                                                        | Firmware behaviour                                                              |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `broadcast_message` length                                                  | Truncated to 100 bytes.                                                         |
+| `broadcast_interval_secs`                                                   | If non-zero and `< 3600`, raised to 3600.                                       |
+| `broadcast_on_preset` invalid for `broadcast_on_region` (or current region) | Cleared, **and `broadcast_on_channel` cleared too.**                            |
+| `broadcast_offer_preset` invalid for offer/current region                   | Cleared.                                                                        |
+| `broadcast_offer_region` not a known region                                 | Cleared to `UNSET`.                                                             |
+| `broadcast_targets[i].region` not a known region                            | That entry's region cleared to `UNSET` (TX falls back to running config).       |
+| `broadcast_targets[i].preset` invalid for that entry's region               | That entry's `preset` and `channel_index` cleared.                              |
+| `broadcast_targets[i].channel_index` ≥ `MAX_NUM_CHANNELS` (8)               | That entry's `channel_index` cleared (existence is **not** checked — see §2.5). |
+| `broadcast_send_as_node` ≠ sender's node ID (remote admin)                  | Rejected, reset to stored value.                                                |
 
 Setting beacon config does **not** trigger a reboot (`shouldReboot = false`); changes take effect
 on the next broadcast cycle. After a successful write, **re-read** the config to display the
@@ -262,9 +291,11 @@ returns `CONTINUE`, so the packet is **not** consumed on-device. The client must
 3. Read `message`, `offer_channel`, `offer_region`, `offer_preset` (presence-checked).
 4. `packet.from` is the **originating beaconer** (the firmware preserves it).
 
-> **Requires `FLAG_LISTEN_ENABLED` set in `flags`.** With listening disabled the firmware does not
-> surface beacons. (A node still physically receives RF, but `wantPacket` rejects it before the
-> phone sees it.)
+> **Requires `FLAG_LISTEN_ENABLED` set in `flags`.** With listening disabled the firmware drops
+> received `MESH_BEACON_APP` packets in the router — before they reach the phone or any on-device
+> handler — the same way it drops a disabled module's packets (e.g. NeighborInfo). The node still
+> physically receives the RF, but the client will not see beacons over the FromRadio stream until
+> listening is enabled.
 
 #### Text duplication — important
 
@@ -381,8 +412,11 @@ Notes:
 
 - A target may **only** reference a channel that already exists locally — the node needs that
   channel's key to encrypt the beacon. A `channel_index` that is out of range, or points at a
-  blank/unconfigured slot, falls back to the **default channel for the target preset** (the
-  preset's display name, e.g. `LongFast`), not an error.
+  blank/unconfigured slot, is not an error: the beacon falls back to the node's **current/primary
+  channel** (its name, PSK, and slot) on the target preset/region. The channel name only defaults
+  to the preset's display name (e.g. `LongFast`) when the primary channel itself is unnamed — so
+  the fallback is "broadcast on my home channel," **not** a freshly-synthesised default-PSK channel
+  for that preset.
 - `channel_index` must be `< MAX_NUM_CHANNELS` (8); the firmware clears it on write otherwise (see
   §2.2 sanitise rules). This is the **only** check on write — the firmware does **not** verify that
   the referenced slot is actually populated, because you may legitimately write the beacon config
@@ -403,16 +437,16 @@ Notes:
 
 ### 2.6 Quick reference
 
-| Concern                | Value                                            |
-| ---------------------- | ------------------------------------------------ |
-| Port number            | `MESH_BEACON_APP = 37`                           |
-| Wire message           | `meshtastic.MeshBeacon`                          |
-| Config message         | `ModuleConfig.MeshBeaconConfig` (variant tag 17) |
-| On/off toggles         | `flags` bitfield (`MeshBeaconConfig.Flags`)      |
-| Local config presence  | `LocalModuleConfig.mesh_beacon` (tag 18)         |
-| Min broadcast interval | 3600 s (1 h)                                     |
-| Message max length     | 100 bytes                                        |
-| Hop behaviour          | Zero-hop (`hop_limit = 0`), never rebroadcast    |
-| Auto-apply offers?     | **Never** — client + user decide                 |
-| Offer PSK              | Public join token, not a secret                  |
-| Disabled today         | `broadcast_send_as_node` application             |
+| Concern                | Value                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| Port number            | `MESH_BEACON_APP = 37`                                                                   |
+| Wire message           | `meshtastic.MeshBeacon`                                                                  |
+| Config message         | `ModuleConfig.MeshBeaconConfig` (variant tag 17)                                         |
+| On/off toggles         | `flags` bitfield (`MeshBeaconConfig.Flags`)                                              |
+| Local config presence  | `LocalModuleConfig.mesh_beacon` (tag 18)                                                 |
+| Min broadcast interval | 3600 s (1 h)                                                                             |
+| Message max length     | 100 bytes                                                                                |
+| Hop behaviour          | Zero-hop (`hop_limit = 0`), never rebroadcast; `hop_start = 1` under `FLAG_LEGACY_SPLIT` |
+| Auto-apply offers?     | **Never** — client + user decide                                                         |
+| Offer PSK              | Public join token, not a secret                                                          |
+| Disabled today         | `broadcast_send_as_node` application                                                     |

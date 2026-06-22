@@ -31,14 +31,16 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Test output helper — Unity swallows printf; TEST_MESSAGE is the only output
-// that appears in results.  Use TEST_MSG_FMT for formatted diagnostic lines.
+// Formatted diagnostic helper. TEST_MESSAGE emits a line into Unity's per-test
+// output (shown inline alongside the :PASS/:FAIL result); use this when you need
+// a printf-style formatted note tied to a specific assertion. Plain printf() also
+// works for free-standing log lines (e.g. the group headers in setup() below).
 // ---------------------------------------------------------------------------
 #define MSG_BUF_LEN 256
 #define TEST_MSG_FMT(fmt, ...)                                                                                                   \
     do {                                                                                                                         \
         char _buf[MSG_BUF_LEN];                                                                                                  \
-        println(_buf, sizeof(_buf), "/n", ##__VA_ARGS__);                                                                        \
+        snprintf(_buf, sizeof(_buf), fmt, ##__VA_ARGS__);                                                                        \
         TEST_MESSAGE(_buf);                                                                                                      \
     } while (0)
 
@@ -1405,7 +1407,7 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_runOnce_sendsWhenEnabled);
     RUN_TEST(test_broadcaster_runOnce_silentWhenDisabled);
 
-    printf("\n=== Listener offer caching === \n");
+    printf("\n=== Listener offer caching ===\n");
 
     RUN_TEST(test_listener_receiveWithOffer_cachesOffer);
     RUN_TEST(test_listener_receiveWithChannelOffer_setsHasChannel);
