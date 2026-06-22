@@ -1,10 +1,10 @@
 #include "configuration.h"
 
-#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
 
-#include "ethCert.h"
 #include "FSCommon.h"
 #include "concurrency/OSThread.h"
+#include "ethCert.h"
 #include <Arduino.h>
 #include <string.h>
 
@@ -168,8 +168,7 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
         // KeyUsage: digitalSignature lets the cert sign TLS handshake
         // messages (ECDHE-ECDSA key exchange). keyEncipherment is required
         // by NSS/Firefox even though TLS 1.2 ECDHE doesn't actually use it.
-        ret = mbedtls_x509write_crt_set_key_usage(
-            &crt, MBEDTLS_X509_KU_DIGITAL_SIGNATURE | MBEDTLS_X509_KU_KEY_ENCIPHERMENT);
+        ret = mbedtls_x509write_crt_set_key_usage(&crt, MBEDTLS_X509_KU_DIGITAL_SIGNATURE | MBEDTLS_X509_KU_KEY_ENCIPHERMENT);
         if (ret != 0) {
             LOG_ERROR("ETH CERT: set_key_usage failed -0x%04x", -ret);
             break;
@@ -213,8 +212,7 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
             break;
         }
         size_t certLen = (size_t)ret;
-        out.certDer.assign(certBuf.data() + certBuf.size() - certLen,
-                           certBuf.data() + certBuf.size());
+        out.certDer.assign(certBuf.data() + certBuf.size() - certLen, certBuf.data() + certBuf.size());
 
         ret = mbedtls_pk_write_key_der(&pk, keyBuf.data(), keyBuf.size());
         if (ret < 0) {
@@ -222,8 +220,7 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
             break;
         }
         size_t keyLen = (size_t)ret;
-        out.keyDer.assign(keyBuf.data() + keyBuf.size() - keyLen,
-                          keyBuf.data() + keyBuf.size());
+        out.keyDer.assign(keyBuf.data() + keyBuf.size() - keyLen, keyBuf.data() + keyBuf.size());
 
         ok = true;
     } while (false);
@@ -241,15 +238,13 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
     String savedIp;
     if (readText(IP_PATH, savedIp)) {
         savedIp.trim();
-        if (savedIp == ipStr && readBinary(CERT_PATH, out.certDer) &&
-            readBinary(KEY_PATH, out.keyDer)) {
-            LOG_INFO("ETH CERT: loaded from FS (%u B cert + %u B key, IP %s)",
-                     (unsigned)out.certDer.size(), (unsigned)out.keyDer.size(), ipStr.c_str());
+        if (savedIp == ipStr && readBinary(CERT_PATH, out.certDer) && readBinary(KEY_PATH, out.keyDer)) {
+            LOG_INFO("ETH CERT: loaded from FS (%u B cert + %u B key, IP %s)", (unsigned)out.certDer.size(),
+                     (unsigned)out.keyDer.size(), ipStr.c_str());
             return true;
         }
         if (savedIp != ipStr) {
-            LOG_INFO("ETH CERT: cached IP %s != current %s, regenerating",
-                     savedIp.c_str(), ipStr.c_str());
+            LOG_INFO("ETH CERT: cached IP %s != current %s, regenerating", savedIp.c_str(), ipStr.c_str());
         }
     }
 
@@ -260,14 +255,13 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
         return false;
     }
     uint32_t dt = millis() - t0;
-    LOG_INFO("ETH CERT: generated %u B cert + %u B key in %u ms",
-             (unsigned)out.certDer.size(), (unsigned)out.keyDer.size(), (unsigned)dt);
+    LOG_INFO("ETH CERT: generated %u B cert + %u B key in %u ms", (unsigned)out.certDer.size(), (unsigned)out.keyDer.size(),
+             (unsigned)dt);
 
     // Persist (best-effort). Failure here means we'll regen on next boot, but
     // current process still has the in-memory cert ready for use.
     if (!writeBinary(CERT_PATH, out.certDer.data(), out.certDer.size()) ||
-        !writeBinary(KEY_PATH, out.keyDer.data(), out.keyDer.size()) ||
-        !writeText(IP_PATH, ipStr)) {
+        !writeBinary(KEY_PATH, out.keyDer.data(), out.keyDer.size()) || !writeText(IP_PATH, ipStr)) {
         LOG_WARN("ETH CERT: persist failed — will regenerate next boot");
     } else {
         LOG_INFO("ETH CERT: persisted to LittleFS");
@@ -340,4 +334,4 @@ const EthCertMaterial &getEthCert()
     return (certThread && certThread->isReady()) ? certThread->cert() : emptyMaterial;
 }
 
-#endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API
+#endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API && ARCH_RP2040

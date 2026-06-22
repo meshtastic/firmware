@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+#if HAS_ETHERNET && (defined(HAS_ETHERNET_API) || defined(HAS_ETHERNET_TLS_API))
 
 #include "ethApiHandlers.h"
 #include "mesh/PhoneAPI.h"
@@ -75,8 +75,10 @@ static bool headerIs(const String &line, const char *prefix, String &valueOut)
     for (size_t i = 0; i < prefixLen; i++) {
         char a = line.charAt(i);
         char b = prefix[i];
-        if (a >= 'A' && a <= 'Z') a += 32;
-        if (b >= 'A' && b <= 'Z') b += 32;
+        if (a >= 'A' && a <= 'Z')
+            a += 32;
+        if (b >= 'A' && b <= 'Z')
+            b += 32;
         if (a != b)
             return false;
     }
@@ -239,8 +241,7 @@ static void handleFromRadio(IStreamReadWrite &client, const Request &req)
     if (!body.empty())
         client.write(body.data(), body.size());
     client.flush();
-    LOG_DEBUG("ETH API: fromradio sent %d packet(s), %u bytes (all=%d)", packets,
-              (unsigned)body.size(), (int)drainAll);
+    LOG_DEBUG("ETH API: fromradio sent %d packet(s), %u bytes (all=%d)", packets, (unsigned)body.size(), (int)drainAll);
 }
 
 static void handleToRadio(IStreamReadWrite &client, const Request &req)
@@ -324,14 +325,12 @@ void handleApiClient(IStreamReadWrite &client)
         Request req;
         if (!parseRequest(client, req, deadline)) {
             if (requestsServed == 0)
-                LOG_DEBUG("ETH API: bad/timeout request from %s",
-                          client.remoteIP().toString().c_str());
+                LOG_DEBUG("ETH API: bad/timeout request from %s", client.remoteIP().toString().c_str());
             return;
         }
 
-        LOG_INFO("ETH API: %s %s%s%s (from %s)", req.method.c_str(), req.path.c_str(),
-                 req.query.length() ? "?" : "", req.query.c_str(),
-                 client.remoteIP().toString().c_str());
+        LOG_INFO("ETH API: %s %s%s%s (from %s)", req.method.c_str(), req.path.c_str(), req.query.length() ? "?" : "",
+                 req.query.c_str(), client.remoteIP().toString().c_str());
 
         if (req.path == "/api/v1/fromradio") {
             handleFromRadio(client, req);
@@ -385,8 +384,7 @@ void handleApiClient(IStreamReadWrite &client)
     }
 
     if (requestsServed >= MAX_REQUESTS_PER_SESSION)
-        LOG_DEBUG("ETH API: session capped at %d requests (will redo handshake on next batch)",
-                  MAX_REQUESTS_PER_SESSION);
+        LOG_DEBUG("ETH API: session capped at %d requests (will redo handshake on next batch)", MAX_REQUESTS_PER_SESSION);
 }
 
-#endif // HAS_ETHERNET && HAS_ETHERNET_API
+#endif // HAS_ETHERNET && (HAS_ETHERNET_API || HAS_ETHERNET_TLS_API)
