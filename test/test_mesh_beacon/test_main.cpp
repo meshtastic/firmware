@@ -195,7 +195,7 @@ static void test_adminValidation_turboPresetOnEU868_isCleared(void)
     resetConfig();
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.broadcast_enabled = true;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     bcfg.has_broadcast_on_preset = true;
     bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
 
@@ -377,7 +377,7 @@ static void test_adminValidation_validSave_invalidatesCache(void)
     bcast->payloadCacheDirty = false; // pretend it was freshly built
 
     meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
-    bcfg.broadcast_enabled = true;
+    bcfg.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     strncpy(bcfg.broadcast_message, "hello", sizeof(bcfg.broadcast_message) - 1);
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
@@ -506,7 +506,7 @@ static void test_broadcaster_sendBeacon_fromIsLocalNodeWhenUnset(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     moduleConfig.mesh_beacon.broadcast_send_as_node = 0;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "from-local", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
 
@@ -526,7 +526,7 @@ static void test_broadcaster_sendBeacon_fromIsCustomNodeWhenSet(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     moduleConfig.mesh_beacon.broadcast_send_as_node = kRemoteNode;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "from-remote", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
 
@@ -652,7 +652,7 @@ static void test_broadcaster_runOnce_sendsWhenEnabled(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_BROADCAST_ENABLED;
     moduleConfig.mesh_beacon.broadcast_interval_secs = 3600;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "runOnce-enabled",
             sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
@@ -671,7 +671,7 @@ static void test_broadcaster_runOnce_silentWhenDisabled(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_enabled = false;
+    moduleConfig.mesh_beacon.flags &= ~MESH_BEACON_FLAG_BROADCAST_ENABLED;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "runOnce-disabled",
             sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
 
@@ -707,7 +707,7 @@ static void test_listener_receiveWithOffer_cachesOffer(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
     MeshBeaconListenerModule::lastReceivedOffer = {};
@@ -735,7 +735,7 @@ static void test_listener_receiveWithChannelOffer_setsHasChannel(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
     MeshBeaconListenerModule::lastReceivedOffer = {};
@@ -763,7 +763,7 @@ static void test_listener_emptyMessageWithoutOffer_isDropped(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
     MeshBeaconListenerModule::lastReceivedOffer = {};
@@ -785,7 +785,7 @@ static void test_listener_offerOnly_isCached(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
     MeshBeaconListenerModule::lastReceivedOffer = {};
@@ -809,7 +809,7 @@ static void test_listener_nullBeacon_isDropped(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
     MeshBeaconListenerModule::lastReceivedOffer = {};
@@ -829,7 +829,7 @@ static void test_listener_receiveWithNoOffer_cacheStaysInvalid(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
     MeshBeaconListenerModule::lastReceivedOffer = {};
@@ -853,7 +853,7 @@ static void test_listener_textMessage_deliveredToPhoneNotMesh(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
     MeshBeaconListenerModule::lastReceivedOffer = {};
@@ -885,7 +885,7 @@ static void test_listener_wantPacket_falseWhenDisabled(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = false;
+    moduleConfig.mesh_beacon.flags &= ~MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
 
@@ -903,7 +903,7 @@ static void test_listener_wantPacket_trueWhenEnabled(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LISTEN_ENABLED;
 
     MeshBeaconListenerModuleTestShim listener;
 
@@ -926,7 +926,7 @@ static void test_broadcaster_legacySplit_sendsTwoPackets(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LEGACY_SPLIT;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "split-text", sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
     moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
@@ -945,7 +945,7 @@ static void test_broadcaster_legacySplit_firstPacketIsBeaconApp(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LEGACY_SPLIT;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "split-offer-only",
             sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
@@ -966,7 +966,7 @@ static void test_broadcaster_legacySplit_firstPacketHasNoMessageText(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LEGACY_SPLIT;
     strncpy(moduleConfig.mesh_beacon.broadcast_message, "hidden-in-split",
             sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
@@ -991,7 +991,7 @@ static void test_broadcaster_legacySplit_secondPacketIsTextMessage(void)
 {
     resetConfig();
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    moduleConfig.mesh_beacon.flags |= MESH_BEACON_FLAG_LEGACY_SPLIT;
     const char *msg = "split-B-text";
     strncpy(moduleConfig.mesh_beacon.broadcast_message, msg, sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
     moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;

@@ -7,6 +7,11 @@
 #include "mesh/generated/meshtastic/mesh_beacon.pb.h"
 #include "mesh/generated/meshtastic/module_config.pb.h"
 
+// Short aliases for the MeshBeaconConfig.flags bitfield (see module_config.proto MeshBeaconConfig.Flags).
+#define MESH_BEACON_FLAG_LISTEN_ENABLED meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED
+#define MESH_BEACON_FLAG_BROADCAST_ENABLED meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED
+#define MESH_BEACON_FLAG_LEGACY_SPLIT meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT
+
 // Sidecar entry pairing a packet ID with target radio settings for beacon TX.
 typedef struct {
     bool inUse;
@@ -87,12 +92,12 @@ class MeshBeaconModule
 
 /**
  * Broadcaster: periodically sends MeshBeacon packets on the configured preset/channel.
- * Active only when moduleConfig.mesh_beacon.broadcast_enabled is true.
+ * Active only when the FLAG_BROADCAST_ENABLED bit is set in moduleConfig.mesh_beacon.flags.
  * Inherits ProtobufModule to access allocDataProtobuf + setStartDelay.
  *
  * Packet flow:
  *  Normal (combined):  one MESH_BEACON_APP carrying offer + message on the beacon radio config.
- *  Legacy split:       two packets when both text and offer are present and broadcast_legacy_split=true,
+ *  Legacy split:       two packets when both text and offer are present and FLAG_LEGACY_SPLIT is set,
  *                      both sent on the same beacon radio settings:
  *                        A) MESH_BEACON_APP with offer only (no text).
  *                        B) TEXT_MESSAGE_APP with the text (for clients that only decode TEXT_MESSAGE_APP).
@@ -130,7 +135,7 @@ extern MeshBeaconBroadcastModule *meshBeaconBroadcastModule;
  * Listener: receives MESH_BEACON_APP packets, delivers text to the local inbox,
  * and caches any offered channel/preset for the client app to retrieve.
  * Does NOT auto-apply offered settings — client app must do so explicitly.
- * Active only when moduleConfig.mesh_beacon.listen_enabled is true.
+ * Active only when the FLAG_LISTEN_ENABLED bit is set in moduleConfig.mesh_beacon.flags.
  */
 class MeshBeaconListenerModule : public ProtobufModule<meshtastic_MeshBeacon>, public Observable<const meshtastic_MeshPacket *>
 {

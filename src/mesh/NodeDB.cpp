@@ -1310,14 +1310,23 @@ void NodeDB::installDefaultModuleConfig()
 
 #if !MESHTASTIC_EXCLUDE_BEACON
     moduleConfig.has_mesh_beacon = true;
-    moduleConfig.mesh_beacon.listen_enabled = true;
-    moduleConfig.mesh_beacon.broadcast_enabled = false;
-    moduleConfig.mesh_beacon.broadcast_legacy_split = true;
+    // Default flags: listen on, broadcast off, legacy split on.
+    moduleConfig.mesh_beacon.flags = meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED |
+                                     meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT;
+// Set or clear a single beacon flag bit from a USERPREFS boolean.
+#define BEACON_APPLY_FLAG(enabled, flag)                                                                                         \
+    do {                                                                                                                         \
+        if (enabled)                                                                                                             \
+            moduleConfig.mesh_beacon.flags |= (uint32_t)(flag);                                                                  \
+        else                                                                                                                     \
+            moduleConfig.mesh_beacon.flags &= ~(uint32_t)(flag);                                                                 \
+    } while (0)
 #ifdef USERPREFS_MESH_BEACON_LISTEN_ENABLED
-    moduleConfig.mesh_beacon.listen_enabled = USERPREFS_MESH_BEACON_LISTEN_ENABLED;
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LISTEN_ENABLED, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED);
 #endif
 #ifdef USERPREFS_MESH_BEACON_BROADCAST_ENABLED
-    moduleConfig.mesh_beacon.broadcast_enabled = USERPREFS_MESH_BEACON_BROADCAST_ENABLED;
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_BROADCAST_ENABLED,
+                      meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED);
 #endif
 #ifdef USERPREFS_MESH_BEACON_MESSAGE
     strncpy(moduleConfig.mesh_beacon.broadcast_message, USERPREFS_MESH_BEACON_MESSAGE,
@@ -1371,8 +1380,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mesh_beacon.broadcast_on_channel.channel_num = USERPREFS_MESH_BEACON_ON_CHANNEL_NUM;
 #endif
 #ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
-    moduleConfig.mesh_beacon.broadcast_legacy_split = USERPREFS_MESH_BEACON_LEGACY_SPLIT;
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);
 #endif
+#undef BEACON_APPLY_FLAG
 // Per-preset broadcast targets (up to 4). Each TARGET_<N>_* key bumps broadcast_targets_count as needed.
 #define BEACON_TARGET_PRESET(N, VAL)                                                                                             \
     do {                                                                                                                         \

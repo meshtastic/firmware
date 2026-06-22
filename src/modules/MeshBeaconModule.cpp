@@ -330,7 +330,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
     // ── Packet type decisions ────────────────────────────────────────────────
     //
-    // broadcast_legacy_split: when both text and offer are present, send TWO packets — A)
+    // FLAG_LEGACY_SPLIT: when both text and offer are present, send TWO packets — A)
     //   MESH_BEACON_APP (offer only) and B) TEXT_MESSAGE_APP (text only) — both on the SAME beacon
     // radio settings, so nodes that only decode TEXT_MESSAGE_APP still receive the text. Otherwise a
     // single packet is sent (offer-only, text-only, or the combined offer+text path).
@@ -338,10 +338,11 @@ void MeshBeaconBroadcastModule::sendBeacon()
     // These are independent decisions, NOT a mutually-exclusive if/else chain: the split
     // case must emit both A and B. Conditions are spelled out as named booleans to avoid
     // the && / || precedence trap (and a prior bug where the split case dropped the text).
-    const bool splitBoth = bcfg.broadcast_legacy_split && hasRadioContent && hasText;
+    const bool legacySplit = bcfg.flags & MESH_BEACON_FLAG_LEGACY_SPLIT;
+    const bool splitBoth = legacySplit && hasRadioContent && hasText;
     const bool sendOfferOnly = splitBoth || (hasRadioContent && !hasText);
     const bool sendTextOnly = splitBoth || (!hasRadioContent && hasText);
-    const bool sendCombined = !bcfg.broadcast_legacy_split && hasRadioContent && hasText;
+    const bool sendCombined = !legacySplit && hasRadioContent && hasText;
 
     // Build offer payload once — shared across all targets.
     uint8_t offerBuf[meshtastic_MeshBeacon_size] = {};
@@ -403,8 +404,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         const meshtastic_ChannelSettings *chPtr = tgt.has_channel ? &tgt.channel : nullptr;
 
         const auto applyTarget = [&](meshtastic_MeshPacket *p) {
-            if (presetDiffers || bcfg.broadcast_legacy_split)
-                setTargetRadioSettings(p, tgt.preset, tgt.slot, bcfg.broadcast_legacy_split, tgt.region, tgt.has_channel, chPtr);
+            if (presetDiffers || legacySplit)
+                setTargetRadioSettings(p, tgt.preset, tgt.slot, legacySplit, tgt.region, tgt.has_channel, chPtr);
             sendBeaconPacket(p, tgt.preset, tgt.has_channel, chPtr);
         };
 
@@ -456,7 +457,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
 int32_t MeshBeaconBroadcastModule::runOnce()
 {
     const auto &bcfg = moduleConfig.mesh_beacon;
-    if (bcfg.broadcast_enabled && airTime->isTxAllowedAirUtil() &&
+    if ((bcfg.flags & MESH_BEACON_FLAG_BROADCAST_ENABLED) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         sendBeacon();
     }
@@ -483,7 +484,7 @@ MeshBeaconListenerModule::MeshBeaconListenerModule()
 
 bool MeshBeaconListenerModule::wantPacket(const meshtastic_MeshPacket *p)
 {
-    return moduleConfig.has_mesh_beacon && moduleConfig.mesh_beacon.listen_enabled &&
+    return moduleConfig.has_mesh_beacon && (moduleConfig.mesh_beacon.flags & MESH_BEACON_FLAG_LISTEN_ENABLED) &&
            p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP;
 }
 
