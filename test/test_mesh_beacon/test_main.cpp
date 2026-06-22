@@ -181,6 +181,26 @@ static void installTestPrimaryChannel(const char *name, const uint8_t *psk, size
     channels.onConfigChanged(); // set primaryIndex + recompute hashes
 }
 
+// Install a secondary channel at the given table index. Pass psk=nullptr/pskLen=0 for a blank slot
+// (no name, no PSK) to exercise the "referenced slot is unconfigured" fallback.
+static void installTestSecondaryChannel(uint8_t index, const char *name, const uint8_t *psk, size_t pskLen)
+{
+    if (channelFile.channels_count < (pb_size_t)(index + 1))
+        channelFile.channels_count = index + 1;
+    meshtastic_Channel &ch = channelFile.channels[index];
+    ch = meshtastic_Channel_init_zero;
+    ch.index = index;
+    ch.has_settings = true;
+    ch.role = meshtastic_Channel_Role_SECONDARY;
+    if (name)
+        strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
+    if (psk && pskLen) {
+        ch.settings.psk.size = (pb_size_t)pskLen;
+        memcpy(ch.settings.psk.bytes, psk, pskLen);
+    }
+    channels.onConfigChanged();
+}
+
 // ===========================================================================
 // Group 1: AdminModule config validation — bad inputs must be sanitised
 // ===========================================================================
@@ -273,6 +293,107 @@ static void test_adminValidation_validOfferRegion_isPreserved(void)
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, moduleConfig.mesh_beacon.broadcast_offer_region);
+}
+
+/**
+ * Verify an out-of-range region in a multi-target entry is sanitised to UNSET on write.
+ * Important because broadcast_targets entries are validated independently of the single-target
+ * broadcast_on_* fields, and an invalid enum must never reach the radio-switch path.
+ */
+static void test_adminValidation_targetUnknownRegion_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].region = (meshtastic_Config_LoRaConfig_RegionCode)255;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_EQUAL(1, moduleConfig.mesh_beacon.broadcast_targets_count);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, moduleConfig.mesh_beacon.broadcast_targets[0].region);
+}
+
+/**
+ * Verify a preset that is illegal for a multi-target entry's region clears that entry's preset
+ * (and its channel), matching the single-target broadcast_on_preset rule.
+ */
+static void test_adminValidation_targetInvalidPresetForRegion_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    bcfg.broadcast_targets[0].has_channel_index = true;
+    bcfg.broadcast_targets[0].channel_index = 1;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE_MESSAGE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset,
+                              "SHORT_TURBO must be cleared for EU_868 target");
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index);
+}
+
+/**
+ * Verify a channel_index beyond the channel-table capacity is cleared on write.
+ * Important so the broadcaster never indexes out of bounds when resolving a target channel.
+ */
+static void test_adminValidation_targetChannelIndexOutOfRange_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_channel_index = true;
+    bcfg.broadcast_targets[0].channel_index = MAX_NUM_CHANNELS; // one past the last valid slot
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index);
+}
+
+/**
+ * Verify an in-range channel_index survives admin validation unchanged.
+ */
+static void test_adminValidation_targetChannelIndexInRange_isPreserved(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].has_channel_index = true;
+    bcfg.broadcast_targets[0].channel_index = 0;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index);
+    TEST_ASSERT_EQUAL_UINT32(0, moduleConfig.mesh_beacon.broadcast_targets[0].channel_index);
+}
+
+/**
+ * Verify a valid preset/region multi-target entry survives admin validation unchanged.
+ * Positive-path control for the per-target validation.
+ */
+static void test_adminValidation_targetValidPresetForRegion_isPreserved(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.broadcast_targets_count = 1;
+    bcfg.broadcast_targets[0].region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    bcfg.broadcast_targets[0].has_preset = true;
+    bcfg.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.broadcast_targets[0].has_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, moduleConfig.mesh_beacon.broadcast_targets[0].preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, moduleConfig.mesh_beacon.broadcast_targets[0].region);
 }
 
 /**
@@ -1075,6 +1196,69 @@ static void test_broadcaster_noChannelOverride_doesNotSwapPrimary(void)
                                      "primary must stay unchanged when no channel override is set");
 }
 
+/**
+ * A broadcast_target whose channel_index points at a configured table slot must transmit encrypted
+ * on THAT slot's channel (name + PSK), not the primary. Verifies the slot-index → channel-table
+ * resolution introduced when BroadcastTarget dropped its embedded ChannelSettings.
+ */
+static void test_broadcaster_targetChannelIndex_usesTableSlot(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    static const uint8_t beaconPsk[16] = {0xBB, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                                          0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, "BeaconNet", beaconPsk, sizeof(beaconPsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true; // content to send
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->primaryAtSend.size() >= 1, "expected at least one send");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("BeaconNet", mockRouter->primaryAtSend[0].name,
+                                     "beacon must be encrypted on the referenced slot's channel");
+    // Primary slot restored to home after send (no leak).
+    TEST_ASSERT_EQUAL_STRING("Home", channels.getByIndex(channels.getPrimaryIndex()).settings.name);
+}
+
+/**
+ * A broadcast_target whose channel_index points at a BLANK table slot (no name, no PSK) must fall
+ * back to the default channel for the preset rather than borrowing the primary's name/PSK with a
+ * clobbered channel_num. Guards the blank-slot handling for multi-target configs.
+ */
+static void test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    installTestSecondaryChannel(1, nullptr, nullptr, 0); // blank slot: no name, no PSK
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 1;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_channel_index = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].channel_index = 1;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    // Exactly one beacon goes out, and a blank slot does NOT trigger a crypto swap — the primary
+    // stays "Home" (no garbage / no clobber), matching the no-channel-override default-for-preset path.
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_TRUE_MESSAGE(mockRouter->primaryAtSend.size() >= 1, "expected at least one send");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Home", mockRouter->primaryAtSend[0].name,
+                                     "blank slot must not swap the beacon onto a borrowed channel");
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1137,6 +1321,11 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
     RUN_TEST(test_adminValidation_unknownOfferRegion_isCleared);
     RUN_TEST(test_adminValidation_validOfferRegion_isPreserved);
+    RUN_TEST(test_adminValidation_targetUnknownRegion_isCleared);
+    RUN_TEST(test_adminValidation_targetInvalidPresetForRegion_isCleared);
+    RUN_TEST(test_adminValidation_targetValidPresetForRegion_isPreserved);
+    RUN_TEST(test_adminValidation_targetChannelIndexOutOfRange_isCleared);
+    RUN_TEST(test_adminValidation_targetChannelIndexInRange_isPreserved);
     RUN_TEST(test_adminValidation_messageTooLong_isTruncatedAt100);
     RUN_TEST(test_adminValidation_intervalTooLow_isClamped);
     RUN_TEST(test_adminValidation_intervalTooHigh_isPreserved);
@@ -1187,6 +1376,8 @@ BEACON_TEST_ENTRY void setup()
 
     RUN_TEST(test_broadcaster_channelPskOverride_swapsBeaconChannelAndRestores);
     RUN_TEST(test_broadcaster_noChannelOverride_doesNotSwapPrimary);
+    RUN_TEST(test_broadcaster_targetChannelIndex_usesTableSlot);
+    RUN_TEST(test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset);
 
     exit(UNITY_END());
 }

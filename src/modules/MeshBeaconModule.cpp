@@ -141,9 +141,11 @@ meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtas
             strncpy(ch.name, overrideChannel->name, sizeof(ch.name) - 1);
         if (overrideChannel->psk.size > 0)
             ch.psk = overrideChannel->psk;
-    } else if (ch.name[0] == '\0') {
-        strncpy(ch.name, DisplayFormatters::getModemPresetDisplayName(preset, false, true), sizeof(ch.name) - 1);
     }
+    // If no usable name survived (no override, or a blank-named one), default to the preset's
+    // display name so the beacon channel is identifiable rather than borrowing the primary's name.
+    if (ch.name[0] == '\0')
+        strncpy(ch.name, DisplayFormatters::getModemPresetDisplayName(preset, false, true), sizeof(ch.name) - 1);
     ch.name[sizeof(ch.name) - 1] = '\0';
     return ch;
 }
@@ -363,8 +365,10 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
     // ── Per-target loop ──────────────────────────────────────────────────────
     //
-    // If broadcast_targets is populated, iterate over those. Otherwise use the legacy
-    // single-target broadcast_on_preset / broadcast_on_region / broadcast_on_channel fields.
+    // If broadcast_targets is populated, iterate over those. Otherwise use the single-target
+    // broadcast_on_preset / broadcast_on_region / broadcast_on_channel fields. The two paths are
+    // equal options; they differ only in how the TX channel is named (single-target embeds a
+    // ChannelSettings inline; a target references a channel-table slot by channel_index).
     struct EffTarget {
         meshtastic_Config_LoRaConfig_ModemPreset preset;
         uint16_t slot;
@@ -382,10 +386,28 @@ void MeshBeaconBroadcastModule::sendBeacon()
             const auto &bt = bcfg.broadcast_targets[ti];
             tgt.preset = bt.has_preset ? bt.preset : config.lora.modem_preset;
             tgt.region = bt.region;
-            tgt.has_channel = bt.has_channel;
-            if (tgt.has_channel)
-                tgt.channel = bt.channel;
-            tgt.slot = tgt.has_channel ? bt.channel.channel_num : config.lora.channel_num;
+            // Resolve the channel from the device's channel table by index. A slot is only usable
+            // if it is actually configured (has a name or PSK — its key is needed to encrypt). An
+            // out-of-range index, or a blank slot, falls back to the default channel for the target
+            // preset (see beaconChannelSettings), exactly as an unset channel_index would.
+            tgt.has_channel = false;
+            tgt.slot = config.lora.channel_num;
+            if (bt.has_channel_index) {
+                if (bt.channel_index >= (uint32_t)channels.getNumChannels()) {
+                    LOG_WARN("Beacon: target %d channel_index %u out of range, using default channel for preset", ti,
+                             bt.channel_index);
+                } else {
+                    const meshtastic_ChannelSettings &cs = channels.getByIndex(bt.channel_index).settings;
+                    if (cs.name[0] != '\0' || cs.psk.size > 0) {
+                        tgt.has_channel = true;
+                        tgt.channel = cs;
+                        tgt.slot = cs.channel_num;
+                    } else {
+                        LOG_DEBUG("Beacon: target %d channel_index %u is a blank slot, using default channel for preset", ti,
+                                  bt.channel_index);
+                    }
+                }
+            }
         } else {
             tgt.preset = bcfg.has_broadcast_on_preset ? bcfg.broadcast_on_preset : config.lora.modem_preset;
             tgt.region = bcfg.broadcast_on_region;

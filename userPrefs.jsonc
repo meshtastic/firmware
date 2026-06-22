@@ -75,26 +75,20 @@
   // Multi-target broadcast: when any TARGET_<N>_* key is set, broadcast_targets overrides the
   // single-target broadcast_on_* fields above. Each target transmits its own copy of the beacon.
   // Up to 4 targets (0-3). Only TARGET_0 is used here; uncomment TARGET_1 to add a second preset.
+  // CHANNEL_INDEX references a slot in the device's channel table (0..MAX_NUM_CHANNELS-1); that
+  // channel must already be configured on the node (its key is needed to encrypt the beacon).
   // "USERPREFS_MESH_BEACON_TARGET_0_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST",
   // "USERPREFS_MESH_BEACON_TARGET_0_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",
-  // "USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NAME": "'LongFast'",
-  // "USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_PSK": "{ 0x01 }",   // 0x01 = Meshtastic default PSK
-  // "USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NUM": "0",
+  // "USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX": "0",   // device channel-table slot to transmit on
   // "USERPREFS_MESH_BEACON_TARGET_1_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW",
   // "USERPREFS_MESH_BEACON_TARGET_1_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_N_868",
-  // "USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NAME": "'NarrowSlow'",
-  // "USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_PSK": "{ 0x01 }",
-  // "USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NUM": "0",
+  // "USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX": "1",
   // "USERPREFS_MESH_BEACON_TARGET_2_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST",
   // "USERPREFS_MESH_BEACON_TARGET_2_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",
-  // "USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NAME": "'MedFast'",
-  // "USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_PSK": "{ 0x01 }",
-  // "USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NUM": "0",
+  // "USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX": "2",
   // "USERPREFS_MESH_BEACON_TARGET_3_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST",
   // "USERPREFS_MESH_BEACON_TARGET_3_REGION": "meshtastic_Config_LoRaConfig_RegionCode_EU_868",
-  // "USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NAME": "'ShortFast'",
-  // "USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_PSK": "{ 0x01 }",
-  // "USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NUM": "0",
+  // "USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX": "3",
   // "USERPREFS_RINGTONE_NAG_SECS": "60",
   // "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS": "43200",
   // "USERPREFS_UI_TEST_LOG": "true", // Test-only: emits `Screen: frame N/M name=... reason=...` log per UI transition (for the mcp-server ui test tier); off in release builds.

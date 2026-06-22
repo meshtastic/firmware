@@ -113,7 +113,9 @@ deployment.
   `broadcast_on_channel` fields describe one destination. Used when `broadcast_targets` is empty.
 - **Multi-target:** `broadcast_targets` (repeated `BroadcastTarget`) describes several. When
   non-empty it takes over from the scalar `broadcast_on_*` fields, and the broadcaster sends **one
-  beacon copy per entry**. Each `BroadcastTarget` is `{ optional preset, region, optional channel }`.
+  beacon copy per entry**. Each `BroadcastTarget` is `{ optional preset, region, optional channel_index }`,
+  where `channel_index` references a slot in the node's own channel table (the channel must already be
+  configured locally — its key is needed to encrypt the beacon).
 
 #### Same-settings vs. other-settings
 
@@ -203,7 +205,7 @@ XEdDSA signing and receivers get an unsigned packet attributed to another node.
 | 2         | `FLAG_BROADCAST_ENABLED` | Periodically broadcast beacons from this node.                                 |
 | 4         | `FLAG_LEGACY_SPLIT`      | Split text+offer into separate `TEXT_MESSAGE_APP` + `MESH_BEACON_APP` packets. |
 
-`BroadcastTarget`: `1 preset` (optional, falls back to running config), `2 region` (`UNSET` = running config), `3 channel` (optional, default channel for the preset if unset).
+`BroadcastTarget`: `1 preset` (optional, falls back to running config), `2 region` (`UNSET` = running config), `4 channel_index` (optional `uint32`, index into the node's channel table; if unset, the default channel for the preset is used). Tag `3` is an unused gap — it previously held an embedded `ChannelSettings`, dropped to keep `ModuleConfig` within the BLE `FromRadio` size budget.
 
 ---
 
@@ -234,14 +236,16 @@ bit, read the current `flags`, set/clear the bit, and write the whole config bac
 The firmware **sanitises on write** — your value may be silently adjusted. Mirror these rules
 client-side so the UI doesn't disagree with the device:
 
-| Rule                                                                        | Firmware behaviour                                   |
-| --------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `broadcast_message` length                                                  | Truncated to 100 bytes.                              |
-| `broadcast_interval_secs`                                                   | If non-zero and `< 3600`, raised to 3600.            |
-| `broadcast_on_preset` invalid for `broadcast_on_region` (or current region) | Cleared, **and `broadcast_on_channel` cleared too.** |
-| `broadcast_offer_preset` invalid for offer/current region                   | Cleared.                                             |
-| `broadcast_offer_region` not a known region                                 | Cleared to `UNSET`.                                  |
-| `broadcast_send_as_node` ≠ sender's node ID (remote admin)                  | Rejected, reset to stored value.                     |
+| Rule                                                                        | Firmware behaviour                                                        |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `broadcast_message` length                                                  | Truncated to 100 bytes.                                                   |
+| `broadcast_interval_secs`                                                   | If non-zero and `< 3600`, raised to 3600.                                 |
+| `broadcast_on_preset` invalid for `broadcast_on_region` (or current region) | Cleared, **and `broadcast_on_channel` cleared too.**                      |
+| `broadcast_offer_preset` invalid for offer/current region                   | Cleared.                                                                  |
+| `broadcast_offer_region` not a known region                                 | Cleared to `UNSET`.                                                       |
+| `broadcast_targets[i].region` not a known region                            | That entry's region cleared to `UNSET` (TX falls back to running config). |
+| `broadcast_targets[i].preset` invalid for that entry's region               | That entry's `preset` and `channel` cleared.                              |
+| `broadcast_send_as_node` ≠ sender's node ID (remote admin)                  | Rejected, reset to stored value.                                          |
 
 Setting beacon config does **not** trigger a reboot (`shouldReboot = false`); changes take effect
 on the next broadcast cycle. After a successful write, **re-read** the config to display the
@@ -312,22 +316,77 @@ To make a node advertise a mesh, write `MeshBeaconConfig` with `FLAG_BROADCAST_E
 
 Typical multi-region invite beacon:
 
-```
+```text
 flags                   = FLAG_BROADCAST_ENABLED | FLAG_LEGACY_SPLIT   // broadcast on; split so legacy nodes still see the text
 broadcast_message       = "Join us on NarrowSlow!"
 broadcast_offer_preset  = NARROW_SLOW
 broadcast_offer_region  = EU_N_868
 broadcast_offer_channel = { name: "MyChannel", psk: <32-byte key> }
 broadcast_interval_secs = 3600
+// channel_index points at slots in THIS node's channel table — configure those channels first.
 broadcast_targets = [
-  { preset: LONG_FAST,   region: EU_868,   channel: { name: "LongFast"   } },
-  { preset: NARROW_SLOW, region: EU_N_868, channel: { name: "NarrowSlow" } },
+  { preset: LONG_FAST,   region: EU_868,   channel_index: 0 },
+  { preset: NARROW_SLOW, region: EU_N_868, channel_index: 1 },
 ]
 ```
 
 The same fields can be baked in at build time via `userPrefs.jsonc`
 (`USERPREFS_MESH_BEACON_*`) — see that file for the full list, including
 `USERPREFS_MESH_BEACON_TARGET_<n>_*` for multi-target entries.
+
+#### Single-target vs. multi-target — equal options, different channel representation
+
+Single-target and multi-target are **equal, first-class options**. Neither is preferred,
+deprecated, or a "legacy" fallback — pick whichever matches the deployment (a single-target
+beacon with no overrides is a plain message-of-the-day; a multi-target list reaches several
+preset/region/channel combinations). The broadcaster uses `broadcast_targets` when it is
+non-empty and the scalar `broadcast_on_*` fields when it is empty.
+
+The one **subtle implementation difference** is how each names its TX channel:
+
+| Path          | TX channel is specified by                              | Channel name/PSK live…                    |
+| ------------- | ------------------------------------------------------- | ----------------------------------------- |
+| Single-target | `broadcast_on_channel` — an embedded `ChannelSettings`  | …inline in the beacon config              |
+| Multi-target  | `broadcast_targets[i].channel_index` — a `uint32` index | …in the node's channel table (referenced) |
+
+This asymmetry is deliberate: embedding a full `ChannelSettings` in every one of the (up to
+four) targets would push `ModuleConfig` past the BLE `FromRadio` size limit, so a target
+references an already-configured channel-table slot instead. `broadcast_offer_channel` (the
+advertised join token) is **always** inline regardless of path — it is the advertisement payload
+and must carry the actual name/PSK.
+
+#### Configuring a multi-target broadcaster (two-step)
+
+Because a target's channel is a reference, configuring a multi-target broadcaster takes **two
+admin writes**, in order:
+
+1. **Create/define each channel in the node's channel table** with the normal channel admin flow
+   (the same `set_channel` your app already uses for adding channels):
+
+   ```text
+   AdminMessage.set_channel { index: 1, role: SECONDARY,
+                              settings: { name: "NarrowSlow", psk: <key>, channel_num: 0 } }
+   ```
+
+2. **Write the beacon config**, pointing each target at the slot index from step 1:
+
+   ```text
+   AdminMessage.set_module_config { mesh_beacon: {
+       flags = FLAG_BROADCAST_ENABLED
+       broadcast_targets = [ { preset: NARROW_SLOW, region: EU_N_868, channel_index: 1 } ]
+   } }
+   ```
+
+Notes:
+
+- A target may **only** reference a channel that already exists locally — the node needs that
+  channel's key to encrypt the beacon. A `channel_index` that is out of range, or points at a
+  blank/unconfigured slot, falls back to the **default channel for the target preset** (the
+  preset's display name, e.g. `LongFast`), not an error.
+- `channel_index` must be `< MAX_NUM_CHANNELS`; the firmware clears it on write otherwise (see
+  §2.2 sanitise rules).
+- The single-target path needs no separate `set_channel` step — its `broadcast_on_channel` is
+  written inline in the same beacon-config message.
 
 ### 2.6 Quick reference
 

@@ -1217,6 +1217,37 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
                 b.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
             }
         }
+        // Validate each multi-target entry the same way as the single-target broadcast_on_* fields,
+        // so a bad preset/region is cleared on write rather than relying on the runtime TX drop.
+        for (pb_size_t i = 0; i < b.broadcast_targets_count; i++) {
+            auto &t = b.broadcast_targets[i];
+            // Region must be a known region code (UNSET = use running config at TX time).
+            if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+                const RegionInfo *r = getRegion(t.region);
+                if (r->code != t.region) {
+                    LOG_WARN("Beacon: broadcast_targets[%u] region %d invalid, clearing", i, t.region);
+                    t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+                }
+            }
+            // Preset must be valid for the target region (or current region if unset).
+            if (t.has_preset) {
+                meshtastic_Config_LoRaConfig probe = config.lora;
+                probe.use_preset = true;
+                probe.modem_preset = t.preset;
+                if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                    probe.region = t.region;
+                if (!RadioInterface::validateConfigLora(probe)) {
+                    LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clearing", i, t.preset);
+                    t.has_preset = false;
+                    t.has_channel_index = false;
+                }
+            }
+            // channel_index must reference a real channel-table slot.
+            if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
+                LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
+                t.has_channel_index = false;
+            }
+        }
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = b;
         shouldReboot = false;

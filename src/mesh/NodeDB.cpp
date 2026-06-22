@@ -1397,29 +1397,13 @@ void NodeDB::installDefaultModuleConfig()
             moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
         moduleConfig.mesh_beacon.broadcast_targets[(N)].region = (VAL);                                                          \
     } while (0)
-#define BEACON_TARGET_CH_NAME(N, VAL)                                                                                            \
+// Target channel is referenced by index into the device's channel table (0..MAX_NUM_CHANNELS-1).
+#define BEACON_TARGET_CH_INDEX(N, VAL)                                                                                           \
     do {                                                                                                                         \
         if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
             moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
-        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel = true;                                                      \
-        strncpy(moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.name, (VAL),                                             \
-                sizeof(moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.name) - 1);                                       \
-    } while (0)
-#define BEACON_TARGET_CH_NUM(N, VAL)                                                                                             \
-    do {                                                                                                                         \
-        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
-            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
-        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel = true;                                                      \
-        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.channel_num = (VAL);                                             \
-    } while (0)
-#define BEACON_TARGET_CH_PSK(N, ...)                                                                                             \
-    do {                                                                                                                         \
-        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
-            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
-        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel = true;                                                      \
-        static const uint8_t _btPsk##N[] = {__VA_ARGS__};                                                                        \
-        memcpy(moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.psk.bytes, _btPsk##N, sizeof(_btPsk##N));                 \
-        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel.psk.size = sizeof(_btPsk##N);                                    \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
     } while (0)
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
     BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
@@ -1427,14 +1411,8 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_0_REGION
     BEACON_TARGET_REGION(0, USERPREFS_MESH_BEACON_TARGET_0_REGION);
 #endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NAME
-    BEACON_TARGET_CH_NAME(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NAME);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NUM
-    BEACON_TARGET_CH_NUM(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_NUM);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_PSK
-    BEACON_TARGET_CH_PSK(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_PSK);
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
     BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
@@ -1442,14 +1420,8 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_1_REGION
     BEACON_TARGET_REGION(1, USERPREFS_MESH_BEACON_TARGET_1_REGION);
 #endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NAME
-    BEACON_TARGET_CH_NAME(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NAME);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NUM
-    BEACON_TARGET_CH_NUM(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_NUM);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_PSK
-    BEACON_TARGET_CH_PSK(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_PSK);
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
     BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
@@ -1457,14 +1429,8 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_2_REGION
     BEACON_TARGET_REGION(2, USERPREFS_MESH_BEACON_TARGET_2_REGION);
 #endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NAME
-    BEACON_TARGET_CH_NAME(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NAME);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NUM
-    BEACON_TARGET_CH_NUM(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_NUM);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_PSK
-    BEACON_TARGET_CH_PSK(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_PSK);
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
 #endif
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
     BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
@@ -1472,20 +1438,12 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef USERPREFS_MESH_BEACON_TARGET_3_REGION
     BEACON_TARGET_REGION(3, USERPREFS_MESH_BEACON_TARGET_3_REGION);
 #endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NAME
-    BEACON_TARGET_CH_NAME(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NAME);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NUM
-    BEACON_TARGET_CH_NUM(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_NUM);
-#endif
-#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_PSK
-    BEACON_TARGET_CH_PSK(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_PSK);
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
 #endif
 #undef BEACON_TARGET_PRESET
 #undef BEACON_TARGET_REGION
-#undef BEACON_TARGET_CH_NAME
-#undef BEACON_TARGET_CH_NUM
-#undef BEACON_TARGET_CH_PSK
+#undef BEACON_TARGET_CH_INDEX
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();
