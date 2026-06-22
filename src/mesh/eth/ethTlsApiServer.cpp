@@ -1,11 +1,11 @@
 #include "configuration.h"
 
-#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
 
-#include "ethTlsApiServer.h"
+#include "concurrency/OSThread.h"
 #include "ethApiHandlers.h"
 #include "ethCert.h"
-#include "concurrency/OSThread.h"
+#include "ethTlsApiServer.h"
 #include <Arduino.h>
 
 #ifdef USE_ARDUINO_ETHERNET
@@ -237,15 +237,14 @@ class EthTlsApiServerThread : public concurrency::OSThread
             return false;
         }
 
-        ret = mbedtls_pk_parse_key(&pkKey, cert.keyDer.data(), cert.keyDer.size(), nullptr, 0,
-                                   picoRand, nullptr);
+        ret = mbedtls_pk_parse_key(&pkKey, cert.keyDer.data(), cert.keyDer.size(), nullptr, 0, picoRand, nullptr);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: pk_parse_key failed -0x%04x", -ret);
             return false;
         }
 
-        ret = mbedtls_ssl_config_defaults(&sslConf, MBEDTLS_SSL_IS_SERVER,
-                                          MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
+        ret = mbedtls_ssl_config_defaults(&sslConf, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM,
+                                          MBEDTLS_SSL_PRESET_DEFAULT);
         if (ret != 0) {
             LOG_ERROR("ETH TLS: ssl_config_defaults failed -0x%04x", -ret);
             return false;
@@ -296,12 +295,10 @@ class EthTlsApiServerThread : public concurrency::OSThread
         if (ret != 0) {
             char err[80];
             mbedtls_strerror(ret, err, sizeof(err));
-            LOG_WARN("ETH TLS: handshake failed -0x%04x (%s) after %u ms", -ret, err,
-                     (unsigned)(millis() - t0));
+            LOG_WARN("ETH TLS: handshake failed -0x%04x (%s) after %u ms", -ret, err, (unsigned)(millis() - t0));
             return;
         }
-        LOG_INFO("ETH TLS: handshake OK in %u ms, ciphersuite=%s", (unsigned)(millis() - t0),
-                 mbedtls_ssl_get_ciphersuite(&ssl));
+        LOG_INFO("ETH TLS: handshake OK in %u ms, ciphersuite=%s", (unsigned)(millis() - t0), mbedtls_ssl_get_ciphersuite(&ssl));
 
         MbedTlsStream stream(&ssl, &client);
         handleApiClient(stream);
@@ -320,4 +317,4 @@ void initEthTlsApiServer()
     LOG_INFO("ETH TLS: server worker scheduled (waits for cert ready)");
 }
 
-#endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API
+#endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API && ARCH_RP2040

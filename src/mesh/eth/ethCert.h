@@ -2,7 +2,7 @@
 
 #include "configuration.h"
 
-#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API)
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
 
 #include <IPAddress.h>
 #include <stddef.h>
@@ -35,4 +35,4 @@ bool isEthCertReady();
 // Snapshot of the generated material once isEthCertReady(). Empty otherwise.
 const EthCertMaterial &getEthCert();
 
-#endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API
+#endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API && ARCH_RP2040

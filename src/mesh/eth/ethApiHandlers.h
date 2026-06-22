@@ -2,7 +2,7 @@
 
 #include "configuration.h"
 
-#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+#if HAS_ETHERNET && (defined(HAS_ETHERNET_API) || defined(HAS_ETHERNET_TLS_API))
 
 #include <Arduino.h>
 #include <IPAddress.h>
@@ -43,4 +43,4 @@ class IStreamReadWrite : public Print
 // after this returns.
 void handleApiClient(IStreamReadWrite &client);
 
-#endif // HAS_ETHERNET && HAS_ETHERNET_API
+#endif // HAS_ETHERNET && (HAS_ETHERNET_API || HAS_ETHERNET_TLS_API)
