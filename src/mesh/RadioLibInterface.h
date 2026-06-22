@@ -167,6 +167,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
 
+    virtual bool reconfigure() override;
+
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
     /**

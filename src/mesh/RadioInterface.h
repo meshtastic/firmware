@@ -240,8 +240,8 @@ class RadioInterface
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
-    float savedFreq;
-    uint32_t savedChannelNum;
+    float savedFreq = 0.0f;
+    uint32_t savedChannelNum = 0;
 
     /***
      * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the
