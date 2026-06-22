@@ -7,6 +7,7 @@
 #include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
@@ -380,6 +381,24 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const bool useTargetList = bcfg.broadcast_targets_count > 0;
     const int targetCount = useTargetList ? (int)bcfg.broadcast_targets_count : 1;
 
+    // Dedup state: the beacon payload is identical across targets, so two targets that resolve to
+    // the same effective radio config (preset + resolved region + channel) would just re-broadcast
+    // the same packet — wasted airtime and a redundant radio switch each. We skip the later one.
+    // Keyed on the *resolved* values so an explicit "current region" dedups against an UNSET one.
+    EffTarget sent[4];
+    meshtastic_Config_LoRaConfig_RegionCode sentRegion[4];
+    int sentCount = 0;
+    const auto sameEffectiveTarget = [](const EffTarget &a, meshtastic_Config_LoRaConfig_RegionCode ar, const EffTarget &b,
+                                        meshtastic_Config_LoRaConfig_RegionCode br) {
+        if (a.preset != b.preset || ar != br || a.has_channel != b.has_channel)
+            return false;
+        if (!a.has_channel)
+            return true; // both fall back to the default channel for the (same) preset
+        return a.slot == b.slot && strncmp(a.channel.name, b.channel.name, sizeof(a.channel.name)) == 0 &&
+               a.channel.psk.size == b.channel.psk.size &&
+               memcmp(a.channel.psk.bytes, b.channel.psk.bytes, a.channel.psk.size) == 0;
+    };
+
     for (int ti = 0; ti < targetCount; ti++) {
         EffTarget tgt = {};
         if (useTargetList) {
@@ -416,6 +435,24 @@ void MeshBeaconBroadcastModule::sendBeacon()
                 tgt.channel = bcfg.broadcast_on_channel;
             tgt.slot = tgt.has_channel ? bcfg.broadcast_on_channel.channel_num : config.lora.channel_num;
         }
+
+        // Skip a target whose effective radio config duplicates one already sent this cycle.
+        const meshtastic_Config_LoRaConfig_RegionCode resolvedRegion =
+            (tgt.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? tgt.region : config.lora.region;
+        bool duplicate = false;
+        for (int si = 0; si < sentCount; si++) {
+            if (sameEffectiveTarget(tgt, resolvedRegion, sent[si], sentRegion[si])) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) {
+            LOG_DEBUG("Beacon: target %d duplicates an earlier target's radio config, skipping", ti);
+            continue;
+        }
+        sent[sentCount] = tgt;
+        sentRegion[sentCount] = resolvedRegion;
+        sentCount++;
 
         const bool channelOverrideConfigured = tgt.has_channel && (tgt.channel.name[0] != '\0' || tgt.channel.psk.size > 0 ||
                                                                    tgt.channel.channel_num != config.lora.channel_num);
@@ -479,16 +516,27 @@ void MeshBeaconBroadcastModule::sendBeacon()
 int32_t MeshBeaconBroadcastModule::runOnce()
 {
     const auto &bcfg = moduleConfig.mesh_beacon;
-    if ((bcfg.flags & MESH_BEACON_FLAG_BROADCAST_ENABLED) && airTime->isTxAllowedAirUtil() &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
-        sendBeacon();
-    }
-
     const uint32_t intervalSecs =
         Default::getConfiguredOrDefault(bcfg.broadcast_interval_secs, default_mesh_beacon_min_broadcast_interval_secs);
-    return static_cast<int32_t>(
-               Default::getConfiguredOrMinimumValue(intervalSecs, default_mesh_beacon_min_broadcast_interval_secs)) *
-           1000;
+    const uint32_t intervalMs =
+        Default::getConfiguredOrMinimumValue(intervalSecs, default_mesh_beacon_min_broadcast_interval_secs) * 1000;
+
+    if ((bcfg.flags & MESH_BEACON_FLAG_BROADCAST_ENABLED) && airTime->isTxAllowedAirUtil() &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        // Throttle against the reboot-safe transmit history (mirrors NodeInfoModule): skip if we
+        // broadcast within the interval, even across a reboot. 0 = never sent → send now.
+        uint32_t lastSent = transmitHistory ? transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_MESH_BEACON_APP) : 0;
+        if (lastSent == 0 || !Throttle::isWithinTimespanMs(lastSent, intervalMs)) {
+            // Record the send BEFORE transmitting: the LoRa TX is a high-current event that can
+            // brown out a marginal supply, and if that reboots us mid-transmit we still want the
+            // "sent" marker persisted so we don't re-broadcast immediately on every boot.
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(meshtastic_PortNum_MESH_BEACON_APP);
+            sendBeacon();
+        }
+    }
+
+    return static_cast<int32_t>(intervalMs);
 }
 
 // ---------------------------------------------------------------------------

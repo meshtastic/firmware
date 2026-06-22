@@ -1259,6 +1259,58 @@ static void test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset(void)
                                      "blank slot must not swap the beacon onto a borrowed channel");
 }
 
+/**
+ * Two broadcast_targets that resolve to the same effective radio config (same preset/region/channel)
+ * must produce only ONE beacon — the payload is identical, so re-broadcasting wastes airtime.
+ */
+static void test_broadcaster_duplicateTargets_dedupedToOnePacket(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 2;
+    for (int i = 0; i < 2; i++) {
+        moduleConfig.mesh_beacon.broadcast_targets[i].has_preset = true;
+        moduleConfig.mesh_beacon.broadcast_targets[i].preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+        moduleConfig.mesh_beacon.broadcast_targets[i].region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    }
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, mockRouter->sentPackets.size(), "duplicate targets must collapse to one beacon");
+}
+
+/**
+ * Two distinct broadcast_targets (different presets) must BOTH be sent — dedup must not over-collapse.
+ */
+static void test_broadcaster_distinctTargets_bothSent(void)
+{
+    resetConfig();
+    static const uint8_t homePsk[16] = {0xAA, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+
+    moduleConfig.has_mesh_beacon = true;
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets_count = 2;
+    moduleConfig.mesh_beacon.broadcast_targets[0].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[0].preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+    moduleConfig.mesh_beacon.broadcast_targets[1].has_preset = true;
+    moduleConfig.mesh_beacon.broadcast_targets[1].preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    MeshBeaconBroadcastModuleTestShim bcast;
+    bcast.sendBeacon();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, mockRouter->sentPackets.size(), "distinct targets must each be sent");
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1378,6 +1430,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_noChannelOverride_doesNotSwapPrimary);
     RUN_TEST(test_broadcaster_targetChannelIndex_usesTableSlot);
     RUN_TEST(test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset);
+    RUN_TEST(test_broadcaster_duplicateTargets_dedupedToOnePacket);
+    RUN_TEST(test_broadcaster_distinctTargets_bothSent);
 
     exit(UNITY_END());
 }

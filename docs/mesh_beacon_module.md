@@ -383,8 +383,21 @@ Notes:
   channel's key to encrypt the beacon. A `channel_index` that is out of range, or points at a
   blank/unconfigured slot, falls back to the **default channel for the target preset** (the
   preset's display name, e.g. `LongFast`), not an error.
-- `channel_index` must be `< MAX_NUM_CHANNELS`; the firmware clears it on write otherwise (see
-  §2.2 sanitise rules).
+- `channel_index` must be `< MAX_NUM_CHANNELS` (8); the firmware clears it on write otherwise (see
+  §2.2 sanitise rules). This is the **only** check on write — the firmware does **not** verify that
+  the referenced slot is actually populated, because you may legitimately write the beacon config
+  before creating the channel. **Validating that a referenced channel exists is the client app's
+  responsibility.** A dangling reference doesn't error; it silently falls back to the preset's
+  default channel — so without a client-side check, the user can believe they're advertising
+  channel _X_ while the node is really transmitting on the preset default. Before writing, confirm
+  each `channel_index` maps to a configured `Channel`, and warn the user otherwise.
+- **No automatic deduplication of channels.** Neither the beacon config nor the channel table
+  dedups by content: two `broadcast_targets` may carry the same `channel_index`, or different
+  indices whose slots hold identical settings, and `set_channel` will happily store two slots with
+  the same name/PSK. The broadcaster _does_ skip transmitting a target whose effective
+  preset/region/channel duplicates an earlier one in the same cycle (so a duplicated entry wastes
+  no airtime), but it does not rewrite or reject your config — keeping the target list free of
+  redundant entries is up to the client.
 - The single-target path needs no separate `set_channel` step — its `broadcast_on_channel` is
   written inline in the same beacon-config message.
 
