@@ -129,8 +129,12 @@ static inline int get_max_num_nodes()
 #define WARM_NODE_COUNT 200
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
 #define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm.dat ~80 KB
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#define WARM_NODE_COUNT 150 // ESP32-S3 without PSRAM: ~6 KB heap, keeps BLE headroom (#10705)
+#elif defined(ARCH_RP2040)
+#define WARM_NODE_COUNT 150 // RP2040/RP2350: smaller warm.dat so the second flash write fits the watchdog (#10746)
 #else
-#define WARM_NODE_COUNT 320 // Generic ESP32, ESP32-S3 without PSRAM, ESP32C3 etc.
+#define WARM_NODE_COUNT 320 // Generic ESP32, ESP32C3 etc.
 #endif                      // platform
 #endif                      // WARM_NODE_COUNT
 
@@ -164,8 +168,10 @@ static inline int get_max_num_nodes()
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048 // PSRAM-equipped ESP32-S3 / native host
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 500 // ESP32-S3 without PSRAM: ~5 KB heap, keeps BLE headroom (#10705)
 #else
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // Generic ESP32, ESP32-S3 without PSRAM
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // Generic ESP32
 #endif
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
 

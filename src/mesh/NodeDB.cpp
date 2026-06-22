@@ -66,6 +66,10 @@
 #include <utility/bonding.h>
 #endif
 
+#ifdef ARCH_RP2040
+#include <hardware/watchdog.h>
+#endif
+
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include <MeshtasticOTA.h>
 #endif
@@ -2682,6 +2686,11 @@ bool NodeDB::saveNodeDatabaseToDisk()
     nodeDatabase.status.clear();
     nodeDatabase.status.shrink_to_fit();
 #if WARM_NODE_COUNT > 0
+#ifdef ARCH_RP2040
+    // nodes.proto + warm.dat are written back-to-back without the loop running between them;
+    // reset the 8s HW watchdog so the second write gets a full budget (issue #10746).
+    watchdog_update();
+#endif
     // Same cadence as the node DB; failure is logged but must not propagate —
     // a false return from here would trigger saveToDisk()'s fsFormat() path.
     warmStore.saveIfDirty();
