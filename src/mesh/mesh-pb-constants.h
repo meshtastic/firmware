@@ -128,9 +128,18 @@ static inline int get_max_num_nodes()
 // chain. Backed by the raw-flash ring below LittleFS — see WarmNodeStore.h.
 #define WARM_NODE_COUNT 200
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
-#define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm.dat ~80 KB
+#define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm cache in PSRAM (~80 KB)
+#elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32P4)
+#define WARM_NODE_COUNT 150 // 512 KB+ SRAM, no PSRAM (S3/C6/P4): ~6 KB heap (#10705)
+#elif defined(ARCH_ESP32)
+#define WARM_NODE_COUNT 100 // classic ESP32 (520 KB) / S2 (320 KB) / C3 (400 KB): tightest free heap w/ BLE+WiFi, ~4 KB (#10705)
+#elif defined(ARCH_RP2040)
+#define WARM_NODE_COUNT 150 // RP2040 (264 KB) / RP2350 (520 KB): bounded so warm.dat write fits the 8s watchdog (#10746)
 #else
-#define WARM_NODE_COUNT 320 // Generic ESP32, ESP32-S3 without PSRAM, ESP32C3 etc.
+// nRF52840 is handled explicitly above (200, raw-flash ring). Any other nRF52 (non-XXAA) and any
+// future non-ESP32/non-RP LittleFS part fall through to this 320 default — flag for review if such a
+// RAM-constrained nRF52 target is ever added.
+#define WARM_NODE_COUNT 320 // other LittleFS-backed parts (e.g. non-nRF52840 nRF52)
 #endif                      // platform
 #endif                      // WARM_NODE_COUNT
 
@@ -164,8 +173,15 @@ static inline int get_max_num_nodes()
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 0
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048 // PSRAM-equipped ESP32-S3 / native host
+#elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32P4)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 500 // 512 KB+ SRAM, no PSRAM (S3/C6/P4): ~5 KB heap (#10705)
+#elif defined(ARCH_ESP32)
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 400 // classic ESP32 / S2 / C3: tightest free heap, ~4 KB (#10705)
 #else
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // Generic ESP32, ESP32-S3 without PSRAM
+// nRF52 (incl. nRF52840) and RP2040/RP2350 fall through here — there is no nRF/RP branch above,
+// by design. These parts have no ESP32-style WiFi+BLE coexistence eating the heap, so the larger
+// 1000-entry (~10 KB) cache fits: nRF52840 is BLE-only on 256 KB RAM; RP2040/RP2350 have 264/520 KB.
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // nRF52 / RP2040 / RP2350 / other non-ESP32
 #endif
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
 
