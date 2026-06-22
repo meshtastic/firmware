@@ -11,6 +11,7 @@
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "WarmNodeStore.h"
 #include "concurrency/Lock.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -113,6 +114,20 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
+
+/// Outcome of mapping a single on-wire last-byte (next_hop / relay_node) back to a full NodeNum.
+/// Because the wire only carries the last byte of a 32-bit node number, the mapping is ambiguous on
+/// dense meshes (the "birthday problem"). Callers must treat Ambiguous and None as "don't trust it".
+enum class LastByteResolution : uint8_t {
+    None,      ///< no relevant candidate node has this last byte
+    Unique,    ///< exactly one relevant candidate -> `num` is valid
+    Ambiguous, ///< two or more relevant candidates collide on this byte
+};
+
+struct ResolvedNode {
+    LastByteResolution status = LastByteResolution::None;
+    NodeNum num = 0; ///< valid only when status == Unique
+};
 
 /// Given a packet, return the number of hops used to reach this node.
 /// Returns defaultIfUnknown if the number of hops couldn't be determined.
@@ -226,9 +241,25 @@ class NodeDB
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
     /*
-     * Sets a node either favorite or unfavorite
+     * Sets a node either favorite or unfavorite. Returns true if the node ends
+     * up in the requested state; false if the node is unknown or favouriting
+     * was refused by the protected-node cap (MAX_NUM_NODES - 2).
      */
-    void set_favorite(bool is_favorite, uint32_t nodeId);
+    bool set_favorite(bool is_favorite, uint32_t nodeId);
+
+    /// Count of eviction-protected (favourite/ignored/manually-verified) nodes.
+    int numProtectedNodes() const;
+
+    /// printf-style warning emitted when setProtectedFlag() refuses a node at
+    /// the cap. %s = verb (favorite/ignore), 0x%08x = node, %d = cap. Shared by
+    /// LOG_WARN here and AdminModule::sendWarning so the wording stays in sync.
+    static constexpr const char *PROTECTED_CAP_WARN_FMT = "Can't %s 0x%08x: protected-node limit (%d) reached";
+
+    /// Turn an eviction-protection flag (favourite/ignored/verified) on/off. Off
+    /// always succeeds; on returns false (no change) once the protected set hits
+    /// the cap (MAX_NUM_NODES-2), keeping >=2 always-evictable slots. Callers
+    /// surface the refusal to the user.
+    bool setProtectedFlag(meshtastic_NodeInfoLite *node, uint32_t mask, bool on);
 
     /*
      * Returns true if the node is in the NodeDB and marked as favorite
@@ -295,6 +326,46 @@ class NodeDB
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
+    /// Find a node in our DB, create an empty NodeInfoLite if missing (evicting
+    /// the oldest non-protected node when full). Public so admin handlers can
+    /// register a node we have not heard from yet (e.g. to block it by ID).
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+
+#if WARM_NODE_COUNT > 0
+    // Warm ("long-tail") tier: minimal {num, last_heard, public_key} records
+    // for nodes evicted from the hot store. See WarmNodeStore.h.
+    WarmNodeStore warmStore;
+#endif
+
+    /// Copy the 32-byte public key for node n — hot store first, then the warm
+    /// tier. Returns false if we don't know a key for n.
+    bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
+    /// Resolve a node's device role — hot store (with user) first, then the role
+    /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
+    /// nodes that have aged out of the hot store.
+    meshtastic_Config_DeviceConfig_Role getNodeRole(NodeNum n);
+
+    /// last_heard of a hot-store node, or 0 if absent. Plain scan of meshNodes
+    /// with no allocation side effects (unlike getOrCreateMeshNode).
+    uint32_t hotNodeLastHeard(NodeNum n) const;
+
+    /**
+     * Resolve a single on-wire last-byte (e.g. next_hop / relay_node) back to a unique full NodeNum,
+     * detecting last-byte collisions instead of silently picking the first match. A 1-byte id only
+     * needs to be unique among a node's plausible relays, not the whole mesh, so we scope the search:
+     *  - requireDirectNeighbor == true  : candidates are direct neighbors (hops_away==0) heard within
+     *                                     NEXTHOP_NEIGHBOR_FRESH_SECS. Use on the SEND path.
+     *  - requireDirectNeighbor == false : also accept favorites and router-role nodes (unknown hop
+     *                                     distance allowed). Use when learning / preserving hops.
+     * Ignored nodes, our own node, and the broadcast/0 sentinels are never candidates. On a tie the
+     * result is Ambiguous (no tie-break) so callers fall back to flooding rather than misroute.
+     */
+    ResolvedNode resolveLastByte(uint8_t lastByte, bool requireDirectNeighbor);
+
+    /// Convenience wrapper around resolveLastByte(): true iff exactly one relevant candidate matches.
+    /// Ambiguous and None both return false (the safe answer for learning / hop preservation).
+    bool resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor, NodeNum *outNum = nullptr);
 
     // Thread-safe satellite-map accessors. Return false if absent or the
     // corresponding DB is compiled out.
@@ -341,11 +412,15 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        // Always include satellite slots so backups from higher-cap peers
-        // decode without truncation, even when our build excludes the DBs.
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size) +
-               (MAX_NUM_NODES * meshtastic_NodePositionEntry_size) + (MAX_NUM_NODES * meshtastic_NodeTelemetryEntry_size) +
-               (MAX_NUM_NODES * meshtastic_NodeEnvironmentEntry_size) + (MAX_NUM_NODES * meshtastic_NodeStatusEntry_size);
+        // Decode-stream size ceiling only — no buffer this big is allocated (load
+        // streams from the file). Sized for the largest file any prior firmware
+        // could write (250-node ESP32-S3, satellites uncapped) so capacity
+        // downgrades / peer backups still decode; excess is trimmed after load.
+        // (not constexpr: portduino resolves MAX_NUM_NODES from runtime config)
+        const size_t loadCeiling = ((size_t)MAX_NUM_NODES > 250) ? (size_t)MAX_NUM_NODES : 250;
+        return nodeDatabaseSize + (loadCeiling * meshtastic_NodeInfoLite_size) +
+               (loadCeiling * meshtastic_NodePositionEntry_size) + (loadCeiling * meshtastic_NodeTelemetryEntry_size) +
+               (loadCeiling * meshtastic_NodeEnvironmentEntry_size) + (loadCeiling * meshtastic_NodeStatusEntry_size);
     }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory
@@ -430,11 +505,10 @@ class NodeDB
     mutable concurrency::Lock satelliteMutex;
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
+    bool migrationSavePending = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
-    /// Find a node in our DB, create an empty NodeInfoLite if missing
-    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
     /*
      * Internal boolean to track sorting paused
@@ -447,8 +521,32 @@ class NodeDB
     /// read our db from flash
     void loadFromDisk();
 
+#ifdef PIO_UNIT_TESTING
+    // Grant the unit-test shim access to the private maintenance paths below
+    // (migration / cleanup / eviction) without relaxing production access.
+    friend class NodeDBTestShim;
+#endif
+
     /// purge db entries without user info
     void cleanupMeshDB();
+
+    /// Trim each satellite map down to MAX_SATELLITE_NODES, dropping the
+    /// stalest entries (used after loading files written before the cap, or by
+    /// a build with a larger cap). Returns true iff anything was trimmed.
+    bool enforceSatelliteCaps();
+
+    /// Node-DB self-care; call only once identity is established (getNodeNum()
+    /// valid). Confirms self is present, trims/demotes only NON-self overflow, and
+    /// rewrites the store once when something changed (never while storage locked).
+    void nodeDBSelfCare();
+
+#if WARM_NODE_COUNT > 0
+    /// A database from a larger-cap build (e.g. the pre-fork 150-node nRF52 store)
+    /// can exceed MAX_NUM_NODES on load. Rank the hot store, demote the oldest
+    /// overflow into the warm tier preserving {num, last_heard, public_key} so PKI
+    /// DMs survive instead of dropping on truncation.
+    void demoteOldestHotNodesToWarm();
+#endif
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultNodeDatabase(), installDefaultChannels(),
@@ -569,6 +667,12 @@ inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+/// A node that the eviction/migration paths must not drop: a favourite, an
+/// ignored (blocked) node, or a manually-verified key.
+inline bool nodeInfoLiteIsProtected(const meshtastic_NodeInfoLite *n)
+{
+    return nodeInfoLiteIsFavorite(n) || nodeInfoLiteIsIgnored(n) || nodeInfoLiteIsKeyManuallyVerified(n);
 }
 
 inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool value)
