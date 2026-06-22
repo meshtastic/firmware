@@ -14,6 +14,7 @@
  * For more information, see: https://meshtastic.org/
  */
 #include "power.h"
+#include "BluetoothCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -47,7 +48,7 @@
 #include "concurrency/LockGuard.h"
 #endif
 
-#if defined(ARCH_STM32WL) && defined(BATTERY_PIN)
+#if defined(ARCH_STM32) && defined(BATTERY_PIN)
 #include "stm32yyxx_ll_adc.h"
 
 /* Analog read resolution */
@@ -430,7 +431,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             float scaled = 0;
 
             battery_adcEnable();
-#ifdef ARCH_STM32WL
+#ifdef ARCH_STM32
             // STM32 ADC with VREFINT runtime calibration
             Vref = __LL_ADC_CALC_VREFANALOG_VOLTAGE(analogRead(AVREF), LL_ADC_RESOLUTION);
             raw = analogRead(BATTERY_PIN);
@@ -607,7 +608,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
-#ifdef ARCH_STM32WL
+#ifdef ARCH_STM32
     // 3300mV placeholder for STM32 errata where VREFINT factory calibration may be missing
     // (e.g. STM32U0, see DS14756 Rev 3 §2.4.1 "VREFINT offset")
     uint32_t Vref = 3300;
@@ -717,7 +718,7 @@ bool Power::analogInit()
 #define BATTERY_SENSE_RESOLUTION_BITS 10
 #endif
 
-#ifdef ARCH_STM32WL
+#ifdef ARCH_STM32
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 #elif defined(ARCH_ESP32) // ESP32 needs special analog stuff
     adc_oneshot_unit_init_cfg_t init_config = {
@@ -748,7 +749,7 @@ bool Power::analogInit()
 
     // NRF52 ADC init moved to powerHAL_init in nrf52 platform
 
-#if !defined(ARCH_ESP32) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_ESP32) && !defined(ARCH_STM32)
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 #endif
 
@@ -837,7 +838,7 @@ void Power::reboot()
     }
     LOG_DEBUG("final reboot!");
     ::reboot();
-#elif defined(ARCH_STM32WL)
+#elif defined(ARCH_STM32)
     HAL_NVIC_SystemReset();
 #else
     rebootAtMsec = -1;
@@ -962,6 +963,10 @@ void Power::readPowerStatus()
         lastLogTime = millis();
     }
     newStatus.notifyObservers(&powerStatus2);
+
+    // Mirror battery level to the BLE Battery Service (0x2A19); the platform layer clamps and dedupes.
+    if (hasBattery == OptTrue)
+        updateBatteryLevel(powerStatus2.getBatteryChargePercent());
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
         // Use stack-allocated buffer to avoid heap allocations in monitoring code

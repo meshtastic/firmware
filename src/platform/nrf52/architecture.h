@@ -85,6 +85,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
 #elif defined(T_ECHO_LITE)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
+#elif defined(T_ECHO_CARD)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_CARD
 #elif defined(TTGO_T_ECHO_PLUS)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO_PLUS
 #elif defined(ELECROW_ThinkNode_M1)
@@ -135,6 +137,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
 #elif defined(MUZI_BASE)
 #define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
+#elif defined(HELTEC_MESH_TOWER_V2)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif

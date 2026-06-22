@@ -6,6 +6,9 @@
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+#include "mesh/eth/ethOTA.h"
+#endif
 #ifdef USE_ARDUINO_ETHERNET
 #include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
 // Shorter DHCP timeout so LoRa startup isn't blocked when no DHCP server is present.
@@ -154,6 +157,10 @@ static int32_t reconnectETH()
             }
 #endif
 
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+            initEthOTA();
+#endif
+
             ethStartupComplete = true;
         }
     }
@@ -178,6 +185,10 @@ static int32_t reconnectETH()
         }
         timeClient.end(); // W5100S: release UDP socket for other services
     }
+#endif
+
+#if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
+    ethOTALoop();
 #endif
 
     return 5000; // every 5 seconds
