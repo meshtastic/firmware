@@ -895,7 +895,7 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
 #define meshtastic_AdminMessage_InputEvent_size  14
 #define meshtastic_AdminMessage_OTAEvent_size    36
-#define meshtastic_AdminMessage_size             511
+#define meshtastic_AdminMessage_size             615
 #define meshtastic_HamParameters_size            47
 #define meshtastic_KeyVerificationAdmin_size     25
 #define meshtastic_LockdownAuth_size             56
