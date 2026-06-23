@@ -408,7 +408,9 @@ bool Channels::hasDefaultChannel()
  */
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
-    if (chIndex > getNumChannels()) {
+    // Note: the original condition used '>' here, which permitted chIndex == getNumChannels() to
+    // reach getHash() and read hashes[] out of bounds. Fixed to '>=' to match the valid range 0..getNumChannels()-1.
+    if (chIndex >= getNumChannels()) {
         return false; // invalid index — never attempt decryption
     }
     if (getHash(chIndex) != channelHash) {
@@ -417,41 +419,49 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
         if (config.lora.use_preset) {
             const meshtastic_Channel &ch = getByIndex(chIndex);
             const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true);
-            auto psk = getKey(chIndex);
-            if (ch.has_settings && presetName && psk.length >= 0) {
-                // Path A: stored name matches preset name — sender may have hashed "" instead of the name
+            if (ch.has_settings && presetName) {
+                // Path A: stored name matches preset name — sender may have hashed "" instead of the name.
+                // Fetch PSK only when the name condition is met, not for every non-matching channel.
                 if (*ch.settings.name && strcmp(ch.settings.name, presetName) == 0) {
-                    // blank name XORs as zero, so blank-name hash == psk hash alone
-                    uint8_t blankHash = xorHash(psk.bytes, psk.length);
-                    if (blankHash == channelHash) {
-                        LOG_DEBUG("Use channel %d '%s' via blank-name alias (hash 0x%x)", chIndex, ch.settings.name, channelHash);
-                        setCrypto(chIndex);
-                        return true;
-                    } else {
-                        LOG_DEBUG("Skip channel %d '%s': blank-name hash 0x%x != packet hash 0x%x", chIndex, ch.settings.name,
-                                  blankHash, channelHash);
+                    auto psk = getKey(chIndex);
+                    if (psk.length >= 0) {
+                        // blank name XORs as zero, so blank-name hash == psk hash alone
+                        uint8_t blankHash = xorHash(psk.bytes, psk.length);
+                        if (blankHash == channelHash) {
+                            LOG_DEBUG("Use channel %d '%s' via blank-name alias (hash 0x%x)", chIndex, ch.settings.name,
+                                      channelHash);
+                            setCrypto(chIndex);
+                            return true;
+                        } else {
+                            LOG_DEBUG("Skip channel %d '%s': blank-name hash 0x%x != packet hash 0x%x", chIndex, ch.settings.name,
+                                      blankHash, channelHash);
+                        }
                     }
                 }
                 // Path B: stored name is blank — sender may have hashed the preset name explicitly (non-standard)
                 if (!*ch.settings.name) {
-                    uint8_t presetHash =
-                        xorHash((const uint8_t *)presetName, strlen(presetName)) ^ xorHash(psk.bytes, psk.length);
-                    if (presetHash == channelHash) {
-                        LOG_WARN("Use channel %d '%s' via non-standard name hash (hash 0x%x) ", chIndex, presetName, channelHash);
-                        setCrypto(chIndex);
-                        return true;
-                    } else {
-                        LOG_DEBUG("Skip channel %d '%s': explicit-name hash 0x%x != packet hash 0x%x", chIndex, presetName,
-                                  presetHash, channelHash);
+                    auto psk = getKey(chIndex);
+                    if (psk.length >= 0) {
+                        uint8_t presetHash =
+                            xorHash((const uint8_t *)presetName, strlen(presetName)) ^ xorHash(psk.bytes, psk.length);
+                        if (presetHash == channelHash) {
+                            LOG_DEBUG("Use channel %d '%s' via non-standard explicit-name hash (hash 0x%x)", chIndex, presetName,
+                                      channelHash);
+                            setCrypto(chIndex);
+                            return true;
+                        } else {
+                            LOG_DEBUG("Skip channel %d '%s': explicit-name hash 0x%x != packet hash 0x%x", chIndex, presetName,
+                                      presetHash, channelHash);
+                        }
                     }
                 }
             }
         }
         LOG_DEBUG("Skip channel %d '%s': local hash 0x%x != packet hash 0x%x", chIndex, getName(chIndex), getHash(chIndex),
-                  channelHash); // channelHash);
+                  channelHash);
         return false;
     } else {
-        LOG_DEBUG("Use channel %d (hash 0x%x)", chIndex, channelHash);
+        LOG_DEBUG("Use channel %d '%s' (hash 0x%x)", chIndex, getName(chIndex), channelHash);
         setCrypto(chIndex);
         return true;
     }
