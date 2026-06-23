@@ -14,6 +14,8 @@ export interface Device {
   flashed_fw_branch: string | null;
   flashed_fw_sha: string | null;
   flashed_at: number | null;
+  hub_location: string | null;
+  hub_port: number | null;
   online: number;
   first_seen: number;
   last_seen: number;
@@ -28,6 +30,7 @@ export interface Camera {
   device_index: string | null;
   backend: string | null;
   rotation: number;
+  mirror: number;
   enabled: number;
   created_at: number;
   device_serial: string | null;

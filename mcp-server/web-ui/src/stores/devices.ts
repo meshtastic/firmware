@@ -54,5 +54,45 @@ export const useDevicesStore = defineStore("devices", () => {
     bySerial[serial] = updated;
   }
 
-  return { bySerial, list, load, init, setFriendlyName, refresh, setEnv };
+  // Pin (or clear, with location=null) which uhubctl hub port the node sits on.
+  async function setHubPort(
+    serial: string,
+    location: string | null,
+    port: number | null,
+  ) {
+    const updated = await api.put<Device>(`/api/devices/${serial}/hub-port`, {
+      location,
+      port,
+    });
+    bySerial[serial] = updated;
+  }
+
+  // Auto-bind the node to its hub port (unique VID match) or get candidates.
+  async function locate(serial: string) {
+    const res = await api.post<{
+      located: boolean;
+      device: Device;
+      candidates: { location: string; port: number }[];
+    }>(`/api/devices/${serial}/locate`);
+    if (res.located && res.device) bySerial[serial] = res.device;
+    return res;
+  }
+
+  // Cut/restore/cycle USB power to the node via its tracked hub port.
+  async function power(serial: string, action: "on" | "off" | "cycle") {
+    return api.post(`/api/devices/${serial}/power/${action}`);
+  }
+
+  return {
+    bySerial,
+    list,
+    load,
+    init,
+    setFriendlyName,
+    refresh,
+    setEnv,
+    setHubPort,
+    locate,
+    power,
+  };
 });

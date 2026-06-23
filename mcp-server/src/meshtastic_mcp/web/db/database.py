@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS devices (
     first_seen       REAL NOT NULL DEFAULT 0,
     last_seen        REAL NOT NULL DEFAULT 0,
     kind             TEXT NOT NULL DEFAULT 'usb',   -- 'usb' | 'native'
-    tcp_port         INTEGER
+    tcp_port         INTEGER,
+    hub_location     TEXT,                          -- uhubctl hub location (e.g. 1-1.3)
+    hub_port         INTEGER                        -- uhubctl port number on that hub
 );
 
 CREATE TABLE IF NOT EXISTS cameras (
@@ -47,6 +49,7 @@ CREATE TABLE IF NOT EXISTS cameras (
     device_index TEXT,
     backend      TEXT,
     rotation     INTEGER NOT NULL DEFAULT 0,
+    mirror       INTEGER NOT NULL DEFAULT 0,
     enabled      INTEGER NOT NULL DEFAULT 1,
     created_at   REAL NOT NULL DEFAULT 0,
     device_serial TEXT,
@@ -136,8 +139,26 @@ class Database:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL;")
         await self._conn.executescript(SCHEMA)
+        await self._migrate()
         await self._conn.commit()
         return self
+
+    async def _migrate(self) -> None:
+        """Additive column migrations for schema added after a db was first
+        created. ``ALTER TABLE ADD COLUMN`` is idempotent here — a duplicate on
+        a fresh db (already created with the column) is caught and ignored."""
+        additions = (
+            ("cameras", "mirror", "INTEGER NOT NULL DEFAULT 0"),
+            ("devices", "hub_location", "TEXT"),
+            ("devices", "hub_port", "INTEGER"),
+        )
+        for table, col, decl in additions:
+            try:
+                await self._conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {col} {decl}"
+                )
+            except Exception:  # noqa: BLE001 - column already present
+                pass
 
     async def close(self) -> None:
         if self._conn is not None:

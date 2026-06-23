@@ -19,14 +19,17 @@ const src = computed(() =>
 );
 
 const rotation = computed(() => props.camera?.rotation ?? 0);
+const mirrored = computed(() => !!props.camera?.mirror);
 
-// Rotation is pure CSS (the MJPEG stream isn't restarted). For 90/270 we scale
-// a 16:9 feed (filling the 16:9 box) by 9/16 so it fits after the quarter turn.
+// Rotation + mirror are pure CSS (the MJPEG stream isn't restarted). For 90/270
+// we scale a 16:9 feed (filling the 16:9 box) by 9/16 so it fits after the
+// quarter turn. Mirror is a horizontal flip applied before the rotation.
 const imgStyle = computed(() => {
   const r = rotation.value;
   const scale = r === 90 || r === 270 ? 0.5625 : 1;
+  const flip = mirrored.value ? " scaleX(-1)" : "";
   return {
-    transform: `rotate(${r}deg) scale(${scale})`,
+    transform: `rotate(${r}deg) scale(${scale})${flip}`,
     transition: "transform 0.2s ease",
   };
 });
@@ -68,6 +71,15 @@ async function rotate() {
     /* ignore — transient */
   }
 }
+
+async function mirror() {
+  if (!props.camera) return;
+  try {
+    await cameras.setMirror(props.camera.id, !mirrored.value);
+  } catch {
+    /* ignore — transient */
+  }
+}
 </script>
 
 <template>
@@ -86,24 +98,46 @@ async function rotate() {
         class="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-emerald-300"
         >● {{ camera.name }}</span
       >
-      <button
-        @click="rotate"
-        class="absolute top-1 right-1 p-1 rounded bg-black/60 text-slate-300 hover:text-emerald-300 transition"
-        :title="`rotate (now ${rotation}°)`"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          class="w-3.5 h-3.5"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+      <div class="absolute top-1 right-1 flex gap-1">
+        <button
+          @click="mirror"
+          class="p-1 rounded bg-black/60 transition"
+          :class="mirrored ? 'text-emerald-300' : 'text-slate-300 hover:text-emerald-300'"
+          :title="mirrored ? 'mirror: on (horizontal flip)' : 'mirror (horizontal flip)'"
         >
-          <polyline points="23 4 23 10 17 10" />
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-        </svg>
-      </button>
+          <svg
+            viewBox="0 0 24 24"
+            class="w-3.5 h-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 3v18" />
+            <path d="M16 7l4 5-4 5" />
+            <path d="M8 7l-4 5 4 5" />
+          </svg>
+        </button>
+        <button
+          @click="rotate"
+          class="p-1 rounded bg-black/60 text-slate-300 hover:text-emerald-300 transition"
+          :title="`rotate (now ${rotation}°)`"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="w-3.5 h-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+        </button>
+      </div>
     </template>
 
     <div

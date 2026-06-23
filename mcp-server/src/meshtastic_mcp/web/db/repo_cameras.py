@@ -9,8 +9,8 @@ import time
 from .database import Database
 
 _COLS = (
-    "id, name, type, device_index, backend, rotation, enabled, created_at, "
-    "device_serial, assigned_at"
+    "id, name, type, device_index, backend, rotation, mirror, enabled, "
+    "created_at, device_serial, assigned_at"
 )
 
 
@@ -65,6 +65,14 @@ async def set_rotation(db: Database, cid: int, rotation: int) -> dict | None:
     await db.execute(
         "UPDATE cameras SET rotation=? WHERE id=?",
         (_normalize_rotation(rotation), cid),
+    )
+    return await get(db, cid)
+
+
+async def set_mirror(db: Database, cid: int, mirror: bool) -> dict | None:
+    """Horizontal flip — a property of the camera mount, like rotation."""
+    await db.execute(
+        "UPDATE cameras SET mirror=? WHERE id=?", (int(bool(mirror)), cid)
     )
     return await get(db, cid)
 

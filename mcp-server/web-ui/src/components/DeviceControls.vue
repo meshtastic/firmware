@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { api } from "../api/client";
 import { useBuildsStore } from "../stores/builds";
+import { useDevicesStore } from "../stores/devices";
 import { useFirmwareStore } from "../stores/firmware";
 import { useTestsStore } from "../stores/tests";
 import type { Device } from "../types";
@@ -9,6 +10,7 @@ import type { Device } from "../types";
 const props = defineProps<{ device: Device }>();
 const tests = useTestsStore();
 const builds = useBuildsStore();
+const devices = useDevicesStore();
 const fw = useFirmwareStore();
 
 const nodedbSize = ref(500);
@@ -114,6 +116,23 @@ const doSend = () => {
     () => (sendText.value = ""),
   );
 };
+
+// USB power control (uhubctl). The node's hub port is tracked on the device;
+// if it's unmapped the backend auto-binds a unique VID match, or returns 409
+// with candidates to pick in device settings.
+const serial = computed(() => props.device.serial_number);
+const hubLabel = computed(() =>
+  props.device.hub_location != null
+    ? `hub ${props.device.hub_location}:${props.device.hub_port}`
+    : "port unmapped — auto/assign in ⚙",
+);
+const powerCycle = () =>
+  run("power cycle", () => devices.power(serial.value, "cycle"));
+const powerOff = () => {
+  if (confirm(`Cut USB power to ${props.device.friendly_name || serial.value}?`))
+    run("power off", () => devices.power(serial.value, "off"));
+};
+const powerOn = () => run("power on", () => devices.power(serial.value, "on"));
 </script>
 
 <template>
@@ -185,6 +204,36 @@ const doSend = () => {
       >
         inject + reboot
       </button>
+    </div>
+
+    <!-- USB power (uhubctl) -->
+    <div v-if="!isNative" class="flex gap-1.5 items-center flex-wrap">
+      <span class="text-[11px] text-slate-500">power</span>
+      <button
+        @click="powerCycle"
+        :disabled="busy || tests.running"
+        class="text-xs px-2 py-1 rounded border border-amber-800 text-amber-300 hover:bg-amber-950/40 disabled:opacity-40"
+        title="USB power-cycle this port (uhubctl off → on)"
+      >
+        ⟳ cycle
+      </button>
+      <button
+        @click="powerOff"
+        :disabled="busy || tests.running"
+        class="text-xs px-2 py-1 rounded border border-rose-800 text-rose-300 hover:bg-rose-950/40 disabled:opacity-40"
+        title="Cut USB power to this port"
+      >
+        ⏻ off
+      </button>
+      <button
+        @click="powerOn"
+        :disabled="busy || tests.running"
+        class="text-xs px-2 py-1 rounded border border-emerald-800 text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-40"
+        title="Restore USB power to this port"
+      >
+        ⏼ on
+      </button>
+      <span class="text-[11px] text-slate-600 mono">{{ hubLabel }}</span>
     </div>
 
     <!-- flash timing: direct artifact vs host rebuild -->

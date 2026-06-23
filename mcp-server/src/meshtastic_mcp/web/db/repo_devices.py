@@ -17,7 +17,7 @@ _COLS = (
     "serial_number, node_num, friendly_name, hw_model, vid, pid, role, "
     "current_port, firmware_version, region, env, env_locked, "
     "flashed_fw_branch, flashed_fw_sha, flashed_at, online, first_seen, "
-    "last_seen, kind, tcp_port"
+    "last_seen, kind, tcp_port, hub_location, hub_port"
 )
 
 
@@ -163,6 +163,19 @@ async def update_enrichment(
     params.append(serial)
     await db.execute(
         f"UPDATE devices SET {', '.join(sets)} WHERE serial_number=?", tuple(params)
+    )
+    return await get(db, serial)
+
+
+async def set_hub_port(
+    db: Database, serial: str, *, location: str | None, port: int | None
+) -> dict | None:
+    """Pin (or clear) which uhubctl hub location + port this device sits on, so
+    power actions target the right physical port. Survives port/USB changes —
+    it's the hub slot, not the tty."""
+    await db.execute(
+        "UPDATE devices SET hub_location=?, hub_port=? WHERE serial_number=?",
+        (location, port, serial),
     )
     return await get(db, serial)
 

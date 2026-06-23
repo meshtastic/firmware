@@ -33,10 +33,12 @@ from .services import (
     firmware,
     identity,
     native,
+    power,
     serial_monitor,
     test_runner,
 )
 from .services.control import ControlBusy
+from .services.power import AmbiguousPort, NoPort
 from .ws.hub import Connection, Hub
 
 log = logging.getLogger("meshtastic_mcp.web")
@@ -90,6 +92,7 @@ def create_app() -> FastAPI:
     _mount_tests(api)
     _mount_native(api)
     _mount_boards(api)
+    _mount_hubs(api)
     app.include_router(api)
     _mount_ws(app)
 
@@ -273,6 +276,56 @@ def _mount_devices(api: APIRouter) -> None:
         rows = await rr.results_for_device(request.app.state.db, serial)
         return rows[:limit]
 
+    # --- per-device USB power (uhubctl) ----------------------------------
+    @api.put("/devices/{serial}/hub-port")
+    async def set_hub_port(serial: str, request: Request, body: dict = Body(...)):
+        db, hub = request.app.state.db, request.app.state.hub
+        await _device_or_404(db, serial)
+        loc = body.get("location")
+        port = body.get("port")
+        dev = await rd.set_hub_port(
+            db, serial, location=loc, port=int(port) if port is not None else None
+        )
+        await hub.publish("device.update", dev)
+        return dev
+
+    @api.post("/devices/{serial}/locate")
+    async def locate_device(serial: str, request: Request):
+        db, hub = request.app.state.db, request.app.state.hub
+        await _device_or_404(db, serial)
+        try:
+            res = await power.locate(db, serial)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if res["located"]:
+            await hub.publish("device.update", res["device"])
+        return res
+
+    @api.post("/devices/{serial}/power/{action}")
+    async def power_action(serial: str, action: str, request: Request):
+        db, hub = request.app.state.db, request.app.state.hub
+        await _device_or_404(db, serial)
+        if action not in ("on", "off", "cycle"):
+            raise HTTPException(status_code=404, detail="unknown power action")
+        _gate_idle()
+        # Free the port from any live serial monitor before toggling VBUS.
+        await request.app.state.serialmon.suspend(serial)
+        try:
+            result = await power.power_device(db, serial, action)
+        except AmbiguousPort as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"error": str(exc), "candidates": exc.candidates},
+            )
+        except (NoPort, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:  # uhubctl errors (permissions, hub gone)
+            raise HTTPException(status_code=502, detail=str(exc))
+        finally:
+            if action != "off":
+                await request.app.state.serialmon.resume(serial)
+        return result
+
 
 def _inject(size: int, port: str | None) -> dict:
     return fixtures.push_fake_nodedb(
@@ -315,6 +368,15 @@ def _mount_cameras(api: APIRouter) -> None:
     async def rotate_camera(cid: int, request: Request, body: dict = Body(...)):
         db, hub = request.app.state.db, request.app.state.hub
         cam = await rc.set_rotation(db, cid, int(body.get("rotation", 0)))
+        if cam is None:
+            raise HTTPException(status_code=404, detail="unknown camera")
+        await hub.publish("camera.update", cam)
+        return cam
+
+    @api.post("/cameras/{cid}/mirror")
+    async def mirror_camera(cid: int, request: Request, body: dict = Body(...)):
+        db, hub = request.app.state.db, request.app.state.hub
+        cam = await rc.set_mirror(db, cid, bool(body.get("mirror", False)))
         if cam is None:
             raise HTTPException(status_code=404, detail="unknown camera")
         await hub.publish("camera.update", cam)
@@ -479,6 +541,19 @@ def _mount_boards(api: APIRouter) -> None:
         return await asyncio.to_thread(
             boards.list_boards, architecture, False, query, None
         )
+
+
+# --- hubs (uhubctl) --------------------------------------------------------
+def _mount_hubs(api: APIRouter) -> None:
+    @api.get("/hubs")
+    async def list_hubs():
+        if not power.available():
+            return {"available": False, "hubs": []}
+        try:
+            hubs = await asyncio.to_thread(power.list_hubs)
+        except RuntimeError as exc:  # uhubctl present but failed (permissions)
+            return {"available": True, "hubs": [], "error": str(exc)}
+        return {"available": True, "hubs": hubs}
 
 
 # --- websocket -------------------------------------------------------------

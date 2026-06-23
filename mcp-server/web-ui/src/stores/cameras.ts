@@ -51,6 +51,11 @@ export const useCamerasStore = defineStore("cameras", () => {
     byId[id] = cam;
   }
 
+  async function setMirror(id: number, mirror: boolean) {
+    const cam = await api.post<Camera>(`/api/cameras/${id}/mirror`, { mirror });
+    byId[id] = cam;
+  }
+
   return {
     byId,
     list,
@@ -61,5 +66,6 @@ export const useCamerasStore = defineStore("cameras", () => {
     remove,
     assign,
     setRotation,
+    setMirror,
   };
 });
