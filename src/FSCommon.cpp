@@ -148,7 +148,8 @@ void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vec
     }
 
     File file = root.openNextFile();
-    while (file) {
+    // file.name()[0] check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
+    while (file && file.name()[0]) {
         if (filenames.size() >= maxCount) {
             if (wasLimited)
                 *wasLimited = true;
