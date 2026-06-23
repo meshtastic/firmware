@@ -7,6 +7,8 @@ This directory tree is designed to solve two problems.
 
 So we are borrowing the initVariant() ideas here (by using weak gcc references). You can now define earlyInitVariant() and lateInitVariant() if your board needs them. earlyInitVariant() runs at the beginning of setup() directly after waitUntilPowerLevelSafe(); while lateInitVariant() runs after the LoRa radio is initialized.
 
+**Important:** earlyInitVariant() runs _before_ consoleInit(), so the logging subsystem isn't set up yet. Calling a `LOG_*` macro there **crashes the device** — it is not a silent no-op. Never use `LOG_*` in earlyInitVariant(); defer any logging to lateInitVariant() or later.
+
 If you'd like a board specific variant to be run, add the variant.cpp file to an appropriately named
 subdirectory and check for \_VARIANT_boardname in the cpp file (so that your code is only built for your board).
 You'll need to define \_VARIANT_boardname in your corresponding variant.h file.

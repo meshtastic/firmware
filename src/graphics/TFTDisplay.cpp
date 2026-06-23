@@ -1474,13 +1474,13 @@ void TFTDisplay::display(bool fromBlank)
                     isset = buffer[x + y_byteIndex] & y_byteMask;
 #if GRAPHICS_TFT_COLORING_ENABLED
                     if (hasColorRegions) {
-                        linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y),
-                                                                            isset, colorTftWhite, colorTftBlack);
+                        linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = graphics::resolveTFTColorPixel(
+                            static_cast<int16_t>(x), static_cast<int16_t>(y), isset, colorTftWhite, colorTftBlack);
                     } else {
-                        linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                        linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
                     }
 #else
-                    linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                    linePixelBuffer[bufferIndex++ + x_LastPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
 #endif
                 }
             } else {
@@ -1494,13 +1494,13 @@ void TFTDisplay::display(bool fromBlank)
                     isset = buffer[x + y_byteIndex] & y_byteMask;
 #if GRAPHICS_TFT_COLORING_ENABLED
                     if (hasColorRegions) {
-                        linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y),
-                                                                            isset, colorTftWhite, colorTftBlack);
+                        linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = graphics::resolveTFTColorPixel(
+                            static_cast<int16_t>(x), static_cast<int16_t>(y), isset, colorTftWhite, colorTftBlack);
                     } else {
-                        linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                        linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
                     }
 #else
-                    linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
+                    linePixelBuffer[bufferIndex++ + x_FirstPixelUpdate] = isset ? colorTftWhite : colorTftBlack;
 #endif
                 }
             }

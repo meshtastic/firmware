@@ -27,6 +27,8 @@ void earlyInitVariant()
     digitalWrite(SDCARD_CS, HIGH);
     pinMode(NFC_CS, OUTPUT);
     digitalWrite(NFC_CS, HIGH);
+    pinMode(I2C_SDA, INPUT_PULLUP);
+    pinMode(I2C_SCL, INPUT_PULLUP);
 
     if (io.begin(Wire, XL9555_SLAVE_ADDRESS0)) {
         io.pinMode(EXPANDS_DRV_EN, OUTPUT);
@@ -43,14 +45,15 @@ void earlyInitVariant()
         io.pinMode(EXPANDS_LORA_RF_SW, OUTPUT);
         io.digitalWrite(EXPANDS_LORA_RF_SW, HIGH); // set RF switch to built-in LoRa antenna
         // io.pinMode(EXPANDS_SD_DET, INPUT);
-    } else {
-        LOG_ERROR("io expander initialisation failed!");
     }
+    // NOTE: deliberately no LOG_* on the io.begin() failure path. earlyInitVariant() runs
+    // before consoleInit(), where calling a LOG_* macro crashes the device (see
+    // extra_variants/README.md). On failure the EXPANDS_* pins stay on their defaults.
 }
 
 static bool readTouch(int16_t *x, int16_t *y)
 {
-    return touchDrv.isPressed() && touchDrv.getPoint(x, y, 1);
+    return touchDrv.getPoint(x, y, 1);
 }
 
 void lateInitVariant()
@@ -58,7 +61,7 @@ void lateInitVariant()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
         touchDrv.setPins(-1, SCREEN_TOUCH_INT);
-        if (touchDrv.begin(Wire, TOUCH_SLAVE_ADDRESS, I2C_SDA, I2C_SCL)) {
+        if (touchDrv.begin(Wire, TOUCH_SLAVE_ADDRESS, -1, -1)) {
             touchScreenImpl1 = new TouchScreenImpl1(TFT_WIDTH, TFT_HEIGHT, readTouch);
             touchScreenImpl1->init();
         } else {
