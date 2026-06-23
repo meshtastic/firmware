@@ -486,7 +486,11 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
 }
 
 /* Check if a certain node was a relayer of a packet in the history given iterator
- * @return true if node was indeed a relayer, false if not */
+ * @return true if node was indeed a relayer, false if not
+ * NOTE: intentionally byte-domain. Both `relayer` and relayed_by[] are on-wire last bytes, so this
+ * answers "did a relayer with this byte touch the packet" — correct without resolving to a NodeNum.
+ * The collision risk is neutralized where the result is consumed (route learning in
+ * NextHopRouter::sniffReceived now gates the write through NodeDB::resolveUniqueLastByte). */
 bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole)
 {
     bool found = false;

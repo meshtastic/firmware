@@ -6,6 +6,7 @@
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
@@ -1013,6 +1014,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 
+    case WIPE_MESSAGES_ALL:
+        LOG_INFO("Wiping all messages from menu");
+        messageStore.clearAllMessages();
+        inkhud->persistence->loadLatestMessage();
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -1130,6 +1138,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Administration Section
         items.push_back(MenuItem::Header("Administration"));
         items.push_back(MenuItem("Reset NodeDB", MenuPage::NODE_CONFIG_ADMIN_RESET));
+        items.push_back(MenuItem("Wipe Messages", MenuPage::NODE_CONFIG_ADMIN_MESSAGES));
 
         // Exit
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -1531,6 +1540,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Reset All", MenuAction::RESET_NODEDB_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Keep Favorites Only", MenuAction::RESET_NODEDB_KEEP_FAVORITES, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_ADMIN_MESSAGES:
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Wipe All Messages", MenuAction::WIPE_MESSAGES_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
