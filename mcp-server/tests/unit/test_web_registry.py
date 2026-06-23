@@ -113,6 +113,38 @@ def test_camera_assignment_survives_port_change(tmp_path):
     asyncio.run(go())
 
 
+def test_camera_rotation_persists_and_normalizes(tmp_path):
+    async def go():
+        db = _fresh_db(tmp_path)
+        await db.connect()
+        try:
+            cid = await rc.add(db, name="cam", device_index="0")
+            assert (await rc.get(db, cid))["rotation"] == 0  # default
+            await rc.set_rotation(db, cid, 90)
+            assert (await rc.get(db, cid))["rotation"] == 90
+            await rc.set_rotation(db, cid, 360)  # wraps to 0
+            assert (await rc.get(db, cid))["rotation"] == 0
+            await rc.set_rotation(db, cid, 450)  # wraps to 90
+            assert (await rc.get(db, cid))["rotation"] == 90
+            await rc.set_rotation(db, cid, 100)  # snaps to nearest quarter (90)
+            assert (await rc.get(db, cid))["rotation"] == 90
+            # rotation survives reassignment (it's a property of the camera)
+            await rd.upsert_from_discovery(
+                db,
+                serial_number="X",
+                current_port="/dev/a",
+                vid="0x239a",
+                pid="0x1",
+                role="nrf52",
+            )
+            await rc.assign(db, cid, "X")
+            assert (await rc.for_device(db, "X"))["rotation"] == 90
+        finally:
+            await db.close()
+
+    asyncio.run(go())
+
+
 def test_role_to_serial_mapping(tmp_path):
     async def go():
         db = _fresh_db(tmp_path)

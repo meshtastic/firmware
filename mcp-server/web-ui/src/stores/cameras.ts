@@ -44,5 +44,22 @@ export const useCamerasStore = defineStore("cameras", () => {
     byId[id] = cam;
   }
 
-  return { byId, list, forDevice, load, init, add, remove, assign };
+  async function setRotation(id: number, rotation: number) {
+    const cam = await api.post<Camera>(`/api/cameras/${id}/rotation`, {
+      rotation,
+    });
+    byId[id] = cam;
+  }
+
+  return {
+    byId,
+    list,
+    forDevice,
+    load,
+    init,
+    add,
+    remove,
+    assign,
+    setRotation,
+  };
 });

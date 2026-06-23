@@ -27,6 +27,7 @@ export interface Camera {
   type: string;
   device_index: string | null;
   backend: string | null;
+  rotation: number;
   enabled: number;
   created_at: number;
   device_serial: string | null;
