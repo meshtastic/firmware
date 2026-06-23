@@ -15,12 +15,8 @@ FindNodeBuzzer *findNodeBuzzer;
 
 FindNodeBuzzer::FindNodeBuzzer() : concurrency::OSThread("FindNodeBuzzer", INT32_MAX) {}
 
-FindNodeBuzzer::Result FindNodeBuzzer::start(uint32_t durationSeconds, uint32_t *acceptedDurationSeconds)
+FindNodeBuzzer::Result FindNodeBuzzer::start()
 {
-    if (acceptedDurationSeconds) {
-        *acceptedDurationSeconds = 0;
-    }
-
     if (!hasFindNodeBuzzer()) {
         return Result::NoBuzzer;
     }
@@ -29,17 +25,8 @@ FindNodeBuzzer::Result FindNodeBuzzer::start(uint32_t durationSeconds, uint32_t 
         return Result::BuzzerDisabled;
     }
 
-    if (durationSeconds == 0) {
-        durationSeconds = DEFAULT_DURATION_SECONDS;
-    } else if (durationSeconds > MAX_DURATION_SECONDS) {
-        durationSeconds = MAX_DURATION_SECONDS;
-    }
-
     startMsec = millis();
-    durationMsec = durationSeconds * 1000U;
-    if (acceptedDurationSeconds) {
-        *acceptedDurationSeconds = durationSeconds;
-    }
+    durationMsec = DEFAULT_DURATION_SECONDS * 1000U;
 
     if (!playFindNodeBuzzer()) {
         stop();

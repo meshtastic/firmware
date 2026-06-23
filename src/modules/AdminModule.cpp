@@ -1482,18 +1482,15 @@ void AdminModule::handleFindNodeRequest(const meshtastic_MeshPacket &req, const 
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
     r.which_payload_variant = meshtastic_AdminMessage_find_node_response_tag;
 
-    uint32_t acceptedDurationSeconds = 0;
     FindNodeBuzzer::Result result = FindNodeBuzzer::Result::NoBuzzer;
     if (findNodeBuzzer) {
-        result =
-            request.stop ? findNodeBuzzer->stop() : findNodeBuzzer->start(request.duration_seconds, &acceptedDurationSeconds);
+        result = request.stop ? findNodeBuzzer->stop() : findNodeBuzzer->start();
     }
 
     switch (result) {
     case FindNodeBuzzer::Result::Started:
         r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_STARTED;
-        r.find_node_response.duration_seconds = acceptedDurationSeconds;
-        LOG_INFO("Find-node buzzer started for %u seconds", acceptedDurationSeconds);
+        LOG_INFO("Find-node buzzer started for %u seconds", FindNodeBuzzer::DEFAULT_DURATION_SECONDS);
         break;
     case FindNodeBuzzer::Result::Stopped:
         r.find_node_response.result = meshtastic_AdminMessage_FindNodeResponse_Result_STOPPED;

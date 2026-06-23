@@ -8,12 +8,11 @@ class FindNodeBuzzer : private concurrency::OSThread
   public:
     enum class Result : uint8_t { Started, Stopped, NoBuzzer, BuzzerDisabled };
 
-    static constexpr uint32_t DEFAULT_DURATION_SECONDS = 30;
-    static constexpr uint32_t MAX_DURATION_SECONDS = 300;
+    static constexpr uint32_t DEFAULT_DURATION_SECONDS = 5 * 60;
 
     FindNodeBuzzer();
 
-    Result start(uint32_t durationSeconds, uint32_t *acceptedDurationSeconds = nullptr);
+    Result start();
     Result stop();
     bool isActive() const;
 
