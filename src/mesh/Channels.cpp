@@ -457,8 +457,7 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
                 }
             }
         }
-        LOG_DEBUG("Skip channel %d '%s': local hash 0x%x != packet hash 0x%x", chIndex, getName(chIndex), getHash(chIndex),
-                  channelHash);
+        LOG_TRACE("Skip channel %d '%s': local hash 0x%x != packet hash 0x%x", chIndex, getName(chIndex), getHash(chIndex), channelHash);
         return false;
     } else {
         LOG_DEBUG("Use channel %d '%s' (hash 0x%x)", chIndex, getName(chIndex), channelHash);
