@@ -133,6 +133,32 @@ async function onAssign(e: Event) {
           >
           <span v-if="device.stale" class="text-amber-500/70">· stale</span>
         </div>
+        <!-- auto-sniffed specs: running firmware, hw model, region, exact env -->
+        <div
+          v-if="device.firmware_version || device.hw_model"
+          class="text-[11px] mono truncate mt-0.5 flex flex-wrap items-center gap-x-1.5"
+        >
+          <span v-if="device.firmware_version" class="text-emerald-300/90"
+            >v{{ device.firmware_version }}</span
+          >
+          <span v-if="device.hw_model" class="text-slate-400"
+            >· {{ device.hw_model }}</span
+          >
+          <span
+            v-if="device.region && device.region !== 'UNSET'"
+            class="text-indigo-300/90"
+            >· {{ device.region }}</span
+          >
+          <span
+            v-else-if="device.region === 'UNSET'"
+            class="text-amber-400/90"
+            title="region unset — node will not transmit"
+            >· region unset</span
+          >
+          <span v-if="device.env" class="text-slate-500"
+            >· env <span class="text-slate-300">{{ device.env }}</span></span
+          >
+        </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
         <button

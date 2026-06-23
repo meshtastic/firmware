@@ -16,7 +16,14 @@ from fastapi import APIRouter, Body, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from meshtastic_mcp import admin, boards, fixtures, flash as flash_lib, log_query
+from meshtastic_mcp import (
+    admin,
+    boards,
+    fixtures,
+    flash as flash_lib,
+    info as mt_info,
+    log_query,
+)
 
 from .db import repo_builds as rb
 from .db import repo_cameras as rc
@@ -66,9 +73,13 @@ def create_app() -> FastAPI:
         app.state.runner = test_runner.TestRunner(db, hub)
         app.state.forwarder = datadog.DDForwarder(db, hub)
         await app.state.forwarder.reload()
-        app.state.discovery = discovery.DeviceDiscovery(db, hub)
-        app.state.discovery.start()
         app.state.serialmon = serial_monitor.SerialMonitor(db, hub)
+        # Discovery auto-enriches devices, suspending their serial monitor for
+        # the connect — so it needs the monitor handle.
+        app.state.discovery = discovery.DeviceDiscovery(
+            db, hub, serialmon=app.state.serialmon
+        )
+        app.state.discovery.start()
         log.info("FleetSuite started — registry at %s", db.path)
 
     @app.on_event("shutdown")
@@ -167,7 +178,7 @@ def _mount_devices(api: APIRouter) -> None:
         db, hub = request.app.state.db, request.app.state.hub
         row = await _device_or_404(db, serial)
         port = row.get("current_port")
-        info = await _port_action(request, serial, admin.device_info, port)
+        info = await _port_action(request, serial, mt_info.device_info, port)
         hw_model = info.get("hw_model")
         env = identity.env_for_hw_model(hw_model) if hw_model else None
         dev = await rd.update_enrichment(
