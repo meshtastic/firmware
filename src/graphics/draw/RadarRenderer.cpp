@@ -474,6 +474,20 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y) {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
   }
 
+  // No active nodes in range — the radar above is intentionally empty (rings
+  // only).  Tell the user why, centred in the list-panel column so it doesn't
+  // overlap the radar circle on the right.
+  if (entries.empty()) {
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    const int panelCX = (x + radarCX - radarRadius) / 2;
+    const int blockTop =
+        y + headerH + (listContentH - 2 * FONT_HEIGHT_SMALL) / 2;
+    display->drawString(panelCX, blockTop, "No active");
+    display->drawString(panelCX, blockTop + FONT_HEIGHT_SMALL, "nodes");
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+  }
+
   // BT/API connection icon — drawn here (no surrounding wipe) so the radar
   // circle and the last list row stay intact.  NodeListRenderer's radar
   // branch deliberately skips drawCommonFooter for the same reason.
