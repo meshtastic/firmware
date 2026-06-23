@@ -86,6 +86,15 @@ class Channels
     // Returns true if the channel has the default name and PSK
     bool isDefaultChannel(ChannelIndex chIndex);
 
+    // Returns true if this channel's effective key is publicly decryptable (open or well-known/default PSK).
+    bool usesPublicKey(ChannelIndex chIndex);
+    // Returns true if the channel is "well known": its PSK is absent or a
+    // single-byte well-known key index, AND its name is any modem-preset
+    // display name (e.g. a channel named "LongFast" counts even while the
+    // radio runs MediumFast). Broader than isDefaultChannel, which only
+    // matches the current preset's name and PSK byte 1.
+    bool isWellKnownChannel(ChannelIndex chIndex);
+
     // Returns true if we can be reached via a channel with the default settings given a region and modem preset
     bool hasDefaultChannel();
 
@@ -143,6 +152,9 @@ extern Channels channels;
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                      0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
+
+/// True if a getKey()-resolved key offers no privacy: length 0 (off) or the public defaultpsk family. Pure; for tests.
+bool cryptoKeyIsPublic(const CryptoKey &key);
 
 static const uint8_t eventpsk[] = {0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36,
                                    0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74,
