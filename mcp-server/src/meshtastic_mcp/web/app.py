@@ -350,6 +350,16 @@ def _mount_cameras(api: APIRouter) -> None:
     async def list_cameras(request: Request):
         return await rc.list_all(request.app.state.db)
 
+    @api.get("/cameras/discover")
+    async def discover_cameras(request: Request):
+        # Indices already bound to a FleetSuite camera — don't re-open those.
+        in_use = {
+            str(c["device_index"])
+            for c in await rc.list_all(request.app.state.db)
+            if c.get("device_index") is not None
+        }
+        return await asyncio.to_thread(camera_stream.discover, in_use)
+
     @api.post("/cameras")
     async def add_camera(request: Request, body: dict = Body(...)):
         db, hub = request.app.state.db, request.app.state.hub

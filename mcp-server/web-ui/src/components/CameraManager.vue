@@ -1,11 +1,50 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
+import { api } from "../api/client";
 import { useCamerasStore } from "../stores/cameras";
+
+interface Discovered {
+  index: number;
+  name: string;
+  in_use: boolean;
+  width?: number;
+  height?: number;
+  unavailable?: boolean;
+}
 
 const cameras = useCamerasStore();
 const name = ref("");
 const index = ref("0");
 const adding = ref(false);
+const manual = ref(false);
+
+const discovered = ref<Discovered[]>([]);
+const scanning = ref(false);
+const scanned = ref(false);
+const hasBackend = ref(true); // cv2 present → live preview possible
+
+async function scan() {
+  scanning.value = true;
+  try {
+    const res = await api.get<{ cv2: boolean; cameras: Discovered[] }>(
+      "/api/cameras/discover",
+    );
+    hasBackend.value = res.cv2;
+    discovered.value = res.cameras;
+    scanned.value = true;
+  } catch {
+    discovered.value = [];
+    scanned.value = true;
+  } finally {
+    scanning.value = false;
+  }
+}
+onMounted(scan);
+
+async function quickAdd(cam: Discovered) {
+  await cameras.add(cam.name, String(cam.index));
+  await scan(); // refresh in_use flags
+}
 
 async function add() {
   if (!name.value.trim()) return;
@@ -14,9 +53,16 @@ async function add() {
     await cameras.add(name.value, index.value);
     name.value = "";
     index.value = "0";
+    await scan();
   } finally {
     adding.value = false;
   }
+}
+
+function res(c: Discovered): string {
+  if (c.unavailable) return "can't open";
+  if (c.width && c.height) return `${c.width}×${c.height}`;
+  return hasBackend.value ? "" : "no preview backend";
 }
 </script>
 
@@ -25,8 +71,62 @@ async function add() {
     <div class="flex items-center gap-2 mb-3">
       <span class="w-1 h-3.5 rounded-full bg-indigo-500/80" />
       <h3 class="section-label">USB Cameras</h3>
+      <div class="flex-1" />
+      <button
+        @click="scan"
+        :disabled="scanning"
+        class="text-xs px-2.5 py-1 rounded border border-indigo-700 text-indigo-300 hover:bg-indigo-600/20 disabled:opacity-40 fs-display"
+      >
+        {{ scanning ? "scanning…" : "⟳ scan" }}
+      </button>
     </div>
-    <div class="flex flex-wrap gap-2 mb-3">
+
+    <!-- discovered cameras -->
+    <ul v-if="discovered.length" class="space-y-1 mb-3">
+      <li
+        v-for="c in discovered"
+        :key="c.index"
+        class="flex items-center gap-2 text-xs px-2 py-1.5 rounded bg-slate-950/40 border border-slate-800"
+      >
+        <span class="w-1.5 h-1.5 rounded-full" :class="c.unavailable ? 'bg-rose-500' : 'bg-emerald-400'" />
+        <span class="text-slate-200 truncate">{{ c.name }}</span>
+        <span class="mono text-slate-500">idx {{ c.index }}</span>
+        <span v-if="res(c)" class="mono text-slate-600">{{ res(c) }}</span>
+        <span class="ml-auto">
+          <span v-if="c.in_use" class="text-emerald-400/70">added ✓</span>
+          <button
+            v-else
+            @click="quickAdd(c)"
+            class="px-2 py-0.5 rounded bg-emerald-700/30 border border-emerald-700 text-emerald-300 hover:bg-emerald-700/50"
+          >
+            add
+          </button>
+        </span>
+      </li>
+    </ul>
+    <p
+      v-else-if="scanned && !scanning"
+      class="text-xs text-slate-600 mb-3"
+    >
+      no cameras detected — connect a USB capture device and scan again
+    </p>
+
+    <p
+      v-if="scanned && !hasBackend"
+      class="text-[11px] text-amber-400/80 mb-3"
+    >
+      live preview needs OpenCV — install the bench extra:
+      <span class="mono">pip install -e '.[ui]'</span> (discovery still works without it)
+    </p>
+
+    <!-- manual fallback -->
+    <button
+      @click="manual = !manual"
+      class="text-[11px] text-slate-500 hover:text-slate-300"
+    >
+      {{ manual ? "▾" : "▸" }} add by index manually
+    </button>
+    <div v-if="manual" class="flex flex-wrap gap-2 mt-2">
       <input
         v-model="name"
         placeholder="name"
@@ -45,7 +145,9 @@ async function add() {
         add camera
       </button>
     </div>
-    <ul class="space-y-1">
+
+    <!-- registered cameras -->
+    <ul v-if="cameras.list.length" class="space-y-1 mt-3 pt-3 border-t border-slate-800">
       <li
         v-for="c in cameras.list"
         :key="c.id"
@@ -63,9 +165,6 @@ async function add() {
         >
           remove
         </button>
-      </li>
-      <li v-if="cameras.list.length === 0" class="text-xs text-slate-600">
-        no cameras yet — add one by its OpenCV device index
       </li>
     </ul>
   </div>
