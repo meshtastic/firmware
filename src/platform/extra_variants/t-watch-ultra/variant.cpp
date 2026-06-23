@@ -53,7 +53,18 @@ void earlyInitVariant()
 
 static bool readTouch(int16_t *x, int16_t *y)
 {
-    return touchDrv.getPoint(x, y, 1);
+    int16_t x_array[1], y_array[1];
+    uint8_t touched = touchDrv.getPoint(x_array, y_array, 1);
+    if (touched > 0) {
+        *x = (x_array[0]);
+        *y = (y_array[0]);
+        // Check bounds
+        if (*x < 0 || *x >= TFT_WIDTH || *y < 0 || *y >= TFT_HEIGHT) {
+            return false;
+        }
+        return true; // Valid touch detected
+    }
+    return false; // No valid touch data
 }
 
 void lateInitVariant()
