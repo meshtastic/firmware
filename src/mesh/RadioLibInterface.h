@@ -99,10 +99,41 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
+  protected:
+    // Noise floor tracking - rolling window of samples.
+    static const uint8_t NOISE_FLOOR_SAMPLES = 20;
+    static const int32_t NOISE_FLOOR_DEFAULT = -120;
+    static const int32_t NOISE_FLOOR_VALID_MIN = -127;
+    static const int32_t NOISE_FLOOR_INVALID = -128;
+    int32_t noiseFloorSamples[NOISE_FLOOR_SAMPLES];
+    uint8_t currentSampleIndex = 0;
+    bool isNoiseFloorBufferFull = false;
+    uint32_t lastNoiseFloorUpdate = 0;
+    static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
+    int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
+
+    /**
+     * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
+     * Implementations should return dBm, or an invalid value that updateNoiseFloor()
+     * can reject.
+     */
+    virtual int16_t getCurrentRSSI() = 0;
+
   public:
     /** Our ISR code currently needs this to find our active instance
      */
     static RadioLibInterface *instance;
+
+    /**
+     * Get the current calculated noise floor in dBm
+     * Returns -120 dBm if not yet calibrated
+     */
+    int32_t getNoiseFloor();
+
+    /**
+     * Calculate the average noise floor from collected samples
+     */
+    int32_t getAverageNoiseFloor();
 
     /**
      * Glue functions called from ISR land
@@ -173,12 +204,37 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
 
     /**
+     * Update the noise floor measurement by sampling RSSI from a slow path.
+     * This should not be called from radio interrupt or TX/RX critical paths.
+     */
+    void updateNoiseFloor();
+
+    /**
+     * Check if we have collected any noise floor samples
+     */
+    bool hasNoiseFloorSamples();
+
+    /**
+     * Get the number of samples in the rolling window
+     */
+    uint8_t getNoiseFloorSampleCount();
+
+    /**
+     * Reset the noise floor calibration
+     * Will automatically restart collection
+     */
+    void resetNoiseFloor();
+
+    /**
      * Request randomness sourced from the LoRa modem, if supported by the active RadioLib interface.
      * @return true if len bytes were produced, false otherwise.
      */
     bool randomBytes(uint8_t *buffer, size_t length);
 
   private:
+    uint8_t getNoiseFloorSampleCountInternal() const;
+    int32_t getAverageNoiseFloorInternal() const;
+
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
     void setTransmitDelay();

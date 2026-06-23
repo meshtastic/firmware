@@ -1257,6 +1257,11 @@ void menuHandler::positionBaseMenu()
                 accelerometerThread->calibrate(30);
             }
 #endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+            if (magnetometerThread) {
+                magnetometerThread->calibrate(30);
+            }
+#endif
             break;
         case PositionAction::GPSSmartPosition:
             menuQueue = GpsSmartPositionMenu;

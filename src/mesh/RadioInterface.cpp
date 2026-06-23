@@ -32,6 +32,8 @@
 #include "STM32WLE5JCInterface.h"
 #endif
 
+Observable<uint32_t> RadioInterface::loraRxPacketObservable;
+
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
         meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, \
