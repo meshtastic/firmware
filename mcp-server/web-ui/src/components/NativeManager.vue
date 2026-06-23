@@ -42,9 +42,10 @@ const add = () =>
 </script>
 
 <template>
-  <div class="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+  <div class="card-rail rounded-xl border border-slate-700/80 bg-slate-900/60 p-4">
     <div class="flex items-center gap-3 mb-3">
-      <h3 class="text-sm font-semibold text-slate-200">Native Nodes (Docker)</h3>
+      <span class="w-1 h-3.5 rounded-full bg-indigo-500/80" />
+      <h3 class="section-label">Native Nodes (Docker)</h3>
       <span
         v-if="!info.docker"
         class="text-[11px] px-2 py-0.5 rounded bg-amber-950/40 text-amber-400"

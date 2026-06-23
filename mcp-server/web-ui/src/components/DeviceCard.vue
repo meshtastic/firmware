@@ -25,6 +25,27 @@ const assignedCamera = computed(() =>
   cameras.forDevice(props.device.serial_number),
 );
 
+// Circular node identifier (Meshtastic design standard): a deterministic color
+// + short token per node. Color is used on the ring/text only — never as a row
+// background wash.
+function colorFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 60% 68%)`;
+}
+const nodeColor = computed(() =>
+  props.device.online ? colorFor(props.device.serial_number) : "#5c5e78",
+);
+const nodeToken = computed(() => {
+  const d = props.device;
+  if (d.role === "native") return "DK";
+  if (d.node_num) return d.node_num.toString(16).slice(-2).toUpperCase();
+  return (d.serial_number || "??")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(-2)
+    .toUpperCase();
+});
+
 const flashedDrift = computed(
   () =>
     props.device.flashed_fw_sha &&
@@ -55,16 +76,24 @@ async function onAssign(e: Event) {
 
 <template>
   <div
-    class="rounded-xl border bg-slate-900/60 p-4 flex flex-col gap-3"
-    :class="device.online ? 'border-slate-700' : 'border-slate-800 opacity-60'"
+    class="card-rail rounded-xl border bg-slate-900/60 p-4 flex flex-col gap-3"
+    :class="
+      device.online
+        ? 'border-slate-700/80'
+        : 'border-slate-800 opacity-60 is-offline'
+    "
   >
     <!-- header -->
-    <div class="flex items-start gap-2">
-      <span
-        class="mt-1 w-2.5 h-2.5 rounded-full shrink-0"
-        :class="device.online ? 'bg-emerald-400' : 'bg-slate-600'"
-        :title="device.online ? 'online' : 'offline'"
-      />
+    <div class="flex items-start gap-2.5">
+      <div
+        class="node-id mt-0.5"
+        :style="{ color: nodeColor }"
+        :title="
+          (device.online ? 'online' : 'offline') + ' · ' + device.serial_number
+        "
+      >
+        <span class="text-slate-100">{{ nodeToken }}</span>
+      </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <template v-if="editing">

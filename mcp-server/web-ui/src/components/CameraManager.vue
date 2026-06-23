@@ -21,8 +21,11 @@ async function add() {
 </script>
 
 <template>
-  <div class="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
-    <h3 class="text-sm font-semibold text-slate-200 mb-3">USB Cameras</h3>
+  <div class="card-rail rounded-xl border border-slate-700/80 bg-slate-900/60 p-4">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="w-1 h-3.5 rounded-full bg-indigo-500/80" />
+      <h3 class="section-label">USB Cameras</h3>
+    </div>
     <div class="flex flex-wrap gap-2 mb-3">
       <input
         v-model="name"
