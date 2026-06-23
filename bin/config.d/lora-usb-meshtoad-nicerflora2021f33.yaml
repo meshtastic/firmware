@@ -1,6 +1,6 @@
 Meta:
   name: meshtoad2021
-  support: maybe
+  support: community
   compatible:
     - usb
 
@@ -11,6 +11,10 @@ Lora:
   Reset: 2
   Busy: 4
   DIO3_TCXO_VOLTAGE: 1.8
+  # Defaults for LR2021, but can be overridden by user config
+  # LR2021_MAX_POWER: 22
+  # LR2021_MAX_POWER_HF: 22
+  # LR2021_IRQ_DIO_NUM: 9
   spidev: ch341
   USB_PID: 0x5512
   USB_VID: 0x1A86
