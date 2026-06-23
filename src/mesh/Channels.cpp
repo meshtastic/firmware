@@ -420,39 +420,28 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
             const meshtastic_Channel &ch = getByIndex(chIndex);
             const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true);
             if (ch.has_settings && presetName) {
+                // blankHash is the hash a sender produces when it hashes "" directly instead of the
+                // preset name. Since hash = xorHash(name) ^ xorHash(PSK), and xorHash("") == 0:
+                //   blankHash = xorHash(PSK) = localHash ^ xorHash(presetName)
+                uint8_t nameXor = xorHash((const uint8_t *)presetName, strlen(presetName));
+                uint8_t blankHash = (uint8_t)getHash(chIndex) ^ nameXor;
+
                 // Path A: stored name matches preset name — sender may have hashed "" instead of the name.
-                // Fetch PSK only when the name condition is met, not for every non-matching channel.
                 if (*ch.settings.name && strcmp(ch.settings.name, presetName) == 0) {
-                    auto psk = getKey(chIndex);
-                    if (psk.length >= 0) {
-                        // blank name XORs as zero, so blank-name hash == psk hash alone
-                        uint8_t blankHash = xorHash(psk.bytes, psk.length);
-                        if (blankHash == channelHash) {
-                            LOG_DEBUG("Use channel %d '%s' via blank-name alias (hash 0x%x)", chIndex, ch.settings.name,
-                                      channelHash);
-                            setCrypto(chIndex);
-                            return true;
-                        } else {
-                            LOG_DEBUG("Skip channel %d '%s': blank-name hash 0x%x != packet hash 0x%x", chIndex, ch.settings.name,
-                                      blankHash, channelHash);
-                        }
+                    if (blankHash == channelHash) {
+                        LOG_DEBUG("Use channel %d '%s' via blank-name alias (hash 0x%x)", chIndex, ch.settings.name, channelHash);
+                        setCrypto(chIndex);
+                        return true;
                     }
                 }
-                // Path B: stored name is blank — sender may have hashed the preset name explicitly (non-standard)
+                // Path B: stored name is blank but sender may have hashed "" directly rather than
+                // using the preset-name fallback (non-standard).
                 if (!*ch.settings.name) {
-                    auto psk = getKey(chIndex);
-                    if (psk.length >= 0) {
-                        uint8_t presetHash =
-                            xorHash((const uint8_t *)presetName, strlen(presetName)) ^ xorHash(psk.bytes, psk.length);
-                        if (presetHash == channelHash) {
-                            LOG_DEBUG("Use channel %d '%s' via non-standard explicit-name hash (hash 0x%x)", chIndex, presetName,
-                                      channelHash);
-                            setCrypto(chIndex);
-                            return true;
-                        } else {
-                            LOG_DEBUG("Skip channel %d '%s': explicit-name hash 0x%x != packet hash 0x%x", chIndex, presetName,
-                                      presetHash, channelHash);
-                        }
+                    if (blankHash == channelHash) {
+                        LOG_DEBUG("Use channel %d '%s' via non-standard blank-name hash (hash 0x%x)", chIndex, presetName,
+                                  channelHash);
+                        setCrypto(chIndex);
+                        return true;
                     }
                 }
             }
