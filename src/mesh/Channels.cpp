@@ -430,22 +430,20 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
                 ChannelHash blankHash = localHash ^ nameXor;
 
                 // Path A: stored name matches preset name - sender may have hashed "" instead of the name.
-                if (*ch.settings.name && strcmp(ch.settings.name, presetName) == 0) {
-                    if (blankHash == channelHash) {
-                        LOG_DEBUG("Use channel %d '%s' via blank-name alias (hash 0x%x)", chIndex, ch.settings.name, channelHash);
-                        setCrypto(chIndex);
-                        return true;
-                    }
+                if (*ch.settings.name && strcmp(ch.settings.name, presetName) == 0 && blankHash == channelHash) {
+                    if (setCrypto(chIndex) < 0)
+                        return false;
+                    LOG_DEBUG("Use channel %d '%s' via blank-name alias (hash 0x%x)", chIndex, ch.settings.name, channelHash);
+                    return true;
                 }
                 // Path B: stored name is blank but sender may have hashed "" directly rather than
                 // using the preset-name fallback (non-standard).
-                if (!*ch.settings.name) {
-                    if (blankHash == channelHash) {
-                        LOG_DEBUG("Use channel %d (blank stored name, preset '%s') via non-standard blank-name hash (hash 0x%x)",
-                                  chIndex, presetName, channelHash);
-                        setCrypto(chIndex);
-                        return true;
-                    }
+                if (!*ch.settings.name && blankHash == channelHash) {
+                    if (setCrypto(chIndex) < 0)
+                        return false;
+                    LOG_DEBUG("Use channel %d (blank stored name, preset '%s') via non-standard blank-name hash (hash 0x%x)",
+                              chIndex, presetName, channelHash);
+                    return true;
                 }
             }
         }
