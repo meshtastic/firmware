@@ -48,7 +48,8 @@
 #define DAC_I2S_MCLK -1 // TODO
 
 #define HAS_AXP2101
-// #define PMU_IRQ 7
+#define PMU_IRQ 7
+#define PMU_POWER_BUTTON_IS_CANCEL
 #define HAS_DRV2605 1
 
 #define I2C_SDA 3

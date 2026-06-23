@@ -1063,8 +1063,10 @@ int32_t Power::runOnce()
         // cancel action also turns the screen on and off.
         if (PMU->isPekeyShortPressIrq()) {
             LOG_INFO("Input: Corona Button Click");
-            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
-            inputBroker->injectInputEvent(&event);
+            if (inputBroker) {
+                InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_CANCEL, .kbchar = 0, .touchX = 0, .touchY = 0};
+                inputBroker->injectInputEvent(&event);
+            }
         }
 #endif
         /*
