@@ -5,6 +5,7 @@ import DeviceGrid from "./components/DeviceGrid.vue";
 import TestDashboard from "./components/TestDashboard.vue";
 import { useBuildsStore } from "./stores/builds";
 import { useCamerasStore } from "./stores/cameras";
+import { useDatadogStore } from "./stores/datadog";
 import { useDevicesStore } from "./stores/devices";
 import { useFirmwareStore } from "./stores/firmware";
 import { useTestsStore } from "./stores/tests";
@@ -18,6 +19,7 @@ const cameras = useCamerasStore();
 const firmware = useFirmwareStore();
 const tests = useTestsStore();
 const builds = useBuildsStore();
+const datadog = useDatadogStore();
 
 onMounted(() => {
   ws.connect();
@@ -26,6 +28,7 @@ onMounted(() => {
   firmware.init();
   tests.init();
   builds.init();
+  datadog.init();
 });
 </script>
 

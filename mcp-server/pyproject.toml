@@ -26,6 +26,7 @@ web = [
   "uvicorn[standard]>=0.27",
   "aiosqlite>=0.19",
   "pywebview>=5.0",
+  "requests>=2.31",
 ]
 # UI test tier + `capture_screen` MCP tool. Optional because the ML OCR
 # model alone is ~100 MB and camera hardware is user-supplied.

@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useTestsStore } from "../stores/tests";
 import BuildQueue from "./BuildQueue.vue";
+import DatadogPanel from "./DatadogPanel.vue";
 import LogPane from "./LogPane.vue";
 import RunControls from "./RunControls.vue";
 import TestTree from "./TestTree.vue";
@@ -25,6 +26,7 @@ function fmtTime(t: number) {
   <div class="p-5 flex flex-col gap-4 h-[calc(100vh-57px)]">
     <RunControls />
     <BuildQueue />
+    <DatadogPanel />
 
     <div class="grid grid-cols-2 gap-4 flex-1 min-h-0">
       <!-- left: counters + tree -->
