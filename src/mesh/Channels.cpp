@@ -411,11 +411,11 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
     // Note: the original condition used '>' here, which permitted chIndex == getNumChannels() to
     // reach getHash() and read hashes[] out of bounds. Fixed to '>=' to match the valid range 0..getNumChannels()-1.
     if (chIndex >= getNumChannels()) {
-        return false; // invalid index — never attempt decryption
+        return false; // invalid index - never attempt decryption
     }
     if (getHash(chIndex) != channelHash) {
         // If the stored name equals the current modem preset name, also accept packets hashed
-        // with a blank channel name — some senders omit the name and hash "" directly.
+        // with a blank channel name - some senders omit the name and hash "" directly.
         if (config.lora.use_preset) {
             const meshtastic_Channel &ch = getByIndex(chIndex);
             const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true);
@@ -423,10 +423,13 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
                 // blankHash is the hash a sender produces when it hashes "" directly instead of the
                 // preset name. Since hash = xorHash(name) ^ xorHash(PSK), and xorHash("") == 0:
                 //   blankHash = xorHash(PSK) = localHash ^ xorHash(presetName)
-                uint8_t nameXor = xorHash((const uint8_t *)presetName, strlen(presetName));
-                uint8_t blankHash = (uint8_t)getHash(chIndex) ^ nameXor;
+                // getHash() returns int16_t only to signal -1 for an invalid channel; chIndex is
+                // in-bounds here, so the stored hash is a valid 8-bit value that fits in ChannelHash.
+                ChannelHash localHash = (ChannelHash)getHash(chIndex);
+                ChannelHash nameXor = xorHash((const uint8_t *)presetName, strlen(presetName));
+                ChannelHash blankHash = localHash ^ nameXor;
 
-                // Path A: stored name matches preset name — sender may have hashed "" instead of the name.
+                // Path A: stored name matches preset name - sender may have hashed "" instead of the name.
                 if (*ch.settings.name && strcmp(ch.settings.name, presetName) == 0) {
                     if (blankHash == channelHash) {
                         LOG_DEBUG("Use channel %d '%s' via blank-name alias (hash 0x%x)", chIndex, ch.settings.name, channelHash);
@@ -438,15 +441,16 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
                 // using the preset-name fallback (non-standard).
                 if (!*ch.settings.name) {
                     if (blankHash == channelHash) {
-                        LOG_DEBUG("Use channel %d '%s' via non-standard blank-name hash (hash 0x%x)", chIndex, presetName,
-                                  channelHash);
+                        LOG_DEBUG("Use channel %d (blank stored name, preset '%s') via non-standard blank-name hash (hash 0x%x)",
+                                  chIndex, presetName, channelHash);
                         setCrypto(chIndex);
                         return true;
                     }
                 }
             }
         }
-        LOG_TRACE("Skip channel %d '%s': local hash 0x%x != packet hash 0x%x", chIndex, getName(chIndex), getHash(chIndex), channelHash);
+        LOG_TRACE("Skip channel %d '%s': local hash 0x%x != packet hash 0x%x", chIndex, getName(chIndex), getHash(chIndex),
+                  channelHash);
         return false;
     } else {
         LOG_DEBUG("Use channel %d '%s' (hash 0x%x)", chIndex, getName(chIndex), channelHash);
