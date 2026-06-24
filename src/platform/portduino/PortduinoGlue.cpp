@@ -913,6 +913,12 @@ bool loadConfig(const char *configPath)
                 Serial1.setPath(serialPath);
                 portduino_config.has_gps = 1;
             }
+            std::string gpsdHost = yamlConfig["GPS"]["GpsdHost"].as<std::string>("");
+            if (!gpsdHost.empty()) {
+                portduino_config.gpsd_host = gpsdHost;
+                portduino_config.gpsd_port = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
+                portduino_config.has_gps = 1;
+            }
         }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
             for (auto extra_pin : yamlConfig["GPIO"]["ExtraPins"]) {

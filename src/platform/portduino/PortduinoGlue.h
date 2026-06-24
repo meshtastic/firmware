@@ -113,6 +113,8 @@ extern struct portduino_config_struct {
 
     // GPS
     bool has_gps = false;
+    std::string gpsd_host = "";
+    int gpsd_port = 2947;
 
     // I2C
     std::string i2cdev = "";

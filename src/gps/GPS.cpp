@@ -25,6 +25,7 @@
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
+#include "GpsdSerial.h"
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -1901,6 +1902,10 @@ std::unique_ptr<GPS> GPS::createGps()
         // They are not used for any hardware access.
         _rx_gpio = 1;
         _tx_gpio = 1;
+        if (!portduino_config.gpsd_host.empty()) {
+            gpsdSerial.setAddress(portduino_config.gpsd_host, portduino_config.gpsd_port);
+            _serial_gps = &gpsdSerial;
+        }
     } else
         return nullptr;
 #endif
@@ -1910,6 +1915,11 @@ std::unique_ptr<GPS> GPS::createGps()
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
+#ifdef ARCH_PORTDUINO
+    // Skip chip-specific probing for gpsd — it's a generic NMEA stream.
+    if (!portduino_config.gpsd_host.empty())
+        new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
+#endif
 
     GpioVirtPin *virtPin = new GpioVirtPin();
     new_gps->enablePin = virtPin; // Always at least populate a virtual pin
