@@ -8,6 +8,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "modules/RoutingStatsModule.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -470,6 +471,7 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
             LOG_DEBUG("Move existing queued packet to the late rebroadcast window %dms from now", p->tx_after - millis());
+            routingStats->logEvent(RoutingEvent::TX_DEFER);
         } else {
             packetPool.release(p);
         }
@@ -523,6 +525,8 @@ void RadioLibInterface::completeSending()
             txRelay++;
         printPacket("Completed sending", p);
 
+        routingStats->logEvent(RoutingEvent::TX_OK, p, xmitMsec);
+
         // We are done sending that packet, release it
         packetPool.release(p);
     }
@@ -567,6 +571,7 @@ void RadioLibInterface::handleReceiveInterrupt()
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
+        routingStats->logEvent(RoutingEvent::RX_BAD, NULL, rxMsec);
 
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf
@@ -577,6 +582,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             LOG_WARN("Ignore received packet too short");
             rxBad++;
             airTime->logAirtime(RX_ALL_LOG, rxMsec);
+            routingStats->logEvent(RoutingEvent::RX_BAD, NULL, rxMsec);
         } else {
             rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission
@@ -619,6 +625,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 #endif
 
             airTime->logAirtime(RX_LOG, rxMsec);
+            routingStats->logEvent(RoutingEvent::RX_OK, mp, rxMsec);
 
             deliverToReceiver(mp);
         }
