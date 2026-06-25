@@ -15,8 +15,9 @@ static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
 static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16));
 
-static BLEDis bledis; // DIS (Device Information Service) helper class instance
-static BLEBas blebas; // BAS (Battery Service) helper class instance
+static BLEDis bledis;             // DIS (Device Information Service) helper class instance
+static BLEBas blebas;             // BAS (Battery Service) helper class instance
+static int lastBatteryLevel = -1; // last value written to BAS, to skip redundant writes/notifies
 #ifndef BLE_DFU_SECURE
 static BLEDfu bledfu; // DFU software update helper service
 #else
@@ -65,6 +66,16 @@ void onConnect(uint16_t conn_handle)
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
+
+    // A new physical link must start unauthenticated. The auth slot is keyed by
+    // the (single, reused) bluetoothPhoneAPI instance, so a prior session's
+    // authorization can otherwise survive a quick reconnect. handleStartConfig()
+    // re-locks on every want_config too; this closes the window before that.
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->setAdminAuthorized(false);
+    }
+#endif
 
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
@@ -336,6 +347,7 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Battery Service");
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
+    lastBatteryLevel = 0;
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
     LOG_INFO("Init the Mesh bluetooth service");
@@ -355,6 +367,14 @@ void NRF52Bluetooth::resumeAdvertising()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
+    if (!nrf52Bluetooth) // skip until the Battery Service has been begun in setup()
+        return;
+
+    if (level > 100) // BAS battery level must stay within 0-100
+        level = 100;
+    if (level == lastBatteryLevel)
+        return;
+    lastBatteryLevel = level;
     blebas.write(level);
 }
 void NRF52Bluetooth::clearBonds()
@@ -391,7 +411,15 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         std::string configuredPasskeyText = std::to_string(configuredPasskey);
         std::string ble_message =
             "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
-        screen->showSimpleBanner(ble_message.c_str(), 30000);
+        // Use the pairing_pin notification type so the lockdown UI short-
+        // circuit (Screen.cpp updateUiFrame) allows the overlay through
+        // even on a locked device — see H13 audit fix. The banner content
+        // is the per-attempt ephemeral pair PIN, not operator content.
+        graphics::BannerOverlayOptions opts;
+        opts.message = ble_message.c_str();
+        opts.durationMs = 30000;
+        opts.notificationType = graphics::notificationTypeEnum::pairing_pin;
+        screen->showOverlayBanner(opts);
     }
 #endif
     passkeyShowing = true;

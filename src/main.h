@@ -39,6 +39,7 @@ extern bool kb_found;
 extern bool osk_found;
 extern ScanI2C::DeviceAddress rtc_found;
 extern ScanI2C::DeviceAddress accelerometer_found;
+extern ScanI2C::DeviceAddress magnetometer_found;
 extern ScanI2C::FoundDevice rgb_found;
 extern ScanI2C::DeviceAddress aqi_found;
 
@@ -73,6 +74,10 @@ extern graphics::Screen *screen;
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
 #endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#include "motion/MagnetometerThread.h"
+extern MagnetometerThread *magnetometerThread;
+#endif
 
 extern bool isVibrating;
 
@@ -86,6 +91,19 @@ extern uint32_t timeLastPowered;
 extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
+
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+// Set by PhoneAPI::handleLockdownAuthInline after a successful unlock.
+// Serviced on the main loop thread because NodeDB::reloadFromDisk() is
+// too heavy for the BLE/serial transport callback stack.
+extern volatile bool lockdownReloadPending;
+
+// Set by PhoneAPI::handleLockdownAuthInline on a disable request (after the
+// passphrase is verified). Serviced on the main loop thread: decrypt every
+// pref back to plaintext, remove the lockdown artifacts, reboot. Heavy file
+// IO, same reason as lockdownReloadPending.
+extern volatile bool lockdownDisablePending;
+#endif
 
 extern uint32_t serialSinceMsec;
 
