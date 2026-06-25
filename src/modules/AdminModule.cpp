@@ -87,7 +87,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     assert(r);
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
-    // While storage is locked, drop every admin payload — both local and
+    // While storage is locked, drop every admin payload - both local and
     // remote (PKC, mesh-relayed). Lockdown unlock is the prerequisite for
     // any admin operation: operators must authenticate via lockdown_auth
     // first. The lockdown_auth path itself is handled synchronously in
@@ -98,9 +98,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // operator has even unlocked it.
     // Only gate when lockdown is ACTIVE. A lockdown-capable build that hasn't
     // been provisioned (or was disabled) is not unlocked either, but must
-    // still serve admin normally — so check isLockdownActive() first.
+    // still serve admin normally - so check isLockdownActive() first.
     if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
-        LOG_WARN("AdminModule: dropping admin payload — storage locked");
+        LOG_WARN("AdminModule: dropping admin payload - storage locked");
         return handled;
     }
 #endif
@@ -134,7 +134,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // local packets into the remote-PKC key check.
         //
         // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
-        // gate lives in PhoneAPI::handleToRadioPacket — any local admin
+        // gate lives in PhoneAPI::handleToRadioPacket - any local admin
         // payload other than lockdown_auth is dropped there if the
         // originating connection is unauthorized. By the time we reach
         // this branch the connection has already proven the passphrase,
@@ -166,7 +166,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             // Note: PKC admin does NOT automatically authorize the
             // originating local PhoneAPI connection for content
             // redaction purposes. PKC and the per-connection lockdown
-            // auth slot are independent gates — operators using PKC
+            // auth slot are independent gates - operators using PKC
             // admin from a local app should still send lockdown_auth
             // separately to unlock the redacted FromRadio stream.
             // (The previous auto-authorize path read a shared
@@ -215,7 +215,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     // lockdown_auth is handled synchronously in
-    // PhoneAPI::handleToRadioPacket — see handleLockdownAuthInline. A
+    // PhoneAPI::handleToRadioPacket - see handleLockdownAuthInline. A
     // packet should not normally reach AdminModule under that flag set,
     // but if it ever does (e.g. injected via a non-PhoneAPI path), drop
     // it silently rather than leaking a partial response.
@@ -299,7 +299,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             break;
         }
 
-        // Hardware supports 2.4 GHz — apply the config.
+        // Hardware supports 2.4 GHz - apply the config.
         // Fail closed: null instance is treated as incapable.
         if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
             LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
@@ -480,7 +480,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 saveChanges(SEGMENT_NODEDATABASE, false);
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
-            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+            } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
                 sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", r->set_favorite_node, MAX_NUM_NODES - 2);
             } else {
                 LOG_WARN("Remote set_favorite_node for 0x%x refused: protected-node cap", r->set_favorite_node);
@@ -509,7 +509,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 nodeDB->eraseNodeSatellites(node->num);
                 saveChanges(SEGMENT_NODEDATABASE, false);
-            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+            } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
                 sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
             } else {
                 LOG_WARN("Remote set_ignored_node for 0x%x refused: protected-node cap", r->set_ignored_node);
@@ -763,6 +763,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
+    bool loraPresetWarnPending = false;
+    meshtastic_Config_LoRaConfig pendingOldLora = {}, pendingNewLora = {};
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag: {
@@ -1008,7 +1010,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
 
         config.lora = validatedLora; // Finally, return the validated config back to the main config
-        warnIfPresetNamedChannel(oldLoraConfig, validatedLora);
+        if (validatedLora.modem_preset != oldLoraConfig.modem_preset) {
+            pendingOldLora = oldLoraConfig;
+            pendingNewLora = validatedLora;
+            loraPresetWarnPending = true;
+        }
 
         break;
     }
@@ -1052,6 +1058,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     } // end of switch case which_payload_variant
 
     saveChanges(changes, requiresReboot);
+    if (loraPresetWarnPending)
+        warnOnLoraPresetChange(pendingOldLora, pendingNewLora);
 } // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -1170,7 +1178,6 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
-    warnIfBlankPsk(cc);
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
@@ -1196,6 +1203,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
     saveChanges(SEGMENT_CHANNELS, false);
+    warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
 }
 
 /**
@@ -1761,44 +1769,133 @@ static void normalizePresetName(const char *src, char *dst, size_t dstLen)
     dst[j] = '\0';
 }
 
-void AdminModule::warnIfPresetNamedChannel(const meshtastic_Config_LoRaConfig &oldLora,
-                                           const meshtastic_Config_LoRaConfig &newLora)
+/**
+ * @brief Emit client warnings for common misconfigurations on a newly committed channel.
+ *
+ * Called from handleSetChannel() after the channel has been saved. The following checks
+ * are performed:
+ *
+ * - Blank PSK (size == 0) on a non-licensed device: the channel has no encryption.
+ * - Blank name with a non-default key (not AQ== / 0x01): the name will auto-resolve to
+ *   the current modem preset name, but the key mismatch means other preset nodes cannot
+ *   decode traffic on this channel.
+ * - Named channel whose name is a case/space variant of the current modem preset: the
+ *   explicit name prevents auto-resolution; client should clear it.
+ * - Same variant match but PSK is not the default key: looks like the preset channel but
+ *   is incompatible with nodes using the preset's default key.
+ *
+ * @param cc  The channel that was written.
+ */
+void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
+{
+    if (cc.role == meshtastic_Channel_Role_DISABLED || !cc.has_settings) // don't check unused channels
+        return;
+
+    if (cc.settings.psk.size == 0 && !owner.is_licensed) // blank PSK and unlicensed
+        sendWarningAndLog("Channel %d '%s' has a blank PSK (no encryption). "
+                          "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                          cc.index, cc.settings.name);
+
+    if (!config.lora.use_preset) { // custom or unset preset can mistype things too
+        if (*cc.settings.name) {
+            char normChan[32];
+            normalizePresetName(cc.settings.name, normChan, sizeof(normChan));
+            for (auto preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN;
+                 preset <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX;
+                 preset = (meshtastic_Config_LoRaConfig_ModemPreset)(preset + 1)) {
+                const char *name = DisplayFormatters::getModemPresetDisplayName(preset, false, true);
+                if (strcmp(cc.settings.name, name) == 0)
+                    break; // exact match - not a mistype, no warning
+                char normPreset[32];
+                normalizePresetName(name, normPreset, sizeof(normPreset));
+                if (strcmp(normChan, normPreset) == 0) {
+                    sendWarningAndLog("Channel %d name '%s' looks like a mistype of '%s' - "
+                                      "make sure to type it exactly!", // max 90 bytes
+                                      cc.index, cc.settings.name, name);
+                    break;
+                }
+            }
+        }
+        return;
+    } // custom or no preset config - no further checks
+
+    const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true);
+    bool isDefaultKey = (cc.settings.psk.size == 1 && cc.settings.psk.bytes[0] == 0x01);
+    char normPreset[32], normChan[32]; // max size is 11 plus nul, but allow for future expansion
+    normalizePresetName(presetName, normPreset, sizeof(normPreset));
+    normalizePresetName(cc.settings.name, normChan, sizeof(normChan));
+
+    if (!*cc.settings.name) {
+        // Blank name resolves to the preset name - warn if the key won't match.
+        if (!isDefaultKey && cc.settings.psk.size > 0)
+            sendWarningAndLog("Channel %d will resolve to preset '%s' but uses a non-default key - "
+                              "other nodes on this preset cannot decode it.", // max 112 bytes
+                              cc.index, presetName);
+        return;
+    }
+
+    if (strcmp(normChan, normPreset) != 0) // not using a preset name for channel
+        return;
+
+    if (strcmp(cc.settings.name, presetName) != 0)
+        sendWarningAndLog("Channel %d name '%s' looks like a mistype of '%s' - "
+                          "clear the name to use the preset name automatically.", // max 113 bytes
+                          cc.index, cc.settings.name, presetName);
+
+    if (!isDefaultKey && cc.settings.psk.size > 0)
+        sendWarningAndLog("Channel %d '%s' matches preset '%s' but uses a non-default key - "
+                          "other nodes on this preset cannot decode it.", // max 118 bytes
+                          cc.index, cc.settings.name, presetName);
+} // warnOnChannelSet
+
+/**
+ * @brief Scan all channels for preset-name conflicts after a modem preset change is committed.
+ *
+ * Called from handleSetConfig() after the LoRa config has been saved, and only when
+ * modem_preset actually changed (rejected configs are never passed here). For every
+ * named, non-disabled channel two checks are performed:
+ *
+ * - Name matches the *old* preset (case-insensitive, spaces stripped): the channel
+ *   was likely tracking the previous preset; the user should rename it if it should
+ *   follow the new one.
+ * - Name matches the *new* preset: the channel name collides with the auto-generated
+ *   preset name but won't resolve automatically because the name is set explicitly.
+ *
+ * No-ops if the new config does not use a preset.
+ *
+ * @param oldLora  LoRa config before the update.
+ * @param newLora  LoRa config after the update.
+ */
+void AdminModule::warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora)
 {
     if (!newLora.use_preset || newLora.modem_preset == oldLora.modem_preset)
         return;
-    const char *oldName = DisplayFormatters::getModemPresetDisplayName(oldLora.modem_preset, false, oldLora.use_preset);
-    const char *newName = DisplayFormatters::getModemPresetDisplayName(newLora.modem_preset, false, newLora.use_preset);
 
-    char normNew[32];
+    char normOld[32] = {}, normNew[32];
+    if (oldLora.use_preset) {
+        const char *oldName = DisplayFormatters::getModemPresetDisplayName(oldLora.modem_preset, false, true);
+        normalizePresetName(oldName, normOld, sizeof(normOld));
+    }
+    const char *newName = DisplayFormatters::getModemPresetDisplayName(newLora.modem_preset, false, true);
     normalizePresetName(newName, normNew, sizeof(normNew));
 
     for (int i = 0; i < channels.getNumChannels(); i++) {
         const meshtastic_Channel &ch = channels.getByIndex(i);
         if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.has_settings || !*ch.settings.name)
             continue;
-        if (strcmp(ch.settings.name, oldName) == 0) {
-            sendWarning("Channel %d name '%s' matches the old preset. "
-                        "Rename it manually if it should track the new preset.",
-                        i, ch.settings.name);
-            continue;
-        }
         char normChan[32];
         normalizePresetName(ch.settings.name, normChan, sizeof(normChan));
-        if (strcmp(normChan, normNew) == 0)
-            sendWarning("Channel %d name '%s' looks like preset '%s' but won't auto-resolve — "
-                        "clear the name to use the preset name automatically.",
-                        i, ch.settings.name, newName);
+        if (*normOld && strcmp(normChan, normOld) == 0) {
+            sendWarningAndLog("Channel %d name '%s' matches the old preset. "
+                              "Rename it manually if it should track the new preset.", // max 98 bytes
+                              i, ch.settings.name);
+        } else if (strcmp(normChan, normNew) == 0) {
+            sendWarningAndLog("Channel %d '%s' looks like preset '%s' but won't auto-resolve - "
+                              "clear the name to fix it.", // max 98 bytes
+                              i, ch.settings.name, newName);
+        }
     }
-}
-
-void AdminModule::warnIfBlankPsk(const meshtastic_Channel &cc)
-{
-    if (cc.role == meshtastic_Channel_Role_DISABLED || !cc.has_settings || cc.settings.psk.size > 0)
-        return;
-    sendWarning("Channel %d '%s' has a blank PSK (no encryption). "
-                "If you intended the default key, set PSK to 'AQ=='.",
-                cc.index, cc.settings.name);
-}
+} // warnOnLoraPresetChange
 
 void disableBluetooth()
 {

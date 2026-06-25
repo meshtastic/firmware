@@ -83,8 +83,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool messageIsRequest(const meshtastic_AdminMessage *r);
     void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
     void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
-    void warnIfPresetNamedChannel(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora);
-    void warnIfBlankPsk(const meshtastic_Channel &cc);
+    void warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora);
+    void warnOnChannelSet(const meshtastic_Channel &cc);
 };
 
 static constexpr const char *licensedModeMessage =
