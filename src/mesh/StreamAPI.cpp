@@ -52,7 +52,8 @@ void StreamAPI::writeStream()
         do {
             // Send every packet we can
             len = getFromRadio(txBuf + HEADER_LEN);
-            emitTxBuffer(len);
+            if (len != 0 && !emitTxBuffer(len))
+                break;
         } while (len);
     }
 }
@@ -169,21 +170,36 @@ int32_t StreamAPI::readStream()
 /**
  * Send the current txBuffer over our stream
  */
-void StreamAPI::emitTxBuffer(size_t len)
+bool StreamAPI::writeFrame(uint8_t *buf, size_t len)
 {
-    if (len != 0) {
-        txBuf[0] = START1;
-        txBuf[1] = START2;
-        txBuf[2] = (len >> 8) & 0xff;
-        txBuf[3] = len & 0xff;
+    if (len == 0 || !canWrite)
+        return false;
 
-        auto totalLen = len + HEADER_LEN;
-        // Serialize stream writes against `emitLogRecord` so a LOG_ firing
-        // mid-packet-emission can't interleave bytes on the wire.
-        concurrency::LockGuard guard(&streamLock);
-        stream->write(txBuf, totalLen);
+    buf[0] = START1;
+    buf[1] = START2;
+    buf[2] = (len >> 8) & 0xff;
+    buf[3] = len & 0xff;
+
+    auto totalLen = len + HEADER_LEN;
+    // Serialize write-readiness checks, writes and write-failure handling
+    // against concurrent stream writes/close.
+    concurrency::LockGuard guard(&streamLock);
+    if (!canWriteFrame(totalLen))
+        return false;
+
+    size_t written = stream->write(buf, totalLen);
+    if (written == totalLen) {
         stream->flush();
+        return true;
     }
+
+    onFrameWriteFailed(totalLen, written);
+    return false;
+}
+
+bool StreamAPI::emitTxBuffer(size_t len)
+{
+    return writeFrame(txBuf, len);
 }
 
 void StreamAPI::emitRebooted()
@@ -221,20 +237,7 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
 
     size_t len =
         pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
-    if (len != 0) {
-        txBufLog[0] = START1;
-        txBufLog[1] = START2;
-        txBufLog[2] = (len >> 8) & 0xff;
-        txBufLog[3] = len & 0xff;
-
-        auto totalLen = len + HEADER_LEN;
-        // Serialize stream writes against `emitTxBuffer` so a packet
-        // emission in flight on another task doesn't interleave bytes
-        // with this log record.
-        concurrency::LockGuard guard(&streamLock);
-        stream->write(txBufLog, totalLen);
-        stream->flush();
-    }
+    writeFrame(txBufLog, len);
 }
 
 /// Hookable to find out when connection changes

@@ -82,8 +82,9 @@ jobs:
       fail-fast: false
       matrix:
         check: ${{ fromJson(needs.setup.outputs.check) }}
-    # Use 'arctastic' self-hosted runner pool when checking in the main repo
-    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
+    # Runs on GitHub-hosted runners so checks don't compete with builds for the
+    # self-hosted 'arctastic' pool (which builds use).
+    runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
     steps:
       - uses: actions/checkout@v6
@@ -245,47 +246,126 @@ jobs:
           path: ./*.elf
           retention-days: 30
 
-  shame:
+  firmware-size-report:
     if: github.repository == 'meshtastic/firmware'
     continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     needs: [build]
     steps:
       - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request'
-        with:
-          filter: blob:none # means we download all the git history but none of the commit (except ones with checkout like the head)
-          fetch-depth: 0
-      - name: Download the current manifests
+
+      - name: Download current manifests
         uses: actions/download-artifact@v8
         with:
-          path: ./manifests-new/
+          path: ./manifests/
           pattern: manifest-*
           merge-multiple: true
-      - name: Upload combined manifests for later commit and global stats crunching.
+
+      - name: Collect current firmware sizes
+        run: python3 bin/collect_sizes.py ./manifests/ ./current-sizes.json
+
+      - name: Upload size report artifact
         uses: actions/upload-artifact@v7
-        id: upload-manifest
         with:
-          name: manifests-${{ github.sha }}
+          name: firmware-sizes-${{ github.sha }}
           overwrite: true
-          path: manifests-new/*.mt.json
-      - name: Find the merge base
+          path: ./current-sizes.json
+          retention-days: 90
+
+      - name: Download baseline sizes from develop
         if: github.event_name == 'pull_request'
-        run: echo "MERGE_BASE=$(git merge-base "origin/$base" "$head")" >> $GITHUB_ENV
+        continue-on-error: true
+        id: baseline-develop
         env:
-          base: ${{ github.base_ref }}
-          head: ${{ github.sha }}
-      # Currently broken (for-loop through EVERY artifact -- rate limiting)
-      # - name: Download the old manifests
-      #   if: github.event_name == 'pull_request'
-      #   run: gh run download -R "$repo" --name "manifests-$merge_base" --dir manifest-old/
-      #   env:
-      #     GH_TOKEN: ${{ github.token }}
-      #     merge_base: ${{ env.MERGE_BASE }}
-      #     repo: ${{ github.repository }}
-      # - name: Do scan and post comment
-      #   if: github.event_name == 'pull_request'
-      #   run: python3 bin/shame.py ${{ github.event.pull_request.number }} manifests-old/ manifests-new/
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list -R "${{ github.repository }}" \
+            --workflow CI --branch develop --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$RUN_ID" ]; then
+            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
+            if [ -n "$ARTIFACT_NAME" ]; then
+              gh run download "$RUN_ID" -R "${{ github.repository }}" \
+                --name "$ARTIFACT_NAME" --dir ./baseline-develop/
+              cp "./baseline-develop/current-sizes.json" ./develop-sizes.json
+              echo "found=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "found=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download baseline sizes from master
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        id: baseline-master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list -R "${{ github.repository }}" \
+            --workflow CI --branch master --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$RUN_ID" ]; then
+            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
+            if [ -n "$ARTIFACT_NAME" ]; then
+              gh run download "$RUN_ID" -R "${{ github.repository }}" \
+                --name "$ARTIFACT_NAME" --dir ./baseline-master/
+              cp "./baseline-master/current-sizes.json" ./master-sizes.json
+              echo "found=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "found=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate size comparison report
+        if: github.event_name == 'pull_request'
+        id: report
+        run: |
+          ARGS="./current-sizes.json"
+          if [ -f ./develop-sizes.json ]; then
+            ARGS="$ARGS --baseline develop:./develop-sizes.json"
+          fi
+          if [ -f ./master-sizes.json ]; then
+            ARGS="$ARGS --baseline master:./master-sizes.json"
+          fi
+          REPORT=$(python3 bin/size_report.py $ARGS)
+          if [ -z "$REPORT" ]; then
+            echo "has_report=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_report=true" >> "$GITHUB_OUTPUT"
+            {
+              echo '<!-- firmware-size-report -->'
+              echo '# Firmware Size Report'
+              echo ''
+              echo "$REPORT"
+              echo ''
+              echo '---'
+              echo "*Updated for ${{ github.sha }}*"
+            } > ./size-report.md
+            cat ./size-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Save PR number
+        if: github.event_name == 'pull_request' && steps.report.outputs.has_report == 'true'
+        run: echo "${{ github.event.pull_request.number }}" > ./pr-number.txt
+
+      - name: Upload size report
+        if: github.event_name == 'pull_request' && steps.report.outputs.has_report == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: size-report
+          path: |
+            ./size-report.md
+            ./pr-number.txt
+          retention-days: 5
 
   release-artifacts:
     permissions: # Needed for 'gh release upload'.
@@ -333,6 +413,7 @@ jobs:
           prerelease: true
           name: Meshtastic Firmware ${{ needs.version.outputs.long }} Alpha
           tag_name: v${{ needs.version.outputs.long }}
+          target_commitish: ${{ github.sha }}
           body: ${{ steps.release_notes.outputs.notes }}
 
       - name: Download source deb

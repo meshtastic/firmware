@@ -4,21 +4,35 @@
 
 #include <Arduino.h>
 
-uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
+uint32_t getPositionPrecisionForChannel(const meshtastic_Channel &channel)
 {
-    const meshtastic_Channel &channel = channels.getByIndex(channelIndex);
-
     if (channel.settings.has_module_settings) {
         return channel.settings.module_settings.position_precision;
-    } else if (channel.role == meshtastic_Channel_Role_PRIMARY) {
-        return 32;
-    } else {
-        return 0;
     }
+    // No module settings: fail closed. A PRIMARY channel used to default to 32
+    // here, leaking an exact position on a sharing-disabled channel. See #10509.
+    return 0;
 }
 
-static int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
+uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
 {
+    const meshtastic_Channel &ch = channels.getByIndex(channelIndex);
+    if (ch.role == meshtastic_Channel_Role_DISABLED)
+        return 0;
+    uint32_t precision = getPositionPrecisionForChannel(ch);
+
+    // Never send a precise position on a publicly-decryptable channel (key check is gated on > ceiling).
+    if (precision > MAX_POSITION_PRECISION_PUBLIC_KEY && channels.usesPublicKey(channelIndex)) {
+        precision = MAX_POSITION_PRECISION_PUBLIC_KEY;
+    }
+    return precision;
+}
+
+int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
+{
+    if (precision == 0 || precision >= 32)
+        return coordinate;
+
     uint32_t coordinateBits = static_cast<uint32_t>(coordinate);
     uint32_t truncated = coordinateBits & (UINT32_MAX << (32 - precision));
 
@@ -26,6 +40,11 @@ static int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
     truncated += (1UL << (31 - precision));
 
     return static_cast<int32_t>(truncated);
+}
+
+int32_t truncateCoordinate(int32_t coordinate, uint8_t precision)
+{
+    return truncateCoordinate(coordinate, static_cast<uint32_t>(precision));
 }
 
 void applyPositionPrecision(meshtastic_Position &position, uint32_t precision)

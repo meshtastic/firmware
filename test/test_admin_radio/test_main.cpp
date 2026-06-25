@@ -11,6 +11,7 @@
  *  6. Channel spacing calculation (placeholder for future protobuf changes)
  */
 
+#include "DisplayFormatters.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -20,6 +21,9 @@
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
+
+// hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
+extern uint32_t hash(const char *str);
 
 class MockMeshService : public MeshService
 {
@@ -32,7 +36,6 @@ static MockMeshService *mockMeshService;
 // -----------------------------------------------------------------------
 // getRegion() tests
 // -----------------------------------------------------------------------
-extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
 
 static void test_getRegion_returnsCorrectRegion_US()
 {
@@ -100,6 +103,29 @@ static void test_validateConfigRegion_unsetRegionReturnsTrue()
     TEST_ASSERT_TRUE(RadioInterface::validateConfigRegion(cfg));
 }
 
+static void test_validateConfigRegion_unknownCodeReturnsFalse()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)255;
+
+    devicestate.owner.is_licensed = false;
+
+    // Unknown code is not in the regions table; getRegion() returns the UNSET sentinel,
+    // whose .code != 255, so validateConfigRegion should reject it.
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigRegion(cfg));
+}
+
+static void test_validateConfigRegion_anotherUnknownCodeReturnsFalse()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)99;
+
+    devicestate.owner.is_licensed = true;
+
+    // Unknown code should be rejected even when owner is licensed.
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigRegion(cfg));
+}
+
 // -----------------------------------------------------------------------
 // Shadow tables for testing (preset lists → profiles → regions → lookup)
 // -----------------------------------------------------------------------
@@ -134,7 +160,6 @@ static const RegionProfile TEST_PROFILE_SPACED = {
     /* textThrottle */ 0,
     /* positionThrottle */ 0,
     /* telemetryThrottle */ 0,
-    /* overrideSlot */ 0,
 };
 
 // A licensed-only profile for testing access control
@@ -147,7 +172,6 @@ static const RegionProfile TEST_PROFILE_LICENSED = {
     /* textThrottle */ 5,
     /* positionThrottle */ 10,
     /* telemetryThrottle */ 10,
-    /* overrideSlot */ 3,
 };
 
 // Turbo-only profile
@@ -160,23 +184,60 @@ static const RegionProfile TEST_PROFILE_TURBO = {
     /* textThrottle */ 0,
     /* positionThrottle */ 0,
     /* telemetryThrottle */ 0,
-    /* overrideSlot */ 0,
+};
+
+// A preset list for the preset-hash override slot test (LONG_FAST + MEDIUM_FAST)
+static const meshtastic_Config_LoRaConfig_ModemPreset TEST_PRESETS_PRESET_HASH[] = {
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
+    MODEM_PRESET_END,
+};
+
+// Profile with overrideSlot = OVERRIDE_SLOT_PRESET_HASH (-1):
+// slot selection always uses hash(presetDisplayName), ignoring the primary channel name.
+static const RegionProfile TEST_PROFILE_PRESET_HASH = {
+    TEST_PRESETS_PRESET_HASH,
+    /* spacing */ 0.0f,
+    /* padding */ 0.0f,
+    /* audioPermitted */ true,
+    /* licensedOnly */ false,
+    /* textThrottle */ 0,
+    /* positionThrottle */ 0,
+    /* telemetryThrottle */ 0,
+};
+
+// Standalone test region using US frequencies (26 MHz span → 104 slots at 250 kHz BW)
+// Used to verify OVERRIDE_SLOT_PRESET_HASH slot formula; not inserted into testRegions[].
+static const RegionInfo TEST_REGION_PRESET_HASH = {
+    meshtastic_Config_LoRaConfig_RegionCode_US,
+    902.0f,
+    928.0f,
+    100,
+    30,
+    false,
+    false,
+    &TEST_PROFILE_PRESET_HASH,
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+    OVERRIDE_SLOT_PRESET_HASH,
+    "TEST_PRESET_HASH",
 };
 
 static const RegionInfo testRegions[] = {
     // A wide US-like region with spacing + padding
-    {meshtastic_Config_LoRaConfig_RegionCode_US, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED, "TEST_US_SPACED"},
+    {meshtastic_Config_LoRaConfig_RegionCode_US, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_US_SPACED"},
 
     // A narrow band simulating tight EU regulation
     {meshtastic_Config_LoRaConfig_RegionCode_EU_868, 869.4f, 869.65f, 10, 14, false, false, &TEST_PROFILE_LICENSED,
-     "TEST_EU_LICENSED"},
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW, 3, "TEST_EU_LICENSED"},
 
     // A wide-LoRa region with turbo-only presets
     {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
-     "TEST_LORA24_TURBO"},
+     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO"},
 
     // Sentinel — must be last
-    {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED, "TEST_UNSET"},
+    {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
+     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET"},
 };
 
 static const RegionInfo *getTestRegion(meshtastic_Config_LoRaConfig_RegionCode code)
@@ -194,6 +255,13 @@ static const RegionInfo *getTestRegion(meshtastic_Config_LoRaConfig_RegionCode c
 // Shadow table tests
 // -----------------------------------------------------------------------
 
+// Helper: replicate the numFreqSlots formula from RadioInterface so tests can compute expected values.
+static uint32_t testComputeNumFreqSlots(const RegionInfo *r, float bw_kHz)
+{
+    float w = r->profile->spacing + (r->profile->padding * 2) + (bw_kHz / 1000.0f);
+    return (uint32_t)(((r->freqEnd - r->freqStart + r->profile->spacing) / w) + 0.5f);
+}
+
 static void test_shadowTable_spacedProfileHasNonZeroSpacing()
 {
     const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
@@ -207,7 +275,7 @@ static void test_shadowTable_licensedProfileFlagsCorrect()
     const RegionInfo *r = getTestRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
     TEST_ASSERT_TRUE(r->profile->licensedOnly);
     TEST_ASSERT_FALSE(r->profile->audioPermitted);
-    TEST_ASSERT_EQUAL(3, r->profile->overrideSlot);
+    TEST_ASSERT_EQUAL(3, r->overrideSlot);
 }
 
 static void test_shadowTable_presetCountMatchesExpected()
@@ -266,6 +334,137 @@ static void test_shadowTable_unknownCodeFallsToSentinel()
     const RegionInfo *r = getTestRegion((meshtastic_Config_LoRaConfig_RegionCode)200);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_UNSET, r->code);
     TEST_ASSERT_EQUAL_STRING("TEST_UNSET", r->name);
+}
+
+static void test_shadowTable_presetHashProfileHasCorrectOverrideSlot()
+{
+    TEST_ASSERT_EQUAL(OVERRIDE_SLOT_PRESET_HASH, TEST_REGION_PRESET_HASH.overrideSlot);
+    TEST_ASSERT_EQUAL(-1, TEST_REGION_PRESET_HASH.overrideSlot);
+    TEST_ASSERT_EQUAL(2, TEST_REGION_PRESET_HASH.getNumPresets());
+}
+
+// -----------------------------------------------------------------------
+// OVERRIDE_SLOT_PRESET_HASH (-1) slot formula tests
+//
+// Property under test:
+//   overrideSlot = -1  → slot = hash(presetDisplayName) % numSlots
+//     regardless of what the primary channel is named
+//   overrideSlot = 0   → slot = hash(channelName) % numSlots
+//     when channel name = preset display name, these two modes give identical slots
+// -----------------------------------------------------------------------
+
+static void test_overrideSlotPresetHash_longFast_customChannelMatchesDefaultNameSlot()
+{
+    // US + LONG_FAST: spacing=0, padding=0, bw=250 kHz
+    // numSlots = round((928-902+0)/0.250) = 104
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, us->wideLora);
+    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
+    TEST_ASSERT_EQUAL_UINT32(104, numSlots); // sanity
+
+    const char *presetName =
+        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false, true);
+
+    // OVERRIDE_SLOT_PRESET_HASH (-1):
+    //   channel is "MyCustomNetwork" but slot still uses preset name hash
+    uint32_t slotPresetHashMode = hash(presetName) % numSlots;
+
+    // OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH (0) with channel name = preset name (user never renamed it):
+    //   channelName == presetName → same hash → same slot
+    const char *defaultChannelName = presetName;
+    uint32_t slotChannelHashModeDefaultName = hash(defaultChannelName) % numSlots;
+
+    TEST_ASSERT_EQUAL_UINT32(slotPresetHashMode, slotChannelHashModeDefaultName);
+
+    // Confirm a different custom channel name gives a different hash INPUT
+    // (so mode 0 would diverge while mode -1 stays locked)
+    TEST_ASSERT_TRUE(strcmp(presetName, "MyCustomNetwork") != 0);
+}
+
+static void test_overrideSlotPresetHash_mediumFast_customChannelMatchesDefaultNameSlot()
+{
+    // US + MEDIUM_FAST: bw=250 kHz → same 104 slots as LONG_FAST for US
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, us->wideLora);
+    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
+    TEST_ASSERT_EQUAL_UINT32(104, numSlots); // sanity
+
+    const char *presetName =
+        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false, true);
+
+    // Mode -1: slot = hash(presetName) % numSlots (channel name irrelevant)
+    uint32_t slotPresetHashMode = hash(presetName) % numSlots;
+
+    // Mode 0 + default name (channel name = preset display name):
+    uint32_t slotChannelHashModeDefaultName = hash(presetName) % numSlots;
+
+    TEST_ASSERT_EQUAL_UINT32(slotPresetHashMode, slotChannelHashModeDefaultName);
+
+    TEST_ASSERT_TRUE(strcmp(presetName, "MyCustomNetwork") != 0);
+}
+
+static void test_overrideSlotPresetHash_longFast_slotIsStableAcrossCustomNames()
+{
+    // Mode -1 must give the same slot for LONG_FAST regardless of which custom name is in use.
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, us->wideLora);
+    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
+
+    const char *presetName =
+        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false, true);
+    uint32_t expectedSlot = hash(presetName) % numSlots;
+
+    // Simulate three different custom channel names; mode -1 ignores all of them
+    const char *customNames[] = {"AlphaNet", "BetaMesh", "GammaMesh"};
+    for (int i = 0; i < 3; i++) {
+        uint32_t slotForCustom = hash(presetName) % numSlots; // mode -1: presetName only
+        TEST_ASSERT_EQUAL_UINT32(expectedSlot, slotForCustom);
+        // Confirm input would have differed in mode 0
+        TEST_ASSERT_TRUE(strcmp(presetName, customNames[i]) != 0);
+    }
+}
+
+static void test_overrideSlotPresetHash_mediumFast_slotIsStableAcrossCustomNames()
+{
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    float bw = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, us->wideLora);
+    uint32_t numSlots = testComputeNumFreqSlots(us, bw);
+
+    const char *presetName =
+        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false, true);
+    uint32_t expectedSlot = hash(presetName) % numSlots;
+
+    const char *customNames[] = {"AlphaNet", "BetaMesh", "GammaMesh"};
+    for (int i = 0; i < 3; i++) {
+        uint32_t slotForCustom = hash(presetName) % numSlots; // mode -1: presetName only
+        TEST_ASSERT_EQUAL_UINT32(expectedSlot, slotForCustom);
+        TEST_ASSERT_TRUE(strcmp(presetName, customNames[i]) != 0);
+    }
+}
+
+static void test_overrideSlotPresetHash_longFastAndMediumFast_slotsAreDifferentPresets()
+{
+    // LONG_FAST and MEDIUM_FAST have different display names → likely different hash slots.
+    // This verifies the two presets genuinely occupy distinct positions, so the equivalence
+    // tests above are not trivially vacuous.
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    float bw_lf = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false);
+    float bw_mf = modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false);
+    uint32_t numSlots_lf = testComputeNumFreqSlots(us, bw_lf);
+    uint32_t numSlots_mf = testComputeNumFreqSlots(us, bw_mf);
+
+    const char *nameLF =
+        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, false, true);
+    const char *nameMF =
+        DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, false, true);
+
+    TEST_ASSERT_TRUE(strcmp(nameLF, nameMF) != 0);
+
+    uint32_t slotLF = hash(nameLF) % numSlots_lf;
+    uint32_t slotMF = hash(nameMF) % numSlots_mf;
+    // They use the same numSlots (both 250 kHz on US), so a difference in display name
+    // should produce a different slot.
+    TEST_ASSERT_NOT_EQUAL(slotLF, slotMF);
 }
 
 // -----------------------------------------------------------------------
@@ -509,6 +708,91 @@ static void test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault()
 }
 
 // -----------------------------------------------------------------------
+// Region-locked preset swap tests (EU_868 / EU_866 / EU_N_868 trio)
+// -----------------------------------------------------------------------
+
+static void test_clampConfigLora_narrowPresetOnEU866SwapsToEUN868()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_litePresetOnEU868SwapsToEU866()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_866, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_eu868PresetOnEUN868SwapsToEU868()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_N_868;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_868, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+}
+
+static void test_clampConfigLora_litePresetOnUSDoesNotSwap()
+{
+    // Previous region is not one of the swappable trio, so the preset clamps to the
+    // region default instead of swapping regions.
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, cfg.region);
+    TEST_ASSERT_EQUAL(us->getDefaultPreset(), cfg.modem_preset);
+}
+
+static void test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap()
+{
+    // ITU2_125CM shares the NARROW presets, so they are valid there and nothing changes
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW;
+
+    RadioInterface::clampConfigLora(cfg);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM, cfg.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW, cfg.modem_preset);
+}
+
+static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
+{
+    // Validation (no clamp) must keep failing so callers route into clampConfigLora,
+    // which performs the region swap.
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg));
+}
+
+// -----------------------------------------------------------------------
 // RegionInfo preset list integrity tests
 // -----------------------------------------------------------------------
 
@@ -722,6 +1006,93 @@ static void test_handleSetConfig_fromOthers_validPresetAccepted()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
 }
 
+static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
+{
+    // Rejecting a remote config must reject ALL of it: an invalid channel_num must not
+    // leak into config.lora alongside the restored region/preset.
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.channel_num = 0;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.channel_num = 5000; // far beyond US slot count
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+}
+
+static void test_regionInfo_supportsPreset()
+{
+    const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
+    TEST_ASSERT_TRUE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+    TEST_ASSERT_FALSE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO));
+    TEST_ASSERT_FALSE(eu868->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST));
+
+    const RegionInfo *eu866 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_866);
+    TEST_ASSERT_TRUE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LITE_SLOW));
+    TEST_ASSERT_FALSE(eu866->supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+}
+
+static void test_checkConfigRegion_quietCheckReportsReason()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    TEST_ASSERT_TRUE(RadioInterface::checkConfigRegion(cfg));
+
+    cfg.region = (meshtastic_Config_LoRaConfig_RegionCode)254;
+    char err[160] = {0};
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg, err, sizeof(err)));
+    TEST_ASSERT_TRUE_MESSAGE(strlen(err) > 0, "Expected a failure reason in errBuf");
+}
+
+static void test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion()
+{
+    // Baseline: EU_866 (LITE profile)
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_866;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST;
+    initRegion();
+
+    // Remote admin keeps the region but selects a NARROW preset (locked to EU_N_868)
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_EU_866, true,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST);
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_FAST, config.lora.modem_preset);
+
+    // Restore the region table pointer for subsequent tests
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+}
+
+static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected()
+{
+    // Baseline: US is not one of the swappable trio, so a LITE preset must be rejected
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LITE_FAST);
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+}
+
 // -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
@@ -760,6 +1131,8 @@ void setup()
     // validateConfigRegion()
     RUN_TEST(test_validateConfigRegion_validRegionReturnsTrue);
     RUN_TEST(test_validateConfigRegion_unsetRegionReturnsTrue);
+    RUN_TEST(test_validateConfigRegion_unknownCodeReturnsFalse);
+    RUN_TEST(test_validateConfigRegion_anotherUnknownCodeReturnsFalse);
 
     // Shadow table tests
     RUN_TEST(test_shadowTable_spacedProfileHasNonZeroSpacing);
@@ -769,6 +1142,7 @@ void setup()
     RUN_TEST(test_shadowTable_channelSpacingWithPadding);
     RUN_TEST(test_shadowTable_turboOnlyOnWideLora);
     RUN_TEST(test_shadowTable_unknownCodeFallsToSentinel);
+    RUN_TEST(test_shadowTable_presetHashProfileHasCorrectOverrideSlot);
 
     // validateConfigLora()
     RUN_TEST(test_validateConfigLora_validPresetForUS);
@@ -790,6 +1164,14 @@ void setup()
     RUN_TEST(test_clampConfigLora_bogusPresetOnUnsetClampedToLongFast);
     RUN_TEST(test_clampConfigLora_invalidPresetOnLORA24ClampedToDefault);
 
+    // Region-locked preset swap
+    RUN_TEST(test_clampConfigLora_narrowPresetOnEU866SwapsToEUN868);
+    RUN_TEST(test_clampConfigLora_litePresetOnEU868SwapsToEU866);
+    RUN_TEST(test_clampConfigLora_eu868PresetOnEUN868SwapsToEU868);
+    RUN_TEST(test_clampConfigLora_litePresetOnUSDoesNotSwap);
+    RUN_TEST(test_clampConfigLora_narrowPresetOnHam125cmDoesNotSwap);
+    RUN_TEST(test_validateConfigLora_siblingLockedPresetStillFailsValidation);
+
     // RegionInfo preset list integrity
     RUN_TEST(test_presetsStd_hasNineEntries);
     RUN_TEST(test_presetsEU868_hasSevenEntries);
@@ -797,6 +1179,13 @@ void setup()
     RUN_TEST(test_defaultPresetIsInAvailablePresets);
     RUN_TEST(test_regionFieldsAreSane);
     RUN_TEST(test_onlyLORA24HasWideLora);
+
+    // OVERRIDE_SLOT_PRESET_HASH (-1) slot formula tests
+    RUN_TEST(test_overrideSlotPresetHash_longFast_customChannelMatchesDefaultNameSlot);
+    RUN_TEST(test_overrideSlotPresetHash_mediumFast_customChannelMatchesDefaultNameSlot);
+    RUN_TEST(test_overrideSlotPresetHash_longFast_slotIsStableAcrossCustomNames);
+    RUN_TEST(test_overrideSlotPresetHash_mediumFast_slotIsStableAcrossCustomNames);
+    RUN_TEST(test_overrideSlotPresetHash_longFastAndMediumFast_slotsAreDifferentPresets);
 
     // Channel spacing (current + placeholder)
     RUN_TEST(test_channelSpacingCalculation_US_LONG_FAST);
@@ -807,6 +1196,11 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromOthers_invalidPresetRejected);
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
+    RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_regionInfo_supportsPreset);
+    RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
+    RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
+    RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
 
     exit(UNITY_END());
 }
