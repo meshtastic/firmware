@@ -340,9 +340,32 @@ void randomSeed(unsigned long seed)
     ::srand((unsigned)seed);
 }
 // realHardware is defined by the framework's Linux hardware shims (now compiled in).
+// Restart the node. There is no in-process restart in wasm, so we hand off to
+// the JS host: a browser reloads the tab (NodeDB state survives via IDBFS, so it
+// comes back as the same node); a headless host calls Module.onReboot() if it
+// provided one (re-instantiate or exit as it sees fit), otherwise we just log —
+// the caller (Power::reboot) already let modules persist via the reboot
+// observers. NOTE: loose !=/== and double-quoted strings only — clang-format
+// mangles !== and /regex/ literals inside EM_ASM JS into invalid runtime tokens.
 void reboot()
 {
-    // No process restart in a tab; a real impl could call location.reload().
+    EM_ASM({
+        try {
+            if (typeof Module != "undefined" && typeof Module.onReboot == "function") {
+                Module.onReboot();
+                return;
+            }
+            if (typeof location != "undefined" && location.reload) {
+                location.reload();
+                return;
+            }
+            if (typeof console != "undefined")
+                console.warn("[wasm] reboot requested but no Module.onReboot hook; node left running");
+        } catch (e) {
+            if (typeof console != "undefined")
+                console.warn("reboot hook threw:", e);
+        }
+    });
 }
 
 // tone()/noTone() — no buzzer in the browser (from linux/LinuxCommon.cpp, excluded).

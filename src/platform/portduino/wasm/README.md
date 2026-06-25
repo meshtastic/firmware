@@ -68,3 +68,15 @@ drain `FromRadio` with `wasm_api_from_radio(out,max)` — the firmware's own
 ~40-line in-process transport (see the `meshtastic-web-node` repo, which hosts
 the dev server, the SDK-UI page, the headless node-usb runner, and the TCP :4403
 bridge for the Python CLI). WebUSB is Chromium-only.
+
+**Reboot:** the firmware can't restart itself in wasm, so a reboot (admin/phone
+command, factory reset, or the 60 s stuck-TX watchdog) hands off to the host. In
+a browser it calls `location.reload()` — NodeDB state survives via IDBFS, so the
+node comes back with the same identity. Headless, provide a `Module.onReboot`
+callback to handle it (re-instantiate the module, `process.exit()` for a
+supervisor to restart, etc.); without one it just logs and keeps running.
+
+```js
+const Module = await createMeshNode({ noInitialRun: true });
+Module.onReboot = () => process.exit(0); // optional; headless restart policy
+```
