@@ -1,43 +1,18 @@
 name: Build PortDuino WASM
 
-# Builds the [env:wasm] target (the portduino node compiled to WebAssembly,
-# src/platform/portduino/wasm/) with `pio run -e wasm` so it can't silently
-# bit-rot. Software/CI only — asserts the full mesh stack + RadioLib + Crypto
-# compile and link to meshnode.{mjs,wasm} via the meshtastic/platform-wasm
-# PlatformIO platform (emcc/Asyncify). It does NOT exercise the radio (that's
-# CH341/WebUSB, hardware).
+# Reusable workflow — called as the `build-wasm` job of the main CI workflow
+# (main_matrix.yml), so the WebAssembly portduino node is built like every other
+# platform. Builds the [env:native-wasm] target (src/platform/portduino/wasm/) with
+# `pio run -e native-wasm` so it can't silently bit-rot. Software/CI only — asserts the
+# full mesh stack + RadioLib + Crypto compile and link to meshnode.{mjs,wasm}
+# via the meshtastic/platform-wasm PlatformIO platform (emcc/Asyncify). It does
+# NOT exercise the radio (that's CH341/WebUSB, hardware).
 
 on:
-  # [env:wasm] is not self-contained — it inherits build_flags/lib_deps/
-  # extra_scripts from the root platformio.ini, which runs bin/platformio-*.py.
-  # Trigger on those shared inputs too, or the rot-guard misses the changes most
-  # likely to break the wasm build.
-  pull_request:
-    paths:
-      - "src/**"
-      - "userPrefs.jsonc"
-      - "platformio.ini"
-      - "variants/native/portduino/platformio.ini"
-      - "variants/native/portduino.ini"
-      - "extra_scripts/wasm_link_flags.py"
-      - "bin/platformio-custom.py"
-      - "bin/platformio-pre.py"
-      - ".github/workflows/build_portduino_wasm.yml"
-  push:
-    branches: [master, develop]
-    paths:
-      - "src/**"
-      - "userPrefs.jsonc"
-      - "platformio.ini"
-      - "variants/native/portduino/platformio.ini"
-      - "variants/native/portduino.ini"
-      - "extra_scripts/wasm_link_flags.py"
-      - "bin/platformio-custom.py"
-      - "bin/platformio-pre.py"
-      - ".github/workflows/build_portduino_wasm.yml"
+  workflow_call:
   workflow_dispatch:
 
-permissions: read-all
+permissions: {}
 
 jobs:
   build-wasm:
@@ -48,7 +23,7 @@ jobs:
         with:
           submodules: recursive
 
-      # Python + PlatformIO. (`pio run -e wasm` installs its own libdeps and the
+      # Python + PlatformIO. (`pio run -e native-wasm` installs its own libdeps and the
       # platform-wasm/framework-portduino packages; it needs no native apt libs.)
       - name: Setup native build
         uses: ./.github/actions/setup-native
@@ -60,11 +35,11 @@ jobs:
           actions-cache-folder: emsdk-cache
 
       - name: Build PortDuino WASM
-        run: platformio run -e wasm
+        run: platformio run -e native-wasm
 
       - name: Assert WASM artifacts
         run: |
-          OUT=.pio/build/wasm
+          OUT=.pio/build/native-wasm
           if [ ! -s "$OUT/meshnode.mjs" ] || [ ! -s "$OUT/meshnode.wasm" ]; then
             echo "::error::wasm artifacts missing"; exit 1
           fi
@@ -81,6 +56,6 @@ jobs:
           name: portduino-wasm
           overwrite: true
           path: |
-            .pio/build/wasm/meshnode.mjs
-            .pio/build/wasm/meshnode.wasm
+            .pio/build/native-wasm/meshnode.mjs
+            .pio/build/native-wasm/meshnode.wasm
           retention-days: 14

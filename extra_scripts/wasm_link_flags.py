@@ -1,5 +1,5 @@
 #
-# Firmware-specific Emscripten *link* settings for [env:wasm].
+# Firmware-specific Emscripten *link* settings for [env:native-wasm].
 #
 # PlatformIO routes `build_flags` to the compile step, not the link step, so the
 # WASM node's link-time emscripten settings have to be appended to LINKFLAGS
@@ -16,12 +16,12 @@
 #   * ASYNCIFY_IMPORTS      — the WebUSB seam: these imported C functions suspend
 #                             the stack (Asyncify) while a WebUSB transfer awaits.
 #
-# Only attached to the wasm env (see extra_scripts in [env:wasm]); a guard keeps
+# Only attached to the wasm env (see extra_scripts in [env:native-wasm]); a guard keeps
 # it inert if it is ever pulled into another env.
 #
 Import("env")
 
-if env["PIOENV"] == "wasm":
+if env["PIOENV"] == "native-wasm":
     env.Append(
         LINKFLAGS=[
             "-sEXPORT_NAME=createMeshNode",

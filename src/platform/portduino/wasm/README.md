@@ -24,7 +24,7 @@ In-tree, six firmware sources carry small `#ifdef ARCH_PORTDUINO_WASM` guards
 
 ## Build
 
-This is a normal PlatformIO env (`[env:wasm]`) built with the
+This is a normal PlatformIO env (`[env:native-wasm]`) built with the
 [meshtastic/platform-wasm](https://github.com/meshtastic/platform-wasm) platform
 (emcc/em++), exactly like any other board target.
 
@@ -32,11 +32,11 @@ Prereq: an **Emscripten SDK** on `PATH` — `source <emsdk>/emsdk_env.sh` (or
 `export EMSDK=<path>`) so the platform builder can locate `emcc`.
 
 ```sh
-pio run -e wasm            # emcc compile + Asyncify link
-pio run -e wasm -t clean   # wipe the build dir
+pio run -e native-wasm            # emcc compile + Asyncify link
+pio run -e native-wasm -t clean   # wipe the build dir
 ```
 
-Output: `.pio/build/wasm/meshnode.mjs` + `meshnode.wasm` (ES module, Asyncify,
+Output: `.pio/build/native-wasm/meshnode.mjs` + `meshnode.wasm` (ES module, Asyncify,
 factory `createMeshNode`, exports `_wasm_setup`, `_wasm_loop_once`,
 `_wasm_fs_sync`, `_wasm_set_region`, `_wasm_api_to_radio`, `_wasm_api_from_radio`,
 `_wasm_api_available`, `_wasm_api_is_connected`, the `_wasm_set_lora_*` setters).
