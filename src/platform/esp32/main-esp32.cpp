@@ -8,6 +8,11 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH && __has_include(<esp_bt.h>)
+#include <esp_bt.h>
+#define CAN_RELEASE_BT_MEMORY 1
+#endif
+
 #include <MeshtasticOTA.h>
 
 #if HAS_WIFI
@@ -31,8 +36,52 @@ void variant_shutdown() __attribute__((weak));
 void variant_shutdown() {}
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+static bool bluetoothMemoryReleased;
+static bool bluetoothMemoryReleaseWarned;
+#endif
+
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+static bool isNetworkConfiguredToDisableBluetooth()
+{
+#if HAS_WIFI
+    return isWifiAvailable();
+#elif defined(USE_WS5500) || defined(USE_CH390D)
+    return config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
+static bool shouldReleaseBluetoothMemory()
+{
+    // On ESP32 targets WiFi and BLE share radio resources. When WiFi is configured for this boot,
+    // BLE will not be started, so its reserved memory can be returned to the heap until reboot.
+    if (isNetworkConfiguredToDisableBluetooth()) {
+        return true;
+    }
+    return !config.bluetooth.enabled;
+}
+
+static const char *getBluetoothReleaseReason()
+{
+    if (isNetworkConfiguredToDisableBluetooth()) {
+        return "WiFi is enabled";
+    }
+    return "Bluetooth is disabled";
+}
+#endif
+
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
+    if (enable && bluetoothMemoryReleased) {
+        if (!shouldReleaseBluetoothMemory() && !bluetoothMemoryReleaseWarned) {
+            bluetoothMemoryReleaseWarned = true;
+            LOG_WARN("Bluetooth memory has been released; reboot to re-enable Bluetooth");
+        }
+        return;
+    }
+
 #if defined(USE_WS5500) || defined(USE_CH390D)
     if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
 #elif HAS_WIFI
@@ -57,6 +106,29 @@ void setBluetoothEnable(bool enable)
 void setBluetoothEnable(bool enable) {}
 void updateBatteryLevel(uint8_t level) {}
 #endif
+
+void esp32ReleaseBluetoothMemoryIfUnused()
+{
+#ifdef CAN_RELEASE_BT_MEMORY
+    if (bluetoothMemoryReleased || !shouldReleaseBluetoothMemory()) {
+        return;
+    }
+
+    const int32_t heapBefore = ESP.getHeapSize();
+    const int32_t freeBefore = ESP.getFreeHeap();
+
+    // ESP_BT_MODE_BTDM releases all BT/BLE controller and host memory for this boot.
+    // It is intentionally irreversible until reboot, matching the runtime config behavior.
+    esp_err_t err = esp_bt_mem_release(ESP_BT_MODE_BTDM);
+    if (err == ESP_OK) {
+        bluetoothMemoryReleased = true;
+        LOG_INFO("Released BTDM memory because %s: heap %+d, free %+d", getBluetoothReleaseReason(),
+                 (int32_t)ESP.getHeapSize() - heapBefore, (int32_t)ESP.getFreeHeap() - freeBefore);
+    } else {
+        LOG_WARN("BTDM memory release failed: %d", err);
+    }
+#endif
+}
 
 void getMacAddr(uint8_t *dmac)
 {
