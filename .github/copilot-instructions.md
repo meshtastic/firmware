@@ -1,5 +1,21 @@
 # Meshtastic Firmware - Copilot Instructions
 
+> **TL;DR**
+> | | |
+> |---|---|
+> | Local tests | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED) |
+> | Hardware tests | `./mcp-server/run-tests.sh` |
+> | Format | `trunk fmt` |
+> | Mirror docs | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code) |
+>
+> **Need this? It's here.**
+> | | |
+> |---|---|
+> | General helpers (clamp, UTF-8, string fmt…) | `src/meshUtils.h` |
+> | Logging macros (LOG_DEBUG / INFO / WARN…) | `src/DebugConfiguration.h` |
+> | New module skeleton | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
+> | Observer / event wiring | `src/Observer.h` |
+
 This document provides context and guidelines for AI assistants working with the Meshtastic firmware codebase.
 
 ## Project Overview
@@ -37,7 +53,7 @@ MQTT provides a bridge between Meshtastic mesh networks and the internet, enabli
 
 Messages are published/subscribed using a hierarchical topic format:
 
-```
+```text
 {root}/{channel_id}/{gateway_id}
 ```
 
@@ -247,7 +263,7 @@ Unit tests for the conversion layer live in `test/test_type_conversions/test_mai
 
 ## Project Structure
 
-```
+```text
 firmware/
 ├── src/                    # Main source code
 │   ├── main.cpp           # Application entry point
@@ -482,7 +498,7 @@ Key defines in variant.h:
 
 ## Build System
 
-## Agent Tooling Baseline
+### Agent Tooling Baseline
 
 Mirror counterpart: `AGENTS.md` under **Agent Tooling Baseline**.
 
@@ -635,7 +651,7 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory with 19 test suites:
+Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count` and is cross-checked on every full run. Current suites:
 
 - `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
 - `test_atak/` - ATAK integration
@@ -647,30 +663,57 @@ Unit tests in `test/` directory with 19 test suites:
 - `test_mesh_module/` - Module framework
 - `test_meshpacket_serializer/` - Packet serialization
 - `test_mqtt/` - MQTT integration
+- `test_nexthop_routing/` - Next-hop routing logic
+- `test_nodedb_blocked/` - NodeDB blocked-node handling
 - `test_packet_history/` - Packet history tracking
 - `test_packet_signing/` - Packet signing
+- `test_position_module/` - Position module behaviour
 - `test_position_precision/` - Position precision helpers
 - `test_radio/` - Radio interface
+- `test_rtc/` - RTC / time handling
 - `test_serial/` - Serial communication
 - `test_traffic_management/` - Traffic management (dedup, rate-limit, hop-trim, role exceptions)
 - `test_transmit_history/` - Retransmission tracking
 - `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
 - `test_utf8/` - UTF-8 utilities
+- `test_warm_store/` - Warm-tier node store
 
-**Preferred run command — `bin/run-tests.sh`** (uses the `coverage` env with ASan/LSan sanitizers, emits an unambiguous RED/AMBER/GREEN verdict, and catches missing suites as AMBER):
+**Preferred run command — `bin/run-tests.sh`** (uses the `coverage` env with ASan/LSan sanitizers; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
 
 ```bash
-./bin/run-tests.sh                          # all suites
-./bin/run-tests.sh -f test_traffic_management  # single suite
-./bin/run-tests.sh -f test_traffic_management > /tmp/test_out.txt 2>&1; tail -5 /tmp/test_out.txt
+./bin/run-tests.sh                             # all suites
+./bin/run-tests.sh -f test_traffic_management  # single suite (yields FILTERED, not GREEN)
 ```
 
-Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER. The final line is machine-readable:
+Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-```
-RESULT: GREEN 19/19 suites passed
-RESULT: RED test_traffic_management: 1 failed
-RESULT: AMBER 18/19 suites ran (missing: test_radio) — all that ran passed
+| Exit | Verdict    | Meaning                                                                                                                                                                                                               |
+| ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                           |
+| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                 |
+| 2    | `AMBER`    | All that ran passed, but something was lost: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or `test/native-suite-count` disagrees with the `test/` directory count |
+| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                    |
+
+Examples — exact counts will vary by suite count and env:
+
+```text
+# GREEN: all suites ran and passed
+RESULT: GREEN N/N suites passed [canonical: N/N]
+
+# RED: real test failure
+RESULT: RED 1 failed
+
+# RED: sanitizer exit-time abort (all tests passed but process aborted at exit)
+RESULT: RED exit-time abort (tests passed; likely sanitizer — see hint above)
+
+# AMBER: native-suite-count disagrees with test/ directory count (too low)
+RESULT: AMBER test/ has 24 suite directories but native-suite-count says 5 — update test/native-suite-count after registering new suites
+
+# AMBER: native-suite-count disagrees with test/ directory count (too high)
+RESULT: AMBER test/ has 24 suite directories but native-suite-count says 99 — update test/native-suite-count after removing suites
+
+# FILTERED: single suite run completed cleanly
+RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) — filtered: test_serial [canonical: 1/24]
 ```
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
