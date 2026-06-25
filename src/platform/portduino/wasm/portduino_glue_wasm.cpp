@@ -120,36 +120,93 @@ static std::string wasm_resolve_mac()
     return std::string(hex, 12);
 }
 
-// Hardcoded MeshToad (E22 / SX1262 over CH341 WebUSB) config — replaces YAML.
+// ---- Per-adapter config setters --------------------------------------------
+// JS may call these BEFORE wasm_setup() to drive a non-MeshToad CH341 LoRa
+// adapter. wasm_set_lora_module is the trigger: left unset (use_simradio, the
+// struct default), wasm_config_apply() falls back to the MeshToad defaults.
+extern "C" EMSCRIPTEN_KEEPALIVE void wasm_set_lora_module(int module_enum)
+{
+    portduino_config.lora_module = (lora_module_enum)module_enum;
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void wasm_set_lora_usb_ids(int vid, int pid)
+{
+    portduino_config.lora_usb_vid = vid;
+    portduino_config.lora_usb_pid = pid;
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void wasm_set_lora_usb_serial(const char *serial)
+{
+    portduino_config.lora_usb_serial_num = serial ? std::string(serial) : "";
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void wasm_set_lora_dio_config(int dio2_as_rf_switch, int dio3_tcxo_mv)
+{
+    portduino_config.dio2_as_rf_switch = (dio2_as_rf_switch != 0);
+    portduino_config.dio3_tcxo_voltage = dio3_tcxo_mv;
+}
+extern "C" EMSCRIPTEN_KEEPALIVE void wasm_set_lora_spi_speed(int hz)
+{
+    portduino_config.spiSpeed = hz;
+}
+// Pin name -> the matching portduino_config field. Sets .pin + .enabled to match
+// the default path (the CH341 backend addresses by D-line number = .pin).
+extern "C" EMSCRIPTEN_KEEPALIVE void wasm_set_lora_pin(const char *name, int pin)
+{
+    if (!name)
+        return;
+    std::string n(name);
+    pinMapping *t = nullptr;
+    if (n == "CS")
+        t = &portduino_config.lora_cs_pin;
+    else if (n == "IRQ")
+        t = &portduino_config.lora_irq_pin;
+    else if (n == "BUSY")
+        t = &portduino_config.lora_busy_pin;
+    else if (n == "RESET")
+        t = &portduino_config.lora_reset_pin;
+    else if (n == "RXEN")
+        t = &portduino_config.lora_rxen_pin;
+    else if (n == "TXEN")
+        t = &portduino_config.lora_txen_pin;
+    else if (n == "ANT_SW")
+        t = &portduino_config.lora_sx126x_ant_sw_pin;
+    if (t) {
+        t->pin = pin;
+        t->enabled = (pin != (int)RADIOLIB_NC);
+    }
+}
+
+// LoRa adapter config. A MeshToad (E22/SX1262 over CH341) by default, or whatever
+// the JS host pre-set via the wasm_set_lora_* setters before wasm_setup(). The
+// browser/headless invariants (CH341 SPI dev, no screen/GPS, MAC) always apply.
 // C++ linkage to match the `extern void wasm_config_apply();` decl in PortduinoGlue.cpp.
 void wasm_config_apply()
 {
-    portduino_config.lora_module = use_sx1262; // the radio proven in the harness
-    portduino_config.lora_spi_dev = "ch341";   // routes init through the WebUSB Ch341Hal
-    portduino_config.lora_usb_vid = 0x1A86;
-    portduino_config.lora_usb_pid = 0x5512;
-    portduino_config.lora_usb_serial_num = ""; // first matching device
-    portduino_config.dio2_as_rf_switch = true; // E22 uses DIO2 as the TX/RX switch
-    portduino_config.dio3_tcxo_voltage = 1800; // MeshToad TCXO at 1.8 V (firmware /1000)
-    portduino_config.spiSpeed = 2000000;
+    if (portduino_config.lora_module == use_simradio) {
+        // Nothing pre-set by JS -> MeshToad E22/SX1262 defaults.
+        portduino_config.lora_module = use_sx1262;
+        portduino_config.lora_usb_vid = 0x1A86;
+        portduino_config.lora_usb_pid = 0x5512;
+        portduino_config.lora_usb_serial_num = ""; // first matching device
+        portduino_config.dio2_as_rf_switch = true; // E22 uses DIO2 as the TX/RX switch
+        portduino_config.dio3_tcxo_voltage = 1800; // 1.8 V TCXO
+        portduino_config.spiSpeed = 2000000;
+        // MeshToad CH341 D-line pin map (bin/config.d/lora-usb-meshtoad-e22.yaml).
+        auto setPin = [](pinMapping &p, int n) {
+            p.pin = n;
+            p.enabled = true;
+        };
+        setPin(portduino_config.lora_cs_pin, 0);    // CS  = D0
+        setPin(portduino_config.lora_irq_pin, 6);   // IRQ = D6
+        setPin(portduino_config.lora_busy_pin, 4);  // BUSY = D4
+        setPin(portduino_config.lora_reset_pin, 2); // RESET = D2
+        setPin(portduino_config.lora_rxen_pin, 1);  // RXen = D1
+    }
+    portduino_config.lora_spi_dev = "ch341"; // every adapter here is WebUSB/CH341
     portduino_config.displayPanel = no_screen;
     portduino_config.has_gps = false;
     portduino_config.MaxNodes = 80; // small DB for the browser
-    // Per-instance unique MAC (persisted in /meshdata, env-overridable). Also
-    // makes getMacAddr() short-circuit before its popen()-based host lookup
-    // (no shell in the browser). The lower 4 bytes become this node's NodeNum.
+    // Per-instance unique MAC (persisted in /meshdata, env-overridable). The lower
+    // 4 bytes become this node's NodeNum; also short-circuits getMacAddr()'s popen.
     portduino_config.mac_address = wasm_resolve_mac();
-
-    // MeshToad CH341 D-line pin map (bin/config.d/lora-usb-meshtoad-e22.yaml).
-    auto setPin = [](pinMapping &p, int n) {
-        p.pin = n;
-        p.enabled = true;
-    };
-    setPin(portduino_config.lora_cs_pin, 0);    // CS  = D0
-    setPin(portduino_config.lora_irq_pin, 6);   // IRQ = D6
-    setPin(portduino_config.lora_busy_pin, 4);  // BUSY = D4
-    setPin(portduino_config.lora_reset_pin, 2); // RESET = D2
-    setPin(portduino_config.lora_rxen_pin, 1);  // RXen = D1
 }
 
 // Set the LoRa region at runtime from the UI (browser <select>) or headless

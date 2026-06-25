@@ -14,7 +14,8 @@
 #
 # Prereqs:
 #   - emsdk: set EMSDK_ENV=/path/to/emsdk_env.sh (or have $EMSDK / ~/emsdk).
-#   - native libdeps: run `pio run -e native-macos` once to populate them.
+#   - native libdeps: run `pio run -e native` (Linux/CI) or `pio run -e native-macos`
+#     (macOS) once to populate them. Override the detected env with NATIVE_ENV=<env>.
 #
 # set -u, NOT -e: we want the whole error wave per pass.
 set -u
@@ -38,16 +39,33 @@ command -v emcc >/dev/null 2>&1 || {
 	exit 1
 }
 
-LIBDEPS="$FW/.pio/libdeps/native-macos"
-[ -d "$LIBDEPS" ] || {
-	echo "Missing $LIBDEPS — populate libdeps once: pio run -e native-macos"
+# Resolve which PlatformIO env populated libdeps. Override with NATIVE_ENV=...;
+# otherwise probe — macOS dev populates native-macos, Linux/CI populates native.
+NATIVE_ENV="${NATIVE_ENV-}"
+if [ -z "$NATIVE_ENV" ]; then
+	for e in native-macos native; do
+		[ -d "$FW/.pio/libdeps/$e" ] && {
+			NATIVE_ENV="$e"
+			break
+		}
+	done
+fi
+LIBDEPS="$FW/.pio/libdeps/$NATIVE_ENV"
+[ -n "$NATIVE_ENV" ] && [ -d "$LIBDEPS" ] || {
+	echo "No native libdeps under $FW/.pio/libdeps/{native-macos,native}."
+	echo "Populate once: pio run -e native (Linux/CI) or pio run -e native-macos (macOS)."
 	exit 1
 }
+echo "[libdeps] using env: $NATIVE_ENV"
 FWPORT="$HOME/.platformio/packages/framework-portduino"
 RADIOLIB="$LIBDEPS/RadioLib/src"
-# native-macos/Crypto is a stale checkout missing XEdDSA.*; heltec-v3/Crypto has it.
-CRYPTO="$FW/.pio/libdeps/heltec-v3/Crypto"
-[ -d "$CRYPTO" ] || CRYPTO="$LIBDEPS/Crypto"
+# Crypto from the SAME env — the meshtastic/Crypto pin includes XEdDSA. A stale
+# local libdeps cache can lag the pin, so fail loudly rather than silently mis-link.
+CRYPTO="$LIBDEPS/Crypto"
+[ -f "$CRYPTO/XEdDSA.cpp" ] || {
+	echo "ERROR: $CRYPTO lacks XEdDSA.cpp (stale libdeps cache). Refresh: pio pkg update -e $NATIVE_ENV"
+	exit 1
+}
 NANOPB="$LIBDEPS/Nanopb"
 CRC32="$LIBDEPS/ErriezCRC32/src"
 [ -d "$CRC32" ] || CRC32="$LIBDEPS/ErriezCRC32"
@@ -248,7 +266,7 @@ emcc "${OBJS[@]}" \
 	-s MODULARIZE=1 -s EXPORT_ES6=1 -s EXPORT_NAME=createMeshNode -s INVOKE_RUN=0 \
 	-lidbfs.js -lnodefs.js \
 	-s EXPORTED_RUNTIME_METHODS=ccall,cwrap,callMain,FS,IDBFS,NODEFS,PATH,HEAPU8,UTF8ToString,stringToUTF8 \
-	-s EXPORTED_FUNCTIONS='_main,_wasm_setup,_wasm_loop_once,_wasm_fs_sync,_wasm_set_region,_wasm_api_to_radio,_wasm_api_from_radio,_wasm_api_available,_wasm_api_is_connected,_malloc,_free' \
+	-s EXPORTED_FUNCTIONS='_main,_wasm_setup,_wasm_loop_once,_wasm_fs_sync,_wasm_set_region,_wasm_api_to_radio,_wasm_api_from_radio,_wasm_api_available,_wasm_api_is_connected,_wasm_set_lora_module,_wasm_set_lora_usb_ids,_wasm_set_lora_usb_serial,_wasm_set_lora_dio_config,_wasm_set_lora_spi_speed,_wasm_set_lora_pin,_malloc,_free' \
 	-s ERROR_ON_UNDEFINED_SYMBOLS=1 \
 	-o "$OUT/meshnode.mjs" 2>>"$LOG"
 rc=$?
