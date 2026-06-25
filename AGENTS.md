@@ -10,18 +10,18 @@ This file (`AGENTS.md`) is a short pointer + quick reference for agents that don
 
 ## Quick command reference
 
-| Action                           | Command                                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Build a firmware variant         | `pio run -e <env>` (e.g. `pio run -e rak4631`, `pio run -e heltec-v3`)                                        |
-| Build native macOS host binary   | `pio run -e native-macos` (Homebrew prereqs + CH341 LoRa setup in `variants/native/portduino/platformio.ini`) |
-| Clean + rebuild                  | `pio run -e <env> -t clean && pio run -e <env>`                                                               |
-| Flash a device                   | `pio run -e <env> -t upload --upload-port <port>` (or use the `pio_flash` MCP tool)                           |
-| Run firmware unit tests (native) | `pio test -e native`                                                                                          |
-| Run MCP hardware tests           | `./mcp-server/run-tests.sh`                                                                                   |
-| Live TUI test runner             | `mcp-server/.venv/bin/meshtastic-mcp-test-tui`                                                                |
-| Format before commit             | `trunk fmt`                                                                                                   |
-| Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                                                         |
-| Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                                                |
+| Action                           | Command                                                                                                                                                                                                        |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build a firmware variant         | `pio run -e <env>` (e.g. `pio run -e rak4631`, `pio run -e heltec-v3`)                                                                                                                                         |
+| Build native macOS host binary   | `pio run -e native-macos` (Homebrew prereqs + CH341 LoRa setup in `variants/native/portduino/platformio.ini`)                                                                                                  |
+| Clean + rebuild                  | `pio run -e <env> -t clean && pio run -e <env>`                                                                                                                                                                |
+| Flash a device                   | `pio run -e <env> -t upload --upload-port <port>` (or use the `pio_flash` MCP tool)                                                                                                                            |
+| Run firmware unit tests (native) | `~/.platformio/penv/bin/python -m platformio test -e native > /tmp/test_out.txt 2>&1` then `grep -E 'error:\|PASS\|FAIL\|succeeded\|failed' /tmp/test_out.txt` (redirect first — piping causes line-buffering) |
+| Run MCP hardware tests           | `./mcp-server/run-tests.sh`                                                                                                                                                                                    |
+| Live TUI test runner             | `mcp-server/.venv/bin/meshtastic-mcp-test-tui`                                                                                                                                                                 |
+| Format before commit             | `trunk fmt`                                                                                                                                                                                                    |
+| Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                                                                                                                                                          |
+| Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                                                                                                                                                 |
 
 ## MCP server (device + test automation)
 
@@ -64,7 +64,7 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 - **One MCP call per serial port at a time.** The port lock is exclusive; concurrent calls deadlock. Sequence: open → read/mutate → close, then next device.
 - **`userPrefs.jsonc` is session state during tests.** The `_session_userprefs` fixture snapshots + restores it; never edit it from inside a test.
 - **Don't speculate about firmware root causes.** When evidence doesn't support a classification, say "unknown" and list what would disambiguate.
-- **Run `trunk fmt` before proposing a commit.** The `trunk_check` CI gate will reject unformatted code.
+- **Run `trunk fmt` before proposing a commit.** The `trunk_check` CI gate will reject unformatted code. Claude Code runs it automatically via the PostToolUse hook in `.claude/settings.json`; trunk's launcher needs `curl` or `wget` to bootstrap its pinned CLI — see **Formatting & the trunk toolchain** in `.github/copilot-instructions.md` for the no-curl bootstrap procedure.
 - **`confirm=True` on destructive MCP tools is a real gate, not a formality.** Don't bypass it via auto-approve settings.
 - **Keep code comments minimal — one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
 - **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check — raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
@@ -108,7 +108,7 @@ Sequence these; don't parallelize on the same port.
 | `src/modules/`                    | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                          |
 | `variants/`                       | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                             |
 | `protobufs/`                      | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                              |
-| `test/`                           | Firmware unit tests (12 suites; `pio test -e native`)                                                                    |
+| `test/`                           | Firmware unit tests (17 suites; `pio test -e native`)                                                                    |
 | `mcp-server/`                     | Python MCP server + pytest hardware integration tests                                                                    |
 | `mcp-server/tests/`               | Tiered pytest suite: `unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/` |
 | `.claude/commands/`               | Claude Code slash command bodies                                                                                         |

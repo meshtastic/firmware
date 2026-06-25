@@ -55,6 +55,11 @@ uninitMemberVar:*/AudioThread.h
 constVariableReference:*/Channels.cpp
 constParameterPointer:*/unishox2.c
 
+// False positive: make_zeroizing_array() returns unique_ptr<uint8_t[], ...>, so
+// .get() is uint8_t*, not void*. cppcheck can't resolve the custom-deleter alias
+// and reports arithmetic on these buffers as void* pointer math.
+arithOperationsOnVoidPointer:*/EncryptedStorage.cpp
+
 useStlAlgorithm
 
 variableScope

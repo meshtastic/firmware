@@ -16,13 +16,18 @@ jobs:
           submodules: true
 
       - name: Update submodule
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop' }}
+        if: ${{ github.ref_name == 'master' || github.ref_name == 'develop' }}
+        working-directory: protobufs
+        env:
+          # Use the branch that triggered the workflow as the protobuf branch.
+          GIT_BRANCH: ${{ github.ref_name }}
         run: |
-          git submodule update --remote protobufs
+          git fetch --prune origin $GIT_BRANCH
+          git checkout origin/$GIT_BRANCH
 
       - name: Download nanopb
         run: |
-          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.9.1-linux-x86.tar.gz
+          wget https://github.com/nanopb/nanopb/releases/download/nanopb-0.4.9.1/nanopb-0.4.9.1-linux-x86.tar.gz
           tar xvzf nanopb-0.4.9.1-linux-x86.tar.gz
           mv nanopb-0.4.9.1-linux-x86 nanopb-0.4.9
 
@@ -33,7 +38,7 @@ jobs:
       - name: Create pull request
         uses: peter-evans/create-pull-request@v8
         with:
-          branch: create-pull-request/update-protobufs
+          branch: create-pull-request/update-protobufs-${{ github.ref_name }}
           labels: submodules
           title: Update protobufs and classes
           commit-message: Update protobufs
