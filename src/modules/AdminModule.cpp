@@ -1,5 +1,6 @@
 #include "AdminModule.h"
 #include "Channels.h"
+#include "DisplayFormatters.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
@@ -1007,6 +1008,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
 
         config.lora = validatedLora; // Finally, return the validated config back to the main config
+        warnIfPresetNamedChannel(oldLoraConfig, validatedLora);
 
         break;
     }
@@ -1168,6 +1170,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
+    warnIfBlankPsk(cc);
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
@@ -1745,6 +1748,56 @@ void AdminModule::sendWarningAndLog(const char *format, ...)
     // If 'buf' contained a % symbol (e.g. "Battery 50%"), passing it directly
     // would crash sendWarning. "%s" treats it purely as text.
     sendWarning("%s", buf);
+}
+
+// Strip spaces and fold to lowercase for loose preset-name comparison.
+static void normalizePresetName(const char *src, char *dst, size_t dstLen)
+{
+    size_t j = 0;
+    for (size_t i = 0; src[i] && j + 1 < dstLen; i++) {
+        if (src[i] != ' ')
+            dst[j++] = (char)tolower((unsigned char)src[i]);
+    }
+    dst[j] = '\0';
+}
+
+void AdminModule::warnIfPresetNamedChannel(const meshtastic_Config_LoRaConfig &oldLora,
+                                           const meshtastic_Config_LoRaConfig &newLora)
+{
+    if (!newLora.use_preset || newLora.modem_preset == oldLora.modem_preset)
+        return;
+    const char *oldName = DisplayFormatters::getModemPresetDisplayName(oldLora.modem_preset, false, oldLora.use_preset);
+    const char *newName = DisplayFormatters::getModemPresetDisplayName(newLora.modem_preset, false, newLora.use_preset);
+
+    char normNew[32];
+    normalizePresetName(newName, normNew, sizeof(normNew));
+
+    for (int i = 0; i < channels.getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channels.getByIndex(i);
+        if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.has_settings || !*ch.settings.name)
+            continue;
+        if (strcmp(ch.settings.name, oldName) == 0) {
+            sendWarning("Channel %d name '%s' matches the old preset. "
+                        "Rename it manually if it should track the new preset.",
+                        i, ch.settings.name);
+            continue;
+        }
+        char normChan[32];
+        normalizePresetName(ch.settings.name, normChan, sizeof(normChan));
+        if (strcmp(normChan, normNew) == 0)
+            sendWarning("Channel %d name '%s' looks like preset '%s' but won't auto-resolve — "
+                        "clear the name to use the preset name automatically.",
+                        i, ch.settings.name, newName);
+    }
+}
+
+void AdminModule::warnIfBlankPsk(const meshtastic_Channel &cc)
+{
+    if (cc.role == meshtastic_Channel_Role_DISABLED || !cc.has_settings || cc.settings.psk.size > 0)
+        return;
+    sendWarning("Channel %d '%s' has a blank PSK (no encryption). "
+                "If you intended the default key, set PSK to 'AQ=='.",
+                cc.index, cc.settings.name);
 }
 
 void disableBluetooth()
