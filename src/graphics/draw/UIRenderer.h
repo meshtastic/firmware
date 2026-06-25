@@ -50,6 +50,10 @@ class UIRenderer
     // Navigation bar overlay
     static void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
 
+    // screen frames
+    // First two pointers are self explanatory
+    // x and y are the offset everything should be drawn at, to support sliding transitions between frames.
+
     static void drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

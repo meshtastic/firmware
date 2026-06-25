@@ -21,7 +21,7 @@ namespace graphics
 #define textSixthLine (textFifthLine + (FONT_HEIGHT_SMALL - 5))
 
 // Consistent Line Spacing for devices like T114 and TEcho/ThinkNode M1 of devices
-#define textFirstLine_medium (FONT_HEIGHT_SMALL + 1)
+#define textFirstLine_medium (FONT_HEIGHT_SMALL + 1 + BASEUI_HEADER_MARGIN)
 #define textSecondLine_medium (textFirstLine_medium + FONT_HEIGHT_SMALL)
 #define textThirdLine_medium (textSecondLine_medium + FONT_HEIGHT_SMALL)
 #define textFourthLine_medium (textThirdLine_medium + FONT_HEIGHT_SMALL)
@@ -35,6 +35,16 @@ namespace graphics
 #define textFourthLine_large (textThirdLine_large + (FONT_HEIGHT_SMALL + 5))
 #define textFifthLine_large (textFourthLine_large + (FONT_HEIGHT_SMALL + 5))
 #define textSixthLine_large (textFifthLine_large + (FONT_HEIGHT_SMALL + 5))
+
+#ifndef BASEUI_HEADER_MARGIN
+#define BASEUI_HEADER_MARGIN 0
+#endif
+#ifndef BASEUI_HEADER_LR_MARGIN
+#define BASEUI_HEADER_LR_MARGIN 0
+#endif
+#ifndef ROUNDED_SCREEN
+#define ROUNDED_SCREEN false
+#endif
 
 // Quick screen access
 #define SCREEN_WIDTH display->getWidth()
