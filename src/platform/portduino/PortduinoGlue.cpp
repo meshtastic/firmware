@@ -915,6 +915,9 @@ bool loadConfig(const char *configPath)
             }
             std::string gpsdHost = yamlConfig["GPS"]["GpsdHost"].as<std::string>("");
             if (!gpsdHost.empty()) {
+                if (portduino_config.has_gps) {
+                    LOG_WARN("GPS config: both SerialPath and GpsdHost are set; GpsdHost takes priority");
+                }
                 portduino_config.gpsd_host = gpsdHost;
                 portduino_config.gpsd_port = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
                 portduino_config.has_gps = 1;

@@ -4,6 +4,7 @@
 #include "configuration.h"
 
 #include <arpa/inet.h>
+#include <cerrno>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -36,20 +37,23 @@ bool GpsdSerial::connectToGpsd()
         return false;
     }
 
-    int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (fd < 0) {
-        freeaddrinfo(res);
-        LOG_WARN("gpsdSerial: socket() failed");
-        return false;
-    }
-
-    if (connect(fd, res->ai_addr, res->ai_addrlen) != 0) {
-        freeaddrinfo(res);
+    // Try every address returned by getaddrinfo (e.g. ::1 before 127.0.0.1).
+    int fd = -1;
+    for (struct addrinfo *rp = res; rp != nullptr; rp = rp->ai_next) {
+        fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (fd < 0)
+            continue;
+        if (connect(fd, rp->ai_addr, rp->ai_addrlen) == 0)
+            break; // connected
         ::close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(res);
+
+    if (fd < 0) {
         LOG_WARN("gpsdSerial: connect to %s:%d failed", _host.c_str(), _port);
         return false;
     }
-    freeaddrinfo(res);
 
     // Switch to non-blocking so available()/read() never stall the GPS thread.
     fcntl(fd, F_SETFL, O_NONBLOCK);
@@ -68,6 +72,7 @@ void GpsdSerial::begin(unsigned long /*baud*/, uint16_t /*config*/)
 {
     if (_sockfd >= 0)
         end();
+    _lastConnectAttemptMs = 0; // force immediate connect on begin()
     connectToGpsd();
 }
 
@@ -87,8 +92,10 @@ void GpsdSerial::fillBuffer()
 
     uint8_t tmp[256];
     ssize_t n;
-    while ((n = recv(_sockfd, tmp, sizeof(tmp), MSG_DONTWAIT)) > 0) {
-        for (ssize_t i = 0; i < n; i++)
+    while (_rxBuf.size() < RX_BUF_MAX && (n = recv(_sockfd, tmp, sizeof(tmp), MSG_DONTWAIT)) > 0) {
+        size_t space = RX_BUF_MAX - _rxBuf.size();
+        size_t toCopy = (static_cast<size_t>(n) < space) ? static_cast<size_t>(n) : space;
+        for (size_t i = 0; i < toCopy; i++)
             _rxBuf.push_back(tmp[i]);
     }
 
@@ -103,8 +110,15 @@ void GpsdSerial::fillBuffer()
 
 int GpsdSerial::available()
 {
-    if (_sockfd < 0)
-        connectToGpsd();
+    if (_sockfd < 0) {
+        // Throttle reconnect attempts to avoid log spam and repeated DNS lookups
+        // when gpsd is unreachable.
+        uint32_t now = millis();
+        if (now - _lastConnectAttemptMs >= RECONNECT_INTERVAL_MS) {
+            _lastConnectAttemptMs = now;
+            connectToGpsd();
+        }
+    }
     fillBuffer();
     return static_cast<int>(_rxBuf.size());
 }

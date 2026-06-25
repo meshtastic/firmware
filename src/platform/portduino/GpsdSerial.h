@@ -13,10 +13,14 @@ namespace arduino {
 // available()/read() interface so the GPS class can feed them to TinyGPS++.
 class GpsdSerial : public HardwareSerial
 {
+    static constexpr size_t RX_BUF_MAX = 4096;
+    static constexpr uint32_t RECONNECT_INTERVAL_MS = 5000;
+
     std::string _host;
     int _port = 2947;
     int _sockfd = -1;
     std::deque<uint8_t> _rxBuf;
+    uint32_t _lastConnectAttemptMs = 0;
 
     bool connectToGpsd();
     void fillBuffer();
