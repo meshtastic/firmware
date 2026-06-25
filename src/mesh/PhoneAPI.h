@@ -46,6 +46,7 @@ class PhoneAPI
         STATE_SEND_MY_INFO, // send our my info record
         STATE_SEND_OWN_NODEINFO,
         STATE_SEND_METADATA,
+        STATE_SEND_REGION_PRESETS,  // Send the region->valid-preset map (one message)
         STATE_SEND_CHANNELS,        // Send all channels
         STATE_SEND_CONFIG,          // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG,    // Send Module specific config
