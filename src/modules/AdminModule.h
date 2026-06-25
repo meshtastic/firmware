@@ -58,7 +58,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     /**
      * Setters
      */
-    void handleSetOwner(meshtastic_User &o);
+    void handleSetOwner(const meshtastic_User &o);
     void handleSetChannel(const meshtastic_Channel &cc);
 
   protected:
@@ -87,6 +87,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
 static constexpr const char *licensedModeMessage =
     "Licensed mode activated, removing admin channel and encryption from all channels";
+
+static constexpr const char *publicChannelPrecisionMessage =
+    "Precise position is not allowed on a public (open / known-key) channel; reduced to coarse precision";
 
 extern AdminModule *adminModule;
 
