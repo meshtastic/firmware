@@ -13,7 +13,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get -y update --fix-missing
-        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev lsb-release
+        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev lsb-release
 
     - name: Setup Python
       uses: actions/setup-python@v6

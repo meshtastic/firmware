@@ -1,0 +1,20 @@
+# https://github.com/wehooper4/Meshtastic-Hardware/tree/main/ZebraHAT
+# Use for 2 watt hat
+Meta:
+  name: ZebraHat 2W
+  support: community
+  compatible:
+    - raspberry-pi
+
+Lora:
+  Module: sx1262  # Zebra SX1262 Pi Hat - 2W
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  SX126X_MAX_POWER: 8 
+  CS: 24
+  IRQ: 22
+  Busy: 27
+  Reset: 17
+  RXen: 25
+I2C:
+  I2CDevice: /dev/i2c-1
