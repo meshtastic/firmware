@@ -447,6 +447,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Commit transaction for edited settings");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
+        flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
     }
     case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
@@ -741,7 +742,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         changed = 1;
         owner.is_licensed = o.is_licensed;
         if (channels.ensureLicensedOperation()) {
-            sendWarning(licensedModeMessage);
+            warnLicensedMode();
         }
     }
     if (owner.has_is_unmessagable != o.has_is_unmessagable ||
@@ -1060,6 +1061,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     saveChanges(changes, requiresReboot);
     if (loraPresetWarnPending)
         warnOnLoraPresetChange(pendingOldLora, pendingNewLora);
+    // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
+    if (!hasOpenEditTransaction)
+        flushChannelWarnings();
 } // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -1180,7 +1184,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
-        sendWarning(licensedModeMessage);
+        warnLicensedMode();
     }
     // Refresh derived state (primaryIndex in particular) BEFORE the precision clamp below. usesPublicKey()
     // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
@@ -1204,6 +1208,9 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
         sendWarning(publicChannelPrecisionMessage);
     saveChanges(SEGMENT_CHANNELS, false);
     warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
+    // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
+    if (!hasOpenEditTransaction)
+        flushChannelWarnings();
 }
 
 /**
@@ -1612,7 +1619,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     // Remove PSK of primary channel for plaintext amateur usage
 
     if (channels.ensureLicensedOperation()) {
-        sendWarning(licensedModeMessage);
+        warnLicensedMode();
     }
     channels.onConfigChanged();
 
@@ -1750,11 +1757,11 @@ void AdminModule::sendWarningAndLog(const char *format, ...)
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
 
-    LOG_WARN(buf);
-    // 2. Call sendWarning
-    // SECURITY NOTE: We pass "%s", buf instead of just 'buf'.
-    // If 'buf' contained a % symbol (e.g. "Battery 50%"), passing it directly
-    // would crash sendWarning. "%s" treats it purely as text.
+    // SECURITY NOTE: Both LOG_WARN and sendWarning are printf-style, so we pass
+    // "%s", buf rather than 'buf' directly. If 'buf' contained a % symbol (e.g. a
+    // user-supplied channel name like "50%"), passing it as the format string would
+    // read bogus varargs and could crash. "%s" treats it purely as text.
+    LOG_WARN("%s", buf);
     sendWarning("%s", buf);
 }
 
@@ -1767,6 +1774,68 @@ static void normalizePresetName(const char *src, char *dst, size_t dstLen)
             dst[j++] = (char)tolower((unsigned char)src[i]);
     }
     dst[j] = '\0';
+}
+
+// Record one channel-configuration warning. The first message is kept verbatim in case it
+// turns out to be the only one; nameIssue/pskIssue and the channel bitmask feed the catch-all
+// wording if more than one channel ends up flagged. flushChannelWarnings() emits the result.
+void AdminModule::queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue, const char *format, ...)
+{
+    if (pendingWarningCount == 0) {
+        va_list args;
+        va_start(args, format);
+        vsnprintf(pendingWarningText, sizeof(pendingWarningText), format, args);
+        va_end(args);
+    }
+    if (channelIndex < MAX_NUM_CHANNELS)
+        pendingWarningChannels |= (1u << channelIndex);
+    pendingWarningNameIssue |= nameIssue;
+    pendingWarningPskIssue |= pskIssue;
+    pendingWarningCount++;
+}
+
+// Queue the fixed "licensed mode activated" notice, deferring it to commit during an edit
+// transaction so repeated triggers collapse to a single message.
+void AdminModule::warnLicensedMode()
+{
+    if (hasOpenEditTransaction)
+        pendingLicenseWarning = true;
+    else
+        sendWarning(licensedModeMessage);
+}
+
+// Emit the coalesced channel warning(s): nothing if none queued, the lone message verbatim if
+// exactly one, otherwise a single catch-all naming every flagged channel. The licensed-mode
+// notice, if queued, is emitted once alongside. Always resets state.
+void AdminModule::flushChannelWarnings()
+{
+    if (pendingLicenseWarning)
+        sendWarning(licensedModeMessage);
+
+    if (pendingWarningCount == 1) {
+        sendWarningAndLog("%s", pendingWarningText);
+    } else if (pendingWarningCount > 1) {
+        char list[48] = {};
+        for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
+            if (!(pendingWarningChannels & (1u << i)))
+                continue;
+            char num[8];
+            snprintf(num, sizeof(num), "%s%u", *list ? ", " : "", i);
+            strncat(list, num, sizeof(list) - strlen(list) - 1);
+        }
+        if (pendingWarningNameIssue && pendingWarningPskIssue)
+            sendWarningAndLog("There may be name and PSK issues on channels %s", list); // max 60 bytes
+        else if (pendingWarningNameIssue)
+            sendWarningAndLog("There may be name issues on channels %s", list); // max 52 bytes
+        else
+            sendWarningAndLog("There may be PSK issues on channels %s", list); // max 51 bytes
+    }
+    pendingWarningText[0] = '\0';
+    pendingWarningChannels = 0;
+    pendingWarningCount = 0;
+    pendingWarningNameIssue = false;
+    pendingWarningPskIssue = false;
+    pendingLicenseWarning = false;
 }
 
 /**
@@ -1791,12 +1860,10 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
     if (cc.role == meshtastic_Channel_Role_DISABLED || !cc.has_settings) // don't check unused channels
         return;
 
-    if (cc.settings.psk.size == 0 && !owner.is_licensed) // blank PSK and unlicensed
-        sendWarningAndLog("Channel %d '%s' has a blank PSK (no encryption). "
-                          "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
-                          cc.index, cc.settings.name);
+    bool blankPsk = (cc.settings.psk.size == 0 && !owner.is_licensed);
 
     if (!config.lora.use_preset) { // custom or unset preset can mistype things too
+        const char *mistypePreset = nullptr;
         if (*cc.settings.name) {
             char normChan[32];
             normalizePresetName(cc.settings.name, normChan, sizeof(normChan));
@@ -1804,20 +1871,33 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
                  preset <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX;
                  preset = (meshtastic_Config_LoRaConfig_ModemPreset)(preset + 1)) {
                 const char *name = DisplayFormatters::getModemPresetDisplayName(preset, false, true);
+                if (strcmp(name, "Invalid") == 0)
+                    continue; // skip preset slots without a real display name
                 if (strcmp(cc.settings.name, name) == 0)
                     break; // exact match - not a mistype, no warning
                 char normPreset[32];
                 normalizePresetName(name, normPreset, sizeof(normPreset));
                 if (strcmp(normChan, normPreset) == 0) {
-                    sendWarningAndLog("Channel %d name '%s' looks like a mistype of '%s' - "
-                                      "make sure to type it exactly!", // max 90 bytes
-                                      cc.index, cc.settings.name, name);
+                    mistypePreset = name;
                     break;
                 }
             }
         }
+        // At most one warning: collapse blank-PSK + mistype into a single catch-all.
+        if (blankPsk && mistypePreset)
+            queueChannelWarning(cc.index, true, true, "There may be name and PSK issues on channel %d", cc.index);
+        else if (mistypePreset)
+            queueChannelWarning(cc.index, true, false,
+                                "Channel %d name '%s' looks like a mistype of '%s' - "
+                                "make sure to type it exactly!", // max 90 bytes
+                                cc.index, cc.settings.name, mistypePreset);
+        else if (blankPsk)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d '%s' has a blank PSK (no encryption). "
+                                "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                                cc.index, cc.settings.name);
         return;
-    } // custom or no preset config - no further checks
+    }
 
     const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true);
     bool isDefaultKey = (cc.settings.psk.size == 1 && cc.settings.psk.bytes[0] == 0x01);
@@ -1826,26 +1906,60 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
     normalizePresetName(cc.settings.name, normChan, sizeof(normChan));
 
     if (!*cc.settings.name) {
-        // Blank name resolves to the preset name - warn if the key won't match.
-        if (!isDefaultKey && cc.settings.psk.size > 0)
-            sendWarningAndLog("Channel %d will resolve to preset '%s' but uses a non-default key - "
-                              "other nodes on this preset cannot decode it.", // max 112 bytes
-                              cc.index, presetName);
+        // Blank name resolves to the preset name - A and B are mutually exclusive (psk.size can't be both 0 and >0)
+        if (blankPsk)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d '%s' has a blank PSK (no encryption). "
+                                "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                                cc.index, cc.settings.name);
+        else if (!isDefaultKey && cc.settings.psk.size > 0)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d will resolve to preset '%s' but uses a non-default key - "
+                                "default-key nodes can't decode it.", // max 102 bytes
+                                cc.index, presetName);
         return;
     }
 
-    if (strcmp(normChan, normPreset) != 0) // not using a preset name for channel
+    if (strcmp(normChan, normPreset) != 0) { // name unrelated to preset
+        if (blankPsk)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d '%s' has a blank PSK (no encryption). "
+                                "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                                cc.index, cc.settings.name);
         return;
+    }
 
-    if (strcmp(cc.settings.name, presetName) != 0)
-        sendWarningAndLog("Channel %d name '%s' looks like a mistype of '%s' - "
-                          "clear the name to use the preset name automatically.", // max 113 bytes
-                          cc.index, cc.settings.name, presetName);
+    bool variantName = (strcmp(cc.settings.name, presetName) != 0);
+    bool keyMismatch = (!isDefaultKey && cc.settings.psk.size > 0);
+    int issues = (int)blankPsk + (int)variantName + (int)keyMismatch;
 
-    if (!isDefaultKey && cc.settings.psk.size > 0)
-        sendWarningAndLog("Channel %d '%s' matches preset '%s' but uses a non-default key - "
-                          "other nodes on this preset cannot decode it.", // max 118 bytes
-                          cc.index, cc.settings.name, presetName);
+    if (issues > 1) {
+        bool hasNameIssue = variantName;
+        bool hasPskIssue = blankPsk || keyMismatch;
+        if (hasNameIssue && hasPskIssue)
+            queueChannelWarning(cc.index, true, true, "There may be name and PSK issues on channel %d", cc.index);
+        else if (hasNameIssue)
+            queueChannelWarning(cc.index, true, false, "There may be name issues on channel %d", cc.index);
+        else
+            queueChannelWarning(cc.index, false, true, "There may be PSK issues on channel %d", cc.index);
+        return;
+    }
+
+    if (blankPsk)
+        queueChannelWarning(cc.index, false, true,
+                            "Channel %d '%s' has a blank PSK (no encryption). "
+                            "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                            cc.index, cc.settings.name);
+    if (variantName)
+        queueChannelWarning(cc.index, true, false,
+                            "Channel %d name '%s' looks like a mistype of '%s' - "
+                            "clear the name to use the preset name automatically.", // max 113 bytes
+                            cc.index, cc.settings.name, presetName);
+    if (keyMismatch)
+        queueChannelWarning(cc.index, false, true,
+                            "Channel %d '%s' matches preset '%s' but uses a non-default key - "
+                            "default-key nodes can't decode it.", // max 108 bytes
+                            cc.index, cc.settings.name, presetName);
 } // warnOnChannelSet
 
 /**
@@ -1879,21 +1993,24 @@ void AdminModule::warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &old
     const char *newName = DisplayFormatters::getModemPresetDisplayName(newLora.modem_preset, false, true);
     normalizePresetName(newName, normNew, sizeof(normNew));
 
+    // Queue one (name) warning per affected channel; flushChannelWarnings() collapses them
+    // into a single message - either the lone warning verbatim or a catch-all listing indices.
     for (int i = 0; i < channels.getNumChannels(); i++) {
         const meshtastic_Channel &ch = channels.getByIndex(i);
         if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.has_settings || !*ch.settings.name)
             continue;
         char normChan[32];
         normalizePresetName(ch.settings.name, normChan, sizeof(normChan));
-        if (*normOld && strcmp(normChan, normOld) == 0) {
-            sendWarningAndLog("Channel %d name '%s' matches the old preset. "
-                              "Rename it manually if it should track the new preset.", // max 98 bytes
-                              i, ch.settings.name);
-        } else if (strcmp(normChan, normNew) == 0) {
-            sendWarningAndLog("Channel %d '%s' looks like preset '%s' but won't auto-resolve - "
-                              "clear the name to fix it.", // max 98 bytes
-                              i, ch.settings.name, newName);
-        }
+        if (*normOld && strcmp(normChan, normOld) == 0)
+            queueChannelWarning(i, true, false,
+                                "Channel %d name '%s' matches the old preset. "
+                                "Rename it manually if it should track the new preset.", // max 98 bytes
+                                i, ch.settings.name);
+        else if (strcmp(normChan, normNew) == 0)
+            queueChannelWarning(i, true, false,
+                                "Channel %d '%s' looks like preset '%s' but won't auto-resolve - "
+                                "clear the name to fix it.", // max 98 bytes
+                                i, ch.settings.name, newName);
     }
 } // warnOnLoraPresetChange
 
