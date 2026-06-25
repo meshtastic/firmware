@@ -31,13 +31,63 @@ static uint32_t
     timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
+#ifdef PIO_UNIT_TESTING
+// Test seam: unit tests can inject a fake system clock (e.g. the uptime seconds that
+// gettimeofday() returns on boards without a real RTC, like RP2040) and force readFromRTC()
+// down the no-hardware-RTC fallback even when a hardware-RTC branch is compiled in.
+static bool hasMockSystemTime = false;
+static bool forceSystemTimeFallback = false;
+static struct timeval mockSystemTime = {};
+#endif
+
+// Reads the platform system clock (or the injected mock during unit tests). Used only by the
+// no-hardware-RTC fallback below, so it may be unused on builds with a hardware RTC.
+[[maybe_unused]] static bool readSystemTime(struct timeval *tv)
+{
+#ifdef PIO_UNIT_TESTING
+    if (hasMockSystemTime) {
+        *tv = mockSystemTime;
+        return true;
+    }
+#endif
+    return gettimeofday(tv, NULL) == 0;
+}
+
+// Seeds the clock from the system time on boards without a hardware RTC. gettimeofday() can
+// return uptime rather than wall-clock time there (e.g. RP2040), so only adopt it when we have
+// nothing better yet -- never clobber a higher-quality GPS/NTP/phone source (issue #9828).
+[[maybe_unused]] static RTCSetResult readFromSystemTimeFallback()
+{
+    struct timeval tv;
+    if (readSystemTime(&tv)) {
+        uint32_t now = millis();
+        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+        if (currentQuality == RTCQualityNone) {
+            LOG_DEBUG("Seed time from system clock: %lu", (unsigned long)printableEpoch);
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
+        } else {
+            LOG_DEBUG("Ignore system clock fallback (%lu); current RTC quality is %s", (unsigned long)printableEpoch,
+                      RtcName(currentQuality));
+        }
+        return RTCSetResultSuccess;
+    }
+    return RTCSetResultNotSet;
+}
+
 /**
- * Reads the current date and time from the RTC module and updates the system time.
- * @return True if the RTC was successfully read and the system time was updated, false otherwise.
+ * Reads date/time from the RTC module (or system-time fallback) and seeds internal timekeeping.
+ * @return RTCSetResultSuccess if a time source was read successfully (even if an existing higher-quality time is retained).
  */
 RTCSetResult readFromRTC()
 {
-    struct timeval tv; /* btw settimeofday() is helpful here too*/
+#ifdef PIO_UNIT_TESTING
+    if (forceSystemTimeFallback) {
+        return readFromSystemTimeFallback();
+    }
+#endif
+
+    [[maybe_unused]] struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
     if (rtc_found.address == RV3028_RTC) {
         uint32_t now = millis();
@@ -162,14 +212,7 @@ RTCSetResult readFromRTC()
         }
     }
 #else
-    if (!gettimeofday(&tv, NULL)) {
-        uint32_t now = millis();
-        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
-        LOG_DEBUG("Read RTC time as %ld", printableEpoch);
-        timeStartMsec = now;
-        zeroOffsetSecs = tv.tv_sec;
-        return RTCSetResultSuccess;
-    }
+    return readFromSystemTimeFallback();
 #endif
     return RTCSetResultNotSet;
 }
@@ -292,7 +335,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
                 LOG_WARN("Failed to set time for RX8130CE");
             }
         }
-#elif defined(ARCH_ESP32)
+#elif defined(ARCH_ESP32) || defined(ARCH_RP2040)
         settimeofday(tv, NULL);
 #endif
 
@@ -422,6 +465,38 @@ void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
     timeStartMsec = millis() - (secondsSinceBoot * 1000);
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
+}
+
+void clearRTCSystemTimeForTests()
+{
+    hasMockSystemTime = false;
+    mockSystemTime = {};
+}
+
+void setRTCSystemTimeForTests(const struct timeval *tv)
+{
+    if (tv == NULL) {
+        clearRTCSystemTimeForTests();
+        return;
+    }
+    mockSystemTime = *tv;
+    hasMockSystemTime = true;
+}
+
+void setReadFromRTCUseSystemTimeForTests(bool enabled)
+{
+    forceSystemTimeFallback = enabled;
+}
+
+void resetRTCStateForTests()
+{
+    currentQuality = RTCQualityNone;
+    timeStartMsec = 0;
+    zeroOffsetSecs = 0;
+    lastSetFromPhoneNtpOrGps = 0;
+    lastTimeValidationWarning = 0;
+    setReadFromRTCUseSystemTimeForTests(false);
+    clearRTCSystemTimeForTests();
 }
 #endif
 
