@@ -29,21 +29,35 @@ export function createCH341Bridge(Module, device) {
     // vid/pid/serial come from the C side; if a device was already handed in
     // (typical — selected via a user gesture), just open that one.
     async open(vid, pid, serial) {
-      try {
-        let dev = device;
-        if (!dev) {
-          dev = await CH341.tryReconnect({ vid, pid }).then((c) =>
-            c ? c.device : null,
-          );
-          if (!dev) return -2; // no granted device; page must requestDevice first
-        }
-        ch = new CH341(dev);
-        await ch.open();
-        return 0;
-      } catch (e) {
-        console.error("CH341 open failed:", e);
-        return -1;
+      let dev = device;
+      if (!dev) {
+        dev = await CH341.tryReconnect({ vid, pid }).then((c) =>
+          c ? c.device : null,
+        );
+        if (!dev) return -2; // no granted device; page must requestDevice first
       }
+      // First-connect is flaky: the WebUSB interface can be momentarily
+      // unclaimable right after the grant, or still held by a prior session
+      // (yields the transient "Could not open SPI: -1"). Retry with a short
+      // backoff, resetting the device between attempts so claimInterface doesn't
+      // trip over a half-open device.
+      const attempts = 4;
+      for (let i = 0; i < attempts; i++) {
+        ch = new CH341(dev);
+        try {
+          await ch.open();
+          return 0;
+        } catch (e) {
+          console.warn(`CH341 open attempt ${i + 1}/${attempts} failed:`, e);
+          try {
+            await dev.close(); // release/close so the next attempt starts clean
+          } catch (_) {}
+          if (i < attempts - 1)
+            await new Promise((r) => setTimeout(r, 200 * (i + 1)));
+        }
+      }
+      console.error("CH341 open failed after", attempts, "attempts");
+      return -1;
     },
 
     // Read `count` bytes from the heap at writePtr, full-duplex transfer, write

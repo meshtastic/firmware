@@ -220,8 +220,20 @@ void wasm_config_apply()
 // reconfigure observer recomputes the carrier freq + saveToDisk). A region change
 // is reconfigure-only — no reboot. Returns 0 on success, -1 if validation fails.
 // `region` is a meshtastic_Config_LoRaConfig_RegionCode enum value.
+// Re-entrancy guard. The node is single-threaded + Asyncify: while setup()/loop()
+// is suspended inside a WebUSB transfer, the JS event loop is free, so a stray DOM
+// or timer callback could re-enter a wasm_* entry point — starting a second
+// Asyncify unwind ("async operation already in flight" abort) or clobbering shared
+// PhoneAPI state. The host MUST call these only BETWEEN wasm_loop_once() ticks; the
+// flag (set around setup()/loop() in portduino_main_wasm.cpp) lets the entry points
+// reject a mid-tick call rather than corrupt/abort. The JS-side queue is the real
+// fix — this is just the safety net the design otherwise lacked.
+extern "C" volatile bool g_wasm_in_firmware = false;
+
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
 {
+    if (g_wasm_in_firmware)
+        return -2; // busy: re-entered mid-tick; call between wasm_loop_once() ticks
     auto newRegion = (meshtastic_Config_LoRaConfig_RegionCode)region;
     if (config.lora.region == newRegion)
         return 0; // no-op
@@ -284,6 +296,8 @@ static WasmPhoneAPI *phone()
 // 1 if accepted, 0 if rejected (e.g. per-portnum throttle — not a transport error).
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_to_radio(const uint8_t *buf, size_t len)
 {
+    if (g_wasm_in_firmware)
+        return 0; // busy: re-entered mid-tick; the host must drain between ticks
     WasmPhoneAPI *p = phone();
     return (p && p->handleToRadio((uint8_t *)buf, len)) ? 1 : 0;
 }
@@ -292,6 +306,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_to_radio(const uint8_t *buf, size_t
 // count, or 0 when nothing is ready this call. out must be >= 512.
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_from_radio(uint8_t *out, size_t max)
 {
+    if (g_wasm_in_firmware)
+        return 0; // busy: re-entered mid-tick; drain between ticks
     WasmPhoneAPI *p = phone();
     if (!p || max < 512 || !p->available())
         return 0;
@@ -301,6 +317,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_from_radio(uint8_t *out, size_t max
 // Cheap readiness check (no 512B buffer needed) for the JS pump.
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_available()
 {
+    if (g_wasm_in_firmware)
+        return 0; // busy: re-entered mid-tick
     WasmPhoneAPI *p = phone();
     return (p && p->available()) ? 1 : 0;
 }

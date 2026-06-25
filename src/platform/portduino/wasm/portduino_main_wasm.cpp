@@ -25,12 +25,21 @@ extern "C" void loop();
 extern void portduinoSetup();
 extern void wasm_fs_mount(); // points portduinoVFS at /meshdata (portduino_glue_wasm.cpp)
 
+// Re-entrancy guard (defined in portduino_glue_wasm.cpp). True while the firmware
+// is executing setup()/loop() — including while it is Asyncify-suspended inside a
+// WebUSB transfer — so the wasm_* API/region entry points reject a mid-tick
+// re-entry from JS instead of corrupting state or aborting Asyncify. The host is
+// expected to call them only between ticks; this is the safety net.
+extern "C" volatile bool g_wasm_in_firmware;
+
 // Boot the node. Call from JS AFTER Module.ch341 (the WebUSB bridge) is wired up.
 extern "C" EMSCRIPTEN_KEEPALIVE void wasm_setup()
 {
+    g_wasm_in_firmware = true;
     wasm_fs_mount();
     portduinoSetup();
     setup();
+    g_wasm_in_firmware = false;
 }
 
 // Called repeatedly by JS on a timer. Returns the firmware's requested delay in
@@ -42,7 +51,9 @@ extern "C" EMSCRIPTEN_KEEPALIVE void wasm_setup()
 // JS setTimeout(_, 5)) — RX latency is bounded by pollMissedIrqs() each tick.
 extern "C" EMSCRIPTEN_KEEPALIVE int wasm_loop_once()
 {
+    g_wasm_in_firmware = true;
     loop();
+    g_wasm_in_firmware = false;
     return 5; // ms; JS caps the scheduling cadence
 }
 
