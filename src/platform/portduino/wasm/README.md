@@ -65,7 +65,7 @@ pump();
 **API control:** feed a `ToRadio` protobuf with `wasm_api_to_radio(ptr,len)` and
 drain `FromRadio` with `wasm_api_from_radio(out,max)` — the firmware's own
 `PhoneAPI`, unframed. The official `@meshtastic/core` SDK drives it through a
-~40-line in-process transport (see the `meshtastic-web-node` repo, which hosts
+~40-line in-process transport (see the `meshtasticd-wasm-node` repo, which hosts
 the dev server, the SDK-UI page, the headless node-usb runner, and the TCP :4403
 bridge for the Python CLI). WebUSB is Chromium-only.
 
