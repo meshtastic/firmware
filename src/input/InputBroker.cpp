@@ -2,6 +2,7 @@
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/HapticFeedback.h"
 #include "modules/ExternalNotificationModule.h"
 #ifdef MESHTASTIC_LOCKDOWN
 #include "security/LockdownDisplay.h"
@@ -256,6 +257,16 @@ void InputBroker::Init()
         }
         touchBacklightActive = false;
     };
+#endif
+#if defined(HAPTIC_FEEDBACK_PIN)
+    // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
+    touchConfig.suppressLeadUpSound = true;
+    initHapticFeedback();
+    touchConfig.onPress = []() {
+        hapticFeedback->pulse(80);
+        hapticFeedback->armDelayedPulse(500, 80);
+    };
+    touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
 #endif
     TouchButtonThread->initButton(touchConfig);
 #endif
