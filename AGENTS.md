@@ -1,20 +1,22 @@
 # Agent instructions
 
 > **TL;DR**
-> | | |
-> |---|---|
-> | Local tests | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED) |
-> | Hardware tests | `./mcp-server/run-tests.sh` |
-> | Format | `trunk fmt` |
-> | Mirror docs | `.github/copilot-instructions.md` (canonical) · `CLAUDE.md` (Claude Code) |
+>
+> |                |                                                                           |
+> | -------------- | ------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)        |
+> | Hardware tests | `./mcp-server/run-tests.sh`                                               |
+> | Format         | `trunk fmt`                                                               |
+> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `CLAUDE.md` (Claude Code) |
 >
 > **Need this? It's here.**
-> | | |
-> |---|---|
-> | General helpers (clamp, UTF-8, string fmt…) | `src/meshUtils.h` |
-> | Logging macros (LOG_DEBUG / INFO / WARN…) | `src/DebugConfiguration.h` |
-> | New module skeleton | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
-> | Observer / event wiring | `src/Observer.h` |
+>
+> |                                             |                                                            |
+> | ------------------------------------------- | ---------------------------------------------------------- |
+> | General helpers (clamp, UTF-8, string fmt…) | `src/meshUtils.h`                                          |
+> | Logging macros (LOG_DEBUG / INFO / WARN…)   | `src/DebugConfiguration.h`                                 |
+> | New module skeleton                         | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
+> | Observer / event wiring                     | `src/Observer.h`                                           |
 
 This repository is the [Meshtastic](https://meshtastic.org) firmware — a C++17 embedded codebase targeting ESP32 / nRF52 / RP2040 / STM32WL / Linux-Portduino LoRa mesh radios — plus a Python MCP server in `mcp-server/` that AI agents use to flash, configure, and test connected devices.
 

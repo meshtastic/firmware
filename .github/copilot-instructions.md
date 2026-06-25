@@ -1,20 +1,22 @@
 # Meshtastic Firmware - Copilot Instructions
 
 > **TL;DR**
-> | | |
-> |---|---|
-> | Local tests | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED) |
-> | Hardware tests | `./mcp-server/run-tests.sh` |
-> | Format | `trunk fmt` |
-> | Mirror docs | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code) |
+>
+> |                |                                                                                              |
+> | -------------- | -------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                           |
+> | Hardware tests | `./mcp-server/run-tests.sh`                                                                  |
+> | Format         | `trunk fmt`                                                                                  |
+> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code) |
 >
 > **Need this? It's here.**
-> | | |
-> |---|---|
-> | General helpers (clamp, UTF-8, string fmt…) | `src/meshUtils.h` |
-> | Logging macros (LOG_DEBUG / INFO / WARN…) | `src/DebugConfiguration.h` |
-> | New module skeleton | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
-> | Observer / event wiring | `src/Observer.h` |
+>
+> |                                             |                                                            |
+> | ------------------------------------------- | ---------------------------------------------------------- |
+> | General helpers (clamp, UTF-8, string fmt…) | `src/meshUtils.h`                                          |
+> | Logging macros (LOG_DEBUG / INFO / WARN…)   | `src/DebugConfiguration.h`                                 |
+> | New module skeleton                         | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
+> | Observer / event wiring                     | `src/Observer.h`                                           |
 
 This document provides context and guidelines for AI assistants working with the Meshtastic firmware codebase.
 
