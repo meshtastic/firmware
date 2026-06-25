@@ -232,6 +232,18 @@ void portduinoSetup()
     concurrency::hasBeenSetup = true;
     consoleInit();
 
+#ifdef ARCH_PORTDUINO_WASM
+    // Browser build: no YAML/filesystem config. Apply a hardcoded SX1262/CH341
+    // setup and create the WebUSB-backed Ch341Hal, then skip the Linux config path.
+    {
+        extern void wasm_config_apply();
+        wasm_config_apply();
+        ch341Hal =
+            new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+    }
+    return;
+#endif
+
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {
@@ -1122,6 +1134,10 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 
 std::string exec(const char *cmd)
 { // https://stackoverflow.com/a/478960
+#ifdef ARCH_PORTDUINO_WASM
+    (void)cmd; // no shell/popen in the browser — shell-outs degrade to empty
+    return "";
+#endif
     std::array<char, 128> buffer;
     std::string result;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);

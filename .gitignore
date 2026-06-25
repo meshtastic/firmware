@@ -66,3 +66,9 @@ userPrefs.jsonc.mcp-session-bak
 # compiled .proto outputs are ephemeral build artifacts.
 build/fixtures/
 bin/_generated/
+
+# portduino WASM build (bin/build-portduino-wasm.sh) + Emscripten SDK
+build/wasm/
+build/wasm-obj/
+build/wasm-*.log
+.emsdk/

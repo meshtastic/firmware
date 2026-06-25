@@ -1,4 +1,7 @@
 #include "configuration.h"
+#ifdef ARCH_PORTDUINO_WASM
+#include <emscripten.h>
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
@@ -97,7 +100,9 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 
 #ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
+#ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#endif
 #include "platform/portduino/PortduinoGlue.h"
 #include <cstdlib>
 #include <fstream>
@@ -1105,10 +1110,12 @@ void setup()
     if (!rIf)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
     else {
+#ifndef ARCH_PORTDUINO_WASM
         // Log bit rate to debug output
         LOG_DEBUG("LoRA bitrate = %f bytes / sec", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
                                                     (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
                                                        1000);
+#endif
 
         router->addInterface(std::move(rIf));
     }
@@ -1395,7 +1402,16 @@ void loop()
 #ifdef DEBUG_LOOP_TIMING
         LOG_DEBUG("main loop delay: %d", delayMsec);
 #endif
+#ifdef ARCH_PORTDUINO_WASM
+        // Single-threaded wasm: mainDelay's InterruptableDelay is a pthread
+        // cond/mutex semaphore that no other thread can ever give(), and
+        // emscripten's single-threaded pthread_cond_timedwait busy-spins. Suspend
+        // cooperatively via Asyncify instead, capping idle sleep so the per-tick
+        // IRQ poll latency stays bounded (RX/TX-done is detected by polling).
+        emscripten_sleep(delayMsec > 50 ? 50 : delayMsec);
+#else
         mainDelay.delay(delayMsec);
+#endif
     }
 }
 #endif
