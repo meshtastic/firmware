@@ -32,16 +32,33 @@
 // already synchronous on the host fs) so syncfs is a harmless no-op there.
 extern "C" EMSCRIPTEN_KEEPALIVE void wasm_fs_sync()
 {
-    // NOTE: loose != and string ops only — clang-format mangles !== and /regex/
-    // literals inside EM_ASM JS (splitting them into invalid tokens at runtime).
+    // Coalesce: IDBFS syncfs is async, and overlapping syncs warn "2 FS.syncfs
+    // operations in flight". Never run two at once — if one is in flight, mark a
+    // pending re-sync and let the running one chain it when it finishes.
+    // NOTE: loose != / == and string ops only — clang-format mangles !== and
+    // /regex/ literals inside EM_ASM JS (splitting them into invalid tokens).
     EM_ASM({
         try {
-            if (typeof FS != "undefined" && FS.syncfs)
+            if (typeof FS == "undefined" || !FS.syncfs)
+                return;
+            if (Module.__fsSyncing) {
+                Module.__fsSyncPending = true;
+                return;
+            }
+            var run = function()
+            {
+                Module.__fsSyncing = true;
+                Module.__fsSyncPending = false;
                 FS.syncfs(
                     false, function(err) {
+                        Module.__fsSyncing = false;
                         if (err)
                             console.warn("syncfs:", err);
+                        if (Module.__fsSyncPending)
+                            run();
                     });
+            };
+            run();
         } catch (e) {
             console.warn("syncfs threw:", e);
         }
