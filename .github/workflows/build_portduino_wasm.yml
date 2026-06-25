@@ -1,26 +1,39 @@
 name: Build PortDuino WASM
 
-# Builds the ARCH_PORTDUINO_WASM target (the portduino node compiled to
-# WebAssembly, src/platform/portduino/wasm/ + bin/build-portduino-wasm.sh) so it
-# can't silently bit-rot. Software/CI only — asserts the full mesh stack +
-# RadioLib + Crypto/XEdDSA compile and link to meshnode.{mjs,wasm}. It does NOT
-# exercise the radio (that's CH341/WebUSB, hardware).
+# Builds the [env:wasm] target (the portduino node compiled to WebAssembly,
+# src/platform/portduino/wasm/) with `pio run -e wasm` so it can't silently
+# bit-rot. Software/CI only — asserts the full mesh stack + RadioLib + Crypto
+# compile and link to meshnode.{mjs,wasm} via the meshtastic/platform-wasm
+# PlatformIO platform (emcc/Asyncify). It does NOT exercise the radio (that's
+# CH341/WebUSB, hardware).
 
 on:
+  # [env:wasm] is not self-contained — it inherits build_flags/lib_deps/
+  # extra_scripts from the root platformio.ini, which runs bin/platformio-*.py.
+  # Trigger on those shared inputs too, or the rot-guard misses the changes most
+  # likely to break the wasm build.
   pull_request:
     paths:
       - "src/**"
       - "userPrefs.jsonc"
+      - "platformio.ini"
+      - "variants/native/portduino/platformio.ini"
       - "variants/native/portduino.ini"
-      - "bin/build-portduino-wasm.sh"
+      - "extra_scripts/wasm_link_flags.py"
+      - "bin/platformio-custom.py"
+      - "bin/platformio-pre.py"
       - ".github/workflows/build_portduino_wasm.yml"
   push:
     branches: [master, develop]
     paths:
       - "src/**"
       - "userPrefs.jsonc"
+      - "platformio.ini"
+      - "variants/native/portduino/platformio.ini"
       - "variants/native/portduino.ini"
-      - "bin/build-portduino-wasm.sh"
+      - "extra_scripts/wasm_link_flags.py"
+      - "bin/platformio-custom.py"
+      - "bin/platformio-pre.py"
       - ".github/workflows/build_portduino_wasm.yml"
   workflow_dispatch:
 
@@ -35,7 +48,8 @@ jobs:
         with:
           submodules: recursive
 
-      # Checkout + Python + PlatformIO + native apt deps (libyaml-cpp, libusb, ...).
+      # Python + PlatformIO. (`pio run -e wasm` installs its own libdeps and the
+      # platform-wasm/framework-portduino packages; it needs no native apt libs.)
       - name: Setup native build
         uses: ./.github/actions/setup-native
 
@@ -45,21 +59,20 @@ jobs:
           version: latest
           actions-cache-folder: emsdk-cache
 
-      # Populate .pio/libdeps/native (RadioLib, Crypto with XEdDSA, Nanopb, ...) and
-      # the portduino framework. The wasm build auto-detects this env (NATIVE_ENV).
-      # On Linux the native link succeeds (no macOS/LovyanGFX issue).
-      - name: Populate native libdeps
-        run: platformio run -e native
-
       - name: Build PortDuino WASM
-        run: bin/build-portduino-wasm.sh
+        run: platformio run -e wasm
 
       - name: Assert WASM artifacts
         run: |
-          if [ ! -s build/wasm/meshnode.mjs ] || [ ! -s build/wasm/meshnode.wasm ]; then
-            echo "::error::wasm artifacts missing"; tail -60 build/wasm-errors.log 2>/dev/null; exit 1
+          OUT=.pio/build/wasm
+          if [ ! -s "$OUT/meshnode.mjs" ] || [ ! -s "$OUT/meshnode.wasm" ]; then
+            echo "::error::wasm artifacts missing"; exit 1
           fi
-          ls -lah build/wasm/meshnode.*
+          # The emcc link succeeds even if embedded EM_ASM JS is malformed, so
+          # parse the generated ES-module loader to catch runtime-JS breakage
+          # (e.g. a formatter splitting !== inside EM_ASM).
+          node --check "$OUT/meshnode.mjs" || { echo "::error::meshnode.mjs failed JS parse"; exit 1; }
+          ls -lah "$OUT"/meshnode.*
 
       - name: Upload WASM artifacts
         if: success()
@@ -68,14 +81,6 @@ jobs:
           name: portduino-wasm
           overwrite: true
           path: |
-            build/wasm/meshnode.mjs
-            build/wasm/meshnode.wasm
+            .pio/build/wasm/meshnode.mjs
+            .pio/build/wasm/meshnode.wasm
           retention-days: 14
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: wasm-build-log
-          path: build/wasm-errors.log
-          retention-days: 7

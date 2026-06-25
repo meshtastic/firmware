@@ -67,7 +67,9 @@ userPrefs.jsonc.mcp-session-bak
 build/fixtures/
 bin/_generated/
 
-# portduino WASM build (bin/build-portduino-wasm.sh) + Emscripten SDK
+# portduino WASM build (pio run -e wasm) + Emscripten SDK. The artifacts land in
+# .pio/build/wasm/ (already ignored via .pio/); these cover the retired
+# standalone emcc build's output dirs and any in-repo emsdk checkout.
 build/wasm/
 build/wasm-obj/
 build/wasm-*.log

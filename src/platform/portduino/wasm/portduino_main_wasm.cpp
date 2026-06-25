@@ -20,10 +20,10 @@ extern "C" void setup();
 extern "C" void loop();
 
 // portduinoSetup() is the firmware's portduino init (PortduinoGlue.cpp). Under
-// ARCH_PORTDUINO_WASM it applies the hardcoded config and creates the WebUSB-backed
-// Ch341Hal, then returns (no YAML/filesystem). Must run before setup().
+// ARCH_PORTDUINO_WASM it applies the wasm config (wasm_config_apply) and creates
+// the WebUSB-backed Ch341Hal, then returns (no YAML/filesystem). Must run before setup().
 extern void portduinoSetup();
-extern void wasm_fs_mount(); // mounts a MEMFS-backed VFS (portduino_glue_web.cpp)
+extern void wasm_fs_mount(); // points portduinoVFS at /meshdata (portduino_glue_wasm.cpp)
 
 // Boot the node. Call from JS AFTER Module.ch341 (the WebUSB bridge) is wired up.
 extern "C" EMSCRIPTEN_KEEPALIVE void wasm_setup()

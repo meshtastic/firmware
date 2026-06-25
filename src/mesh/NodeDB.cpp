@@ -906,11 +906,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #ifdef USERPREFS_CONFIG_LORA_REGION
     config.lora.region = USERPREFS_CONFIG_LORA_REGION;
-#elif defined(ARCH_PORTDUINO_WASM)
-    // The browser/wasm node has no UI yet to set a region on first boot; default
-    // to a valid one so initLoRa picks a real frequency and TX is enabled (an
-    // UNSET region gates both TX and keygen). Overridable later via config.
-    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
 #else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif

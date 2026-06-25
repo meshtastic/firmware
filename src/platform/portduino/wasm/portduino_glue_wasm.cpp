@@ -1,9 +1,10 @@
 // WASM-side portduino glue (ARCH_PORTDUINO_WASM). Replaces the Linux YAML/
-// filesystem config path with a hardcoded SX1262/CH341 setup, mounts a
-// persistent FS (IDBFS in the browser / NODEFS headless), resolves a per-node
-// MAC, sets the LoRa region, and bridges the firmware's PhoneAPI to JS
-// (wasm_api_*). Also supplies delay()/yield()->emscripten_sleep and the other
-// framework symbols normally provided by the excluded linux/LinuxCommon.cpp.
+// filesystem config path with a CH341 setup (a MeshToad by default, or whatever
+// the JS host pre-sets via the wasm_set_lora_* setters), mounts a persistent FS
+// (IDBFS in the browser / NODEFS headless), resolves a per-node MAC, and bridges
+// the firmware's PhoneAPI to JS (wasm_api_*). Also supplies
+// delay()/yield()->emscripten_sleep and the other framework symbols normally
+// provided by the excluded linux/LinuxCommon.cpp.
 //
 // Wiring in the firmware tree (already in place, all #ifdef ARCH_PORTDUINO_WASM):
 //   - PortduinoGlue.cpp portduinoSetup(): calls wasm_config_apply() and
@@ -31,9 +32,11 @@
 // already synchronous on the host fs) so syncfs is a harmless no-op there.
 extern "C" EMSCRIPTEN_KEEPALIVE void wasm_fs_sync()
 {
+    // NOTE: loose != and string ops only — clang-format mangles !== and /regex/
+    // literals inside EM_ASM JS (splitting them into invalid tokens at runtime).
     EM_ASM({
         try {
-            if (typeof FS != = "undefined" && FS.syncfs)
+            if (typeof FS != "undefined" && FS.syncfs)
                 FS.syncfs(
                     false, function(err) {
                         if (err)
@@ -45,10 +48,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void wasm_fs_sync()
     });
 }
 
-// Mount a MEMFS-backed VFS so NodeDB/config saves succeed (in RAM for now;
-// IDBFS for cross-reload persistence is the follow-up). The framework main.cpp
-// (which we replaced) normally does portduinoVFS->mountpoint(); without it every
-// save fails with "File system is not mounted".
+// Point the portduino VFS at /meshdata so NodeDB/config saves succeed (the
+// framework main.cpp we replaced normally does this; without it every save fails
+// with "File system is not mounted"). The JS host has already FS.mount'ed an
+// IDBFS (browser) or NODEFS (headless) backend at /meshdata for real persistence
+// (see web/fs-setup.js); here we just ensure the subtree exists and set the root.
 void wasm_fs_mount()
 {
     mkdir("/meshdata", 0777);
@@ -74,8 +78,8 @@ static std::string wasm_resolve_mac()
     EM_ASM(
         {
             try {
-                var m = (typeof process != = "undefined" && process.env && process.env.MESH_MAC) || "";
-                stringToUTF8(String(m).replace(/ : / g, ""), $0, 32);
+                var m = (typeof process != "undefined" && process.env && process.env.MESH_MAC) || "";
+                stringToUTF8(String(m).split(":").join(""), $0, 32);
             } catch (e) {
             }
         },
@@ -97,7 +101,7 @@ static std::string wasm_resolve_mac()
     EM_ASM(
         {
             try {
-                var c = (typeof crypto != = "undefined" && crypto.getRandomValues) ? crypto : null;
+                var c = (typeof crypto != "undefined" && crypto.getRandomValues) ? crypto : null;
                 if (c)
                     c.getRandomValues(HEAPU8.subarray($0, $0 + 6));
                 else
@@ -306,16 +310,6 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_api_is_connected()
 {
     WasmPhoneAPI *p = phone();
     return (p && p->isConnected()) ? 1 : 0;
-}
-
-// First-boot filesystem: no-op so NodeDB starts empty each load (no scandir/stat,
-// no IDBFS yet). Replace with an IDBFS-backed mount in task #8. This OVERRIDES
-// the strong fsInit() in src/FSCommon.cpp via the linker only if FSCommon.cpp is
-// EXCLUDED from the build; otherwise rename this and add an ARCH_PORTDUINO_WASM
-// guard inside fsInit(). Simplest first pass: exclude FSCommon.cpp, define here.
-extern "C" void fsInit()
-{
-    // RAM-only: nothing to mount. NodeDB.loadFromDisk() will see no files.
 }
 
 // delay()/yield() normally come from framework linux/LinuxCommon.cpp (excluded:

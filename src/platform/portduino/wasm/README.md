@@ -8,14 +8,14 @@ swapped for a WebUSB one. The desktop/native portduino build is untouched.
 
 ## Layout (this dir is excluded from the native PlatformIO `build_src_filter`)
 
-| file                       | role                                                                                                                        |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `portduino_glue_wasm.cpp`  | hardcoded LoRa config (no YAML), MEMFS/IDBFS mount, region/MAC helpers, and the `wasm_api_*` PhoneAPI bridge                |
-| `portduino_main_wasm.cpp`  | `wasm_setup()` / `wasm_loop_once()` — JS drives the cooperative loop                                                        |
-| `libpinedio_webusb.c`      | WebUSB libpinedio backend (sync C ↔ async WebUSB via Asyncify `EM_ASYNC_JS`)                                                |
-| `include/libpinedio-usb.h` | the 12-fn libpinedio API the backend implements                                                                             |
-| `stubs/`                   | `argp.h` shim + jsoncpp serializer stub (MQTT-only, excluded)                                                               |
-| `js/`                      | the WebUSB runtime: `bridge.js` (implements the C backend's imports), `ch341.js` (CH341 transport), `protocol.js` (framing) |
+| file                       | role                                                                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `portduino_glue_wasm.cpp`  | LoRa config (MeshToad default + `wasm_set_lora_*` setters, no YAML), VFS mount, region/MAC helpers, and the `wasm_api_*` PhoneAPI bridge |
+| `portduino_main_wasm.cpp`  | `wasm_setup()` / `wasm_loop_once()` — JS drives the cooperative loop                                                                     |
+| `libpinedio_webusb.c`      | WebUSB libpinedio backend (sync C ↔ async WebUSB via Asyncify `EM_ASYNC_JS`)                                                             |
+| `include/libpinedio-usb.h` | the 12-fn libpinedio API the backend implements                                                                                          |
+| `stubs/`                   | `argp.h` shim + jsoncpp serializer stub (MQTT-only, excluded)                                                                            |
+| `js/`                      | the WebUSB runtime: `bridge.js` (implements the C backend's imports), `ch341.js` (CH341 transport), `protocol.js` (framing)              |
 
 In-tree, six firmware sources carry small `#ifdef ARCH_PORTDUINO_WASM` guards
 (single-threaded cooperative sleep, continuous RX, region default, RNG, etc.):
@@ -24,20 +24,22 @@ In-tree, six firmware sources carry small `#ifdef ARCH_PORTDUINO_WASM` guards
 
 ## Build
 
-Prereqs:
+This is a normal PlatformIO env (`[env:wasm]`) built with the
+[meshtastic/platform-wasm](https://github.com/meshtastic/platform-wasm) platform
+(emcc/em++), exactly like any other board target.
 
-- **Emscripten SDK** — set `EMSDK_ENV=/path/to/emsdk_env.sh` (or have `$EMSDK` / `~/emsdk`).
-- **Native libdeps** — run `pio run -e native-macos` once so RadioLib/Crypto/Nanopb/etc. are present.
+Prereq: an **Emscripten SDK** on `PATH` — `source <emsdk>/emsdk_env.sh` (or
+`export EMSDK=<path>`) so the platform builder can locate `emcc`.
 
 ```sh
-bin/build-portduino-wasm.sh          # cached per-file emcc compile + link
-bin/build-portduino-wasm.sh clean    # wipe the object cache
+pio run -e wasm            # emcc compile + Asyncify link
+pio run -e wasm -t clean   # wipe the build dir
 ```
 
-Output: `build/wasm/meshnode.mjs` + `meshnode.wasm` (ES module, Asyncify, exports
-`_wasm_setup`, `_wasm_loop_once`, `_wasm_fs_sync`, `_wasm_set_region`,
-`_wasm_api_to_radio`, `_wasm_api_from_radio`, `_wasm_api_available`,
-`_wasm_api_is_connected`).
+Output: `.pio/build/wasm/meshnode.mjs` + `meshnode.wasm` (ES module, Asyncify,
+factory `createMeshNode`, exports `_wasm_setup`, `_wasm_loop_once`,
+`_wasm_fs_sync`, `_wasm_set_region`, `_wasm_api_to_radio`, `_wasm_api_from_radio`,
+`_wasm_api_available`, `_wasm_api_is_connected`, the `_wasm_set_lora_*` setters).
 
 ## Run
 

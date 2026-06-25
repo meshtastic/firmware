@@ -287,10 +287,12 @@ void portduinoSetup()
         }
     }
 
+#ifndef ARCH_PORTDUINO_WASM
     if (yamlOnly) {
         std::cout << portduino_config.emit_yaml() << std::endl;
         exit(EXIT_SUCCESS);
     }
+#endif
 
     if (portduino_config.force_simradio) {
         std::cout << "Running in simulated mode." << std::endl;
@@ -745,6 +747,16 @@ int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
 #endif
 }
 
+#ifdef ARCH_PORTDUINO_WASM
+// Browser node: configuration comes from the wasm_set_lora_* setters, not a YAML
+// file. Reached only as dead code after portduinoSetup()'s early return; kept
+// defined (and yaml-free) so those references still link.
+bool loadConfig(const char *configPath)
+{
+    (void)configPath;
+    return false;
+}
+#else
 bool loadConfig(const char *configPath)
 {
     YAML::Node yamlConfig;
@@ -1095,6 +1107,7 @@ bool loadConfig(const char *configPath)
     }
     return true;
 }
+#endif // !ARCH_PORTDUINO_WASM
 
 // https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
 static bool ends_with(std::string_view str, std::string_view suffix)
@@ -1150,6 +1163,7 @@ std::string exec(const char *cmd)
     return result;
 }
 
+#ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault)
 {
     if (sourceNode.IsMap()) {
@@ -1164,3 +1178,4 @@ void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault
         destPin.gpiochip = portduino_config.lora_default_gpiochip;
     }
 }
+#endif // !ARCH_PORTDUINO_WASM
