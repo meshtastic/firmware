@@ -1,5 +1,23 @@
 # Meshtastic Firmware - Copilot Instructions
 
+> **TL;DR**
+>
+> |                |                                                                                              |
+> | -------------- | -------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                           |
+> | Hardware tests | `./mcp-server/run-tests.sh`                                                                  |
+> | Format         | `trunk fmt`                                                                                  |
+> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code) |
+>
+> **Need this? It's here.**
+>
+> |                                             |                                                            |
+> | ------------------------------------------- | ---------------------------------------------------------- |
+> | General helpers (clamp, UTF-8, string fmt…) | `src/meshUtils.h`                                          |
+> | Logging macros (LOG_DEBUG / INFO / WARN…)   | `src/DebugConfiguration.h`                                 |
+> | New module skeleton                         | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
+> | Observer / event wiring                     | `src/Observer.h`                                           |
+
 This document provides context and guidelines for AI assistants working with the Meshtastic firmware codebase.
 
 ## Project Overview
@@ -37,7 +55,7 @@ MQTT provides a bridge between Meshtastic mesh networks and the internet, enabli
 
 Messages are published/subscribed using a hierarchical topic format:
 
-```
+```text
 {root}/{channel_id}/{gateway_id}
 ```
 
@@ -191,7 +209,24 @@ Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which d
 
 ### Eviction
 
-Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly.
+Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `demoteOldestHotNodesToWarm` (the over-cap warm-tier migration), `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly. (Note: `enforceSatelliteCaps`/`evictSatelliteOverCap` call `.erase()` directly on purpose — that's a satellite-only cap trim where the node _stays_ in the header, a different operation from this chokepoint.)
+
+### Warm tier (long-tail identity)
+
+On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node — primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
+
+- **Write:** `getOrCreateMeshNode`'s eviction and `demoteOldestHotNodesToWarm` (the over-cap boot migration) call `warmStore.absorb(num, last_heard, key)` _before_ the node leaves the header.
+- **Read-back:** `getOrCreateMeshNode` calls `warmStore.take()` to rehydrate `last_heard` + key when a warm node is re-admitted; `copyPublicKey()` falls back to the warm tier so the PKI send path finds keys for evicted peers.
+- **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Everywhere else: a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
+- **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap — 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 keeps its flash-scaled 100/200/250, portduino 250). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
+
+### Satellite caps
+
+Only the freshest `MAX_SATELLITE_NODES` nodes keep satellite payloads; the rest of the header table carries just the `NodeInfoLite`. The cap is **per-platform**: 40 on RAM-constrained parts (nRF52840, generic ESP32) since the four maps live in internal SRAM (not PSRAM, ~408 B/node across the four), and 250 on flash-rich hosts (ESP32-S3, portduino) so every hot node can carry rich data as before the cap existed. `enforceSatelliteCaps()` trims each map to the cap on load (returns whether it trimmed); `evictSatelliteOverCap()` trims before each insert. Eviction is by the owning node's hot `last_heard` (stalest first, demoted/absent nodes rank as `last_heard==0`); self is never trimmed.
+
+### On-boot self-care
+
+`NodeDB::nodeDBSelfCare()` runs once identity is established (the constructor after key (re)gen, and `reloadFromDisk()` — _not_ inside `loadFromDisk`, where `getNodeNum()` is still 0). It confirms self is present (warns if a non-empty DB is missing us — a foreign/over-cap file), pins self to index 0, demotes/trims only **non-self** overflow into the warm tier, then rewrites `nodes.proto` **once** and only if it healed something — and never while encrypted storage is locked (it would persist placeholder defaults). `loadFromDisk` deliberately leaves the loaded store untrimmed for this pass.
 
 ### Sync flow: thin NodeInfo + post-COMPLETE_ID replay (no opt-in)
 
@@ -230,7 +265,7 @@ Unit tests for the conversion layer live in `test/test_type_conversions/test_mai
 
 ## Project Structure
 
-```
+```text
 firmware/
 ├── src/                    # Main source code
 │   ├── main.cpp           # Application entry point
@@ -465,7 +500,7 @@ Key defines in variant.h:
 
 ## Build System
 
-## Agent Tooling Baseline
+### Agent Tooling Baseline
 
 Mirror counterpart: `AGENTS.md` under **Agent Tooling Baseline**.
 
@@ -618,27 +653,74 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory with 17 test suites:
+Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count` and is cross-checked on every full run. Current suites:
 
 - `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
 - `test_atak/` - ATAK integration
 - `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
+- `test_hop_scaling/` - Hop scaling histogram and required-hop logic
 - `test_http_content_handler/` - HTTP handling
 - `test_mac_from_string/` - MAC address parsing
 - `test_mesh_module/` - Module framework
 - `test_meshpacket_serializer/` - Packet serialization
 - `test_mqtt/` - MQTT integration
+- `test_nexthop_routing/` - Next-hop routing logic
+- `test_nodedb_blocked/` - NodeDB blocked-node handling
 - `test_packet_history/` - Packet history tracking
+- `test_packet_signing/` - Packet signing
+- `test_position_module/` - Position module behaviour
 - `test_position_precision/` - Position precision helpers
 - `test_radio/` - Radio interface
+- `test_rtc/` - RTC / time handling
 - `test_serial/` - Serial communication
-- `test_traffic_management/` - Traffic management
+- `test_traffic_management/` - Traffic management (dedup, rate-limit, hop-trim, role exceptions)
 - `test_transmit_history/` - Retransmission tracking
 - `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
 - `test_utf8/` - UTF-8 utilities
+- `test_warm_store/` - Warm-tier node store
 
-Run command (preferred — avoids pipe-buffering and the Ubuntu externally-managed-environment error):
+**Preferred run command — `bin/run-tests.sh`** (uses the `coverage` env with ASan/LSan sanitizers; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
+
+```bash
+./bin/run-tests.sh                             # all suites
+./bin/run-tests.sh -f test_traffic_management  # single suite (yields FILTERED, not GREEN)
+```
+
+Exit codes and verdicts (exact counts will vary; examples below are illustrative):
+
+| Exit | Verdict    | Meaning                                                                                                                                                                                                               |
+| ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                           |
+| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                 |
+| 2    | `AMBER`    | All that ran passed, but something was lost: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or `test/native-suite-count` disagrees with the `test/` directory count |
+| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                    |
+
+Examples — exact counts will vary by suite count and env:
+
+```text
+# GREEN: all suites ran and passed
+RESULT: GREEN N/N suites passed [canonical: N/N]
+
+# RED: real test failure
+RESULT: RED 1 failed
+
+# RED: sanitizer exit-time abort (all tests passed but process aborted at exit)
+RESULT: RED exit-time abort (tests passed; likely sanitizer — see hint above)
+
+# AMBER: native-suite-count disagrees with test/ directory count (too low)
+RESULT: AMBER test/ has 24 suite directories but native-suite-count says 5 — update test/native-suite-count after registering new suites
+
+# AMBER: native-suite-count disagrees with test/ directory count (too high)
+RESULT: AMBER test/ has 24 suite directories but native-suite-count says 99 — update test/native-suite-count after removing suites
+
+# FILTERED: single suite run completed cleanly
+RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) — filtered: test_serial [canonical: 1/24]
+```
+
+> **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
+
+Raw `pio test` (no sanitizers, no verdict logic) — use only when you need to override the env:
 
 ```bash
 ~/.platformio/penv/bin/python -m platformio test -e native -f test_your_suite > /tmp/test_out.txt 2>&1
@@ -646,7 +728,7 @@ grep -E 'error:|PASS|FAIL|succeeded|failed' /tmp/test_out.txt
 tail -15 /tmp/test_out.txt
 ```
 
-Do **not** use `pio test … | tail -N` — it discards build errors and shows stale cached results. Do **not** use `pio test … | grep` — line-buffering makes the terminal appear hung until the process exits. Redirect to a file first, then grep.
+Do **not** pipe `pio test` — line-buffering makes the terminal appear hung and hides build errors.
 
 Simulation testing: `bin/test-simulator.sh`
 
