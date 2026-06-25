@@ -74,8 +74,10 @@ int32_t pinedio_init(struct pinedio_inst *inst, void *driver)
         inst->in_error = true;
         return ret < 0 ? ret : -2;
     }
-    // Auto-CS defaults to on upstream until Ch341Hal turns it off.
-    webusb_set_auto_cs(inst->options[PINEDIO_OPTION_AUTO_CS] ? 1 : 1);
+    // Honor the configured Auto-CS. Ch341Hal sets PINEDIO_OPTION_AUTO_CS=0 (CS is
+    // left to RadioLib's NSS, which drives it active-low correctly); it has not
+    // been set yet at init, so this defaults off until Ch341Hal applies it.
+    webusb_set_auto_cs(inst->options[PINEDIO_OPTION_AUTO_CS] ? 1 : 0);
     webusb_get_serial((int)inst->serial_number, sizeof(inst->serial_number));
     webusb_get_product((int)inst->product_string, sizeof(inst->product_string));
     return 0;

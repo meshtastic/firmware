@@ -12,7 +12,7 @@
 // IMPORTANT: a wasm heap can grow across an `await`, so always re-read
 // Module.HEAPU8 *after* awaiting, never cache it across a suspension point.
 
-import { CH341 } from "../src/ch341.js";
+import { CH341 } from "./ch341.js";
 
 export function createCH341Bridge(Module, device) {
   let ch = null;

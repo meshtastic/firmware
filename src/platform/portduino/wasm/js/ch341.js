@@ -155,7 +155,13 @@ export class CH341 {
         let got = 0;
         while (got < dataLen) {
           const r = await this._in(dataLen - got);
-          if (r.length === 0) break;
+          // A zero-length read means the device gave us nothing while MISO bytes
+          // were still outstanding. Leaving them 0 would silently corrupt the SPI
+          // response, so fail loudly instead of returning a partial buffer.
+          if (r.length === 0)
+            throw new Error(
+              `CH341 SPI short read: ${got}/${dataLen} MISO bytes (device returned 0)`,
+            );
           for (let i = 0; i < r.length; i++)
             read[off + got + i] = proto.reverseByte(r[i]);
           got += r.length;
