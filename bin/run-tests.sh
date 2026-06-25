@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run native PlatformIO unit tests and emit a single, unambiguous RED/AMBER/GREEN verdict.
+# Run native PlatformIO unit tests and emit a single, unambiguous verdict.
 #
 # Why this exists: PlatformIO reports failures three different ways ([FAILED], :FAIL:,
 # [ERRORED]) and an all-pass run prints "N succeeded" with NO "0 failed" clause — so naive
@@ -8,16 +8,26 @@
 # canonical set in test/ so a suite silently going missing shows up as AMBER, not green.
 #
 # Usage:
-#   ./bin/run-tests.sh                      # run all suites, full RAG + count cross-check
-#   ./bin/run-tests.sh -f test_utf8         # run one suite (no count cross-check)
+#   ./bin/run-tests.sh                      # run all suites, full verdict + count cross-check
+#   ./bin/run-tests.sh -f test_utf8         # run one suite (yields FILTERED, not GREEN)
 #   ./bin/run-tests.sh -e native            # override env (default: coverage)
 #   ./bin/run-tests.sh --quiet              # only print the final RESULT line
 #
-# Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER.
+# Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
+#
+# Verdicts:
+#   GREEN    — all canonical suites ran, all passed, no ignored test cases.
+#   AMBER    — all that ran passed, but something was lost: a suite silently went missing on a
+#              full run, or individual test cases were skipped (Unity TEST_IGNORE / :IGNORE:).
+#   FILTERED — a -f run completed cleanly; suites not in the filter were intentionally skipped.
+#              Use this when iterating on a single suite; it is not a quality signal.
+#   RED      — at least one failure, build error, or sanitizer fault.
 #
 # The final line is machine-readable, e.g.:
-#   RESULT: GREEN 19/19 suites passed
-#   RESULT: AMBER 17/19 suites ran (missing: test_radio test_serial) — all that ran passed
+#   RESULT: GREEN N/N suites passed
+#   RESULT: AMBER N/M suites ran (missing: test_radio test_serial) — all that ran passed
+#   RESULT: AMBER 3 test case(s) ignored
+#   RESULT: FILTERED 1/N suites ran (not run: …) — filtered: test_utf8
 #   RESULT: RED test_traffic_management: 1 failed  (or: build/crash error)
 #   RESULT: RED sanitizer fault — SUMMARY: AddressSanitizer: 1272 byte(s) leaked  (tests may have
 #           all passed; the coverage build aborts at exit on an ASan/LSan fault — often shown only
@@ -72,6 +82,15 @@ trap 'rm -f "$LOG" "${MARKER:-}"; [[ -n ${PROGRESS_PID:-} ]] && kill "$PROGRESS_
 # "what should run"; a filtered run only expects its filtered suite.
 mapfile -t ALL_SUITES < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
 EXPECTED_COUNT=${#ALL_SUITES[@]}
+
+# Canonical suite count — the registered total, maintained in test/native-suite-count.
+# Update that file whenever a test suite is added or removed.
+CANONICAL_COUNT_FILE="test/native-suite-count"
+if [[ -f $CANONICAL_COUNT_FILE ]]; then
+	CANONICAL_COUNT=$(tr -d '[:space:]' <"$CANONICAL_COUNT_FILE")
+else
+	CANONICAL_COUNT=""
+fi
 
 # Cached object-count for this env, written after each completed build (in the gitignored build
 # dir). Used as the progress denominator: accurate for a full rebuild (every object recompiles),
@@ -129,6 +148,9 @@ if ! $QUIET; then
 	echo "Running: $PIO test -e $ENV ${PASSTHRU[*]-} (expecting $EXPECTED_COUNT suites)"
 fi
 echo "progress: tail -f $PROGRESS_FILE" >&2
+if [[ ! -t 1 ]] && ! $QUIET; then
+	echo "hint: stdout is a pipe — build errors appear at the top of output and may be lost; use --quiet to get just the RESULT line" >&2
+fi
 
 # Run pio, tee to log. PIPESTATUS[0] is pio's real exit (NOT tee's).
 if $QUIET; then
@@ -227,8 +249,41 @@ if ! grep -qE "$PASS_RE" "$LOG"; then
 	exit 1
 fi
 
-# AMBER: everything that ran passed, but (full run only) a canonical suite neither ran NOR was
-# explicitly skipped — i.e. it silently went missing. SKIPPED suites are accounted for.
+# Canonical-count rating suffix — appended to every verdict line so the result is always
+# rated against the registered total, not just the directory count.
+# If the two counts diverge (suite added/removed without updating native-suite-count), that
+# is itself surfaced as AMBER before we reach any verdict.
+canonical_rating() {
+	if [[ -n $CANONICAL_COUNT ]]; then
+		echo "[canonical: ${RAN_COUNT}/${CANONICAL_COUNT}]"
+	fi
+}
+
+# AMBER: directory count disagrees with native-suite-count — file needs updating.
+if [[ -n $CANONICAL_COUNT && $EXPECTED_COUNT -ne $CANONICAL_COUNT ]]; then
+	echo ""
+	if [[ $EXPECTED_COUNT -gt $CANONICAL_COUNT ]]; then
+		echo "RESULT: AMBER test/ has $EXPECTED_COUNT suite directories but native-suite-count says $CANONICAL_COUNT — update test/native-suite-count after registering new suites"
+	else
+		echo "RESULT: AMBER test/ has $EXPECTED_COUNT suite directories but native-suite-count says $CANONICAL_COUNT — update test/native-suite-count after removing suites"
+	fi
+	exit 2
+fi
+
+# AMBER: individual test cases were skipped (Unity TEST_IGNORE → :IGNORE: in output).
+# Applies to both full and filtered runs — a skipped test case is a lost signal either way.
+mapfile -t IGNORED_TESTS < <(grep -oE '[^:]+:[0-9]+:[^:]+:IGNORE:.*' "$LOG" 2>/dev/null | sed 's/:IGNORE:.*//' | sort -u)
+IGNORED_COUNT=${#IGNORED_TESTS[@]}
+if [[ $IGNORED_COUNT -gt 0 ]]; then
+	IGNORE_DETAIL="$(printf '%s\n' "${IGNORED_TESTS[@]}" | head -5 | sed 's/^/    /')"
+	echo ""
+	echo "$IGNORE_DETAIL"
+	echo ""
+	echo "RESULT: AMBER ${IGNORED_COUNT} test case(s) ignored $(canonical_rating)"
+	exit 2
+fi
+
+# AMBER: full run only — a canonical suite neither ran NOR was explicitly skipped (silently missing).
 ACCOUNTED_COUNT=$((RAN_COUNT + ${#SKIPPED_SUITES[@]}))
 if [[ -z $FILTER && $ACCOUNTED_COUNT -lt $EXPECTED_COUNT ]]; then
 	missing=()
@@ -236,14 +291,21 @@ if [[ -z $FILTER && $ACCOUNTED_COUNT -lt $EXPECTED_COUNT ]]; then
 		printf '%s\n' "${RAN_SUITES[@]}" "${SKIPPED_SUITES[@]}" | grep -qx "$s" || missing+=("$s")
 	done
 	echo ""
-	echo "RESULT: AMBER ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (missing: ${missing[*]}) — all that ran passed"
+	echo "RESULT: AMBER ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (missing: ${missing[*]}) — all that ran passed $(canonical_rating)"
 	exit 2
 fi
 
-# GREEN.
+# FILTERED: a -f run completed cleanly. Suites outside the filter were intentionally not run;
+# this is not a quality signal and is distinct from suites that went missing unexpectedly.
 if [[ -n $FILTER ]]; then
-	echo "RESULT: GREEN ${RAN_COUNT} suite(s) passed (filtered: $FILTER)"
-else
-	echo "RESULT: GREEN ${RAN_COUNT}/${EXPECTED_COUNT} suites passed"
+	not_run=()
+	for s in "${ALL_SUITES[@]}"; do
+		printf '%s\n' "${RAN_SUITES[@]}" "${SKIPPED_SUITES[@]}" | grep -qx "$s" || not_run+=("$s")
+	done
+	echo "RESULT: FILTERED ${RAN_COUNT}/${EXPECTED_COUNT} suites ran (not run: ${not_run[*]}) — filtered: $FILTER $(canonical_rating)"
+	exit 3
 fi
+
+# GREEN: all canonical suites ran, all passed, no ignored test cases.
+echo "RESULT: GREEN ${RAN_COUNT}/${EXPECTED_COUNT} suites passed $(canonical_rating)"
 exit 0
