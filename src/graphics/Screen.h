@@ -12,7 +12,21 @@
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 namespace graphics
 {
-enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, text_input };
+enum notificationTypeEnum {
+    none,
+    text_banner,
+    selection_picker,
+    node_picker,
+    number_picker,
+    hex_picker,
+    text_input,
+    // BLE pairing PIN banner. Treated specially by the lockdown short-circuit
+    // in Screen.cpp: the PIN is ephemeral (regenerated per pair attempt) and
+    // not a real secret, so we allow ui->update() to composite it over the
+    // LOCKED frame. Without this, a first-pair on a locked device cannot
+    // complete because the PIN never renders.
+    pairing_pin,
+};
 
 struct BannerOverlayOptions {
     const char *message;
