@@ -3,7 +3,7 @@
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.035
 
@@ -30,9 +30,6 @@
 // Enable Traffic Management Module for Heltec V4
 #ifndef HAS_TRAFFIC_MANAGEMENT
 #define HAS_TRAFFIC_MANAGEMENT 1
-#endif
-#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
 #endif
 
 // ---- KCT8103L RF FRONT END CONFIGURATION ----

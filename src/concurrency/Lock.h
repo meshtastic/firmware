@@ -12,6 +12,7 @@ class Lock
 {
   public:
     Lock();
+    ~Lock();
 
     Lock(const Lock &) = delete;
     Lock &operator=(const Lock &) = delete;

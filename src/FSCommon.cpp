@@ -79,27 +79,135 @@ bool copyFile(const char *from, const char *to)
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
 #ifdef FSCom
-
-#ifdef ARCH_ESP32
-    // take SPI Lock
     spiLock->lock();
-    // rename was fixed for ESP32 IDF LittleFS in April
     bool result = FSCom.rename(pathFrom, pathTo);
     spiLock->unlock();
     return result;
 #else
-    // copyFile does its own locking.
-    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
-        return true;
-    } else {
-        return false;
-    }
-#endif
-
+    return false;
 #endif
 }
 
+#include <cstring>
+#include <new>
+#include <stdexcept>
 #include <vector>
+
+/**
+ * @brief Platform-agnostic filesystem format / wipe.
+ *
+ * On embedded targets (ESP32, NRF52, STM32WL, RP2040) this calls the
+ * native FSCom.format() which erases and reinitialises the LittleFS
+ * partition.
+ *
+ * On Portduino the fs::FS backend has no format() method. We instead
+ * delete /prefs (the only meshtastic data directory written at runtime)
+ * and return. rmDir("/prefs") is already called unconditionally by
+ * factoryReset() so this is a proven primitive on Portduino.
+ * FSBegin() is a no-op (#define FSBegin() true) on Portduino.
+ *
+ * @return true on success, false on failure or if no filesystem is configured.
+ */
+bool fsFormat()
+{
+#ifdef FSCom
+#if defined(ARCH_PORTDUINO)
+    rmDir("/prefs");
+    return FSBegin();
+#else
+    return FSCom.format();
+#endif
+#else
+    return false;
+#endif
+}
+
+#ifdef FSCom
+namespace
+{
+bool pathEndsWithDot(const char *path)
+{
+    if (!path)
+        return false;
+
+    size_t length = strlen(path);
+    return length > 0 && path[length - 1] == '.';
+}
+
+bool copyFilePath(char *dest, size_t destSize, const char *path, bool *wasLimited)
+{
+    if (!path || destSize == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    if (strlcpy(dest, path, destSize) >= destSize) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    return true;
+}
+
+void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vector<meshtastic_FileInfo> &filenames,
+                  bool *wasLimited)
+{
+    if (!dirname)
+        return;
+
+    File root = FSCom.open(dirname, FILE_O_READ);
+    if (!root)
+        return;
+    if (!root.isDirectory()) {
+        root.close();
+        return;
+    }
+
+    File file = root.openNextFile();
+    // file.name()[0] check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
+    while (file && file.name()[0]) {
+        if (filenames.size() >= maxCount) {
+            if (wasLimited)
+                *wasLimited = true;
+            file.close();
+            break;
+        }
+        const char *fileName = file.name();
+        if (file.isDirectory() && !pathEndsWithDot(fileName)) {
+            char pathBuffer[sizeof(((meshtastic_FileInfo *)nullptr)->file_name)] = {};
+#ifdef ARCH_ESP32
+            const char *subDirPath = file.path();
+#else
+            const char *subDirPath = fileName;
+#endif
+            bool hasSubDirPath = copyFilePath(pathBuffer, sizeof(pathBuffer), subDirPath, wasLimited);
+            file.close();
+
+            if (levels && hasSubDirPath) {
+                collectFiles(pathBuffer, levels - 1, maxCount, filenames, wasLimited);
+            } else if (wasLimited) {
+                *wasLimited = true;
+            }
+        } else {
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
+#ifdef ARCH_ESP32
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.path(), wasLimited);
+#else
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.name(), wasLimited);
+#endif
+            if (hasFilePath && !pathEndsWithDot(fileInfo.file_name)) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+}
+} // namespace
+#endif
 
 /**
  * @brief Get the list of files in a directory.
@@ -109,45 +217,40 @@ bool renameFile(const char *pathFrom, const char *pathTo)
  *
  * @param dirname The name of the directory.
  * @param levels The number of levels of subdirectories to list.
- * @return A vector of strings containing the full path of each file in the directory.
+ * @param maxCount The maximum number of files to collect before truncating the walk.
+ * @param wasLimited Optional out-param, set to true if the listing was truncated (by maxCount or low memory).
+ * @return A vector of meshtastic_FileInfo for each file in the directory.
  */
-std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount, bool *wasLimited)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
+    if (wasLimited)
+        *wasLimited = false;
 #ifdef FSCom
-    File root = FSCom.open(dirname, FILE_O_READ);
-    if (!root)
-        return filenames;
-    if (!root.isDirectory())
-        return filenames;
-
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
-            if (levels) {
-#ifdef ARCH_ESP32
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
-#else
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
-#endif
-                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
-                file.close();
-            }
-        } else {
-            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
-#ifdef ARCH_ESP32
-            strcpy(fileInfo.file_name, file.path());
-#else
-            strcpy(fileInfo.file_name, file.name());
-#endif
-            if (!String(fileInfo.file_name).endsWith(".")) {
-                filenames.push_back(fileInfo);
-            }
-            file.close();
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+    size_t reservedCount = maxCount;
+    while (reservedCount > 0) {
+        try {
+            filenames.reserve(reservedCount);
+            break;
+        } catch (const std::bad_alloc &) {
+            reservedCount /= 2;
+        } catch (const std::length_error &) {
+            reservedCount /= 2;
         }
-        file = root.openNextFile();
     }
-    root.close();
+    if (reservedCount == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return filenames;
+    }
+    if (reservedCount < maxCount) {
+        if (wasLimited)
+            *wasLimited = true;
+        maxCount = reservedCount;
+    }
+#endif
+    collectFiles(dirname, levels, maxCount, filenames, wasLimited);
 #endif
     return filenames;
 }
@@ -163,98 +266,59 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 void listDir(const char *dirname, uint8_t levels, bool del)
 {
 #ifdef FSCom
-#if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     char buffer[255];
-#endif
     File root = FSCom.open(dirname, FILE_O_READ);
-    if (!root) {
+    if (!root || !root.isDirectory())
         return;
-    }
-    if (!root.isDirectory()) {
-        return;
-    }
 
     File file = root.openNextFile();
-    while (
-        file &&
-        file.name()[0]) { // This file.name() check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
+    while (file && file.name()[0]) { // file.name()[0] check: workaround for Adafruit LittleFS nRF52 bug #4395
+#ifdef ARCH_ESP32
+        const char *filepath = file.path();
+#else
+        const char *filepath = file.name();
+#endif
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
-#ifdef ARCH_ESP32
-                listDir(file.path(), levels - 1, del);
+                listDir(filepath, levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Remove %s", file.path());
-                    strncpy(buffer, file.path(), sizeof(buffer));
+                    LOG_DEBUG("Remove %s", filepath);
+                    strncpy(buffer, filepath, sizeof(buffer) - 1);
+                    buffer[sizeof(buffer) - 1] = '\0';
                     file.close();
                     FSCom.rmdir(buffer);
                 } else {
                     file.close();
                 }
-#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-                listDir(file.name(), levels - 1, del);
-                if (del) {
-                    LOG_DEBUG("Remove %s", file.name());
-                    strncpy(buffer, file.name(), sizeof(buffer));
-                    file.close();
-                    FSCom.rmdir(buffer);
-                } else {
-                    file.close();
-                }
-#else
-                LOG_DEBUG(" %s (directory)", file.name());
-                listDir(file.name(), levels - 1, del);
-                file.close();
-#endif
             }
         } else {
-#ifdef ARCH_ESP32
             if (del) {
-                LOG_DEBUG("Delete %s", file.path());
-                strncpy(buffer, file.path(), sizeof(buffer));
+                LOG_DEBUG("Delete %s", filepath);
+                strncpy(buffer, filepath, sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)", file.path(), file.size());
+                LOG_DEBUG(" %s (%i Bytes)", filepath, file.size());
                 file.close();
             }
-#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-            if (del) {
-                LOG_DEBUG("Delete %s", file.name());
-                strncpy(buffer, file.name(), sizeof(buffer));
-                file.close();
-                FSCom.remove(buffer);
-            } else {
-                LOG_DEBUG(" %s (%i Bytes)", file.name(), file.size());
-                file.close();
-            }
-#else
-            LOG_DEBUG("   %s (%i Bytes)", file.name(), file.size());
-            file.close();
-#endif
         }
         file = root.openNextFile();
     }
 #ifdef ARCH_ESP32
-    if (del) {
-        LOG_DEBUG("Remove %s", root.path());
-        strncpy(buffer, root.path(), sizeof(buffer));
-        root.close();
-        FSCom.rmdir(buffer);
-    } else {
-        root.close();
-    }
-#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-    if (del) {
-        LOG_DEBUG("Remove %s", root.name());
-        strncpy(buffer, root.name(), sizeof(buffer));
-        root.close();
-        FSCom.rmdir(buffer);
-    } else {
-        root.close();
-    }
+    const char *rootpath = root.path();
 #else
-    root.close();
+    const char *rootpath = root.name();
 #endif
+    if (del) {
+        LOG_DEBUG("Remove %s", rootpath);
+        strncpy(buffer, rootpath, sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+        root.close();
+        FSCom.rmdir(buffer);
+    } else {
+        root.close();
+    }
 #endif
 }
 
@@ -268,14 +332,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 void rmDir(const char *dirname)
 {
 #ifdef FSCom
-
-#if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
-#elif defined(ARCH_NRF52)
-    // nRF52 implementation of LittleFS has a recursive delete function
-    FSCom.rmdir_r(dirname);
-#endif
-
 #endif
 }
 
@@ -307,7 +364,7 @@ void fsInit()
  */
 void setupSDCard()
 {
-#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && !defined(HAS_SD_MMC)
     concurrency::LockGuard g(spiLock);
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
     if (!SD.begin(SDCARD_CS, SDHandler, SD_SPI_FREQUENCY)) {

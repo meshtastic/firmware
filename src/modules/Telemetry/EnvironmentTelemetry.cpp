@@ -310,9 +310,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
         if (((lastTelemetry == 0) ||
-             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
-                                                              moduleConfig.telemetry.environment_update_interval,
-                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(
+                 lastTelemetry, Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
+                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes,
+                                                                        TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
@@ -515,6 +516,10 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
             packetPool.release(lastMeasurementPacket);
 
         lastMeasurementPacket = packetPool.allocCopy(mp);
+
+        // Cache the latest env metrics per node on NodeDB so the phone can
+        // pull last-known values across reboots and replays.
+        nodeDB->updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
     }
 
     return false; // Let others look at this message also if they want

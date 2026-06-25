@@ -183,9 +183,13 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     static float segmentHeight = SEGMENT_HEIGHT * 0.75f;
 
     if (!scaleInitialized) {
+#ifdef DISPLAY_FORCE_SMALL_FONTS
+        float screenwidth_target_ratio = 0.70f; // Target 70% of display width (adjustable)
+#else
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
-        float max_scale = 3.5f;                 // Safety limit to avoid runaway scaling
-        float step = 0.05f;                     // Step increment per iteration
+#endif
+        float max_scale = 3.5f; // Safety limit to avoid runaway scaling
+        float step = 0.05f;     // Step increment per iteration
 
         float target_width = display->getWidth() * screenwidth_target_ratio;
         float target_height =

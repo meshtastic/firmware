@@ -33,7 +33,12 @@ class TestableRadioInterface : public RadioInterface
 
 static void test_bwCodeToKHz_specialMappings()
 {
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 7.8f, bwCodeToKHz(8));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 10.4f, bwCodeToKHz(10));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 15.6f, bwCodeToKHz(16));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 20.8f, bwCodeToKHz(21));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 31.25f, bwCodeToKHz(31));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 41.7f, bwCodeToKHz(42));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 62.5f, bwCodeToKHz(62));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 203.125f, bwCodeToKHz(200));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 406.25f, bwCodeToKHz(400));
@@ -45,6 +50,18 @@ static void test_bwCodeToKHz_passthrough()
 {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 125.0f, bwCodeToKHz(125));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 250.0f, bwCodeToKHz(250));
+}
+
+static void test_bwCodeToKHz_roundTrip()
+{
+    // Round-trip: bwKHzToCode(bwCodeToKHz(code)) should return the original code
+    uint16_t codes[] = {8, 10, 16, 21, 31, 42, 62, 200, 400, 800, 1600};
+    for (size_t i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
+        uint16_t code = codes[i];
+        float khz = bwCodeToKHz(code);
+        uint16_t result = bwKHzToCode(khz);
+        TEST_ASSERT_EQUAL_UINT16(code, result);
+    }
 }
 
 static void test_validateConfigLora_noopWhenUsePresetFalse()
@@ -183,6 +200,87 @@ static void test_applyModemConfig_customCodingRateLowerThanPreset()
     TEST_ASSERT_EQUAL_UINT8(8, testRadio->getCr());
 }
 
+// -----------------------------------------------------------------------
+// getRegionPresetMap() — region->valid-preset map sent to clients during want_config
+// -----------------------------------------------------------------------
+
+static size_t countKnownRegions()
+{
+    size_t n = 0;
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++)
+        n++;
+    return n;
+}
+
+// Every region in the firmware table (except the UNSET sentinel) must appear
+// exactly once in the map, and all counts must stay within the mesh.options bounds
+// (exceeding them would mean nanopb silently truncates the wire message).
+static void test_regionPresetMap_coversAllRegionsWithinBounds()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+    const size_t known = countKnownRegions();
+    TEST_ASSERT_EQUAL_UINT((unsigned)known, (unsigned)map.region_groups_count);
+
+    // Bounds derived from the generated nanopb arrays (mesh.options max_count), so
+    // this stays correct if those bounds change.
+    const size_t maxGroups = sizeof(map.groups) / sizeof(map.groups[0]);
+    const size_t maxRegions = sizeof(map.region_groups) / sizeof(map.region_groups[0]);
+    TEST_ASSERT_GREATER_THAN_UINT(0, map.groups_count);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxGroups, map.groups_count);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxRegions, map.region_groups_count);
+
+    // Each known region appears exactly once.
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        int hits = 0;
+        for (pb_size_t i = 0; i < map.region_groups_count; i++)
+            if (map.region_groups[i].region == r->code)
+                hits++;
+        TEST_ASSERT_EQUAL_INT(1, hits);
+    }
+}
+
+// The advertised presets must agree with the live region table: every preset is
+// legal in its region, the default is among them, and the licensed flag matches.
+static void test_regionPresetMap_matchesRegionTable()
+{
+    meshtastic_LoRaRegionPresetMap map;
+    getRegionPresetMap(map);
+
+    for (pb_size_t i = 0; i < map.region_groups_count; i++) {
+        meshtastic_Config_LoRaConfig_RegionCode code = map.region_groups[i].region;
+        uint8_t gi = map.region_groups[i].group_index;
+        TEST_ASSERT_LESS_THAN_UINT(map.groups_count, gi);
+
+        const meshtastic_LoRaPresetGroup &grp = map.groups[gi];
+        const RegionInfo *r = getRegion(code);
+
+        // Group's list is non-empty, within the generated array bound, and is the
+        // region's full list.
+        const size_t maxPresets = sizeof(grp.presets) / sizeof(grp.presets[0]);
+        TEST_ASSERT_GREATER_THAN_UINT(0, grp.presets_count);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxPresets, grp.presets_count);
+        TEST_ASSERT_EQUAL_UINT((unsigned)r->getNumPresets(), (unsigned)grp.presets_count);
+
+        // Every advertised preset is legal in this region.
+        for (pb_size_t p = 0; p < grp.presets_count; p++)
+            TEST_ASSERT_TRUE(r->supportsPreset(grp.presets[p]));
+
+        // Default preset matches the table, is legal, and is present in the list.
+        TEST_ASSERT_EQUAL(r->getDefaultPreset(), grp.default_preset);
+        TEST_ASSERT_TRUE(r->supportsPreset(grp.default_preset));
+        bool defaultInList = false;
+        for (pb_size_t p = 0; p < grp.presets_count; p++)
+            if (grp.presets[p] == grp.default_preset)
+                defaultInList = true;
+        TEST_ASSERT_TRUE(defaultInList);
+
+        // Licensed flag matches the region's profile.
+        TEST_ASSERT_EQUAL(r->profile->licensedOnly, grp.licensed_only);
+    }
+}
+
 void setUp(void)
 {
     mockMeshService = new MockMeshService();
@@ -213,6 +311,7 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
+    RUN_TEST(test_bwCodeToKHz_roundTrip);
     RUN_TEST(test_validateConfigLora_noopWhenUsePresetFalse);
     RUN_TEST(test_validateConfigLora_validPreset_nonWideRegion);
     RUN_TEST(test_validateConfigLora_validPreset_wideRegion);
@@ -223,6 +322,8 @@ void setup()
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
+    RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
+    RUN_TEST(test_regionPresetMap_matchesRegionTable);
     exit(UNITY_END());
 }
 
