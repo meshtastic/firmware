@@ -911,6 +911,7 @@ bool loadConfig(const char *configPath)
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
                 Serial1.setPath(serialPath);
+                portduino_config.gps_serial_path = serialPath;
                 portduino_config.has_gps = 1;
             }
             std::string gpsdHost = yamlConfig["GPS"]["GpsdHost"].as<std::string>("");
