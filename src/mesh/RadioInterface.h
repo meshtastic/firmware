@@ -128,6 +128,9 @@ class RadioInterface
 
     virtual ~RadioInterface() {}
 
+    /// Fires once per valid received LoRa packet (arg = sender NodeNum). Used e.g. to flash LED_LORA.
+    static Observable<uint32_t> loraRxPacketObservable;
+
     /**
      * Coerce LoRa config fields (bandwidth/spread_factor) derived from presets.
      * This is used during early bootstrapping so UIs that display these fields directly remain consistent.
@@ -142,6 +145,10 @@ class RadioInterface
     virtual bool canSleep() { return true; }
 
     virtual bool wideLora() { return false; }
+
+    /// Whether the radio can tune sub-GHz bands. False for 2.4 GHz-only chips (SX128x);
+    /// multiband chips like the LR1121 keep the default.
+    virtual bool supportsSubGhz() { return true; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }
@@ -244,7 +251,12 @@ class RadioInterface
 
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
 
-    // Check if a candidate region is compatible and valid.
+    // Check if a candidate region is compatible and valid, with no side effects (safe for
+    // speculative UI checks). errBuf, if given, receives the failure reason.
+    static bool checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf = nullptr, size_t errLen = 0);
+
+    // Check if a candidate region is compatible and valid. On failure, logs at ERROR,
+    // records a critical error, and sends a client notification.
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate radio configuration is valid.
@@ -252,6 +264,11 @@ class RadioInterface
 
     // Make a candidate radio configuration valid, even if it isn't.
     static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+
+    // If preset is locked to a sibling of currentRegion among the swappable EU regions
+    // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
+    static const RegionInfo *regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
+                                                 meshtastic_Config_LoRaConfig_ModemPreset preset);
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()
