@@ -1,5 +1,23 @@
 # Agent instructions
 
+> **TL;DR**
+>
+> |                |                                                                           |
+> | -------------- | ------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)        |
+> | Hardware tests | `./mcp-server/run-tests.sh`                                               |
+> | Format         | `trunk fmt`                                                               |
+> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `CLAUDE.md` (Claude Code) |
+>
+> **Need this? It's here.**
+>
+> |                                             |                                                            |
+> | ------------------------------------------- | ---------------------------------------------------------- |
+> | General helpers (clamp, UTF-8, string fmt…) | `src/meshUtils.h`                                          |
+> | Logging macros (LOG_DEBUG / INFO / WARN…)   | `src/DebugConfiguration.h`                                 |
+> | New module skeleton                         | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
+> | Observer / event wiring                     | `src/Observer.h`                                           |
+
 This repository is the [Meshtastic](https://meshtastic.org) firmware — a C++17 embedded codebase targeting ESP32 / nRF52 / RP2040 / STM32WL / Linux-Portduino LoRa mesh radios — plus a Python MCP server in `mcp-server/` that AI agents use to flash, configure, and test connected devices.
 
 ## Primary instruction file
@@ -10,18 +28,18 @@ This file (`AGENTS.md`) is a short pointer + quick reference for agents that don
 
 ## Quick command reference
 
-| Action                           | Command                                                                                                                                                                                                        |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Build a firmware variant         | `pio run -e <env>` (e.g. `pio run -e rak4631`, `pio run -e heltec-v3`)                                                                                                                                         |
-| Build native macOS host binary   | `pio run -e native-macos` (Homebrew prereqs + CH341 LoRa setup in `variants/native/portduino/platformio.ini`)                                                                                                  |
-| Clean + rebuild                  | `pio run -e <env> -t clean && pio run -e <env>`                                                                                                                                                                |
-| Flash a device                   | `pio run -e <env> -t upload --upload-port <port>` (or use the `pio_flash` MCP tool)                                                                                                                            |
-| Run firmware unit tests (native) | `~/.platformio/penv/bin/python -m platformio test -e native > /tmp/test_out.txt 2>&1` then `grep -E 'error:\|PASS\|FAIL\|succeeded\|failed' /tmp/test_out.txt` (redirect first — piping causes line-buffering) |
-| Run MCP hardware tests           | `./mcp-server/run-tests.sh`                                                                                                                                                                                    |
-| Live TUI test runner             | `mcp-server/.venv/bin/meshtastic-mcp-test-tui`                                                                                                                                                                 |
-| Format before commit             | `trunk fmt`                                                                                                                                                                                                    |
-| Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                                                                                                                                                          |
-| Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                                                                                                                                                 |
+| Action                           | Command                                                                                                                                                               |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build a firmware variant         | `pio run -e <env>` (e.g. `pio run -e rak4631`, `pio run -e heltec-v3`)                                                                                                |
+| Build native macOS host binary   | `pio run -e native-macos` (Homebrew prereqs + CH341 LoRa setup in `variants/native/portduino/platformio.ini`)                                                         |
+| Clean + rebuild                  | `pio run -e <env> -t clean && pio run -e <env>`                                                                                                                       |
+| Flash a device                   | `pio run -e <env> -t upload --upload-port <port>` (or use the `pio_flash` MCP tool)                                                                                   |
+| Run firmware unit tests (native) | `./bin/run-tests.sh` (preferred — ASan/LSan + RED/AMBER/GREEN verdict); or raw: `~/.platformio/penv/bin/python -m platformio test -e native > /tmp/test_out.txt 2>&1` |
+| Run MCP hardware tests           | `./mcp-server/run-tests.sh`                                                                                                                                           |
+| Live TUI test runner             | `mcp-server/.venv/bin/meshtastic-mcp-test-tui`                                                                                                                        |
+| Format before commit             | `trunk fmt`                                                                                                                                                           |
+| Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                                                                                                                 |
+| Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                                                                                                        |
 
 ## MCP server (device + test automation)
 
@@ -108,7 +126,7 @@ Sequence these; don't parallelize on the same port.
 | `src/modules/`                    | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                          |
 | `variants/`                       | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                             |
 | `protobufs/`                      | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                              |
-| `test/`                           | Firmware unit tests (17 suites; `pio test -e native`)                                                                    |
+| `test/`                           | Firmware unit tests (19 suites; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                      |
 | `mcp-server/`                     | Python MCP server + pytest hardware integration tests                                                                    |
 | `mcp-server/tests/`               | Tiered pytest suite: `unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/` |
 | `.claude/commands/`               | Claude Code slash command bodies                                                                                         |
