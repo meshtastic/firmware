@@ -424,11 +424,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    const int navHeight = FONT_HEIGHT_SMALL;
+    const int navHeight = FONT_HEIGHT_SMALL + BASEUI_BELOW_HEADER_MARGIN + BASEUI_HEADER_MARGIN;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
-    constexpr int LEFT_MARGIN = 2;
-    constexpr int RIGHT_MARGIN = 2;
+    constexpr int LEFT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
+    constexpr int RIGHT_MARGIN = 2 + BASEUI_BODY_LR_MARGIN;
     constexpr int SCROLLBAR_WIDTH = 3;
     constexpr int BUBBLE_PAD_X = 3;
     constexpr int BUBBLE_PAD_Y = 4;
@@ -715,7 +715,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int finalScroll = (int)scrollY;
     int yOffset = -finalScroll + getTextPositions(display)[1];
-    const int contentTop = getTextPositions(display)[1];
+    const int contentTop = navHeight;       // getTextPositions(display)[1] + BASEUI_BELOW_HEADER_MARGIN;
     const int contentBottom = scrollBottom; // already excludes nav line
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
