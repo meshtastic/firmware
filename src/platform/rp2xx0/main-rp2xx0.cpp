@@ -3,6 +3,7 @@
 #include "hardware/xosc.h"
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
+#include <hardware/watchdog.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
 
@@ -99,6 +100,10 @@ void getMacAddr(uint8_t *dmac)
 
 void rp2040Setup()
 {
+    if (watchdog_caused_reboot()) {
+        LOG_WARN("Rebooted by watchdog!");
+    }
+
     /* Sets a random seed to make sure we get different random numbers on each boot. */
     uint32_t seed = 0;
     if (!HardwareRNG::seed(seed)) {
@@ -126,6 +131,16 @@ void rp2040Setup()
     LOG_INFO("clk_adc  = %dkHz", f_clk_adc);
     LOG_INFO("clk_rtc  = %dkHz", f_clk_rtc);
 #endif
+}
+
+void rp2040Loop()
+{
+    static bool watchdog_running = false;
+    if (!watchdog_running) {
+        watchdog_enable(8000, true); // 8s timeout; pauses during debug
+        watchdog_running = true;
+    }
+    watchdog_update();
 }
 
 void enterDfuMode()

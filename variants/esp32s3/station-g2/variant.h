@@ -10,6 +10,11 @@ Board Information: https://wiki.uniteng.com/en/meshtastic/station-g2
 #define SX126X_MAX_POWER 19
 #endif
 
+// Enable Traffic Management Module for Station G2
+#ifndef HAS_TRAFFIC_MANAGEMENT
+#define HAS_TRAFFIC_MANAGEMENT 1
+#endif
+
 /*
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC_CHANNEL_3

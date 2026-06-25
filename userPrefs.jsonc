@@ -24,6 +24,7 @@
   // "USERPREFS_CONFIG_OWNER_SHORT_NAME": "MLN",
   // "USERPREFS_CONFIG_DEVICE_ROLE": "meshtastic_Config_DeviceConfig_Role_CLIENT", // Defaults to CLIENT. ROUTER*, and LOST AND FOUND roles are restricted.
   // "USERPREFS_EVENT_MODE": "1",
+  // "USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS": "1", // Extend TMM position dedup and precision clamping to private/custom-key channels (default: well-known channels only)
   // "USERPREFS_FIRMWARE_EDITION": "meshtastic_FirmwareEdition_BURNING_MAN",
   // "USERPREFS_FIXED_BLUETOOTH": "121212",
   // "USERPREFS_FIXED_GPS": "",
