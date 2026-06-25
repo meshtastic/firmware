@@ -384,6 +384,8 @@ void InkHUD::MapApplet::onRender(bool full)
     }
 
     // Dual map scale bars
+    if (metersToPx <= 0.0f)
+        return;
     int16_t horizPx = width() * 0.25f;
     int16_t vertPx = height() * 0.25f;
     float horizMeters = horizPx / metersToPx;
@@ -538,6 +540,8 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
         }
 
         // All NodeDB processed, find mean values
+        if (positionCount == 0)
+            return;
         xAvg /= positionCount;
         yAvg /= positionCount;
         zAvg /= positionCount;
