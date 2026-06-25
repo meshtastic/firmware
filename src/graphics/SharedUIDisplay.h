@@ -42,6 +42,12 @@ namespace graphics
 #ifndef BASEUI_HEADER_LR_MARGIN
 #define BASEUI_HEADER_LR_MARGIN 0
 #endif
+#ifndef BASEUI_BODY_LR_MARGIN
+#define BASEUI_BODY_LR_MARGIN 0
+#endif
+#ifndef BASEUI_BELOW_HEADER_MARGIN
+#define BASEUI_BELOW_HEADER_MARGIN 0
+#endif
 #ifndef ROUNDED_SCREEN
 #define ROUNDED_SCREEN false
 #endif
