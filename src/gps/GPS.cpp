@@ -100,8 +100,7 @@ bool isValidGnssModel(uint8_t model)
 {
     // Only real chip identifiers belong in the probe cache.
     // GNSS_MODEL_UNKNOWN and GNSS_MODEL_GENERIC_NMEA are runtime-only values.
-    return model != static_cast<uint8_t>(GNSS_MODEL_UNKNOWN) &&
-           model < static_cast<uint8_t>(GNSS_MODEL_GENERIC_NMEA);
+    return model != static_cast<uint8_t>(GNSS_MODEL_UNKNOWN) && model < static_cast<uint8_t>(GNSS_MODEL_GENERIC_NMEA);
 }
 
 bool isValidProbeBaud(uint32_t baud)

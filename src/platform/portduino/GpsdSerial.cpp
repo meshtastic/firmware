@@ -11,7 +11,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-namespace arduino {
+namespace arduino
+{
 
 // The single global instance used by PortduinoGlue and GPS::createGps().
 GpsdSerial gpsdSerial;

@@ -5,7 +5,8 @@
 #include <deque>
 #include <string>
 
-namespace arduino {
+namespace arduino
+{
 
 // Presents a gpsd TCP NMEA stream as a HardwareSerial port.
 // Connect gpsd at the configured host:port, send a WATCH request to enable
