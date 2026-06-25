@@ -10,6 +10,8 @@
 #include "concurrency/OSThread.h"
 #include <memory>
 
+enum DecodeState : int;
+
 /**
  * A mesh aware router that supports multiple interfaces.
  */
@@ -137,6 +139,15 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false);
 
+#if !MESHTASTIC_EXCLUDE_MQTT
+    /**
+     * Publish a received packet to MQTT using the same receive-side publish rules as handleReceived().
+     * Takes ownership of pEncrypted when provided (and always releases it before returning).
+     */
+    void publishReceivedToMqtt(const meshtastic_MeshPacket *p, DecodeState decodedState,
+                               meshtastic_MeshPacket *pEncrypted = nullptr);
+#endif
+
   private:
     /**
      * Called from loop()
@@ -162,7 +173,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
-enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
+enum DecodeState : int { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
 
 /** FIXME - move this into a mesh packet class
  * Remove any encryption and decode the protobufs inside this packet (if necessary).
