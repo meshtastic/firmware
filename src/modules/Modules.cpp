@@ -128,8 +128,7 @@ void setupModules()
 #endif
 
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
-    // Instantiate only when enabled to avoid extra memory use and background work.
-    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled) {
+    if (moduleConfig.has_traffic_management) {
         trafficManagementModule = new TrafficManagementModule();
     }
 #endif
