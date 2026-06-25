@@ -808,11 +808,18 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Lora"]) {
 
             if (yamlConfig["Lora"]["Module"]) {
+                const std::string moduleName = yamlConfig["Lora"]["Module"].as<std::string>("");
+                bool found = false;
                 for (const auto &loraModule : portduino_config.loraModules) {
-                    if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.second) {
+                    if (moduleName == loraModule.second) {
                         portduino_config.lora_module = loraModule.first;
+                        found = true;
                         break;
                     }
+                }
+                if (!found) {
+                    std::cerr << "Unknown Lora.Module: " << moduleName << std::endl;
+                    exit(EXIT_FAILURE);
                 }
             }
             if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
