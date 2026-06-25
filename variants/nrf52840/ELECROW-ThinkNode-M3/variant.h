@@ -37,7 +37,8 @@ extern "C" {
 
 // Power Pin
 #define NRF_APM
-#define GPS_POWER 14
+#define PIN_GPS_EN 14
+#define GPS_EN_ACTIVE HIGH
 #define PIN_POWER_USB 31
 #define EXT_PWR_DETECT PIN_POWER_USB
 #define PIN_POWER_DONE 24
