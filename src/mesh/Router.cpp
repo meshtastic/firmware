@@ -100,51 +100,31 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         return true;
     }
 
-#if HAS_TRAFFIC_MANAGEMENT
-    // When router_preserve_hops is enabled, preserve hops for decoded packets that are not
-    // position or telemetry (those have their own exhaust_hop controls).
-    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled &&
-        moduleConfig.traffic_management.router_preserve_hops && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum != meshtastic_PortNum_POSITION_APP && p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP) {
-        LOG_DEBUG("Router hop preserved: port=%d from=0x%08x (traffic_management)", p->decoded.portnum, getFrom(p));
-        if (trafficManagementModule) {
-            trafficManagementModule->recordRouterHopPreserved();
-        }
-        return false;
-    }
-#endif
+    // router_preserve_hops: not suitable right now — removed from config until
+    // the right heuristics for when to preserve vs. exhaust hops are established.
+    // #if HAS_TRAFFIC_MANAGEMENT
+    //     if (moduleConfig.has_traffic_management &&
+    //         moduleConfig.traffic_management.router_preserve_hops && ...) { ... }
+    // #endif
 
-    // For subsequent hops, check if previous relay is a favorite router
-    // Optimized search for favorite routers with matching last byte
-    // Check ordering optimized for IoT devices (cheapest checks first)
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node)
-            continue;
-
-        // Check 1: is_favorite (cheapest - single bit test)
-        if (!nodeInfoLiteIsFavorite(node))
-            continue;
-
-        // Check 2: has_user (cheap - single bit test)
-        if (!nodeInfoLiteHasUser(node))
-            continue;
-
-        // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-            continue;
-        }
-
-        // Check 4: last byte extraction and comparison (most expensive)
-        if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
-            // Found a favorite router match
-            LOG_DEBUG("Identified favorite relay router 0x%x from last byte 0x%x", node->num, p->relay_node);
+    // For subsequent hops, preserve hop_limit only when the previous relay is UNAMBIGUOUSLY a favorite
+    // router. The relay_node byte is just the last byte of a 32-bit node number, so on a dense mesh it
+    // collides; the old "first matching node wins" scan could preserve hops for the wrong node
+    // (non-deterministic, depends on NodeDB order). resolveLastByte() reports a collision instead, and
+    // we re-check the favorite/router predicate on the single resolved node. On ambiguity/none we
+    // decrement (the safe default).
+    NodeNum resolved = 0;
+    if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false, &resolved)) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(resolved);
+        if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
+            IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                      meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+            LOG_DEBUG("Identified unique favorite relay router 0x%x from last byte 0x%x", resolved, p->relay_node);
             return false; // Don't decrement hop_limit
         }
     }
 
-    // No favorite router match found, decrement hop_limit
+    // No unambiguous favorite router match found, decrement hop_limit
     return true;
 }
 
@@ -485,14 +465,16 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->public_key.size > 0 && nodeDB->getMeshNode(p->to) != nullptr &&
-        nodeDB->getMeshNode(p->to)->public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
+    // Attempt PKI decryption first. The sender's key may come from the hot
+    // store or the warm tier (nodes evicted from the hot store keep their key
+    // there), so DMs from long-tail nodes still decrypt.
+    meshtastic_NodeInfoLite_public_key_t fromKey = {0, {0}};
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->copyPublicKey(p->from, fromKey) &&
+        nodeDB->getMeshNode(p->to) != nullptr && nodeDB->getMeshNode(p->to)->public_key.size > 0 &&
+        rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->public_key, p->id, rawSize, p->encrypted.bytes,
-                                      bytes)) {
+        if (crypto->decryptCurve25519(p->from, fromKey, p->id, rawSize, p->encrypted.bytes, bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
             meshtastic_Data decodedtmp;
@@ -503,7 +485,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->public_key.bytes, 32);
+                memcpy(p->public_key.bytes, fromKey.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -720,7 +702,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        // Destination key from the hot store or the warm tier (evicted
+        // long-tail nodes keep their key there)
+        meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+        bool haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
@@ -743,18 +728,17 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a known public key for the destination
-            if (node == nullptr || node->public_key.size != 32) {
+            if (!haveDestKey) {
                 LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
                          p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
-            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
-                memcmp(p->public_key.bytes, node->public_key.bytes, 32) != 0) {
+            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) && memcmp(p->public_key.bytes, destKey.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
-                         *node->public_key.bytes);
+                         *destKey.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
