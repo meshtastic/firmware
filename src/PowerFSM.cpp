@@ -74,6 +74,23 @@ static bool hasModuleManagedSleepRole()
            config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
 }
 
+static bool isBluetoothEnabledForPowerFSM()
+{
+#if HAS_BLUETOOTH && !MESHTASTIC_EXCLUDE_BLUETOOTH
+    return config.bluetooth.enabled;
+#else
+    return false;
+#endif
+}
+
+static uint32_t getBluetoothWaitMs()
+{
+    if (!isBluetoothEnabledForPowerFSM())
+        return 0;
+
+    return Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
+}
+
 #if defined(T5_S3_EPAPER_PRO)
 static void t5BacklightOffForSleep()
 {
@@ -446,10 +463,7 @@ void PowerFSM_setup()
 
         // If ESP32 and using power-saving, timer mover from DARK to light-sleep
         // Also serves purpose of the old DARK to DARK transition(?) See https://github.com/meshtastic/firmware/issues/3517
-        powerFSM.add_timed_transition(
-            &stateDARK, &stateLS,
-            Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
-            "Bluetooth timeout");
+        powerFSM.add_timed_transition(&stateDARK, &stateLS, getBluetoothWaitMs(), NULL, "Bluetooth timeout");
     } else {
         // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
         powerFSM.add_timed_transition(&stateDARK, &stateDARK,
