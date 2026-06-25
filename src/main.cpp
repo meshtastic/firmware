@@ -149,6 +149,9 @@ void printPartitionTable()
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ACCELEROMETER && !defined(ARCH_STM32WL)
+#include "modules/TiltTelemetryModule.h"
+#endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
 #include "motion/MagnetometerThread.h"
 MagnetometerThread *magnetometerThread = nullptr;
@@ -840,6 +843,11 @@ void setup()
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ACCELEROMETER
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+        if (acc_info.type == ScanI2C::DeviceType::LIS3DH) {
+            tiltTelemetryModule = new TiltTelemetryModule();
+        }
+#endif
     }
 #endif
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_MAGNETOMETER
