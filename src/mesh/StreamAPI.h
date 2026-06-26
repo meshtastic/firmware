@@ -80,7 +80,7 @@ class StreamAPI : public PhoneAPI
     /**
      * Send the current txBuffer over our stream
      */
-    void emitTxBuffer(size_t len);
+    bool emitTxBuffer(size_t len);
 
     /// Are we allowed to write packets to our output stream (subclasses can turn this off - i.e. SerialConsole)
     bool canWrite = true;
@@ -91,7 +91,12 @@ class StreamAPI : public PhoneAPI
     /// Low level function to emit a protobuf encapsulated log record
     void emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg);
 
+    virtual bool canWriteFrame(size_t frameLen) { return true; }
+    virtual void onFrameWriteFailed(size_t frameLen, size_t writtenLen) {}
+
   private:
+    bool writeFrame(uint8_t *buf, size_t len);
+
     /// Dedicated scratch + tx buffer for LogRecord emission.
     ///
     /// The main packet emission path (`writeStream` -> `getFromRadio` ->
