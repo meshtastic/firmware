@@ -29,9 +29,9 @@ jobs:
         uses: ./.github/actions/setup-native
 
       - name: Setup Emscripten SDK
-        uses: mymindstorm/setup-emsdk@v14
+        uses: emscripten-core/setup-emsdk@v16
         with:
-          version: latest
+          version: 6.0.1
           actions-cache-folder: emsdk-cache
 
       - name: Build PortDuino WASM
