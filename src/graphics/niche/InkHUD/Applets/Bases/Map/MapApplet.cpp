@@ -138,7 +138,7 @@ static int lz4_decompress(const uint8_t *src, int src_len, uint8_t *dst, int dst
     const uint8_t *s = src;
     const uint8_t *s_end = src + src_len;
     uint8_t *d = dst;
-    uint8_t *d_end = dst + dst_cap;
+    const uint8_t *d_end = dst + dst_cap;
     while (s < s_end) {
         uint8_t token = *s++;
         int lit_len = (token >> 4) & 0xF;
@@ -297,7 +297,7 @@ void InkHUD::MapApplet::onRender(bool full)
         const float latRad = latCenter * DEG_TO_RAD;
 
         // Collect unique zooms, sort descending (highest detail first)
-        int zooms[16];
+        int zooms[16] = {};
         int nzooms = 0;
         for (int i = 0; i < map_tile_count && nzooms < 16; i++) {
             bool found = false;
