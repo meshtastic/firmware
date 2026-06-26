@@ -11,6 +11,7 @@ using namespace NicheGraphics;
 bool InkHUD::MapApplet::s_zoomLocked = false;
 int InkHUD::MapApplet::s_lockedZoom = -1;
 int InkHUD::MapApplet::s_lastRenderedZoom = -1;
+int InkHUD::MapApplet::s_autoFitZoom = -1;
 
 // Observe GPS position updates so the map redraws whenever a new location arrives.
 InkHUD::MapApplet::MapApplet()
@@ -33,12 +34,17 @@ int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
 // Zoom in one step from the current display zoom.
 void InkHUD::MapApplet::zoomIn()
 {
-    if (map_tile_count == 0)
-        return;
-
     int baseZoom = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
     if (baseZoom < 0)
         return;
+
+    if (map_tile_count == 0) {
+        if (baseZoom < ZOOM_MAX_NO_TILES) {
+            s_lockedZoom = baseZoom + 1;
+            s_zoomLocked = true;
+        }
+        return;
+    }
 
     // Jump to the next tile zoom strictly above current, not just +1
     int next = -1;
@@ -62,26 +68,36 @@ void InkHUD::MapApplet::resetZoom()
 
 bool InkHUD::MapApplet::canZoomIn() const
 {
-    if (map_tile_count == 0)
+    if (s_lastRenderedZoom < 0)
         return false;
-    int maxZoom = map_tile_zooms[0];
-    for (int i = 1; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] > maxZoom)
-            maxZoom = map_tile_zooms[i];
-    }
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
-    return ref >= 0 && ref < maxZoom;
+    if (map_tile_count == 0)
+        return ref < ZOOM_MAX_NO_TILES;
+    for (int i = 0; i < map_tile_count; i++) {
+        if (map_tile_zooms[i] > ref)
+            return true;
+    }
+    return false;
 }
 
 void InkHUD::MapApplet::zoomOut()
 {
-    if (map_tile_count == 0)
-        return;
-
     int baseZoom = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
     if (baseZoom < 0) {
         s_zoomLocked = false;
         s_lockedZoom = -1;
+        return;
+    }
+
+    if (map_tile_count == 0) {
+        int floor = (s_autoFitZoom >= 0) ? s_autoFitZoom : baseZoom;
+        if (baseZoom > floor) {
+            s_lockedZoom = baseZoom - 1;
+            s_zoomLocked = true;
+        } else {
+            s_zoomLocked = false;
+            s_lockedZoom = -1;
+        }
         return;
     }
 
@@ -104,15 +120,16 @@ void InkHUD::MapApplet::zoomOut()
 
 bool InkHUD::MapApplet::canZoomOut() const
 {
-    if (map_tile_count == 0 || s_lastRenderedZoom < 0)
+    if (s_lastRenderedZoom < 0)
         return false;
-    int minZoom = map_tile_zooms[0];
-    for (int i = 1; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] < minZoom)
-            minZoom = map_tile_zooms[i];
-    }
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
-    return ref >= 0 && (ref > minZoom || s_zoomLocked);
+    if (map_tile_count == 0)
+        return s_autoFitZoom >= 0 ? ref > s_autoFitZoom : false;
+    for (int i = 0; i < map_tile_count; i++) {
+        if (map_tile_zooms[i] < ref)
+            return true;
+    }
+    return false;
 }
 
 // Raw LZ4 block decompressor. Returns bytes written, or -1 on error.
@@ -329,6 +346,8 @@ void InkHUD::MapApplet::onRender(bool full)
             }
         }
 
+        if (!s_zoomLocked)
+            s_autoFitZoom = chosenZoom;
         metersToPx = chosenMetersToPx;
         s_lastRenderedZoom = chosenZoom;
         drawMapTileBackground(chosenZoom);

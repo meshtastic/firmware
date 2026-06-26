@@ -36,12 +36,14 @@ class MapApplet : public Applet
     MapApplet *asMapApplet() override { return this; } // Identify as MapApplet without RTTI
 
     // Zoom lock — shared across all MapApplet instances (static)
+    static constexpr int ZOOM_MAX_NO_TILES = 16;
+
     void zoomIn();
     void zoomOut();
     void resetZoom();
     bool isZoomLocked() const { return s_zoomLocked; }
-    bool canZoomIn() const;  // False when already at the highest available tile zoom
-    bool canZoomOut() const; // False when already at the lowest available tile zoom
+    bool canZoomIn() const;
+    bool canZoomOut() const;
 
   protected:
     virtual bool shouldDrawNode(meshtastic_NodeInfoLite *node) { return true; } // Allow derived applets to filter the nodes
@@ -58,7 +60,8 @@ class MapApplet : public Applet
 
     static bool s_zoomLocked;
     static int s_lockedZoom;
-    static int s_lastRenderedZoom; // Zoom level used in the most recent render (for step-in reference)
+    static int s_lastRenderedZoom;
+    static int s_autoFitZoom; // Zoom chosen by auto-fit (updated whenever not locked)
     // Position and size of a marker to be drawn
     struct Marker {
         float eastMeters = 0;  // Meters east of map center. Negative if west.
