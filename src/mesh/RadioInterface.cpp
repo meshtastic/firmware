@@ -770,11 +770,12 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     return delay;
 }
 
+// Node IDs and packet IDs are formatted as 0x%08x in logs, and !%08x in user-facing display.
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     std::string out =
-        DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
+        DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=%d", prefix, p->id,
                               p->from, p->to, p->transport_mechanism, p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
@@ -788,13 +789,13 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
             out += DEBUG_PORT.mt_sprintf(" PKI");
 
         if (s.source != 0)
-            out += DEBUG_PORT.mt_sprintf(" source=%08x", s.source);
+            out += DEBUG_PORT.mt_sprintf(" source=0x%08x", s.source);
 
         if (s.dest != 0)
-            out += DEBUG_PORT.mt_sprintf(" dest=%08x", s.dest);
+            out += DEBUG_PORT.mt_sprintf(" dest=0x%08x", s.dest);
 
         if (s.request_id)
-            out += DEBUG_PORT.mt_sprintf(" requestId=%0x", s.request_id);
+            out += DEBUG_PORT.mt_sprintf(" requestId=0x%08x", s.request_id);
 
         /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)
