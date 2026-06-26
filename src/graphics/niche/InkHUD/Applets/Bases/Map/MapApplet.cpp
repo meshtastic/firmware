@@ -36,17 +36,21 @@ void InkHUD::MapApplet::zoomIn()
     if (map_tile_count == 0)
         return;
 
-    int maxZoom = map_tile_zooms[0];
-    for (int i = 1; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] > maxZoom)
-            maxZoom = map_tile_zooms[i];
-    }
-
     int baseZoom = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
-    if (baseZoom < 0 || baseZoom >= maxZoom)
+    if (baseZoom < 0)
         return;
 
-    s_lockedZoom = baseZoom + 1;
+    // Jump to the next tile zoom strictly above current, not just +1
+    int next = -1;
+    for (int i = 0; i < map_tile_count; i++) {
+        int z = map_tile_zooms[i];
+        if (z > baseZoom && (next < 0 || z < next))
+            next = z;
+    }
+    if (next < 0)
+        return;
+
+    s_lockedZoom = next;
     s_zoomLocked = true;
 }
 
@@ -74,20 +78,27 @@ void InkHUD::MapApplet::zoomOut()
     if (map_tile_count == 0)
         return;
 
-    int minZoom = map_tile_zooms[0];
-    for (int i = 1; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] < minZoom)
-            minZoom = map_tile_zooms[i];
-    }
-
     int baseZoom = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
-    if (baseZoom < 0 || baseZoom <= minZoom) {
+    if (baseZoom < 0) {
         s_zoomLocked = false;
         s_lockedZoom = -1;
         return;
     }
 
-    s_lockedZoom = baseZoom - 1;
+    // Jump to the next tile zoom strictly below current, not just -1
+    int next = -1;
+    for (int i = 0; i < map_tile_count; i++) {
+        int z = map_tile_zooms[i];
+        if (z < baseZoom && (next < 0 || z > next))
+            next = z;
+    }
+    if (next < 0) {
+        s_zoomLocked = false;
+        s_lockedZoom = -1;
+        return;
+    }
+
+    s_lockedZoom = next;
     s_zoomLocked = true;
 }
 
