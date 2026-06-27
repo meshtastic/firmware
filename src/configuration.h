@@ -179,6 +179,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #endif
 
+#ifdef USE_KCT8103L_PA_ONLY
+#if defined(HELTEC_MESH_TOWER_V2)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 8, 7
+#endif
+#endif
+
 #ifdef RAK13302
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
