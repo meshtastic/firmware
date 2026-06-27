@@ -69,6 +69,7 @@ enum MenuAction {
     SET_REGION_ITU1_2M,
     SET_REGION_ITU2_2M,
     SET_REGION_ITU3_2M,
+    SET_REGION_ITU2_125CM,
     // Device Roles
     SET_ROLE_CLIENT,
     SET_ROLE_CLIENT_MUTE,
@@ -128,6 +129,11 @@ enum MenuAction {
     // Administration
     RESET_NODEDB_ALL,
     RESET_NODEDB_KEEP_FAVORITES,
+    WIPE_MESSAGES_ALL,
+    // Map zoom (MapApplet and FavoritesMapApplet)
+    MAP_ZOOM_IN,
+    MAP_ZOOM_OUT,
+    MAP_ZOOM_RESET,
 };
 
 } // namespace NicheGraphics::InkHUD
