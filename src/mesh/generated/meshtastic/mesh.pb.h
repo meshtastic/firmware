@@ -78,10 +78,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
     meshtastic_HardwareModel_RAK11310 = 26,
-    /* Makerfabs SenseLoRA Receiver (RP2040 + RFM96) */
-    meshtastic_HardwareModel_SENSELORA_RP2040 = 27,
-    /* Makerfabs SenseLoRA Industrial Monitor (ESP32-S3 + RFM96) */
-    meshtastic_HardwareModel_SENSELORA_S3 = 28,
+    /* Makerfabs Tracker Reserved */
+    meshtastic_HardwareModel_MAKERFABS_TRACKER = 27,
+    /* Makerfabs Reserved */
+    meshtastic_HardwareModel_MAKERFABS_RESERVED = 28,
     /* Canary Radio Company - CanaryOne: https://canaryradio.io/products/canaryone */
     meshtastic_HardwareModel_CANARYONE = 29,
     /* Waveshare RP2040 LoRa - https://www.waveshare.com/rp2040-lora.htm */
@@ -948,6 +948,23 @@ typedef struct _meshtastic_RemoteShell {
     uint32_t last_rx_seq;
 } meshtastic_RemoteShell;
 
+/* A rectangular, axis-aligned geographic bounding box.
+ Used to define a rectangular geofence region for a Waypoint.
+ Fields are ordered west, south, east, north to match the standard bounding box
+ convention used by GeoJSON and PMTiles (min longitude, min latitude, max longitude, max latitude),
+ so the box can drive an offline map extract directly.
+ All coordinates are in degrees scaled by 1e-7 (same convention as Position and Waypoint). */
+typedef struct _meshtastic_BoundingBox {
+    /* Western edge of the box - minimum longitude (south-west corner) */
+    int32_t longitude_west_i;
+    /* Southern edge of the box - minimum latitude (south-west corner) */
+    int32_t latitude_south_i;
+    /* Eastern edge of the box - maximum longitude (north-east corner) */
+    int32_t longitude_east_i;
+    /* Northern edge of the box - maximum latitude (north-east corner) */
+    int32_t latitude_north_i;
+} meshtastic_BoundingBox;
+
 /* Waypoint message, used to share arbitrary locations across the mesh */
 typedef struct _meshtastic_Waypoint {
     /* Id of the waypoint */
@@ -969,6 +986,20 @@ typedef struct _meshtastic_Waypoint {
     char description[100];
     /* Designator icon for the waypoint in the form of a unicode emoji */
     uint32_t icon;
+    /* If greater than zero, defines a circular geofence centred on this waypoint's
+ location (latitude_i / longitude_i) with this radius in meters.
+ Zero means the waypoint has no circular geofence. */
+    uint32_t geofence_radius;
+    /* Optional rectangular geofence region for this waypoint.
+ May be used instead of, or in addition to, geofence_radius. */
+    bool has_bounding_box;
+    meshtastic_BoundingBox bounding_box;
+    /* If true, a notification should be raised when a tracked node enters this
+ waypoint's geofence (the circular radius and/or the bounding box). */
+    bool notify_on_enter;
+    /* If true, a notification should be raised when a tracked node exits this
+ waypoint's geofence (the circular radius and/or the bounding box). */
+    bool notify_on_exit;
 } meshtastic_Waypoint;
 
 /* Message for node status */
@@ -1628,6 +1659,7 @@ extern "C" {
 
 
 
+
 #define meshtastic_MeshPacket_priority_ENUMTYPE meshtastic_MeshPacket_Priority
 #define meshtastic_MeshPacket_delayed_ENUMTYPE meshtastic_MeshPacket_Delayed
 #define meshtastic_MeshPacket_transport_mechanism_ENUMTYPE meshtastic_MeshPacket_TransportMechanism
@@ -1678,7 +1710,8 @@ extern "C" {
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
+#define meshtastic_BoundingBox_init_default      {0, 0, 0, 0}
+#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
@@ -1716,7 +1749,8 @@ extern "C" {
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
+#define meshtastic_BoundingBox_init_zero         {0, 0, 0, 0}
+#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
@@ -1820,6 +1854,10 @@ extern "C" {
 #define meshtastic_RemoteShell_flags_tag         8
 #define meshtastic_RemoteShell_last_tx_seq_tag   9
 #define meshtastic_RemoteShell_last_rx_seq_tag   10
+#define meshtastic_BoundingBox_longitude_west_i_tag 1
+#define meshtastic_BoundingBox_latitude_south_i_tag 2
+#define meshtastic_BoundingBox_longitude_east_i_tag 3
+#define meshtastic_BoundingBox_latitude_north_i_tag 4
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1828,6 +1866,10 @@ extern "C" {
 #define meshtastic_Waypoint_name_tag             6
 #define meshtastic_Waypoint_description_tag      7
 #define meshtastic_Waypoint_icon_tag             8
+#define meshtastic_Waypoint_geofence_radius_tag  9
+#define meshtastic_Waypoint_bounding_box_tag     10
+#define meshtastic_Waypoint_notify_on_enter_tag  11
+#define meshtastic_Waypoint_notify_on_exit_tag   12
 #define meshtastic_StatusMessage_status_tag      1
 #define meshtastic_MqttClientProxyMessage_topic_tag 1
 #define meshtastic_MqttClientProxyMessage_data_tag 2
@@ -2083,6 +2125,14 @@ X(a, STATIC,   SINGULAR, UINT32,   last_rx_seq,      10)
 #define meshtastic_RemoteShell_CALLBACK NULL
 #define meshtastic_RemoteShell_DEFAULT NULL
 
+#define meshtastic_BoundingBox_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_west_i,   1) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_south_i,   2) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_east_i,   3) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_north_i,   4)
+#define meshtastic_BoundingBox_CALLBACK NULL
+#define meshtastic_BoundingBox_DEFAULT NULL
+
 #define meshtastic_Waypoint_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   OPTIONAL, SFIXED32, latitude_i,        2) \
@@ -2091,9 +2141,14 @@ X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
 X(a, STATIC,   SINGULAR, UINT32,   locked_to,         5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
 X(a, STATIC,   SINGULAR, STRING,   description,       7) \
-X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
+X(a, STATIC,   SINGULAR, FIXED32,  icon,              8) \
+X(a, STATIC,   SINGULAR, UINT32,   geofence_radius,   9) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  bounding_box,     10) \
+X(a, STATIC,   SINGULAR, BOOL,     notify_on_enter,  11) \
+X(a, STATIC,   SINGULAR, BOOL,     notify_on_exit,   12)
 #define meshtastic_Waypoint_CALLBACK NULL
 #define meshtastic_Waypoint_DEFAULT NULL
+#define meshtastic_Waypoint_bounding_box_MSGTYPE meshtastic_BoundingBox
 
 #define meshtastic_StatusMessage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   status,            1)
@@ -2402,6 +2457,7 @@ extern const pb_msgdesc_t meshtastic_Data_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerification_msg;
 extern const pb_msgdesc_t meshtastic_StoreForwardPlusPlus_msg;
 extern const pb_msgdesc_t meshtastic_RemoteShell_msg;
+extern const pb_msgdesc_t meshtastic_BoundingBox_msg;
 extern const pb_msgdesc_t meshtastic_Waypoint_msg;
 extern const pb_msgdesc_t meshtastic_StatusMessage_msg;
 extern const pb_msgdesc_t meshtastic_MqttClientProxyMessage_msg;
@@ -2442,6 +2498,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_KeyVerification_fields &meshtastic_KeyVerification_msg
 #define meshtastic_StoreForwardPlusPlus_fields &meshtastic_StoreForwardPlusPlus_msg
 #define meshtastic_RemoteShell_fields &meshtastic_RemoteShell_msg
+#define meshtastic_BoundingBox_fields &meshtastic_BoundingBox_msg
 #define meshtastic_Waypoint_fields &meshtastic_Waypoint_msg
 #define meshtastic_StatusMessage_fields &meshtastic_StatusMessage_msg
 #define meshtastic_MqttClientProxyMessage_fields &meshtastic_MqttClientProxyMessage_msg
@@ -2477,6 +2534,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 /* meshtastic_resend_chunks_size depends on runtime parameters */
 /* meshtastic_ChunkedPayloadResponse_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
+#define meshtastic_BoundingBox_size              20
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
@@ -2512,7 +2570,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
-#define meshtastic_Waypoint_size                 165
+#define meshtastic_Waypoint_size                 197
 
 #ifdef __cplusplus
 } /* extern "C" */
