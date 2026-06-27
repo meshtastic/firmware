@@ -199,7 +199,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         originalRegion = config.lora.region;
         originalPrimaryChannel = *c;
 
-        LOG_INFO("Beacon: switch radio for packet %#08lx to preset=%d slot=%u region=%d", p->id, targetPreset, targetSlot,
+        LOG_INFO("Beacon: switch radio for packet 0x%08x to preset=%d slot=%u region=%d", p->id, targetPreset, targetSlot,
                  targetRegion);
         config.lora.modem_preset = targetPreset;
         config.lora.channel_num = targetSlot;
@@ -476,7 +476,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             pA->decoded.payload.size = offerSize;
             pA->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
             stampPacket(pA);
-            LOG_INFO("Beacon: split-A MESH_BEACON_APP (offer only) from=%#08lx target=%d", pA->from, ti);
+            LOG_INFO("Beacon: split-A MESH_BEACON_APP (offer only) from=0x%08x target=%d", pA->from, ti);
             applyTarget(pA);
         }
 
@@ -491,7 +491,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             pB->decoded.payload.size = msgLen;
             pB->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
             stampPacket(pB);
-            LOG_INFO("Beacon: split-B TEXT_MESSAGE_APP msg='%.40s' from=%#08lx target=%d", bcfg.broadcast_message, pB->from, ti);
+            LOG_INFO("Beacon: split-B TEXT_MESSAGE_APP msg='%.40s' from=0x%08x target=%d", bcfg.broadcast_message, pB->from, ti);
             applyTarget(pB);
         }
 
@@ -505,7 +505,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             p->decoded.payload.size = payloadCacheSize;
             p->decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
             stampPacket(p);
-            LOG_INFO("Beacon: MESH_BEACON_APP offer+msg from=%#08lx msg='%.40s' target=%d", p->from, bcfg.broadcast_message, ti);
+            LOG_INFO("Beacon: MESH_BEACON_APP offer+msg from=0x%08x msg='%.40s' target=%d", p->from, bcfg.broadcast_message, ti);
             applyTarget(p);
         }
     }
@@ -572,7 +572,7 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
     // which sends a real TEXT_MESSAGE_APP over RF. We also do not fire EVENT_RECEIVED_MSG: a beacon
     // is an advisory broadcast, not a personal message, and must not wake the device from sleep.
     if (hasText)
-        LOG_INFO("Beacon: received from %#08lx: '%.40s'", mp.from, b->message);
+        LOG_INFO("Beacon: received from 0x%08x: '%.40s'", mp.from, b->message);
 
     // Cache any offer for the client app — never auto-applied.
     if (hasOfferContent) {
@@ -585,7 +585,7 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
         lastReceivedOffer.preset = b->offer_preset;
         lastReceivedOffer.received_at =
             getValidTime(RTCQualityFromNet); // 0 if no RTC fix yet — consumers must not treat 0 as valid
-        LOG_INFO("Beacon: stored offer from %#08lx (preset=%d)", mp.from, b->offer_preset);
+        LOG_INFO("Beacon: stored offer from 0x%08x (preset=%d)", mp.from, b->offer_preset);
     }
 
     notifyObservers(&mp);

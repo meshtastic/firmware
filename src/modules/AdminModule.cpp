@@ -321,7 +321,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (mp.from != 0 && r->set_module_config.which_payload_variant == meshtastic_ModuleConfig_mesh_beacon_tag) {
             auto &b = const_cast<meshtastic_ModuleConfig_MeshBeaconConfig &>(r->set_module_config.payload_variant.mesh_beacon);
             if (b.broadcast_send_as_node != 0 && b.broadcast_send_as_node != mp.from) {
-                LOG_WARN("Beacon: rejecting broadcast_send_as_node %#08lx from node %#08lx (must match sender)",
+                LOG_WARN("Beacon: rejecting broadcast_send_as_node 0x%08x from node 0x%08x (must match sender)",
                          b.broadcast_send_as_node, mp.from);
                 b.broadcast_send_as_node = moduleConfig.mesh_beacon.broadcast_send_as_node;
             }
