@@ -272,6 +272,9 @@ void MeshBeaconBroadcastModule::rebuildCache()
     beacon.has_offer_preset = bcfg.has_broadcast_offer_preset;
     beacon.offer_preset = bcfg.broadcast_offer_preset;
     beacon.offer_region = bcfg.broadcast_offer_region;
+    // Note: an empty config legitimately encodes to 0 bytes, and pb_encode_to_bytes can't distinguish
+    // that from a (here effectively impossible — buffer is max-sized) failure, so we always clear the
+    // dirty flag. The combined send is gated on payloadCacheSize > 0, so an empty payload is never TX'd.
     payloadCacheSize = (pb_size_t)pb_encode_to_bytes(payloadCache, sizeof(payloadCache), &meshtastic_MeshBeacon_msg, &beacon);
     payloadCacheDirty = false;
     LOG_DEBUG("Beacon: payload cache rebuilt (%u bytes)", payloadCacheSize);
@@ -371,6 +374,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
         offerOnly.offer_preset = bcfg.broadcast_offer_preset;
         offerOnly.offer_region = bcfg.broadcast_offer_region;
         offerSize = (pb_size_t)pb_encode_to_bytes(offerBuf, sizeof(offerBuf), &meshtastic_MeshBeacon_msg, &offerOnly);
+        if (offerSize == 0)
+            LOG_WARN("Beacon: offer encode failed, skipping offer packet(s)");
     }
     if (sendCombined && payloadCacheDirty)
         rebuildCache();
@@ -479,7 +484,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             sendBeaconPacket(p, tgt.preset, tgt.has_channel, chPtr);
         };
 
-        if (sendOfferOnly) {
+        if (sendOfferOnly && offerSize > 0) {
             meshtastic_MeshPacket *pA = allocDataPacket();
             if (!pA) {
                 LOG_WARN("Beacon: failed to allocate split-A packet (target %d)", ti);
@@ -508,7 +513,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             applyTarget(pB);
         }
 
-        if (sendCombined) {
+        if (sendCombined && payloadCacheSize > 0) {
             meshtastic_MeshPacket *p = allocDataPacket();
             if (!p) {
                 LOG_WARN("Beacon: failed to allocate beacon packet (target %d)", ti);

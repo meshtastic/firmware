@@ -368,8 +368,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
     switch (notification) {
     case ISR_TX:
-        handleTransmitInterrupt();
+        handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
 #if !MESHTASTIC_EXCLUDE_BEACON
+        // Pre-switch the radio to the NEXT queued packet's beacon config (no-op for normal traffic).
+        // Not required for correctness — TRANSMIT_DELAY_COMPLETED would switch before CAD anyway — but
+        // doing it here lets the next beacon skip the switch-only delay cycle and, more importantly,
+        // keeps the post-TX listen window (and the CAD/LBT that follows) on the channel we're about to
+        // transmit on. Only engages when the next packet is itself a beacon — exactly when we want it.
         MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
 #endif
         startReceive();
