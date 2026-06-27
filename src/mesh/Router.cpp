@@ -832,6 +832,19 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             skipHandle = true;
         }
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // Beacon listening is disabled: drop beacon packets so they are neither surfaced to the
+        // phone nor handled on-device (same pattern as the disabled neighbor-info case above).
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP &&
+            (!moduleConfig.has_mesh_beacon ||
+             !(moduleConfig.mesh_beacon.flags & meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED))) {
+            LOG_DEBUG("Beacon listening is disabled, ignore beacon packet");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
+
         bool shouldIgnoreNonstandardPorts =
             config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
 #if USERPREFS_EVENT_MODE
