@@ -710,6 +710,13 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // This packet may have already triggered a beacon radio switch in TRANSMIT_DELAY_COMPLETED;
+        // since it never reaches completeSending() here, restore the radio so it isn't left on the
+        // beacon config (which would also break RX on the home channel).
+        MeshBeaconModule::clearTargetRadioSettings(txp);
+        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+#endif
         packetPool.release(txp);
         return false;
     } else {
