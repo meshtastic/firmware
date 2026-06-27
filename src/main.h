@@ -11,7 +11,7 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <SPI.h>
 #include <map>
-#if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2)
+#if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
 #endif
@@ -114,6 +114,9 @@ extern bool runASAP;
 extern bool pauseBluetoothLogging;
 
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
+#ifdef ARCH_ESP32
+void esp32ReleaseBluetoothMemoryIfUnused();
+#endif
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 #if !MESHTASTIC_EXCLUDE_I2C
