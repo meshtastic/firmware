@@ -244,7 +244,7 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
         packetPool.release(p); // free the packet we just removed
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%x, removed=%d", id, result);
+    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
 
