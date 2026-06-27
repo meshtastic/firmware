@@ -1180,7 +1180,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         LOG_INFO("Set module config: MeshBeacon");
         // Sanitize a local copy rather than const_cast-ing the const input (UB if a truly-const
         // object is ever passed); the validated copy is assigned into moduleConfig below.
-        meshtastic_ModuleConfig_MeshBeaconConfig beaconCfg = c.payload_variant.mesh_beacon;
+        auto beaconCfg = c.payload_variant.mesh_beacon;
         // Hard cap at 100 chars.
         beaconCfg.broadcast_message[100] = '\0';
         // Enforce interval minimum (0 means unset/use default).
