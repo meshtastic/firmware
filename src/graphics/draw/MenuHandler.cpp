@@ -177,19 +177,31 @@ void menuHandler::OnboardMessage()
 
 static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
 {
+    // Capture the region we're leaving from config (not the global myRegion, which on
+    // REGULATORY_LORA_REGIONCODE builds is pinned to the regulatory region rather than the
+    // user's stored region) before we overwrite it below.
+    const meshtastic_Config_LoRaConfig_RegionCode previousRegion = config.lora.region;
     config.lora.region = region;
     config.lora.channel_num = 0; // Reset to default channel
 
-    // Reconcile the preset with the explicitly chosen region: a preset locked to another
-    // region would leave config.lora invalid until applyModemConfig() repairs it with
-    // error/critical-error side effects — or, for the swappable EU trio, the clamp would
-    // flip the region right back. The user picked the region, so the preset follows it.
+    // Reconcile the preset with the explicitly chosen region. presetForRegionChange follows the
+    // default into the new region when the user was merely riding the old region's default (so a
+    // board that picks US lands on LONG_TURBO for FCC §15.247), while preserving a deliberately
+    // chosen preset. We then force the region default if the carried-over preset isn't valid here:
+    // leaving an invalid preset would keep config.lora broken until applyModemConfig() repairs it
+    // with error/critical-error side effects — or, for the swappable EU trio, flip the region back.
     const RegionInfo *newRegion = getRegion(region);
-    if (config.lora.use_preset && !newRegion->supportsPreset(config.lora.modem_preset)) {
-        LOG_INFO("Preset %s not available in %s, using default %s",
-                 DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), newRegion->name,
-                 DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
-        config.lora.modem_preset = newRegion->getDefaultPreset();
+    if (config.lora.use_preset) {
+        meshtastic_Config_LoRaConfig_ModemPreset newPreset =
+            RadioInterface::presetForRegionChange(previousRegion, region, config.lora.modem_preset);
+        if (!newRegion->supportsPreset(newPreset))
+            newPreset = newRegion->getDefaultPreset();
+        if (newPreset != config.lora.modem_preset) {
+            LOG_INFO("Preset %s -> region %s default %s",
+                     DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), newRegion->name,
+                     DisplayFormatters::getModemPresetDisplayName(newPreset, false, true));
+            config.lora.modem_preset = newPreset;
+        }
     }
 
     if (isHam && adminModule) {

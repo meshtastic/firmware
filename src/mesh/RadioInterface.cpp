@@ -963,6 +963,18 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
     return nullptr;
 }
 
+meshtastic_Config_LoRaConfig_ModemPreset
+RadioInterface::presetForRegionChange(meshtastic_Config_LoRaConfig_RegionCode oldRegion,
+                                      meshtastic_Config_LoRaConfig_RegionCode newRegion,
+                                      meshtastic_Config_LoRaConfig_ModemPreset currentPreset)
+{
+    // Only follow the default when the caller was riding the old region's default; a preset that
+    // differs is a deliberate choice and is preserved.
+    if (currentPreset == getRegion(oldRegion)->getDefaultPreset())
+        return getRegion(newRegion)->getDefaultPreset();
+    return currentPreset;
+}
+
 /**
  * Checks if a region is valid for the current settings, with no side effects.
  * Safe to call speculatively (e.g. from UI pickers). When errBuf is given, it
