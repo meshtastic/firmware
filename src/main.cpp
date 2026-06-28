@@ -971,6 +971,12 @@ void setup()
                 gps = GPS::createGps();
                 if (gps) {
                     gpsStatus->observe(&gps->newStatus);
+
+                    // If lora region is unset, disable the gps thread
+                    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+                        gps->disable();
+                    }
                 } else {
                     LOG_DEBUG("Run without GPS");
                 }
