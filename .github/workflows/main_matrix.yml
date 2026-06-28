@@ -146,6 +146,14 @@ jobs:
       checks: write
     uses: ./.github/workflows/test_native.yml
 
+  build-wasm:
+    # Build the WebAssembly portduino node ([env:native-wasm]) as part of normal CI,
+    # like the other platforms. It's a dedicated job (not a row in the `build`
+    # matrix) because its artifact is meshnode.{mjs,wasm} — not a flashable
+    # .bin/.uf2/.hex — and it needs the Emscripten SDK; board_level=extra keeps
+    # it out of generate_ci_matrix.py.
+    uses: ./.github/workflows/build_portduino_wasm.yml
+
   docker:
     permissions: # Needed for pushing to GHCR.
       contents: read
