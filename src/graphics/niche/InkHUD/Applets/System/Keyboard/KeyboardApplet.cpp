@@ -664,7 +664,7 @@ bool InkHUD::KeyboardApplet::showSelectionHighlight() const
 
 uint16_t InkHUD::KeyboardApplet::getKeyboardHeight()
 {
-    auto *hud = NicheGraphics::InkHUD::InkHUD::getInstance();
+    const auto *hud = NicheGraphics::InkHUD::InkHUD::getInstance();
     if (!hud || !hud->hasTouchEnabledProvider())
         return static_cast<uint16_t>(fontSmall.lineHeight() * 1.2f) * LEGACY_KBD_ROWS;
 
