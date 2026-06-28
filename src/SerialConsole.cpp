@@ -65,6 +65,10 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.setRX(SERIAL2_RX);
 #endif
     Port.begin(SERIAL_BAUD);
+#if defined(IS_USB_SERIAL) && defined(T5_S3_EPAPER_PRO)
+    // Native USB disconnects during reset; do not block boot while the host re-enumerates the CDC port.
+    Port.setTxTimeoutMs(0);
+#endif
 #if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040) ||   \
     defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     time_t timeout = millis();
