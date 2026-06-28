@@ -32,6 +32,17 @@ lint:
         - json
         - toml
         - ini
+    - name: cpp-sources
+      extensions:
+        - c
+        - cc
+        - cpp
+        - cxx
+        - h
+        - hh
+        - hpp
+        - hxx
+        - ino
   definitions:
     - name: ascii-dash
       files: [ascii-dash-targets]
@@ -41,8 +52,23 @@ lint:
           formatter: true
           run: env LC_ALL=C sed -e 's/\xe2\x80\x94/-/g' -e 's/\xe2\x80\x93/-/g' ${target}
           success_codes: [0]
+    # Flags preprocessor conditionals that OR together too many defined()
+    # terms (e.g. the 13-driver display chains in main.cpp). The compiler has
+    # no warning for this; the fix is an umbrella feature macro (HAS_TFT /
+    # HAS_SCREEN, already in src/configuration.h). Tune the limit via
+    # MAX_DEFINED in bin/lint-ifdef-complexity.sh (default 5 -> warns at 6+).
+    - name: too-many-defined
+      files: [cpp-sources]
+      commands:
+        - name: lint
+          output: regex
+          parse_regex: "(?P<path>.+):(?P<line>\\d+):(?P<col>\\d+):(?P<severity>\\w+):(?P<message>.+):(?P<code>[a-z-]+)"
+          run: bin/lint-ifdef-complexity.sh ${target}
+          success_codes: [0]
+          read_output_from: stdout
   enabled:
     - ascii-dash@SYSTEM
+    - too-many-defined@SYSTEM
     - checkov@3.2.529
     - renovate@43.150.0
     - prettier@3.8.3
