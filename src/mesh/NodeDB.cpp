@@ -2326,7 +2326,9 @@ void NodeDB::loadFromDisk()
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         config.lora.tx_enabled = false;
     } else if (state != LoadFileResult::LOAD_SUCCESS) {
-        installDefaultConfig(); // Config file absent (e.g. first boot) - defaults + keygen are correct here
+        // No decodable config to work with: the file is absent (first boot) or could not be opened (OTHER_FAILURE
+        // / NO_FILESYSTEM). Unlike DECODE_FAILED there are no usable contents to protect, so install defaults.
+        installDefaultConfig();
     } else if (config.version < DEVICESTATE_MIN_VER) {
         LOG_WARN("config %d is old, discard", config.version);
         installDefaultConfig(true);
