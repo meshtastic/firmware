@@ -9,6 +9,7 @@
 #include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
@@ -79,6 +80,14 @@ static unsigned char userprefs_admin_key_1[] = USERPREFS_USE_ADMIN_KEY_1;
 #ifdef USERPREFS_USE_ADMIN_KEY_2
 static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 #endif
+
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void variantDefaultConfig() __attribute__((weak));
+void variantDefaultConfig() {}
+
+void variantDefaultModuleConfig() __attribute__((weak));
+void variantDefaultModuleConfig() {}
 
 #ifdef HELTEC_MESH_NODE_T114
 
@@ -516,6 +525,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     if (transmitHistory) {
         transmitHistory->clear();
     }
+#if HAS_SCREEN
+    messageStore.clearAllMessages();
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
     installDefaultDeviceState();
@@ -785,6 +797,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
     initConfigIntervals();
+    variantDefaultConfig();
+    variantDefaultModuleConfig();
 }
 
 void NodeDB::initConfigIntervals()
@@ -826,7 +840,8 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION)
+#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION) ||               \
+    defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
     moduleConfig.external_notification.enabled = true;
 #endif
 #if defined(PIN_BUZZER)
@@ -847,7 +862,7 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 #if defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
-#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION)
+#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 

@@ -23,6 +23,7 @@
 #include "main.h"
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
+#include "power/SGM41562.h"
 #include "sleep.h"
 
 #if defined(ARCH_PORTDUINO)
@@ -490,6 +491,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // lastly provide a fallback to indicate external power when fully charged.
     virtual bool isVbusIn() override
     {
+#ifdef HAS_SGM41562
+        if (sgm41562 && sgm41562->refresh())
+            return sgm41562->isInputPowerGood();
+#endif
 #ifdef EXT_PWR_DETECT
         return digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE;
 
@@ -506,6 +511,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// we can't be smart enough to say 'full'?
     virtual bool isCharging() override
     {
+#ifdef HAS_SGM41562
+        if (sgm41562 && sgm41562->refresh())
+            return sgm41562->isCharging();
+#endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT) && !defined(HAS_PMU)
         if (hasRAK()) {
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
@@ -723,6 +732,12 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
+#ifdef HAS_SGM41562
+    // Initialize the charger early so AnalogBatteryLevel can read charging
+    // state from it. The charger does not provide battery voltage / percent —
+    // those still come from the platform ADC via analogInit() below.
+    initSGM41562(SGM41562_WIRE);
+#endif
     bool found = false;
     if (axpChipInit()) {
         found = true;
@@ -904,7 +919,16 @@ void Power::readPowerStatus()
 
     // Notify any status instances that are observing us
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
-    if (millis() > lastLogTime + 50 * 1000) {
+
+    // Log battery-presence transitions once; skip OptUnknown so we don't lie before the first probe.
+    static OptionalBool prevHasBattery = OptUnknown;
+    if (hasBattery != OptUnknown && hasBattery != prevHasBattery) {
+        LOG_INFO("Power: battery hardware %s", hasBattery == OptTrue ? "detected" : "absent (USB-only)");
+        prevHasBattery = hasBattery;
+    }
+
+    // Periodic telemetry only emits when a battery is actually present (otherwise values are constant -1/0).
+    if (hasBattery == OptTrue && !Throttle::isWithinTimespanMs(lastLogTime, 50 * 1000)) {
         LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(),
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         lastLogTime = millis();

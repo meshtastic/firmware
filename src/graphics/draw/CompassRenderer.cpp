@@ -28,6 +28,9 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
         display->fillRect(nX - 8, nY - 1, nLabelWidth + 3, FONT_HEIGHT_SMALL - 6);
     } else {
         display->fillRect(nX - 4, nY - 1, nLabelWidth + 2, FONT_HEIGHT_SMALL - 6);
+        display->fillRect(northX - 8, northY - 1, nLabelWidth + 3, FONT_HEIGHT_SMALL - 6);
+    } else {
+        display->fillRect(northX - 4, northY - 1, nLabelWidth + 2, FONT_HEIGHT_SMALL - 6);
     }
 #endif
     display->setColor(WHITE);

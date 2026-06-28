@@ -2,6 +2,7 @@
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/HapticFeedback.h"
 #include "modules/ExternalNotificationModule.h"
 
 #if ARCH_PORTDUINO
@@ -238,6 +239,16 @@ void InputBroker::Init()
         touchBacklightActive = false;
     };
 #endif
+#if defined(HAPTIC_FEEDBACK_PIN)
+    // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
+    touchConfig.suppressLeadUpSound = true;
+    initHapticFeedback();
+    touchConfig.onPress = []() {
+        hapticFeedback->pulse(80);
+        hapticFeedback->armDelayedPulse(500, 80);
+    };
+    touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
+#endif
     TouchButtonThread->initButton(touchConfig);
 #endif
 
@@ -333,6 +344,12 @@ void InputBroker::Init()
             BaseType_t higherWake = 0;
             concurrency::mainDelay.interruptFromISR(&higherWake);
         };
+#if defined(ELECROW_ThinkNode_M7)
+        userConfigNoScreen.longLongPressTime = 15 * 1000;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
+#else
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+#endif
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
         userConfigNoScreen.longPress = INPUT_BROKER_NONE;
         userConfigNoScreen.longPressTime = 500;

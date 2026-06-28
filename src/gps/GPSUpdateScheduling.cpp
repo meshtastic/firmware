@@ -15,6 +15,7 @@ void GPSUpdateScheduling::informGotLock()
     searchEndedMs = millis();
     LOG_DEBUG("Took %us to get lock", (searchEndedMs - searchStartedMs) / 1000);
     updateLockTimePrediction();
+    consecutiveFailures = 0; // Drop back to fast cadence as soon as we acquire any fix
 }
 
 // Search finished without obtaining a fix. We still need to mark the end time so
@@ -24,7 +25,9 @@ void GPSUpdateScheduling::informGotLock()
 void GPSUpdateScheduling::informSearchFailed()
 {
     searchEndedMs = millis();
-    LOG_DEBUG("GPS search ended without fix after %us", (searchEndedMs - searchStartedMs) / 1000);
+    consecutiveFailures++;
+    LOG_DEBUG("GPS search ended without fix after %us (consecutive failures: %u)", (searchEndedMs - searchStartedMs) / 1000,
+              consecutiveFailures);
 }
 
 // Clear old lock-time prediction data.
@@ -35,6 +38,7 @@ void GPSUpdateScheduling::reset()
     searchEndedMs = 0;
     searchCount = 0;
     predictedMsToGetLock = 0;
+    consecutiveFailures = 0;
 }
 
 // How many milliseconds before we should next search for GPS position
@@ -45,6 +49,20 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
 
     // Target interval (seconds), between GPS updates
     uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval, default_gps_update_interval);
+
+    // After a failed search, back off: indoors / no-sky environments will keep failing,
+    // so wake at most once per broadcast interval rather than once per gps_update_interval.
+    // Capped at 1 hour so a user-configured very-long broadcast interval still retries
+    // periodically (in case conditions change). Reset on any successful lock.
+    if (consecutiveFailures > 0) {
+        constexpr uint32_t failureRetryCapMs = 60UL * 60UL * 1000UL; // 1 hour cap
+        uint32_t failureSleepMs =
+            Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+        if (failureSleepMs > failureRetryCapMs)
+            failureSleepMs = failureRetryCapMs;
+        if (updateInterval < failureSleepMs)
+            updateInterval = failureSleepMs;
+    }
 
     // Check how long until we should start searching, to hopefully hit our target interval
     uint32_t dueAtMs = searchEndedMs + updateInterval;
@@ -81,12 +99,16 @@ bool GPSUpdateScheduling::isUpdateDue()
 bool GPSUpdateScheduling::searchedTooLong()
 {
     constexpr uint32_t oneMinuteMs = 60UL * 1000UL;
-    constexpr uint32_t maxSearchClampMs = 15UL * oneMinuteMs; // Hard cap: 15 minutes is always too long
+    constexpr uint32_t maxSearchClampMs = 15UL * oneMinuteMs;   // Hard cap: 15 minutes is always too long
+    constexpr uint32_t postFailureSearchMs = 5UL * oneMinuteMs; // Tighter dwell once we know the environment is hostile
     uint32_t elapsed = elapsedSearchMs();
 
     // Anything over 15 minutes is too long, regardless of the broadcast interval.
-    // TODO: Make a smarter algorithm that backs off the search dwell time when not getting a lock.
     if (elapsed > maxSearchClampMs)
+        return true;
+
+    // After a prior failed search, shorten the dwell
+    if (consecutiveFailures > 0 && elapsed > postFailureSearchMs)
         return true;
 
     uint32_t minimumOrConfiguredSecs =

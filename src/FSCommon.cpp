@@ -88,6 +88,9 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
+#include <cstring>
+#include <new>
+#include <stdexcept>
 #include <vector>
 
 /**
@@ -133,11 +136,47 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
 #ifdef FSCom
+namespace
+{
+bool pathEndsWithDot(const char *path)
+{
+    if (!path)
+        return false;
+
+    size_t length = strlen(path);
+    return length > 0 && path[length - 1] == '.';
+}
+
+bool copyFilePath(char *dest, size_t destSize, const char *path, bool *wasLimited)
+{
+    if (!path || destSize == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    if (strlcpy(dest, path, destSize) >= destSize) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    return true;
+}
+
+void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vector<meshtastic_FileInfo> &filenames,
+                  bool *wasLimited)
+{
+    if (!dirname)
+        return;
+
     File root = FSCom.open(dirname, FILE_O_READ);
     if (!root)
-        return filenames;
-    if (!root.isDirectory())
-        return filenames;
+        return;
+    if (!root.isDirectory()) {
+        root.close();
+        return;
+    }
 
     File file = root.openNextFile();
     while (file) {
@@ -164,6 +203,41 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
         file = root.openNextFile();
     }
     root.close();
+}
+} // namespace
+#endif
+
+// Callers must hold the SPI lock; recursion prevents taking it here.
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount, bool *wasLimited)
+{
+    std::vector<meshtastic_FileInfo> filenames = {};
+    if (wasLimited)
+        *wasLimited = false;
+#ifdef FSCom
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+    size_t reservedCount = maxCount;
+    while (reservedCount > 0) {
+        try {
+            filenames.reserve(reservedCount);
+            break;
+        } catch (const std::bad_alloc &) {
+            reservedCount /= 2;
+        } catch (const std::length_error &) {
+            reservedCount /= 2;
+        }
+    }
+    if (reservedCount == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return filenames;
+    }
+    if (reservedCount < maxCount) {
+        if (wasLimited)
+            *wasLimited = true;
+        maxCount = reservedCount;
+    }
+#endif
+    collectFiles(dirname, levels, maxCount, filenames, wasLimited);
 #endif
     return filenames;
 }

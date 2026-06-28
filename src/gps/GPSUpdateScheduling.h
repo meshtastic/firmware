@@ -25,6 +25,7 @@ class GPSUpdateScheduling
     uint32_t searchEndedMs = 0;
     uint32_t searchCount = 0;
     uint32_t predictedMsToGetLock = 0;
+    uint32_t consecutiveFailures = 0; // Count of search cycles that ended without a fix; reset on lock
 
     const float weighting = 0.2; // Controls exponential smoothing of lock-times prediction. 20% weighting of "latest lock-time".
 };

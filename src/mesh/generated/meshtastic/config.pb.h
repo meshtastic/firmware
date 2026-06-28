@@ -198,7 +198,9 @@ typedef enum _meshtastic_Config_DisplayConfig_OledType {
     /* Can not be auto detected but set by proto. Used for 128x64 screens */
     meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3,
     /* Can not be auto detected but set by proto. Used for 128x128 screens */
-    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128 = 4
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128 = 4,
+    /* Can not be auto detected but set by proto. Used for 64x128 rotated screens */
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_ROTATED = 5
 } meshtastic_Config_DisplayConfig_OledType;
 
 typedef enum _meshtastic_Config_DisplayConfig_DisplayMode {
@@ -288,15 +290,17 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26,
     /* ITU Region 1 Amateur Radio 2m band (144-146 MHz) */
     meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M = 27,
-    /* ITU Region 2 / 3 Amateur Radio 2m band (144-148 MHz) */
-    meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M = 28,
+    /* ITU Region 2 Amateur Radio 2m band (144-148 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M = 28,
     /* EU 866MHz band (Band no. 47b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_866 = 29,
     /* EU 874MHz and 917MHz bands (Band no. 1 and 4 of 2022/172/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_874 = 30,
     meshtastic_Config_LoRaConfig_RegionCode_EU_917 = 31,
     /* EU 868MHz band, with narrow presets */
-    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868 = 32
+    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868 = 32,
+    /* ITU Region 3 Amateur Radio 2m band (144-148 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M = 33
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -720,8 +724,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayUnits)(meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
 
 #define _meshtastic_Config_DisplayConfig_OledType_MIN meshtastic_Config_DisplayConfig_OledType_OLED_AUTO
-#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128
-#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128+1))
+#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_ROTATED
+#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_ROTATED+1))
 
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MIN meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MAX meshtastic_Config_DisplayConfig_DisplayMode_COLOR
@@ -732,8 +736,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_EU_N_868
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW

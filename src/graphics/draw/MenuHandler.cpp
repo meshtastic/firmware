@@ -491,7 +491,7 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-#if defined(M5STACK_UNITC6L)
+#if defined(OLED_TINY)
     static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
 #else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
@@ -1255,6 +1255,11 @@ void menuHandler::positionBaseMenu()
 #if !MESHTASTIC_EXCLUDE_ACCELEROMETER
             if (accelerometerThread) {
                 accelerometerThread->calibrate(30);
+            }
+#endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+            if (magnetometerThread) {
+                magnetometerThread->calibrate(30);
             }
 #endif
             break;
