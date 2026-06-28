@@ -1127,7 +1127,7 @@ static void test_usRegionDefaultPresetIsLongTurbo()
 
 static void test_nonUsRegionDefaultPresetUnchanged()
 {
-    // Only US changed: every other region still defaults to LONG_FAST.
+    // Only US changed: EU_868 still defaults to LONG_FAST.
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
                       getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868)->getDefaultPreset());
 }
