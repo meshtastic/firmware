@@ -105,7 +105,9 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define BAT_READ 30 // D30 = P0.04  Reads battery voltage from divider on signal board.
+#define BAT_READ 30 // D30 = P0.04  Battery divider enable (BAT_CTL) on signal board.
+#define ADC_CTRL BAT_READ
+#define ADC_CTRL_ENABLED HIGH
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT // PIN_A7
@@ -178,4 +180,4 @@ extern "C" {
 }
 #endif
 
-#endif //  _SEEED_SOLAR_NODE_H_
+#endif //  _SEEED_TRACKER_L1_H_
