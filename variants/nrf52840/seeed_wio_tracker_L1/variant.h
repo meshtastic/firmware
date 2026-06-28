@@ -180,4 +180,4 @@ extern "C" {
 }
 #endif
 
-#endif //  _SEEED_SOLAR_NODE_H_
+#endif //  _SEEED_TRACKER_L1_H_
