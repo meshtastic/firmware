@@ -52,9 +52,9 @@ lint:
           formatter: true
           run: env LC_ALL=C sed -e 's/\xe2\x80\x94/-/g' -e 's/\xe2\x80\x93/-/g' ${target}
           success_codes: [0]
-    # Flags preprocessor conditionals that OR together too many defined()
-    # terms (e.g. the 13-driver display chains in main.cpp). The compiler has
-    # no warning for this; the fix is an umbrella feature macro (HAS_TFT /
+    # Flags preprocessor conditionals that contain too many defined() terms
+    # (e.g. the 13-driver display chains in main.cpp). The compiler has no
+    # warning for this; the fix is an umbrella feature macro (HAS_TFT /
     # HAS_SCREEN, already in src/configuration.h). Tune the limit via
     # MAX_DEFINED in bin/lint-ifdef-complexity.sh (default 5 -> warns at 6+).
     - name: too-many-defined
