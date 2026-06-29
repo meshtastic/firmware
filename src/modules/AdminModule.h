@@ -22,6 +22,8 @@ struct AdminModule_ObserverData {
  */
 class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
 {
+    friend class AdminModuleTestShim; // native unit tests reach handleSetConfig + hasOpenEditTransaction
+
   public:
     /** Constructor
      * name is for debugging output
@@ -64,7 +66,11 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
   protected:
     void handleSetConfig(const meshtastic_Config &c, bool fromOthers);
 
+#ifdef PIO_UNIT_TESTING
+  protected:
+#else
   private:
+#endif
     bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
 
