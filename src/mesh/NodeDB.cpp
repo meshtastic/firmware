@@ -480,8 +480,10 @@ NodeDB::NodeDB()
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Generate crypto keys if needed using consolidated function
     // Set my node num uint32 value to bytes from the public key (if we have one)
-    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist
-    generateCryptoKeyPair(nullptr);
+    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist.
+    // Skip on a degraded boot: the keypair isn't in RAM, so minting one would change our NodeNum.
+    if (!configDecodeFailed)
+        generateCryptoKeyPair(nullptr);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
@@ -625,7 +627,9 @@ NodeDB::NodeDB()
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
         saveWhat |= SEGMENT_NODEDATABASE;
-    if (configCRC != crc32Buffer(&config, sizeof(config)))
+    // Don't persist on a degraded boot: it would overwrite the unreadable-but-maybe-transient config file
+    // with no-key UNSET defaults. Runtime reconfiguration (admin set) still persists normally.
+    if (!configDecodeFailed && configCRC != crc32Buffer(&config, sizeof(config)))
         saveWhat |= SEGMENT_CONFIG;
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
@@ -1308,6 +1312,152 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+    moduleConfig.has_mesh_beacon = true;
+    // Default flags: listen on, broadcast off, legacy split on.
+    moduleConfig.mesh_beacon.flags = meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED |
+                                     meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT;
+// Set or clear a single beacon flag bit from a USERPREFS boolean.
+#define BEACON_APPLY_FLAG(enabled, flag)                                                                                         \
+    do {                                                                                                                         \
+        if (enabled)                                                                                                             \
+            moduleConfig.mesh_beacon.flags |= (uint32_t)(flag);                                                                  \
+        else                                                                                                                     \
+            moduleConfig.mesh_beacon.flags &= ~(uint32_t)(flag);                                                                 \
+    } while (0)
+#ifdef USERPREFS_MESH_BEACON_LISTEN_ENABLED
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LISTEN_ENABLED, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED);
+#endif
+#ifdef USERPREFS_MESH_BEACON_BROADCAST_ENABLED
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_BROADCAST_ENABLED,
+                      meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED);
+#endif
+#ifdef USERPREFS_MESH_BEACON_MESSAGE
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, USERPREFS_MESH_BEACON_MESSAGE,
+            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_message[sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1] = '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_INTERVAL_SECS
+    moduleConfig.mesh_beacon.broadcast_interval_secs =
+        (USERPREFS_MESH_BEACON_INTERVAL_SECS != 0 &&
+         USERPREFS_MESH_BEACON_INTERVAL_SECS < default_mesh_beacon_min_broadcast_interval_secs)
+            ? default_mesh_beacon_min_broadcast_interval_secs
+            : USERPREFS_MESH_BEACON_INTERVAL_SECS;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = USERPREFS_MESH_BEACON_OFFER_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_REGION
+    moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_offer_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1] =
+        '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
+    static_assert(sizeof(beaconOfferPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes),
+                  "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+    memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
+    moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
+    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_REGION
+    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_on_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1] = '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
+    static_assert(sizeof(beaconOnPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes),
+                  "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+    memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
+    moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    moduleConfig.mesh_beacon.broadcast_on_channel.channel_num = USERPREFS_MESH_BEACON_ON_CHANNEL_NUM;
+#endif
+#ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);
+#endif
+#undef BEACON_APPLY_FLAG
+// Per-preset broadcast targets (up to 4). Each TARGET_<N>_* key bumps broadcast_targets_count as needed.
+#define BEACON_TARGET_PRESET(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_preset = true;                                                       \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].preset = (VAL);                                                          \
+    } while (0)
+#define BEACON_TARGET_REGION(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].region = (VAL);                                                          \
+    } while (0)
+// Target channel is referenced by index into the device's channel table (0..MAX_NUM_CHANNELS-1).
+#define BEACON_TARGET_CH_INDEX(N, VAL)                                                                                           \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
+    } while (0)
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
+    BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_REGION
+    BEACON_TARGET_REGION(0, USERPREFS_MESH_BEACON_TARGET_0_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
+    BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_REGION
+    BEACON_TARGET_REGION(1, USERPREFS_MESH_BEACON_TARGET_1_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
+    BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_REGION
+    BEACON_TARGET_REGION(2, USERPREFS_MESH_BEACON_TARGET_2_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
+    BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_REGION
+    BEACON_TARGET_REGION(3, USERPREFS_MESH_BEACON_TARGET_3_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
+#endif
+#undef BEACON_TARGET_PRESET
+#undef BEACON_TARGET_REGION
+#undef BEACON_TARGET_CH_INDEX
+#endif // !MESHTASTIC_EXCLUDE_BEACON
+
     initModuleConfigIntervals();
 }
 
@@ -1974,6 +2124,7 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    configDecodeFailed = false;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2163,15 +2314,26 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
-        installDefaultConfig(); // Our in RAM copy might now be corrupt
+    if (state == LoadFileResult::DECODE_FAILED) {
+        // Config file present but undecodable this boot (corruption / torn write / transient decrypt fail).
+        // loadProto() already zeroed `config`, so the keypair is gone from RAM; minting a new one would change
+        // our NodeNum (== crc32(public_key)) and orphan us on the mesh. configDecodeFailed freezes identity and
+        // skips persisting (see ctor), so a transient failure self-heals on the next clean boot. A genuinely
+        // absent config returns OTHER_FAILURE, so this never fires on first boot. Boot degraded + radio-silent.
+        LOG_ERROR("Config decode failed - freezing identity, booting degraded (radio silent until restored)");
+        configDecodeFailed = true;
+        installDefaultConfig(true);
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.tx_enabled = false;
+    } else if (state != LoadFileResult::LOAD_SUCCESS) {
+        // No decodable config to work with: the file is absent (first boot) or could not be opened (OTHER_FAILURE
+        // / NO_FILESYSTEM). Unlike DECODE_FAILED there are no usable contents to protect, so install defaults.
+        installDefaultConfig();
+    } else if (config.version < DEVICESTATE_MIN_VER) {
+        LOG_WARN("config %d is old, discard", config.version);
+        installDefaultConfig(true);
     } else {
-        if (config.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("config %d is old, discard", config.version);
-            installDefaultConfig(true);
-        } else {
-            LOG_INFO("Loaded saved config version %d", config.version);
-        }
+        LOG_INFO("Loaded saved config version %d", config.version);
     }
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
@@ -2188,7 +2350,9 @@ void NodeDB::loadFromDisk()
     // take effect even when NVS already has a valid config (e.g. region-locked
     // dev boards with no BLE/serial to set the region at runtime).
 #ifdef USERPREFS_CONFIG_LORA_REGION
-    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
+    // Skip on a degraded boot to keep the radio silent (identity is already protected by the keygen gate).
+    if (!configDecodeFailed)
+        config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #endif
 
 #ifdef USERPREFS_LORACONFIG_USE_PRESET
@@ -2758,6 +2922,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        moduleConfig.has_mesh_beacon = true;
+#endif
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
