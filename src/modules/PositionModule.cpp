@@ -2,6 +2,7 @@
 #include "PositionModule.h"
 #include "Default.h"
 #include "GPS.h"
+#include "GeofenceModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
@@ -108,6 +109,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     nodeDB->updatePosition(getFrom(&mp), p);
     precision = getPositionPrecisionForChannel(mp.channel);
+
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    // Evaluate this other-node position against any geofencing waypoints we know about.
+    if (geofenceModule && !isLocal)
+        geofenceModule->evaluatePosition(getFrom(&mp), p);
+#endif
 
     return false; // Let others look at this message also if they want
 }

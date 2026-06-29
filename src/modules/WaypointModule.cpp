@@ -1,4 +1,5 @@
 #include "WaypointModule.h"
+#include "GeofenceModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
@@ -25,6 +26,14 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     // Keep a copy of the most recent text message.
     devicestate.rx_waypoint = mp;
     devicestate.has_rx_waypoint = true;
+
+    // Feed the geofence engine: it keeps its own in-memory store of geofencing waypoints (the
+    // single rx_waypoint above only remembers the last one shown on screen).
+    if (geofenceModule) {
+        meshtastic_Waypoint wp{};
+        if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp))
+            geofenceModule->onWaypointReceived(wp);
+    }
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 
