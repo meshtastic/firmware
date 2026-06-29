@@ -480,8 +480,10 @@ NodeDB::NodeDB()
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Generate crypto keys if needed using consolidated function
     // Set my node num uint32 value to bytes from the public key (if we have one)
-    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist
-    generateCryptoKeyPair(nullptr);
+    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist.
+    // Skip on a degraded boot: the keypair isn't in RAM, so minting one would change our NodeNum.
+    if (!configDecodeFailed)
+        generateCryptoKeyPair(nullptr);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
@@ -625,7 +627,9 @@ NodeDB::NodeDB()
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
         saveWhat |= SEGMENT_NODEDATABASE;
-    if (configCRC != crc32Buffer(&config, sizeof(config)))
+    // Don't persist on a degraded boot: it would overwrite the unreadable-but-maybe-transient config file
+    // with no-key UNSET defaults. Runtime reconfiguration (admin set) still persists normally.
+    if (!configDecodeFailed && configCRC != crc32Buffer(&config, sizeof(config)))
         saveWhat |= SEGMENT_CONFIG;
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
@@ -2120,6 +2124,7 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    configDecodeFailed = false;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2309,15 +2314,26 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
-        installDefaultConfig(); // Our in RAM copy might now be corrupt
+    if (state == LoadFileResult::DECODE_FAILED) {
+        // Config file present but undecodable this boot (corruption / torn write / transient decrypt fail).
+        // loadProto() already zeroed `config`, so the keypair is gone from RAM; minting a new one would change
+        // our NodeNum (== crc32(public_key)) and orphan us on the mesh. configDecodeFailed freezes identity and
+        // skips persisting (see ctor), so a transient failure self-heals on the next clean boot. A genuinely
+        // absent config returns OTHER_FAILURE, so this never fires on first boot. Boot degraded + radio-silent.
+        LOG_ERROR("Config decode failed - freezing identity, booting degraded (radio silent until restored)");
+        configDecodeFailed = true;
+        installDefaultConfig(true);
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.tx_enabled = false;
+    } else if (state != LoadFileResult::LOAD_SUCCESS) {
+        // No decodable config to work with: the file is absent (first boot) or could not be opened (OTHER_FAILURE
+        // / NO_FILESYSTEM). Unlike DECODE_FAILED there are no usable contents to protect, so install defaults.
+        installDefaultConfig();
+    } else if (config.version < DEVICESTATE_MIN_VER) {
+        LOG_WARN("config %d is old, discard", config.version);
+        installDefaultConfig(true);
     } else {
-        if (config.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("config %d is old, discard", config.version);
-            installDefaultConfig(true);
-        } else {
-            LOG_INFO("Loaded saved config version %d", config.version);
-        }
+        LOG_INFO("Loaded saved config version %d", config.version);
     }
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
@@ -2334,7 +2350,9 @@ void NodeDB::loadFromDisk()
     // take effect even when NVS already has a valid config (e.g. region-locked
     // dev boards with no BLE/serial to set the region at runtime).
 #ifdef USERPREFS_CONFIG_LORA_REGION
-    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
+    // Skip on a degraded boot to keep the radio silent (identity is already protected by the keygen gate).
+    if (!configDecodeFailed)
+        config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #endif
 
 #ifdef USERPREFS_LORACONFIG_USE_PRESET
