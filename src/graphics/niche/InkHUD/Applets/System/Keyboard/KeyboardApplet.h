@@ -37,6 +37,11 @@ class KeyboardApplet : public SystemApplet
     static uint16_t getKeyboardHeight(); // used to set the keyboard tile height
 
   private:
+    bool useTouchKeyboard() const;
+    void renderLegacyKeyboard(bool full);
+    void handleLegacyInput(bool longPress);
+    void drawLegacyKeyLabel(uint16_t left, uint16_t top, uint16_t width, char key, Color color);
+
     enum KeyCode : int16_t {
         KEY_NONE = -1,
         KEY_BACKSPACE = 256,
@@ -69,6 +74,8 @@ class KeyboardApplet : public SystemApplet
     bool showSelectionHighlight() const;
 
     static const uint8_t KBD_COLS = 11;
+    static const uint8_t LEGACY_KBD_ROWS = 4;
+    static const uint8_t LEGACY_KBD_KEY_COUNT = KBD_COLS * LEGACY_KBD_ROWS;
     static const uint8_t KBD_ROWS = 5;
     static const uint8_t KBD_KEY_COUNT = KBD_COLS * KBD_ROWS;
     static const uint8_t EMOTE_SLOT_COUNT = KBD_COLS * (KBD_ROWS - 1); // top 4 rows
@@ -137,6 +144,22 @@ class KeyboardApplet : public SystemApplet
     static constexpr uint8_t KEY_GAP_X = 3;
     static constexpr uint8_t KEY_GAP_Y = 4;
     static constexpr uint8_t KEY_RADIUS = 4;
+
+    const char legacyKeys[LEGACY_KBD_KEY_COUNT] = {
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\b',  // row 0
+        'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '\n',  // row 1
+        'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '!', ' ',   // row 2
+        'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '?', '\x1b' // row 3
+    };
+
+    const uint16_t legacyKeyWidths[LEGACY_KBD_KEY_COUNT] = {
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, // row 0
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, // row 1
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 24, // row 2
+        16, 16, 16, 16, 16, 16, 16, 10, 10, 12, 40  // row 3
+    };
+
+    uint16_t legacyRowWidths[LEGACY_KBD_ROWS];
 };
 
 } // namespace NicheGraphics::InkHUD

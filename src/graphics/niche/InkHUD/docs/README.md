@@ -254,6 +254,20 @@ You will need to add these lines to any variants which will use your applet.
 
 If you need to create several similar applets, it might make sense to create a reusable base class. Several of these already exist in `src/graphics/niche/InkHUD/Applets/Bases`, but use these with caution, as they may be modified in future.
 
+#### Map Applet Base
+
+`MapApplet` (`src/graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h`) is a base class for applets that plot node positions on a map. It handles tile rendering, zoom control, scale bars, and GPS tracking. `PositionsApplet` and `FavoritesMapApplet` both inherit from it.
+
+##### Map Tiles
+
+Map tiles are stored in `MapTile.h` (`src/graphics/niche/InkHUD/Applets/Bases/Map/MapTile.h`). The file committed to the repository contains no tile data by default — the map applets work without tiles, falling back to the original marker-only display.
+
+Tiles are 256×256 pixels, 1-bit (column-major bit packing), compressed per tile with LZ4 to keep flash usage low.
+
+##### Zoom Controls
+
+When the menu is opened from a map applet, zoom controls appear automatically. Zoom In and Zoom Out step through the available tile zoom levels. Reset Zoom returns to the default auto-fit behavior, where the map scales to show all visible nodes.
+
 #### System Applets
 
 So far, we have been talking about "user applets". We also recognize a separate category of "system applets". These handle things like the menu, and the boot screen. These often need special handling, and need to be implemented manually.

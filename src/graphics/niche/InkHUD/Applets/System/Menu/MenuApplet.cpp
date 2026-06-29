@@ -10,6 +10,7 @@
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
@@ -1021,6 +1022,27 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true);
         break;
 
+    case MAP_ZOOM_IN: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomIn();
+        break;
+    }
+
+    case MAP_ZOOM_OUT: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomOut();
+        break;
+    }
+
+    case MAP_ZOOM_RESET: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->resetZoom();
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -1046,6 +1068,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
+
+        // Map zoom controls — only when viewing a map applet
+        {
+            MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+            if (mapApplet) {
+                if (mapApplet->canZoomIn())
+                    items.push_back(MenuItem("Zoom In", MenuAction::MAP_ZOOM_IN, MenuPage::EXIT));
+                if (mapApplet->canZoomOut())
+                    items.push_back(MenuItem("Zoom Out", MenuAction::MAP_ZOOM_OUT, MenuPage::EXIT));
+                if (mapApplet->isZoomLocked())
+                    items.push_back(MenuItem("Reset Zoom", MenuAction::MAP_ZOOM_RESET, MenuPage::EXIT));
+            }
+        }
+
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));

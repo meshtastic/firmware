@@ -40,6 +40,11 @@ cstyleCast
 *:.pio/*
 *:*/libdeps/*
 *:*/generated/*
+// emscripten-only wasm node: EM_ASYNC_JS/EM_JS expand to constructs cppcheck
+// can't parse (internalAstError), and these sources are not part of any checked
+// board build ([env:native-wasm] is board_level=extra, compiled by the build-wasm
+// CI job, not pio check). Don't analyze them here.
+*:*/platform/portduino/wasm/*
 noExplicitConstructor:*/mqtt/*
 postfixOperator:*/mqtt/*
 

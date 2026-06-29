@@ -8,7 +8,12 @@
 #include "LR11x0Interface.h"
 #include "Module.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#ifndef ARCH_PORTDUINO_WASM
+// The browser (WASM) node configures the radio via the wasm_set_lora_* setters
+// instead of a YAML file, so it has no yaml-cpp dependency. Everything that uses
+// YAML below (emit_yaml / loadConfig / readGPIOFromYaml) is likewise guarded.
 #include "yaml-cpp/yaml.h"
+#endif
 
 extern struct portduino_status_struct {
     bool LoRa_in_error = false;
@@ -64,7 +69,9 @@ bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+#ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
+#endif
 std::string exec(const char *cmd);
 
 extern struct portduino_config_struct {
@@ -221,6 +228,7 @@ extern struct portduino_config_struct {
                                 &tbRightPin,
                                 &tbPressPin};
 
+#ifndef ARCH_PORTDUINO_WASM
     std::string emit_yaml()
     {
         YAML::Emitter out;
@@ -569,4 +577,5 @@ extern struct portduino_config_struct {
         out << YAML::EndMap; // General
         return out.c_str();
     }
+#endif // !ARCH_PORTDUINO_WASM
 } portduino_config;

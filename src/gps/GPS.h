@@ -98,6 +98,9 @@ class GPS : private concurrency::OSThread
     // Disable the thread
     int32_t disable() override;
 
+    // Returns if the thread is enabled
+    bool isEnabled();
+
     // toggle between enabled/disabled
     void toggleGpsMode();
 

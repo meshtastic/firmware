@@ -1000,6 +1000,11 @@ typedef struct _meshtastic_Waypoint {
     /* If true, a notification should be raised when a tracked node exits this
  waypoint's geofence (the circular radius and/or the bounding box). */
     bool notify_on_exit;
+    /* If true, only raise geofence enter/exit notifications for nodes that are
+ marked as favorites on the receiving device. Applies to both notify_on_enter
+ and notify_on_exit. Favorite status is resolved locally per receiver, so the
+ same waypoint alerts each node only for its own favorites. */
+    bool notify_favorites_only;
 } meshtastic_Waypoint;
 
 /* Message for node status */
@@ -1711,7 +1716,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_BoundingBox_init_default      {0, 0, 0, 0}
-#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0}
+#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
@@ -1750,7 +1755,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_BoundingBox_init_zero         {0, 0, 0, 0}
-#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0}
+#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
@@ -1870,6 +1875,7 @@ extern "C" {
 #define meshtastic_Waypoint_bounding_box_tag     10
 #define meshtastic_Waypoint_notify_on_enter_tag  11
 #define meshtastic_Waypoint_notify_on_exit_tag   12
+#define meshtastic_Waypoint_notify_favorites_only_tag 13
 #define meshtastic_StatusMessage_status_tag      1
 #define meshtastic_MqttClientProxyMessage_topic_tag 1
 #define meshtastic_MqttClientProxyMessage_data_tag 2
@@ -2145,7 +2151,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  icon,              8) \
 X(a, STATIC,   SINGULAR, UINT32,   geofence_radius,   9) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  bounding_box,     10) \
 X(a, STATIC,   SINGULAR, BOOL,     notify_on_enter,  11) \
-X(a, STATIC,   SINGULAR, BOOL,     notify_on_exit,   12)
+X(a, STATIC,   SINGULAR, BOOL,     notify_on_exit,   12) \
+X(a, STATIC,   SINGULAR, BOOL,     notify_favorites_only,  13)
 #define meshtastic_Waypoint_CALLBACK NULL
 #define meshtastic_Waypoint_DEFAULT NULL
 #define meshtastic_Waypoint_bounding_box_MSGTYPE meshtastic_BoundingBox
@@ -2570,7 +2577,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
-#define meshtastic_Waypoint_size                 197
+#define meshtastic_Waypoint_size                 199
 
 #ifdef __cplusplus
 } /* extern "C" */
