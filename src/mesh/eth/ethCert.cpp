@@ -242,8 +242,13 @@ static bool certKeyParse(const std::vector<uint8_t> &certDer, const std::vector<
     mbedtls_pk_context pk;
     mbedtls_x509_crt_init(&crt);
     mbedtls_pk_init(&pk);
+    // Both DERs must parse AND form a matching pair: parsing alone would accept a
+    // truncation-free but mismatched cert/key (e.g. a new cert written over an old
+    // key when the IP commit-marker survived a failed clear), which TLS would then
+    // reject at handshake time.
     bool ok = mbedtls_x509_crt_parse_der(&crt, certDer.data(), certDer.size()) == 0 &&
-              mbedtls_pk_parse_key(&pk, keyDer.data(), keyDer.size(), nullptr, 0, picoRand, nullptr) == 0;
+              mbedtls_pk_parse_key(&pk, keyDer.data(), keyDer.size(), nullptr, 0, picoRand, nullptr) == 0 &&
+              mbedtls_pk_check_pair(&crt.pk, &pk, picoRand, nullptr) == 0;
     mbedtls_pk_free(&pk);
     mbedtls_x509_crt_free(&crt);
     return ok;
@@ -333,6 +338,12 @@ class EthCertThread : public concurrency::OSThread
         bool ok = ensureCertForIp(ip, material_);
         if (!ok) {
             LOG_ERROR("ETH CERT: pipeline FAILED — TLS server will not start");
+            // Don't leave isReady() reporting true with empty material: a later TLS
+            // teardown (e.g. a W5500 reset) would then fail initTlsContext() and stay
+            // disabled. Clear readiness so the TLS worker waits and the next poll
+            // retries from scratch.
+            ready_ = false;
+            certIp_ = IPAddress(0, 0, 0, 0);
             material_.certDer.clear();
             material_.keyDer.clear();
             return CERT_RECHECK_MS; // retry on the next poll
