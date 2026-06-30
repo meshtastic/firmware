@@ -90,6 +90,10 @@ void GpsdSerial::fillBuffer()
 {
     if (_sockfd < 0)
         return;
+    // Guard: if the buffer is already full, skip recv entirely so n is always
+    // assigned before the post-loop disconnect check below.
+    if (_rxBuf.size() >= RX_BUF_MAX)
+        return;
 
     uint8_t tmp[256];
     ssize_t n;

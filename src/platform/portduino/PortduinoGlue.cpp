@@ -950,9 +950,14 @@ bool loadConfig(const char *configPath)
                 if (portduino_config.has_gps) {
                     LOG_WARN("GPS config: both SerialPath and GpsdHost are set; GpsdHost takes priority");
                 }
-                portduino_config.gpsd_host = gpsdHost;
-                portduino_config.gpsd_port = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
-                portduino_config.has_gps = 1;
+                int gpsdPort = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
+                if (gpsdPort < 1 || gpsdPort > 65535) {
+                    LOG_ERROR("GPS config: GpsdPort %d is out of range [1, 65535]; ignoring GPS config", gpsdPort);
+                } else {
+                    portduino_config.gpsd_host = gpsdHost;
+                    portduino_config.gpsd_port = gpsdPort;
+                    portduino_config.has_gps = 1;
+                }
             }
         }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
