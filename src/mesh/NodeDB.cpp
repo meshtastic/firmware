@@ -3797,6 +3797,12 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
     }
 
     bool keygenSuccess = false;
+    // freshKeypair gates createNewIdentity() below. Only a genuinely new or explicitly imported keypair
+    // may adopt the key-derived NodeNum (my_node_num == crc32(public_key)). Regenerating the public key
+    // from an unchanged existing private key must NOT change our identity: that path runs on every normal
+    // boot, so deriving the NodeNum there silently migrates a legacy (macaddr-derived) NodeNum on the first
+    // 2.8 boot, orphaning the node on the mesh (peers keep addressing the old number; DMs to it NAK).
+    bool freshKeypair = false;
     // Record whether the stored key is a known compromised/low-entropy key so main.cpp can warn the
     // user. A detected low-entropy key is regenerated below, but the flag stays set so the
     // "Compromised keys were detected and regenerated" notification still fires.
@@ -3812,12 +3818,14 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         // Generate public key from the provided private key
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
             keygenSuccess = true;
+            freshKeypair = true; // an explicitly imported key establishes a (possibly new) identity
         } else {
             LOG_ERROR("Failed to generate public key from provided private key");
             return false;
         }
     }
-    // Try to regenerate public key from existing private key if it's valid and not low entropy
+    // Regenerate the public key from an existing, unchanged private key (the normal-boot path). The key is
+    // identical, so identity must be preserved: leave freshKeypair=false so the NodeNum is not re-derived.
     else if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
         config.security.public_key.size = 32;
         LOG_DEBUG("Regenerate PKI public key from existing private key");
@@ -3831,6 +3839,7 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         config.security.private_key.size = 32;
         crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
         keygenSuccess = true;
+        freshKeypair = true; // a brand-new keypair gets a fresh key-derived identity
     }
 
     // Update sizes and copy to owner if successful
@@ -3842,8 +3851,11 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         LOG_DEBUG("Set DH private key for crypto operations");
         crypto->setDHPrivateKey(config.security.private_key.bytes);
 
-        // Conditionally create new identity based on parameter
-        createNewIdentity();
+        // Adopt the key-derived NodeNum only for a genuinely new/imported keypair - never when we just
+        // regenerated the same public key from the same private key on a normal boot. The latter is what
+        // previously migrated established (legacy) NodeNums on the first 2.8 boot and orphaned nodes.
+        if (freshKeypair)
+            createNewIdentity();
     }
     return keygenSuccess;
 #else

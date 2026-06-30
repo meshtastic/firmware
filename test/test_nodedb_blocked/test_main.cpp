@@ -13,6 +13,7 @@
 // The migration demotes overflow into the warm tier, so these tests need it.
 #if WARM_NODE_COUNT > 0
 
+#include "mesh/CryptoEngine.h"
 #include "mesh/NodeDB.h"
 #include <cstring>
 
@@ -197,6 +198,33 @@ static void test_protectedCap_refusesBeyondLimit(void)
     TEST_ASSERT_TRUE(db->setProtectedFlag(already, NODEINFO_BITFIELD_IS_IGNORED_MASK, true));
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
+// Regression: regenerating the public key from an existing, UNCHANGED private key (the normal-boot path)
+// must NOT change our NodeNum. Before the fix, generateCryptoKeyPair() called createNewIdentity() on this
+// path too, re-deriving my_node_num = crc32(pubkey) every boot - which silently migrated legacy
+// (macaddr-derived) NodeNums on the first 2.8 boot and orphaned the node (peers keep addressing the old
+// number, DMs to it NAK, and it lingers as an ignored, keyless ghost).
+static void test_generateCryptoKeyPair_regenerateKeepsExistingNodeNum(void)
+{
+    // Establish a valid existing keypair; region set so keygen isn't blocked; non-licensed.
+    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+    config.security.public_key.size = 32;
+    config.security.private_key.size = 32;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    owner.is_licensed = false;
+
+    // A legacy NodeNum that does NOT equal crc32(pubkey).
+    const uint32_t legacyNum = 0x2b873e80;
+    myNodeInfo.my_node_num = legacyNum;
+
+    // privateKey == nullptr + a valid existing 32-byte key => the "regenerate from existing key" branch.
+    // The key is unchanged, so identity must be preserved (createNewIdentity() must NOT run).
+    db->generateCryptoKeyPair();
+
+    TEST_ASSERT_EQUAL_UINT32(legacyNum, db->getNodeNum());
+}
+#endif
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -209,6 +237,9 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_preservesFavorite);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
+    RUN_TEST(test_generateCryptoKeyPair_regenerateKeepsExistingNodeNum);
+#endif
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
