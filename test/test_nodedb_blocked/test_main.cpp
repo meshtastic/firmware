@@ -13,6 +13,7 @@
 // The migration demotes overflow into the warm tier, so these tests need it.
 #if WARM_NODE_COUNT > 0
 
+#include "mesh/CryptoEngine.h"
 #include "mesh/NodeDB.h"
 #include <cstring>
 
@@ -197,6 +198,30 @@ static void test_protectedCap_refusesBeyondLimit(void)
     TEST_ASSERT_TRUE(db->setProtectedFlag(already, NODEINFO_BITFIELD_IS_IGNORED_MASK, true));
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
+// Regression (PR #10820): regenerating the public key from an unchanged private key on a normal boot must
+// preserve the NodeNum, not re-derive crc32(pubkey) and migrate a legacy NodeNum.
+static void test_generateCryptoKeyPair_regenerateKeepsExistingNodeNum(void)
+{
+    // Establish a valid existing keypair; region set so keygen isn't blocked; non-licensed.
+    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+    config.security.public_key.size = 32;
+    config.security.private_key.size = 32;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    owner.is_licensed = false;
+
+    // A legacy NodeNum that does NOT equal crc32(pubkey).
+    const uint32_t legacyNum = 0x2b873e80;
+    myNodeInfo.my_node_num = legacyNum;
+
+    // privateKey == nullptr + a valid existing 32-byte key => the "regenerate from existing key" branch.
+    // Assert it actually ran (returns true), then that identity was preserved (createNewIdentity skipped).
+    TEST_ASSERT_TRUE(db->generateCryptoKeyPair());
+
+    TEST_ASSERT_EQUAL_UINT32(legacyNum, db->getNodeNum());
+}
+#endif
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -209,6 +234,9 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_preservesFavorite);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
+    RUN_TEST(test_generateCryptoKeyPair_regenerateKeepsExistingNodeNum);
+#endif
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
