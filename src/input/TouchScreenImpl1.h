@@ -30,8 +30,6 @@ class TouchScreenImpl1 : public TouchScreenBase
     CallbackObserver<TouchScreenImpl1, esp_sleep_wakeup_cause_t> lsEndObserver =
         CallbackObserver<TouchScreenImpl1, esp_sleep_wakeup_cause_t>(this, &TouchScreenImpl1::afterLightSleep);
 #endif
-
-    bool (*_getTouch)(int16_t *, int16_t *);
 };
 
 extern TouchScreenImpl1 *touchScreenImpl1;
