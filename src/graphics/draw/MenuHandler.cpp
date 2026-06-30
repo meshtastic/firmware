@@ -214,6 +214,11 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
         snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
     }
+#if !MESHTASTIC_EXCLUDE_GPS
+    // Enable gps if it was previously disabled due to region not being set
+    if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+        gps->enable();
+#endif
     service->reloadConfig(changes);
 }
 

@@ -1020,6 +1020,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
 
+#if !MESHTASTIC_EXCLUDE_GPS
+        // Enable gps if it was previously disabled due to region not being set
+        if (!requiresReboot && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr &&
+            !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+            gps->enable();
+        }
+#endif
+
         config.lora = validatedLora; // Finally, return the validated config back to the main config
 
         break;
@@ -1029,16 +1037,24 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.has_bluetooth = true;
         config.bluetooth = c.payload_variant.bluetooth;
         break;
-    case meshtastic_Config_security_tag:
+    case meshtastic_Config_security_tag: {
         LOG_INFO("Set config: Security");
-        config.security = c.payload_variant.security;
+        meshtastic_Config_SecurityConfig incoming = c.payload_variant.security;
+        // Preserve our keypair when a SET omits the private key but we already hold one: regenerating would
+        // change our NodeNum (== crc32(public_key)) and orphan us on the mesh. A SET without the key is a
+        // partial/legacy client, not an identity reset (that goes through factory_reset). Done outside the
+        // PKI guard so non-PKI builds keep their key bytes too.
+        if (incoming.private_key.size != 32 && config.security.private_key.size == 32) {
+            LOG_WARN("Security set omitted private key; preserving existing identity keypair");
+            incoming.private_key = config.security.private_key;
+            incoming.public_key = config.security.public_key;
+        }
+        config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // Only regenerate keys if the private key is not 32 bytes
+        // First provisioning (no key) generates one; a private key supplied without its public key derives it.
         if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
-        }
-        // If user provided a private key of correct size but no public key, generate the public key from private key
-        else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
+        } else if (config.security.public_key.size == 0) {
             nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
         }
 #endif
@@ -1055,6 +1071,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         requiresReboot = true;
 
         break;
+    }
     case meshtastic_Config_device_ui_tag:
         // NOOP! This is handled by handleStoreDeviceUIConfig
         break;
