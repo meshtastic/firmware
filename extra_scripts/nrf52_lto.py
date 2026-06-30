@@ -51,6 +51,18 @@ USB_ISR = "Adafruit_TinyUSB_nrf"  # USBD_IRQHandler
 LIB_ISR = ("/bluefruit.cpp", "/Wire_nRF52.cpp", "/PDM.cpp", "/RotaryEncoder.cpp")
 
 
+# The active board variant file owns strong overrides of the core's weak initVariant()/
+# earlyInitVariant()/lateInitVariant() stubs (cores/nRF5/main.cpp). Same failure mode as the ISRs
+# above: whole-image LTO mis-resolves the call (made from the -fno-lto framework core) to the empty
+# WEAK stub, so the board's early hardware setup -- e.g. driving PIN_3V3_EN to power the LoRa/sensor
+# rail -- silently never runs and the radio probe finds no chip. Compiling the variant without LTO
+# lets ordinary linking pick the strong override. HW-proven on nrf52_promicro_diy_tcxo (boot-trace
+# 2026-06-30). NOTE: only the real board variant (built from /variants/...) -- NOT the guarded
+# src/platform/extra_variants/*/variant.cpp no-op stubs, which don't tolerate the -fno-lto recompile.
+def _is_board_variant(path):
+    return path.endswith("/variant.cpp") and "extra_variants" not in path
+
+
 def _no_lto(node):
     try:
         path = node.get_abspath()
@@ -63,6 +75,7 @@ def _no_lto(node):
         USB_ISR in path
         or any(s in path for s in FRAMEWORK)
         or any(s in path for s in LIB_ISR)
+        or _is_board_variant(path)
     ):
         return env.Object(
             node,
