@@ -206,9 +206,9 @@ meshtastic_MeshPacket *Router::allocForSending()
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
 void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
-                        bool ackWantsAck)
+                        bool ackWantsAck, const meshtastic_MeshPacket *relaySource)
 {
-    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck);
+    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck, relaySource);
 }
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)

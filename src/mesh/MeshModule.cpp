@@ -46,7 +46,7 @@ int32_t MeshModule::setStartDelay()
 }
 
 meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                               uint8_t hopLimit)
+                                               uint8_t hopLimit, const meshtastic_MeshPacket *relaySource)
 {
     meshtastic_Routing c = meshtastic_Routing_init_default;
 
@@ -67,6 +67,14 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
+    // When this ack reports an overheard rebroadcast of our own packet, carry that copy's relaying node
+    // and the link metrics (RSSI/SNR) we heard it at, so the phone can attribute them to the relayer. The
+    // ack is delivered locally (to == us), so Router::send() is bypassed and won't overwrite these.
+    if (relaySource) {
+        p->relay_node = relaySource->relay_node;
+        p->rx_rssi = relaySource->rx_rssi;
+        p->rx_snr = relaySource->rx_snr;
+    }
     if (err != meshtastic_Routing_Error_NONE)
         LOG_WARN("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x", err, to, idFrom, p->id);
 
