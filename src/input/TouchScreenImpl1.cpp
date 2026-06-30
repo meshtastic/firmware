@@ -71,7 +71,6 @@ void TouchScreenImpl1::init()
     lsObserver.observe(&notifyLightSleep);
     lsEndObserver.observe(&notifyLightSleepEnd);
 #endif
-    return 0; // Indicates success
 }
 
 // Attach the touch-controller IRQ so a new touch wakes the polling thread immediately.
