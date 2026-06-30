@@ -18,6 +18,7 @@
 #define LORA_DIO2 RADIOLIB_NC // Not really used
 
 // HX8357 TFT LCD
+#define HAS_SPI_TFT 1
 #define HX8357_CS 48
 #define HX8357_RS 47 // AKA DC
 #define HX8357_RESET 46

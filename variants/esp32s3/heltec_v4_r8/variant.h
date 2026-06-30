@@ -53,6 +53,7 @@
 #define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
 
 #if HAS_TFT
+#define HAS_SPI_TFT 1
 #define USE_TFTDISPLAY 1
 #endif
 /*

@@ -1,5 +1,6 @@
 // ST7796 TFT LCD
 #define TFT_CS 38
+#define HAS_SPI_TFT 1
 #define ST7796_CS TFT_CS
 #define ST7796_RS 37    // DC
 #define ST7796_SDA MOSI // MOSI

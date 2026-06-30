@@ -18,6 +18,7 @@
 // #define ADC_MULTIPLIER 2
 
 // ST7701 TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7701_CS (4 | IO_EXPANDER)
 #define ST7701_RS -1  // DC
 #define ST7701_SDA 48 // MOSI

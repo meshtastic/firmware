@@ -52,8 +52,10 @@
 #undef LED_STATE_ON
 #undef LED_POWER
 
+#define HAS_SPI_TFT 1
 #define HAS_CST226SE 1
 #define HAS_TOUCHSCREEN 1
+#define VARIANT_TOUCHSCREEN 1
 // #define TOUCH_IRQ 35 // broken in this version of the lib 0.3.1
 #ifndef TOUCH_IRQ
 #define TOUCH_IRQ -1
