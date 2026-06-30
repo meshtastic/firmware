@@ -3858,20 +3858,17 @@ bool NodeDB::createNewIdentity()
     if (newNodeNum == oldNodeNum)
         return false;
 
-    // Remove the old node entry entirely rather than retiring it in place. Flagging the old
-    // identity as ignored (the previous behavior) left a keyless ghost of ourselves in the DB:
-    // it survives cleanupMeshDB() and LRU eviction (both skip ignored nodes), is still streamed
-    // to clients, and any DM/admin a client aims at it is rejected forever with
-    // PKI_SEND_FAIL_PUBLIC_KEY (err 39) because its public key was wiped. removeNodeByNum() also
-    // drops the satellite stores and the warm-tier copy so the stale identity can't be resurrected.
-    if (getMeshNode(oldNodeNum) != NULL)
+    // Remove the old node entry entirely rather than retiring it in place. Flagging the old identity as
+    // ignored (the previous behavior) left a keyless ghost of ourselves that survived cleanup/eviction, was
+    // still streamed to clients, and made any DM/admin aimed at it fail forever with PKI_SEND_FAIL_PUBLIC_KEY.
+    // removeNodeByNum() drops the lite entry, its satellite stores, and the warm-tier copy.
+    if (getMeshNode(oldNodeNum) != NULL) {
         LOG_DEBUG("Old node num %u is now %u, removing stale identity", oldNodeNum, newNodeNum);
-    removeNodeByNum(oldNodeNum);
-
-    // Also drop any satellite-store entries (position/telemetry/environment/status) keyed by the
-    // old node number in case the lite entry itself was already absent (removeNodeByNum only
-    // erases them when it actually removed a node).
-    eraseNodeSatellites(oldNodeNum);
+        removeNodeByNum(oldNodeNum);
+    } else {
+        // Lite entry already absent: drop any orphaned satellite-store entries directly.
+        eraseNodeSatellites(oldNodeNum);
+    }
 
     myNodeInfo.my_node_num = newNodeNum;
 
