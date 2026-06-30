@@ -39,9 +39,7 @@ enum class TFTColorRole : uint8_t {
     Count
 };
 
-#if HAS_TFT || defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||                 \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
+#if HAS_TFT || defined(HAS_SPI_TFT)
 #define GRAPHICS_TFT_COLORING_ENABLED 1
 #else
 #define GRAPHICS_TFT_COLORING_ENABLED 0

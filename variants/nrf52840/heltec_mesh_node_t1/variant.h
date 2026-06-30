@@ -31,7 +31,7 @@ extern "C" {
 #define HELTEC_MESH_NODE_T1
 
 // Display (ST7735, 80x160 TFT via SPI1)
-
+#define HAS_SPI_TFT 1
 #define ST7735_CS (0 + 12)
 #define ST7735_RS (0 + 22) // DC
 #define ST7735_SDA (0 + 24)
