@@ -62,7 +62,7 @@ lint:
       commands:
         - name: lint
           output: regex
-          parse_regex: "(?P<path>.+):(?P<line>\\d+):(?P<col>\\d+):(?P<severity>\\w+):(?P<message>.+):(?P<code>[a-z-]+)"
+          parse_regex: (?P<path>.+):(?P<line>\d+):(?P<col>\d+):(?P<severity>\w+):(?P<message>.+):(?P<code>[a-z-]+)
           run: bin/lint-ifdef-complexity.sh ${target}
           success_codes: [0]
           read_output_from: stdout
