@@ -1922,10 +1922,10 @@ void NodeDB::pickNewNodeNum()
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
-            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, picking 0x%x", nodeNum, candidate);
+            LOG_WARN("NOTE! Our desired nodenum 0x%08x is invalid or in use, picking 0x%08x", nodeNum, candidate);
         nodeNum = candidate;
     }
-    LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
+    LOG_DEBUG("Use nodenum 0x%08x ", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }
@@ -3074,7 +3074,7 @@ void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
     const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
     const bool hasBitfield = decoded && p.decoded.has_bitfield;
     LOG_DEBUG(
-        "Drop packet (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
+        "Drop packet (%s): hop_start invalid/missing (from=0x%08x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
         context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
 }
 
@@ -3122,7 +3122,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
             // recorded based on the packet rxTime
             //
             // FIXME perhaps handle RX_SRC_USER separately?
-            LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
+            LOG_INFO("updatePosition REMOTE node=0x%08x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
 
             // First, back up fields that we want to protect from overwrite
             uint32_t tmp_time = slot.time;
@@ -3155,7 +3155,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         if (src == RX_SRC_LOCAL) {
             LOG_DEBUG("updateTelemetry LOCAL device");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE device node=0x%x", nodeId);
+            LOG_DEBUG("updateTelemetry REMOTE device node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3167,7 +3167,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         if (src == RX_SRC_LOCAL) {
             LOG_DEBUG("updateTelemetry LOCAL env");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE env node=0x%x", nodeId);
+            LOG_DEBUG("updateTelemetry REMOTE env node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3336,7 +3336,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         return;
     }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
+        LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
         if (!info) {
@@ -3730,7 +3730,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
-            LOG_MIGRATION("Rehydrated node 0x%x from warm tier (key=%d)", n, lite->public_key.size == 32);
+            LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
         }
 #endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
