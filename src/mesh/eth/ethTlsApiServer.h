@@ -12,4 +12,9 @@
 // Idempotent: subsequent calls are no-ops.
 void initEthTlsApiServer();
 
+/// Reset the TLS server to its pre-bind state (frees the mbedTLS context, drops
+/// the TCP/443 listener, clears the ready flag) so the worker rebuilds and
+/// rebinds on its next tick. Called by reconnectETH() after a W5500 chip reset.
+void deInitEthTlsApiServer();
+
 #endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API && ARCH_RP2040

@@ -2,9 +2,9 @@
 
 #if HAS_ETHERNET && defined(HAS_ETHERNET_API)
 
+#include "concurrency/OSThread.h"
 #include "ethApiHandlers.h"
 #include "ethApiServer.h"
-#include "concurrency/OSThread.h"
 #include <Arduino.h>
 
 #ifdef USE_ARDUINO_ETHERNET
@@ -83,13 +83,30 @@ static EthApiServerThread *apiThread = nullptr;
 
 void initEthApiServer()
 {
-    if (apiServer)
-        return;
-    apiServer = new EthernetServer(ETH_API_PORT);
-    apiServer->begin();
-    apiThread = new EthApiServerThread(); // OSThread base auto-registers with the scheduler
-    LOG_INFO("ETH API: server listening on TCP port %d (phase 2.0, OSThread @ 20ms)",
-             ETH_API_PORT);
+    // Bind the listener (idempotent — deInitEthApiServer() drops apiServer on a
+    // W5500 reset, and this rebinds it on the restart path).
+    if (!apiServer) {
+        apiServer = new EthernetServer(ETH_API_PORT);
+        apiServer->begin();
+        LOG_INFO("ETH API: server listening on TCP port %d (phase 2.0, OSThread @ 20ms)", ETH_API_PORT);
+    }
+    // The worker is created once and kept for the lifetime of the process. It
+    // idles harmlessly while apiServer is null (runOnce guards on it), so we
+    // never delete it from another thread's runOnce — that would corrupt the
+    // scheduler's thread list mid-iteration.
+    if (!apiThread)
+        apiThread = new EthApiServerThread(); // OSThread base auto-registers with the scheduler
+}
+
+void deInitEthApiServer()
+{
+    // A W5500 chip reset wipes the hardware socket table, so the listener is now
+    // bound to a dead socket. Drop it (the worker stays alive and idles) so the
+    // next initEthApiServer() from reconnectETH's restart path rebinds TCP/80.
+    if (apiServer) {
+        delete apiServer;
+        apiServer = nullptr;
+    }
 }
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_API

@@ -185,12 +185,20 @@ class EthTlsApiServerThread : public concurrency::OSThread
   protected:
     int32_t runOnce() override
     {
-        // Phase A: wait for the cert worker to finish.
+        // Phase A: wait for the cert worker, then rebuild if the cert was
+        // regenerated (a DHCP lease change to a new IP bumps the generation, and
+        // the SAN must follow or browsers reject the new address).
+        if (tlsReady && getEthCertGeneration() != loadedCertGen_) {
+            LOG_INFO("ETH TLS: cert regenerated (gen %u->%u), reloading + rebinding", (unsigned)loadedCertGen_,
+                     (unsigned)getEthCertGeneration());
+            deInitEthTlsApiServer(); // frees ctx, drops the listener, clears tlsReady
+        }
         if (!tlsReady) {
             if (!isEthCertReady())
                 return 500;
             if (!initTlsContext())
                 return INT32_MAX; // hard fail — TLS server stays disabled
+            loadedCertGen_ = getEthCertGeneration();
             tlsReady = true;
         }
 
@@ -215,6 +223,7 @@ class EthTlsApiServerThread : public concurrency::OSThread
 
   private:
     uint32_t lastActivityMs;
+    uint32_t loadedCertGen_ = 0; // cert generation the current TLS context was built from
 
     bool initTlsContext()
     {
@@ -315,6 +324,28 @@ void initEthTlsApiServer()
         return;
     tlsThread = new EthTlsApiServerThread();
     LOG_INFO("ETH TLS: server worker scheduled (waits for cert ready)");
+}
+
+void deInitEthTlsApiServer()
+{
+    // A W5500 chip reset leaves tlsServer bound to a dead socket and the cached
+    // mbedTLS context stale. Reset the worker back to Phase A (free the context,
+    // drop the listener, clear tlsReady) WITHOUT deleting the OSThread — its next
+    // runOnce re-waits for isEthCertReady() and rebuilds the context + rebinds
+    // TCP/443. Safe to free here: this runs in reconnectETH (ethConnect thread),
+    // and the cooperative scheduler guarantees tlsThread is not mid-runOnce, so
+    // nothing is using these contexts right now.
+    if (tlsServer) {
+        delete tlsServer;
+        tlsServer = nullptr;
+    }
+    if (tlsReady) {
+        mbedtls_ssl_free(&ssl);
+        mbedtls_ssl_config_free(&sslConf);
+        mbedtls_pk_free(&pkKey);
+        mbedtls_x509_crt_free(&certChain);
+        tlsReady = false;
+    }
 }
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API && ARCH_RP2040

@@ -35,4 +35,8 @@ bool isEthCertReady();
 // Snapshot of the generated material once isEthCertReady(). Empty otherwise.
 const EthCertMaterial &getEthCert();
 
+// Monotonic counter bumped each time the cert is (re)generated — e.g. when a DHCP
+// lease change moves us to a new IP. The TLS server reloads when this changes.
+uint32_t getEthCertGeneration();
+
 #endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API && ARCH_RP2040

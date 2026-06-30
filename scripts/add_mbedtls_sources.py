@@ -8,6 +8,10 @@
 # variant's -DMBEDTLS_USER_CONFIG_FILE build flag). Unused symbols are dropped
 # at link time, so non-TLS envs that pull this script in pay nothing.
 
+# trunk-ignore-all(ruff/F821)
+# trunk-ignore-all(flake8/F821): Import/env/Return are SCons-injected globals
+# trunk-ignore-all(ruff/E402)
+# trunk-ignore-all(flake8/E402): stdlib imports must follow Import("env")
 Import("env")
 
 import glob

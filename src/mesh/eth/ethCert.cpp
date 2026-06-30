@@ -230,18 +230,44 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
     return ok;
 }
 
+// Sanity-check a cached cert/key pair before trusting it. A reset between the
+// three persist writes in ensureCertForIp() can leave a truncated DER on the FS;
+// parsing both here catches that so we regenerate instead of handing the TLS
+// server a bad pair (which then hard-disables HTTPS until the files change).
+static bool certKeyParse(const std::vector<uint8_t> &certDer, const std::vector<uint8_t> &keyDer)
+{
+    if (certDer.empty() || keyDer.empty())
+        return false;
+    mbedtls_x509_crt crt;
+    mbedtls_pk_context pk;
+    mbedtls_x509_crt_init(&crt);
+    mbedtls_pk_init(&pk);
+    bool ok = mbedtls_x509_crt_parse_der(&crt, certDer.data(), certDer.size()) == 0 &&
+              mbedtls_pk_parse_key(&pk, keyDer.data(), keyDer.size(), nullptr, 0, picoRand, nullptr) == 0;
+    mbedtls_pk_free(&pk);
+    mbedtls_x509_crt_free(&crt);
+    return ok;
+}
+
 bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
 {
     String ipStr = ip.toString();
 
-    // Try cache
+    // Try cache. The IP file is a commit-marker written last (and cleared first)
+    // by the persist step below, so a present matching marker means cert+key were
+    // both fully written; certKeyParse() is belt-and-suspenders against truncation.
     String savedIp;
     if (readText(IP_PATH, savedIp)) {
         savedIp.trim();
         if (savedIp == ipStr && readBinary(CERT_PATH, out.certDer) && readBinary(KEY_PATH, out.keyDer)) {
-            LOG_INFO("ETH CERT: loaded from FS (%u B cert + %u B key, IP %s)", (unsigned)out.certDer.size(),
-                     (unsigned)out.keyDer.size(), ipStr.c_str());
-            return true;
+            if (certKeyParse(out.certDer, out.keyDer)) {
+                LOG_INFO("ETH CERT: loaded from FS (%u B cert + %u B key, IP %s)", (unsigned)out.certDer.size(),
+                         (unsigned)out.keyDer.size(), ipStr.c_str());
+                return true;
+            }
+            LOG_WARN("ETH CERT: cached cert/key failed to parse (partial write?), regenerating");
+            out.certDer.clear();
+            out.keyDer.clear();
         }
         if (savedIp != ipStr) {
             LOG_INFO("ETH CERT: cached IP %s != current %s, regenerating", savedIp.c_str(), ipStr.c_str());
@@ -258,8 +284,14 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
     LOG_INFO("ETH CERT: generated %u B cert + %u B key in %u ms", (unsigned)out.certDer.size(), (unsigned)out.keyDer.size(),
              (unsigned)dt);
 
-    // Persist (best-effort). Failure here means we'll regen on next boot, but
+    // Persist (best-effort). Failure here means we'll regen on next boot, but the
     // current process still has the in-memory cert ready for use.
+    //
+    // Clear the IP commit-marker FIRST so a reset mid-write can't leave the marker
+    // pointing at a half-written (or stale-paired) cert/key — the load path only
+    // trusts the cache when the marker matches. Writing the marker LAST commits the
+    // new pair atomically w.r.t. the loader.
+    writeText(IP_PATH, "");
     if (!writeBinary(CERT_PATH, out.certDer.data(), out.certDer.size()) ||
         !writeBinary(KEY_PATH, out.keyDer.data(), out.keyDer.size()) || !writeText(IP_PATH, ipStr)) {
         LOG_WARN("ETH CERT: persist failed — will regenerate next boot");
@@ -270,9 +302,13 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
     return true;
 }
 
-// One-shot worker that defers cert gen off the Periodic thread (which has a
-// tight stack and ticks every 5s alongside reconnect / NTP / MQTT). Polls for
-// a non-zero IP, then runs ensureCertForIp() once and goes idle forever.
+// Worker that defers cert gen off the Periodic thread (which has a tight stack
+// and ticks every 5s alongside reconnect / NTP / MQTT). Waits for a non-zero IP,
+// generates/loads the cert for it, then keeps polling at CERT_RECHECK_MS so a
+// DHCP lease change to a new IP regenerates the cert — the SAN must track the
+// current address or browsers reject the new one. The steady-state poll is just
+// localIP() + compare; ECDSA keygen only reruns when the IP actually changes,
+// and it runs on this thread's own stack (not the Periodic's).
 //
 // Phase 2.1-bis. The previous attempt called ensureCertForIp() inline from
 // reconnectETH() and reboot-looped the board: probable stack overflow during
@@ -285,31 +321,38 @@ class EthCertThread : public concurrency::OSThread
   protected:
     int32_t runOnce() override
     {
-        if (ready_)
-            return INT32_MAX;
-
         IPAddress ip = Ethernet.localIP();
-        if (ip == IPAddress(0, 0, 0, 0)) {
-            // DHCP not yet bound; check again in 250 ms.
-            return 250;
-        }
+        if (ip == IPAddress(0, 0, 0, 0))
+            return 250; // DHCP not yet bound; check again in 250 ms
 
+        if (ready_ && ip == certIp_)
+            return CERT_RECHECK_MS; // cert already matches the current IP
+
+        // First cert, or the lease moved us to a new IP. ensureCertForIp()
+        // regenerates whenever its saved IP != ip, so the cert SAN follows.
         bool ok = ensureCertForIp(ip, material_);
         if (!ok) {
             LOG_ERROR("ETH CERT: pipeline FAILED — TLS server will not start");
             material_.certDer.clear();
             material_.keyDer.clear();
+            return CERT_RECHECK_MS; // retry on the next poll
         }
+        certIp_ = ip;
         ready_ = true;
-        return INT32_MAX;
+        certGeneration_++; // bump so the TLS worker reloads + rebinds with the new cert
+        return CERT_RECHECK_MS;
     }
 
   private:
+    static constexpr uint32_t CERT_RECHECK_MS = 30000; // re-poll IP to catch DHCP lease changes
     bool ready_ = false;
+    IPAddress certIp_ = IPAddress(0, 0, 0, 0);
+    uint32_t certGeneration_ = 0;
     EthCertMaterial material_;
 
   public:
     bool isReady() const { return ready_; }
+    uint32_t generation() const { return certGeneration_; }
     const EthCertMaterial &cert() const { return material_; }
 };
 
@@ -332,6 +375,11 @@ bool isEthCertReady()
 const EthCertMaterial &getEthCert()
 {
     return (certThread && certThread->isReady()) ? certThread->cert() : emptyMaterial;
+}
+
+uint32_t getEthCertGeneration()
+{
+    return certThread ? certThread->generation() : 0;
 }
 
 #endif // HAS_ETHERNET && HAS_ETHERNET_TLS_API && ARCH_RP2040

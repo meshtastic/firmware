@@ -173,15 +173,17 @@ static void sendError(IStreamReadWrite &client, int status, const char *reason, 
     client.flush();
 }
 
-static void handleFromRadio(IStreamReadWrite &client, const Request &req)
+// Returns true if the connection may stay open (keep-alive), false if the
+// handler emitted an error response with Connection: close framing.
+static bool handleFromRadio(IStreamReadWrite &client, const Request &req)
 {
     if (req.method == "OPTIONS") {
         sendPreflight(client, "GET, OPTIONS");
-        return;
+        return true;
     }
     if (req.method != "GET") {
         sendError(client, 405, "Method Not Allowed", "method must be GET or OPTIONS");
-        return;
+        return false;
     }
 
     String allParam;
@@ -217,22 +219,25 @@ static void handleFromRadio(IStreamReadWrite &client, const Request &req)
         client.write(body.data(), body.size());
     client.flush();
     LOG_DEBUG("ETH API: fromradio sent %d packet(s), %u bytes (all=%d)", packets, (unsigned)body.size(), (int)drainAll);
+    return true;
 }
 
-static void handleToRadio(IStreamReadWrite &client, const Request &req)
+// Returns true if the connection may stay open (keep-alive), false if the
+// handler emitted an error response with Connection: close framing.
+static bool handleToRadio(IStreamReadWrite &client, const Request &req)
 {
     if (req.method == "OPTIONS") {
         sendPreflight(client, "PUT, OPTIONS");
-        return;
+        return true;
     }
     if (req.method != "PUT") {
         sendError(client, 405, "Method Not Allowed", "method must be PUT or OPTIONS");
-        return;
+        return false;
     }
 
     if (req.contentLength <= 0 || (size_t)req.contentLength > MAX_TO_FROM_RADIO_SIZE) {
         sendError(client, 400, "Bad Request", "missing or oversized Content-Length");
-        return;
+        return false;
     }
 
     uint8_t buf[MAX_TO_FROM_RADIO_SIZE];
@@ -254,7 +259,7 @@ static void handleToRadio(IStreamReadWrite &client, const Request &req)
     if (got != (size_t)req.contentLength) {
         LOG_WARN("ETH API: toradio short read (%u/%ld)", (unsigned)got, req.contentLength);
         sendError(client, 408, "Request Timeout", "body read incomplete");
-        return;
+        return false;
     }
 
     webAPI.handleToRadio(buf, got);
@@ -270,6 +275,7 @@ static void handleToRadio(IStreamReadWrite &client, const Request &req)
     client.write(buf, got);
     client.flush();
     LOG_DEBUG("ETH API: toradio handled %u bytes", (unsigned)got);
+    return true;
 }
 
 void handleApiClient(IStreamReadWrite &client)
@@ -307,14 +313,20 @@ void handleApiClient(IStreamReadWrite &client)
         LOG_INFO("ETH API: %s %s%s%s (from %s)", req.method.c_str(), req.path.c_str(), req.query.length() ? "?" : "",
                  req.query.c_str(), client.remoteIP().toString().c_str());
 
+        bool keepAlive = true;
         if (req.path == "/api/v1/fromradio") {
-            handleFromRadio(client, req);
+            keepAlive = handleFromRadio(client, req);
         } else if (req.path == "/api/v1/toradio") {
-            handleToRadio(client, req);
+            keepAlive = handleToRadio(client, req);
         } else {
             sendError(client, 404, "Not Found", "unknown endpoint");
             return; // errors are terminal — Connection: close framing
         }
+        // A handler that emitted an error advertised Connection: close. Stop the
+        // keep-alive loop so any unread/leftover body bytes (e.g. after a 408
+        // short read or a 400 oversized PUT) aren't misparsed as the next request.
+        if (!keepAlive)
+            return;
         requestsServed++;
 #ifdef ARCH_RP2040
         // yield() ONLY cedes to the OSThread scheduler; it does not call

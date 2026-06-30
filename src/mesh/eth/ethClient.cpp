@@ -66,6 +66,16 @@ static int32_t reconnectETH()
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
             deInitApiServer();
 #endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+            // Drop the HTTP/80 listener; the restart path below rebinds it. Without
+            // this the singleton guard makes initEthApiServer() a no-op and the
+            // phone API stays dead on a stale socket until reboot.
+            deInitEthApiServer();
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
+            // Same for HTTPS/443 + its mbedTLS context.
+            deInitEthTlsApiServer();
+#endif
 #if HAS_UDP_MULTICAST
             if (udpHandler) {
                 udpHandler->stop();
