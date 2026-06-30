@@ -148,12 +148,19 @@ fi
 
 %post
 %systemd_post meshtasticd.service
+%systemd_post meshtasticd@.service
 
 %preun
 %systemd_preun meshtasticd.service
+if [ $1 -eq 0 ]; then
+    systemctl --no-reload disable --now 'meshtasticd@*.service' 2>/dev/null || :
+fi
 
 %postun
 %systemd_postun_with_restart meshtasticd.service
+if [ $1 -ge 1 ]; then
+    systemctl try-restart 'meshtasticd@*.service' 2>/dev/null || :
+fi
 
 %files
 %defattr(-,%{meshtasticd_user},%{meshtasticd_user})
