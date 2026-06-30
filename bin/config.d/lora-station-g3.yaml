@@ -1,0 +1,18 @@
+# Station G3 motherboard with a Raspberry Pi Zero 2W as the MCU daughterboard.
+# Verify spidev / I2C device paths for your OS — they may differ.
+Meta:
+  name: Station G3
+  support: community
+  compatible:
+    - raspberry-pi
+
+Lora:
+  Module: sx1262
+  IRQ: 22                       # BCM pin — wiki spec
+  Reset: 16                     # BCM pin — wiki spec
+  Busy: 24                      # BCM pin — wiki spec
+  # CS: 8                       # BCM 8 = SPI0 CE0 (default); uncomment only to override
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  spidev: spidev0.0
+  # SX126X_MAX_POWER: 19        # matches Station G2 firmware cap; raise carefully per PA jumper mode

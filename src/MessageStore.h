@@ -1,6 +1,6 @@
 #pragma once
 
-#if HAS_SCREEN
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 
 // Disable debug logging entirely on release builds of HELTEC_MESH_SOLAR for space constraints
 #if defined(HELTEC_MESH_SOLAR)
@@ -123,9 +123,6 @@ class MessageStore
 
     // Allocate text into pool (used by sender-side code)
     static uint16_t storeText(const char *src, size_t len);
-
-    // Used when loading from flash to rebuild the text pool
-    static uint16_t rebuildTextFromFlash(const char *src, size_t len);
 
   private:
     std::deque<StoredMessage> liveMessages; // Single in-RAM message buffer (also used for persistence)

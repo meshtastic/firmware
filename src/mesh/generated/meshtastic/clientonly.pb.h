@@ -17,7 +17,7 @@
 typedef struct _meshtastic_DeviceProfile {
     /* Long name for the node */
     bool has_long_name;
-    char long_name[40];
+    char long_name[25];
     /* Short name of the node */
     bool has_short_name;
     char short_name[5];

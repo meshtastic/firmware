@@ -8,6 +8,9 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -15,6 +18,7 @@
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
 #endif
+
 void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
@@ -28,6 +32,7 @@ void LockingArduinoHal::spiEndTransaction()
 
     spiLock->unlock();
 }
+
 #if ARCH_PORTDUINO
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
@@ -40,20 +45,16 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
+
+    // Initialize unused sample slots to a sane default; sample count controls averaging.
+    for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
+        noiseFloorSamples[i] = NOISE_FLOOR_DEFAULT;
+    }
+
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
     module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
     module.setCb_digitalRead(stm32wl_emulate_digitalRead);
 #endif
-}
-
-RadioLibInterface::~RadioLibInterface()
-{
-    // If the static `instance` pointer still references us, clear it.
-    // A later successful init() may have replaced `instance` with a newer
-    // interface — don't clobber that case.
-    if (instance == this) {
-        instance = nullptr;
-    }
 }
 
 #ifdef ARCH_ESP32
@@ -256,6 +257,87 @@ bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
     return txQueue.find(from, id);
 }
 
+void RadioLibInterface::updateNoiseFloor()
+{
+    // Only sample from idle receive mode. TX/RX-critical paths must return to radio work quickly.
+    if (!isReceiving || sendingPacket != NULL || isActivelyReceiving() || isIRQPending()) {
+        return;
+    }
+
+    uint32_t now = millis();
+    if (now - lastNoiseFloorUpdate < NOISE_FLOOR_UPDATE_INTERVAL_MS) {
+        return;
+    }
+    lastNoiseFloorUpdate = now;
+
+    int16_t rssi = getCurrentRSSI();
+    if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN) {
+        LOG_DEBUG("Skipping invalid RSSI reading: %d", rssi);
+        return;
+    }
+
+    noiseFloorSamples[currentSampleIndex] = (int32_t)rssi;
+    currentSampleIndex++;
+
+    if (currentSampleIndex >= NOISE_FLOOR_SAMPLES) {
+        currentSampleIndex = 0;
+        isNoiseFloorBufferFull = true;
+    }
+
+    currentNoiseFloor = getAverageNoiseFloorInternal();
+
+    LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
+}
+
+uint8_t RadioLibInterface::getNoiseFloorSampleCountInternal() const
+{
+    return isNoiseFloorBufferFull ? NOISE_FLOOR_SAMPLES : currentSampleIndex;
+}
+
+int32_t RadioLibInterface::getAverageNoiseFloorInternal() const
+{
+    uint8_t sampleCount = getNoiseFloorSampleCountInternal();
+
+    if (sampleCount == 0) {
+        return NOISE_FLOOR_DEFAULT;
+    }
+
+    int32_t sum = 0;
+    for (uint8_t i = 0; i < sampleCount; i++) {
+        sum += noiseFloorSamples[i];
+    }
+
+    return sum / sampleCount;
+}
+
+int32_t RadioLibInterface::getAverageNoiseFloor()
+{
+    return getAverageNoiseFloorInternal();
+}
+
+int32_t RadioLibInterface::getNoiseFloor()
+{
+    return currentNoiseFloor;
+}
+
+bool RadioLibInterface::hasNoiseFloorSamples()
+{
+    return getNoiseFloorSampleCountInternal() > 0;
+}
+
+uint8_t RadioLibInterface::getNoiseFloorSampleCount()
+{
+    return getNoiseFloorSampleCountInternal();
+}
+
+void RadioLibInterface::resetNoiseFloor()
+{
+    currentSampleIndex = 0;
+    isNoiseFloorBufferFull = false;
+    currentNoiseFloor = NOISE_FLOOR_DEFAULT;
+    LOG_INFO("Noise floor reset - rolling window collection will restart");
+}
+
 bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
 {
     if (!buffer || length == 0 || !iface) {
@@ -283,9 +365,18 @@ currently active.
 */
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+
     switch (notification) {
     case ISR_TX:
-        handleTransmitInterrupt();
+        handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // Pre-switch the radio to the NEXT queued packet's beacon config (no-op for normal traffic).
+        // Not required for correctness — TRANSMIT_DELAY_COMPLETED would switch before CAD anyway — but
+        // doing it here lets the next beacon skip the switch-only delay cycle and, more importantly,
+        // keeps the post-TX listen window (and the CAD/LBT that follows) on the channel we're about to
+        // transmit on. Only engages when the next packet is itself a beacon — exactly when we want it.
+        MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
+#endif
         startReceive();
         setTransmitDelay();
         break;
@@ -308,9 +399,27 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 if (delay_remaining > 0) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
+#if !MESHTASTIC_EXCLUDE_BEACON
+                } else if (MeshBeaconModule::beaconTxConfigInvalid(txp)) {
+                    // The beacon's target radio config is invalid (bad preset/region, or an
+                    // unlicensed node keying up on a ham-only region). Drop the packet — never
+                    // transmit it on the current (home) config — and move on to the next queued packet.
+                    LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", txp->id);
+                    meshtastic_MeshPacket *bad = txQueue.dequeue();
+                    MeshBeaconModule::clearTargetRadioSettings(bad);
+                    packetPool.release(bad);
+                    setTransmitDelay();
+                } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
+                    setTransmitDelay();
+#endif
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                        startReceive();      // try receiving this packet, afterwards we'll be trying to transmit again
+#if !MESHTASTIC_EXCLUDE_BEACON
+                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
+#endif
+                        {
+                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+                        }
                         setTransmitDelay();
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
@@ -414,11 +523,6 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     return false;
 }
 
-/**
- * Remove a packet that is eligible for replacement from the TX queue
- */
-// void RadioLibInterface::removePending
-
 void RadioLibInterface::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case
@@ -434,6 +538,9 @@ void RadioLibInterface::completeSending()
     // that can take a long time
     auto p = sendingPacket;
     sendingPacket = NULL;
+#ifdef LED_LORA
+    digitalWrite(LED_LORA, LED_STATE_OFF);
+#endif
 
     if (p) {
         // Packet has been sent, count it toward our TX airtime utilization.
@@ -444,6 +551,10 @@ void RadioLibInterface::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+#endif
 
         // We are done sending that packet, release it
         packetPool.release(p);
@@ -536,6 +647,10 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             printPacket("Lora RX", mp);
 
+#ifdef LED_LORA
+            loraRxPacketObservable.notifyObservers(mp->from);
+#endif
+
             airTime->logAirtime(RX_LOG, rxMsec);
 
             deliverToReceiver(mp);
@@ -555,6 +670,9 @@ void RadioLibInterface::pollMissedIrqs()
     if (isReceiving) {
         checkRxDoneIrqFlag();
     }
+    if (sendingPacket) {
+        checkTxDoneIrqFlag();
+    }
 }
 
 void RadioLibInterface::resetAGC()
@@ -567,6 +685,14 @@ void RadioLibInterface::checkRxDoneIrqFlag()
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
+    }
+}
+
+void RadioLibInterface::checkTxDoneIrqFlag()
+{
+    if (iface->checkIrq(RADIOLIB_IRQ_TX_DONE)) {
+        LOG_WARN("caught missed TX_DONE");
+        notify(ISR_TX, true);
     }
 }
 
@@ -589,6 +715,13 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // This packet may have already triggered a beacon radio switch in TRANSMIT_DELAY_COMPLETED;
+        // since it never reaches completeSending() here, restore the radio so it isn't left on the
+        // beacon config (which would also break RX on the home channel).
+        MeshBeaconModule::clearTargetRadioSettings(txp);
+        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+#endif
         packetPool.release(txp);
         return false;
     } else {
@@ -611,6 +744,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             enableInterrupt(isrTxLevel0);
             lastTxStart = millis();
             printPacket("Started Tx", txp);
+#ifdef LED_LORA
+            digitalWrite(LED_LORA, LED_STATE_ON);
+#endif
         }
 
         return res == RADIOLIB_ERR_NONE;

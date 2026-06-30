@@ -4,7 +4,7 @@
 // This board has a serial coprocessor for sensor readings
 #define SENSOR_RP2040_TXD 19
 #define SENSOR_RP2040_RXD 20
-#define SENSOR_PORT_NUM 2
+#define SENSOR_PORT_NUM UART_NUM_2
 #define SENSOR_BAUD_RATE 115200
 
 #define BUTTON_PIN 38
@@ -14,10 +14,11 @@
 // #define BUTTON_NEED_PULLUP
 
 // #define BATTERY_PIN 27 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-// #define ADC_CHANNEL ADC1_GPIO27_CHANNEL
+// #define ADC_CHANNEL ADC2_GPIO27_CHANNEL
 // #define ADC_MULTIPLIER 2
 
 // ST7701 TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7701_CS (4 | IO_EXPANDER)
 #define ST7701_RS -1  // DC
 #define ST7701_SDA 48 // MOSI
