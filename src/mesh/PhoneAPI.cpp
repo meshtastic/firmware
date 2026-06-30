@@ -12,6 +12,7 @@
 #include "Channels.h"
 #include "Default.h"
 #include "FSCommon.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
@@ -38,6 +39,17 @@
 #endif
 #include "Throttle.h"
 #include <RTC.h>
+
+namespace
+{
+constexpr uint8_t FILES_MANIFEST_LEVELS = 3;
+constexpr size_t FILES_MANIFEST_MAX_COUNT = 64;
+
+void releaseFilesManifest(std::vector<meshtastic_FileInfo> &filesManifest)
+{
+    std::vector<meshtastic_FileInfo>().swap(filesManifest);
+}
+} // namespace
 
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
@@ -297,18 +309,31 @@ void PhoneAPI::handleStartConfig()
         state = STATE_SEND_MY_INFO;
     }
     pauseBluetoothLogging = true;
-    spiLock->lock();
 #if defined(MESHTASTIC_EXCLUDE_FILES_MANIFEST)
     // Skip the recursive FS walk. Used by platforms whose Zephyr LittleFS
     // backend can't safely traverse a deep tree (e.g. nRF54L15) and platforms
     // that don't support OTA browsing — the manifest is only consumed by
     // companion apps for those flows.
-    filesManifest.clear();
+    releaseFilesManifest(filesManifest);
 #else
-    filesManifest = getFiles("/", 10);
+    // Manifest is never read on the node-info-only path (STATE_SEND_FILEMANIFEST
+    // short-circuits to sendConfigComplete), so skip the SPI lock + FS walk.
+    if (config_nonce != SPECIAL_NONCE_ONLY_NODES) {
+        bool filesManifestLimited = false;
+        {
+            concurrency::LockGuard guard(spiLock);
+            filesManifest = getFiles("/", FILES_MANIFEST_LEVELS, FILES_MANIFEST_MAX_COUNT, &filesManifestLimited);
+        }
+        if (filesManifestLimited) {
+            LOG_WARN("Got %zu files in manifest (limited to %zu entries/depth %u)", filesManifest.size(),
+                     FILES_MANIFEST_MAX_COUNT, static_cast<unsigned>(FILES_MANIFEST_LEVELS));
+        } else {
+            LOG_DEBUG("Got %zu files in manifest", filesManifest.size());
+        }
+    } else {
+        releaseFilesManifest(filesManifest);
+    }
 #endif
-    spiLock->unlock();
-    LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 
     LOG_INFO("Start API client config millis=%u", millis());
     // Protect against concurrent BLE callbacks: they run in NimBLE's FreeRTOS task and also touch nodeInfoQueue.
@@ -376,8 +401,7 @@ void PhoneAPI::close()
             replayPhase = REPLAY_PHASE_IDLE;
         }
         packetForPhone = NULL;
-        filesManifest.clear();
-        filesManifest.shrink_to_fit();
+        releaseFilesManifest(filesManifest);
         lastPortNumToRadio.clear();
         fromRadioNum = 0;
         config_nonce = 0;
@@ -516,9 +540,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     STATE_SEND_UIDATA,
     STATE_SEND_OWN_NODEINFO,
     STATE_SEND_METADATA,
-    STATE_SEND_CHANNELS
+    STATE_SEND_REGION_PRESETS, // region -> valid modem presets (one message)
+    STATE_SEND_CHANNELS,
     STATE_SEND_CONFIG,
-    STATE_SEND_MODULE_CONFIG,
+    STATE_SEND_MODULECONFIG,
     STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to the client
     STATE_SEND_FILEMANIFEST,
     STATE_SEND_COMPLETE_ID,
@@ -636,7 +661,20 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             memset(&fromRadioScratch.metadata, 0, sizeof(fromRadioScratch.metadata));
         }
 #endif
+        state = STATE_SEND_REGION_PRESETS;
+        break;
+
+    case STATE_SEND_REGION_PRESETS:
+        // Tell the client which modem presets are legal in each region so its UI
+        // can block illegal region+preset combinations. This is public RF /
+        // regulatory information (region and modem_preset are already in the
+        // unauthenticated LoRa whitelist below), so it is sent unconditionally —
+        // even an unauthorized/locked-down client can render a correct picker.
+        LOG_DEBUG("Send region preset map");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_region_presets_tag;
+        getRegionPresetMap(fromRadioScratch.region_presets);
         state = STATE_SEND_CHANNELS;
+        config_state = 0; // STATE_SEND_CHANNELS indexes channels starting at 0
         break;
 
     case STATE_SEND_CHANNELS:
@@ -928,7 +966,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // ONLY_NODES variants skip the manifest.
         if (config_state == filesManifest.size() || config_nonce == SPECIAL_NONCE_ONLY_NODES) {
             config_state = 0;
-            filesManifest.clear();
+            releaseFilesManifest(filesManifest);
             // Skip to complete packet
             sendConfigComplete();
         } else {
@@ -1517,6 +1555,7 @@ bool PhoneAPI::available()
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
     case STATE_SEND_METADATA:
+    case STATE_SEND_REGION_PRESETS:
     case STATE_SEND_OWN_NODEINFO:
     case STATE_SEND_FILEMANIFEST:
     case STATE_SEND_COMPLETE_ID:

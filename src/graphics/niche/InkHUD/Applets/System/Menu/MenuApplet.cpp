@@ -6,9 +6,11 @@
 #include "GPS.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
@@ -1013,6 +1015,34 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 
+    case WIPE_MESSAGES_ALL:
+        LOG_INFO("Wiping all messages from menu");
+        messageStore.clearAllMessages();
+        inkhud->persistence->loadLatestMessage();
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+        break;
+
+    case MAP_ZOOM_IN: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomIn();
+        break;
+    }
+
+    case MAP_ZOOM_OUT: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomOut();
+        break;
+    }
+
+    case MAP_ZOOM_RESET: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->resetZoom();
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -1038,6 +1068,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
+
+        // Map zoom controls — only when viewing a map applet
+        {
+            MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+            if (mapApplet) {
+                if (mapApplet->canZoomIn())
+                    items.push_back(MenuItem("Zoom In", MenuAction::MAP_ZOOM_IN, MenuPage::EXIT));
+                if (mapApplet->canZoomOut())
+                    items.push_back(MenuItem("Zoom Out", MenuAction::MAP_ZOOM_OUT, MenuPage::EXIT));
+                if (mapApplet->isZoomLocked())
+                    items.push_back(MenuItem("Reset Zoom", MenuAction::MAP_ZOOM_RESET, MenuPage::EXIT));
+            }
+        }
+
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
@@ -1130,6 +1174,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Administration Section
         items.push_back(MenuItem::Header("Administration"));
         items.push_back(MenuItem("Reset NodeDB", MenuPage::NODE_CONFIG_ADMIN_RESET));
+        items.push_back(MenuItem("Wipe Messages", MenuPage::NODE_CONFIG_ADMIN_MESSAGES));
 
         // Exit
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -1531,6 +1576,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Reset All", MenuAction::RESET_NODEDB_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Keep Favorites Only", MenuAction::RESET_NODEDB_KEEP_FAVORITES, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_ADMIN_MESSAGES:
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Wipe All Messages", MenuAction::WIPE_MESSAGES_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
