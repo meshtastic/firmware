@@ -573,11 +573,14 @@ static void WiFiEvent(WiFiEvent_t event)
 #endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
-#if defined(USE_WS5500) || defined(USE_CH390D)
+#if defined(USE_CH390D)
+        // The CH390 driver's ETH class doesn't expose the IPv6 address getters
+        LOG_INFO("Obtained IP6 address");
+#elif defined(USE_WS5500)
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
-#elif defined(USE_WS5500)
+#else
         LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
 #endif
 #endif

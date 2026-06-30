@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
@@ -78,10 +79,12 @@ static inline void transformNeedlePoint(float localX, float localY, float sinHea
     outY = static_cast<int16_t>(y);
 }
 
+#if GRAPHICS_TFT_COLORING_ENABLED
 static float getCompassRingAngleOffset(float heading)
 {
     return (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) ? -heading : 0.0f;
 }
+#endif
 
 static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int16_t compassX, int16_t compassY,
                                                                              uint16_t compassDiam, float headingRadian,
@@ -714,10 +717,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
         snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words);
     }
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) &&                                                                   \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
+#if (defined(USE_EINK) || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (currentResolution == ScreenResolution::High) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 1, 8, 8, imgUser, display);
@@ -816,16 +816,16 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Helper to get SNR limit based on modem preset
     auto getSnrLimit = [](meshtastic_Config_LoRaConfig_ModemPreset preset) -> float {
         switch (preset) {
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+        case PRESET(LONG_SLOW):
+        case PRESET(LONG_MODERATE):
+        case PRESET(LONG_FAST):
             return -6.0f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+        case PRESET(MEDIUM_SLOW):
+        case PRESET(MEDIUM_FAST):
             return -5.5f;
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+        case PRESET(SHORT_SLOW):
+        case PRESET(SHORT_FAST):
+        case PRESET(SHORT_TURBO):
             return -4.5f;
         default:
             return -6.0f;
@@ -1141,11 +1141,16 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    // Display Region and Channel Utilization
-    if (currentResolution == ScreenResolution::UltraLow) {
-        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+    if (!config.lora.tx_enabled) {
+        const char *txdisabled = "Transmit Disabled";
+        display->drawString(x, getTextPositions(display)[line], txdisabled);
     } else {
-        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        // Display Region and Channel Utilization
+        if (currentResolution == ScreenResolution::UltraLow) {
+            drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        } else {
+            drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        }
     }
     char uptimeStr[32] = "";
     if (currentResolution != ScreenResolution::UltraLow) {
