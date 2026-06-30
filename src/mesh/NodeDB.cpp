@@ -3858,18 +3858,17 @@ bool NodeDB::createNewIdentity()
     if (newNodeNum == oldNodeNum)
         return false;
 
-    // Retire the old node entry
-    meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
-    if (node != NULL) {
-        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, newNodeNum);
-        nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
-        node->public_key.size = 0;
-        memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
+    // Remove the old node entry entirely rather than retiring it in place. Flagging the old identity as
+    // ignored (the previous behavior) left a keyless ghost of ourselves that survived cleanup/eviction, was
+    // still streamed to clients, and made any DM/admin aimed at it fail forever with PKI_SEND_FAIL_PUBLIC_KEY.
+    // removeNodeByNum() drops the lite entry, its satellite stores, and the warm-tier copy.
+    if (getMeshNode(oldNodeNum) != NULL) {
+        LOG_DEBUG("Old node num %u is now %u, removing stale identity", oldNodeNum, newNodeNum);
+        removeNodeByNum(oldNodeNum);
+    } else {
+        // Lite entry already absent: drop any orphaned satellite-store entries directly.
+        eraseNodeSatellites(oldNodeNum);
     }
-
-    // Drop satellite-store entries (position/telemetry/environment/status) keyed by the retired
-    // node number so stale data isn't left attached to the old identity.
-    eraseNodeSatellites(oldNodeNum);
 
     myNodeInfo.my_node_num = newNodeNum;
 
