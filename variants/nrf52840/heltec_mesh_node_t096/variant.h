@@ -37,6 +37,7 @@ extern "C" {
 #define VEXT_ON_VALUE HIGH
 
 // ST7735S TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7735_CS (0 + 22)
 #define ST7735_RS (0 + 15)  // DC
 #define ST7735_SDA (0 + 17) // MOSI
