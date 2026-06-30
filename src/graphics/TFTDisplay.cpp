@@ -1356,13 +1356,30 @@ void TFTDisplay::display(bool fromBlank)
                 y_byteMask = (1 << (y & 7));
 
                 uint16_t *chunkRow = repaintChunkBuffer + (row * displayWidth);
+
+                // Step 1: fill the whole row with the default colors. No per-pixel
+                // region scan, so background pixels (the bulk of the screen) are O(1).
                 for (x = 0; x < displayWidth; x++) {
                     isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
-                    if (hasColorRegions) {
-                        chunkRow[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                     colorTftWhite, colorTftBlack);
-                    } else {
-                        chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                    chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                }
+
+                // Step 2: overprint each region overlapping this row, applied in
+                // ascending index order so the highest-index region wins (matches
+                // resolveTFTColorPixel precedence). Only region-covered pixels are
+                // re-touched, so total cost is ~screen + sum of region spans.
+                if (hasColorRegions) {
+                    graphics::beginTFTColorRow(static_cast<int16_t>(y));
+                    for (uint8_t k = 0; k < graphics::tftColorRowCount; k++) {
+                        const graphics::TFTColorRegion &r = graphics::colorRegions[graphics::tftColorRowRegions[k]];
+                        int32_t xs = r.x > 0 ? r.x : 0;
+                        int32_t xe = r.x + r.width;
+                        if (xe > (int32_t)displayWidth)
+                            xe = (int32_t)displayWidth;
+                        for (int32_t xx = xs; xx < xe; xx++) {
+                            isset = (buffer[xx + y_byteIndex] & y_byteMask) != 0;
+                            chunkRow[xx] = isset ? r.onColorBe : r.offColorBe;
+                        }
                     }
                 }
             }
@@ -1450,12 +1467,16 @@ void TFTDisplay::display(bool fromBlank)
 
             int y_offset = 0;
             // Step 3: Copy only the changed span into the pixel line buffer.
+#if GRAPHICS_TFT_COLORING_ENABLED
+            if (hasColorRegions)
+                graphics::beginTFTColorRow(static_cast<int16_t>(y));
+#endif
             for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
                 isset = buffer[x + y_byteIndex] & y_byteMask;
 #if GRAPHICS_TFT_COLORING_ENABLED
                 if (hasColorRegions) {
-                    linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                        colorTftWhite, colorTftBlack);
+                    linePixelBuffer[x] =
+                        graphics::resolveTFTColorPixelRow(static_cast<int16_t>(x), isset, colorTftWhite, colorTftBlack);
                 } else {
                     linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
                 }

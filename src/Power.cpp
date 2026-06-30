@@ -838,6 +838,14 @@ void Power::reboot()
     NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
+#elif defined(ARCH_PORTDUINO_WASM)
+    // Browser/headless WASM node: no in-process restart. notifyReboot above
+    // already let modules persist; hand off to the host (reboot() ->
+    // location.reload() in a tab, or Module.onReboot() headless). Deliberately
+    // skip the ARCH_PORTDUINO SPI/Wire/Serial teardown below — it would kill the
+    // radio with no actual restart to follow, leaving a wedged node. Must come
+    // before the ARCH_PORTDUINO arm: the wasm build defines both macros.
+    ::reboot();
 #elif defined(ARCH_PORTDUINO)
     deInitApiServer();
 #ifdef __linux__

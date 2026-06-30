@@ -1,4 +1,7 @@
 #include "configuration.h"
+#ifdef ARCH_PORTDUINO_WASM
+#include <emscripten.h>
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
@@ -97,7 +100,9 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 
 #ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
+#ifndef ARCH_PORTDUINO_WASM // raspi HTTP server (ulfius/zlib/openssl) excluded in the browser/wasm build
 #include "mesh/raspihttp/PiWebServer.h"
+#endif
 #include "platform/portduino/PortduinoGlue.h"
 #include <cstdlib>
 #include <fstream>
@@ -795,6 +800,11 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
+#ifdef ARCH_ESP32
+    // Config is loaded now, and Bluetooth has not been initialized yet. If the
+    // saved config will keep Bluetooth inactive, return its reserved memory early.
+    esp32ReleaseBluetoothMemoryIfUnused();
+#endif
 
     // Initialize transmit history to persist broadcast throttle timers across reboots
     TransmitHistory::getInstance()->loadFromDisk();
@@ -917,9 +927,7 @@ void setup()
 #if HAS_SCREEN
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_SPISSD1306) || defined(USE_ST7796) || defined(CO5300_CS) || defined(HACKADAY_COMMUNICATOR)
+#if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
@@ -964,6 +972,12 @@ void setup()
                 gps = GPS::createGps();
                 if (gps) {
                     gpsStatus->observe(&gps->newStatus);
+
+                    // If lora region is unset, disable the gps thread
+                    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+                        gps->disable();
+                    }
                 } else {
                     LOG_DEBUG("Run without GPS");
                 }
@@ -1043,9 +1057,7 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
-    defined(USE_ST7796) || defined(USE_SPISSD1306) || defined(CO5300_CS) || defined(HACKADAY_COMMUNICATOR)
+#if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
@@ -1108,10 +1120,12 @@ void setup()
     if (!rIf)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
     else {
+#ifndef ARCH_PORTDUINO_WASM
         // Log bit rate to debug output
         LOG_DEBUG("LoRA bitrate = %f bytes / sec", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
                                                     (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
                                                        1000);
+#endif
 
         router->addInterface(std::move(rIf));
     }
@@ -1398,7 +1412,16 @@ void loop()
 #ifdef DEBUG_LOOP_TIMING
         LOG_DEBUG("main loop delay: %d", delayMsec);
 #endif
+#ifdef ARCH_PORTDUINO_WASM
+        // Single-threaded wasm: mainDelay's InterruptableDelay is a pthread
+        // cond/mutex semaphore that no other thread can ever give(), and
+        // emscripten's single-threaded pthread_cond_timedwait busy-spins. Suspend
+        // cooperatively via Asyncify instead, capping idle sleep so the per-tick
+        // IRQ poll latency stays bounded (RX/TX-done is detected by polling).
+        emscripten_sleep(delayMsec > 50 ? 50 : delayMsec);
+#else
         mainDelay.delay(delayMsec);
+#endif
     }
 }
 #endif

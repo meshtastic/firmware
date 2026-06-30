@@ -18,11 +18,12 @@
 
 TouchScreenImpl1 *touchScreenImpl1;
 
-// Hardware-interrupt wake on the touch IRQ line. Scoped to T-Watch Ultra: other touch boards
+// Hardware-interrupt wake on the touch IRQ line. Some touch boards
 // either drive this pin differently (RAK14014 already owns this interrupt in TFTDisplay) or
 // route it through an IO expander, which can't be used with attachInterrupt().
-#if defined(SCREEN_TOUCH_INT) && defined(T_WATCH_ULTRA)
-#define TOUCHSCREEN_HAS_INTERRUPT 1
+
+// use ENABLE_TOUCH_INT to indicate that we should enable the interrupt here.
+#if defined(SCREEN_TOUCH_INT) && defined(ENABLE_TOUCH_INT)
 
 // The touch controller pulls SCREEN_TOUCH_INT low when a new touch begins. Wake the polling
 // thread immediately so the touch is handled without waiting for the next idle poll. The
@@ -64,19 +65,20 @@ void TouchScreenImpl1::init()
     attachTouchInterrupt();
 #endif
 
-#if defined(TOUCHSCREEN_HAS_INTERRUPT) && defined(ARCH_ESP32)
+#if defined(ENABLE_TOUCH_INT) && defined(ARCH_ESP32)
     // Detach/reattach our interrupt around light sleep, so sleep.cpp can configure the touch
     // pin as a wake source without our handler interfering.
     lsObserver.observe(&notifyLightSleep);
     lsEndObserver.observe(&notifyLightSleepEnd);
 #endif
+    return 0; // Indicates success
 }
 
 // Attach the touch-controller IRQ so a new touch wakes the polling thread immediately.
 // No-op on boards without a usable touch interrupt line.
 void TouchScreenImpl1::attachTouchInterrupt()
 {
-#ifdef TOUCHSCREEN_HAS_INTERRUPT
+#ifdef ENABLE_TOUCH_INT
     pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
     attachInterrupt(SCREEN_TOUCH_INT, touchScreenInterruptHandler, FALLING);
     LOG_INFO("TouchScreen interrupt attached on pin %d", SCREEN_TOUCH_INT);
@@ -87,7 +89,7 @@ void TouchScreenImpl1::attachTouchInterrupt()
 // Detach our interrupt before light sleep; sleep.cpp configures its own wake-on-touch.
 int TouchScreenImpl1::beforeLightSleep(void *unused)
 {
-#ifdef TOUCHSCREEN_HAS_INTERRUPT
+#ifdef ENABLE_TOUCH_INT
     detachInterrupt(SCREEN_TOUCH_INT);
 #endif
     return 0; // Indicates success
