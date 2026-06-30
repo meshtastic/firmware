@@ -42,7 +42,8 @@ typedef enum {
     GNSS_MODEL_AG3335,
     GNSS_MODEL_AG3352,
     GNSS_MODEL_LS20031,
-    GNSS_MODEL_CM121
+    GNSS_MODEL_CM121,
+    GNSS_MODEL_GENERIC_NMEA // generic NMEA source (e.g. gpsd); skips chip-specific probe and init
 } GnssModel_t;
 
 typedef enum {
