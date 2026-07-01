@@ -20,6 +20,9 @@ bool LIS3DHSensor::init()
 
 int32_t LIS3DHSensor::runOnce()
 {
+    sensor.read();
+    publishCompassAccelSample(sensor.x_g, sensor.y_g, sensor.z_g);
+
     if (sensor.getClick() > 0) {
         uint8_t click = sensor.getClick();
         if (!config.device.double_tap_as_button_press && config.display.wake_on_tap_or_motion) {
