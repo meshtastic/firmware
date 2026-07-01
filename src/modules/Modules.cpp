@@ -7,6 +7,9 @@
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
 #include "ReplyBotModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_EXAMPLE
+#include "modules/ExampleModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #endif
@@ -128,6 +131,9 @@ void setupModules()
     statusLEDModule = new StatusLEDModule();
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_EXAMPLE
+    new ExampleModule();
 #endif
 
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
