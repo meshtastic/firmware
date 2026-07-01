@@ -1,4 +1,3 @@
-#pragma once
 #include "RadioLib.h"
 
 // Keep LR20x0 naming while RadioLib exposes LR2021 symbols.
@@ -6,6 +5,8 @@
 #define LR20x0 LR2021
 #endif
 
+#ifndef RFSWITCH_NRF52TCXO_LR11X0_DEFINED
+#define RFSWITCH_NRF52TCXO_LR11X0_DEFINED
 // This is rewritten to match the requirements of the E80-900M2213S
 // The E80 does not conform to the reference Semtech switches(!) and therefore needs a custom matrix.
 // See footnote #3 in "https://www.cdebyte.com/products/E80-900M2213S/2#Pin"
@@ -30,13 +31,19 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
     END_OF_MODE_TABLE,
     // clang-format on
 };
+#endif
 
 // LR2021 RF switch matrix following the standard Semtech / Seeed T1000-E reference topology.
 // DIO5 -> antenna path select (HIGH = sub-GHz LF)
 // DIO6 -> TX enable / HP PA select
 // DIO7 -> not connected (no GNSS on LR2021)
 // DIO8 -> RF front-end power enable
-
+//
+// LR20X0_RFSWITCH_NATIVE tells LR20x0Interface.cpp that lr20x0_rfswitch_* are defined here
+// directly, so it should not alias rfswitch_dio_pins (which points to the LR11x0 table above).
+#ifndef RFSWITCH_NRF52TCXO_LR20X0_DEFINED
+#define RFSWITCH_NRF52TCXO_LR20X0_DEFINED
+#define LR20X0_RFSWITCH_NATIVE
 static const uint32_t lr20x0_rfswitch_dio_pins[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
                                                     RADIOLIB_LR2021_DIO8, RADIOLIB_NC};
 
@@ -51,3 +58,4 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
     END_OF_MODE_TABLE,
     // clang-format on
 };
+#endif

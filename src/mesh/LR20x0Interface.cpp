@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#if RADIOLIB_EXCLUDE_LR2021 != 1
 #include "LR20x0Interface.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
@@ -12,6 +12,10 @@
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#ifndef LR20X0_RFSWITCH_NATIVE
+#define lr20x0_rfswitch_dio_pins rfswitch_dio_pins
+#define lr20x0_rfswitch_table rfswitch_table
+#endif
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #define lr20x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
@@ -80,7 +84,10 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-#ifdef LR2021_IRQ_DIO_NUM
+#if ARCH_PORTDUINO
+    lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
+    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+#elif defined(LR2021_IRQ_DIO_NUM)
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
 #elif defined(IRQ_DIO_NUM)
@@ -211,7 +218,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
-    // Apply RX gain mode — valid in STDBY, matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
@@ -332,7 +339,7 @@ template <typename T> void LR20x0Interface<T>::resetAGC()
 
     LOG_DEBUG("LR20x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
-    // 1. Warm sleep — powers down the analog frontend, resetting AGC state
+    // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
 
     // 2. Wake to RC standby for stable calibration

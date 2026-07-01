@@ -27,7 +27,7 @@ template class LR11x0Interface<LR1110>;
 template class LR11x0Interface<LR1120>;
 template class LR11x0Interface<LR1121>;
 #endif
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#if RADIOLIB_EXCLUDE_LR2021 != 1
 template class LR20x0Interface<LR2021>;
 #endif
 #ifdef ARCH_STM32WL

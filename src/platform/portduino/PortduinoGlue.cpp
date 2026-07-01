@@ -174,7 +174,7 @@ void getMacAddr(uint8_t *dmac)
         // the same kind of stable, host-derived identifier that the BlueZ
         // path provides on Linux. If en0 isn't found or has no MAC, dmac is
         // left untouched and the caller's "Blank MAC Address not allowed!"
-        // check will still fire — preserving existing behavior for users
+        // check will still fire - preserving existing behavior for users
         // who deliberately rely on --hwid or YAML override.
         struct ifaddrs *ifap = nullptr;
         if (getifaddrs(&ifap) == 0) {
@@ -548,7 +548,7 @@ void portduinoSetup()
         // Pass the full buffer size (9 = 8 chars + null) to getSerialString,
         // not 8. The function treats `len` as buffer size and reserves one
         // slot for the null terminator, so passing 8 produced a 7-char serial
-        // and broke the `strlen(serial) == 8` check below — masked on Linux
+        // and broke the `strlen(serial) == 8` check below - masked on Linux
         // by the BlueZ HCI MAC fallback in getMacAddr(), but on macOS (where
         // the BlueZ path is __linux__-guarded) it left mac_address empty and
         // meshtasticd refused to start.
@@ -830,9 +830,14 @@ bool loadConfig(const char *configPath)
                 portduino_config.lr1110_max_power = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["LR1120_MAX_POWER"])
                 portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+            if (yamlConfig["Lora"]["LR2021_MAX_POWER"])
+                portduino_config.lr2021_max_power = yamlConfig["Lora"]["LR2021_MAX_POWER"].as<int>(22);
+            if (yamlConfig["Lora"]["LR2021_MAX_POWER_HF"])
+                portduino_config.lr2021_max_power_hf = yamlConfig["Lora"]["LR2021_MAX_POWER_HF"].as<int>(22);
+            if (yamlConfig["Lora"]["LR2021_IRQ_DIO_NUM"])
+                portduino_config.lr2021_irq_dio_num = yamlConfig["Lora"]["LR2021_IRQ_DIO_NUM"].as<int>(9);
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
-
             if (yamlConfig["Lora"]["TX_GAIN_LORA"]) {
                 YAML::Node tx_gain_node = yamlConfig["Lora"]["TX_GAIN_LORA"];
                 if (tx_gain_node.IsSequence() && tx_gain_node.size() != 0) {
@@ -927,6 +932,8 @@ bool loadConfig(const char *configPath)
                     if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX"][i].as<std::string>("") == "HIGH")
                         portduino_config.rfswitch_table[2].values[i] = HIGH;
                     if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HP"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[3].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_RX_HF"][i].as<std::string>("") == "HIGH")
                         portduino_config.rfswitch_table[3].values[i] = HIGH;
                     if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
                         portduino_config.rfswitch_table[4].values[i] = HIGH;
@@ -1170,7 +1177,7 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 std::string exec(const char *cmd)
 { // https://stackoverflow.com/a/478960
 #ifdef ARCH_PORTDUINO_WASM
-    (void)cmd; // no shell/popen in the browser — shell-outs degrade to empty
+    (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
     return "";
 #endif
     std::array<char, 128> buffer;

@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#if RADIOLIB_EXCLUDE_LR2021 != 1
 
 #include "LR2021Interface.h"
 #include "error.h"

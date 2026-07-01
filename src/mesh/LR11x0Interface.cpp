@@ -6,13 +6,15 @@
 #include "mesh/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#define lr11x0_rfswitch_dio_pins rfswitch_dio_pins
+#define lr11x0_rfswitch_table rfswitch_table
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
-#define rfswitch_dio_pins portduino_config.rfswitch_dio_pins
-#define rfswitch_table portduino_config.rfswitch_table
+#define lr11x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
+#define lr11x0_rfswitch_table portduino_config.rfswitch_table
 #else
-static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
-static const Module::RfSwitchMode_t rfswitch_table[] = {
+static const uint32_t lr11x0_rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
+static const Module::RfSwitchMode_t lr11x0_rfswitch_table[] = {
     {LR11x0::MODE_STBY, {}},  {LR11x0::MODE_RX, {}},   {LR11x0::MODE_TX, {}},   {LR11x0::MODE_TX_HP, {}},
     {LR11x0::MODE_TX_HF, {}}, {LR11x0::MODE_GNSS, {}}, {LR11x0::MODE_WIFI, {}}, END_OF_MODE_TABLE,
 };
@@ -146,7 +148,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 #endif
 
     if (dioAsRfSwitch) {
-        lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
+        lora.setRfSwitchTable(lr11x0_rfswitch_dio_pins, lr11x0_rfswitch_table);
         LOG_DEBUG("Set DIO RF switch");
     }
 
@@ -205,7 +207,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
-    // Apply RX gain mode — valid in STDBY, matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
@@ -326,7 +328,7 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
 
     LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
-    // 1. Warm sleep — powers down the analog frontend, resetting AGC state
+    // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
 
     // 2. Wake to RC standby for stable calibration
