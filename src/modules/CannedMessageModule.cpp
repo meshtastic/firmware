@@ -60,6 +60,31 @@ static NodeNum lastDest = NODENUM_BROADCAST;
 static uint8_t lastChannel = 0;
 static bool lastDestSet = false;
 
+static void applyComposeContextFromCurrentThread(NodeNum &dest, uint8_t &channel)
+{
+    switch (graphics::MessageRenderer::getThreadMode()) {
+    case graphics::MessageRenderer::ThreadMode::DIRECT: {
+        const uint32_t peer = graphics::MessageRenderer::getThreadPeer();
+        if (peer != 0) {
+            dest = peer;
+            channel = 0;
+        }
+        break;
+    }
+    case graphics::MessageRenderer::ThreadMode::CHANNEL: {
+        const int threadChannel = graphics::MessageRenderer::getThreadChannel();
+        if (threadChannel >= 0 && threadChannel < channels.getNumChannels()) {
+            dest = NODENUM_BROADCAST;
+            channel = static_cast<uint8_t>(threadChannel);
+        }
+        break;
+    }
+    case graphics::MessageRenderer::ThreadMode::ALL:
+    default:
+        break;
+    }
+}
+
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
 CannedMessageModule *cannedMessageModule;
@@ -460,8 +485,24 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             LaunchWithDestination(NODENUM_BROADCAST);
             return 1;
         }
+        // Allow opening free text compose without printing a char
+        if (event->kbchar == INPUT_BROKER_MSG_OPEN_FREETEXT) {
+            applyComposeContextFromCurrentThread(dest, channel);
+            lastDest = dest;
+            lastChannel = channel;
+            lastDestSet = true;
+            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            return 1;
+        }
         // Printable char (ASCII) opens free text compose
         if (event->kbchar >= 32 && event->kbchar <= 126) {
+            applyComposeContextFromCurrentThread(dest, channel);
+            lastDest = dest;
+            lastChannel = channel;
+            lastDestSet = true;
             updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;

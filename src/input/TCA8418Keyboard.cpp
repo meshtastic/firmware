@@ -1,51 +1,88 @@
 #include "TCA8418Keyboard.h"
+#include "modules/CannedMessageModule.h"
 
 #define _TCA8418_COLS 3
 #define _TCA8418_ROWS 4
 #define _TCA8418_NUM_KEYS 12
 
-#define _TCA8418_LONG_PRESS_THRESHOLD 2000
+#define _TCA8418_LONG_PRESS_THRESHOLD 1000
+#define _TCA8418_LONG_PRESS_REPEAT_INTERVAL 250
 #define _TCA8418_MULTI_TAP_THRESHOLD 750
 
 using Key = TCA8418KeyboardBase::TCA8418Key;
 
 // Num chars per key, Modulus for rotating through characters
-static uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 2, 2, 2};
+static uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 1, 2, 4};
 
 static unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
-    {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
-    {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
-    {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
-    {'4', 'g', 'h', 'i', 'G', 'H', 'I'},                                // 4
-    {'5', 'j', 'k', 'l', 'J', 'K', 'L'},                                // 5
-    {'6', 'm', 'n', 'o', 'M', 'N', 'O'},                                // 6
-    {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},                      // 7
-    {'8', 't', 'u', 'v', 'T', 'U', 'V'},                                // 8
-    {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'},                      // 9
-    {'*', '+'},                                                         // *
-    {'0', ' '},                                                         // 0
-    {'#', '@'},                                                         // #
+    {'.', ',', '?', '!', '1', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
+    {'a', 'b', 'c', '2', 'A', 'B', 'C'},                                // 2
+    {'d', 'e', 'f', '3', 'D', 'E', 'F'},                                // 3
+    {'g', 'h', 'i', '4', 'G', 'H', 'I'},                                // 4
+    {'j', 'k', 'l', '5', 'J', 'K', 'L'},                                // 5
+    {'m', 'n', 'o', '6', 'M', 'N', 'O'},                                // 6
+    {'p', 'q', 'r', 's', '7', 'P', 'Q', 'R', 'S'},                      // 7
+    {'t', 'u', 'v', '8', 'T', 'U', 'V'},                                // 8
+    {'w', 'x', 'y', 'z', '9', 'W', 'X', 'Y', 'Z'},                      // 9
+    {Key::BSP},                                                         // *
+    {' ', '0'},                                                         // 0
+    {'#', '@', '*', '+'},                                               // #
 };
 
 static unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
     Key::ESC,   // 1
     Key::UP,    // 2
-    Key::NONE,  // 3
+    Key::TAB,  // 3
     Key::LEFT,  // 4
-    Key::NONE,  // 5
+    Key::SELECT,  // 5
     Key::RIGHT, // 6
     Key::NONE,  // 7
     Key::DOWN,  // 8
     Key::NONE,  // 9
     Key::BSP,   // *
-    Key::NONE,  // 0
-    Key::NONE,  // #
+    Key::NONE,   // 0
+    Key::NONE  // #
 };
+
+// key assignment when not in a free text entering state
+static unsigned char TCA8418NavMap[_TCA8418_NUM_KEYS] = {
+    Key::ESC,   // 1
+    Key::UP,    // 2
+    Key::OPEN_FREETEXT,  // 3
+    Key::LEFT,  // 4
+    Key::SELECT,  // 5
+    Key::RIGHT, // 6
+    Key::NONE,  // 7
+    Key::DOWN,  // 8
+    Key::NONE,  // 9
+    Key::NONE,   // *
+    Key::GPS_TOGGLE,  // 0
+    Key::MUTE_TOGGLE  // #
+};
+
+
+static bool isRepeatable(Key key)
+{
+    return key == Key::UP || key == Key::DOWN || key == Key::LEFT || key == Key::RIGHT || key == Key::BSP;
+}
+
+static Key getRepeatKey(uint8_t key_index, bool is_char_input_allowed)
+{
+    if (key_index >= _TCA8418_NUM_KEYS) {
+        return Key::NONE;
+    }
+
+    Key repeat_key = static_cast<Key>(is_char_input_allowed ? TCA8418LongPressMap[key_index] : TCA8418NavMap[key_index]);
+    return isRepeatable(repeat_key) ? repeat_key : Key::NONE;
+}
 
 TCA8418Keyboard::TCA8418Keyboard()
     : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), last_key(UINT8_MAX), next_key(UINT8_MAX), last_tap(0L), char_idx(0),
-      tap_interval(0), should_backspace(false)
+            tap_interval(0), should_backspace(false)
 {
+        press_started_at = 0;
+        last_repeat = 0;
+        is_repeating_long_press = false;
 }
 
 void TCA8418Keyboard::reset()
@@ -97,6 +134,34 @@ void TCA8418Keyboard::pressed(uint8_t key)
     // Store the current key as the last key
     last_key = next_key;
     last_tap = now;
+    press_started_at = now;
+    last_repeat = now;
+    is_repeating_long_press = false;
+}
+
+void TCA8418Keyboard::held()
+{
+    if (state != Held || last_key >= _TCA8418_NUM_KEYS) {
+        return;
+    }
+
+    bool is_char_input_allowed = cannedMessageModule && cannedMessageModule->isCharInputAllowed();
+    unsigned char repeat_key = getRepeatKey(last_key, is_char_input_allowed);
+    if (repeat_key == Key::NONE) {
+        return;
+    }
+
+    uint32_t now = millis();
+    uint32_t held_interval = now - press_started_at;
+    if (held_interval <= _TCA8418_LONG_PRESS_THRESHOLD) {
+        return;
+    }
+
+    if (!is_repeating_long_press || (now - last_repeat) >= _TCA8418_LONG_PRESS_REPEAT_INTERVAL) {
+        queueEvent(repeat_key);
+        is_repeating_long_press = true;
+        last_repeat = now;
+    }
 }
 
 void TCA8418Keyboard::released()
@@ -110,20 +175,31 @@ void TCA8418Keyboard::released()
         state = Idle;
         return;
     }
+
     uint32_t now = millis();
-    int32_t held_interval = now - last_tap;
+    int32_t held_interval = now - press_started_at;
     last_tap = now;
-    if (tap_interval < _TCA8418_MULTI_TAP_THRESHOLD && should_backspace) {
-        queueEvent(BSP);
-    }
-    if (held_interval > _TCA8418_LONG_PRESS_THRESHOLD) {
-        queueEvent(TCA8418LongPressMap[last_key]);
+
+    bool is_char_input_allowed = cannedMessageModule && cannedMessageModule->isCharInputAllowed();
+    if (is_char_input_allowed) {
+        if (tap_interval < _TCA8418_MULTI_TAP_THRESHOLD && should_backspace && TCA8418TapMap[last_key][(char_idx % TCA8418TapMod[last_key])] != Key::BSP) {
+            queueEvent(BSP);
+        } 
+        if (held_interval > _TCA8418_LONG_PRESS_THRESHOLD) {
+            if (!is_repeating_long_press) {
+                queueEvent(TCA8418LongPressMap[last_key]);
+                // LOG_DEBUG("Long Press Key: %i Map: %i", last_key, TCA8418LongPressMap[last_key]);
+            }
+        } else {
+            queueEvent(TCA8418TapMap[last_key][(char_idx % TCA8418TapMod[last_key])]);
+            // LOG_DEBUG("Key Press: %i Index:%i if %i Map: %c", last_key, char_idx, TCA8418TapMod[last_key],
+            //           TCA8418TapMap[last_key][(char_idx % TCA8418TapMod[last_key])]);
+        }
+    } else if (!is_repeating_long_press) {
+        queueEvent(TCA8418NavMap[last_key]);
         // LOG_DEBUG("Long Press Key: %i Map: %i", last_key, TCA8418LongPressMap[last_key]);
-    } else {
-        queueEvent(TCA8418TapMap[last_key][(char_idx % TCA8418TapMod[last_key])]);
-        // LOG_DEBUG("Key Press: %i Index:%i if %i Map: %c", last_key, char_idx, TCA8418TapMod[last_key],
-        //           TCA8418TapMap[last_key][(char_idx % TCA8418TapMod[last_key])]);
     }
+    is_repeating_long_press = false;
 }
 
 void TCA8418Keyboard::setBacklight(bool on)
