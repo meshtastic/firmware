@@ -312,35 +312,46 @@ void cpuDeepSleep(uint32_t msecToWake)
 
         // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
         // to detect wake and in normal operation the external part drives them hard.
-#ifdef BUTTON_PIN
-        // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
+#if HAS_BUTTON
+    uint32_t _btnPin = 0xFF;
+#if defined(USERPREFS_BUTTON_PIN)
+    _btnPin = USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    _btnPin = BUTTON_PIN;
+#endif
+    if (config.device.button_gpio != 0) {
+        _btnPin = config.device.button_gpio;
+    }
+
+    uint64_t gpioMask = 0;
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
-    uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
+    if (_btnPin != 0xFF) {
+        gpioMask |= (1ULL << _btnPin);
+    }
 #endif
 #ifdef ALT_BUTTON_WAKE
     gpioMask |= (1ULL << BUTTON_PIN_ALT);
 #endif
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    if (_btnPin != 0xFF) {
+        gpio_pullup_en((gpio_num_t)_btnPin);
+    }
 #endif
 
-    // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
-    // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-
+    if (gpioMask != 0) {
 #ifdef ESP32S3_WAKE_TYPE
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
+        esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
 #else
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 #ifdef CONFIG_IDF_TARGET_ESP32
-    // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+        // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
+        esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
 #else
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
+        esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
 #endif
-
 #endif // #end ESP32S3_WAKE_TYPE
+    }
 #endif
     variant_shutdown();
 

@@ -176,8 +176,17 @@ static void lsIdle()
             default:
                 // We woke for some other reason (button press, device IRQ interrupt)
 
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#if HAS_BUTTON
+                uint32_t _btnPin = 0xFF;
+#if defined(USERPREFS_BUTTON_PIN)
+                _btnPin = USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+                _btnPin = BUTTON_PIN;
+#endif
+                if (config.device.button_gpio != 0) {
+                    _btnPin = config.device.button_gpio;
+                }
+                bool pressed = (_btnPin != 0xFF) ? !digitalRead(_btnPin) : false;
 #else
                 bool pressed = false;
 #endif

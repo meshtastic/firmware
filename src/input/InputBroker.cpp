@@ -44,7 +44,7 @@ static bool touchBacklightActive = false;
 #endif
 #endif
 
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 ButtonThread *UserButtonThread = nullptr;
 #endif
 
@@ -164,25 +164,36 @@ void InputBroker::pollSoonWorker(void *p)
 void InputBroker::Init()
 {
 
-#ifdef BUTTON_PIN
+#if HAS_BUTTON
 #ifdef ARCH_ESP32
+    uint32_t _btnPin = 0xFF;
+#if defined(USERPREFS_BUTTON_PIN)
+    _btnPin = USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    _btnPin = BUTTON_PIN;
+#endif
+    if (config.device.button_gpio != 0) {
+        _btnPin = config.device.button_gpio;
+    }
 
+    if (_btnPin != 0xFF) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
 #ifdef BUTTON_NEED_PULLUP
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
+        pinMode(_btnPin, INPUT_PULLUP);
 #else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+        pinMode(_btnPin, INPUT);
 #endif
 #else
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+        pinMode(_btnPin, INPUT);
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    delay(10);
+        gpio_pullup_en((gpio_num_t)_btnPin);
+        delay(10);
 #endif
+#endif
+    }
 #ifdef BUTTON_NEED_PULLUP2
     gpio_pullup_en((gpio_num_t)BUTTON_NEED_PULLUP2);
     delay(10);
-#endif
 #endif
 #endif
 #endif
@@ -313,12 +324,17 @@ void InputBroker::Init()
     BackButtonThread->initButton(backConfig);
 #endif
 
-#if defined(BUTTON_PIN)
+#if HAS_BUTTON
+    uint32_t _pinNum = 0xFF;
 #if defined(USERPREFS_BUTTON_PIN)
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
-#else
-    int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+    _pinNum = USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    _pinNum = BUTTON_PIN;
 #endif
+    if (config.device.button_gpio != 0) {
+        _pinNum = config.device.button_gpio;
+    }
+
 #ifndef BUTTON_ACTIVE_LOW
 #define BUTTON_ACTIVE_LOW true
 #endif
@@ -328,7 +344,8 @@ void InputBroker::Init()
 
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
-    UserButtonThread = new ButtonThread("UserButton");
+    if (_pinNum != 0xFF) {
+        UserButtonThread = new ButtonThread("UserButton");
 #if !MESHTASTIC_EXCLUDE_SCREEN
     if (screen) {
         ButtonConfig userConfig;
@@ -376,6 +393,7 @@ void InputBroker::Init()
         userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
+    }
     }
 #endif
 #endif
