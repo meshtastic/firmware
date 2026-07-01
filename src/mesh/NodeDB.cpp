@@ -917,7 +917,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
-    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    // Default to the region's own default preset (e.g. US is LONG_TURBO for FCC §15.247).
+    // Region is set just above, so a region-locked board is born on its compliant default
+    // without any runtime "upgrade" step.
+    config.lora.modem_preset = getRegion(config.lora.region)->getDefaultPreset();
 #endif
 
 #ifdef USERPREFS_LORACONFIG_USE_PRESET

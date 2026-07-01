@@ -77,7 +77,12 @@ const RegionInfo regions[] = {
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
     */
-    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    // FCC §15.247 requires >=500 kHz of 6 dB bandwidth for digital (non-frequency-hopping)
+    // modulation in the 902-928 MHz band, so the US region's default preset is LONG_TURBO (500 kHz)
+    // rather than the 250 kHz LONG_FAST. A fresh US board adopts this as its factory default via
+    // getDefaultPreset() (see installDefaultConfig); LONG_FAST and the other presets stay available
+    // for users who opt in.
+    RDEF(US, 902.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_TURBO), 0),
 
     /*
         EN300220 ETSI V3.2.1 [Table B.1, Item H, p. 21]
@@ -957,6 +962,18 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
             return sibling;
     }
     return nullptr;
+}
+
+meshtastic_Config_LoRaConfig_ModemPreset
+RadioInterface::presetForRegionChange(meshtastic_Config_LoRaConfig_RegionCode oldRegion,
+                                      meshtastic_Config_LoRaConfig_RegionCode newRegion,
+                                      meshtastic_Config_LoRaConfig_ModemPreset currentPreset)
+{
+    // Only follow the default when the caller was riding the old region's default; a preset that
+    // differs is a deliberate choice and is preserved.
+    if (currentPreset == getRegion(oldRegion)->getDefaultPreset())
+        return getRegion(newRegion)->getDefaultPreset();
+    return currentPreset;
 }
 
 /**

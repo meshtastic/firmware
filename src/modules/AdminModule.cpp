@@ -936,6 +936,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // Ensure initRegion() uses the newly validated region
                 config.lora.region = validatedLora.region;
                 initRegion();
+                // The python CLI / app echoes the whole lora config back when you change one field,
+                // so `--set lora.region US` arrives carrying the *previous* preset. If that preset
+                // was just the old region's default (no deliberate choice), follow the default into
+                // the new region so US adopts LONG_TURBO (FCC §15.247). The carried-over preset is
+                // already valid here — an unsupported one would have failed validateConfigLora above
+                // and routed into the clamp path below.
+                if (validatedLora.use_preset) {
+                    validatedLora.modem_preset = RadioInterface::presetForRegionChange(oldLoraConfig.region, validatedLora.region,
+                                                                                       validatedLora.modem_preset);
+                }
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
                 }

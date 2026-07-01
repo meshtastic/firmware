@@ -1173,6 +1173,59 @@ void tearDown(void)
     testAdmin = nullptr;
 }
 
+// -----------------------------------------------------------------------
+// US region factory default preset (LONG_TURBO for FCC §15.247). A fresh board adopts its region's
+// default via getDefaultPreset() in installDefaultConfig() — there is no runtime "upgrade" path.
+// -----------------------------------------------------------------------
+
+static void test_usRegionDefaultPresetIsLongTurbo()
+{
+    // FCC §15.247: the US region's default preset is the 500 kHz LONG_TURBO, so a fresh US board is
+    // born compliant.
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+                      getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->getDefaultPreset());
+}
+
+static void test_nonUsRegionDefaultPresetUnchanged()
+{
+    // Only US changed: EU_868 still defaults to LONG_FAST.
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868)->getDefaultPreset());
+}
+
+// -----------------------------------------------------------------------
+// presetForRegionChange(): an explicit region change follows the old region's default into the new
+// region (so `--set lora.region US` lands on LONG_TURBO) but preserves a deliberately chosen preset.
+// -----------------------------------------------------------------------
+
+static void test_presetForRegionChange_ridingDefaultAdoptsNewDefault()
+{
+    // Fresh node: region UNSET (default LONG_FAST), preset still LONG_FAST. Setting region US must
+    // follow the default to US's LONG_TURBO.
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+                      RadioInterface::presetForRegionChange(meshtastic_Config_LoRaConfig_RegionCode_UNSET,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_US,
+                                                            meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST));
+}
+
+static void test_presetForRegionChange_ridingUsDefaultFollowsToLongFast()
+{
+    // Leaving US while riding its LONG_TURBO default drops back to LONG_FAST for a LONG_FAST region.
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,
+                      RadioInterface::presetForRegionChange(meshtastic_Config_LoRaConfig_RegionCode_US,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_EU_868,
+                                                            meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO));
+}
+
+static void test_presetForRegionChange_deliberatePresetPreserved()
+{
+    // A preset that isn't the old region's default is a deliberate choice and survives the switch.
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+                      RadioInterface::presetForRegionChange(meshtastic_Config_LoRaConfig_RegionCode_EU_868,
+                                                            meshtastic_Config_LoRaConfig_RegionCode_US,
+                                                            meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST));
+}
+
 void setup()
 {
     delay(10);
@@ -1240,6 +1293,15 @@ void setup()
     RUN_TEST(test_defaultPresetIsInAvailablePresets);
     RUN_TEST(test_regionFieldsAreSane);
     RUN_TEST(test_onlyLORA24HasWideLora);
+
+    // US region factory default preset
+    RUN_TEST(test_usRegionDefaultPresetIsLongTurbo);
+    RUN_TEST(test_nonUsRegionDefaultPresetUnchanged);
+
+    // Explicit region change preset follow-through
+    RUN_TEST(test_presetForRegionChange_ridingDefaultAdoptsNewDefault);
+    RUN_TEST(test_presetForRegionChange_ridingUsDefaultFollowsToLongFast);
+    RUN_TEST(test_presetForRegionChange_deliberatePresetPreserved);
 
     // OVERRIDE_SLOT_PRESET_HASH (-1) slot formula tests
     RUN_TEST(test_overrideSlotPresetHash_longFast_customChannelMatchesDefaultNameSlot);

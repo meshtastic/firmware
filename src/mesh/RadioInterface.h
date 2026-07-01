@@ -270,6 +270,15 @@ class RadioInterface
     static const RegionInfo *regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
                                                  meshtastic_Config_LoRaConfig_ModemPreset preset);
 
+    // Pick the modem preset to carry across an explicit region change. If currentPreset is just
+    // oldRegion's default (the caller was riding the default and never deliberately chose a preset),
+    // follow the default into newRegion — so e.g. selecting region US adopts LONG_TURBO (FCC
+    // §15.247). A deliberately chosen preset is returned unchanged. Callers stay responsible for
+    // clamping a preset that newRegion does not support.
+    static meshtastic_Config_LoRaConfig_ModemPreset presetForRegionChange(meshtastic_Config_LoRaConfig_RegionCode oldRegion,
+                                                                          meshtastic_Config_LoRaConfig_RegionCode newRegion,
+                                                                          meshtastic_Config_LoRaConfig_ModemPreset currentPreset);
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
