@@ -2161,6 +2161,8 @@ void menuHandler::BrightnessPickerMenu()
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             // For HELTEC devices, use analogWrite to control backlight
             analogWrite(VTFT_LEDA, uiconfig.screen_brightness);
+#elif defined(HAS_EINK_FRONTLIGHT) && defined(PIN_EINK_BL)
+            analogWrite(PIN_EINK_BL, uiconfig.screen_brightness);
 #elif defined(ST7789_CS) || defined(ST7796_CS)
             static_cast<TFTDisplay *>(screen->getDisplayDevice())->setDisplayBrightness(uiconfig.screen_brightness);
 #elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)

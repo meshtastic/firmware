@@ -17,6 +17,10 @@
 extern ExtensionIOXL9555 io;
 #endif
 
+#ifdef T_DECK_MAX
+void tDeckMaxSetAudioAmp(bool enable);
+#endif
+
 #define AUDIO_THREAD_INTERVAL_MS 100
 
 class AudioThread : public concurrency::OSThread
@@ -28,6 +32,8 @@ class AudioThread : public concurrency::OSThread
     {
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#elif defined(T_DECK_MAX)
+        tDeckMaxSetAudioAmp(true);
 #endif
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
@@ -56,6 +62,8 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(false);
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#elif defined(T_DECK_MAX)
+        tDeckMaxSetAudioAmp(false);
 #endif
     }
 
@@ -68,12 +76,16 @@ class AudioThread : public concurrency::OSThread
 
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#elif defined(T_DECK_MAX)
+        tDeckMaxSetAudioAmp(true);
 #endif
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#elif defined(T_DECK_MAX)
+        tDeckMaxSetAudioAmp(false);
 #endif
     }
 

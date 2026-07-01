@@ -9,9 +9,9 @@
 #include "GxEPD2Multi.h"
 #endif
 
-// Limit how often we push a full E-Ink refresh. T-Deck Pro needs faster updates for typing.
+// Limit how often we push a full E-Ink refresh. T-Deck Pro/Max need faster updates for typing.
 #ifndef EINK_FORCE_DISPLAY_THROTTLE_MS
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK_MAX)
 #define EINK_FORCE_DISPLAY_THROTTLE_MS 200
 #else
 #define EINK_FORCE_DISPLAY_THROTTLE_MS 1000

@@ -1,4 +1,4 @@
-#if defined(T_DECK_PRO)
+#if defined(T_DECK_PRO) || defined(T_DECK_MAX)
 
 #include "TDeckProKeyboard.h"
 
@@ -192,4 +192,4 @@ bool TDeckProKeyboard::isModifierKey(uint8_t key)
     return (key == modifierRightShiftKey || key == modifierLeftShiftKey || key == modifierAltKey || key == modifierSymKey);
 }
 
-#endif // T_DECK_PRO
+#endif // T_DECK_PRO || T_DECK_MAX
