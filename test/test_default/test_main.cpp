@@ -168,6 +168,13 @@ void test_ms_result_is_int32_safe()
     TEST_ASSERT_GREATER_OR_EQUAL_INT32(0, result);
 }
 
+void test_ms_decaf_zero_timeout()
+{
+    TEST_ASSERT_EQUAL_UINT32(0U, Default::getTimeoutMs(DECAF_ZERO_TIMEOUT_SECS, 10));
+    TEST_ASSERT_EQUAL_UINT32(10000U, Default::getTimeoutMs(0, 10));
+    TEST_ASSERT_EQUAL_UINT32(2000U, Default::getTimeoutMs(2, 10));
+}
+
 void test_scaled_overflow_saturates()
 {
     // long_fast (SF11/BW250) with a 24h base and heavy congestion overflows
@@ -200,6 +207,7 @@ void setup()
     RUN_TEST(test_ms_uint32_max);
     RUN_TEST(test_ms_default_clamps);
     RUN_TEST(test_ms_result_is_int32_safe);
+    RUN_TEST(test_ms_decaf_zero_timeout);
     RUN_TEST(test_scaled_overflow_saturates);
     exit(UNITY_END());
 }
