@@ -103,6 +103,7 @@ cp -r bin/config.d/* %{buildroot}%{_sysconfdir}/meshtasticd/available.d
 
 # Install systemd service
 install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.service
+install -D -m 0644 bin/meshtasticd@.service %{buildroot}%{_unitdir}/meshtasticd@.service
 
 # Install meshtasticd start wrapper
 install -D -m 0755 bin/meshtasticd-start.sh %{buildroot}%{_bindir}/meshtasticd-start.sh
@@ -147,12 +148,19 @@ fi
 
 %post
 %systemd_post meshtasticd.service
+%systemd_post meshtasticd@.service
 
 %preun
 %systemd_preun meshtasticd.service
+if [ $1 -eq 0 ]; then
+    systemctl --no-reload disable --now 'meshtasticd@*.service' 2>/dev/null || :
+fi
 
 %postun
 %systemd_postun_with_restart meshtasticd.service
+if [ $1 -ge 1 ]; then
+    systemctl try-restart 'meshtasticd@*.service' 2>/dev/null || :
+fi
 
 %files
 %defattr(-,%{meshtasticd_user},%{meshtasticd_user})
@@ -168,6 +176,7 @@ fi
 %config(noreplace) %{_sysconfdir}/meshtasticd/config.yaml
 %config %{_sysconfdir}/meshtasticd/available.d/*
 %{_unitdir}/meshtasticd.service
+%{_unitdir}/meshtasticd@.service
 %dir %{_datadir}/meshtasticd
 %dir %{_datadir}/meshtasticd/web
 %{_datadir}/meshtasticd/web/*
