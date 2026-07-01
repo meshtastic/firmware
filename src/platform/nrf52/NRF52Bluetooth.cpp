@@ -20,7 +20,7 @@ static BLEBas blebas; // BAS (Battery Service) helper class instance
 #ifndef BLE_DFU_SECURE
 static BLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
+static BLEDfuSecure bledfusecure; // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -258,6 +258,35 @@ int NRF52Bluetooth::getRssi()
 #define VALID_BLE_TX_POWER(x)                                                                                                    \
     ((x) == -20 || (x) == -16 || (x) == -12 || (x) == -8 || (x) == -4 || (x) == 0 || (x) == 4 || (x) == 8)
 
+void NRF52Bluetooth::restoreTxPower()
+{
+#if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
+    Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
+#else
+    // Bluefruit.begin() default.
+    Bluefruit.setTxPower(0);
+#endif
+}
+
+void NRF52Bluetooth::restoreSecurityState()
+{
+    if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
+        Bluefruit.Security.setPairPasskeyCallback(nullptr);
+        Bluefruit.Security.setPairCompleteCallback(nullptr);
+        Bluefruit.Security.setSecuredCallback(nullptr);
+        Bluefruit.Security.setIOCaps(false, false, false);
+        // setPairPasskeyCallback() enables MITM even when clearing the callback.
+        Bluefruit.Security.setMITM(false);
+        return;
+    }
+
+    Bluefruit.Security.setIOCaps(true, false, false);
+    Bluefruit.Security.setMITM(true);
+    Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+    Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
+    Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
+}
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
@@ -269,9 +298,7 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
-#if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
-    Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
-#endif
+    restoreTxPower();
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
             configuredPasskey = config.bluetooth.fixed_pin;
@@ -283,13 +310,10 @@ void NRF52Bluetooth::setup()
         auto pinString = std::to_string(configuredPasskey);
         LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());
-        Bluefruit.Security.setIOCaps(true, false, false);
-        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
-        Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
-        Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
+        restoreSecurityState();
         meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     } else {
-        Bluefruit.Security.setIOCaps(false, false, false);
+        restoreSecurityState();
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
     // Set the advertised device name (keep it short!)
@@ -347,6 +371,10 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    LOG_DEBUG("Resume NRF52 BLE advertising");
+    // shutdown() swaps security callbacks, so restore BLE state before advertising.
+    restoreSecurityState();
+    restoreTxPower();
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
@@ -434,6 +462,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 // On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any connection attempts.
 bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
+    LOG_WARN("Rejecting BLE pairing (onUnwantedPairing) - should only fire while Bluetooth is disabled");
     NRF52Bluetooth::disconnect();
     return false;
 }
