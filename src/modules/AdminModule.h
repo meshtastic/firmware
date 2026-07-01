@@ -89,6 +89,27 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool messageIsRequest(const meshtastic_AdminMessage *r);
     void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
     void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
+    void warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora);
+    void warnOnChannelSet(const meshtastic_Channel &cc);
+
+    // Channel-configuration warnings are coalesced into a single client notification.
+    // queueChannelWarning() records one warning for a channel; while an edit transaction
+    // is open (begin/commit_edit_settings) the warnings accumulate and flushChannelWarnings()
+    // emits one combined message at commit. Outside a transaction the caller flushes
+    // immediately, so a single channel/preset edit still produces a single message.
+    void queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue, const char *format, ...)
+        __attribute__((format(printf, 5, 6)));
+    // Emit the "licensed mode activated" notice, deferring to commit during an edit transaction
+    // so repeated triggers (e.g. owner + several channels) produce a single message.
+    void warnLicensedMode();
+    void flushChannelWarnings();
+
+    char pendingWarningText[250] = {};    // the lone queued message, used verbatim when only one fired
+    uint32_t pendingWarningChannels = 0;  // bitmask of channel indices with a queued warning
+    uint8_t pendingWarningCount = 0;      // number of queued warnings this transaction
+    bool pendingWarningNameIssue = false; // any queued warning was about a channel name
+    bool pendingWarningPskIssue = false;  // any queued warning was about a PSK
+    bool pendingLicenseWarning = false;   // a licensed-mode notice is queued for this transaction
 };
 
 static constexpr const char *licensedModeMessage =

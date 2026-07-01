@@ -17,18 +17,30 @@
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "mesh/Channels.h"
 #include "modules/AdminModule.h"
+#include <string>
 #include <unity.h>
+#include <vector>
 
 #include "meshtastic/config.pb.h"
 
 // hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
 extern uint32_t hash(const char *str);
 
+// Every client notification the AdminModule emits flows through sendClientNotification();
+// capture each formatted message so the warning/coalescing tests can assert on the exact
+// set of messages produced by a sequence of admin messages.
+static std::vector<std::string> capturedWarnings;
+
 class MockMeshService : public MeshService
 {
   public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
+    void sendClientNotification(meshtastic_ClientNotification *n) override
+    {
+        capturedWarnings.push_back(n->message);
+        releaseClientNotificationToPool(n);
+    }
 };
 
 static MockMeshService *mockMeshService;
@@ -932,6 +944,7 @@ static void test_channelSpacingCalculation_placeholder()
 class AdminModuleTestShim : public AdminModule
 {
   public:
+    using AdminModule::handleReceivedProtobuf; // drive full incoming admin messages (begin/commit/set_channel)
     using AdminModule::handleSetConfig;
     // Defer persistence so handleSetConfig() exercises the in-RAM config logic without saveToDisk() touching
     // the (uninitialized) node database in this lightweight harness.
@@ -1155,6 +1168,167 @@ static void test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejecte
 }
 
 // -----------------------------------------------------------------------
+// Channel-configuration warning + coalescing tests
+//
+// These exercise the real incoming-admin-message path (handleReceivedProtobuf):
+// begin_edit_settings / set_channel / commit_edit_settings. Warnings raised while a
+// transaction is open must be deferred and collapsed into a single notification at
+// commit; outside a transaction each save emits its own single message immediately.
+// -----------------------------------------------------------------------
+
+static const uint8_t DEFAULT_KEY[] = {0x01};      // the well-known "default" PSK (AQ==)
+static const uint8_t CUSTOM_KEY[] = {0x42, 0x17}; // any non-default key
+
+// Count captured warnings whose text contains substr.
+static int warningsContaining(const char *substr)
+{
+    int n = 0;
+    for (const auto &w : capturedWarnings)
+        if (w.find(substr) != std::string::npos)
+            n++;
+    return n;
+}
+
+static meshtastic_Channel makeChannel(int8_t index, meshtastic_Channel_Role role, const char *name, const uint8_t *psk,
+                                      size_t pskLen)
+{
+    meshtastic_Channel ch = meshtastic_Channel_init_zero;
+    ch.index = index;
+    ch.role = role;
+    ch.has_settings = true;
+    strncpy(ch.settings.name, name, sizeof(ch.settings.name) - 1);
+    ch.settings.psk.size = pskLen;
+    for (size_t i = 0; i < pskLen; i++)
+        ch.settings.psk.bytes[i] = psk[i];
+    return ch;
+}
+
+// Dispatch one admin message as if it arrived from a local (from==0) client, which bypasses
+// the passkey/authorization gates so the switch body runs.
+static void sendAdmin(meshtastic_AdminMessage &m)
+{
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag; // required: handler drops non-decoded packets
+    testAdmin->handleReceivedProtobuf(mp, &m);
+}
+
+static void sendSetChannel(const meshtastic_Channel &ch)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_channel_tag;
+    m.set_channel = ch;
+    sendAdmin(m);
+}
+
+static void sendBeginEdit()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_begin_edit_settings_tag;
+    m.begin_edit_settings = true;
+    sendAdmin(m);
+}
+
+static void sendCommitEdit()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_commit_edit_settings_tag;
+    m.commit_edit_settings = true;
+    sendAdmin(m);
+}
+
+// Preset = LongFast on US, unlicensed owner. "LongFast" is the display name we compare against.
+static void usePresetLongFast()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    owner.is_licensed = false;
+}
+
+static void test_warn_singleChannel_variantName_oneSpecificMessage()
+{
+    usePresetLongFast();
+    // Name is a case/space variant of the preset with the default key: a single name issue.
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
+}
+
+static void test_warn_singleChannel_nameAndPsk_collapsedToCatchAll()
+{
+    usePresetLongFast();
+    // Variant name AND a non-default key: two issues on one channel collapse to one catch-all.
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", CUSTOM_KEY, 2));
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("There may be name and PSK issues on channel 0"));
+}
+
+static void test_warn_cleanChannel_noMessage()
+{
+    usePresetLongFast();
+    // Exact preset name + default key: nothing to warn about.
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1));
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+}
+
+static void test_warn_transaction_multipleChannels_singleCoalescedMessage()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "long fast", DEFAULT_KEY, 1));
+    // Nothing emitted yet - warnings are deferred until commit.
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+
+    sendCommitEdit();
+    // Exactly one message, naming both channels.
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("There may be name issues on channels 0, 1"));
+}
+
+static void test_warn_transaction_singleChannel_keepsSpecificMessage()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+
+    sendCommitEdit();
+    // One flagged channel: the specific message verbatim, not the plural catch-all.
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
+    TEST_ASSERT_EQUAL_INT(0, warningsContaining("on channels"));
+}
+
+static void test_warn_license_noTransaction_emittedImmediately()
+{
+    usePresetLongFast();
+    owner.is_licensed = true;
+    // Setting a channel that still carries a key triggers ensureLicensedOperation() to strip it.
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", CUSTOM_KEY, 2));
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("Licensed mode activated"));
+}
+
+static void test_warn_license_transaction_coalescedToSingleMessage()
+{
+    usePresetLongFast();
+    owner.is_licensed = true;
+    sendBeginEdit();
+    // Two separate triggers within one transaction (two channels with keys to strip).
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", CUSTOM_KEY, 2));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "", CUSTOM_KEY, 2));
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+
+    sendCommitEdit();
+    // Collapsed to a single licensed-mode notice (and no channel warning, since names are blank).
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("Licensed mode activated"));
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
+}
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -1163,6 +1337,12 @@ void setUp(void)
     mockMeshService = new MockMeshService();
     service = mockMeshService;
     testAdmin = new AdminModuleTestShim();
+    capturedWarnings.clear();
+    // Committing an edit transaction triggers a full saveToDisk(), which dereferences nodeDB.
+    // Create it once (kept reachable via the global, so no leak) for the warning tests; the
+    // other tests in this suite set their own config/region state and are unaffected.
+    if (!nodeDB)
+        nodeDB = new NodeDB();
 }
 void tearDown(void)
 {
@@ -1264,6 +1444,15 @@ void setup()
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
+
+    // Channel-configuration warning + coalescing
+    RUN_TEST(test_warn_singleChannel_variantName_oneSpecificMessage);
+    RUN_TEST(test_warn_singleChannel_nameAndPsk_collapsedToCatchAll);
+    RUN_TEST(test_warn_cleanChannel_noMessage);
+    RUN_TEST(test_warn_transaction_multipleChannels_singleCoalescedMessage);
+    RUN_TEST(test_warn_transaction_singleChannel_keepsSpecificMessage);
+    RUN_TEST(test_warn_license_noTransaction_emittedImmediately);
+    RUN_TEST(test_warn_license_transaction_coalescedToSingleMessage);
 
     exit(UNITY_END());
 }
