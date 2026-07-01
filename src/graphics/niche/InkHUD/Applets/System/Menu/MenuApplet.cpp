@@ -1306,6 +1306,28 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         previousPage = MenuPage::NODE_CONFIG;
         items.push_back(MenuItem("Back", previousPage));
 
+        items.push_back(MenuItem::Header("Device GPS"));
+
+        items.push_back(MenuItem("Fixed Pos", MenuAction::TOGGLE_FIXED_POSITION, MenuPage::NODE_CONFIG_POSITION,
+                                 &config.position.fixed_position));
+
+#if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
+        const auto mode = config.position.gps_mode;
+        if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            items.push_back(MenuItem("GPS None", MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION));
+        } else {
+            gpsEnabled = (mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED);
+            items.push_back(MenuItem("GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION, &gpsEnabled));
+
+            nodeConfigLabels.emplace_back(
+                "GPS Poll: " + getUInt32OptionLabel(GPS_UPDATE_INTERVAL_OPTIONS,
+                                                    sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]),
+                                                    config.position.gps_update_interval));
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION,
+                                     MenuPage::NODE_CONFIG_POSITION_GPS_UPDATE_INTERVAL));
+        }
+#endif
+
         items.push_back(MenuItem::Header("Position Packet"));
 
         nodeConfigLabels.emplace_back(
@@ -1331,27 +1353,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                 MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_SMART_DISTANCE));
         }
 
-        items.push_back(MenuItem::Header("Device GPS"));
-
-        items.push_back(MenuItem("Fixed Pos", MenuAction::TOGGLE_FIXED_POSITION, MenuPage::NODE_CONFIG_POSITION,
-                                 &config.position.fixed_position));
-
-#if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
-        const auto mode = config.position.gps_mode;
-        if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-            items.push_back(MenuItem("GPS None", MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION));
-        } else {
-            gpsEnabled = (mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED);
-            items.push_back(MenuItem("GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION, &gpsEnabled));
-
-            nodeConfigLabels.emplace_back(
-                "GPS Poll: " + getUInt32OptionLabel(GPS_UPDATE_INTERVAL_OPTIONS,
-                                                    sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]),
-                                                    config.position.gps_update_interval));
-            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION,
-                                     MenuPage::NODE_CONFIG_POSITION_GPS_UPDATE_INTERVAL));
-        }
-#endif
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
