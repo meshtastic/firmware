@@ -72,6 +72,7 @@ class AudioThread : public concurrency::OSThread
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
+        audioOut->stop();
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, LOW);
 #endif
