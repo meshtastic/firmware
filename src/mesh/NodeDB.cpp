@@ -480,8 +480,10 @@ NodeDB::NodeDB()
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Generate crypto keys if needed using consolidated function
     // Set my node num uint32 value to bytes from the public key (if we have one)
-    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist
-    generateCryptoKeyPair(nullptr);
+    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist.
+    // Skip on a degraded boot: the keypair isn't in RAM, so minting one would change our NodeNum.
+    if (!configDecodeFailed)
+        generateCryptoKeyPair(nullptr);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
@@ -625,7 +627,9 @@ NodeDB::NodeDB()
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
         saveWhat |= SEGMENT_NODEDATABASE;
-    if (configCRC != crc32Buffer(&config, sizeof(config)))
+    // Don't persist on a degraded boot: it would overwrite the unreadable-but-maybe-transient config file
+    // with no-key UNSET defaults. Runtime reconfiguration (admin set) still persists normally.
+    if (!configDecodeFailed && configCRC != crc32Buffer(&config, sizeof(config)))
         saveWhat |= SEGMENT_CONFIG;
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
@@ -1031,9 +1035,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
     config.bluetooth.fixed_pin = defaultBLEPin;
 
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306) ||         \
-    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
+#if defined(USE_EINK) || defined(HAS_SPI_TFT) || defined(USE_SPISSD1306)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -1307,6 +1309,152 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+    moduleConfig.has_mesh_beacon = true;
+    // Default flags: listen on, broadcast off, legacy split on.
+    moduleConfig.mesh_beacon.flags = meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED |
+                                     meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT;
+// Set or clear a single beacon flag bit from a USERPREFS boolean.
+#define BEACON_APPLY_FLAG(enabled, flag)                                                                                         \
+    do {                                                                                                                         \
+        if (enabled)                                                                                                             \
+            moduleConfig.mesh_beacon.flags |= (uint32_t)(flag);                                                                  \
+        else                                                                                                                     \
+            moduleConfig.mesh_beacon.flags &= ~(uint32_t)(flag);                                                                 \
+    } while (0)
+#ifdef USERPREFS_MESH_BEACON_LISTEN_ENABLED
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LISTEN_ENABLED, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED);
+#endif
+#ifdef USERPREFS_MESH_BEACON_BROADCAST_ENABLED
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_BROADCAST_ENABLED,
+                      meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED);
+#endif
+#ifdef USERPREFS_MESH_BEACON_MESSAGE
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, USERPREFS_MESH_BEACON_MESSAGE,
+            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_message[sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1] = '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_INTERVAL_SECS
+    moduleConfig.mesh_beacon.broadcast_interval_secs =
+        (USERPREFS_MESH_BEACON_INTERVAL_SECS != 0 &&
+         USERPREFS_MESH_BEACON_INTERVAL_SECS < default_mesh_beacon_min_broadcast_interval_secs)
+            ? default_mesh_beacon_min_broadcast_interval_secs
+            : USERPREFS_MESH_BEACON_INTERVAL_SECS;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = USERPREFS_MESH_BEACON_OFFER_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_REGION
+    moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_offer_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1] =
+        '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
+    static_assert(sizeof(beaconOfferPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes),
+                  "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+    memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
+    moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
+    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_REGION
+    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_on_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1] = '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
+    static_assert(sizeof(beaconOnPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes),
+                  "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+    memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
+    moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    moduleConfig.mesh_beacon.broadcast_on_channel.channel_num = USERPREFS_MESH_BEACON_ON_CHANNEL_NUM;
+#endif
+#ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);
+#endif
+#undef BEACON_APPLY_FLAG
+// Per-preset broadcast targets (up to 4). Each TARGET_<N>_* key bumps broadcast_targets_count as needed.
+#define BEACON_TARGET_PRESET(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_preset = true;                                                       \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].preset = (VAL);                                                          \
+    } while (0)
+#define BEACON_TARGET_REGION(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].region = (VAL);                                                          \
+    } while (0)
+// Target channel is referenced by index into the device's channel table (0..MAX_NUM_CHANNELS-1).
+#define BEACON_TARGET_CH_INDEX(N, VAL)                                                                                           \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
+    } while (0)
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
+    BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_REGION
+    BEACON_TARGET_REGION(0, USERPREFS_MESH_BEACON_TARGET_0_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
+    BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_REGION
+    BEACON_TARGET_REGION(1, USERPREFS_MESH_BEACON_TARGET_1_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
+    BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_REGION
+    BEACON_TARGET_REGION(2, USERPREFS_MESH_BEACON_TARGET_2_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
+    BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_REGION
+    BEACON_TARGET_REGION(3, USERPREFS_MESH_BEACON_TARGET_3_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
+#endif
+#undef BEACON_TARGET_PRESET
+#undef BEACON_TARGET_REGION
+#undef BEACON_TARGET_CH_INDEX
+#endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();
 }
@@ -1774,10 +1922,10 @@ void NodeDB::pickNewNodeNum()
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
-            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, picking 0x%x", nodeNum, candidate);
+            LOG_WARN("NOTE! Our desired nodenum 0x%08x is invalid or in use, picking 0x%08x", nodeNum, candidate);
         nodeNum = candidate;
     }
-    LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
+    LOG_DEBUG("Use nodenum 0x%08x ", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }
@@ -1974,6 +2122,7 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    configDecodeFailed = false;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2163,15 +2312,26 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
-        installDefaultConfig(); // Our in RAM copy might now be corrupt
+    if (state == LoadFileResult::DECODE_FAILED) {
+        // Config file present but undecodable this boot (corruption / torn write / transient decrypt fail).
+        // loadProto() already zeroed `config`, so the keypair is gone from RAM; minting a new one would change
+        // our NodeNum (== crc32(public_key)) and orphan us on the mesh. configDecodeFailed freezes identity and
+        // skips persisting (see ctor), so a transient failure self-heals on the next clean boot. A genuinely
+        // absent config returns OTHER_FAILURE, so this never fires on first boot. Boot degraded + radio-silent.
+        LOG_ERROR("Config decode failed - freezing identity, booting degraded (radio silent until restored)");
+        configDecodeFailed = true;
+        installDefaultConfig(true);
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.tx_enabled = false;
+    } else if (state != LoadFileResult::LOAD_SUCCESS) {
+        // No decodable config to work with: the file is absent (first boot) or could not be opened (OTHER_FAILURE
+        // / NO_FILESYSTEM). Unlike DECODE_FAILED there are no usable contents to protect, so install defaults.
+        installDefaultConfig();
+    } else if (config.version < DEVICESTATE_MIN_VER) {
+        LOG_WARN("config %d is old, discard", config.version);
+        installDefaultConfig(true);
     } else {
-        if (config.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("config %d is old, discard", config.version);
-            installDefaultConfig(true);
-        } else {
-            LOG_INFO("Loaded saved config version %d", config.version);
-        }
+        LOG_INFO("Loaded saved config version %d", config.version);
     }
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
@@ -2188,7 +2348,9 @@ void NodeDB::loadFromDisk()
     // take effect even when NVS already has a valid config (e.g. region-locked
     // dev boards with no BLE/serial to set the region at runtime).
 #ifdef USERPREFS_CONFIG_LORA_REGION
-    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
+    // Skip on a degraded boot to keep the radio silent (identity is already protected by the keygen gate).
+    if (!configDecodeFailed)
+        config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #endif
 
 #ifdef USERPREFS_LORACONFIG_USE_PRESET
@@ -2758,6 +2920,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        moduleConfig.has_mesh_beacon = true;
+#endif
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
@@ -2909,7 +3074,7 @@ void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
     const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
     const bool hasBitfield = decoded && p.decoded.has_bitfield;
     LOG_DEBUG(
-        "Drop packet (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
+        "Drop packet (%s): hop_start invalid/missing (from=0x%08x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
         context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
 }
 
@@ -2957,7 +3122,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
             // recorded based on the packet rxTime
             //
             // FIXME perhaps handle RX_SRC_USER separately?
-            LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
+            LOG_INFO("updatePosition REMOTE node=0x%08x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
 
             // First, back up fields that we want to protect from overwrite
             uint32_t tmp_time = slot.time;
@@ -2990,7 +3155,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         if (src == RX_SRC_LOCAL) {
             LOG_DEBUG("updateTelemetry LOCAL device");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE device node=0x%x", nodeId);
+            LOG_DEBUG("updateTelemetry REMOTE device node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3002,7 +3167,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         if (src == RX_SRC_LOCAL) {
             LOG_DEBUG("updateTelemetry LOCAL env");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE env node=0x%x", nodeId);
+            LOG_DEBUG("updateTelemetry REMOTE env node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3171,7 +3336,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         return;
     }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
+        LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
         if (!info) {
@@ -3565,7 +3730,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
-            LOG_MIGRATION("Rehydrated node 0x%x from warm tier (key=%d)", n, lite->public_key.size == 32);
+            LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
         }
 #endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
@@ -3693,18 +3858,17 @@ bool NodeDB::createNewIdentity()
     if (newNodeNum == oldNodeNum)
         return false;
 
-    // Retire the old node entry
-    meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
-    if (node != NULL) {
-        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, newNodeNum);
-        nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
-        node->public_key.size = 0;
-        memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
+    // Remove the old node entry entirely rather than retiring it in place. Flagging the old identity as
+    // ignored (the previous behavior) left a keyless ghost of ourselves that survived cleanup/eviction, was
+    // still streamed to clients, and made any DM/admin aimed at it fail forever with PKI_SEND_FAIL_PUBLIC_KEY.
+    // removeNodeByNum() drops the lite entry, its satellite stores, and the warm-tier copy.
+    if (getMeshNode(oldNodeNum) != NULL) {
+        LOG_DEBUG("Old node num %u is now %u, removing stale identity", oldNodeNum, newNodeNum);
+        removeNodeByNum(oldNodeNum);
+    } else {
+        // Lite entry already absent: drop any orphaned satellite-store entries directly.
+        eraseNodeSatellites(oldNodeNum);
     }
-
-    // Drop satellite-store entries (position/telemetry/environment/status) keyed by the retired
-    // node number so stale data isn't left attached to the old identity.
-    eraseNodeSatellites(oldNodeNum);
 
     myNodeInfo.my_node_num = newNodeNum;
 
