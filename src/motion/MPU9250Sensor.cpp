@@ -105,17 +105,23 @@ bool MPU9250Sensor::initMPU6500()
     delay(50);
 
     // DLPF 41 Hz (CONFIG = 3), sample rate 1 kHz / (1 + SMPLRT_DIV) = 200 Hz
-    writeRegister(addr, MPU_CONFIG, 0x03);
-    writeRegister(addr, MPU_SMPLRT_DIV, 0x04);
+    if (!writeRegister(addr, MPU_CONFIG, 0x03) || !writeRegister(addr, MPU_SMPLRT_DIV, 0x04)) {
+        return false;
+    }
 
     // ±2 g accel range
-    writeRegister(addr, MPU_ACCEL_CONFIG, 0x00);
+    if (!writeRegister(addr, MPU_ACCEL_CONFIG, 0x00)) {
+        return false;
+    }
     // ±250 dps gyro (gyro is unused for compass but configuring leaves the chip in a known state)
-    writeRegister(addr, MPU_GYRO_CONFIG, 0x00);
+    if (!writeRegister(addr, MPU_GYRO_CONFIG, 0x00)) {
+        return false;
+    }
 
     // Expose AK8963 on the main I2C bus: disable internal master, enable bypass
-    writeRegister(addr, MPU_USER_CTRL, 0x00);
-    writeRegister(addr, MPU_INT_PIN_CFG, 0x02);
+    if (!writeRegister(addr, MPU_USER_CTRL, 0x00) || !writeRegister(addr, MPU_INT_PIN_CFG, 0x02)) {
+        return false;
+    }
     delay(10);
 
     return true;
@@ -130,13 +136,19 @@ bool MPU9250Sensor::initAK8963()
     }
 
     // Soft reset
-    writeRegister(AK8963_ADDR, AK_CNTL2, 0x01);
+    if (!writeRegister(AK8963_ADDR, AK_CNTL2, 0x01)) {
+        return false;
+    }
     delay(100);
 
     // Power-down then enter Fuse ROM access to read per-axis sensitivity (ASA)
-    writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_POWERDOWN);
+    if (!writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_POWERDOWN)) {
+        return false;
+    }
     delay(10);
-    writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_FUSE_ROM);
+    if (!writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_FUSE_ROM)) {
+        return false;
+    }
     delay(10);
 
     uint8_t asa[3] = {0};
@@ -150,9 +162,13 @@ bool MPU9250Sensor::initAK8963()
     }
 
     // Back to power-down, then enter continuous-mode-2 (100 Hz) at 16-bit resolution
-    writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_POWERDOWN);
+    if (!writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_POWERDOWN)) {
+        return false;
+    }
     delay(10);
-    writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_CONT2_16BIT);
+    if (!writeRegister(AK8963_ADDR, AK_CNTL1, AK_MODE_CONT2_16BIT)) {
+        return false;
+    }
     delay(10);
 
     return true;
@@ -224,6 +240,12 @@ int32_t MPU9250Sensor::runOnce()
     FusionVector accel = {{0, 0, 0}};
     FusionVector mag = {{0, 0, 0}};
     if (!readSensors(accel, mag)) {
+        // Missed samples must not stall calibration: close the window on timeout
+        // even when no fresh magnetometer data is available.
+        if (doCalibration) {
+            finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY,
+                                       highestZ, lowestZ);
+        }
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
@@ -282,6 +304,8 @@ int32_t MPU9250Sensor::runOnce()
 #if MPU9250_UP_AXIS == MPU9250_UP_AXIS_PX
     ga = FusionAxesSwap(ga, FusionAxesAlignmentNZPYPX);
     ma = FusionAxesSwap(ma, FusionAxesAlignmentNZPYPX);
+#elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_PZ
+    // Default orientation (chip +Z up), no remap needed.
 #elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_NX
     ga = FusionAxesSwap(ga, FusionAxesAlignmentPZPYNX);
     ma = FusionAxesSwap(ma, FusionAxesAlignmentPZPYNX);
@@ -291,6 +315,8 @@ int32_t MPU9250Sensor::runOnce()
 #elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_NY
     ga = FusionAxesSwap(ga, FusionAxesAlignmentPXPZNY);
     ma = FusionAxesSwap(ma, FusionAxesAlignmentPXPZNY);
+#else
+#error "MPU9250_UP_AXIS must be one of MPU9250_UP_AXIS_PZ/PX/NX/PY/NY"
 #endif
 
     if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
