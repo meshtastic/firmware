@@ -272,7 +272,7 @@ When the menu is opened from a map applet, zoom controls appear automatically. Z
 
 InkHUD's `Node Config -> Position` page now exposes the common position controls directly in the menu applet, using the same compact selector pattern as other InkHUD config pages.
 
-- Device GPS controls: fixed position toggle, GPS enable/disable, GPS polling interval
+- Device GPS controls: GPS enable/disable, GPS polling interval
 - Position packet controls: broadcast interval, smart position toggle, smart minimum interval, smart minimum distance
 
 #### System Applets

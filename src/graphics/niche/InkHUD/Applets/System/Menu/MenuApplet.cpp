@@ -620,11 +620,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyConfigReload(SEGMENT_CONFIG, true);
         break;
 
-    case TOGGLE_FIXED_POSITION:
-        config.position.fixed_position = !config.position.fixed_position;
-        applyConfigReload();
-        break;
-
     case SET_POSITION_BROADCAST_INTERVAL: {
         const uint8_t index = cursor - 1;
         constexpr uint8_t optionCount = sizeof(POSITION_BROADCAST_OPTIONS) / sizeof(POSITION_BROADCAST_OPTIONS[0]);
@@ -1349,9 +1344,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(
                 MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_SMART_DISTANCE));
         }
-
-        items.push_back(MenuItem("Fixed Pos", MenuAction::TOGGLE_FIXED_POSITION, MenuPage::NODE_CONFIG_POSITION,
-                                 &config.position.fixed_position));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
