@@ -66,6 +66,10 @@ enum MenuAction {
     SET_REGION_BR_902,
     SET_REGION_EU_866,
     SET_REGION_NARROW_868,
+    SET_REGION_ITU1_2M,
+    SET_REGION_ITU2_2M,
+    SET_REGION_ITU3_2M,
+    SET_REGION_ITU2_125CM,
     // Device Roles
     SET_ROLE_CLIENT,
     SET_ROLE_CLIENT_MUTE,
@@ -84,6 +88,8 @@ enum MenuAction {
     SET_PRESET_LITE_FAST,
     SET_PRESET_NARROW_SLOW,
     SET_PRESET_NARROW_FAST,
+    SET_PRESET_TINY_SLOW,
+    SET_PRESET_TINY_FAST,
     SET_PRESET_FROM_REGION, // Dynamic: preset chosen from region-available list
     // Timezones
     SET_TZ_US_HAWAII,
@@ -123,6 +129,11 @@ enum MenuAction {
     // Administration
     RESET_NODEDB_ALL,
     RESET_NODEDB_KEEP_FAVORITES,
+    WIPE_MESSAGES_ALL,
+    // Map zoom (MapApplet and FavoritesMapApplet)
+    MAP_ZOOM_IN,
+    MAP_ZOOM_OUT,
+    MAP_ZOOM_RESET,
 };
 
 } // namespace NicheGraphics::InkHUD

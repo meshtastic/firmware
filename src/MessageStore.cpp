@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if HAS_SCREEN
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 #include "FSCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
@@ -356,7 +356,14 @@ void MessageStore::clearAllMessages()
 #ifdef FSCom
     SafeFile f(filename.c_str(), false);
     uint8_t count = 0;
-    f.write(&count, 1); // write "0 messages"
+
+    // SafeFile already does its own spiLock in its constructor and close().
+    // Avoid nesting spiLocks, as this will hang until watchdog reset!
+    {
+        concurrency::LockGuard guard(spiLock);
+        f.write(&count, 1); // write "0 messages"
+    }
+
     f.close();
 #endif
 
