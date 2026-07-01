@@ -2,7 +2,11 @@
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/HapticFeedback.h"
 #include "modules/ExternalNotificationModule.h"
+#ifdef MESHTASTIC_LOCKDOWN
+#include "security/LockdownDisplay.h"
+#endif
 
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
@@ -118,6 +122,22 @@ int InputBroker::handleInputEvent(const InputEvent *event)
 #if HAS_SCREEN
     if (screen && screenWasOff) {
         // If the screen was off, it is in the process of turning on, and we just drop the event
+        return 0;
+    }
+#endif
+
+#ifdef MESHTASTIC_LOCKDOWN
+    // Lockdown: when the display is redacted (storage locked, or screen-lock
+    // latch set after idle) the screen content is hidden, but local input
+    // would otherwise still flow into UI handlers — letting an operator
+    // drive menus, fire canned messages, change settings etc. blind. Eat
+    // the event here so input is no-op until the redaction clears.
+    // The latch is cleared only by unlockScreen() on a successful
+    // passphrase auth (see PhoneAPI::handleLockdownAuthInline) — local
+    // input does not clear it, even if storage happens to be unlocked.
+    // PowerFSM was already triggered above, so the backlight still wakes
+    // to show the LOCKED frame — the input just doesn't act on anything.
+    if (meshtastic_security::shouldRedactDisplay()) {
         return 0;
     }
 #endif
@@ -238,6 +258,16 @@ void InputBroker::Init()
         touchBacklightActive = false;
     };
 #endif
+#if defined(HAPTIC_FEEDBACK_PIN)
+    // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
+    touchConfig.suppressLeadUpSound = true;
+    initHapticFeedback();
+    touchConfig.onPress = []() {
+        hapticFeedback->pulse(80);
+        hapticFeedback->armDelayedPulse(500, 80);
+    };
+    touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
+#endif
     TouchButtonThread->initButton(touchConfig);
 #endif
 
@@ -299,6 +329,7 @@ void InputBroker::Init()
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThread("UserButton");
+#if !MESHTASTIC_EXCLUDE_SCREEN
     if (screen) {
         ButtonConfig userConfig;
         userConfig.pinNumber = (uint8_t)_pinNum;
@@ -317,7 +348,9 @@ void InputBroker::Init()
         userConfig.longPressTime = 500;
         userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
         UserButtonThread->initButton(userConfig);
-    } else {
+    } else
+#endif
+    {
         ButtonConfig userConfigNoScreen;
         userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
         userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
@@ -330,6 +363,12 @@ void InputBroker::Init()
             BaseType_t higherWake = 0;
             concurrency::mainDelay.interruptFromISR(&higherWake);
         };
+#if defined(ELECROW_ThinkNode_M7)
+        userConfigNoScreen.longLongPressTime = 15 * 1000;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
+#else
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+#endif
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
         userConfigNoScreen.longPress = INPUT_BROKER_NONE;
         userConfigNoScreen.longPressTime = 500;
@@ -379,14 +418,19 @@ void InputBroker::Init()
     }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR && portduino_config.i2cdev != "") {
-        seesawRotary = new SeesawRotary("SeesawRotary");
-        if (!seesawRotary->init()) {
-            delete seesawRotary;
-            seesawRotary = nullptr;
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        if (portduino_config.i2cdev != "") {
+            seesawRotary = new SeesawRotary("SeesawRotary");
+            if (!seesawRotary->init()) {
+                delete seesawRotary;
+                seesawRotary = nullptr;
+            }
         }
+#ifdef __linux__
+        // Linux evdev keyboard input only — macOS has no <linux/input.h>.
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
+#endif
     }
 #endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && HAS_TRACKBALL

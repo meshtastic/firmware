@@ -36,6 +36,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void addInterface(std::unique_ptr<RadioInterface> _iface) { iface = std::move(_iface); }
 
     /**
+     * Borrowed (non-owning) access to the radio interface — used by NodeDB
+     * after a lockdown unlock so it can push the freshly-loaded config to
+     * the SX12xx via reconfigure(). Returns nullptr when no radio has been
+     * attached (e.g. ARCH_PORTDUINO simulator before SimRadio bind).
+     */
+    RadioInterface *getRadioIface() { return iface.get(); }
+
+    /**
      * do idle processing
      * Mostly looking in our incoming rxPacket queue and calling handleReceived.
      */
@@ -91,9 +99,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
-
-    // pointer to the encrypted packet
-    meshtastic_MeshPacket *p_encrypted = nullptr;
 
   protected:
     friend class RoutingModule;

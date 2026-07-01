@@ -1,5 +1,5 @@
 #define USE_ST7789
-
+#define HAS_SPI_TFT 1
 #define ST7789_NSS 37
 #define ST7789_RS 34  // DC
 #define ST7789_SDA 35 // MOSI
@@ -9,6 +9,7 @@
 #define ST7789_BUSY -1
 // #define VTFT_CTRL 38
 #define VTFT_LEDA 38
+#define TFT_BACKLIGHT_ON HIGH
 // #define ST7789_BL (32+6)
 #define ST7789_SPI_HOST SPI2_HOST
 // #define TFT_BL (32+6)
@@ -83,7 +84,7 @@
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
 
 #define BATTERY_PIN 10 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO10_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_9
 #define ADC_MULTIPLIER 2 * 1.02 // 100k + 100k, and add 2% to kick the voltage over the max voltage to show charging.
 
 // BMI270 6-axis IMU on internal I2C bus

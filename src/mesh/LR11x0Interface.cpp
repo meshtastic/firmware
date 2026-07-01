@@ -57,26 +57,27 @@ template <typename T> bool LR11x0Interface<T>::init()
 #if ARCH_PORTDUINO
     float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
-#elif !defined(LR11X0_DIO3_TCXO_VOLTAGE)
+#elif defined(LR11X0_DIO3_TCXO_VOLTAGE)
+    float tcxoVoltage = LR11X0_DIO3_TCXO_VOLTAGE;
+    LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", LR11X0_DIO3_TCXO_VOLTAGE);
+    // (DIO3 is not free to be used as an IRQ)
+#elif defined(TCXO_OPTIONAL)
+    float tcxoVoltage = 1.6f; // TCXO_OPTIONAL: try default 1.6 V first, fall back to XTAL on failure
+    LOG_DEBUG("TCXO_OPTIONAL: no LR11X0_DIO3_TCXO_VOLTAGE defined, trying default TCXO Vref 1.6 V first");
+#else
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
     // (DIO3 is free to be used as an IRQ)
     LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
-#else
-    float tcxoVoltage = LR11X0_DIO3_TCXO_VOLTAGE;
-    LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", LR11X0_DIO3_TCXO_VOLTAGE);
-    // (DIO3 is not free to be used as an IRQ)
 #endif
 
     RadioLibInterface::init();
 
-    limitPower(LR1110_MAX_POWER);
-
-    if ((power > LR1120_MAX_POWER) &&
-        (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) { // clamp again if wide freq range
-        power = LR1120_MAX_POWER;
-        preambleLength = 12; // 12 is the default for operation above 2GHz
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+        limitPower(LR1120_MAX_POWER);
+    } else {
+        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
     }
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
@@ -102,6 +103,17 @@ template <typename T> bool LR11x0Interface<T>::init()
         delay(100);
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     }
+
+#if defined(TCXO_OPTIONAL)
+    // If init failed for any reason other than chip not found, retry without TCXO (XTAL mode)
+    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        LOG_WARN("LR11x0 init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);
+        tcxoVoltage = 0;
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        if (res == RADIOLIB_ERR_NONE)
+            LOG_INFO("LR11x0 init success without TCXO (XTAL mode)");
+    }
+#endif
 
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
@@ -177,17 +189,18 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
 
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+        limitPower(LR1120_MAX_POWER);
+    } else {
+        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
+    }
+
     err = lora.setPreambleLength(preambleLength);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    if (power > LR1110_MAX_POWER) // This chip has lower power limits than some
-        power = LR1110_MAX_POWER;
-    if ((power > LR1120_MAX_POWER) && (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) // 2.4G power limit
-        power = LR1120_MAX_POWER;
 
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
@@ -199,7 +212,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
 template <typename T> void LR11x0Interface<T>::disableInterrupt()
@@ -354,5 +367,15 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 #endif
 
     return true;
+}
+
+template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
+{
+#ifdef ARCH_PORTDUINO_WASM
+    float rssi = lora.getRSSI(); // installed RadioLib's LR11x0 getRSSI() is 0-arg
+#else
+    float rssi = lora.getRSSI(false, true);
+#endif
+    return (int16_t)round(rssi);
 }
 #endif

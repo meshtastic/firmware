@@ -203,6 +203,14 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
     default:
         if (output > 0)
             digitalWrite(output, (moduleConfig.external_notification.active ? on : !on));
+#ifdef PCA_LED_NOTIFICATION
+        io.digitalWrite(PCA_LED_NOTIFICATION, on);
+
+#endif
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+        notificationPixel.setPixelColor(0, on ? NEOPIXEL_STATUS_NOTIFICATION_COLOR : 0);
+        notificationPixel.show();
+#endif
         break;
     }
 
@@ -320,6 +328,12 @@ ExternalNotificationModule::ExternalNotificationModule()
             LOG_INFO("Use Pin %i in digital mode", output);
             pinMode(output, OUTPUT);
         }
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+        LOG_INFO("Use WS2812 on GPIO %d as notification LED", NEOPIXEL_STATUS_NOTIFICATION_PIN);
+        notificationPixel.begin();
+        notificationPixel.clear();
+        notificationPixel.show();
+#endif
         setExternalState(0, false);
         externalTurnedOn[0] = 0;
         if (moduleConfig.external_notification.output_vibra) {
@@ -368,7 +382,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // If we receive a direct message and the receipent is us, apply DM mute setting
             // Else we just handle it as not muted.
             const bool isDmToUs = !isBroadcast(mp.to) && isToUs(&mp);
-            bool is_muted = isDmToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
+            bool is_muted = isDmToUs ? nodeInfoLiteIsMuted(sender)
                                      : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
 
             const bool buzzerModeIsDirectOnly =

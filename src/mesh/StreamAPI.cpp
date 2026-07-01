@@ -2,6 +2,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Throttle.h"
+#include "concurrency/LockGuard.h"
 #include "configuration.h"
 
 #define START1 0x94
@@ -51,7 +52,8 @@ void StreamAPI::writeStream()
         do {
             // Send every packet we can
             len = getFromRadio(txBuf + HEADER_LEN);
-            emitTxBuffer(len);
+            if (len != 0 && !emitTxBuffer(len))
+                break;
         } while (len);
     }
 }
@@ -168,18 +170,36 @@ int32_t StreamAPI::readStream()
 /**
  * Send the current txBuffer over our stream
  */
-void StreamAPI::emitTxBuffer(size_t len)
+bool StreamAPI::writeFrame(uint8_t *buf, size_t len)
 {
-    if (len != 0) {
-        txBuf[0] = START1;
-        txBuf[1] = START2;
-        txBuf[2] = (len >> 8) & 0xff;
-        txBuf[3] = len & 0xff;
+    if (len == 0 || !canWrite)
+        return false;
 
-        auto totalLen = len + HEADER_LEN;
-        stream->write(txBuf, totalLen);
+    buf[0] = START1;
+    buf[1] = START2;
+    buf[2] = (len >> 8) & 0xff;
+    buf[3] = len & 0xff;
+
+    auto totalLen = len + HEADER_LEN;
+    // Serialize write-readiness checks, writes and write-failure handling
+    // against concurrent stream writes/close.
+    concurrency::LockGuard guard(&streamLock);
+    if (!canWriteFrame(totalLen))
+        return false;
+
+    size_t written = stream->write(buf, totalLen);
+    if (written == totalLen) {
         stream->flush();
+        return true;
     }
+
+    onFrameWriteFailed(totalLen, written);
+    return false;
+}
+
+bool StreamAPI::emitTxBuffer(size_t len)
+{
+    return writeFrame(txBuf, len);
 }
 
 void StreamAPI::emitRebooted()
@@ -195,21 +215,29 @@ void StreamAPI::emitRebooted()
 
 void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
 {
-    // In case we send a FromRadio packet
-    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_log_record_tag;
-    fromRadioScratch.log_record.level = level;
+    // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here — those
+    // belong to the main packet-emission path and a LOG_ firing during
+    // `writeStream()` would corrupt an in-flight encode. We keep a
+    // dedicated `fromRadioScratchLog` + `txBufLog` for log records and
+    // only serialize the actual `stream->write` call via `streamLock` so
+    // a concurrent packet emission doesn't interleave bytes on the wire.
+    memset(&fromRadioScratchLog, 0, sizeof(fromRadioScratchLog));
+    fromRadioScratchLog.which_payload_variant = meshtastic_FromRadio_log_record_tag;
+    fromRadioScratchLog.log_record.level = level;
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    fromRadioScratch.log_record.time = rtc_sec;
-    strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source) - 1);
+    fromRadioScratchLog.log_record.time = rtc_sec;
+    strncpy(fromRadioScratchLog.log_record.source, src, sizeof(fromRadioScratchLog.log_record.source) - 1);
 
     auto num_printed =
-        vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message) - 1, format, arg);
-    if (num_printed > 0 && fromRadioScratch.log_record.message[num_printed - 1] ==
+        vsnprintf(fromRadioScratchLog.log_record.message, sizeof(fromRadioScratchLog.log_record.message) - 1, format, arg);
+    if (num_printed > 0 && fromRadioScratchLog.log_record.message[num_printed - 1] ==
                                '\n') // Strip any ending newline, because we have records for framing instead.
-        fromRadioScratch.log_record.message[num_printed - 1] = '\0';
-    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
+        fromRadioScratchLog.log_record.message[num_printed - 1] = '\0';
+
+    size_t len =
+        pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
+    writeFrame(txBufLog, len);
 }
 
 /// Hookable to find out when connection changes

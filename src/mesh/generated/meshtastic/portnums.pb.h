@@ -76,6 +76,8 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_ALERT_APP = 11,
     /* Module/port for handling key verification requests. */
     meshtastic_PortNum_KEY_VERIFICATION_APP = 12,
+    /* Module/port for handling primitive remote shell access. */
+    meshtastic_PortNum_REMOTE_SHELL_APP = 13,
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module.
  ENCODING: ASCII Plaintext */
@@ -96,6 +98,11 @@ typedef enum _meshtastic_PortNum {
  This module allows setting an extra string of status for a node.
  Broadcasts on change and on a timer, possibly once a day. */
     meshtastic_PortNum_NODE_STATUS_APP = 36,
+    /* Beacon module broadcast packets.
+ ENCODING: protobuf
+ Periodically broadcast by nodes in beacon mode; received by nodes with MeshBeaconConfig.FLAG_LISTEN_ENABLED.
+ Carries a text message plus optional channel/preset offers for client apps. */
+    meshtastic_PortNum_MESH_BEACON_APP = 37,
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.
@@ -150,6 +157,10 @@ typedef enum _meshtastic_PortNum {
  arbitrary telemetry over meshtastic that is not covered by telemetry.proto
  ENCODING: CayenneLLP */
     meshtastic_PortNum_CAYENNE_APP = 77,
+    /* ATAK Plugin V2
+ Portnum for payloads from the official Meshtastic ATAK plugin using
+ TAKPacketV2 with zstd dictionary compression. */
+    meshtastic_PortNum_ATAK_PLUGIN_V2 = 78,
     /* GroupAlarm integration
  Used for transporting GroupAlarm-related messages between Meshtastic nodes
  and companion applications/services. */

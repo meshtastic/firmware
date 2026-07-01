@@ -1,4 +1,5 @@
 #include "CryptoEngine.h"
+#include "HardwareRNG.h"
 #include "PortduinoGPIO.h"
 #include "SPIChip.h"
 #include "mesh/RF95Interface.h"
@@ -8,24 +9,39 @@
 #include "PortduinoGlue.h"
 #include "SHA256.h"
 #include "api/ServerAPI.h"
-#include "linux/gpio/LinuxGPIOPin.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
 #ifdef PORTDUINO_LINUX_HARDWARE
+#include "linux/gpio/LinuxGPIOPin.h"
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+#endif
+
+#ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
+#endif
+
+#ifdef __APPLE__
+// Used by getMacAddr()'s macOS fallback to read the en0 link-layer address.
+// `getifaddrs()` is the BSD-portable way; `<net/if_dl.h>` provides the
+// `sockaddr_dl` cast and the `LLADDR()` macro that points at the 6-byte MAC.
+#include <cstring> // strcmp, memcpy
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <net/if_dl.h>
 #endif
 
 #include "platform/portduino/USBHal.h"
@@ -129,9 +145,9 @@ void getMacAddr(uint8_t *dmac)
         }
     } else if (portduino_config.mac_address.length() > 11) {
         MAC_from_string(portduino_config.mac_address, dmac);
-        exit;
+        return;
     } else {
-
+#ifdef PORTDUINO_LINUX_HARDWARE
         struct hci_dev_info di = {0};
         di.dev_id = 0;
         bdaddr_t bdaddr;
@@ -151,6 +167,37 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+#elif defined(__APPLE__)
+        // No BlueZ on macOS, but we can fall back to the host's primary
+        // network interface MAC. `en0` is Wi-Fi on every shipping Mac
+        // (Ethernet, when present, is en1 or higher), which gives the user
+        // the same kind of stable, host-derived identifier that the BlueZ
+        // path provides on Linux. If en0 isn't found or has no MAC, dmac is
+        // left untouched and the caller's "Blank MAC Address not allowed!"
+        // check will still fire — preserving existing behavior for users
+        // who deliberately rely on --hwid or YAML override.
+        struct ifaddrs *ifap = nullptr;
+        if (getifaddrs(&ifap) == 0) {
+            for (struct ifaddrs *p = ifap; p != nullptr; p = p->ifa_next) {
+                if (p->ifa_addr == nullptr || p->ifa_addr->sa_family != AF_LINK) {
+                    continue;
+                }
+                if (strcmp(p->ifa_name, "en0") != 0) {
+                    continue;
+                }
+                auto *sdl = reinterpret_cast<struct sockaddr_dl *>(p->ifa_addr);
+                if (sdl->sdl_alen == 6) {
+                    memcpy(dmac, LLADDR(sdl), 6);
+                    break;
+                }
+            }
+            freeifaddrs(ifap);
+        }
+#else
+        // No platform-specific MAC source; leave dmac at its default. Caller
+        // can override via the --hwid CLI flag or the YAML config.
+        (void)dmac;
+#endif
     }
 }
 
@@ -180,6 +227,22 @@ void portduinoSetup()
 
     // Force stdout to be line buffered
     setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
+
+    // We do this super early so that we can log from the rest of the init code
+    concurrency::hasBeenSetup = true;
+    consoleInit();
+
+#ifdef ARCH_PORTDUINO_WASM
+    // Browser build: no YAML/filesystem config. Apply a hardcoded SX1262/CH341
+    // setup and create the WebUSB-backed Ch341Hal, then skip the Linux config path.
+    {
+        extern void wasm_config_apply();
+        wasm_config_apply();
+        ch341Hal =
+            new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+    }
+    return;
+#endif
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
@@ -224,16 +287,20 @@ void portduinoSetup()
         }
     }
 
+#ifndef ARCH_PORTDUINO_WASM
     if (yamlOnly) {
         std::cout << portduino_config.emit_yaml() << std::endl;
         exit(EXIT_SUCCESS);
     }
+#endif
 
     if (portduino_config.force_simradio) {
         std::cout << "Running in simulated mode." << std::endl;
         portduino_config.MaxNodes = 200; // Default to 200 nodes
         // Set the random seed equal to TCPPort to have a different seed per instance
-        randomSeed(TCPPort);
+        uint32_t seed = TCPPort;
+        HardwareRNG::seed(seed);
+        randomSeed(seed);
         return;
     }
 
@@ -249,10 +316,9 @@ void portduinoSetup()
         // Try CH341
         try {
             std::cout << "autoconf: Looking for CH341 device..." << std::endl;
-            ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
-                                    portduino_config.lora_usb_pid);
-            ch341Hal->getProductString(autoconf_product, 95);
-            delete ch341Hal;
+            auto probe = std::unique_ptr<Ch341Hal>(new Ch341Hal(0, portduino_config.lora_usb_serial_num,
+                                                                portduino_config.lora_usb_vid, portduino_config.lora_usb_pid));
+            probe->getProductString(autoconf_product, 95);
             std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
 
             found_ch341 = true;
@@ -479,10 +545,17 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
         char serial[9] = {0};
-        ch341Hal->getSerialString(serial, 8);
+        // Pass the full buffer size (9 = 8 chars + null) to getSerialString,
+        // not 8. The function treats `len` as buffer size and reserves one
+        // slot for the null terminator, so passing 8 produced a 7-char serial
+        // and broke the `strlen(serial) == 8` check below — masked on Linux
+        // by the BlueZ HCI MAC fallback in getMacAddr(), but on macOS (where
+        // the BlueZ path is __linux__-guarded) it left mac_address empty and
+        // meshtasticd refused to start.
+        ch341Hal->getSerialString(serial, sizeof(serial));
         std::cout << "CH341 Serial " << serial << std::endl;
         char product_string[96] = {0};
-        ch341Hal->getProductString(product_string, 95);
+        ch341Hal->getProductString(product_string, sizeof(product_string));
         std::cout << "CH341 Product " << product_string << std::endl;
         if (strlen(serial) == 8 && portduino_config.mac_address.length() < 12) {
             std::cout << "Deriving MAC address from Serial and Product String" << std::endl;
@@ -503,7 +576,7 @@ void portduinoSetup()
     }
 
     getMacAddr(dmac);
-#ifndef UNIT_TEST
+#ifndef PIO_UNIT_TESTING
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
         std::cout << "Please set a MAC Address in config.yaml using either MACAddress or MACAddressSource." << std::endl;
@@ -512,7 +585,9 @@ void portduinoSetup()
 #endif
     printf("MAC ADDRESS: %02X:%02X:%02X:%02X:%02X:%02X\n", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
     // Rather important to set this, if not running simulated.
-    randomSeed(time(NULL));
+    uint32_t seed = static_cast<uint32_t>(time(NULL));
+    HardwareRNG::seed(seed);
+    randomSeed(seed);
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
 
@@ -645,7 +720,9 @@ void portduinoSetup()
     if (verboseEnabled && portduino_config.logoutputlevel != level_trace) {
         portduino_config.logoutputlevel = level_debug;
     }
-
+    if (portduino_config.lora_spi_dev != "") {
+        portduinoSetOptions({.realHardware = true});
+    }
     return;
 }
 
@@ -670,6 +747,16 @@ int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
 #endif
 }
 
+#ifdef ARCH_PORTDUINO_WASM
+// Browser node: configuration comes from the wasm_set_lora_* setters, not a YAML
+// file. Reached only as dead code after portduinoSetup()'s early return; kept
+// defined (and yaml-free) so those references still link.
+bool loadConfig(const char *configPath)
+{
+    (void)configPath;
+    return false;
+}
+#else
 bool loadConfig(const char *configPath)
 {
     YAML::Node yamlConfig;
@@ -721,11 +808,18 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Lora"]) {
 
             if (yamlConfig["Lora"]["Module"]) {
+                const std::string moduleName = yamlConfig["Lora"]["Module"].as<std::string>("");
+                bool found = false;
                 for (const auto &loraModule : portduino_config.loraModules) {
-                    if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.second) {
+                    if (moduleName == loraModule.second) {
                         portduino_config.lora_module = loraModule.first;
+                        found = true;
                         break;
                     }
+                }
+                if (!found) {
+                    std::cerr << "Unknown Lora.Module: " << moduleName << std::endl;
+                    exit(EXIT_FAILURE);
                 }
             }
             if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
@@ -848,7 +942,22 @@ bool loadConfig(const char *configPath)
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
                 Serial1.setPath(serialPath);
+                portduino_config.gps_serial_path = serialPath;
                 portduino_config.has_gps = 1;
+            }
+            std::string gpsdHost = yamlConfig["GPS"]["GpsdHost"].as<std::string>("");
+            if (!gpsdHost.empty()) {
+                if (portduino_config.has_gps) {
+                    LOG_WARN("GPS config: both SerialPath and GpsdHost are set; GpsdHost takes priority");
+                }
+                int gpsdPort = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
+                if (gpsdPort < 1 || gpsdPort > 65535) {
+                    LOG_ERROR("GPS config: GpsdPort %d is out of range [1, 65535]; ignoring GPS config", gpsdPort);
+                } else {
+                    portduino_config.gpsd_host = gpsdHost;
+                    portduino_config.gpsd_port = gpsdPort;
+                    portduino_config.has_gps = 1;
+                }
             }
         }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
@@ -1020,6 +1129,7 @@ bool loadConfig(const char *configPath)
     }
     return true;
 }
+#endif // !ARCH_PORTDUINO_WASM
 
 // https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
 static bool ends_with(std::string_view str, std::string_view suffix)
@@ -1030,21 +1140,39 @@ static bool ends_with(std::string_view str, std::string_view suffix)
 bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
     mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
-    if (mac_str.length() == 12) {
-        dmac[0] = std::stoi(portduino_config.mac_address.substr(0, 2), nullptr, 16);
-        dmac[1] = std::stoi(portduino_config.mac_address.substr(2, 2), nullptr, 16);
-        dmac[2] = std::stoi(portduino_config.mac_address.substr(4, 2), nullptr, 16);
-        dmac[3] = std::stoi(portduino_config.mac_address.substr(6, 2), nullptr, 16);
-        dmac[4] = std::stoi(portduino_config.mac_address.substr(8, 2), nullptr, 16);
-        dmac[5] = std::stoi(portduino_config.mac_address.substr(10, 2), nullptr, 16);
-        return true;
-    } else {
+    if (mac_str.length() != 12) {
         return false;
     }
+    // Validate every character is a hex digit before parsing. std::stoi
+    // would otherwise skip leading whitespace and silently truncate at the
+    // first non-digit, which is too lenient for a MAC address.
+    for (char c : mac_str) {
+        if (!isxdigit(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    // Parse into a temporary so dmac is not partially modified if a later
+    // byte fails. At least one caller in getMacAddr() ignores the bool
+    // return, so leaving stale bytes in dmac on failure would silently
+    // produce a wrong MAC.
+    uint8_t tmp[6];
+    try {
+        for (int i = 0; i < 6; i++) {
+            tmp[i] = static_cast<uint8_t>(std::stoi(mac_str.substr(i * 2, 2), nullptr, 16));
+        }
+    } catch (const std::exception &) {
+        return false;
+    }
+    memcpy(dmac, tmp, 6);
+    return true;
 }
 
 std::string exec(const char *cmd)
 { // https://stackoverflow.com/a/478960
+#ifdef ARCH_PORTDUINO_WASM
+    (void)cmd; // no shell/popen in the browser — shell-outs degrade to empty
+    return "";
+#endif
     std::array<char, 128> buffer;
     std::string result;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
@@ -1057,6 +1185,7 @@ std::string exec(const char *cmd)
     return result;
 }
 
+#ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault)
 {
     if (sourceNode.IsMap()) {
@@ -1071,3 +1200,4 @@ void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault
         destPin.gpiochip = portduino_config.lora_default_gpiochip;
     }
 }
+#endif // !ARCH_PORTDUINO_WASM

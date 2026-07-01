@@ -104,6 +104,15 @@ class Applet : public GFX
     virtual void onFreeText(char c) {}
     virtual void onFreeTextDone() {}
     virtual void onFreeTextCancel() {}
+    // Absolute display-space touch point, for touch-friendly UI interactions.
+    // Return true if consumed.
+    virtual bool onTouchPoint(uint16_t x, uint16_t y, bool longPress)
+    {
+        (void)x;
+        (void)y;
+        (void)longPress;
+        return false;
+    }
     // List of inputs which can be subscribed to
     enum InputMask {      // | No Joystick  |     With Joystick     |
         BUTTON_SHORT = 1, // | Button Click | Joystick Center Click |
@@ -118,6 +127,8 @@ class Applet : public GFX
     bool isInputSubscribed(InputMask input); // Check if input should be handled by applet, this should not be overloaded.
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
+
+    virtual class MapApplet *asMapApplet() { return nullptr; } // Returns non-null only for MapApplet and its subclasses
 
     static uint16_t getHeaderHeight(); // How tall the "standard" applet header is
 
