@@ -290,15 +290,30 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26,
     /* ITU Region 1 Amateur Radio 2m band (144-146 MHz) */
     meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M = 27,
-    /* ITU Region 2 / 3 Amateur Radio 2m band (144-148 MHz) */
-    meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M = 28,
+    /* ITU Region 2 Amateur Radio 2m band (144-148 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M = 28,
     /* EU 866MHz band (Band no. 47b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_866 = 29,
     /* EU 874MHz and 917MHz bands (Band no. 1 and 4 of 2022/172/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_874 = 30,
     meshtastic_Config_LoRaConfig_RegionCode_EU_917 = 31,
     /* EU 868MHz band, with narrow presets */
-    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868 = 32
+    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868 = 32,
+    /* ITU Region 3 Amateur Radio 2m band (144-148 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M = 33,
+    /* ITU Region 1 Amateur Radio 70cm band (430-440 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU1_70CM = 34,
+    /* ITU Region 2 Amateur Radio 70cm band (420-450 MHz)
+ Note: Some countries do not allocate 420-430 MHz or 440-450 MHz.
+ Check local law! */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM = 35,
+    /* ITU Region 3 Amateur Radio 70cm band (430-450 MHz)
+ Note: Some countries do not allocate 440-450 MHz. Check local law! */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM = 36,
+    /* ITU Region 2 Amateur Radio 1.25m '125cm' band (220-225 MHz)
+ Note: Some countries do not allocate 220-222 MHz (Ex: USA/Canada).
+ Check local law! */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM = 37
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -345,7 +360,21 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Narrow Slow
  Moderate range preset optimized for EU 868MHz band with 62.5kHz bandwidth.
  Comparable link budget and data rate to LONG_FAST. */
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13,
+    /* Tiny Fast
+ Preset optimized for compliance with Amateur Radio restrictions with 20kHz bandwidth.
+ Many regions limit data transmission bandwidth in lower amateur bands (2 Meter).
+ Note: TCXO with tight tolerances (±5 ppm or better) is *absolutely required* at these narrow bandwidths.
+ Only compatible with SX127x and SX126x chipsets.
+ Comparable link budget and data rate to LONG_FAST. */
+    meshtastic_Config_LoRaConfig_ModemPreset_TINY_FAST = 14,
+    /* Tiny Slow
+ Preset optimized for compliance with Amateur Radio restrictions with 20kHz bandwidth.
+ Many regions limit data transmission bandwidth in lower amateur bands (2 Meter).
+ Note: TCXO with tight tolerances (±5 ppm or better) is *absolutely required* at these narrow bandwidths.
+ Only compatible with SX127x and SX126x chipsets.
+ Comparable link budget and data rate to LONG_MODERATE. */
+    meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW = 15
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_LoRaConfig_FEM_LNA_Mode {
@@ -734,12 +763,12 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_EU_N_868
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW+1))
 
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT

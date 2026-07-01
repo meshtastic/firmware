@@ -22,6 +22,8 @@ struct AdminModule_ObserverData {
  */
 class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
 {
+    friend class AdminModuleTestShim; // native unit tests reach handleSetConfig + hasOpenEditTransaction
+
   public:
     /** Constructor
      * name is for debugging output
@@ -64,10 +66,18 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
   protected:
     void handleSetConfig(const meshtastic_Config &c, bool fromOthers);
 
+#ifdef PIO_UNIT_TESTING
+  protected:
+#else
   private:
+#endif
     bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
+
+  public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
+
+  private:
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);
@@ -83,6 +93,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
 static constexpr const char *licensedModeMessage =
     "Licensed mode activated, removing admin channel and encryption from all channels";
+
+static constexpr const char *publicChannelPrecisionMessage =
+    "Precise position is not allowed on a public (open / known-key) channel; reduced to coarse precision";
 
 extern AdminModule *adminModule;
 

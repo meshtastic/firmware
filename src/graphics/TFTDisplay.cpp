@@ -1142,8 +1142,17 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#endif
+#elif defined(VARIANT_DISPLAY_DRIVER)
+// Board-specific framebuffer backends (class LGFX) can livee in the
+// variant files — variant_display.h (declaration) and
+// variant_display.cpp (bodies) — so this shared
+// file isn't inflated for a single board. It exposes the same surface TFTDisplay
+// drives, so the generic `tft = new LGFX;` in connect() works.
+#include "variant_display.h"
 
+static LGFX *tft = nullptr;
+
+#endif
 #include "SPILock.h"
 #include "TFTColorRegions.h"
 #include "TFTDisplay.h"
@@ -1270,13 +1279,30 @@ void TFTDisplay::display(bool fromBlank)
                 y_byteMask = (1 << (y & 7));
 
                 uint16_t *chunkRow = repaintChunkBuffer + (row * displayWidth);
+
+                // Step 1: fill the whole row with the default colors. No per-pixel
+                // region scan, so background pixels (the bulk of the screen) are O(1).
                 for (x = 0; x < displayWidth; x++) {
                     isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
-                    if (hasColorRegions) {
-                        chunkRow[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                     colorTftWhite, colorTftBlack);
-                    } else {
-                        chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                    chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                }
+
+                // Step 2: overprint each region overlapping this row, applied in
+                // ascending index order so the highest-index region wins (matches
+                // resolveTFTColorPixel precedence). Only region-covered pixels are
+                // re-touched, so total cost is ~screen + sum of region spans.
+                if (hasColorRegions) {
+                    graphics::beginTFTColorRow(static_cast<int16_t>(y));
+                    for (uint8_t k = 0; k < graphics::tftColorRowCount; k++) {
+                        const graphics::TFTColorRegion &r = graphics::colorRegions[graphics::tftColorRowRegions[k]];
+                        int32_t xs = r.x > 0 ? r.x : 0;
+                        int32_t xe = r.x + r.width;
+                        if (xe > (int32_t)displayWidth)
+                            xe = (int32_t)displayWidth;
+                        for (int32_t xx = xs; xx < xe; xx++) {
+                            isset = (buffer[xx + y_byteIndex] & y_byteMask) != 0;
+                            chunkRow[xx] = isset ? r.onColorBe : r.offColorBe;
+                        }
                     }
                 }
             }
@@ -1363,12 +1389,16 @@ void TFTDisplay::display(bool fromBlank)
             }
 
             // Step 3: Copy only the changed span into the pixel line buffer.
+#if GRAPHICS_TFT_COLORING_ENABLED
+            if (hasColorRegions)
+                graphics::beginTFTColorRow(static_cast<int16_t>(y));
+#endif
             for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
                 isset = buffer[x + y_byteIndex] & y_byteMask;
 #if GRAPHICS_TFT_COLORING_ENABLED
                 if (hasColorRegions) {
-                    linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                        colorTftWhite, colorTftBlack);
+                    linePixelBuffer[x] =
+                        graphics::resolveTFTColorPixelRow(static_cast<int16_t>(x), isset, colorTftWhite, colorTftBlack);
                 } else {
                     linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
                 }
@@ -1458,7 +1488,8 @@ void TFTDisplay::sendCommand(uint8_t com)
             digitalWrite(portduino_config.displayBacklight.pin, TFT_BACKLIGHT_ON);
 #elif defined(HACKADAY_COMMUNICATOR)
         tft->displayOn();
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096)
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
+    !defined(HELTEC_MESH_NODE_T1)
         tft->wakeup();
         tft->powerSaveOff();
 #endif
@@ -1469,7 +1500,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(true); // using unPhone library
 #endif
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
 #elif !defined(M5STACK) && !defined(ST7789_CS) &&                                                                                \
     !defined(HACKADAY_COMMUNICATOR) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
@@ -1485,7 +1516,8 @@ void TFTDisplay::sendCommand(uint8_t com)
             digitalWrite(portduino_config.displayBacklight.pin, !TFT_BACKLIGHT_ON);
 #elif defined(HACKADAY_COMMUNICATOR)
         tft->displayOff();
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096)
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
+    !defined(HELTEC_MESH_NODE_T1)
         tft->sleep();
         tft->powerSaveOn();
 #endif
@@ -1496,7 +1528,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(false); // using unPhone library
 #endif
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
 #elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR)
         tft->setBrightness(0);
 #endif
@@ -1511,7 +1543,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
 {
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
     // todo
 #elif !defined(HACKADAY_COMMUNICATOR)
     tft->setBrightness(_brightness);
@@ -1531,7 +1563,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -1550,7 +1582,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->getTouch(x, y);
 #else
     return false;
@@ -1567,7 +1599,7 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Do TFT init");
-#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
     tft = new TFT_eSPI;
 #elif defined(HACKADAY_COMMUNICATOR)
     bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);

@@ -5,7 +5,12 @@ GROUP(-lgcc -lc -lnosys)
 
 MEMORY
 {
-  FLASH (rx)     : ORIGIN = 0x27000, LENGTH = 0xED000 - 0x27000
+  /* App region ends at 0xEA000, not 0xED000: the 12 KB warm-node-store
+   * record-ring (3 x 4 KB pages, src/mesh/WarmNodeStore.h) occupies
+   * 0xEA000-0xED000, directly below the stock LittleFS partition. Boards on
+   * the framework-default linker script are covered by the post-link guard
+   * in extra_scripts/nrf52_warm_region.py instead. */
+  FLASH (rx)     : ORIGIN = 0x27000, LENGTH = 0xEA000 - 0x27000
 
   /* SRAM required by Softdevice depend on
    * - Attribute Table Size (Number of Services and Characteristics)

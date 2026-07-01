@@ -368,4 +368,14 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 
     return true;
 }
+
+template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
+{
+#ifdef ARCH_PORTDUINO_WASM
+    float rssi = lora.getRSSI(); // installed RadioLib's LR11x0 getRSSI() is 0-arg
+#else
+    float rssi = lora.getRSSI(false, true);
+#endif
+    return (int16_t)round(rssi);
+}
 #endif
