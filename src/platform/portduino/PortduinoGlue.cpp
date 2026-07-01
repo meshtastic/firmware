@@ -174,7 +174,7 @@ void getMacAddr(uint8_t *dmac)
         // the same kind of stable, host-derived identifier that the BlueZ
         // path provides on Linux. If en0 isn't found or has no MAC, dmac is
         // left untouched and the caller's "Blank MAC Address not allowed!"
-        // check will still fire — preserving existing behavior for users
+        // check will still fire - preserving existing behavior for users
         // who deliberately rely on --hwid or YAML override.
         struct ifaddrs *ifap = nullptr;
         if (getifaddrs(&ifap) == 0) {
@@ -548,7 +548,7 @@ void portduinoSetup()
         // Pass the full buffer size (9 = 8 chars + null) to getSerialString,
         // not 8. The function treats `len` as buffer size and reserves one
         // slot for the null terminator, so passing 8 produced a 7-char serial
-        // and broke the `strlen(serial) == 8` check below — masked on Linux
+        // and broke the `strlen(serial) == 8` check below - masked on Linux
         // by the BlueZ HCI MAC fallback in getMacAddr(), but on macOS (where
         // the BlueZ path is __linux__-guarded) it left mac_address empty and
         // meshtasticd refused to start.
@@ -1175,7 +1175,7 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 std::string exec(const char *cmd)
 { // https://stackoverflow.com/a/478960
 #ifdef ARCH_PORTDUINO_WASM
-    (void)cmd; // no shell/popen in the browser — shell-outs degrade to empty
+    (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
     return "";
 #endif
     std::array<char, 128> buffer;

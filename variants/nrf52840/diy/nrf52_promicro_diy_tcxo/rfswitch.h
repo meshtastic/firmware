@@ -5,8 +5,6 @@
 #define LR20x0 LR2021
 #endif
 
-
-
 #ifndef RFSWITCH_NRF52TCXO_LR11X0_DEFINED
 #define RFSWITCH_NRF52TCXO_LR11X0_DEFINED
 // This is rewritten to match the requirements of the E80-900M2213S
