@@ -10,6 +10,10 @@
 #define ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE 0
 #endif
 
+#ifndef ENVIRONMENTAL_TELEMETRY_SCREEN_ENABLE
+#define ENVIRONMENTAL_TELEMETRY_SCREEN_ENABLE 0
+#endif
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"

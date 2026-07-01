@@ -176,6 +176,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213
 #elif defined(HELTEC_VISION_MASTER_E290)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
+#elif defined(NM_EPD_420)
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(SENSECAP_INDICATOR)
 #define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
 #elif defined(SEEED_XIAO_S3)
