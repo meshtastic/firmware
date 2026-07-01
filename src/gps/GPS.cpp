@@ -1141,6 +1141,10 @@ bool GPS::setup()
     }
 
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
+#ifdef ARCH_ESP32
+    notifyLightSleepObserver.observe(&notifyLightSleep);
+    notifyLightSleepEndObserver.observe(&notifyLightSleepEnd);
+#endif
 
     return true;
 }
@@ -1149,6 +1153,10 @@ GPS::~GPS()
 {
     // we really should unregister our sleep observer
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
+#ifdef ARCH_ESP32
+    notifyLightSleepObserver.unobserve(&notifyLightSleep);
+    notifyLightSleepEndObserver.unobserve(&notifyLightSleepEnd);
+#endif
 }
 
 // Put the GPS hardware into a specified state
@@ -1583,6 +1591,29 @@ int GPS::prepareDeepSleep(void *unused)
     disable();
     return 0;
 }
+
+#ifdef ARCH_ESP32
+// Light-sleep is short and the GPS state machine survives across it; soft-sleep
+// the receiver instead of disabling so we don't pay re-init / re-acquire cost
+// on every cycle. Without this the GPS keeps drawing ~25 mA the whole time the
+// MCU is asleep — the dominant drain on most non-router devices.
+int GPS::prepareLightSleep(void *unused)
+{
+    preLightSleepState = powerState;
+    if (powerState == GPS_ACTIVE) {
+        setPowerState(GPS_SOFTSLEEP);
+    }
+    return 0;
+}
+
+int GPS::endLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    if (preLightSleepState == GPS_ACTIVE && powerState != GPS_ACTIVE) {
+        setPowerState(GPS_ACTIVE);
+    }
+    return 0;
+}
+#endif
 
 static const char *PROBE_MESSAGE = "Trying %s (%s)...";
 static const char *DETECTED_MESSAGE = "%s detected";
