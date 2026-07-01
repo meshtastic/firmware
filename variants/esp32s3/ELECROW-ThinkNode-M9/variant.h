@@ -27,8 +27,8 @@
 /*CHARGE_CHECK*/
 #define DONE 8
 #define EXT_PWR_DETECT 1
-#define EXT_CHRG_DETECT 1
-#define EXT_CHRG_DETECT_VALUE LOW
+// #define EXT_CHRG_DETECT 1
+#define EXT_PWR_DETECT_VALUE LOW
 
 /*GPS*/
 #define HAS_GPS 1
