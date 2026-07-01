@@ -897,6 +897,13 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
             fromRadioScratch.moduleConfig.payload_variant.tak = moduleConfig.tak;
             break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        case meshtastic_ModuleConfig_mesh_beacon_tag:
+            LOG_DEBUG("Send module config: mesh beacon");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+            fromRadioScratch.moduleConfig.payload_variant.mesh_beacon = moduleConfig.mesh_beacon;
+            break;
+#endif
         default:
             LOG_DEBUG("Unhandled module config type %d", config_state);
         }

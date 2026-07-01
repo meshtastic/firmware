@@ -1487,6 +1487,13 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        case meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG:
+            configName = "MeshBeacon";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+            res.get_module_config_response.payload_variant.mesh_beacon = moduleConfig.mesh_beacon;
+            break;
+#endif
         }
         LOG_INFO("Get module config: %s", configName);
 
