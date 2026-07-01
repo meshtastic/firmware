@@ -7,7 +7,7 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_SPA06_003.h>
 
-SPA06Sensor::SPA06Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SPA06, "SPA06") {}
+SPA06Sensor::SPA06Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SPA06, "SPA06"), spa_temp(nullptr), spa_pressure(nullptr) {}
 
 bool SPA06Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
