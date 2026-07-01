@@ -148,7 +148,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         if ((ackId || nakId) &&
             // Implicit ACKs from MQTT should not stop retransmissions
             !(isFromUs(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT)) {
-            LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
+            LOG_DEBUG("Received a %s for 0x%08x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
             if (ackId) {
                 stopRetransmission(p->to, ackId);
                 // M3: an end-to-end ACK proves the directed route to the ACK's sender currently works,

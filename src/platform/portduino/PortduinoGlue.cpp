@@ -232,6 +232,18 @@ void portduinoSetup()
     concurrency::hasBeenSetup = true;
     consoleInit();
 
+#ifdef ARCH_PORTDUINO_WASM
+    // Browser build: no YAML/filesystem config. Apply a hardcoded SX1262/CH341
+    // setup and create the WebUSB-backed Ch341Hal, then skip the Linux config path.
+    {
+        extern void wasm_config_apply();
+        wasm_config_apply();
+        ch341Hal =
+            new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+    }
+    return;
+#endif
+
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {
@@ -275,10 +287,12 @@ void portduinoSetup()
         }
     }
 
+#ifndef ARCH_PORTDUINO_WASM
     if (yamlOnly) {
         std::cout << portduino_config.emit_yaml() << std::endl;
         exit(EXIT_SUCCESS);
     }
+#endif
 
     if (portduino_config.force_simradio) {
         std::cout << "Running in simulated mode." << std::endl;
@@ -733,6 +747,16 @@ int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
 #endif
 }
 
+#ifdef ARCH_PORTDUINO_WASM
+// Browser node: configuration comes from the wasm_set_lora_* setters, not a YAML
+// file. Reached only as dead code after portduinoSetup()'s early return; kept
+// defined (and yaml-free) so those references still link.
+bool loadConfig(const char *configPath)
+{
+    (void)configPath;
+    return false;
+}
+#else
 bool loadConfig(const char *configPath)
 {
     YAML::Node yamlConfig;
@@ -918,7 +942,22 @@ bool loadConfig(const char *configPath)
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
                 Serial1.setPath(serialPath);
+                portduino_config.gps_serial_path = serialPath;
                 portduino_config.has_gps = 1;
+            }
+            std::string gpsdHost = yamlConfig["GPS"]["GpsdHost"].as<std::string>("");
+            if (!gpsdHost.empty()) {
+                if (portduino_config.has_gps) {
+                    LOG_WARN("GPS config: both SerialPath and GpsdHost are set; GpsdHost takes priority");
+                }
+                int gpsdPort = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
+                if (gpsdPort < 1 || gpsdPort > 65535) {
+                    LOG_ERROR("GPS config: GpsdPort %d is out of range [1, 65535]; ignoring GPS config", gpsdPort);
+                } else {
+                    portduino_config.gpsd_host = gpsdHost;
+                    portduino_config.gpsd_port = gpsdPort;
+                    portduino_config.has_gps = 1;
+                }
             }
         }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
@@ -1090,6 +1129,7 @@ bool loadConfig(const char *configPath)
     }
     return true;
 }
+#endif // !ARCH_PORTDUINO_WASM
 
 // https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
 static bool ends_with(std::string_view str, std::string_view suffix)
@@ -1129,6 +1169,10 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 
 std::string exec(const char *cmd)
 { // https://stackoverflow.com/a/478960
+#ifdef ARCH_PORTDUINO_WASM
+    (void)cmd; // no shell/popen in the browser — shell-outs degrade to empty
+    return "";
+#endif
     std::array<char, 128> buffer;
     std::string result;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
@@ -1141,6 +1185,7 @@ std::string exec(const char *cmd)
     return result;
 }
 
+#ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault)
 {
     if (sourceNode.IsMap()) {
@@ -1155,3 +1200,4 @@ void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault
         destPin.gpiochip = portduino_config.lora_default_gpiochip;
     }
 }
+#endif // !ARCH_PORTDUINO_WASM

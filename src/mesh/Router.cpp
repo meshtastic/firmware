@@ -119,7 +119,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
             IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-            LOG_DEBUG("Identified unique favorite relay router 0x%x from last byte 0x%x", resolved, p->relay_node);
+            LOG_DEBUG("Identified unique favorite relay router 0x%08x from last byte 0x%x", resolved, p->relay_node);
             return false; // Don't decrement hop_limit
         }
     }
@@ -450,7 +450,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
-        LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
+        LOG_DEBUG("Node 0x%08x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
 
@@ -832,6 +832,19 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             skipHandle = true;
         }
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // Beacon listening is disabled: drop beacon packets so they are neither surfaced to the
+        // phone nor handled on-device (same pattern as the disabled neighbor-info case above).
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP &&
+            (!moduleConfig.has_mesh_beacon ||
+             !(moduleConfig.mesh_beacon.flags & meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED))) {
+            LOG_DEBUG("Beacon listening is disabled, ignore beacon packet");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
+
         bool shouldIgnoreNonstandardPorts =
             config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
 #if USERPREFS_EVENT_MODE
@@ -912,14 +925,14 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #endif
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
-        LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);
+        LOG_DEBUG("Ignore msg, 0x%08x is in our ignore list", p->from);
         packetPool.release(p);
         return;
     }
 
     meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->from);
     if (nodeInfoLiteIsIgnored(node)) {
-        LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
+        LOG_DEBUG("Ignore msg, 0x%08x is ignored", p->from);
         packetPool.release(p);
         return;
     }
@@ -931,7 +944,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (config.lora.ignore_mqtt && p->via_mqtt) {
-        LOG_DEBUG("Msg came in via MQTT from 0x%x", p->from);
+        LOG_DEBUG("Msg came in via MQTT from 0x%08x", p->from);
         packetPool.release(p);
         return;
     }
@@ -943,7 +956,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (shouldFilterReceived(p)) {
-        LOG_DEBUG("Incoming msg was filtered from 0x%x", p->from);
+        LOG_DEBUG("Incoming msg was filtered from 0x%08x", p->from);
         packetPool.release(p);
         return;
     }

@@ -12,6 +12,25 @@
 #include "meshUtils.h" // vformat
 
 #endif
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+#include "platform/nrf52/Nrf52Twim.h"
+#include <QMA6100P.h>
+
+namespace
+{
+bool probeQMA6100P(uint8_t address)
+{
+    uint8_t chipID = 0;
+
+    Nrf52Twim::restoreBus();
+    const bool readOk = Nrf52Twim::readRegister(address, SFE_QMA6100P_CHIP_ID, chipID);
+    const bool found = readOk && chipID == QMA6100P_CHIP_ID;
+    Nrf52Twim::restoreBus();
+
+    return found;
+}
+} // namespace
+#endif
 
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
 {
@@ -277,11 +296,36 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     // 0x7C-0x7F Reserved for future purposes
 
     for (addr.address = 8; addr.address < 120; addr.address++) {
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+        bool nrf52QmaFound = false;
+#endif
         if (asize != 0) {
             if (!in_array(address, asize, (uint8_t)addr.address))
                 continue;
             LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         }
+        // For QMA6100P candidates on nRF52, use bounded I2C probing; otherwise use normal Wire
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+        if (addr.address == QMA6100P_ADDRESS_LOW || addr.address == QMA6100P_ADDRESS_HIGH) {
+            nrf52QmaFound = probeQMA6100P(addr.address);
+            err = nrf52QmaFound ? 0 : 2;
+        } else {
+            i2cBus->beginTransmission(addr.address);
+#ifdef ARCH_PORTDUINO
+            err = 2;
+            if ((addr.address >= 0x30 && addr.address <= 0x37) || (addr.address >= 0x50 && addr.address <= 0x5F)) {
+                if (i2cBus->read() != -1)
+                    err = 0;
+            } else {
+                err = i2cBus->writeQuick((uint8_t)0);
+            }
+            if (err != 0)
+                err = 2;
+#else
+            err = i2cBus->endTransmission();
+#endif
+        }
+#else
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         err = 2;
@@ -295,6 +339,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             err = 2;
 #else
         err = i2cBus->endTransmission();
+#endif
 #endif
         type = NONE;
         if (err == 0) {
@@ -750,7 +795,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             }
-                SCAN_SIMPLE_CASE(BMM150_ADDR, BMM150, "BMM150", (uint8_t)addr.address);
+            case BMM150_ADDR:
+#if defined(HAS_QMA6100P) && (defined(ARCH_NRF52) || defined(NRF52_SERIES) || defined(NRF52))
+                if (nrf52QmaFound) {
+                    logFoundDevice("QMA6100P", (uint8_t)addr.address);
+                    type = QMA6100P;
+                    break;
+                }
+#endif
+                logFoundDevice("BMM150", (uint8_t)addr.address);
+                type = BMM150;
+                break;
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
 #endif
