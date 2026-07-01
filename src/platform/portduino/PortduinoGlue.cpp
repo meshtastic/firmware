@@ -933,6 +933,8 @@ bool loadConfig(const char *configPath)
                         portduino_config.rfswitch_table[2].values[i] = HIGH;
                     if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HP"][i].as<std::string>("") == "HIGH")
                         portduino_config.rfswitch_table[3].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_RX_HF"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[3].values[i] = HIGH;
                     if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
                         portduino_config.rfswitch_table[4].values[i] = HIGH;
                     if (yamlConfig["Lora"]["rfswitch_table"]["MODE_GNSS"][i].as<std::string>("") == "HIGH")
