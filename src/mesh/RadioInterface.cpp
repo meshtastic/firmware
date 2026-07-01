@@ -761,9 +761,18 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     if (shouldRebroadcastEarlyLikeRouter(p)) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. Router: setting tx delay:%d", delay);
+    } else if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+        delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
+        LOG_DEBUG("rx_snr found in packet. Client_base: setting tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
-        delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
+        // plus another 8*CWmax to cede priority to client_base
+        uint8_t routerWindow = 2 * CWmax;
+        delay = (8 * CWmax) + random(0, pow_of_2(CWsize));
+        delay = delay > pow_of_2(CWmax) ? pow_of_2(CWmax) : delay;
+        delay += routerWindow;
+
+        delay *= slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. Setting tx delay:%d", delay);
     }
 
