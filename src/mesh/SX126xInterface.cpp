@@ -258,7 +258,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
     }
 
-    // Apply RX gain mode — valid in STDBY (datasheet §9.6), matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY (datasheet §9.6), matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("SX126X setRxBoostedGainMode %s%d", radioLibErr, err);
@@ -429,7 +429,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 
     LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
 
-    // 1. Warm sleep — powers down the entire analog frontend, resetting AGC state.
+    // 1. Warm sleep - powers down the entire analog frontend, resetting AGC state.
     //    A plain standby→startReceive cycle does NOT reset the AGC.
     lora.sleep(true);
 
