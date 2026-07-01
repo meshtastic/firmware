@@ -239,7 +239,7 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 
     if (shouldTriggerDRV) {
         drv.go();
-    } else if (!on) {
+    } else if (!on && index == 1) {
         drv.stop();
     }
 #endif
@@ -417,8 +417,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             // Alert GPIO Buzzer when receiving a bell = alertBellBuzzer: true
             // Alert GPIO Buzzer when receiving a message = alertMessageBuzzer: true
-            buzzerShouldAlert = canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
-                                              (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
+            // If you are already buzzing, keep going
+            buzzerShouldAlert =
+                buzzerShouldAlert || canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
+                                                   (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
