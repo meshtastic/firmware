@@ -6,7 +6,7 @@ it is closed, gzipped to `<name>.YYYYMMDD-HHMMSS-uuuuuu-NNNNN.jsonl.gz`,
 and the live file resets to empty. Old archives past `keep_archives` are
 unlinked oldest-first.
 
-Size check is amortized — `os.fstat` runs every `check_every` writes,
+Size check is amortized - `os.fstat` runs every `check_every` writes,
 not per-write, so the hot path stays at one `fh.write` + one `fh.flush`.
 
 Threading: every public method acquires `self._lock`. The recorder runs

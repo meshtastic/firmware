@@ -1,5 +1,5 @@
 /*
- * nrf54l15_main.cpp — Zephyr entry point for Meshtastic nRF54L15 port
+ * nrf54l15_main.cpp - Zephyr entry point for Meshtastic nRF54L15 port
  *
  * Zephyr calls main() instead of Arduino's setup()/loop().
  * This file provides the main() that bootstraps the Arduino-style
@@ -34,7 +34,7 @@ static struct crash_info saved_crash __attribute__((section(".noinit")));
 // Override Zephyr's weak fatal handler to save crash info, then cold-reboot so
 // main() can report the saved record on the next boot. We don't rely on
 // CONFIG_RESET_ON_FATAL_ERROR (default off → k_fatal_halt would spin forever)
-// — we issue sys_reboot() ourselves after flushing logs.
+// - we issue sys_reboot() ourselves after flushing logs.
 extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 {
     saved_crash.magic = CRASH_MAGIC;
@@ -55,7 +55,7 @@ extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch
            saved_crash.cfsr);
 
     // Walk the failing thread's stack and print any word that looks like a
-    // Thumb code address (0x1000 — flash end, with the Thumb-mode low bit set).
+    // Thumb code address (0x1000 - flash end, with the Thumb-mode low bit set).
     // The Cortex-M exception frame at PSP holds r0,r1,r2,r3,r12,lr,pc,xpsr
     // (8 words); deeper words are the caller's saved frame, which gives a
     // crude but useful poor-man's backtrace when CONFIG_DEBUG_COREDUMP is off.
@@ -64,7 +64,7 @@ extern "C" void k_sys_fatal_error_handler(unsigned int reason, const struct arch
     // abort itself.  Cheap (~150 B of code) and silent until a fault.
     uint32_t psp;
     __asm__ volatile("mrs %0, psp" : "=r"(psp));
-    printk("[nrf54l15] PSP=0x%08x — stack walk:\n", psp);
+    printk("[nrf54l15] PSP=0x%08x - stack walk:\n", psp);
     // Validate PSP before dereferencing. Real faults frequently leave PSP
     // pointing at corrupted/unmapped memory, and walking it blindly triggers a
     // second fault inside this handler. Restrict to nRF54L15 SRAM (256 KB at

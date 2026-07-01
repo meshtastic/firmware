@@ -75,7 +75,7 @@ class TestParseLogLine:
         assert out["msg"] == "raw message body"
 
     def test_bare_message(self) -> None:
-        # LogRecord.message path — no level prefix at all.
+        # LogRecord.message path - no level prefix at all.
         out = parse_log_line("just a bare message")
         assert "level" not in out or out.get("level") is None
         assert out["line"] == "just a bare message"
@@ -155,7 +155,7 @@ class TestRecorderDebugHeapSynthesis:
         assert synth[-1]["fields"]["heap_total_bytes"] == 200000
 
     def test_no_heap_no_synthesis(self, recorder: "Recorder") -> None:
-        # Plain log line (no [heap N], no Heap status) — telemetry.jsonl
+        # Plain log line (no [heap N], no Heap status) - telemetry.jsonl
         # should NOT gain a synth row.
         before = (recorder.base_dir / "telemetry.jsonl").read_text().count("\n")
         recorder._on_log_line("INFO  | 00:00:00 1 [Main] just a message", _FakeIface())
@@ -234,7 +234,7 @@ class TestSerialTap:
     def test_serial_line_handler_swallows_exceptions(
         self, recorder: "Recorder"
     ) -> None:
-        # Hostile input — should not raise.
+        # Hostile input - should not raise.
         recorder._on_serial_line(None, port="/dev/cu.tap")  # type: ignore[arg-type]
         recorder._on_serial_line(b"\x00\x01\x02\x03", port="/dev/cu.tap")  # type: ignore[arg-type]
         # Survived.
@@ -320,11 +320,11 @@ class TestRecorderWrites:
         recorder._on_log_line("INFO  | 12:34:56 99 [T] hi", _FakeIface())
         path = recorder.base_dir / "logs.jsonl"
         rows = [json.loads(line) for line in path.read_text().splitlines() if line]
-        # First row is recorder_start_event mirror? No — that's events.jsonl only.
+        # First row is recorder_start_event mirror? No - that's events.jsonl only.
         assert any(r.get("level") == "INFO" and r.get("tag") == "T" for r in rows)
 
     def test_telemetry_recorded_and_packet_double(self, recorder: Recorder) -> None:
-        # _on_telemetry alone — only telemetry.jsonl
+        # _on_telemetry alone - only telemetry.jsonl
         recorder._on_telemetry(
             {
                 "fromId": "!abc",
@@ -367,13 +367,13 @@ class TestRecorderWrites:
         assert "kept" in post_resume
 
     def test_pubsub_handler_swallows_exceptions(self, recorder: Recorder) -> None:
-        # If the writer dies, the pubsub callback must NOT raise — that
+        # If the writer dies, the pubsub callback must NOT raise - that
         # would crash the meshtastic receive thread.
         bad_packet = object()  # not a dict
         recorder._on_receive(bad_packet, _FakeIface())  # type: ignore[arg-type]
         recorder._on_telemetry(bad_packet, _FakeIface())  # type: ignore[arg-type]
         recorder._on_log_line(None, _FakeIface())  # type: ignore[arg-type]
-        # No assertion needed — survival is the test.
+        # No assertion needed - survival is the test.
 
 
 # -- log_query read side ---------------------------------------------

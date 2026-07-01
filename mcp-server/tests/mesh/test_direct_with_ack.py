@@ -38,7 +38,7 @@ def test_direct_with_ack_roundtrip(
 
     unique = f"mcp-ack-{tx_role}-to-{rx_role}-{int(time.time())}"
 
-    # TX iface stays open across the RX wait — sendText+wantAck relies on
+    # TX iface stays open across the RX wait - sendText+wantAck relies on
     # the firmware's retransmit loop, which races the SerialInterface close.
     # Bilateral NodeInfo nudge: directed packets are PKI-encrypted, so BOTH
     # sides need current pubkeys (err=35/39 otherwise). See
@@ -72,7 +72,7 @@ def test_direct_with_ack_roundtrip(
                 )
 
             # Retry covers LoRa collisions. Re-nudge both sides between
-            # attempts — if RX's cached TX pubkey is stale, just re-sending
+            # attempts - if RX's cached TX pubkey is stale, just re-sending
             # the text doesn't heal it; re-broadcasting NodeInfo does.
             got = None
             for _attempt in range(2):

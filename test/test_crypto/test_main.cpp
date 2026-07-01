@@ -266,7 +266,7 @@ void test_XEdDSA_max_payload(void)
 // Signing the same message twice yields signatures that both verify. This XEdDSA implementation is
 // deterministic in practice (the two signatures are typically byte-identical, even though
 // HardwareRNG::fill provides real entropy on this platform), so we assert only the security-relevant
-// property — every produced signature verifies — rather than asserting (non-)determinism.
+// property - every produced signature verifies - rather than asserting (non-)determinism.
 void test_XEdDSA_repeated_sign_verifies(void)
 {
     uint8_t pub[32], priv[32], sig1[64], sig2[64];

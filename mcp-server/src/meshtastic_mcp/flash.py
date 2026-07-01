@@ -47,7 +47,7 @@ def _require_confirm(confirm: bool, operation: str) -> None:
 
 
 def _reject_native_env(env: str, operation: str) -> None:
-    """`native*` envs build a host executable, not firmware — there's no
+    """`native*` envs build a host executable, not firmware - there's no
     upload step. The user wants `build` (or just runs the binary directly).
     """
     if env.startswith("native"):
@@ -121,7 +121,7 @@ def build(
     `{"DEBUG_HEAP": 1}` enables per-thread leak detection + `[heap N]`
     prefix on every log line. Combines with the recorder so heap shows
     up at log cadence (much higher resolution than the ~60 s LocalStats
-    packet) — see `recorder/parsers.py:_HEAP_PREFIX_RE`. Bool values
+    packet) - see `recorder/parsers.py:_HEAP_PREFIX_RE`. Bool values
     expand to bare `-D<NAME>` (presence-only flags).
     """
     args = ["run", "-e", env]
@@ -183,10 +183,10 @@ def flash(
 ) -> dict[str, Any]:
     """`pio run -e <env> -t upload --upload-port <port>`. All architectures.
 
-    `userprefs_overrides` (optional): see `build()` — the rebuild-before-upload
+    `userprefs_overrides` (optional): see `build()` - the rebuild-before-upload
     that pio performs will pick up the injected values.
 
-    `build_flags` (optional): same shape as `build()` — `PLATFORMIO_BUILD_FLAGS`
+    `build_flags` (optional): same shape as `build()` - `PLATFORMIO_BUILD_FLAGS`
     is exported for the rebuild-before-upload, so the uploaded firmware
     actually carries the flags. Without this propagation, `pio run -t upload`
     would relink without the env var and silently drop them. Common use:
@@ -361,7 +361,7 @@ def update_flash(
 def _do_1200bps_touch(port: str, settle_ms: int, touch_timeout_s: float = 3.0) -> None:
     """Open port at 1200 baud and close, bounded by a worker thread.
 
-    Both the open and the close can block on a busy CDC device — we wrap the
+    Both the open and the close can block on a busy CDC device - we wrap the
     whole thing in a worker so the caller returns in at most `touch_timeout_s`
     regardless. The touch is signal-only: the USB configuration change to
     1200 baud alone is enough to trip the Adafruit bootloader's reset, so a
@@ -433,7 +433,7 @@ def touch_1200bps(
     poll_timeout_s: float = 8.0,
     retries: int = 2,
 ) -> dict[str, Any]:
-    """Open port at 1200 baud, close immediately — triggers USB CDC bootloader.
+    """Open port at 1200 baud, close immediately - triggers USB CDC bootloader.
 
     Works for: nRF52840 (Adafruit bootloader), ESP32-S3 (native USB download
     mode), RP2040 (when built with 1200bps-reset stdio), Arduino Leonardo/Micro.
@@ -442,7 +442,7 @@ def touch_1200bps(
     VID/PID (0x239A / 0x0029) for up to `poll_timeout_s` seconds. Adafruit's
     bootloader docs note a touch sometimes needs to be repeated, so this
     retries up to `retries` times. The returned `new_port` is the bootloader
-    port (distinct from the app port) — exactly what's needed for `pio run
+    port (distinct from the app port) - exactly what's needed for `pio run
     -t upload` to drive nrfutil.
 
     For non-nRF52 devices (ESP32-S3, RP2040, Arduino), falls back to

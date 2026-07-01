@@ -482,9 +482,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // Weighting for nonlinear segments
     float milestone1 = 25;
     float milestone2 = 40;
-    float weight1 = 0.45; // Weight for 0–25%
-    float weight2 = 0.35; // Weight for 25–40%
-    float weight3 = 0.20; // Weight for 40–100%
+    float weight1 = 0.45; // Weight for 0-25%
+    float weight2 = 0.35; // Weight for 25-40%
+    float weight3 = 0.20; // Weight for 40-100%
     float totalWeight = weight1 + weight2 + weight3;
 
     int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
