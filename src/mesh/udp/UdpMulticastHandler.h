@@ -74,7 +74,7 @@ class UdpMulticastHandler final
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
             // Drop packets with spoofed local origin — no legitimate LAN node should send from=0 or our own nodeNum
             if (isFromUs(&mp)) {
-                LOG_WARN("UDP packet with spoofed local from=0x%x, dropping", mp.from);
+                LOG_WARN("UDP packet with spoofed local from=0x%08x, dropping", mp.from);
                 return;
             }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;

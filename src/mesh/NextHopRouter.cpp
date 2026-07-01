@@ -116,7 +116,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
                 // -> store nothing and keep flooding (safe).
                 if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false)) {
                     if (origTx && origTx->next_hop != p->relay_node) { // Not already set
-                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
+                        LOG_INFO("Update next hop of 0x%08x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
                                  p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
@@ -128,7 +128,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
                         trafficManagementModule->setNextHop(p->from, p->relay_node);
 #endif
                 } else {
-                    LOG_DEBUG("Not learning next hop for 0x%x: relay byte 0x%x ambiguous/unknown; keep flooding", p->from,
+                    LOG_DEBUG("Not learning next hop for 0x%08x: relay byte 0x%x ambiguous/unknown; keep flooding", p->from,
                               p->relay_node);
                 }
             }
@@ -225,7 +225,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         // TraceRouteModule) with no matching record is left authoritative.
         const RouteHealth *h = findRouteHealth(to);
         if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, millis())) {
-            LOG_INFO("Next hop 0x%x for 0x%x is stale (age/fails); flood and clear", node->next_hop, to);
+            LOG_INFO("Next hop 0x%x for 0x%08x is stale (age/fails); flood and clear", node->next_hop, to);
             node->next_hop = NO_NEXT_HOP_PREFERENCE; // clear persisted route
             clearRouteHealth(to);                    // clear RAM health
             return std::nullopt;
@@ -240,10 +240,10 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
             ResolvedNode r = nodeDB->resolveLastByte(node->next_hop, /*requireDirectNeighbor=*/true);
             if (r.status == LastByteResolution::Unique)
                 return node->next_hop;
-            LOG_WARN("Next hop 0x%x for 0x%x %s; set no pref", node->next_hop, to,
+            LOG_WARN("Next hop 0x%x for 0x%08x %s; set no pref", node->next_hop, to,
                      r.status == LastByteResolution::Ambiguous ? "ambiguous among neighbors" : "not a known neighbor");
         } else
-            LOG_WARN("Next hop for 0x%x is 0x%x, same as relayer; set no pref", to, node->next_hop);
+            LOG_WARN("Next hop for 0x%08x is 0x%x, same as relayer; set no pref", to, node->next_hop);
     }
 
 #if HAS_TRAFFIC_MANAGEMENT
@@ -257,17 +257,17 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
         if (hint && hint != relay_node) {
             const RouteHealth *h = findRouteHealth(to);
             if (h && h->lastNextHop == hint && isRouteStale(*h, millis())) {
-                LOG_INFO("TMM next hop 0x%x for 0x%x is stale (age/fails); flood and clear", hint, to);
+                LOG_INFO("TMM next hop 0x%x for 0x%08x is stale (age/fails); flood and clear", hint, to);
                 trafficManagementModule->clearNextHop(to); // clear overflow route (setNextHop won't store 0)
                 clearRouteHealth(to);                      // clear RAM health
                 return std::nullopt;
             }
             ResolvedNode r = nodeDB->resolveLastByte(hint, /*requireDirectNeighbor=*/true);
             if (r.status == LastByteResolution::Unique) {
-                LOG_DEBUG("Next hop for 0x%x is 0x%x (TMM cache)", to, hint);
+                LOG_DEBUG("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
                 return hint;
             }
-            LOG_WARN("TMM next hop 0x%x for 0x%x %s; set no pref", hint, to,
+            LOG_WARN("TMM next hop 0x%x for 0x%08x %s; set no pref", hint, to,
                      r.status == LastByteResolution::Ambiguous ? "ambiguous among neighbors" : "not a known neighbor");
         }
     }
@@ -368,15 +368,15 @@ int32_t NextHopRouter::doRetransmissions()
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
-                    LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
-                              p.packet->id);
+                    LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from,
+                              p.packet->to, p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
             } else {
-                LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
+                LOG_DEBUG("Sending retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
 
                 if (!isBroadcast(p.packet->to)) {
@@ -389,7 +389,7 @@ int32_t NextHopRouter::doRetransmissions()
                         // Also reset it in the nodeDB
                         meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                         if (sentTo) {
-                            LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                            LOG_INFO("Resetting next hop for packet with dest 0x%08x", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
 #if HAS_TRAFFIC_MANAGEMENT
