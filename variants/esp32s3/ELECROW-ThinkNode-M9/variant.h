@@ -15,7 +15,8 @@
 // I2C keyboard
 #define I2C_SCL 21
 #define I2C_SDA 20
-#define KB_INT 12
+#define KB_INT 12 // STC8H key-press interrupt (falling edge)
+#define KB_LED 46 // STC8H keypad backlight LED
 // I2C peripheral
 #define I2C_SCL1 6
 #define I2C_SDA1 7
@@ -26,8 +27,8 @@
 /*CHARGE_CHECK*/
 #define DONE 8
 #define EXT_PWR_DETECT 1
-#define EXT_CHRG_DETECT 1
-#define EXT_CHRG_DETECT_VALUE LOW
+// #define EXT_CHRG_DETECT 1
+#define EXT_PWR_DETECT_VALUE LOW
 
 /*GPS*/
 #define HAS_GPS 1
@@ -57,6 +58,7 @@
 #define SPI_READ_FREQUENCY 16000000
 
 #define USE_TFTDISPLAY 1
+#define HAS_SPI_TFT 1
 #define TFT_CS ST7789_CS
 #define TFT_BL ST7789_BL
 #define TFT_HEIGHT 320

@@ -101,6 +101,7 @@ class ScanI2C
         ADS1115,
         IIS2MDCTR,
         ISM330DHCX,
+        STC8HKB, // STC8H companion-MCU keypad (ThinkNode-M9)
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
