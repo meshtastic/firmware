@@ -119,6 +119,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/T1000xSensor.h"
 #endif
 
+#if __has_include(<Adafruit_SPA06_003.h>)
+#include "Sensor/SPA06Sensor.h"
+#endif
+
 #ifdef SENSECAP_INDICATOR
 #include "Sensor/IndicatorSensor.h"
 #endif
@@ -169,6 +173,9 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
     addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);
     addSensor<CGRadSensSensor>(i2cScanner, ScanI2C::DeviceType::CGRADSENS);
+#if HAS_SPA06 && __has_include(<Adafruit_SPA06_003.h>)
+    addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
+#endif
 #endif
 #endif
 
