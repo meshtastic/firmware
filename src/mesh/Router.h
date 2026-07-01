@@ -36,7 +36,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void addInterface(std::unique_ptr<RadioInterface> _iface) { iface = std::move(_iface); }
 
     /**
-     * Borrowed (non-owning) access to the radio interface — used by NodeDB
+     * Borrowed (non-owning) access to the radio interface - used by NodeDB
      * after a lockdown unlock so it can push the freshly-loaded config to
      * the SX12xx via reconfigure(). Returns nullptr when no radio has been
      * attached (e.g. ARCH_PORTDUINO simulator before SimRadio bind).

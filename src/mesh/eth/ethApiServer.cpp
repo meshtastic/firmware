@@ -83,7 +83,7 @@ static EthApiServerThread *apiThread = nullptr;
 
 void initEthApiServer()
 {
-    // Bind the listener (idempotent — deInitEthApiServer() drops apiServer on a
+    // Bind the listener (idempotent - deInitEthApiServer() drops apiServer on a
     // W5500 reset, and this rebinds it on the restart path).
     if (!apiServer) {
         apiServer = new EthernetServer(ETH_API_PORT);
@@ -92,7 +92,7 @@ void initEthApiServer()
     }
     // The worker is created once and kept for the lifetime of the process. It
     // idles harmlessly while apiServer is null (runOnce guards on it), so we
-    // never delete it from another thread's runOnce — that would corrupt the
+    // never delete it from another thread's runOnce - that would corrupt the
     // scheduler's thread list mid-iteration.
     if (!apiThread)
         apiThread = new EthApiServerThread(); // OSThread base auto-registers with the scheduler

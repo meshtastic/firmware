@@ -201,7 +201,7 @@ static void test_applyModemConfig_customCodingRateLowerThanPreset()
 }
 
 // -----------------------------------------------------------------------
-// getRegionPresetMap() — region->valid-preset map sent to clients during want_config
+// getRegionPresetMap() - region->valid-preset map sent to clients during want_config
 // -----------------------------------------------------------------------
 
 static size_t countKnownRegions()

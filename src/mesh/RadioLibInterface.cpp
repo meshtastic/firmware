@@ -371,10 +371,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
         handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
 #if !MESHTASTIC_EXCLUDE_BEACON
         // Pre-switch the radio to the NEXT queued packet's beacon config (no-op for normal traffic).
-        // Not required for correctness — TRANSMIT_DELAY_COMPLETED would switch before CAD anyway — but
+        // Not required for correctness - TRANSMIT_DELAY_COMPLETED would switch before CAD anyway - but
         // doing it here lets the next beacon skip the switch-only delay cycle and, more importantly,
         // keeps the post-TX listen window (and the CAD/LBT that follows) on the channel we're about to
-        // transmit on. Only engages when the next packet is itself a beacon — exactly when we want it.
+        // transmit on. Only engages when the next packet is itself a beacon - exactly when we want it.
         MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
 #endif
         startReceive();
@@ -402,8 +402,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #if !MESHTASTIC_EXCLUDE_BEACON
                 } else if (MeshBeaconModule::beaconTxConfigInvalid(txp)) {
                     // The beacon's target radio config is invalid (bad preset/region, or an
-                    // unlicensed node keying up on a ham-only region). Drop the packet — never
-                    // transmit it on the current (home) config — and move on to the next queued packet.
+                    // unlicensed node keying up on a ham-only region). Drop the packet - never
+                    // transmit it on the current (home) config - and move on to the next queued packet.
                     LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", txp->id);
                     meshtastic_MeshPacket *bad = txQueue.dequeue();
                     MeshBeaconModule::clearTargetRadioSettings(bad);
