@@ -129,7 +129,7 @@ bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
         filled = true;
     }
 #elif defined(__EMSCRIPTEN__)
-    // Browser/wasm: no getrandom/arc4random — fall through to std::random_device,
+    // Browser/wasm: no getrandom/arc4random - fall through to std::random_device,
     // which emscripten backs with crypto.getRandomValues().
 #else
     // arc4random_buf is available on Darwin/BSD and cannot fail.

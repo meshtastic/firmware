@@ -10,7 +10,7 @@
     Unlike the other NicheGraphics EInk drivers, this one drives a parallel e-paper
     panel via the FastEPD library. SPI parameters passed to begin() are ignored.
 
-    The ED047TC1 panel has an inactive pixel border on all four edges (~4–8 physical
+    The ED047TC1 panel has an inactive pixel border on all four edges (~4-8 physical
     pixels). DISPLAY_WIDTH / DISPLAY_HEIGHT expose a reduced "safe area" to InkHUD so
     that content is never drawn into this dead zone. The update() method copies the
     InkHUD frame buffer into the centre of the larger physical 960×540 buffer, using
@@ -18,9 +18,9 @@
     V_OFFSET_TOP and V_OFFSET_BOTTOM (vertical, pixel rows) to position it.
 
     Changing these constants shifts content inward from each physical edge:
-        H_OFFSET_BYTES = 2   →  16px left margin, 16px right margin  (960 – 16 – 16 = 928)
+        H_OFFSET_BYTES = 2   →  16px left margin, 16px right margin  (960 - 16 - 16 = 928)
         V_OFFSET_TOP   = 16  →  16px top margin
-        V_OFFSET_BOTTOM = 16 →  16px bottom margin                   (540 – 16 – 16 = 508)
+        V_OFFSET_BOTTOM = 16 →  16px bottom margin                   (540 - 16 - 16 = 508)
 
 */
 
@@ -74,7 +74,7 @@ class ED047TC1 : public EInk
   public:
     ED047TC1() : EInk(DISPLAY_WIDTH, DISPLAY_HEIGHT, supported) {}
 
-    // EInk interface — SPI params are not used for this parallel display
+    // EInk interface - SPI params are not used for this parallel display
     void begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst = 0xFF) override;
     void update(uint8_t *imageData, UpdateTypes type) override;
 
