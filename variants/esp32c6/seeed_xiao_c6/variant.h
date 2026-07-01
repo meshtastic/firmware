@@ -1,0 +1,30 @@
+#define LED_STATE_ON 1
+
+// Seeed XIAO ESP32-C6 + Wio-SX1262 default wiring
+// XIAO ESP32-C6 pin map:
+// D0=0, D1=1, D2=2, D3=21, D4=22, D5=23, D8=19, D9=20, D10=18
+
+#define USE_SX1262
+
+#define LORA_SCK 19
+#define LORA_MISO 20
+#define LORA_MOSI 18
+#define LORA_CS 22
+
+#define LORA_RESET 2
+#define LORA_DIO1 1
+#define LORA_DIO2 21
+
+#ifdef USE_SX1262
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+
+#define SX126X_RXEN 23
+#define SX126X_TXEN RADIOLIB_NC
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#endif
+
+#define SERIAL_PRINT_PORT 1
