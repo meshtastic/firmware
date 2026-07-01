@@ -1308,9 +1308,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         items.push_back(MenuItem::Header("Device GPS"));
 
-        items.push_back(MenuItem("Fixed Pos", MenuAction::TOGGLE_FIXED_POSITION, MenuPage::NODE_CONFIG_POSITION,
-                                 &config.position.fixed_position));
-
 #if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
         const auto mode = config.position.gps_mode;
         if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
@@ -1352,6 +1349,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(
                 MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_SMART_DISTANCE));
         }
+
+        items.push_back(MenuItem("Fixed Pos", MenuAction::TOGGLE_FIXED_POSITION, MenuPage::NODE_CONFIG_POSITION,
+                                 &config.position.fixed_position));
 
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
