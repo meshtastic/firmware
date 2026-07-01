@@ -238,6 +238,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     bool randomBytes(uint8_t *buffer, size_t length);
 
+    /**
+     * Read radio die temperature in Celsius, if the active modem exposes a calibrated reading.
+     */
+    virtual bool getChipTemperature(float &temperature) { return false; }
+
   private:
     uint8_t getNoiseFloorSampleCountInternal() const;
     int32_t getAverageNoiseFloorInternal() const;
