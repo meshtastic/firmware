@@ -48,9 +48,9 @@ meshtastic_MeshPacket *RoutingModule::allocReply()
 }
 
 void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
-                               bool ackWantsAck)
+                               bool ackWantsAck, const meshtastic_MeshPacket *relaySource)
 {
-    auto p = allocAckNak(err, to, idFrom, chIndex, hopLimit);
+    auto p = allocAckNak(err, to, idFrom, chIndex, hopLimit, relaySource);
 
     // Allow the caller to set want_ack on this ACK packet if it's important that the ACK be delivered reliably
     p->want_ack = ackWantsAck;
@@ -77,9 +77,9 @@ uint8_t RoutingModule::getHopLimitForResponse(const meshtastic_MeshPacket &mp)
 }
 
 meshtastic_MeshPacket *RoutingModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                                  uint8_t hopLimit)
+                                                  uint8_t hopLimit, const meshtastic_MeshPacket *relaySource)
 {
-    return MeshModule::allocAckNak(err, to, idFrom, chIndex, hopLimit);
+    return MeshModule::allocAckNak(err, to, idFrom, chIndex, hopLimit, relaySource);
 }
 
 RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)
