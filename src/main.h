@@ -67,6 +67,11 @@ extern AudioThread *audioThread;
 extern UdpMulticastHandler *udpHandler;
 #endif
 
+#ifdef ARCH_PORTDUINO
+#include "mesh/udp/UdpUnicastConnector.h"
+extern UdpUnicastConnector *udpUnicastConnector;
+#endif
+
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
