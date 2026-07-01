@@ -90,7 +90,8 @@ static const char *getDisplayTimeoutLabel(uint32_t timeoutSeconds)
     return "Custom";
 }
 
-static std::string getUInt32OptionLabel(const UInt32Option *options, uint8_t optionCount, uint32_t value)
+static std::string getUInt32OptionLabel(const UInt32Option *options, uint8_t optionCount, uint32_t value,
+                                        const char *zeroLabel = nullptr)
 {
     for (uint8_t i = 0; i < optionCount; i++) {
         if (options[i].value == value) {
@@ -98,6 +99,9 @@ static std::string getUInt32OptionLabel(const UInt32Option *options, uint8_t opt
         }
     }
 
+    if (value == 0) {
+        return zeroLabel ? zeroLabel : "0 sec";
+    }
     if (value == 2147483647UL) {
         return "At Boot";
     }
@@ -1314,7 +1318,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             nodeConfigLabels.emplace_back(
                 "GPS Poll: " + getUInt32OptionLabel(GPS_UPDATE_INTERVAL_OPTIONS,
                                                     sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]),
-                                                    config.position.gps_update_interval));
+                                                    config.position.gps_update_interval, "Default"));
             items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION,
                                      MenuPage::NODE_CONFIG_POSITION_GPS_UPDATE_INTERVAL));
         }
@@ -2516,9 +2520,9 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     const bool showGpsInfo = false;
 #endif
     const uint8_t columnCount = showGpsInfo ? 4 : 3;
-    int16_t colL[4];
-    int16_t colC[4];
-    int16_t colR[4];
+    int16_t colL[4] = {};
+    int16_t colC[4] = {};
+    int16_t colR[4] = {};
     for (uint8_t i = 0; i < columnCount; i++) {
         colL[i] = left + ((width / columnCount) * i);
         colC[i] = colL[i] + ((width / columnCount) / 2);
@@ -2529,8 +2533,8 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
 
     // Voltage
     float voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
-    char voltageStr[5]; // "X.XX"
-    sprintf(voltageStr, "%.2f", voltage);
+    char voltageStr[8]; // e.g. "4.12"
+    snprintf(voltageStr, sizeof(voltageStr), "%.2f", voltage);
     printAt(colC[0], labelT, "Bat V", CENTER, TOP);
     printAt(colC[0], valT, voltageStr, CENTER, TOP);
 
@@ -2539,8 +2543,8 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
         drawPixel(colR[0], y, BLACK);
 
     // Channel Util
-    char chUtilStr[4]; // "XX%"
-    sprintf(chUtilStr, "%2.f%%", airTime->channelUtilizationPercent());
+    char chUtilStr[8]; // e.g. "100%"
+    snprintf(chUtilStr, sizeof(chUtilStr), "%2.f%%", airTime->channelUtilizationPercent());
     printAt(colC[1], labelT, "Ch", CENTER, TOP);
     printAt(colC[1], valT, chUtilStr, CENTER, TOP);
 
@@ -2549,8 +2553,8 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
         drawPixel(colR[1], y, BLACK);
 
     // Duty Cycle (AirTimeTx)
-    char dutyUtilStr[4]; // "XX%"
-    sprintf(dutyUtilStr, "%2.f%%", airTime->utilizationTXPercent());
+    char dutyUtilStr[8]; // e.g. "100%"
+    snprintf(dutyUtilStr, sizeof(dutyUtilStr), "%2.f%%", airTime->utilizationTXPercent());
     printAt(colC[2], labelT, "Duty", CENTER, TOP);
     printAt(colC[2], valT, dutyUtilStr, CENTER, TOP);
 
@@ -2570,8 +2574,8 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
         }
 
         if (!gpsDisabled && gpsStatus != nullptr && gpsStatus->getIsConnected()) {
-            char satsStr[4];
-            sprintf(satsStr, "%lu", (unsigned long)gpsStatus->getNumSatellites());
+            char satsStr[12];
+            snprintf(satsStr, sizeof(satsStr), "%lu", (unsigned long)gpsStatus->getNumSatellites());
             printAt(colC[3], valT, satsStr, CENTER, TOP);
         } else {
             printAt(colC[3], valT, "--", CENTER, TOP);
