@@ -19,6 +19,7 @@ class menuHandler
         TwelveHourPicker,
         ClockFacePicker,
         ClockMenu,
+        TrackingViewPicker,
         PositionBaseMenu,
         NodeBaseMenu,
         GpsToggleMenu,
@@ -75,6 +76,11 @@ class menuHandler
     static void TZPicker();
     static void twelveHourPicker();
     static void clockFacePicker();
+    static void trackingViewPicker();
+    // Set the menu to re-open when the user picks "Back" from trackingViewPicker.
+    // Caller invokes this immediately before queueing TrackingViewPicker so the
+    // picker can return to its actual parent menu (or MenuNone to dismiss).
+    static void setTrackingViewPickerReturn(screenMenus target);
     static void messageResponseMenu();
     static void messageViewModeMenu();
     static void replyMenu();
@@ -93,6 +99,7 @@ class menuHandler
     static void BuzzerModeMenu();
     static void switchToMUIMenu();
     static void nodeListMenu();
+    static void radarBearingsMenu();
     static void resetNodeDBMenu();
     static void BrightnessPickerMenu();
     static void rebootMenu();

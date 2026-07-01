@@ -3042,8 +3042,6 @@ int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown)
     return p.hop_start - p.hop_limit;
 }
 
-#define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
-
 size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
