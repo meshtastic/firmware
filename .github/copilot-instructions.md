@@ -331,6 +331,8 @@ firmware/
 
 - Follow existing code style - run `trunk fmt` before commits
 - Prefer `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` for logging
+- **Format node IDs and packet IDs as `0x%08x` in logs.** This covers `NodeNum`/`PacketId` and the `uint32_t` packet fields `from`, `to`, `id`, `dest`, `source`, `request_id`, and `node_id`. They are 32-bit, so 8 hex digits is exact — `%08x` never truncates or leaves a value ragged. Do **not** use `%x` (variable width) or `%0x` (a no-op typo for `%08x` — the `0` flag does nothing without a width). User-facing display uses `!%08x` (the `!xxxxxxxx` convention), e.g. `Applet::hexifyNodeNum`.
+- **Do not zero-pad one-byte values to 8.** `next_hop`, `relay_node`, and the next-hop hint are `uint8_t` last-byte route hints, and `channel` is a one-byte hash/index — log these as `0x%x` (or `%d`). Padding a byte to `0x000000ab` falsely implies a full node number. The same goes for I2C addresses, register values, flags/bitmasks, and error/reason codes: they are not IDs, so leave them `0x%x`.
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
 - **Keep code comments minimal — one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.

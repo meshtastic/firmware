@@ -23,7 +23,7 @@ jobs:
     outputs:
       artifact-id: ${{ steps.upload-firmware.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 

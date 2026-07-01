@@ -439,12 +439,11 @@ InkHUD::Applet::SignalStrength InkHUD::Applet::getSignalStrength(float snr, floa
         return SIGNAL_NONE;
 }
 
-// Apply the standard "node id" formatting to a nodenum int: !0123abdc
+// Format a node number as the standard user-facing node ID string: !xxxxxxxx
 std::string InkHUD::Applet::hexifyNodeNum(NodeNum num)
 {
-    // Not found in nodeDB, show a hex nodeid instead
     char nodeIdHex[10];
-    sprintf(nodeIdHex, "!%0x", num); // Convert to the typical "fixed width hex with !" format
+    sprintf(nodeIdHex, "!%08x", num);
     return std::string(nodeIdHex);
 }
 

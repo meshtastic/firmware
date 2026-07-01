@@ -16,7 +16,7 @@ jobs:
     runs-on: macos-${{ inputs.macos_ver }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 

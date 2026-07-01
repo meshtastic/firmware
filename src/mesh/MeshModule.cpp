@@ -68,7 +68,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
     if (err != meshtastic_Routing_Error_NONE)
-        LOG_WARN("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x", err, to, idFrom, p->id);
+        LOG_WARN("Alloc an err=%d,to=0x%08x,idFrom=0x%08x,id=0x%08x", err, to, idFrom, p->id);
 
     return p;
 }
