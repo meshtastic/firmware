@@ -120,6 +120,9 @@ extern struct portduino_config_struct {
 
     // GPS
     bool has_gps = false;
+    std::string gps_serial_path = "";
+    std::string gpsd_host = "";
+    int gpsd_port = 2947;
 
     // I2C
     std::string i2cdev = "";
@@ -358,6 +361,18 @@ extern struct portduino_config_struct {
             }
             out << YAML::EndSeq;
             out << YAML::EndMap; // GPIO
+        }
+
+        if (has_gps) {
+            out << YAML::Key << "GPS" << YAML::Value << YAML::BeginMap;
+            if (!gpsd_host.empty()) {
+                out << YAML::Key << "GpsdHost" << YAML::Value << gpsd_host;
+                if (gpsd_port != 2947)
+                    out << YAML::Key << "GpsdPort" << YAML::Value << gpsd_port;
+            } else if (!gps_serial_path.empty()) {
+                out << YAML::Key << "SerialPath" << YAML::Value << gps_serial_path;
+            }
+            out << YAML::EndMap; // GPS
         }
 
         if (i2cdev != "") {

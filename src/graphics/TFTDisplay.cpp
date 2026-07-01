@@ -1142,8 +1142,17 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#endif
+#elif defined(VARIANT_DISPLAY_DRIVER)
+// Board-specific framebuffer backends (class LGFX) can livee in the
+// variant files — variant_display.h (declaration) and
+// variant_display.cpp (bodies) — so this shared
+// file isn't inflated for a single board. It exposes the same surface TFTDisplay
+// drives, so the generic `tft = new LGFX;` in connect() works.
+#include "variant_display.h"
 
+static LGFX *tft = nullptr;
+
+#endif
 #include "SPILock.h"
 #include "TFTColorRegions.h"
 #include "TFTDisplay.h"

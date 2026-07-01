@@ -942,7 +942,22 @@ bool loadConfig(const char *configPath)
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
                 Serial1.setPath(serialPath);
+                portduino_config.gps_serial_path = serialPath;
                 portduino_config.has_gps = 1;
+            }
+            std::string gpsdHost = yamlConfig["GPS"]["GpsdHost"].as<std::string>("");
+            if (!gpsdHost.empty()) {
+                if (portduino_config.has_gps) {
+                    LOG_WARN("GPS config: both SerialPath and GpsdHost are set; GpsdHost takes priority");
+                }
+                int gpsdPort = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
+                if (gpsdPort < 1 || gpsdPort > 65535) {
+                    LOG_ERROR("GPS config: GpsdPort %d is out of range [1, 65535]; ignoring GPS config", gpsdPort);
+                } else {
+                    portduino_config.gpsd_host = gpsdHost;
+                    portduino_config.gpsd_port = gpsdPort;
+                    portduino_config.has_gps = 1;
+                }
             }
         }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
