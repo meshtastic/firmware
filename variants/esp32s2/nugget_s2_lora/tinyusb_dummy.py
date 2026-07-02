@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
-import hashlib
 import shutil
 from pathlib import Path
 
@@ -9,12 +8,14 @@ Import("env")
 
 
 def source_fingerprint(path):
-    digest = hashlib.sha256()
+    entries = []
     for item in sorted(path.rglob("*")):
-        digest.update(item.relative_to(path).as_posix().encode())
-        if item.is_file():
-            digest.update(item.read_bytes())
-    return digest.hexdigest()
+        stat = item.stat()
+        kind = "f" if item.is_file() else "d"
+        entries.append(
+            f"{kind}:{item.relative_to(path).as_posix()}:{stat.st_size}:{stat.st_mtime_ns}"
+        )
+    return "\n".join(entries)
 
 
 project_dir = Path(env.subst("$PROJECT_DIR"))
