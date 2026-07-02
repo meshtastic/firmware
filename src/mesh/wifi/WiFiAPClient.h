@@ -25,6 +25,10 @@ bool isWifiAvailable();
 
 uint8_t getWifiDisconnectReason();
 
+#if HAS_WIFI && defined(ARCH_ESP32) && (ESP_ARDUINO_VERSION <= ESP_ARDUINO_VERSION_VAL(3, 0, 0))
+IPv6Address GlobalIPv6();
+#endif
+
 #if defined(USE_WS5500) || defined(USE_CH390D)
 // Startup Ethernet
 bool initEthernet();
