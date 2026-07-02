@@ -49,6 +49,20 @@ void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *
     }
 }
 
+void drawScaledXBitmap3x(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display)
+{
+    for (int row = 0; row < height; row++) {
+        uint8_t rowMask = (1 << row);
+        for (int col = 0; col < width; col++) {
+            uint8_t colData = pgm_read_byte(&bitmapXBM[col]);
+            if (colData & rowMask) {
+                // Note: rows become X, columns become Y after transpose
+                display->fillRect(x + row * 3, y + col * 3, 3, 3);
+            }
+        }
+    }
+}
+
 // Static variables for dynamic cycling
 static ListMode_Node currentMode_Nodes = MODE_LAST_HEARD;
 static ListMode_Location currentMode_Location = MODE_DISTANCE;
@@ -602,7 +616,7 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
-    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
+    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1 + BASEUI_HEADER_MARGIN;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
     bool locationScreen = false;
 
@@ -616,7 +630,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     graphics::drawCommonHeader(display, x, y, title);
 
     // Space below header
-    y += COMMON_HEADER_HEIGHT;
+    y += COMMON_HEADER_HEIGHT + BASEUI_BELOW_HEADER_MARGIN;
 
     int totalColumns = 1; // Default to 1 column
 
@@ -629,7 +643,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     } else {
         if (SCREEN_WIDTH <= 64) {
             totalColumns = 1;
-        } else if (SCREEN_WIDTH > 64 && SCREEN_WIDTH <= 240) {
+        } else if ((SCREEN_WIDTH > 64 && SCREEN_WIDTH <= 240) || ROUNDED_SCREEN) {
             totalColumns = 2;
         } else {
             totalColumns = 3;
@@ -681,11 +695,20 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         auto *node = nodeDB->getMeshNode(nodeNum);
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
+        int effectiveColumnWidth = columnWidth;
+        if (BASEUI_BODY_LR_MARGIN) {
+            if (col == 0) {
+                xPos += BASEUI_BODY_LR_MARGIN;
+                effectiveColumnWidth -= BASEUI_BODY_LR_MARGIN;
+            } else if (col == (totalColumns - 1)) {
+                effectiveColumnWidth -= BASEUI_BODY_LR_MARGIN;
+            }
+        }
 
-        renderer(display, node, xPos, yPos, columnWidth);
+        renderer(display, node, xPos, yPos, effectiveColumnWidth);
 
         if (extras)
-            extras(display, node, xPos, yPos, columnWidth, headingRadian, lat, lon);
+            extras(display, node, xPos, yPos, effectiveColumnWidth, headingRadian, lat, lon);
 
         lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;

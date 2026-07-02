@@ -58,20 +58,17 @@ const int DURATION_1_1 = 1000; // 1/1 note
 #ifdef HAS_I2S
 void playTonesRTTTL(const ToneDuration *tone_durations, int size)
 {
-    // translate ToneDuration[] to RTTTL string and play using audioThread
-    static std::unordered_map<int, std::string> freqToNote = {
-        {NOTE_C3, "c4"},   {NOTE_CS3, "c#4"}, {NOTE_D3, "d4"},   {NOTE_DS3, "d#4"}, {NOTE_E3, "e4"},   {NOTE_F3, "f4"},
-        {NOTE_FS3, "f#4"}, {NOTE_G3, "g4"},   {NOTE_GS3, "g#4"}, {NOTE_A3, "a4"},   {NOTE_AS3, "a#4"}, {NOTE_B3, "b4"},
-        {NOTE_C4, "c5"},   {NOTE_E4, "e5"},   {NOTE_G4, "g5"},   {NOTE_A4, "a5"},   {NOTE_C5, "c6"},   {NOTE_E5, "e6"},
-        {NOTE_G5, "g6"},   {NOTE_F5, "f6"},   {NOTE_G6, "g7"},   {NOTE_E7, "e8"}};
+    // translate ToneDuration[] to a single RTTTL string and play it via audioThread
+    static std::unordered_map<int, const char *> freqToNote = {
+        {NOTE_SILENT, "p"}, // rest
+        {NOTE_C3, "c4"},    {NOTE_CS3, "c#4"}, {NOTE_D3, "d4"},   {NOTE_DS3, "d#4"}, {NOTE_E3, "e4"},   {NOTE_F3, "f4"},
+        {NOTE_FS3, "f#4"},  {NOTE_G3, "g4"},   {NOTE_GS3, "g#4"}, {NOTE_A3, "a4"},   {NOTE_AS3, "a#4"}, {NOTE_B3, "b4"},
+        {NOTE_C4, "c5"},    {NOTE_CS4, "c#5"}, {NOTE_E4, "e5"},   {NOTE_G4, "g5"},   {NOTE_A4, "a5"},   {NOTE_B4, "b5"},
+        {NOTE_C5, "c6"},    {NOTE_E5, "e6"},   {NOTE_G5, "g6"},   {NOTE_F5, "f6"},   {NOTE_G6, "g7"},   {NOTE_E7, "e8"}};
 
     char rtttl[128] = "tone:d=32,o=4,b=200:"; // default duration and octave
     for (int i = 0; i < size; i++) {
         const auto &td = tone_durations[i];
-        std::string note = "b4";
-        if (freqToNote.find(td.frequency_khz) != freqToNote.end()) {
-            note = freqToNote[td.frequency_khz];
-        }
         int dur = 32; // default duration
         if (td.duration_ms >= 1000)
             dur = 1;
@@ -86,16 +83,22 @@ void playTonesRTTTL(const ToneDuration *tone_durations, int size)
         else
             dur = 32;
 
-        char noteStr[64];
-        snprintf(noteStr, sizeof(noteStr), "%s,%d", note.c_str(), dur);
-        strncat(rtttl, noteStr, sizeof(rtttl) - strlen(rtttl) - 1);
+        auto it = freqToNote.find(td.frequency_khz);
+        const char *note = (it != freqToNote.end()) ? it->second : "p"; // unknown freq -> rest
 
-        audioThread->beginRttl(rtttl, strlen(rtttl));
-        while (audioThread->isPlaying()) {
-            delay(10);
-        }
-        return;
+        // RTTTL grammar puts duration before the note; notes are comma-separated
+        char noteStr[64];
+        snprintf(noteStr, sizeof(noteStr), "%s%d%s", i ? "," : "", dur, note);
+        strncat(rtttl, noteStr, sizeof(rtttl) - strlen(rtttl) - 1);
     }
+    // trailing rest flushes the last note out of the I2S DMA buffer before teardown
+    strncat(rtttl, ",32p", sizeof(rtttl) - strlen(rtttl) - 1);
+
+    audioThread->beginRttl(rtttl, strlen(rtttl));
+    while (audioThread->isPlaying()) {
+        delay(10);
+    }
+    audioThread->stop(); // release I2S so the amp goes silent instead of looping the last buffer
 }
 #endif
 
