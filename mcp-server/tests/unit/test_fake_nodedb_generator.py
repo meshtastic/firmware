@@ -1,7 +1,7 @@
 """Tests for the fake-NodeDB fixture pipeline (bin/gen-fake-nodedb-seed.py
 + bin/seed-json-to-proto.py + mcp-server fixtures.push_fake_nodedb).
 
-Lives under tests/unit/ because none of these touch real hardware — they
+Lives under tests/unit/ because none of these touch real hardware - they
 shell out to the bin/ scripts and decode the resulting protobufs in-process.
 """
 
@@ -42,7 +42,7 @@ def _require_v25_bindings() -> None:
         )
     if "positions" not in NodeDatabase.DESCRIPTOR.fields_by_name:
         pytest.skip(
-            "Loaded NodeDatabase predates v25 — run `./bin/regen-py-protos.sh`."
+            "Loaded NodeDatabase predates v25 - run `./bin/regen-py-protos.sh`."
         )
 
 
@@ -170,7 +170,7 @@ def test_committed_seed_compiles_and_decodes(size: int, tmp_path: pathlib.Path) 
     proto = tmp_path / "out.proto"
     jsonl = FIXTURES_DIR / f"seed_v25_{size:04d}.jsonl"
     if not jsonl.is_file():
-        pytest.skip(f"{jsonl} not present — run ./bin/regen-fake-nodedbs.sh")
+        pytest.skip(f"{jsonl} not present - run ./bin/regen-fake-nodedbs.sh")
     _run([sys.executable, str(COMPILE), "--in", str(jsonl), "--out", str(proto)])
 
     db = NodeDatabase()
@@ -199,7 +199,7 @@ def test_compile_freshens_timestamps(tmp_path: pathlib.Path) -> None:
     _require_v25_bindings()
     jsonl = FIXTURES_DIR / "seed_v25_0250.jsonl"
     if not jsonl.is_file():
-        pytest.skip("250-node seed not present — run ./bin/regen-fake-nodedbs.sh")
+        pytest.skip("250-node seed not present - run ./bin/regen-fake-nodedbs.sh")
     a = tmp_path / "a.proto"
     b = tmp_path / "b.proto"
     _run([sys.executable, str(COMPILE), "--in", str(jsonl), "--out", str(a)])

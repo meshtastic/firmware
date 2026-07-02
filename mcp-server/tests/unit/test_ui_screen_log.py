@@ -1,8 +1,8 @@
 """Pin the `Screen: frame N/M name=X reason=Y` regex + FrameEvent dataclass.
 
 The firmware-side format lives in `src/graphics/Screen.cpp::logFrameChange`;
-if the format string changes, this test — and the parser in
-`tests/ui/_screen_log.py` — have to be updated together.
+if the format string changes, this test - and the parser in
+`tests/ui/_screen_log.py` - have to be updated together.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class TestFrameEventParse:
 
     def test_with_log_prefix(self) -> None:
         """Log lines may be preamble-wrapped by the firmware LOG_INFO macro
-        (timestamp, severity, etc.) — the regex uses .search() not .match()
+        (timestamp, severity, etc.) - the regex uses .search() not .match()
         so prefixes are fine."""
         raw = "[INFO] 00:12:34  567   Screen: frame 4/12 name=nodelist_nodes reason=fn_f3    "
         evt = FrameEvent.parse(raw)

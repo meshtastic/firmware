@@ -122,7 +122,7 @@ def wait_for_reason(
 ) -> FrameEvent:
     """Wait for a frame event with `reason=<reason>` after call-start.
 
-    Matches only on `reason` — useful when the caller knows *why* a
+    Matches only on `reason` - useful when the caller knows *why* a
     transition should happen (e.g. `fn_f1`, `rebuild`) but not which named
     frame the firmware will land on for this particular board.
     """

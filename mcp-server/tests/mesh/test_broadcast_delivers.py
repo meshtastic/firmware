@@ -1,7 +1,7 @@
 """Mesh: broadcast text from TX arrives at RX.
 
 Uses `meshtastic.SerialInterface` pubsub on RX to detect the decoded text
-packet — `pio device monitor` output doesn't include message bodies.
+packet - `pio device monitor` output doesn't include message bodies.
 """
 
 from __future__ import annotations

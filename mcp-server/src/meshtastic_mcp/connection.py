@@ -42,7 +42,7 @@ def parse_tcp_port(port: str) -> tuple[str, int]:
     """Parse `tcp://host[:port]` → (host, port). Defaults to 4403.
 
     Validates host shape (non-empty, no path separators) and port range
-    (1..65535). Raises `ConnectionError` on malformed input — never lets
+    (1..65535). Raises `ConnectionError` on malformed input - never lets
     a raw `ValueError` bubble up to a tool surface.
     """
     if not port.startswith(TCP_SCHEME):
@@ -65,7 +65,7 @@ def parse_tcp_port(port: str) -> tuple[str, int]:
     if any(c in host for c in ("/", "\\")):
         raise ConnectionError(
             f"Invalid TCP endpoint {port!r}: host {host!r} contains a path "
-            "separator. TCP hostnames cannot contain '/' or '\\' — did you "
+            "separator. TCP hostnames cannot contain '/' or '\\' - did you "
             "pass a serial port path or a Windows drive path by mistake?"
         )
     if not (1 <= tcp_port <= 65535):
@@ -95,7 +95,7 @@ def normalize_tcp_endpoint(endpoint: str) -> str:
 
 
 def reject_if_tcp(port: str | None, tool_name: str) -> None:
-    """Raise if `port` is a TCP endpoint — for tools that need real USB
+    """Raise if `port` is a TCP endpoint - for tools that need real USB
     hardware (flash, bootloader, vendor escape hatches, serial monitor).
 
     Only checks the explicit arg; auto-selection via env var is the caller's
@@ -143,7 +143,7 @@ def connect(port: str | None = None, timeout_s: float = 8.0) -> Iterator:
     For serial: raises `ConnectionError` immediately if another serial
     session holds the port (a `pio device monitor` in `serial_sessions/`).
     For TCP: no exclusive-access requirement, so the serial-session check
-    is skipped — but the `port_lock` still serializes parallel `connect()`
+    is skipped - but the `port_lock` still serializes parallel `connect()`
     calls to the same daemon endpoint.
 
     `timeout_s` is plumbed through to both `SerialInterface(timeout=...)`
@@ -164,7 +164,7 @@ def connect(port: str | None = None, timeout_s: float = 8.0) -> Iterator:
         lock = registry.port_lock(resolved)
         if not lock.acquire(blocking=False):
             raise ConnectionError(
-                f"TCP endpoint {resolved} is busy — another device operation "
+                f"TCP endpoint {resolved} is busy - another device operation "
                 "is in flight. Retry shortly."
             )
 
@@ -204,7 +204,7 @@ def connect(port: str | None = None, timeout_s: float = 8.0) -> Iterator:
     lock = registry.port_lock(resolved)
     if not lock.acquire(blocking=False):
         raise ConnectionError(
-            f"Port {resolved} is busy — another device operation is in flight. "
+            f"Port {resolved} is busy - another device operation is in flight. "
             "Retry shortly."
         )
 

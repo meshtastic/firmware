@@ -181,7 +181,7 @@ def telemetry_timeline(
     """
     end = time.time()
     if isinstance(window, (int, float)):
-        # Numeric `window` is a duration in seconds — "last N seconds".
+        # Numeric `window` is a duration in seconds - "last N seconds".
         # Without this branch, `_parse_time(-N)` would treat -N as an
         # absolute epoch timestamp (i.e., Jan 1 1970 minus N seconds),
         # producing a wildly negative `start` and matching nothing.
