@@ -1457,6 +1457,9 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             if (!isAudioModuleAvailableForRegion(config.lora.region)) {
                 LOG_WARN("Get module config: Audio module is unavailable for current radio/region");
                 myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &req);
+                if (req.pki_encrypted) {
+                    myReply->pki_encrypted = true;
+                }
                 return;
             }
             configName = "Audio";
