@@ -6,6 +6,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
+#include "mesh/CryptoEngine.h"
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
@@ -131,6 +132,21 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
             return;
         }
         p->channel = ch.index;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        // Already-decoded downlink skips perhapsDecode's crypto path entirely, so enforce the
+        // signature policy here: verify a carried signature and apply unsigned-downgrade
+        // protection for known signers. Without this, a peer on a plaintext broker could
+        // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
+        // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
+        // CryptoEngine cache state, and MQTT ingress can run on a different task.
+        {
+            concurrency::LockGuard g(cryptLock);
+            if (!checkXeddsaReceivePolicy(p.get())) {
+                LOG_INFO("Ignore decoded message failing XEdDSA policy");
+                return;
+            }
+        }
+#endif
     }
 
     // PKI messages get accepted even if we can't decrypt
