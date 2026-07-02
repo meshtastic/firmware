@@ -23,7 +23,7 @@ jobs:
           GIT_BRANCH: ${{ github.ref_name }}
         run: |
           git fetch --prune origin $GIT_BRANCH
-          git checkout FETCH_HEAD
+          git checkout origin/$GIT_BRANCH
 
       - name: Download nanopb
         run: |

@@ -271,6 +271,12 @@ template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
+template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false);
+    return (int16_t)round(rssi);
+}
+
 template <typename T> void SX126xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();

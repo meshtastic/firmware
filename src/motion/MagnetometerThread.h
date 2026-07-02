@@ -47,8 +47,9 @@ class MagnetometerThread : public concurrency::OSThread
     {
         canSleep = true;
 
-        if (isInitialised)
+        if (isInitialised) {
             return sensor->runOnce();
+        }
 
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }

@@ -29,12 +29,10 @@ jobs:
             const { owner, repo } = context.repo;
             const pr = context.payload.pull_request;
 
-            // Trusted authors only (matches the real workflow). author_association
-            // can't reflect private org membership for the token, so concealed
-            // members appear as CONTRIBUTOR — include it, or maintainers are excluded.
-            const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'];
+            // Only org members get the flasher comment (matches the real workflow)
+            const allowedAssociations = ['OWNER', 'MEMBER'];
             if (!allowedAssociations.includes(pr.author_association)) {
-              core.info(`Author association ${pr.author_association} is not trusted; skipping.`);
+              core.info(`Author association ${pr.author_association} is not an org member; skipping.`);
               return;
             }
 

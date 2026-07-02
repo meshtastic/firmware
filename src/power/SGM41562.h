@@ -7,7 +7,7 @@
 #include <Wire.h>
 #include <stdint.h>
 
-// SG Micro SGM41562 - single-cell Li-ion buck charger, I²C-controlled, no
+// SG Micro SGM41562 — single-cell Li-ion buck charger, I²C-controlled, no
 // fuel gauge. This driver exposes status (charging / input good / fault),
 // charge enable, and shipping-mode control. Battery voltage/percent still
 // come from the platform ADC path; the charger is plumbed in as a
@@ -18,7 +18,7 @@
 // example for this board uses).
 
 #ifndef SGM41562_ADDR
-#define SGM41562_ADDR 0x03 // Per datasheet - unusual but correct
+#define SGM41562_ADDR 0x03 // Per datasheet — unusual but correct
 #endif
 
 #ifndef SGM41562_WIRE
@@ -38,10 +38,10 @@ class SGM41562
     bool begin(TwoWire &wire, uint8_t address = SGM41562_ADDR);
 
     // Re-read the system status + fault registers. Throttled internally to
-    // at most one I²C transaction per 250 ms - call as often as you like.
+    // at most one I²C transaction per 250 ms — call as often as you like.
     bool refresh();
 
-    // Status - cached from the most recent refresh().
+    // Status — cached from the most recent refresh().
     ChargeStatus chargeStatus() const { return chargeStatus_; }
     bool isCharging() const { return chargeStatus_ == ChargeStatus::Precharge || chargeStatus_ == ChargeStatus::FastCharge; }
     bool isChargeDone() const { return chargeStatus_ == ChargeStatus::ChargeDone; }

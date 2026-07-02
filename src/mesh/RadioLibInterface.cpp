@@ -8,9 +8,6 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
-#if !MESHTASTIC_EXCLUDE_BEACON
-#include "modules/MeshBeaconModule.h"
-#endif
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -55,6 +52,12 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
     module.setCb_digitalRead(stm32wl_emulate_digitalRead);
 #endif
+}
+
+static bool radioFrequencyChanged(float previousFreq, float currentFreq)
+{
+    const float delta = currentFreq - previousFreq;
+    return delta > 0.000001f || delta < -0.000001f;
 }
 
 #ifdef ARCH_ESP32
@@ -231,6 +234,16 @@ bool RadioLibInterface::canSleep()
     return res;
 }
 
+bool RadioLibInterface::reconfigure()
+{
+    const float previousFreq = getFreq();
+    bool result = RadioInterface::reconfigure();
+    if (result && radioFrequencyChanged(previousFreq, getFreq())) {
+        resetNoiseFloor();
+    }
+    return result;
+}
+
 /** Allow other firmware components to ask whether we are currently sending a packet
 Initially implemented to protect T-Echo's capacitive touch button from spurious presses during tx
 */
@@ -247,7 +260,7 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
         packetPool.release(p); // free the packet we just removed
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
+    LOG_DEBUG("cancelSending id=0x%x, removed=%d", id, result);
     return result;
 }
 
@@ -334,6 +347,7 @@ void RadioLibInterface::resetNoiseFloor()
 {
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
+    lastNoiseFloorUpdate = 0;
     currentNoiseFloor = NOISE_FLOOR_DEFAULT;
     LOG_INFO("Noise floor reset - rolling window collection will restart");
 }
@@ -368,15 +382,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
     switch (notification) {
     case ISR_TX:
-        handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
-#if !MESHTASTIC_EXCLUDE_BEACON
-        // Pre-switch the radio to the NEXT queued packet's beacon config (no-op for normal traffic).
-        // Not required for correctness - TRANSMIT_DELAY_COMPLETED would switch before CAD anyway - but
-        // doing it here lets the next beacon skip the switch-only delay cycle and, more importantly,
-        // keeps the post-TX listen window (and the CAD/LBT that follows) on the channel we're about to
-        // transmit on. Only engages when the next packet is itself a beacon - exactly when we want it.
-        MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
-#endif
+        handleTransmitInterrupt();
         startReceive();
         setTransmitDelay();
         break;
@@ -399,27 +405,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 if (delay_remaining > 0) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
-#if !MESHTASTIC_EXCLUDE_BEACON
-                } else if (MeshBeaconModule::beaconTxConfigInvalid(txp)) {
-                    // The beacon's target radio config is invalid (bad preset/region, or an
-                    // unlicensed node keying up on a ham-only region). Drop the packet - never
-                    // transmit it on the current (home) config - and move on to the next queued packet.
-                    LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", txp->id);
-                    meshtastic_MeshPacket *bad = txQueue.dequeue();
-                    MeshBeaconModule::clearTargetRadioSettings(bad);
-                    packetPool.release(bad);
-                    setTransmitDelay();
-                } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
-                    setTransmitDelay();
-#endif
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-#if !MESHTASTIC_EXCLUDE_BEACON
-                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
-#endif
-                        {
-                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
-                        }
+                        startReceive();      // try receiving this packet, afterwards we'll be trying to transmit again
                         setTransmitDelay();
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
@@ -551,10 +539,6 @@ void RadioLibInterface::completeSending()
         if (!isFromUs(p))
             txRelay++;
         printPacket("Completed sending", p);
-#if !MESHTASTIC_EXCLUDE_BEACON
-        MeshBeaconModule::clearTargetRadioSettings(p);
-        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
-#endif
 
         // We are done sending that packet, release it
         packetPool.release(p);
@@ -670,9 +654,6 @@ void RadioLibInterface::pollMissedIrqs()
     if (isReceiving) {
         checkRxDoneIrqFlag();
     }
-    if (sendingPacket) {
-        checkTxDoneIrqFlag();
-    }
 }
 
 void RadioLibInterface::resetAGC()
@@ -685,14 +666,6 @@ void RadioLibInterface::checkRxDoneIrqFlag()
     if (iface->checkIrq(RADIOLIB_IRQ_RX_DONE)) {
         LOG_WARN("caught missed RX_DONE");
         notify(ISR_RX, true);
-    }
-}
-
-void RadioLibInterface::checkTxDoneIrqFlag()
-{
-    if (iface->checkIrq(RADIOLIB_IRQ_TX_DONE)) {
-        LOG_WARN("caught missed TX_DONE");
-        notify(ISR_TX, true);
     }
 }
 
@@ -715,13 +688,6 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
-#if !MESHTASTIC_EXCLUDE_BEACON
-        // This packet may have already triggered a beacon radio switch in TRANSMIT_DELAY_COMPLETED;
-        // since it never reaches completeSending() here, restore the radio so it isn't left on the
-        // beacon config (which would also break RX on the home channel).
-        MeshBeaconModule::clearTargetRadioSettings(txp);
-        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
-#endif
         packetPool.release(txp);
         return false;
     } else {

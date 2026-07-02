@@ -143,6 +143,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     int32_t getAverageNoiseFloor();
 
     /**
+     * Get the current calculated noise floor in dBm
+     * Returns -120 dBm if not yet calibrated
+     */
+    int32_t getNoiseFloor();
+
+    /**
+     * Calculate the average noise floor from collected samples
+     */
+    int32_t getAverageNoiseFloor();
+
+    /**
      * Glue functions called from ISR land
      */
     virtual void disableInterrupt() = 0;
@@ -173,6 +184,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
+
+    virtual bool reconfigure() override;
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 

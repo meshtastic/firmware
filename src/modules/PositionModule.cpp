@@ -598,7 +598,7 @@ static inline void computeImpreciseLatLon(int32_t inLat, int32_t inLon, uint8_t 
         // Build mask for top 'precisionBits' bits of a 32-bit unsigned field
         const uint32_t mask = (precisionBits == 32) ? UINT32_MAX : (UINT32_MAX << (32 - precisionBits));
         // Note: latitude_i/longitude_i are stored as signed 32-bit in meshtastic code but
-        // the bitmask logic used previously operated as unsigned-preserve that behavior by
+        // the bitmask logic used previously operated as unsigned -- preserve that behavior by
         // casting to uint32_t for masking, then back to int32_t.
         uint32_t lat_u = static_cast<uint32_t>(inLat) & mask;
         uint32_t lon_u = static_cast<uint32_t>(inLon) & mask;
