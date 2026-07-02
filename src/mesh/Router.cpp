@@ -100,7 +100,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         return true;
     }
 
-    // router_preserve_hops: not suitable right now — removed from config until
+    // router_preserve_hops: not suitable right now - removed from config until
     // the right heuristics for when to preserve vs. exhaust hops are established.
     // #if HAS_TRAFFIC_MANAGEMENT
     //     if (moduleConfig.has_traffic_management &&
@@ -119,7 +119,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
             IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-            LOG_DEBUG("Identified unique favorite relay router 0x%x from last byte 0x%x", resolved, p->relay_node);
+            LOG_DEBUG("Identified unique favorite relay router 0x%08x from last byte 0x%x", resolved, p->relay_node);
             return false; // Don't decrement hop_limit
         }
     }
@@ -450,7 +450,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
-        LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
+        LOG_DEBUG("Node 0x%08x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
 
@@ -560,7 +560,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
             }
         } else {
-            // Unsigned packet — only reject the class of packet a signing node always signs:
+            // Unsigned packet - only reject the class of packet a signing node always signs:
             // an unencrypted broadcast small enough to also carry a signature (see perhapsEncode()).
             // Unicast packets and oversized broadcasts are never signed, so they must not be
             // hard-failed here even if this node has signed before.
@@ -925,14 +925,14 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #endif
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
-        LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);
+        LOG_DEBUG("Ignore msg, 0x%08x is in our ignore list", p->from);
         packetPool.release(p);
         return;
     }
 
     meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->from);
     if (nodeInfoLiteIsIgnored(node)) {
-        LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
+        LOG_DEBUG("Ignore msg, 0x%08x is ignored", p->from);
         packetPool.release(p);
         return;
     }
@@ -944,7 +944,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (config.lora.ignore_mqtt && p->via_mqtt) {
-        LOG_DEBUG("Msg came in via MQTT from 0x%x", p->from);
+        LOG_DEBUG("Msg came in via MQTT from 0x%08x", p->from);
         packetPool.release(p);
         return;
     }
@@ -956,7 +956,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (shouldFilterReceived(p)) {
-        LOG_DEBUG("Incoming msg was filtered from 0x%x", p->from);
+        LOG_DEBUG("Incoming msg was filtered from 0x%08x", p->from);
         packetPool.release(p);
         return;
     }

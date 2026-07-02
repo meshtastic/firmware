@@ -17,7 +17,7 @@ An [MCP](https://modelcontextprotocol.io) server for working with the Meshtastic
 ## Prerequisites
 
 - Python ≥ 3.11
-- [PlatformIO Core](https://platformio.org/install/cli) — `pio` on `$PATH` or at `~/.platformio/penv/bin/pio`
+- [PlatformIO Core](https://platformio.org/install/cli) - `pio` on `$PATH` or at `~/.platformio/penv/bin/pio`
 - The Meshtastic firmware repo checked out somewhere (set via `MESHTASTIC_FIRMWARE_ROOT`)
 - Optional: `esptool`, `nrfutil`, `picotool` on `$PATH` (or under the firmware venv at `.venv/bin/`) if you want to use the direct-tool wrappers
 
@@ -35,7 +35,7 @@ Verify:
 MESHTASTIC_FIRMWARE_ROOT=<firmware-repo> .venv/bin/python -m meshtastic_mcp
 ```
 
-The server blocks on stdin (that's correct — it speaks MCP over stdio). Ctrl-C to exit.
+The server blocks on stdin (that's correct - it speaks MCP over stdio). Ctrl-C to exit.
 
 ## Register with Claude Code
 
@@ -77,7 +77,7 @@ Same `mcpServers` block, but in `~/Library/Application Support/Claude/claude_des
 | ----------------- | -------------------------------------------------------------------- |
 | `build`           | `pio run -e <env>` (+ mtjson target)                                 |
 | `clean`           | `pio run -e <env> -t clean`                                          |
-| `pio_flash`       | `pio run -e <env> -t upload --upload-port <port>` — any architecture |
+| `pio_flash`       | `pio run -e <env> -t upload --upload-port <port>` - any architecture |
 | `erase_and_flash` | ESP32 full factory flash via `bin/device-install.sh`                 |
 | `update_flash`    | ESP32 OTA app-partition update via `bin/device-update.sh`            |
 | `touch_1200bps`   | 1200-baud open/close to trigger USB CDC bootloader entry             |
@@ -113,9 +113,9 @@ _The tool tables below document 38 currently registered MCP server tools._
 | `set_channel_url`   | Import channels from a Meshtastic URL                                      |
 | `set_debug_log_api` | Enable or disable debug logging for the Meshtastic Python API client       |
 | `send_text`         | Broadcast or direct text message                                           |
-| `reboot`            | `localNode.reboot(secs)` — requires `confirm=True`                         |
-| `shutdown`          | `localNode.shutdown(secs)` — requires `confirm=True`                       |
-| `factory_reset`     | `localNode.factoryReset(full?)` — requires `confirm=True`                  |
+| `reboot`            | `localNode.reboot(secs)` - requires `confirm=True`                         |
+| `shutdown`          | `localNode.shutdown(secs)` - requires `confirm=True`                       |
+| `factory_reset`     | `localNode.factoryReset(full?)` - requires `confirm=True`                  |
 
 ### Direct hardware tools (escape hatches)
 
@@ -162,7 +162,7 @@ rather than auto-`sudo`'ing mid-run.
 
 - **All destructive flash/admin tools require `confirm=True`** as a tool-level gate, on top of any permission prompt from Claude.
 - **Serial port is exclusive.** If a `serial_*` session is active on a port, `device_info`/admin tools on the same port will fail fast with a pointer at the active `session_id`. Close the session first.
-- **Flash confirmation by architecture**: `erase_and_flash` / `update_flash` error if the env's architecture isn't ESP32 — use `pio_flash` for nRF52/RP2040/STM32.
+- **Flash confirmation by architecture**: `erase_and_flash` / `update_flash` error if the env's architecture isn't ESP32 - use `pio_flash` for nRF52/RP2040/STM32.
 
 ## Environment variables
 
@@ -182,7 +182,7 @@ rather than auto-`sudo`'ing mid-run.
 The `native-macos` and `native` PlatformIO envs build a headless `meshtasticd`
 binary that runs on the host (Apple Silicon / Intel macOS, or Linux Portduino).
 The daemon exposes the meshtastic TCP API on port `4403` rather than a USB
-serial endpoint — point the MCP server at it via `MESHTASTIC_MCP_TCP_HOST`:
+serial endpoint - point the MCP server at it via `MESHTASTIC_MCP_TCP_HOST`:
 
 ```bash
 # 1. Build + run a daemon on this host (see variants/native/portduino/platformio.ini
@@ -194,9 +194,9 @@ pio run -e native-macos
 export MESHTASTIC_MCP_TCP_HOST=localhost     # or host:port, default port 4403
 ```
 
-**First-run gotcha — MAC address.** `meshtasticd` derives its MAC from the
+**First-run gotcha - MAC address.** `meshtasticd` derives its MAC from the
 USB adapter's serial-number / product strings. Many cheap CH341 dongles
-(MeshStick included — VID 0x1A86 / PID 0x5512) ship with `iSerialNumber=0`
+(MeshStick included - VID 0x1A86 / PID 0x5512) ship with `iSerialNumber=0`
 and `iProduct=0`, so the daemon aborts on boot with `*** Blank MAC Address
 not allowed!`. Set the MAC explicitly in `config.yaml`:
 
@@ -228,10 +228,10 @@ on) raise a clear `ConnectionError` rather than failing mysteriously:
 `pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`,
 `serial_open` (use info/admin tools directly), and the vendor escape hatches
 `esptool_*`, `nrfutil_*`, `picotool_*`. `pio_flash` against a `native*` env
-similarly raises — there's no upload step; use `build` and run the binary
+similarly raises - there's no upload step; use `build` and run the binary
 directly.
 
-The pytest harness in `tests/` still assumes USB-attached devices per role —
+The pytest harness in `tests/` still assumes USB-attached devices per role -
 TCP-aware fixtures are not part of this surface yet.
 
 ## Hardware Test Suite
@@ -239,7 +239,7 @@ TCP-aware fixtures are not part of this surface yet.
 `mcp-server/tests/` holds a pytest-based integration suite that exercises
 real USB-connected Meshtastic devices against the MCP server surface. Separate
 from the native C++ unit tests in the firmware repo's top-level `test/`
-directory — this one validates the device-facing behavior end-to-end.
+directory - this one validates the device-facing behavior end-to-end.
 
 ### Invocation
 
@@ -262,33 +262,33 @@ in the pre-flight header.
 
 ### Tiers (run in this order)
 
-- **`bake`** (`tests/test_00_bake.py`) — flashes both hub roles with the
+- **`bake`** (`tests/test_00_bake.py`) - flashes both hub roles with the
   session's test profile. Has a skip-if-already-baked check (region + channel
   match); `--force-bake` overrides.
-- **`unit`** — pure Python, no hardware. boards / PIO wrapper /
+- **`unit`** - pure Python, no hardware. boards / PIO wrapper /
   userPrefs-parse / testing-profile fixtures.
-- **`mesh`** — 2-device mesh: formation, broadcast delivery, direct+ACK,
+- **`mesh`** - 2-device mesh: formation, broadcast delivery, direct+ACK,
   traceroute, bidirectional. Parametrized over both directions. Includes
   `test_peer_offline_recovery` which uses uhubctl to power-cycle one peer
   mid-conversation and verifies the mesh recovers (skips without uhubctl).
-- **`telemetry`** — periodic telemetry broadcast + on-demand request/reply
+- **`telemetry`** - periodic telemetry broadcast + on-demand request/reply
   (`TELEMETRY_APP` with `wantResponse=True`).
-- **`monitor`** — boot log has no panic markers within 60 s of reboot.
-- **`recovery`** — `uhubctl` power-cycle round-trip: verifies the hub port
+- **`monitor`** - boot log has no panic markers within 60 s of reboot.
+- **`recovery`** - `uhubctl` power-cycle round-trip: verifies the hub port
   can be toggled off/on, the device re-enumerates with the same
   `my_node_num`, and NVS-resident config (region, channel, modem preset)
   survives a hard reset. Requires `uhubctl` on PATH; skips cleanly otherwise.
-- **`ui`** — input-broker-driven screen navigation (`AdminMessage.send_input_event`
+- **`ui`** - input-broker-driven screen navigation (`AdminMessage.send_input_event`
   injection → `Screen::handleInputEvent` → frame transition). Parametrized
   on the screen-bearing role (heltec-v3 OLED). Captures images via USB
   webcam + OCRs them for HTML-report evidence. Requires `pip install -e '.[ui]'`
   and `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3=<index>`; tier is auto-deselected
   if `cv2` isn't importable.
-- **`fleet`** — PSK-seed isolation: two labs with different seeds never
+- **`fleet`** - PSK-seed isolation: two labs with different seeds never
   overlap.
-- **`admin`** — owner persistence across reboot, channel URL round-trip,
+- **`admin`** - owner persistence across reboot, channel URL round-trip,
   `lora.hop_limit` persistence.
-- **`provisioning`** — region/channel baking, userPrefs survive
+- **`provisioning`** - region/channel baking, userPrefs survive
   `factory_reset(full=False)`.
 
 #### UI tier setup
@@ -297,7 +297,7 @@ The `tests/ui/` tier drives the on-device OLED via the firmware's existing
 `AdminMessage.send_input_event` RPC (no firmware changes required) and
 verifies transitions via a macro-gated log line + camera + OCR. Summary:
 
-1. Install extras: `pip install -e 'mcp-server/.[ui]'` — pulls in
+1. Install extras: `pip install -e 'mcp-server/.[ui]'` - pulls in
    `opencv-python-headless`, `numpy`, `easyocr`, `Pillow`. First easyocr
    run downloads ~100 MB of models to `~/.EasyOCR/`; an autouse session
    fixture pre-warms the reader so per-test OCR is <100 ms after that.
@@ -329,13 +329,13 @@ captures just become 1×1 black PNGs.
 
 ### Artifacts (regenerated every run, under `tests/`)
 
-- `report.html` — self-contained pytest-html report. Each test gets a
+- `report.html` - self-contained pytest-html report. Each test gets a
   **Meshtastic debug** section attached on failure with a 200-line firmware
   log tail + device-state dump. Open this first on failures.
-- `junit.xml` — CI-parseable.
-- `reportlog.jsonl` — `pytest-reportlog` event stream; consumed by the TUI.
-- `fwlog.jsonl` — firmware log mirror (`meshtastic.log.line` pubsub → JSONL).
-- `flash.log` — tee of all pio / esptool / nrfutil / picotool subprocess
+- `junit.xml` - CI-parseable.
+- `reportlog.jsonl` - `pytest-reportlog` event stream; consumed by the TUI.
+- `fwlog.jsonl` - firmware log mirror (`meshtastic.log.line` pubsub → JSONL).
+- `flash.log` - tee of all pio / esptool / nrfutil / picotool subprocess
   output during the run (driven by `MESHTASTIC_MCP_FLASH_LOG`).
 
 ### Live TUI
@@ -353,11 +353,12 @@ quit (SIGINT → SIGTERM → SIGKILL escalation).
 
 Set `MESHTASTIC_UI_TUI_CAMERA=1` to mount a bottom-of-screen **UI camera**
 panel. Left side: the latest capture PNG rendered as Unicode half-blocks
-(via `rich-pixels`, works in any terminal — no kitty/sixel required).
-Right side: live transcript tail ("step 3 — frame 4/8 name=nodelist_nodes
-— OCR: Nodes 2/2") so you can see every event-injection and its result
-as each UI test runs. Requires the `[ui]` extras for image rendering; the
-transcript alone works without them.
+(via `rich-pixels`, works in any terminal - no kitty/sixel required).
+Right side: live transcript tail ("step 3 - frame 4/8 name=nodelist_nodes
+
+- OCR: Nodes 2/2") so you can see every event-injection and its result
+  as each UI test runs. Requires the `[ui]` extras for image rendering; the
+  transcript alone works without them.
 
 ### Slash commands
 
@@ -375,7 +376,7 @@ Three AI-assisted workflows are wired up for Claude Code operators
 - `SerialInterface` holds an **exclusive port lock**; sequence calls
   open → mutate → close, then next device. No parallel calls to the
   same port.
-- Directed PKI-encrypted sends need **bilateral NodeInfo warmup** —
+- Directed PKI-encrypted sends need **bilateral NodeInfo warmup** -
   both sides must hold the other's current pubkey. See
   `tests/mesh/_receive.py::nudge_nodeinfo_port` and the three directed-
   send tests (`test_direct_with_ack`, `test_traceroute`,
@@ -397,7 +398,7 @@ mcp-server/
     ├── flash.py            # build, clean, flash, erase_and_flash, update_flash, touch_1200bps
     ├── serial_session.py   # SerialSession + reader thread + ring buffer
     ├── registry.py         # session registry + per-port locks
-    ├── connection.py       # connect(port) ctx mgr — SerialInterface + port lock
+    ├── connection.py       # connect(port) ctx mgr - SerialInterface + port lock
     ├── info.py             # device_info, list_nodes
     ├── admin.py            # set_owner, get/set_config, channels, send_text, reboot/shutdown/factory_reset
     └── hw_tools.py         # esptool / nrfutil / picotool wrappers
@@ -405,8 +406,8 @@ mcp-server/
 
 ## Troubleshooting
 
-- **"Could not locate Meshtastic firmware root"** — set `MESHTASTIC_FIRMWARE_ROOT`.
-- **"Could not find `pio`"** — install PlatformIO or set `MESHTASTIC_PIO_BIN`.
-- **"Port is held by serial session ..."** — call `serial_close(session_id)` or `serial_list` to find it.
-- **`factory.bin` not found after build** — the env may not be ESP32; only ESP32 envs produce a `.factory.bin`.
-- **`touch_1200bps` reported `new_port: null`** — the device may not have 1200bps-reset stdio, or the bootloader re-uses the same port name. Check `list_devices` manually.
+- **"Could not locate Meshtastic firmware root"** - set `MESHTASTIC_FIRMWARE_ROOT`.
+- **"Could not find `pio`"** - install PlatformIO or set `MESHTASTIC_PIO_BIN`.
+- **"Port is held by serial session ..."** - call `serial_close(session_id)` or `serial_list` to find it.
+- **`factory.bin` not found after build** - the env may not be ESP32; only ESP32 envs produce a `.factory.bin`.
+- **`touch_1200bps` reported `new_port: null`** - the device may not have 1200bps-reset stdio, or the bootloader re-uses the same port name. Check `list_devices` manually.

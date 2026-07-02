@@ -2,7 +2,7 @@
 
 This is NOT line coverage (that's `coverage.py`). This measures which of the
 38 public MCP tools in `meshtastic_mcp.server` got invoked during a pytest
-run — a quick signal for "where are the test-coverage gaps".
+run - a quick signal for "where are the test-coverage gaps".
 
 Approach: introspect `meshtastic_mcp.server.app` for registered tools, find
 the underlying handler functions in their source modules, and wrap each with
@@ -40,7 +40,7 @@ def _wrap(module: Any, attr: str, tool_name: str) -> None:
 
 
 # Mapping: MCP tool name → (module, function name). Mirrors the wiring in
-# `meshtastic_mcp.server`. Keep synchronized manually — adding a tool without
+# `meshtastic_mcp.server`. Keep synchronized manually - adding a tool without
 # updating this map means it shows as count=0 in reports even if exercised.
 _TOOL_MAP: dict[str, tuple[str, str]] = {
     # Discovery & metadata
@@ -54,7 +54,7 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "erase_and_flash": ("meshtastic_mcp.flash", "erase_and_flash"),
     "update_flash": ("meshtastic_mcp.flash", "update_flash"),
     "touch_1200bps": ("meshtastic_mcp.flash", "touch_1200bps"),
-    # Serial log sessions — module-level functions on serial_session
+    # Serial log sessions - module-level functions on serial_session
     "serial_open": ("meshtastic_mcp.serial_session", "open_session"),
     "serial_read": ("meshtastic_mcp.serial_session", "read_session"),
     "serial_list": ("meshtastic_mcp.registry", "all_sessions"),
@@ -74,7 +74,7 @@ _TOOL_MAP: dict[str, tuple[str, str]] = {
     "shutdown": ("meshtastic_mcp.admin", "shutdown"),
     "factory_reset": ("meshtastic_mcp.admin", "factory_reset"),
     "send_input_event": ("meshtastic_mcp.admin", "send_input_event"),
-    # `capture_screen` in server.py calls camera.get_camera — instrument that.
+    # `capture_screen` in server.py calls camera.get_camera - instrument that.
     "capture_screen": ("meshtastic_mcp.camera", "get_camera"),
     # USB power control via uhubctl.
     "uhubctl_list": ("meshtastic_mcp.uhubctl", "list_hubs"),
@@ -106,8 +106,8 @@ def install() -> None:
     import importlib
 
     # Whitelist the exact module paths this function is ever allowed to
-    # import. `module_path` below is iterated from `_TOOL_MAP` — a file-
-    # local, hardcoded dict literal — but a static whitelist makes the
+    # import. `module_path` below is iterated from `_TOOL_MAP` - a file-
+    # local, hardcoded dict literal - but a static whitelist makes the
     # "no untrusted input here" invariant legible to reviewers and to
     # the Semgrep `non-literal-import` audit rule.
     _allowed_modules = frozenset(path for path, _attr in _TOOL_MAP.values())

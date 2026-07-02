@@ -2,7 +2,7 @@
 `USERPREFS_CONFIG_LORA_REGION` must refuse to transmit.
 
 Real operator concern: FCC compliance. A device shipped without an explicit
-region setting must not emit RF until the operator sets a region — this test
+region setting must not emit RF until the operator sets a region - this test
 proves the firmware honors that invariant when the USERPREFS bake deliberately
 omits the region key.
 
@@ -32,7 +32,7 @@ def test_unset_region_blocks_tx(
 ) -> None:
     """Bake a device with no LoRa region, then assert:
       1. `config.lora.region` reads as "UNSET" (or 0).
-      2. An attempt to `send_text` surfaces a refusal — either the meshtastic
+      2. An attempt to `send_text` surfaces a refusal - either the meshtastic
          SDK raises, or the serial log contains a clear "region unset" marker.
 
     Always re-bakes the session test_profile in the finalizer so downstream
@@ -43,7 +43,7 @@ def test_unset_region_blocks_tx(
         pytest.skip(f"role {target!r} not on hub")
     port = hub_devices[target]
 
-    # Pick the right env for this role — must match what test_00_bake used.
+    # Pick the right env for this role - must match what test_00_bake used.
     import os
 
     env = os.environ.get("MESHTASTIC_MCP_ENV_ESP32S3", "t-beam-1w")

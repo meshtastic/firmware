@@ -3,7 +3,7 @@ message-scroll path (or opens CannedMessages on empty devices).
 
 Weaker than a "no frame change" assertion because on a fresh bench
 device the message store is usually empty, and the firmware's UP
-handler in that case launches CannedMessage — which DOES rebuild
+handler in that case launches CannedMessage - which DOES rebuild
 frames. We just verify the path doesn't crash + produce captures for
 visual inspection.
 """
@@ -28,7 +28,7 @@ def test_up_down_on_textmessage_survives(
     lines: list[str] = request.node._debug_log_buffer
     frame_capture("initial")
 
-    # Walk RIGHT until we land on textMessage — up to 15 hops.
+    # Walk RIGHT until we land on textMessage - up to 15 hops.
     for _i in range(15):
         send_event(ui_port, InputEventCode.RIGHT)
         time.sleep(0.3)
@@ -37,7 +37,7 @@ def test_up_down_on_textmessage_survives(
             break
     else:
         pytest.skip(
-            "couldn't reach textMessage frame within 15 RIGHTs — not present on this board"
+            "couldn't reach textMessage frame within 15 RIGHTs - not present on this board"
         )
 
     wait_for_frame(lines, "textMessage", timeout_s=5.0)
@@ -57,4 +57,4 @@ def test_up_down_on_textmessage_survives(
     # The next test's `ui_home_state` will error out if the device is
     # unresponsive, so we don't need a stricter guarantee here.
     final = get_current_frame(lines)
-    assert final is not None, "no frame log after UP/DOWN — event path broke"
+    assert final is not None, "no frame log after UP/DOWN - event path broke"

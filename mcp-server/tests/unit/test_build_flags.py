@@ -1,6 +1,6 @@
 """Unit tests for the `build_flags` injection on `flash.build()`.
 
-We don't actually run pio here — too slow, requires hardware-aware envs.
+We don't actually run pio here - too slow, requires hardware-aware envs.
 We test the translation layer (`_build_flags_env`) and that the env vars
 are threaded through pio.run correctly via mock.
 """

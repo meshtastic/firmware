@@ -1,6 +1,6 @@
 // Tests for the NodeDB hot-store migration and favourite/ignored (blocked)
-// retention paths — src/mesh/NodeDB.cpp.
-#include "MeshTypes.h" // BEFORE TestUtil.h — provides WARM_NODE_COUNT / MAX_NUM_NODES via mesh-pb-constants.h
+// retention paths - src/mesh/NodeDB.cpp.
+#include "MeshTypes.h" // BEFORE TestUtil.h - provides WARM_NODE_COUNT / MAX_NUM_NODES via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>
 
@@ -19,7 +19,7 @@
 // Subclass shim: exposes the private maintenance paths (via the friend
 // declaration in NodeDB.h) and lets a test own the hot store directly
 // (meshNodes/numMeshNodes are public). Declared at global scope so it matches
-// `friend class NodeDBTestShim` — an anonymous-namespace class would not.
+// `friend class NodeDBTestShim` - an anonymous-namespace class would not.
 class NodeDBTestShim : public NodeDB
 {
   public:
@@ -165,7 +165,7 @@ static void test_ignored_survivesEvictionAndCleanup(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(4000 + 1)); // blocked node survived
     TEST_ASSERT_NULL(db->getMeshNode(4000 + 2));     // oldest non-blocked evicted
 
-    // (b) cleanup protection — ignored kept without user info, plain no-user purged
+    // (b) cleanup protection - ignored kept without user info, plain no-user purged
     db->clearHot();
     db->seedSelf();
     db->push(5000, 100, false, /*ignored=*/true, /*withUser=*/false, false);
@@ -213,7 +213,7 @@ NDB_TEST_ENTRY void setup()
 }
 NDB_TEST_ENTRY void loop() {}
 
-#else // WARM_NODE_COUNT == 0 — nothing to exercise here
+#else // WARM_NODE_COUNT == 0 - nothing to exercise here
 
 void setUp(void) {}
 void tearDown(void) {}

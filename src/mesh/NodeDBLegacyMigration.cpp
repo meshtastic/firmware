@@ -92,7 +92,7 @@ bool NodeDB::migrateLegacyNodeDatabase()
                 sanitizeUtf8(slim.long_name, sizeof(slim.long_name)); // replace bad bytes so nanopb encode never fails
                 strncpy(slim.short_name, legacy.user.short_name, sizeof(slim.short_name));
                 slim.short_name[sizeof(slim.short_name) - 1] = '\0';
-                sanitizeUtf8(slim.short_name, sizeof(slim.short_name)); // same — v24 names may contain non-UTF-8 bytes
+                sanitizeUtf8(slim.short_name, sizeof(slim.short_name)); // same - v24 names may contain non-UTF-8 bytes
                 slim.hw_model = legacy.user.hw_model;
                 slim.role = legacy.user.role;
                 if (legacy.user.is_licensed)

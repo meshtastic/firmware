@@ -1,5 +1,5 @@
-// Tests for XEdDSA packet-signing *policy* — the receive-path accept/reject behavior and the
-// send-path signing policy — as opposed to the raw sign/verify primitive (covered in test_crypto).
+// Tests for XEdDSA packet-signing *policy* - the receive-path accept/reject behavior and the
+// send-path signing policy - as opposed to the raw sign/verify primitive (covered in test_crypto).
 //
 // The decision logic under test lives inside perhapsDecode()/perhapsEncode() (free functions in
 // Router.cpp). It only runs after a packet is decrypted, so every case drives a real
@@ -37,7 +37,7 @@ static constexpr size_t SMALL_PAYLOAD = 16;
 static constexpr size_t OVERSIZED_PAYLOAD = 180;
 
 // ---------------------------------------------------------------------------
-// MockNodeDB — inject nodes with controlled public keys / signer bits.
+// MockNodeDB - inject nodes with controlled public keys / signer bits.
 // Mirrors the pattern in test/test_hop_scaling. meshNodes/numMeshNodes are public on NodeDB.
 // ---------------------------------------------------------------------------
 class MockNodeDB : public NodeDB
@@ -101,7 +101,7 @@ static meshtastic_MeshPacket makeDecoded(NodeNum from, NodeNum to, meshtastic_Po
     return p;
 }
 
-// Sign a decoded packet with the CryptoEngine's current key — used to simulate a *remote* signer,
+// Sign a decoded packet with the CryptoEngine's current key - used to simulate a *remote* signer,
 // because perhapsEncode only auto-signs packets that originate from us.
 static void signWithCurrentKey(meshtastic_MeshPacket *p)
 {
@@ -154,7 +154,7 @@ void tearDown(void)
 }
 
 // ===========================================================================
-// Group A — receive-side accept/reject matrix
+// Group A - receive-side accept/reject matrix
 // ===========================================================================
 
 // A1: valid signature from a node whose key we know -> accepted, marked signed, signer bit learned.
@@ -205,7 +205,7 @@ void test_A3_signed_no_pubkey_accepted_unverified(void)
     TEST_ASSERT_FALSE_MESSAGE(remoteSignerBit(), "must not learn signer without verifying");
 }
 
-// A4: downgrade protection — unsigned small broadcast from a known signer -> dropped.
+// A4: downgrade protection - unsigned small broadcast from a known signer -> dropped.
 void test_A4_downgrade_unsigned_broadcast_from_signer_dropped(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);
@@ -217,7 +217,7 @@ void test_A4_downgrade_unsigned_broadcast_from_signer_dropped(void)
     TEST_ASSERT_EQUAL(DECODE_FAILURE, roundTrip(&p));
 }
 
-// A5: no prior knowledge — unsigned small broadcast from a non-signer -> accepted.
+// A5: no prior knowledge - unsigned small broadcast from a non-signer -> accepted.
 void test_A5_unsigned_broadcast_from_nonsigner_accepted(void)
 {
     mockNodeDB->addNode(REMOTE_NODE); // signer bit clear
@@ -252,7 +252,7 @@ void test_A7_unsigned_oversized_broadcast_from_signer_accepted(void)
 }
 
 // ===========================================================================
-// Group B — send-side signing policy (perhapsEncode)
+// Group B - send-side signing policy (perhapsEncode)
 // ===========================================================================
 
 // B1: our own small broadcast is auto-signed (and verifies on the way back in).
@@ -291,7 +291,7 @@ void test_B3_local_oversized_broadcast_not_signed(void)
 }
 
 // ===========================================================================
-// Group C — NodeInfoModule downgrade drop (stricter: any unsigned NodeInfo from a known signer)
+// Group C - NodeInfoModule downgrade drop (stricter: any unsigned NodeInfo from a known signer)
 // ===========================================================================
 class NodeInfoTestShim : public NodeInfoModule
 {
