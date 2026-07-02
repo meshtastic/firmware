@@ -41,8 +41,16 @@ constexpr float ACCEL_LSB_PER_G = 16384.0f;
 constexpr float MAG_UT_PER_LSB = 0.15f;
 } // namespace
 
+/**
+ * @brief Construct the driver for a detected MPU-9250/MPU-9255 device.
+ * @param foundDevice I2C scan result identifying the chip's address and bus port.
+ */
 MPU9250Sensor::MPU9250Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
+/**
+ * @brief Select the TwoWire bus instance the detected device lives on.
+ * @return Pointer to Wire1 when the device was scanned on the second port, else Wire.
+ */
 TwoWire *MPU9250Sensor::resolveBus() const
 {
 #if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
@@ -52,6 +60,13 @@ TwoWire *MPU9250Sensor::resolveBus() const
 #endif
 }
 
+/**
+ * @brief Write a single byte to a register on the given I2C address.
+ * @param i2cAddr Target die address (MPU-6500 or AK8963).
+ * @param reg Register address to write.
+ * @param value Byte value to store.
+ * @return true if the I2C transaction completed successfully.
+ */
 bool MPU9250Sensor::writeRegister(uint8_t i2cAddr, uint8_t reg, uint8_t value)
 {
     bus->beginTransmission(i2cAddr);
@@ -60,6 +75,14 @@ bool MPU9250Sensor::writeRegister(uint8_t i2cAddr, uint8_t reg, uint8_t value)
     return bus->endTransmission() == 0;
 }
 
+/**
+ * @brief Read a block of consecutive registers from an I2C address.
+ * @param i2cAddr Target die address (MPU-6500 or AK8963).
+ * @param reg First register address to read.
+ * @param buf Destination buffer; must hold at least @p len bytes.
+ * @param len Number of bytes to read.
+ * @return true if exactly @p len bytes were received.
+ */
 bool MPU9250Sensor::readRegisters(uint8_t i2cAddr, uint8_t reg, uint8_t *buf, uint8_t len)
 {
     bus->beginTransmission(i2cAddr);
@@ -77,6 +100,14 @@ bool MPU9250Sensor::readRegisters(uint8_t i2cAddr, uint8_t reg, uint8_t *buf, ui
     return true;
 }
 
+/**
+ * @brief Reset and configure the MPU-6500 accelerometer/gyroscope die.
+ *
+ * Verifies WHO_AM_I, wakes the device onto the gyro PLL, sets the DLPF, sample
+ * rate and full-scale ranges, then enables I2C bypass so the on-package AK8963
+ * magnetometer becomes reachable on the main bus.
+ * @return true only if every required register write succeeded.
+ */
 bool MPU9250Sensor::initMPU6500()
 {
     const uint8_t addr = deviceAddress();
@@ -127,6 +158,13 @@ bool MPU9250Sensor::initMPU6500()
     return true;
 }
 
+/**
+ * @brief Initialise the AK8963 magnetometer die.
+ *
+ * Confirms WHO_AM_I, reads the Fuse-ROM per-axis sensitivity adjustment (ASA)
+ * into asaScale, then switches the magnetometer into 16-bit continuous mode 2.
+ * @return true if the die responded and all setup writes succeeded.
+ */
 bool MPU9250Sensor::initAK8963()
 {
     uint8_t wia = 0;
@@ -174,6 +212,13 @@ bool MPU9250Sensor::initAK8963()
     return true;
 }
 
+/**
+ * @brief Bring the sensor fully online.
+ *
+ * Resolves the I2C bus, initialises both the MPU-6500 and AK8963 dies, and
+ * loads any persisted hard-iron calibration.
+ * @return true when the device is ready to produce headings.
+ */
 bool MPU9250Sensor::init()
 {
     bus = resolveBus();
@@ -195,6 +240,12 @@ bool MPU9250Sensor::init()
     return true;
 }
 
+/**
+ * @brief Read one accelerometer and magnetometer sample.
+ * @param[out] accel Acceleration vector in g.
+ * @param[out] mag Magnetic field vector in µT, sensitivity- and axis-scaled.
+ * @return false if no fresh magnetometer sample was ready or the reading overflowed.
+ */
 bool MPU9250Sensor::readSensors(FusionVector &accel, FusionVector &mag)
 {
     // Read 6 bytes of accel data
@@ -234,6 +285,14 @@ bool MPU9250Sensor::readSensors(FusionVector &accel, FusionVector &mag)
     return true;
 }
 
+/**
+ * @brief Periodic worker: sample, filter, compute tilt-compensated heading, publish.
+ *
+ * Applies hard-iron correction and a per-axis EMA, remaps the accel/mag frames
+ * to a common orientation, computes the compass heading via the Fusion library,
+ * and pushes it to the screen. Also drives the calibration state machine.
+ * @return Milliseconds until the next desired invocation.
+ */
 int32_t MPU9250Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
@@ -332,6 +391,10 @@ int32_t MPU9250Sensor::runOnce()
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 }
 
+/**
+ * @brief Begin hard-iron calibration, seeding extrema from the current sample.
+ * @param forSeconds Duration of the calibration window in seconds.
+ */
 void MPU9250Sensor::calibrate(uint16_t forSeconds)
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
