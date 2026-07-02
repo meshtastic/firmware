@@ -875,15 +875,28 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         break;
                     }
 #endif
-                    if (addr.address == BMX160_ADDR) {
-                        type = BMX160;
-                        logFoundDevice("BMX160", (uint8_t)addr.address);
+                    // Disambiguate shared 0x68/0x69 addresses via WHO_AM_I (0x75: 0x71 MPU-9250,
+                    // 0x73 MPU-9255, 0x68 MPU-6050); must run before the BMX160-by-address fallback.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x75), 1);
+                    if (registerValue == 0x71 || registerValue == 0x73) {
+                        type = MPU9250;
+                        logFoundDevice(registerValue == 0x73 ? "MPU9255" : "MPU9250", (uint8_t)addr.address);
                         break;
-                    } else {
+                    }
+                    if (registerValue == 0x68) {
                         type = MPU6050;
                         logFoundDevice("MPU6050", (uint8_t)addr.address);
                         break;
                     }
+                    if (addr.address == BMX160_ADDR) {
+                        type = BMX160;
+                        logFoundDevice("BMX160", (uint8_t)addr.address);
+                        break;
+                    }
+                    // Fallback for the shared 0x68 address: assume MPU-6050
+                    type = MPU6050;
+                    logFoundDevice("MPU6050", (uint8_t)addr.address);
+                    break;
                 }
                 break;
 
