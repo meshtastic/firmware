@@ -23,9 +23,11 @@ bool SPA06Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     spa06.setPressureOversampling(SPA06_003_OVERSAMPLE_8);    // 8x oversampling
     spa06.setTemperatureOversampling(SPA06_003_OVERSAMPLE_8); // 8x oversampling
 
-    // Set measurement rate
-    spa06.setPressureMeasureRate(SPA06_003_RATE_32);    // 32 Hz
-    spa06.setTemperatureMeasureRate(SPA06_003_RATE_32); // 32 Hz
+    // Set measurement rate. 1 Hz is ample for telemetry (polled every tens of seconds)
+    // and draws far less power than 32 Hz, while staying in continuous mode so getMetrics()
+    // remains non-blocking (fresh data always available).
+    spa06.setPressureMeasureRate(SPA06_003_RATE_1);    // 1 Hz
+    spa06.setTemperatureMeasureRate(SPA06_003_RATE_1); // 1 Hz
     spa06.setMeasurementMode(SPA06_003_MEAS_CONTINUOUS_BOTH);
 
     spa_temp = spa06.getTemperatureSensor();
@@ -37,6 +39,10 @@ bool SPA06Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool SPA06Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    if (!spa_temp || !spa_pressure) {
+        return false;
+    }
+
     sensors_event_t temp, press;
 
     if (!spa_temp->getEvent(&temp) || !spa_pressure->getEvent(&press)) {
