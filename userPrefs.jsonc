@@ -57,6 +57,9 @@
   // "USERPREFS_MQTT_PASSWORD": "large4cats",
   // "USERPREFS_MQTT_ENCRYPTION_ENABLED": "true",
   // "USERPREFS_MQTT_TLS_ENABLED": "false",
+  // "USERPREFS_POWER_SAFE_BOOT_WAKE_MV": "3700",
+  // "USERPREFS_POWER_SAFE_BOOT_SLEEP_MV": "3400",
+  // "USERPREFS_POWER_SAFE_BOOT_RECHECK_SECS": "120",
   // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
   // "USERPREFS_MESH_BEACON_LISTEN_ENABLED": "true", // Accept incoming beacons (default: on)
   //   "USERPREFS_MESH_BEACON_BROADCAST_ENABLED": "true",           // Periodically broadcast beacons from this node
