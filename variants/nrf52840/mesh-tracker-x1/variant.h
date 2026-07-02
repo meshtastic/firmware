@@ -16,8 +16,8 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_MESH_TRACKER_X1
-#define _VARIANT_MESH_TRACKER_X1
+#ifndef _VARIANT_MESH_TRACKER_X1_
+#define _VARIANT_MESH_TRACKER_X1_
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
