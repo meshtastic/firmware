@@ -100,6 +100,11 @@ class MeshService
                p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
                p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
+
+    /// Returns false when a decoded NodeInfo/Waypoint payload fails nested protobuf decode (invalid
+    /// UTF-8 under PB_VALIDATE_UTF8, etc.); other portnums pass through. Callers gate on the variant.
+    static bool phonePayloadIsDecodable(const meshtastic_Data &decoded);
+
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
 

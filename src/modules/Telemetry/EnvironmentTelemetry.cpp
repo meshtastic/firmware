@@ -375,6 +375,22 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         return;
     }
 
+    // Bound the float metrics before String(float) renders them (see UnitConversions::displaySafeFloat);
+    // the stored packet is always the environment variant.
+    {
+        auto &e = telemetry.variant.environment_metrics;
+        e.temperature = UnitConversions::displaySafeFloat(e.temperature);
+        e.relative_humidity = UnitConversions::displaySafeFloat(e.relative_humidity);
+        e.barometric_pressure = UnitConversions::displaySafeFloat(e.barometric_pressure);
+        e.voltage = UnitConversions::displaySafeFloat(e.voltage);
+        e.current = UnitConversions::displaySafeFloat(e.current);
+        e.lux = UnitConversions::displaySafeFloat(e.lux);
+        e.white_lux = UnitConversions::displaySafeFloat(e.white_lux);
+        e.weight = UnitConversions::displaySafeFloat(e.weight);
+        e.distance = UnitConversions::displaySafeFloat(e.distance);
+        e.radiation = UnitConversions::displaySafeFloat(e.radiation);
+    }
+
     const auto &m = telemetry.variant.environment_metrics;
 
     // Check if any telemetry field has valid data

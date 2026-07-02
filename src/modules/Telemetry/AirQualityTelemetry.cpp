@@ -210,6 +210,11 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
         return;
     }
 
+    // Same String(float) stack-overflow guard as EnvironmentTelemetry: form_formaldehyde is the only
+    // float rendered here, and its raw bytes are unvalidated on decode.
+    telemetry.variant.air_quality_metrics.form_formaldehyde =
+        UnitConversions::displaySafeFloat(telemetry.variant.air_quality_metrics.form_formaldehyde);
+
     const auto &m = telemetry.variant.air_quality_metrics;
 
     // Check if any telemetry field has valid data
