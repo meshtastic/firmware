@@ -38,6 +38,7 @@
 #if !MESHTASTIC_EXCLUDE_BEACON
 #include "modules/MeshBeaconModule.h"
 #endif
+#include "modules/ModuleAvailability.h"
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -1086,6 +1087,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
+    if (c.which_payload_variant == meshtastic_ModuleConfig_audio_tag && !isAudioModuleAvailableForRegion(config.lora.region)) {
+        LOG_WARN("Set module config: Audio module is unavailable for current radio/region");
+        return false;
+    }
+
     // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
     // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
     if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
@@ -1448,6 +1454,14 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AUDIO_CONFIG:
+            if (!isAudioModuleAvailableForRegion(config.lora.region)) {
+                LOG_WARN("Get module config: Audio module is unavailable for current radio/region");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &req);
+                if (req.pki_encrypted) {
+                    myReply->pki_encrypted = true;
+                }
+                return;
+            }
             configName = "Audio";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_audio_tag;
             res.get_module_config_response.payload_variant.audio = moduleConfig.audio;

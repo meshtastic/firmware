@@ -40,6 +40,7 @@
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
+#include "modules/ModuleAvailability.h"
 #include "modules/Modules.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -1187,9 +1188,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if MESHTASTIC_EXCLUDE_REMOTEHARDWARE
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_REMOTEHARDWARE_CONFIG;
 #endif
-#if MESHTASTIC_EXCLUDE_AUDIO
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
-#endif
+    if (!isAudioModuleAvailableForRegion(config.lora.region)) {
+        deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
+    }
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
 #if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
