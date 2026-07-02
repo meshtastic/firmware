@@ -66,8 +66,8 @@ https://github.com/brad112358/easy_E22
 |       |             |     |          |              |
 |       | Mid board   |     |          | Internal     |
 | P1.01 | Serial2 RX  |     | 0.15     | LED          |
-| P1.02 | GPS_RX      |     | 0.13     | 3V3_EN       |
-| P1.07 | GPS_TX      |     |          |              |
+| P1.02 | TX to GPS   |     | 0.13     | 3V3_EN       |
+| P1.07 | RX from GPS |     |          |              |
 */
 
 // Number of pins defined in PinDescription array
@@ -148,7 +148,7 @@ https://github.com/brad112358/easy_E22
 #define PIN_SERIAL2_RX (32 + 1) // P1.01
 #define PIN_SERIAL2_TX (0 + 17) // P0.17
 // Buzzer - PWM
-#define PIN_BUZZER (0 + 6)      // p0.06
+#define PIN_BUZZER (0 + 8)      // p0.08
 #endif
 
 // Serial interfaces
