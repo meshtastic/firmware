@@ -112,7 +112,7 @@ bool MPU9250Sensor::initMPU6500()
 {
     const uint8_t addr = deviceAddress();
 
-    // Sanity-check WHO_AM_I — scan should have already verified this but be defensive
+    // Sanity-check WHO_AM_I - scan should have already verified this but be defensive
     uint8_t whoAmI = 0;
     if (!readRegisters(addr, MPU_WHO_AM_I, &whoAmI, 1)) {
         LOG_DEBUG("MPU9250 WHO_AM_I read failed at 0x%02X", addr);
@@ -194,7 +194,7 @@ bool MPU9250Sensor::initAK8963()
         LOG_DEBUG("MPU9250 AK8963 ASA read failed");
         return false;
     }
-    // Sensitivity adjustment: H_adj = H * ((ASA - 128) * 0.5 / 128 + 1) — datasheet 8.3.11
+    // Sensitivity adjustment: H_adj = H * ((ASA - 128) * 0.5 / 128 + 1) - datasheet 8.3.11
     for (int i = 0; i < 3; ++i) {
         asaScale[i] = (((float)asa[i] - 128.0f) * 0.5f / 128.0f) + 1.0f;
     }
@@ -267,7 +267,7 @@ bool MPU9250Sensor::readSensors(FusionVector &accel, FusionVector &mag)
     }
 
     // Read 6 bytes of mag (little-endian) plus ST2 to release the data register.
-    // ST2 also exposes the magnetic overflow flag (bit 3) — discard the sample if set.
+    // ST2 also exposes the magnetic overflow flag (bit 3) - discard the sample if set.
     uint8_t magRaw[7] = {0};
     if (!readRegisters(AK8963_ADDR, AK_HXL, magRaw, 7)) {
         return false;
@@ -302,8 +302,8 @@ int32_t MPU9250Sensor::runOnce()
         // Missed samples must not stall calibration: close the window on timeout
         // even when no fresh magnetometer data is available.
         if (doCalibration) {
-            finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY,
-                                       highestZ, lowestZ);
+            finishCalibrationIfExpired(showingScreen, compassCalibrationFileName, highestX, lowestX, highestY, lowestY, highestZ,
+                                       lowestZ);
         }
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
@@ -348,15 +348,15 @@ int32_t MPU9250Sensor::runOnce()
     ma.axis.z = -mag.axis.z;
 
     // Compensate for non-flat case mounting. FusionCompassCalculateHeading()
-    // assumes Z is the up axis — when the baseboard is mounted vertically
+    // assumes Z is the up axis - when the baseboard is mounted vertically
     // (e.g. a case where the LCD sits perpendicular to the board), chip Z is
     // horizontal and the tilt-comp math becomes unstable. Override which chip
     // axis is treated as world-up via the MPU9250_UP_AXIS_* defines.
-    //   _PZ (default) — chip +Z up (baseboard flat)
-    //   _PX           — chip +X up (vertical mount, silkscreen "north" up)
-    //   _NX           — chip -X up
-    //   _PY           — chip +Y up
-    //   _NY           — chip -Y up
+    //   _PZ (default) - chip +Z up (baseboard flat)
+    //   _PX           - chip +X up (vertical mount, silkscreen "north" up)
+    //   _NX           - chip -X up
+    //   _PY           - chip +Y up
+    //   _NY           - chip -Y up
 #ifndef MPU9250_UP_AXIS
 #define MPU9250_UP_AXIS MPU9250_UP_AXIS_PZ
 #endif

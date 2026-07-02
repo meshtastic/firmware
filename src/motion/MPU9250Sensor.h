@@ -45,7 +45,7 @@ class MPU9250Sensor : public MotionSensor
     // Pick the correct TwoWire instance for the detected device.
     TwoWire *resolveBus() const;
 
-    // Low-level I2C helpers — one address per call so we can address both dies.
+    // Low-level I2C helpers - one address per call so we can address both dies.
     bool writeRegister(uint8_t i2cAddr, uint8_t reg, uint8_t value);
     bool readRegisters(uint8_t i2cAddr, uint8_t reg, uint8_t *buf, uint8_t len);
 
