@@ -1,7 +1,7 @@
 """Pin `InputEventCode` values to the firmware `input_broker_event` enum.
 
 If this test fails, someone changed the firmware enum (or this Python
-mirror) and they must stay in sync — the admin RPC sends these as u8
+mirror) and they must stay in sync - the admin RPC sends these as u8
 wire values directly.
 
 Also exercises `coerce_event_code` for the happy + error paths.

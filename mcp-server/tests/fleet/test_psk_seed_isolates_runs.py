@@ -1,6 +1,6 @@
 """Fleet: different session seeds produce non-overlapping PSKs.
 
-No hardware needed — this is a pure property check on the test profile
+No hardware needed - this is a pure property check on the test profile
 generator, elevated into the `fleet/` tier because it's the critical
 invariant for running concurrent CI labs without cross-contamination.
 """
@@ -12,7 +12,7 @@ from meshtastic_mcp import userprefs
 
 def test_psk_seed_isolates_runs() -> None:
     """Two labs running simultaneously with different seeds must end up with
-    different PSKs — which means firmware baked in lab A cannot decode lab B's
+    different PSKs - which means firmware baked in lab A cannot decode lab B's
     traffic, and vice versa.
 
     This is the formal statement of the isolation claim that

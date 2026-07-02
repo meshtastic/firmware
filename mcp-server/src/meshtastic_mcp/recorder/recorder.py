@@ -2,17 +2,17 @@
 
 Subscribes once to the meshtastic pubsub fan-out and writes four append-only
 JSONL streams under `mcp-server/.mtlog/`. The pubsub fan-out is
-process-global — a single subscription captures every active interface
+process-global - a single subscription captures every active interface
 without per-connection bookkeeping.
 
 Files:
-  logs.jsonl      — every `meshtastic.log.line` event (best-effort prefix
+  logs.jsonl      - every `meshtastic.log.line` event (best-effort prefix
                     parsed for level/tag/uptime; raw `line` always preserved)
-  telemetry.jsonl — `meshtastic.receive.telemetry` packets, flattened by
+  telemetry.jsonl - `meshtastic.receive.telemetry` packets, flattened by
                     variant (device / local / environment / power / etc.)
-  packets.jsonl   — every other `meshtastic.receive.*` packet, summarized
+  packets.jsonl   - every other `meshtastic.receive.*` packet, summarized
                     (portnum, hops, RSSI/SNR, payload size + 64-byte hex)
-  events.jsonl    — connection lifecycle, node-DB updates, and manual
+  events.jsonl    - connection lifecycle, node-DB updates, and manual
                     `mark_event` rows. Lower volume; useful for aligning
                     timelines.
 
@@ -83,7 +83,7 @@ class Recorder:
             self._started = False
 
     def pause(self, reason: str | None = None) -> None:
-        # Write the pause marker BEFORE flipping the flag — `_write_event`
+        # Write the pause marker BEFORE flipping the flag - `_write_event`
         # short-circuits when paused, so the order matters for this event
         # to actually land in events.jsonl.
         self._write_event(
@@ -108,7 +108,7 @@ class Recorder:
     def _wire_pubsub(self) -> None:
         from pubsub import pub  # type: ignore[import-untyped]
 
-        # Subscribers — one per topic. Each pubsub publisher sends
+        # Subscribers - one per topic. Each pubsub publisher sends
         # keyword args matching its handler's signature; pubsub
         # introspects the function signature to route args.
         bindings = [
@@ -225,7 +225,7 @@ class Recorder:
         Same parse + heap-synthesis path as `_on_log_line`, but receives
         the raw text-formatted line (full level/clock/uptime/thread/`[heap N]`/
         body). On DEBUG_HEAP builds in text mode this gives us per-log-line
-        heap data — far higher cadence than LocalStats, and works without
+        heap data - far higher cadence than LocalStats, and works without
         protobuf API mode (no SerialInterface required).
         """
         files = self._files_snapshot()
@@ -255,7 +255,7 @@ class Recorder:
             files["logs"].write(record)
 
             # Synthesize a heap_free telemetry sample whenever the line
-            # carries one — same logic as _on_log_line, tagged source so
+            # carries one - same logic as _on_log_line, tagged source so
             # consumers can distinguish text-mode tap from protobuf path.
             heap_free = parsed.get("heap_free")
             if isinstance(heap_free, int):
@@ -285,7 +285,7 @@ class Recorder:
             tags = parsers.interface_label(interface)
             extracted = parsers.extract_telemetry(packet)
             if extracted is None:
-                # Couldn't extract a known variant — fall through to the
+                # Couldn't extract a known variant - fall through to the
                 # generic `_on_receive` path, which will still fire for
                 # this packet via the parent topic.
                 return
@@ -304,7 +304,7 @@ class Recorder:
 
     def _on_receive(self, packet: dict[str, Any], interface: Any = None) -> None:
         # Generic-receive fires for EVERY packet. Telemetry packets get
-        # recorded twice (here and in _on_telemetry) — that's intentional:
+        # recorded twice (here and in _on_telemetry) - that's intentional:
         # packets.jsonl is the universal record, telemetry.jsonl is the
         # structured timeseries view.
         files = self._files_snapshot()
@@ -338,7 +338,7 @@ class Recorder:
     def _on_node_updated(
         self, node: dict[str, Any] | None = None, interface: Any = None
     ) -> None:
-        # Lower-volume than packets but informative — node ID, hops away,
+        # Lower-volume than packets but informative - node ID, hops away,
         # last heard. Skip the user dict if absent.
         try:
             user = (node or {}).get("user") if isinstance(node, dict) else None
@@ -381,7 +381,7 @@ class Recorder:
                         "role": "marker",
                         "level": "MARK",
                         "tag": "mark_event",
-                        "line": f"[mark] {label}" + (f" — {note}" if note else ""),
+                        "line": f"[mark] {label}" + (f" - {note}" if note else ""),
                     }
                 )
             except Exception:
@@ -399,7 +399,7 @@ class Recorder:
     ) -> float:
         ts = time.time()
         # Lifecycle markers (recorder_start, recorder_pause, recorder_resume)
-        # arrive at choreographed moments — `pause()` writes BEFORE flipping
+        # arrive at choreographed moments - `pause()` writes BEFORE flipping
         # the flag and `resume()` writes AFTER clearing it, so those calls
         # see _paused=False here. Other event kinds short-circuit when
         # paused via the snapshot guard below.

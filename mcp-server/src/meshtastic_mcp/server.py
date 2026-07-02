@@ -1,4 +1,4 @@
-"""FastMCP server wiring — 43 tools across 9 categories (adds uhubctl power control).
+"""FastMCP server wiring - 43 tools across 9 categories (adds uhubctl power control).
 
 Each tool handler is a thin delegation to a named module (pio.py, admin.py,
 etc.). Business logic does not live here.
@@ -32,7 +32,7 @@ app = FastMCP("meshtastic-mcp")
 
 
 def _start_recorder() -> None:
-    # Persistent device-log capture. Starts on first import — pubsub fan-out
+    # Persistent device-log capture. Starts on first import - pubsub fan-out
     # is process-global, so subscribing here captures every active interface
     # (whether opened by an MCP tool, a pytest fixture, or a serial_session).
     # Files land in mcp-server/.mtlog/ (gitignored). See recorder/recorder.py
@@ -154,7 +154,7 @@ def pio_flash(
 
     `build_flags` (optional): dict of `-D<NAME>=<VALUE>` macros for the
     rebuild-before-upload, e.g. `{"DEBUG_HEAP": 1}`. Required for the flags
-    to actually land in the uploaded firmware — without it, the implicit
+    to actually land in the uploaded firmware - without it, the implicit
     rebuild relinks without the env var and silently drops them.
     """
     return flash.flash(
@@ -219,7 +219,7 @@ def userprefs_manifest() -> dict[str, Any]:
     """Full manifest of USERPREFS_* keys the firmware knows about.
 
     Combines `userPrefs.jsonc` (active + commented examples) with a scan of
-    `src/**` for `USERPREFS_<KEY>` references — so every key the firmware
+    `src/**` for `USERPREFS_<KEY>` references - so every key the firmware
     actually consumes shows up, even if undocumented in the jsonc.
 
     Each entry has: key, active (is it uncommented), value (current), example
@@ -268,7 +268,7 @@ def userprefs_reset() -> dict[str, Any]:
     """Restore userPrefs.jsonc from the most recent MCP backup (if any).
 
     The backup is only created by the legacy `userprefs_set` workflow (not
-    currently written automatically). Returns `{restored: bool, ...}` — false
+    currently written automatically). Returns `{restored: bool, ...}` - false
     when no backup is present, in which case the caller should edit the
     jsonc directly.
     """
@@ -293,7 +293,7 @@ def userprefs_testing_profile(
       - Run on a deterministic non-default LoRa slot (default 88 on US LONG_FAST,
         well off the `hash("LongFast")` slot a stock production device uses)
       - Join a private channel with a name and PSK that differ from public
-        defaults — so no accidental mesh-with-production-devices
+        defaults - so no accidental mesh-with-production-devices
       - Have MQTT disabled (no uplink/downlink bridge), so test traffic never
         leaks to a public broker
       - Optionally disable GPS for bench-test conditions
@@ -314,8 +314,8 @@ def userprefs_testing_profile(
             (fine one-off, useless for multi-device clusters).
         channel_name: primary channel name (≤11 chars). Default "McpTest".
         channel_num: 1-indexed LoRa slot (0 = fall back to name-hash). Default
-            88 — mid-upper US band, unlikely to collide with production slots.
-        region: short code — one of US, EU_433, EU_868, CN, JP, ANZ, KR, TW,
+            88 - mid-upper US band, unlikely to collide with production slots.
+        region: short code - one of US, EU_433, EU_868, CN, JP, ANZ, KR, TW,
             RU, IN, NZ_865, TH, UA_433, UA_868, MY_433, MY_919, SG_923, LORA_24.
         modem_preset: one of LONG_FAST, LONG_SLOW, LONG_MODERATE, VERY_LONG_SLOW,
             MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, SHORT_TURBO.
@@ -345,7 +345,7 @@ def touch_1200bps(port: str, settle_ms: int = 250) -> dict[str, Any]:
 
     After the touch, polls serial devices for up to 3 seconds and reports any
     new port that appeared (the bootloader often enumerates as a different
-    device). Not destructive — this is just a reset signal.
+    device). Not destructive - this is just a reset signal.
     """
     return flash.touch_1200bps(port, settle_ms=settle_ms)
 
@@ -363,7 +363,7 @@ def serial_open(
     """Open a `pio device monitor` session reading from `port`.
 
     If `env` is set, pio picks up monitor_speed and monitor_filters from
-    platformio.ini — recommended for firmware debugging since it enables
+    platformio.ini - recommended for firmware debugging since it enables
     esp32_exception_decoder / esp32_c3_exception_decoder for ESP32 envs.
 
     Without `env`, uses the supplied baud and filters (default ["direct"]).
@@ -398,7 +398,7 @@ def serial_read(
     or `since_cursor=0` to read from the start of the in-memory buffer.
 
     Returns `dropped` = count of lines that aged out of the 10k-line ring
-    buffer between reads — so a value > 0 means you missed data.
+    buffer between reads - so a value > 0 means you missed data.
     """
     session = registry.get_session(session_id)
     return serial_session.read_session(
@@ -502,13 +502,13 @@ def set_debug_log_api(enabled: bool, port: str | None = None) -> dict[str, Any]:
     When true, firmware streams log lines as protobuf `LogRecord` messages
     over the StreamAPI (topic `meshtastic.log.line` in meshtastic-python)
     instead of raw text. Lets diagnostic clients capture firmware-side logs
-    through the SAME SerialInterface used for admin/info calls — no
+    through the SAME SerialInterface used for admin/info calls - no
     separate `pio device monitor` session needed, no exclusive-port-lock
     conflict. Persists across reboot via NVS; wiped by factory_reset
     unless re-applied.
 
     The earlier emitLogRecord race (shared tx buffer) is fixed at the
-    firmware level — the log path has a dedicated scratch + txBuf and
+    firmware level - the log path has a dedicated scratch + txBuf and
     both emission paths serialize via a mutex. Safe to leave on under
     traffic.
     """
@@ -625,7 +625,7 @@ def capture_screen(role: str | None = None, ocr: bool = True) -> dict[str, Any]:
 def uhubctl_list() -> list[dict[str, Any]]:
     """List every USB hub + per-port device attachment as seen by `uhubctl`.
 
-    Read-only — no confirm required. Each hub entry includes its location
+    Read-only - no confirm required. Each hub entry includes its location
     (`1-1.3`), descriptor, whether it supports Per-Port Power Switching,
     and a list of populated ports with VID:PID of attached devices.
     Useful for pre-flight checks before a destructive power-cycle call.
@@ -645,12 +645,12 @@ def uhubctl_power(
 ) -> dict[str, Any]:
     """Power a USB hub port on or off via `uhubctl -a on|off`.
 
-    Target the port by either (`location`, `port`) — raw uhubctl syntax,
-    e.g. `location="1-1.3", port=2` — OR by `role` ("nrf52", "esp32s3").
+    Target the port by either (`location`, `port`) - raw uhubctl syntax,
+    e.g. `location="1-1.3", port=2` - OR by `role` ("nrf52", "esp32s3").
     Role lookup honors `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` +
     `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
 
-    `action="off"` requires `confirm=True` (destructive — the attached
+    `action="off"` requires `confirm=True` (destructive - the attached
     device will immediately disappear from the OS).
     """
     from . import uhubctl as uhubctl_mod
@@ -678,7 +678,7 @@ def uhubctl_cycle(
 ) -> dict[str, Any]:
     """Power a USB hub port off, wait `delay_s` seconds, then on.
 
-    The typical hard-reset sequence — shorter than off+on as two RPCs
+    The typical hard-reset sequence - shorter than off+on as two RPCs
     because uhubctl handles the timing in-process. Target by (location,
     port) or by role (see `uhubctl_power`). Requires `confirm=True`.
     """
@@ -714,7 +714,7 @@ def _resolve_uhubctl_target(
 def esptool_chip_info(port: str) -> dict[str, Any]:
     """Run `esptool flash_id` and return chip, MAC, crystal, and flash size.
 
-    Read-only — no confirm required. Prefer this over parsing pio upload logs
+    Read-only - no confirm required. Prefer this over parsing pio upload logs
     when you just want to identify the chip.
     """
     return hw_tools.esptool_chip_info(port)
@@ -738,7 +738,7 @@ def esptool_raw(
     erase_flash, erase_region, merge_bin) require confirm=True.
 
     Prefer the high-level `pio_flash` / `erase_and_flash` / `update_flash`
-    tools where possible — they know board-specific offsets and protocols.
+    tools where possible - they know board-specific offsets and protocols.
     """
     return hw_tools.esptool_raw(args, port=port, confirm=confirm)
 
@@ -747,7 +747,7 @@ def esptool_raw(
 def nrfutil_dfu(port: str, package_path: str, confirm: bool = False) -> dict[str, Any]:
     """DFU-flash a .zip package to an nRF52840 via `nrfutil dfu serial`.
 
-    Prefer `pio_flash` for flashing firmware built from this repo — pio handles
+    Prefer `pio_flash` for flashing firmware built from this repo - pio handles
     the DFU invocation automatically. Use this tool when flashing a pre-built
     release zip or a custom bootloader. Requires confirm=True.
     """
@@ -786,7 +786,7 @@ def picotool_raw(args: list[str], confirm: bool = False) -> dict[str, Any]:
 
 # ---------- Persistent device-log capture (recorder) ----------------------
 #
-# The recorder is autouse — it starts at server import and continuously
+# The recorder is autouse - it starts at server import and continuously
 # writes every meshtastic pubsub event to JSONL files under .mtlog/. These
 # tools are query-only over those files, plus a few lifecycle controls.
 
@@ -810,7 +810,7 @@ def logs_window(
     Time strings: "-15m", "-2h", "-3d", "now", or ISO 8601.
 
     Note: lines arriving via the LogRecord protobuf path (when
-    set_debug_log_api(True) is on) come without level prefix — the
+    set_debug_log_api(True) is on) come without level prefix - the
     meshtastic Python lib drops record.level before fan-out. For those,
     `level` filter won't match; use `grep` instead.
     """
@@ -840,7 +840,7 @@ def telemetry_timeline(
     heap_free_bytes) are normalized.
 
     Returns slope_per_min (linear-regression slope, units/minute) so a
-    leak detector can read one number — negative slope on free_heap over
+    leak detector can read one number - negative slope on free_heap over
     a long window indicates a real leak.
 
     LocalStats variant ("local") cadence is ~60 s (whatever the device's
@@ -868,7 +868,7 @@ def packets_window(
     """Recent mesh packets recorded by the recorder.
 
     Each row is a summary (portnum, from/to, hop_limit, RSSI/SNR, payload
-    size + first 64 bytes hex) — full payload bytes are not stored.
+    size + first 64 bytes hex) - full payload bytes are not stored.
     `portnum` accepts a pipe-separated set like "TEXT_MESSAGE_APP|POSITION_APP".
     """
     return log_query.packets_window(
@@ -927,7 +927,7 @@ def recorder_status() -> dict[str, Any]:
 
 @app.tool()
 def recorder_pause(reason: str | None = None) -> dict[str, Any]:
-    """Pause writes to all four streams. Pubsub subscriptions stay active —
+    """Pause writes to all four streams. Pubsub subscriptions stay active -
     we just drop events on the floor while paused. Resume with `recorder_resume`.
 
     Use when capturing a known-good baseline that you don't want to
@@ -983,9 +983,9 @@ def push_fake_nodedb(
     """Push a fake-NodeDB v25 fixture (250/500/1000/2000 nodes) onto a device.
 
     Two transports:
-      target="portduino" — file copy to ~/.portduino/<portduino_config>/prefs/nodes.proto.
+      target="portduino" - file copy to ~/.portduino/<portduino_config>/prefs/nodes.proto.
                             Fast, no device connection needed.
-      target="hardware"  — XModem upload over serial/BLE to /prefs/nodes.proto.
+      target="hardware"  - XModem upload over serial/BLE to /prefs/nodes.proto.
                             Requires `port` + `confirm=True`. Triggers a reboot
                             so loadFromDisk picks up the new file at next boot.
 

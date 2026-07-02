@@ -1,7 +1,7 @@
 """Provisioning: the pre-bake recipe (US/LONG_FAST/slot 88/private channel)
 lands on the device exactly as specified.
 
-This is THE test that proves the MCP's core value prop — flashing firmware
+This is THE test that proves the MCP's core value prop - flashing firmware
 with a preset USERPREFS produces a device in the expected radio config without
 any post-flash admin steps.
 """

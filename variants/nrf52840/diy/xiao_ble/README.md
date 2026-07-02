@@ -144,7 +144,7 @@ _(none)_
   - Meshtastic firmware is aware of the gain of the E22-900M30S module, so the Meshtastic clients' Tx power setting reflects the actual output power, i.e. setting 30 dBm in the Meshtastic app programs the E22 module to correctly output 30 dBm, setting 24 dBm will output 24 dBm, etc.
 - **Adequate 5V Power Supply to the E22 Module**
   - Have a bypass capacitor from its 5V supply to ground; 100 µF works well
-  - Voltage must be between 5V–5.5V, lower supply voltage results in less output power; for example, with a fully charged LiPo at 4.2V, Tx power appears to max out around 26-27 dBm
+  - Voltage must be between 5V-5.5V, lower supply voltage results in less output power; for example, with a fully charged LiPo at 4.2V, Tx power appears to max out around 26-27 dBm
 
 ### Additional Reading
 
