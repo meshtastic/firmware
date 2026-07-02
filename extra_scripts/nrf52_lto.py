@@ -33,7 +33,7 @@ Import("env")
 
 env.Append(LINKFLAGS=["-flto", "-flto-partition=1to1"])
 
-# The -fno-lto re-compiles below run with the global env, which lacks the framework's
+# The ISR -fno-lto re-compiles below run with the global env, which lacks the framework's
 # bundled-library include dirs -- and those libs cross-include each other (Wire pulls in
 # Adafruit_TinyUSB.h, which pulls in SPI.h, ...). Add every bundled-lib dir (+ its src/) so
 # the re-compiles resolve without chasing headers one at a time.
@@ -59,8 +59,42 @@ LIB_ISR = ("/bluefruit.cpp", "/Wire_nRF52.cpp", "/PDM.cpp", "/RotaryEncoder.cpp"
 # lets ordinary linking pick the strong override. HW-proven on nrf52_promicro_diy_tcxo (boot-trace
 # 2026-06-30). NOTE: only the real board variant (built from /variants/...) -- NOT the guarded
 # src/platform/extra_variants/*/variant.cpp no-op stubs, which don't tolerate the -fno-lto recompile.
+#
+# Anchor to THIS repo's variants/ tree: a board variant's abspath is
+# <PROJECT_DIR>/variants/<arch>/<board>/variant.cpp. Anchoring deliberately excludes
+#   - PlatformIO's framework-owned .../framework-arduinoadafruitnrf52/variants/*/variant.cpp
+#   - the src/platform/extra_variants/*/variant.cpp stubs (they live under src/, not variants/)
+# both of which also end in "/variant.cpp" but must NOT be recompiled here.
+_PROJECT_VARIANTS = (
+    env.subst("$PROJECT_DIR").replace("\\", "/").rstrip("/") + "/variants/"
+)
+
+
 def _is_board_variant(path):
-    return path.endswith("/variant.cpp") and "extra_variants" not in path
+    return (
+        path.endswith("/variant.cpp")
+        and path.startswith(_PROJECT_VARIANTS)
+        and "extra_variants" not in path
+    )
+
+
+# projenv is the construction env PlatformIO uses to compile project sources (src/ + the board
+# variant). Unlike the bare framework env captured above, it carries the -DAPP_VERSION... flags
+# and the generated-protobuf include path (pb.h) that bin/platformio-custom.py appends *after*
+# this pre-script's eval. It isn't exported yet at eval time, but it is by the time the build
+# middleware fires -- so fetch it lazily from SCons' export registry, falling back to env.
+_projenv_cache = []
+
+
+def _get_projenv():
+    if not _projenv_cache:
+        try:
+            from SCons.Script.SConscript import global_exports
+
+            _projenv_cache.append(global_exports.get("projenv", env))
+        except Exception:
+            _projenv_cache.append(env)
+    return _projenv_cache[0]
 
 
 def _no_lto(node):
@@ -75,12 +109,22 @@ def _no_lto(node):
         USB_ISR in path
         or any(s in path for s in FRAMEWORK)
         or any(s in path for s in LIB_ISR)
-        or _is_board_variant(path)
     ):
         return env.Object(
             node,
             CCFLAGS=env["CCFLAGS"] + ["-fno-lto"],
             CPPPATH=env["CPPPATH"] + _extra_inc,
+        )
+    if _is_board_variant(path):
+        # The board variant is a project source, not a framework object: it can #include
+        # configuration.h/sleep.h, which need the -DAPP_VERSION... define and the generated-
+        # protobuf include path (pb.h). Recompile it with projenv (which has both) -- using the
+        # bare framework env here fails with "APP_VERSION must be set" / "pb.h: No such file".
+        build_env = _get_projenv()
+        return build_env.Object(
+            node,
+            CCFLAGS=build_env["CCFLAGS"] + ["-fno-lto"],
+            CPPPATH=build_env["CPPPATH"] + _extra_inc,
         )
     return node
 
