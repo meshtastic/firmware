@@ -1,4 +1,4 @@
-"""USB hub power control for tests — thin composition of the `uhubctl`
+"""USB hub power control for tests - thin composition of the `uhubctl`
 module + `_port_discovery.resolve_port_by_role`.
 
 Why separate from the production module:
@@ -11,7 +11,7 @@ Why separate from the production module:
   the `factory_reset` flow. Composing the two gives a one-call helper.
 
 Also exposes `is_uhubctl_available()` so fixtures can skip cleanly when
-uhubctl isn't installed — we never want "no uhubctl" to look like a test
+uhubctl isn't installed - we never want "no uhubctl" to look like a test
 failure.
 """
 
@@ -29,14 +29,14 @@ from ._port_discovery import resolve_port_by_role
 def is_uhubctl_available() -> bool:
     """Return True iff `config.uhubctl_bin()` resolves AND the binary is callable.
 
-    Soft-fails silently — fixtures use this to `pytest.skip` with an
+    Soft-fails silently - fixtures use this to `pytest.skip` with an
     actionable message when the operator hasn't installed uhubctl.
     """
     try:
         config_mod.uhubctl_bin()
     except Exception:  # noqa: BLE001
         return False
-    # Do NOT actually invoke uhubctl here — on macOS a non-sudo run would
+    # Do NOT actually invoke uhubctl here - on macOS a non-sudo run would
     # fail, which is a config issue, not a tool-missing issue. That gets
     # surfaced to the user when they actually run a recovery action.
     return True

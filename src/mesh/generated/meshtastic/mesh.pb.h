@@ -308,9 +308,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TDISPLAY_S3_PRO = 126,
     /* Heltec Mesh Node T096 board features an nRF52840 CPU and a TFT screen. */
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T096 = 127,
-    /* Seeed studio T1000-E Pro tracker card. NRF52840 w/ LR2021 radio,
+    /* Seeed studio Mesh Tracker X1card. NRF52840 w/ LR2021 radio,
  GPS, button, buzzer, and sensors. */
-    meshtastic_HardwareModel_TRACKER_T1000_E_PRO = 128,
+    meshtastic_HardwareModel_MESH_TRACKER_X1 = 128,
     /* Elecrow ThinkNode M7, M8 and M9 */
     meshtastic_HardwareModel_THINKNODE_M7 = 129,
     meshtastic_HardwareModel_THINKNODE_M8 = 130,
@@ -1000,6 +1000,11 @@ typedef struct _meshtastic_Waypoint {
     /* If true, a notification should be raised when a tracked node exits this
  waypoint's geofence (the circular radius and/or the bounding box). */
     bool notify_on_exit;
+    /* If true, only raise geofence enter/exit notifications for nodes that are
+ marked as favorites on the receiving device. Applies to both notify_on_enter
+ and notify_on_exit. Favorite status is resolved locally per receiver, so the
+ same waypoint alerts each node only for its own favorites. */
+    bool notify_favorites_only;
 } meshtastic_Waypoint;
 
 /* Message for node status */
@@ -1239,15 +1244,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        — storage already unlocked, client must auth
-   "token_missing"     — no boot token on flash
-   "token_expired"     — boot token wall-clock TTL elapsed
-   "token_boots_zero"  — boot token boot-count TTL exhausted
-   "token_hmac_fail"   — token tampered or wrong device
-   "token_dek_fail"    — token DEK decrypt failed
-   "token_wrong_size"  — token file corrupted
-   "token_bad_magic"   — token file corrupted
-   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
+   "needs_auth"        - storage already unlocked, client must auth
+   "token_missing"     - no boot token on flash
+   "token_expired"     - boot token wall-clock TTL elapsed
+   "token_boots_zero"  - boot token boot-count TTL exhausted
+   "token_hmac_fail"   - token tampered or wrong device
+   "token_dek_fail"    - token DEK decrypt failed
+   "token_wrong_size"  - token file corrupted
+   "token_bad_magic"   - token file corrupted
+   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];
@@ -1711,7 +1716,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_init_default {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_default      {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_BoundingBox_init_default      {0, 0, 0, 0}
-#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0}
+#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
@@ -1750,7 +1755,7 @@ extern "C" {
 #define meshtastic_StoreForwardPlusPlus_init_zero {_meshtastic_StoreForwardPlusPlus_SFPP_message_type_MIN, {0, {0}}, {0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_RemoteShell_init_zero         {_meshtastic_RemoteShell_OpCode_MIN, 0, 0, 0, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_BoundingBox_init_zero         {0, 0, 0, 0}
-#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0}
+#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
@@ -1870,6 +1875,7 @@ extern "C" {
 #define meshtastic_Waypoint_bounding_box_tag     10
 #define meshtastic_Waypoint_notify_on_enter_tag  11
 #define meshtastic_Waypoint_notify_on_exit_tag   12
+#define meshtastic_Waypoint_notify_favorites_only_tag 13
 #define meshtastic_StatusMessage_status_tag      1
 #define meshtastic_MqttClientProxyMessage_topic_tag 1
 #define meshtastic_MqttClientProxyMessage_data_tag 2
@@ -2145,7 +2151,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  icon,              8) \
 X(a, STATIC,   SINGULAR, UINT32,   geofence_radius,   9) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  bounding_box,     10) \
 X(a, STATIC,   SINGULAR, BOOL,     notify_on_enter,  11) \
-X(a, STATIC,   SINGULAR, BOOL,     notify_on_exit,   12)
+X(a, STATIC,   SINGULAR, BOOL,     notify_on_exit,   12) \
+X(a, STATIC,   SINGULAR, BOOL,     notify_favorites_only,  13)
 #define meshtastic_Waypoint_CALLBACK NULL
 #define meshtastic_Waypoint_DEFAULT NULL
 #define meshtastic_Waypoint_bounding_box_MSGTYPE meshtastic_BoundingBox
@@ -2570,7 +2577,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_StoreForwardPlusPlus_size     377
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     115
-#define meshtastic_Waypoint_size                 197
+#define meshtastic_Waypoint_size                 199
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -1,11 +1,11 @@
 """Board / PlatformIO env enumeration.
 
-Parses `pio project config --json-output` — a nested list of
-`[section_name, [[key, value], ...]]` pairs — into a dict keyed by env name,
+Parses `pio project config --json-output` - a nested list of
+`[section_name, [[key, value], ...]]` pairs - into a dict keyed by env name,
 extracting the `custom_meshtastic_*` metadata the firmware variants expose.
 
 The parsed config is cached and invalidated when `platformio.ini`'s mtime
-changes, so subsequent calls don't pay the 1–2s pio startup cost.
+changes, so subsequent calls don't pay the 1-2s pio startup cost.
 """
 
 from __future__ import annotations

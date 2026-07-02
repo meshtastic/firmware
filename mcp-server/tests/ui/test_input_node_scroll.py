@@ -38,7 +38,7 @@ def test_up_down_on_nodelist_no_frame_change(
     frame_capture("on-nodelist")
 
     # UP/DOWN on nodelist scroll internally + `return 0` before
-    # notifyObservers — no frame-change log. Verify.
+    # notifyObservers - no frame-change log. Verify.
     send_event(ui_port, InputEventCode.UP)
     assert_no_frame_change(lines, wait_s=1.5)
     send_event(ui_port, InputEventCode.DOWN)

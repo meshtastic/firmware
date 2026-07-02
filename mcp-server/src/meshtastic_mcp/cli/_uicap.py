@@ -22,7 +22,7 @@ class UiCaptureTailer(threading.Thread):
     """Recursively watch a captures root for new `transcript.md` lines.
 
     Invokes ``post(test_id, line)`` for each new line, where ``test_id``
-    is derived from the path — the sanitized nodeid directory name.
+    is derived from the path - the sanitized nodeid directory name.
     """
 
     def __init__(
@@ -46,7 +46,7 @@ class UiCaptureTailer(threading.Thread):
             try:
                 self._scan_once()
             except Exception:
-                # Best-effort tailer — never bring down the TUI because a
+                # Best-effort tailer - never bring down the TUI because a
                 # directory vanished mid-scan.
                 pass
             time.sleep(self._poll_interval)
@@ -62,7 +62,7 @@ class UiCaptureTailer(threading.Thread):
             except OSError:
                 continue
             if size < offset:
-                # File truncated / rewritten — reset and re-emit.
+                # File truncated / rewritten - reset and re-emit.
                 offset = 0
             if size == offset:
                 continue

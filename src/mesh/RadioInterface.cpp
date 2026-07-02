@@ -174,7 +174,7 @@ const RegionInfo regions[] = {
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
        https://standard.nbtc.go.th/getattachment/Standards/%E0%B8%A1%E0%B8%B2%E0%B8%95%E0%B8%A3%E0%B8%90%E0%B8%B2%E0%B8%99%E0%B8%97%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%97%E0%B8%84%E0%B8%99%E0%B8%B4%E0%B8%84%E0%B8%82%E0%B8%AD%E0%B8%87%E0%B9%80%E0%B8%84%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B9%82%E0%B8%97%E0%B8%A3%E0%B8%84%E0%B8%A1%E0%B8%99%E0%B8%B2%E0%B8%84%E0%B8%A1/1033-2565.pdf.aspx?lang=th-TH
-       Thailand 920–925 MHz set max TX power to 27 dBm and enforce 10% duty cycle, aligned with NBTC regulations.
+       Thailand 920-925 MHz set max TX power to 27 dBm and enforce 10% duty cycle, aligned with NBTC regulations.
     */
     RDEF(TH, 920.0f, 925.0f, 10, 27, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
@@ -246,7 +246,7 @@ const RegionInfo regions[] = {
 
     /*
         ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 2m allocation: 144.000 - 146.000 MHz.
-        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        Power limit is the regulatory ceiling (1 W / 30 dBm) - individual hardware will cap below this
         via its own PA curve; the field here is just the legal upper bound.
 
         Default slot: 26 (144.510 MHz)
@@ -770,11 +770,12 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     return delay;
 }
 
+// Node IDs and packet IDs are formatted as 0x%08x in logs, and !%08x in user-facing display.
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     std::string out =
-        DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
+        DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=%d", prefix, p->id,
                               p->from, p->to, p->transport_mechanism, p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
@@ -788,13 +789,13 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
             out += DEBUG_PORT.mt_sprintf(" PKI");
 
         if (s.source != 0)
-            out += DEBUG_PORT.mt_sprintf(" source=%08x", s.source);
+            out += DEBUG_PORT.mt_sprintf(" source=0x%08x", s.source);
 
         if (s.dest != 0)
-            out += DEBUG_PORT.mt_sprintf(" dest=%08x", s.dest);
+            out += DEBUG_PORT.mt_sprintf(" dest=0x%08x", s.dest);
 
         if (s.request_id)
-            out += DEBUG_PORT.mt_sprintf(" requestId=%0x", s.request_id);
+            out += DEBUG_PORT.mt_sprintf(" requestId=0x%08x", s.request_id);
 
         /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)

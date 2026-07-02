@@ -260,7 +260,7 @@ int32_t InkHUD::MenuApplet::runOnce()
     return OSThread::disable();
 }
 
-// Storage for the dynamically-built region preset list — populated in showPage(NODE_CONFIG_PRESET)
+// Storage for the dynamically-built region preset list - populated in showPage(NODE_CONFIG_PRESET)
 static constexpr uint8_t MAX_REGION_PRESETS = 16;
 static meshtastic_Config_LoRaConfig_ModemPreset regionPresets[MAX_REGION_PRESETS];
 static uint8_t regionPresetCount = 0;
@@ -1069,7 +1069,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
 
-        // Map zoom controls — only when viewing a map applet
+        // Map zoom controls - only when viewing a map applet
         {
             MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
             if (mapApplet) {

@@ -6,12 +6,12 @@ have a single place that owns timeouts, buffer sizes, JSON parsing, and the
 
 `run()` has two execution paths:
 
-* Fast path (default): `subprocess.run(capture_output=True)` — buffered, one
+* Fast path (default): `subprocess.run(capture_output=True)` - buffered, one
   return; fine for sub-second pio calls like `pio --version` or
   `pio project config --json-output`.
 * Streaming path: when the `MESHTASTIC_MCP_FLASH_LOG` env var is set, each
   output line is tee'd to that file as it arrives via a threaded reader.
-  The TUI tails the file to give live flash progress — otherwise a 3-minute
+  The TUI tails the file to give live flash progress - otherwise a 3-minute
   `pio run -t upload` is completely silent to the operator.
 
 `hw_tools.py` shares the streaming helper via `pio._run_capturing()` so
@@ -110,7 +110,7 @@ def _run_capturing(
     reader threads accumulate into result strings AND append each line to
     the flash log file. Stdout and stderr stay separate in the return value
     (so `stderr_tail` still means stderr), but are interleaved in the log
-    file in the order they arrived — that's what a human wants to read.
+    file in the order they arrived - that's what a human wants to read.
     """
     log_path = _flash_log_path()
     t0 = time.monotonic()
@@ -119,7 +119,7 @@ def _run_capturing(
         env = {**os.environ, **extra_env}
 
     if log_path is None:
-        # Fast path — unchanged.
+        # Fast path - unchanged.
         proc = subprocess.run(
             list(argv),
             cwd=str(cwd) if cwd else None,
@@ -172,7 +172,7 @@ def _run_capturing(
                 log_fh.flush()
             except OSError:
                 # Log file disappeared (umount, operator deleted the dir).
-                # Don't let that bubble up — the subprocess output is still
+                # Don't let that bubble up - the subprocess output is still
                 # collected in-memory for the return value.
                 try:
                     log_fh.close()
@@ -248,7 +248,7 @@ def run(
     `cwd` defaults to the firmware root. `check=True` raises `PioError` on
     non-zero exit; set `check=False` to inspect `returncode` manually.
 
-    `extra_env` merges into the subprocess environment — used for
+    `extra_env` merges into the subprocess environment - used for
     `PLATFORMIO_BUILD_FLAGS=-DDEBUG_HEAP=1` and similar build-time
     toggles that can't be expressed as command-line args.
 

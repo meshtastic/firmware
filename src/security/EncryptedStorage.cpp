@@ -2,7 +2,7 @@
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
 
-// Common includes — available for all platform implementations
+// Common includes - available for all platform implementations
 #include "EncryptedStorage.h"
 #include "FSCommon.h"
 #include "RTC.h"
@@ -53,14 +53,14 @@ static bool kekDerived = false;
 static uint8_t ephemeralKek[AES_KEY_SIZE];
 static bool ephemeralKekDerived = false;
 
-// Data Encryption Key — loaded from /prefs/.dek, never stored in plaintext
+// Data Encryption Key - loaded from /prefs/.dek, never stored in plaintext
 static uint8_t dek[AES_KEY_SIZE];
 static bool dekLoaded = false;
 
 // Reason the device is currently locked (set in initLocked / readAndConsumeToken)
 static const char *lockReason = "not_provisioned";
 
-// Token state after successful unlock — exposed via getBootsRemaining() / getValidUntilEpoch()
+// Token state after successful unlock - exposed via getBootsRemaining() / getValidUntilEpoch()
 static uint8_t s_bootsRemaining = 0;
 static uint32_t s_validUntilEpoch = 0;
 
@@ -73,7 +73,7 @@ static uint32_t s_validUntilEpoch = 0;
 static uint32_t s_sessionMaxMs = 0;
 static uint32_t s_sessionStartedMs = 0;
 
-// Backoff state — seconds remaining before next passphrase attempt is allowed
+// Backoff state - seconds remaining before next passphrase attempt is allowed
 static uint32_t s_backoffSecondsRemaining = 0;
 
 // ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ static void readBackoff(uint8_t &attempts, uint8_t &bootsSinceFail, uint32_t &la
         auto f = FSCom.open(BACKOFF_FILENAME, FILE_O_READ);
         if (!f) {
             // Fresh device (no provision yet) OR an attacker deleted the
-            // file. Caller resolves the ambiguity via isProvisioned() —
+            // file. Caller resolves the ambiguity via isProvisioned() -
             // see bumpBootsSinceFailOnBoot and the unlock backoff gate.
             return;
         }
@@ -217,7 +217,7 @@ static void writeBackoff(uint8_t attempts, uint8_t bootsSinceFail, uint32_t last
 }
 
 // Called once per boot from initLocked(). Skip the bump on a fresh
-// (un-provisioned) device — there's no backoff file to MAC against yet and
+// (un-provisioned) device - there's no backoff file to MAC against yet and
 // readBackoff would return kBackoffMaxAttempts which would be wrong here.
 static void bumpBootsSinceFailOnBoot()
 {
@@ -489,11 +489,11 @@ static bool loadDEK()
 
     const uint8_t *storedHmac = buf + DEK_SIZE - HMAC_SIZE;
     if (!constTimeEq(expectedHmac.data(), storedHmac, HMAC_SIZE)) {
-        LOG_ERROR("EncryptedStorage: DEK HMAC mismatch — wrong passphrase or tampered file");
+        LOG_ERROR("EncryptedStorage: DEK HMAC mismatch - wrong passphrase or tampered file");
         return false;
     }
 
-    // Decrypt DEK into a local candidate — only write to global dek[] on success so that
+    // Decrypt DEK into a local candidate - only write to global dek[] on success so that
     // a wrong passphrase attempt does not destroy the live DEK in RAM.
     meshtastic_security::ZeroizingBuffer<AES_KEY_SIZE> dekCandidate;
     nRFCrypto.begin();
@@ -566,7 +566,7 @@ static bool saveDEK()
     // Write file: magic(4)+nonce(13)+encDEK(16)+hmac(32) = 65 bytes
     // H12 (audit): atomic write via SafeFile. Power-loss between remove()
     // and write() previously left a missing or partial DEK file, which
-    // bricked the device — the encrypted protos can't be decrypted with
+    // bricked the device - the encrypted protos can't be decrypted with
     // no DEK on flash. SafeFile writes a tmp file, reads it back to verify
     // a content hash, then atomically renames over the target. Crash before
     // rename → old DEK stays in place; crash after rename → new DEK is on
@@ -631,7 +631,7 @@ static bool computeMonoHmac(const uint8_t body[MONO_BODY_SIZE], uint8_t out[HMAC
 }
 
 // Read the persisted max-counter-seen value. Missing/short/MAC-fail
-// returns 0 — the safe default that lets the next token write succeed and
+// returns 0 - the safe default that lets the next token write succeed and
 // re-seed the file. Unlike the backoff file, missing-here is not a tamper
 // signal: a fresh device or a device whose .tokmono got wiped (e.g. via
 // factory-erase) legitimately has no counter file.
@@ -707,7 +707,7 @@ static bool writeMonoCounter(uint32_t counter)
  * @param sessionMaxSeconds  Uptime-based session cap per boot (0 = no cap).
  *                           Persisted in the token so token-auto-unlock at
  *                           cold boot inherits the same limit. Reboot
- *                           starts a fresh session window — combined with
+ *                           starts a fresh session window - combined with
  *                           bootsRemaining, gives a hard exposure ceiling
  *                           bootsRemaining * sessionMaxSeconds.
  */
@@ -858,7 +858,7 @@ static bool readAndConsumeToken()
     nRFCrypto.end();
 
     if (!hmacOk || !constTimeEq(computedHmac.data(), buf.data() + TOKEN_BODY_SIZE, HMAC_SIZE)) {
-        LOG_ERROR("EncryptedStorage: Token HMAC failed — tampered or wrong device, deleting");
+        LOG_ERROR("EncryptedStorage: Token HMAC failed - tampered or wrong device, deleting");
         concurrency::LockGuard g(spiLock);
         FSCom.remove(TOKEN_FILENAME);
         lockReason = "token_hmac_fail";
@@ -916,7 +916,7 @@ static bool readAndConsumeToken()
 
     // Check time expiry. A wall-clock TTL (validUntilEpoch != 0) needs a
     // currently valid RTC to verify. getValidTime() returns 0 unless we
-    // actually have an RTC source — getTime() would return a boot-relative
+    // actually have an RTC source - getTime() would return a boot-relative
     // count, which an attacker can reset by power-cycling with no RTC sync.
     //
     // If the wall-clock TTL is set but we can't verify it right now:
@@ -1037,11 +1037,11 @@ void initLocked()
         return;
     }
 
-    // Not unlocked — log the device state for the operator
+    // Not unlocked - log the device state for the operator
     if (isProvisioned()) {
-        LOG_WARN("EncryptedStorage: Device LOCKED — reason: %s", lockReason);
+        LOG_WARN("EncryptedStorage: Device LOCKED - reason: %s", lockReason);
     } else {
-        LOG_WARN("EncryptedStorage: Device NOT PROVISIONED — operator must set passphrase");
+        LOG_WARN("EncryptedStorage: Device NOT PROVISIONED - operator must set passphrase");
     }
 }
 
@@ -1160,7 +1160,7 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
 
     // H4 (audit): seed an attempts=0 backoff sentinel so the file is
     // present post-provision. From this point on, a missing backoff file
-    // means an attacker deleted it — readBackoff returns max-attempts and
+    // means an attacker deleted it - readBackoff returns max-attempts and
     // forces a full backoff window. Without this, the very first failed
     // attempt would find a missing file and have to choose between fresh
     // (no penalty, attacker bypass) and tamper (legitimate user locked
@@ -1184,8 +1184,8 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
         return false;
     }
 
-    // Exponential backoff. Three independent enforcement layers — any one
-    // triggers a block — so the policy is robust whether RTC is valid, never
+    // Exponential backoff. Three independent enforcement layers - any one
+    // triggers a block - so the policy is robust whether RTC is valid, never
     // synced, or being spoofed within reasonable bounds:
     //
     //   1. Within-boot: millis() since the last failure on THIS boot. RAM-only,
@@ -1228,7 +1228,7 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
                 }
             }
 
-            // (3) reboot-count fallback. Always enforced — closes the bypass
+            // (3) reboot-count fallback. Always enforced - closes the bypass
             // where an attacker reboots between attempts (which resets millis
             // and may leave the RTC unsynced). Conservative: assume ~5 s per
             // reboot cycle, so require ceil(delay / 5) boots to elapse.
@@ -1269,7 +1269,7 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
     // H3 (audit): RESERVE the attempt slot on disk BEFORE running the HMAC
     // verify. The previous design wrote the failure record only after a
     // failed verify, so pulling power between verify and the write left
-    // attempts unchanged — an attacker could glitch the chip mid-call to
+    // attempts unchanged - an attacker could glitch the chip mid-call to
     // bypass the counter. Pre-incrementing means the attempt is durably
     // recorded regardless of what happens to the chip during verify; the
     // success path then writes attempts=0 to clear the reservation.
@@ -1292,15 +1292,15 @@ bool unlockWithPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8
                  s_backoffSecondsRemaining);
     };
 
-    // Load the DEK (verifies HMAC — wrong passphrase will fail here)
+    // Load the DEK (verifies HMAC - wrong passphrase will fail here)
     if (!loadDEK()) {
-        LOG_ERROR("EncryptedStorage: DEK load failed — wrong passphrase?");
+        LOG_ERROR("EncryptedStorage: DEK load failed - wrong passphrase?");
         kekDerived = false;
         onFailure();
         return false;
     }
 
-    // Passphrase correct — clear the reserved attempt by writing an
+    // Passphrase correct - clear the reserved attempt by writing an
     // attempts=0 sentinel (NOT removing the file; see clearBackoff note).
     clearBackoff();
 
@@ -1328,13 +1328,13 @@ void lockNow()
     secureWipeKeys();
     s_sessionMaxMs = 0;
     s_sessionStartedMs = 0;
-    LOG_INFO("EncryptedStorage: Device locked — token deleted, DEK and KEK material zeroed");
+    LOG_INFO("EncryptedStorage: Device locked - token deleted, DEK and KEK material zeroed");
 }
 
 void secureWipeKeys()
 {
     // M11 (audit): callable from fault handlers. Do NOT take spiLock and do
-    // NOT log — interrupt-context safety. Just zero every byte of key
+    // NOT log - interrupt-context safety. Just zero every byte of key
     // material that the rest of the module might leave in BSS.
     meshtastic_security::secure_zero(dek, sizeof(dek));
     dekLoaded = false;
@@ -1362,7 +1362,7 @@ bool isUnlocked()
 bool isLockdownActive()
 {
     // Lockdown is "active" iff the device has been provisioned with a
-    // passphrase — i.e. a DEK exists on flash. A lockdown-capable build
+    // passphrase - i.e. a DEK exists on flash. A lockdown-capable build
     // (MESHTASTIC_LOCKDOWN) that has never been provisioned, or that has
     // been disabled via disableLockdown(), is NOT active and behaves like
     // stock firmware: plaintext storage, no redaction, normal logging.
@@ -1407,7 +1407,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
 
     // MED-1: snapshot DEK before any lock acquisition so a concurrent lockNow() cannot
     // zero dek[] mid-operation. If lockNow() races and zeros dek[] before we copy, the
-    // snapshot will be zero and the HMAC will fail — a secure failure mode.
+    // snapshot will be zero and the HMAC will fail - a secure failure mode.
     uint8_t dekSnapshot[AES_KEY_SIZE];
     memcpy(dekSnapshot, dek, AES_KEY_SIZE);
 
@@ -1416,7 +1416,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     size_t fileSize = 0;
 
     // MED-3: hold spiLock only for file I/O; release it before any crypto operation.
-    // spiLock is a non-recursive binary semaphore — re-entry from the same task deadlocks.
+    // spiLock is a non-recursive binary semaphore - re-entry from the same task deadlocks.
     {
         concurrency::LockGuard g(spiLock);
         auto f = FSCom.open(filename, FILE_O_READ);
@@ -1466,7 +1466,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
             meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
             return false;
         }
-    } // spiLock released here — MED-3
+    } // spiLock released here - MED-3
 
     // Parse header (outside spiLock)
     size_t pos = 0;
@@ -1491,7 +1491,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     const uint8_t *ciphertext = fileBuf.get() + pos;
     const uint8_t *storedHmac = fileBuf.get() + fileSize - HMAC_SIZE;
 
-    // M2 (audit): HMAC now covers the full on-disk header — magic +
+    // M2 (audit): HMAC now covers the full on-disk header - magic +
     // plaintext_len in addition to the nonce + ciphertext that the original
     // design covered. Without this, the 4-byte magic and 4-byte plaintext_len
     // bytes are integrity-protected only by the equality check
@@ -1533,13 +1533,13 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
     // length derived from the file size. For AES-CTR the two are always equal in a legitimate
     // file; a mismatch means the header field was tampered independently of the ciphertext.
     if (plaintextLen != ciphertextLen) {
-        LOG_ERROR("EncryptedStorage: plaintextLen (%d) != ciphertextLen (%d) in %s — header tampered", plaintextLen,
+        LOG_ERROR("EncryptedStorage: plaintextLen (%d) != ciphertextLen (%d) in %s - header tampered", plaintextLen,
                   (uint32_t)ciphertextLen, filename);
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
         return false;
     }
 
-    // Decrypt using dekSnapshot — MED-1
+    // Decrypt using dekSnapshot - MED-1
     if (plaintextLen > outBufSize) {
         LOG_ERROR("EncryptedStorage: Output buffer too small for %s (%d > %d)", filename, plaintextLen, outBufSize);
         meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
@@ -1607,7 +1607,7 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
 
     // M2 (audit): HMAC covers the full header (magic + plaintext_len) in
     // addition to nonce + ciphertext. See readAndDecrypt for the rationale.
-    // Must match the read side exactly — keep both updates in lockstep.
+    // Must match the read side exactly - keep both updates in lockstep.
     uint32_t magicForMac = MAGIC;
     uint32_t plaintextLenForMac = (uint32_t)plaintextLen;
     size_t hmacDataLen = 4 + NONCE_SIZE + 4 + ciphertextLen;
@@ -1665,7 +1665,7 @@ bool encryptAndWrite(const char *filename, const uint8_t *plaintext, size_t plai
 
 bool migrateFile(const char *filename)
 {
-    // L-2: Precondition — spiLock must NOT be held by the calling task when this function
+    // L-2: Precondition - spiLock must NOT be held by the calling task when this function
     // is called. Both isEncrypted() and encryptAndWrite() (called internally) acquire
     // spiLock; since it is a non-recursive binary semaphore, re-entry deadlocks the task.
 #ifdef FSCom
@@ -1692,13 +1692,13 @@ bool migrateFile(const char *filename)
 
         // M25 (audit): refuse to allocate a buffer for an attacker-injected
         // oversized file. The legitimate ceiling is the largest proto file
-        // we ever write — comfortably under 64 KiB on every supported
+        // we ever write - comfortably under 64 KiB on every supported
         // variant. Anything significantly larger is either corrupt or
         // hostile (e.g. DFU file inject); reading it into RAM would OOM
         // the device.
         constexpr size_t kMigrateMaxFileSize = 64 * 1024;
         if (fileSize > kMigrateMaxFileSize) {
-            LOG_ERROR("EncryptedStorage: refusing to migrate %s — size %u exceeds %u-byte cap", filename, (unsigned)fileSize,
+            LOG_ERROR("EncryptedStorage: refusing to migrate %s - size %u exceeds %u-byte cap", filename, (unsigned)fileSize,
                       (unsigned)kMigrateMaxFileSize);
             f.close();
             return false;
@@ -1734,7 +1734,7 @@ bool migrateFile(const char *filename)
 bool migrateFileToPlaintext(const char *filename)
 {
     // Inverse of migrateFile: decrypt an encrypted file and rewrite it as
-    // plaintext, atomically. Idempotent — a file that is already plaintext
+    // plaintext, atomically. Idempotent - a file that is already plaintext
     // is a no-op success, which is what makes the disable flow re-runnable
     // after a power-loss crash.
 #ifdef FSCom
@@ -1743,7 +1743,7 @@ bool migrateFileToPlaintext(const char *filename)
         return true;
     }
     if (!dekLoaded) {
-        LOG_ERROR("EncryptedStorage: cannot revert %s — not unlocked", filename);
+        LOG_ERROR("EncryptedStorage: cannot revert %s - not unlocked", filename);
         return false;
     }
 
@@ -1779,7 +1779,7 @@ bool migrateFileToPlaintext(const char *filename)
     }
 
     // Write the plaintext over the encrypted file. SafeFile (non-encrypted
-    // direct write — NOT encryptAndWrite) atomically replaces it.
+    // direct write - NOT encryptAndWrite) atomically replaces it.
     SafeFile sf(filename, /*fullAtomic=*/true);
     sf.write(plaintext.get(), plaintextLen);
     if (!sf.close()) {
@@ -1807,7 +1807,7 @@ void removeLockdownArtifacts()
     secureWipeKeys();
     s_sessionMaxMs = 0;
     s_sessionStartedMs = 0;
-    LOG_INFO("EncryptedStorage: lockdown artifacts removed — device is no longer in lockdown");
+    LOG_INFO("EncryptedStorage: lockdown artifacts removed - device is no longer in lockdown");
 }
 
 } // namespace EncryptedStorage

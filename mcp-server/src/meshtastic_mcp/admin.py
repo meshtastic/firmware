@@ -222,7 +222,7 @@ def set_config(path: str, value: Any, port: str | None = None) -> dict[str, Any]
         # Treat the section as the root; the rest of the path walks into it.
         leaf_parent, field = _walk_to_field(container, segments[1:] or [])
         # Use `is_repeated` (modern upb protobuf API) rather than the
-        # deprecated `label == LABEL_REPEATED` check — the C-extension
+        # deprecated `label == LABEL_REPEATED` check - the C-extension
         # FieldDescriptor in protobuf >= 5.x doesn't expose `.label` at
         # all, and `is_repeated` is the supported replacement that works
         # across both the pure-python and upb backends.
@@ -313,7 +313,7 @@ def set_debug_log_api(enabled: bool, port: str | None = None) -> dict[str, Any]:
     When enabled, firmware emits log lines as protobuf `LogRecord` messages
     over the StreamAPI instead of raw text. meshtastic-python surfaces them
     on pubsub topic `meshtastic.log.line`, which flows through the SAME
-    SerialInterface our tests already hold open — no `pio device monitor`
+    SerialInterface our tests already hold open - no `pio device monitor`
     needed, no port-contention with admin/info calls.
 
     Firmware gate: `src/SerialConsole.cpp` (`usingProtobufs &&
@@ -322,7 +322,7 @@ def set_debug_log_api(enabled: bool, port: str | None = None) -> dict[str, Any]:
     re-applied after reset.
 
     Previously-documented concurrency hazard (emitLogRecord sharing the
-    main packet-emission buffers) has been fixed — see `StreamAPI.h`
+    main packet-emission buffers) has been fixed - see `StreamAPI.h`
     where the log path now owns dedicated `fromRadioScratchLog` /
     `txBufLog` buffers, and `StreamAPI::emitTxBuffer` +
     `StreamAPI::emitLogRecord` both serialize their `stream->write`
@@ -366,7 +366,7 @@ def send_input_event(
     """Inject an InputBroker event (button press / key / gesture) into the UI.
 
     Wraps `AdminMessage.send_input_event` (handled in firmware at
-    src/modules/AdminModule.cpp::handleSendInputEvent). Local-only — no PKI
+    src/modules/AdminModule.cpp::handleSendInputEvent). Local-only - no PKI
     warmup needed since the admin message is addressed to `my_node_num`.
 
     `event_code` accepts an int, a case-insensitive name

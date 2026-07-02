@@ -104,7 +104,9 @@ Lora:
 ### Define GPS
 
 GPS:
-#  SerialPath: /dev/ttyS0
+#  SerialPath: /dev/ttyS0  # Use a physical serial GPS device (mutually exclusive with GpsdHost)
+#  GpsdHost: localhost      # Use gpsd daemon as GPS source instead of a serial device
+#  GpsdPort: 2947           # gpsd TCP port (default: 2947)
 #  ExtraPins:
 #    - 22
 
