@@ -218,12 +218,16 @@ int32_t StatusLEDModule::runOnce()
 
 #ifdef LED_POWER
 #ifdef LED_POWER_CRITICAL
-    if (power_state == critical) {
-        digitalWrite(LED_POWER, 0);
-        digitalWrite(LED_POWER_CRITICAL, CHARGE_LED_state);
+    if (LED_POWER != LED_POWER_CRITICAL) {
+        if (power_state == critical) {
+            digitalWrite(LED_POWER, 0);
+            digitalWrite(LED_POWER_CRITICAL, CHARGE_LED_state);
+        } else {
+            digitalWrite(LED_POWER, CHARGE_LED_state);
+            digitalWrite(LED_POWER_CRITICAL, 0);
+        }
     } else {
         digitalWrite(LED_POWER, CHARGE_LED_state);
-        digitalWrite(LED_POWER_CRITICAL, 0);
     }
 #else
     digitalWrite(LED_POWER, CHARGE_LED_state);
