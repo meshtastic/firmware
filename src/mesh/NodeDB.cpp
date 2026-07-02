@@ -1024,7 +1024,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2)) &&           \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2)) &&            \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -3264,14 +3264,20 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
             if (!duplicateWarned) {
                 duplicateWarned = true;
+                // Sanitize before embedding long_name in the phone-facing ClientNotification string
+                // (defense-in-depth vs PB_VALIDATE_UTF8).
+                char safeName[sizeof(p.long_name)];
+                strncpy(safeName, p.long_name, sizeof(safeName));
+                safeName[sizeof(safeName) - 1] = '\0';
+                sanitizeUtf8(safeName, sizeof(safeName));
                 char warning[] =
                     "Remote device %s has advertised your public key. This may indicate a compromised key. You may need "
                     "to regenerate your public keys.";
-                LOG_WARN(warning, p.long_name);
+                LOG_WARN(warning, safeName);
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 cn->level = meshtastic_LogRecord_Level_WARNING;
                 cn->time = getValidTime(RTCQualityFromNet);
-                snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
+                snprintf(cn->message, sizeof(cn->message), warning, safeName);
                 service->sendClientNotification(cn);
             }
             return false;
