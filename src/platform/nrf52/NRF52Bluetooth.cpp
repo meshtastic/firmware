@@ -446,13 +446,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 #endif
     passkeyShowing = true;
 
-    if (match_request) {
-        uint32_t start_time = millis();
-        while (millis() < start_time + 30000) {
-            if (!Bluefruit.connected(conn_handle))
-                break;
-        }
-    }
+    // Pairing completion or disconnect dismisses the passkey UI; blocking here stalls BLE event processing.
     LOG_INFO("BLE passkey pair: match_request=%i", match_request);
     return true;
 }
