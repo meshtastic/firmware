@@ -13,7 +13,7 @@
 // object with no machine code; the final ELF had the real inlined bodies).
 //
 // How the hardware works:
-//   - The STC8H raises KB_INT (falling edge) when a key is pressed. The ISR
+//   - The STC8H raises KB_INT (rising edge, idle-low) when a key is pressed. The ISR
 //     latches key_event; is_key_event() just returns that flag.
 //   - The pressed key code is read over I2C from register 0x05.
 //   - is_key_state() polls KB_INT directly to keep the backlight lit while a
@@ -26,7 +26,7 @@
 
 STC8HKeyboard Stc8HKeyBoard;
 
-// ISR latched on each KB_INT falling edge (a key was pressed).
+// ISR latched on each KB_INT rising edge (a key was pressed).
 static void has_key_event()
 {
     Stc8HKeyBoard.key_event = true;
@@ -69,9 +69,14 @@ void STC8HKeyboard::begin(uint8_t addr, TwoWire *wire)
 #ifdef PIN_LED
     pinMode(PIN_LED, OUTPUT);
 #endif
-    attachInterrupt(KB_INT, has_key_event, FALLING);
+    attachInterrupt(KB_INT, has_key_event, RISING);
     _pWire->begin();
     Keyboard_state = true;
+#ifdef ARCH_ESP32
+    // Detach/reattach the key interrupt around ESP32 light sleep
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
 }
 
 bool STC8HKeyboard::is_Keyboard_begin()
@@ -130,5 +135,21 @@ void STC8HKeyboard::set_sleep_status(void)
     writeRegister(STC8_REG_ADDR_STATE, 0x01);
     _pWire->end();
 }
+
+#ifdef ARCH_ESP32
+// Detach the key interrupt before ESP32 light sleep, so it can't fire while asleep.
+int STC8HKeyboard::beforeLightSleep(void *unused)
+{
+    detachInterrupt(KB_INT);
+    return 0; // Indicates success
+}
+
+// Reattach the key interrupt after waking from light sleep.
+int STC8HKeyboard::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachInterrupt(KB_INT, has_key_event, RISING);
+    return 0; // Indicates success
+}
+#endif
 
 #endif // ELECROW_ThinkNode_M9

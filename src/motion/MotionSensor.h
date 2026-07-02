@@ -42,6 +42,11 @@ class MotionSensor
 
     virtual void calibrate(uint16_t forSeconds){};
 
+    // Latest samples published by the compass-fusion drivers (accel from the IMU, mag from the magnetometer).
+    // Public so an optional on-screen sensor debug readout can read them. Return false if nothing published yet.
+    static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
+    static bool getLatestCompassMagSample(float &x, float &y, float &z, uint32_t &ageMs);
+
   protected:
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
@@ -68,7 +73,7 @@ class MotionSensor
                                          float &lowestY, float &highestZ, float &lowestZ);
     static float applyCompassOrientation(float heading);
     static void publishCompassAccelSample(float x, float y, float z);
-    static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
+    static void publishCompassMagSample(float x, float y, float z);
 
     ScanI2C::FoundDevice device;
 

@@ -7,6 +7,10 @@
 #include <Wire.h>
 #if defined(ELECROW_ThinkNode_M9)
 
+#ifdef ARCH_ESP32
+#include "sleep.h" // notifyLightSleep / notifyLightSleepEnd + esp_sleep_wakeup_cause_t
+#endif
+
 // Registers exposed by the STC8H companion MCU over I2C.
 #define STC8_REG_ADDR_BATTERY 0x01
 #define STC8_REG_ADDR_MATRIX_KEY 0x05
@@ -39,6 +43,13 @@ class STC8HKeyboard
 
     bool key_event;
 
+#ifdef ARCH_ESP32
+    // Detach/reattach the KB_INT interrupt around ESP32 light sleep, so the
+    // companion MCU's key interrupt can't fire spuriously while asleep.
+    int beforeLightSleep(void *unused);
+    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
+#endif
+
   private:
     void writeRegister(uint8_t reg, uint8_t val);
 
@@ -47,6 +58,14 @@ class STC8HKeyboard
     TwoWire *_pWire = &Wire;
 
     bool Keyboard_state = false;
+
+#ifdef ARCH_ESP32
+    // Get notified when light sleep begins and ends (mirrors TwoButton / Power)
+    CallbackObserver<STC8HKeyboard, void *> lsObserver =
+        CallbackObserver<STC8HKeyboard, void *>(this, &STC8HKeyboard::beforeLightSleep);
+    CallbackObserver<STC8HKeyboard, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<STC8HKeyboard, esp_sleep_wakeup_cause_t>(this, &STC8HKeyboard::afterLightSleep);
+#endif
 };
 
 extern STC8HKeyboard Stc8HKeyBoard;

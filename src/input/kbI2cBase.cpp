@@ -649,7 +649,7 @@ int32_t KbI2cBase::runOnce()
             break;
         }
         if (e.inputEvent != INPUT_BROKER_NONE) {
-            LOG_DEBUG("STC8H companion-MCU keypad key event: 0x%02x", c);
+            // LOG_DEBUG("STC8H companion-MCU keypad key event: 0x%02x", c);
             this->notifyObservers(&e);
         }
 

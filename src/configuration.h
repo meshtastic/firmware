@@ -257,6 +257,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define QMC5883L_ADDR 0x0D
 #define HMC5883L_ADDR 0x1E
 #define MMC5983MA_ADDR 0x30
+#define QMC6309_ADDR 0x7C
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
