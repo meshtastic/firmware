@@ -44,6 +44,32 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 | P1.07 | Free pin    |     |          |              |       |
 */
 
+/*
+Alternative pin assignement for Easy E22 Promicro build
+https://github.com/brad112358/easy_E22
+
+| Pin   | Function    |     | Pin      | Function     |
+| ----- | ----------- | --- | -------- | ------------ |
+| Gnd   |             |     | vbat     |              |
+| P0.06 | BUTTON_PIN  |     | vbat     |              |
+| P0.08 | PIN_BUZZER  |     | Gnd      |              |
+| Gnd   |             |     | reset    |              |
+| Gnd   |             |     | ext_vcc  | *see 0.13    |
+| P0.17 | Serial2 TX  |     | P0.31    | BATTERY_PIN  |
+| P0.20 | Rotary B    |     | P0.29    | DIO1         |
+| P0.22 | Rotary A    |     | P0.02    | BUSY         |
+| P0.24 | Rotary press|     | P1.15    | NRST         |
+| P1.00 | TXEN        |     | P1.13    | MISO         |
+| P0.11 | RXEN        |     | P1.11    | MOSI         |
+| P1.04 | SDA         |     | P0.10    | SCK          |
+| P1.06 | SCL         |     | P0.09    | CS           |
+|       |             |     |          |              |
+|       | Mid board   |     |          | Internal     |
+| P1.01 | Serial2 RX  |     | 0.15     | LED          |
+| P1.02 | GPS_RX      |     | 0.13     | 3V3_EN       |
+| P1.07 | GPS_TX      |     |          |              |
+*/
+
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
@@ -76,8 +102,13 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // WIRE IC AND IIC PINS
 #define WIRE_INTERFACES_COUNT 1
 
+#ifndef EASYPROMICRO
 #define PIN_WIRE_SDA (32 + 4) // P1.04
 #define PIN_WIRE_SCL (0 + 11) // P0.11
+#else                         // Easy E22 Promicro arrangement
+#define PIN_WIRE_SDA (32 + 4) // P1.04
+#define PIN_WIRE_SCL (32 + 6) // P1.06
+#endif
 
 // LED
 #define PIN_LED1 (0 + 15) // P0.15
@@ -86,13 +117,23 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define LED_STATE_ON 1 // State when LED is lit
 
 // Button
+#ifndef EASYPROMICRO
 #define BUTTON_PIN (32 + 0) // P1.00
+#else                       // Easy E22 Promicro arrangement
+#define BUTTON_PIN (0 + 6)  // P0.06
+#endif
 
 // GPS
+#ifndef EASYPROMICRO
 #define GPS_TX_PIN (0 + 20) // P0.20 - This is data from the MCU
 #define GPS_RX_PIN (0 + 22) // P0.22 - This is data from the GNSS
-
 #define PIN_GPS_EN (0 + 24) // P0.24
+#else                       // Easy E22 Promicro arrangement
+#define GPS_TX_PIN (32 + 2) // P1.02 - This is data from the MCU
+#define GPS_RX_PIN (32 + 7) // P1.07 - This is data from the GNSS
+#define PIN_GPS_EN (0 + 13) // P0.13 - Use power control for GPS enable
+#endif
+
 #define GPS_UBLOX
 // define GPS_DEBUG
 
@@ -100,12 +141,20 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define PIN_SERIAL1_TX GPS_TX_PIN
 #define PIN_SERIAL1_RX GPS_RX_PIN
 
-#define PIN_SERIAL2_RX (0 + 6) // P0.06
-#define PIN_SERIAL2_TX (0 + 8) // P0.08
+#ifndef EASYPROMICRO
+#define PIN_SERIAL2_RX (0 + 6)  // P0.06
+#define PIN_SERIAL2_TX (0 + 8)  // P0.08
+#else                           // Easy E22 Promicro arrangement
+#define PIN_SERIAL2_RX (32 + 1) // P1.01
+#define PIN_SERIAL2_TX (0 + 17) // P0.17
+// Buzzer - PWM
+#define PIN_BUZZER (0 + 6)      // p0.06
+#endif
 
 // Serial interfaces
 #define SPI_INTERFACES_COUNT 1
 
+#ifndef EASYPROMICRO
 #define PIN_SPI_MISO (0 + 2)   // P0.02
 #define PIN_SPI_MOSI (32 + 15) // P1.15
 #define PIN_SPI_SCK (32 + 11)  // P1.11
@@ -165,7 +214,35 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define LR2021_DIO_AS_RF_SWITCH
 #define LR2021_IRQ_DIO_NUM 9 // DIO9 → P0.10
 
-// #define SX126X_MAX_POWER 8 set this if using a high-power board!
+#else // Easy E22 Promicro arrangement
+#define USE_SSD1306
+// #define USE_SH1106
+
+#define USE_SX1262
+#define PIN_SPI_MISO (32 + 13) // P1.13
+#define PIN_SPI_MOSI (32 + 11) // P1.11
+#define PIN_SPI_SCK (0 + 10)   // P0.10
+
+#define LORA_MISO PIN_SPI_MISO
+#define LORA_MOSI PIN_SPI_MOSI
+#define LORA_SCK PIN_SPI_SCK
+#define LORA_CS (0 + 9)      // P0.09 NSS
+#define LORA_DIO0 (0 + 2)    // P0.02 BUSY
+#define LORA_DIO1 (0 + 29)   // P0.29 IRQ
+#define LORA_RESET (32 + 15) // P1.15 NRST
+
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO0
+#define SX126X_RESET LORA_RESET
+#define SX126X_RXEN (0 + 11) // P0.11
+#define SX126X_TXEN (32 + 0) // P1.00
+#define SX126X_MAX_POWER 8   // Default to prevent damage to E22_900M33S; Comment out for others
+#undef TX_GAIN_LORA
+#define TX_GAIN_LORA 22 // 8 for E22 900M30S, 25 for 900M33S, 22 for 3.7V battery powered 900M33S,  0 for 900M22S
+#endif
+
+// #define SX126X_MAX_POWER 8 // set this if using a high-power board!
 
 /*
 On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, use TCXO_OPTIONAL to try both
