@@ -205,7 +205,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
-    // Apply RX gain mode — valid in STDBY, matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
@@ -326,7 +326,7 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
 
     LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
-    // 1. Warm sleep — powers down the analog frontend, resetting AGC state
+    // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
 
     // 2. Wake to RC standby for stable calibration

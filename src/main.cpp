@@ -1337,6 +1337,9 @@ void loop()
 #ifdef ARCH_NRF54L15
     nrf54l15Loop();
 #endif
+#ifdef ARCH_RP2040
+    rp2040Loop();
+#endif
     power->powerCommandsCheck();
 
     if (RadioLibInterface::instance != nullptr) {

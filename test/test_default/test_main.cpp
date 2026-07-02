@@ -139,7 +139,7 @@ void test_ms_below_threshold()
 
 void test_ms_at_threshold()
 {
-    // INT32_MAX / 1000 = 2,147,483 — largest secs that does not clamp.
+    // INT32_MAX / 1000 = 2,147,483 - largest secs that does not clamp.
     TEST_ASSERT_EQUAL_UINT32(2147483000U, Default::getConfiguredOrDefaultMs(2147483U, 0));
 }
 

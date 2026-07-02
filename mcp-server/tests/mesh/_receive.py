@@ -1,7 +1,7 @@
 """Shared helper for mesh receive tests.
 
 `pio device monitor` captures firmware log output, which does NOT include
-decoded text message contents or telemetry payloads — those are only
+decoded text message contents or telemetry payloads - those are only
 accessible through `meshtastic.SerialInterface`'s pubsub mechanism.
 
 `ReceiveCollector` opens a long-lived SerialInterface on a port, subscribes
@@ -9,7 +9,7 @@ to the pubsub topic of interest, and exposes an atomic `wait_for(predicate)`
 that mesh tests use to verify end-to-end delivery.
 
 This module also exposes two module-level helpers for forcing a device to
-broadcast a fresh NodeInfo — the on-demand path that sidesteps the
+broadcast a fresh NodeInfo - the on-demand path that sidesteps the
 firmware's 10-minute NodeInfo rate-limit. Tests doing directed PKI-encrypted
 sends need BOTH endpoints to hold current pubkeys for each other:
 
@@ -31,7 +31,7 @@ from typing import Any, Callable
 def nudge_nodeinfo(iface: Any) -> None:
     """Force the device behind ``iface`` to broadcast a fresh NodeInfo.
 
-    Sends a ``ToRadio.Heartbeat(nonce=1)`` — the firmware's documented
+    Sends a ``ToRadio.Heartbeat(nonce=1)`` - the firmware's documented
     on-demand NodeInfo trigger (see `src/mesh/api/PacketAPI.cpp:74-79`
     for TCP/UDP and `src/mesh/PhoneAPI.cpp::handleToRadio` for serial,
     both routed to `NodeInfoModule::sendOurNodeInfo(..., shorterTimeout=true)`
@@ -49,7 +49,7 @@ def nudge_nodeinfo(iface: Any) -> None:
 
 
 def nudge_nodeinfo_port(port: str) -> None:
-    """Open ``port`` briefly, nudge, close — for when no iface is open yet.
+    """Open ``port`` briefly, nudge, close - for when no iface is open yet.
 
     Uses the meshtastic_mcp port-lock-aware `connect()` context manager
     so we don't race ReceiveCollector or other long-lived handles on
@@ -99,7 +99,7 @@ class ReceiveCollector:
         )
         from pubsub import pub  # type: ignore[import-untyped]
 
-        # pubsub uses weak refs by default — we stash a strong ref so the
+        # pubsub uses weak refs by default - we stash a strong ref so the
         # handler doesn't disappear between subscribe and wait_for.
         def handler(packet: dict, interface: Any) -> None:
             with self._lock:
@@ -169,7 +169,7 @@ class ReceiveCollector:
         """Send a text packet through the already-open SerialInterface.
 
         Use this when a test also has a ReceiveCollector open on the same port
-        — `admin.send_text(port=...)` would try to open a second SerialInterface
+        - `admin.send_text(port=...)` would try to open a second SerialInterface
         and fail the port lock.
         """
         if self._iface is None:
@@ -187,7 +187,7 @@ class ReceiveCollector:
         Thin wrapper around the module-level :func:`nudge_nodeinfo` that
         also validates the context-manager invariant. Delegates so tests
         that need to nudge BOTH sides (bilateral PKI warmup) share one
-        implementation — the caller just passes each iface in turn.
+        implementation - the caller just passes each iface in turn.
 
         Firmware-side details (rate-limit bypass, nonce==1 trigger path,
         shorterTimeout=true window) are documented on the module-level

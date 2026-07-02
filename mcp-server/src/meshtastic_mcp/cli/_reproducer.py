@@ -14,7 +14,7 @@ minimum viable failure context into a tarball under
       └── env.json             seed, run #, pytest version, platform, hostname
 
 Separate module so the logic can be unit-tested without Textual. The
-TUI glue is thin — one key binding calls :func:`build_reproducer_bundle`
+TUI glue is thin - one key binding calls :func:`build_reproducer_bundle`
 with the focused test's state and shows the path in a modal.
 """
 
@@ -35,7 +35,7 @@ from typing import Any, Iterable
 @dataclass
 class ReproContext:
     """Everything :func:`build_reproducer_bundle` needs. Shaped to map
-    cleanly onto the state the TUI already tracks — no extra data
+    cleanly onto the state the TUI already tracks - no extra data
     collection required at export time."""
 
     nodeid: str
@@ -70,7 +70,7 @@ def _filtered_fwlog(
     if not fwlog_path.is_file():
         return b""
     if start_ts is None or stop_ts is None:
-        # Without a time window, include the whole file — rare; happens
+        # Without a time window, include the whole file - rare; happens
         # when a test fails in setup before pytest emitted a start ts.
         try:
             return fwlog_path.read_bytes()
@@ -115,14 +115,14 @@ Exported by `meshtastic-mcp-test-tui` on {t}.
 
 | File | Contents |
 |---|---|
-| `test_report.json` | The pytest-reportlog `TestReport` event for the failing test — includes `longrepr`, captured `sections` (stdout/stderr/log), `duration`, `location`, `keywords`. |
+| `test_report.json` | The pytest-reportlog `TestReport` event for the failing test - includes `longrepr`, captured `sections` (stdout/stderr/log), `duration`, `location`, `keywords`. |
 | `fwlog.jsonl` | Firmware log lines (from `meshtastic.log.line` pubsub) filtered to [start−5s, stop+5s] around the test's run window. Each line is `{{ts, port, line}}`. |
 | `devices.json` | Per-device snapshot at export time: `device_info` + `lora` config per detected role. |
 | `env.json` | Python version, platform, hostname, seed, run number. |
 
 ## How to triage
 
-1. Open `test_report.json` and read `longrepr` + `sections` — most failures explain themselves there.
+1. Open `test_report.json` and read `longrepr` + `sections` - most failures explain themselves there.
 2. If the failure is a mesh/telemetry assertion, `fwlog.jsonl` is where the answer usually lives. Grep for `Error=`, `NAK`, `PKI_UNKNOWN_PUBKEY`, `Skip send`, `Guru Meditation`, or the uptime timestamps around the assertion event.
 3. Compare `devices.json` against the expected state (e.g. `num_nodes >= 2`, `primary_channel == "McpTest"`, `region == "US"`). If fields disagree with the seed-derived USERPREFS profile, the device probably wasn't baked with this session's profile.
 
@@ -139,7 +139,7 @@ def build_reproducer_bundle(ctx: ReproContext) -> pathlib.Path:
     """Build a tarball under ``ctx.output_dir`` and return its path.
 
     Parent dirs are created as needed. Errors during optional sections
-    (devices, env) are swallowed — the bundle is still useful without
+    (devices, env) are swallowed - the bundle is still useful without
     them; refusing to export because the device poller had a hiccup
     would be worse than the export missing a file.
     """
@@ -159,7 +159,7 @@ def build_reproducer_bundle(ctx: ReproContext) -> pathlib.Path:
         # README
         _add("README.md", _readme(ctx).encode("utf-8"))
 
-        # test_report.json — reconstruct from the fields the TUI stashes.
+        # test_report.json - reconstruct from the fields the TUI stashes.
         test_report = {
             "nodeid": ctx.nodeid,
             "outcome": "failed",
@@ -208,7 +208,7 @@ def build_reproducer_bundle(ctx: ReproContext) -> pathlib.Path:
 
 
 def iter_entries(archive_path: pathlib.Path) -> Iterable[str]:
-    """Yield member names — used by callers that want to confirm the bundle shape."""
+    """Yield member names - used by callers that want to confirm the bundle shape."""
     with tarfile.open(archive_path, "r:gz") as tar:
         for m in tar.getmembers():
             yield m.name

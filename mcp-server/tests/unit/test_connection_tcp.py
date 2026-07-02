@@ -1,6 +1,6 @@
 """TCP transport plumbing in connection.py + devices.py.
 
-Pure-Python tests — no real device or daemon required. Mocks `TCPInterface`
+Pure-Python tests - no real device or daemon required. Mocks `TCPInterface`
 when exercising `connect()`.
 """
 
@@ -171,7 +171,7 @@ class TestResolvePort:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "localhost")
-        # Don't patch list_devices — let the real env-var path run, but stub
+        # Don't patch list_devices - let the real env-var path run, but stub
         # the USB enumeration to keep the test hermetic.
         with patch("meshtastic_mcp.devices.list_ports.comports", return_value=[]):
             assert connection.resolve_port(None) == "tcp://localhost:4403"
@@ -208,7 +208,7 @@ class TestDevicesTcpEntry:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # `list_devices` is the diagnostic tool reached for when an env var
-        # isn't working — it must not throw on misconfiguration.
+        # isn't working - it must not throw on misconfiguration.
         monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "host:notaport")
         with patch("meshtastic_mcp.devices.list_ports.comports", return_value=[]):
             ds = devices.list_devices(include_unknown=True)
@@ -222,7 +222,7 @@ class TestDevicesTcpEntry:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # `likely_meshtastic=False` keeps the bad TCP entry out of the
-        # auto-select path — `resolve_port(None)` should still report
+        # auto-select path - `resolve_port(None)` should still report
         # "no Meshtastic devices" rather than picking a broken endpoint.
         monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "host:notaport")
         with patch("meshtastic_mcp.devices.list_ports.comports", return_value=[]):
@@ -274,7 +274,7 @@ class TestDevicesTcpEntry:
             ds = devices.list_devices(include_unknown=True)
 
         assert ds, "expected at least the USB + TCP entries"
-        # Real USB candidate must be at position 0 — it's likely_meshtastic.
+        # Real USB candidate must be at position 0 - it's likely_meshtastic.
         assert ds[0]["port"] == "/dev/cu.usbmodem4201"
         assert ds[0]["likely_meshtastic"] is True
         # The malformed TCP entry exists but lands among the unlikely entries.
@@ -287,7 +287,7 @@ class TestDevicesTcpEntry:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Conversely, a *valid* TCP env var should sort ahead of USB
-        # candidates of equal likely_meshtastic rank — explicit env-var
+        # candidates of equal likely_meshtastic rank - explicit env-var
         # configuration is a precedence signal.
         monkeypatch.setenv("MESHTASTIC_MCP_TCP_HOST", "localhost:4403")
 
@@ -375,7 +375,7 @@ class TestConnectRoutesTcp:
                 with connection.connect(port="tcp://locktest:4403"):
                     pass
 
-        # Lock should be released — a second connect attempt must not fail
+        # Lock should be released - a second connect attempt must not fail
         # with "busy".
         with patch("meshtastic.tcp_interface.TCPInterface") as mock_tcp:
             mock_tcp.return_value.close.return_value = None

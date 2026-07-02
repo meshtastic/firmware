@@ -15,10 +15,10 @@ Usage:
     ./scripts/mtlog_to_datadog.py --once          # catch up + exit
     ./scripts/mtlog_to_datadog.py --since 3600   # backfill last hour from start
 
-Default `DD_SITE` is `us5.datadoghq.com` — the team's Datadog instance.
+Default `DD_SITE` is `us5.datadoghq.com` - the team's Datadog instance.
 Override via `DD_SITE=...` env var or `--site` flag for one-offs.
 
-The forwarder is a separate process by design — a Datadog outage or
+The forwarder is a separate process by design - a Datadog outage or
 auth failure must not backpressure the recorder. We exit non-zero on
 fatal config errors (missing API key) and keep retrying on transient
 network/HTTP errors.
@@ -89,7 +89,7 @@ class _StreamReader:
             # Rotation happened. Start over.
             last_pos = 0
         if last_pos > size:
-            # Live file truncated/shrunk under us — recorder rotated.
+            # Live file truncated/shrunk under us - recorder rotated.
             last_pos = 0
         try:
             with self.path.open("r", encoding="utf-8") as fh:
@@ -369,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
     log_dir = Path(args.log_dir)
     if not log_dir.exists():
         print(
-            f"log dir {log_dir} does not exist — start the mcp-server first.",
+            f"log dir {log_dir} does not exist - start the mcp-server first.",
             file=sys.stderr,
         )
         return 2

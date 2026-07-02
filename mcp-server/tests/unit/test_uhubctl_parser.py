@@ -5,9 +5,9 @@ new hub-descriptor fields (e.g. the `, ppps` marker). The parser uses loose
 regexes to tolerate additions; this test keeps us honest.
 
 Samples captured from:
-- v2.6.0 on macOS (Homebrew) — two USB2 hubs, one populated with an
+- v2.6.0 on macOS (Homebrew) - two USB2 hubs, one populated with an
   nRF52 and a CP2102, plus chained USB3 hubs.
-- v2.5.0 on Linux (hypothetical — reconstructed from the project README).
+- v2.5.0 on Linux (hypothetical - reconstructed from the project README).
 """
 
 from __future__ import annotations

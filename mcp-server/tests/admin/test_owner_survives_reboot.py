@@ -19,7 +19,7 @@ def test_owner_survives_reboot(
     baked_single: dict[str, Any],
     wait_until,
 ) -> None:
-    """Runs once per connected role — proves the reboot-persistence
+    """Runs once per connected role - proves the reboot-persistence
     round-trip works on each device independently, not just one."""
     port = baked_single["port"]
 

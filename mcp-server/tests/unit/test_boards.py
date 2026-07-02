@@ -1,6 +1,6 @@
 """`boards.py` filter and enumeration correctness.
 
-Runs against the real `pio project config` output of this firmware repo —
+Runs against the real `pio project config` output of this firmware repo -
 validates that filter predicates match expected envs and don't drift if
 variants get reorganized.
 """
