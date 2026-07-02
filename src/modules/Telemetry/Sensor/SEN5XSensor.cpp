@@ -320,7 +320,7 @@ bool SEN5XSensor::vocStateToSensor()
     // Note: send command already takes into account the CRC
     // buffer size increment needed
     if (!sendCommand(SEN5X_RW_VOCS_STATE, vocState, SEN5X_VOC_STATE_BUFFER_SIZE)) {
-        LOG_ERROR("%s: Error sending VOC's state command'", sensorName);
+        LOG_ERROR("%s: Error sending VOC's state command", sensorName);
         return false;
     }
 
@@ -336,7 +336,7 @@ bool SEN5XSensor::vocStateFromSensor()
     LOG_INFO("%s: Getting VOC state from sensor", sensorName);
     //  Ask VOCs state from the sensor
     if (!sendCommand(SEN5X_RW_VOCS_STATE)) {
-        LOG_ERROR("%s: Error sending VOC's state command'", sensorName);
+        LOG_ERROR("%s: Error sending VOC's state command", sensorName);
         return false;
     }
 
