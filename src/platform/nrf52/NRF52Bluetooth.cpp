@@ -308,7 +308,7 @@ void NRF52Bluetooth::setup()
             configuredPasskey = hwrand % 900000u + 100000u;
         }
         auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
+        LOG_DEBUG("Bluetooth pin configured");
         Bluefruit.Security.setPIN(pinString.c_str());
         restoreSecurityState();
         meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
@@ -399,9 +399,7 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
-    char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
-    LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
+    LOG_INFO("BLE pair process started: match_request=%i", match_request);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     // Get passkey as string
@@ -447,7 +445,6 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     passkeyShowing = true;
 
     // Pairing completion or disconnect dismisses the passkey UI; blocking here stalls BLE event processing.
-    LOG_INFO("BLE passkey pair: match_request=%i", match_request);
     return true;
 }
 
