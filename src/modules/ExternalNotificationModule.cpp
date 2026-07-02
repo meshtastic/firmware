@@ -419,8 +419,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // Alert GPIO Buzzer when receiving a message = alertMessageBuzzer: true
             // If you are already buzzing, keep going
             buzzerShouldAlert =
-                buzzerShouldAlert || canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
-                                                   (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
+                buzzerShouldAlert || (canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
+                                                    (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
