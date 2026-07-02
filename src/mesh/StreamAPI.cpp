@@ -215,7 +215,7 @@ void StreamAPI::emitRebooted()
 
 void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
 {
-    // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here — those
+    // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here - those
     // belong to the main packet-emission path and a LOG_ firing during
     // `writeStream()` would corrupt an in-flight encode. We keep a
     // dedicated `fromRadioScratchLog` + `txBufLog` for log records and

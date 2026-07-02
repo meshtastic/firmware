@@ -10,6 +10,7 @@
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
@@ -35,10 +36,35 @@ struct DisplayTimeoutOption {
     const char *label;
 };
 
+struct UInt32Option {
+    uint32_t value;
+    const char *label;
+};
+
 static constexpr DisplayTimeoutOption DISPLAY_TIMEOUT_OPTIONS[] = {
     {0, "Forever"},      {30, "30 secs"},     {60, "1 min"},     {5 * 60, "5 min"},
     {15 * 60, "15 min"}, {30 * 60, "30 min"}, {60 * 60, "1 hr"},
 };
+
+static constexpr UInt32Option POSITION_BROADCAST_OPTIONS[] = {
+    {60, "1 min"},           {90, "90 sec"},          {5 * 60, "5 min"},       {15 * 60, "15 min"},
+    {60 * 60, "1 hr"},       {2 * 60 * 60, "2 hr"},   {3 * 60 * 60, "3 hr"},   {4 * 60 * 60, "4 hr"},
+    {5 * 60 * 60, "5 hr"},   {6 * 60 * 60, "6 hr"},   {12 * 60 * 60, "12 hr"}, {18 * 60 * 60, "18 hr"},
+    {24 * 60 * 60, "24 hr"}, {36 * 60 * 60, "36 hr"}, {48 * 60 * 60, "48 hr"}, {72 * 60 * 60, "72 hr"},
+};
+
+static constexpr UInt32Option GPS_UPDATE_INTERVAL_OPTIONS[] = {
+    {8, "8 sec"},      {20, "20 sec"},        {40, "40 sec"},          {60, "1 min"},           {80, "80 sec"},
+    {2 * 60, "2 min"}, {5 * 60, "5 min"},     {10 * 60, "10 min"},     {15 * 60, "15 min"},     {30 * 60, "30 min"},
+    {60 * 60, "1 hr"}, {6 * 60 * 60, "6 hr"}, {12 * 60 * 60, "12 hr"}, {24 * 60 * 60, "24 hr"}, {2147483647UL, "At Boot"},
+};
+
+static constexpr UInt32Option SMART_INTERVAL_OPTIONS[] = {
+    {5 * 60, "5 min"},     {10 * 60, "10 min"},   {15 * 60, "15 min"},     {30 * 60, "30 min"},     {60 * 60, "1 hr"},
+    {2 * 60 * 60, "2 hr"}, {6 * 60 * 60, "6 hr"}, {12 * 60 * 60, "12 hr"}, {24 * 60 * 60, "24 hr"},
+};
+
+static constexpr uint32_t SMART_DISTANCE_OPTIONS[] = {20, 50, 100, 250, 500, 1000, 2000, 5000};
 
 struct PositionPrecisionOption {
     uint8_t value; // proto value
@@ -62,6 +88,30 @@ static const char *getDisplayTimeoutLabel(uint32_t timeoutSeconds)
     }
 
     return "Custom";
+}
+
+static std::string getUInt32OptionLabel(const UInt32Option *options, uint8_t optionCount, uint32_t value,
+                                        const char *zeroLabel = nullptr)
+{
+    for (uint8_t i = 0; i < optionCount; i++) {
+        if (options[i].value == value) {
+            return options[i].label;
+        }
+    }
+
+    if (value == 0) {
+        return zeroLabel ? zeroLabel : "0 sec";
+    }
+    if (value == 2147483647UL) {
+        return "At Boot";
+    }
+    if (value % (60 * 60) == 0) {
+        return std::to_string(value / (60 * 60)) + " hr";
+    }
+    if (value % 60 == 0) {
+        return std::to_string(value / 60) + " min";
+    }
+    return std::to_string(value) + " sec";
 }
 
 static bool supportsFreeTextKeyboard(const InkHUD::InkHUD *inkhud, const InkHUD::Persistence::Settings *settings)
@@ -259,7 +309,7 @@ int32_t InkHUD::MenuApplet::runOnce()
     return OSThread::disable();
 }
 
-// Storage for the dynamically-built region preset list — populated in showPage(NODE_CONFIG_PRESET)
+// Storage for the dynamically-built region preset list - populated in showPage(NODE_CONFIG_PRESET)
 static constexpr uint8_t MAX_REGION_PRESETS = 16;
 static meshtastic_Config_LoRaConfig_ModemPreset regionPresets[MAX_REGION_PRESETS];
 static uint8_t regionPresetCount = 0;
@@ -330,6 +380,17 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+}
+
+static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
+{
+    nodeDB->saveToDisk(changes);
+    service->reloadConfig(changes);
+
+    if (reboot) {
+        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    }
 }
 
 static const char *getTimezoneLabelFromValue(const char *tzdef)
@@ -557,6 +618,51 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         service->reloadConfig(SEGMENT_CONFIG);
 #endif
         break;
+
+    case TOGGLE_SMART_POSITION:
+        config.position.position_broadcast_smart_enabled = !config.position.position_broadcast_smart_enabled;
+        applyConfigReload(SEGMENT_CONFIG, true);
+        break;
+
+    case SET_POSITION_BROADCAST_INTERVAL: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(POSITION_BROADCAST_OPTIONS) / sizeof(POSITION_BROADCAST_OPTIONS[0]);
+        if (index < optionCount && config.position.position_broadcast_secs != POSITION_BROADCAST_OPTIONS[index].value) {
+            config.position.position_broadcast_secs = POSITION_BROADCAST_OPTIONS[index].value;
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
+
+    case SET_SMART_BROADCAST_INTERVAL: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(SMART_INTERVAL_OPTIONS) / sizeof(SMART_INTERVAL_OPTIONS[0]);
+        if (index < optionCount && config.position.broadcast_smart_minimum_interval_secs != SMART_INTERVAL_OPTIONS[index].value) {
+            config.position.broadcast_smart_minimum_interval_secs = SMART_INTERVAL_OPTIONS[index].value;
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
+
+    case SET_SMART_BROADCAST_DISTANCE: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(SMART_DISTANCE_OPTIONS) / sizeof(SMART_DISTANCE_OPTIONS[0]);
+        if (index < optionCount && config.position.broadcast_smart_minimum_distance != SMART_DISTANCE_OPTIONS[index]) {
+            config.position.broadcast_smart_minimum_distance = SMART_DISTANCE_OPTIONS[index];
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
+
+    case SET_GPS_UPDATE_INTERVAL: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]);
+        if (index < optionCount && config.position.gps_update_interval != GPS_UPDATE_INTERVAL_OPTIONS[index].value) {
+            config.position.gps_update_interval = GPS_UPDATE_INTERVAL_OPTIONS[index].value;
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
 
     case ENABLE_BLUETOOTH:
         // This helps users recover from a bad wifi config
@@ -1021,6 +1127,27 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true);
         break;
 
+    case MAP_ZOOM_IN: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomIn();
+        break;
+    }
+
+    case MAP_ZOOM_OUT: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomOut();
+        break;
+    }
+
+    case MAP_ZOOM_RESET: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->resetZoom();
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -1046,6 +1173,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
+
+        // Map zoom controls - only when viewing a map applet
+        {
+            MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+            if (mapApplet) {
+                if (mapApplet->canZoomIn())
+                    items.push_back(MenuItem("Zoom In", MenuAction::MAP_ZOOM_IN, MenuPage::EXIT));
+                if (mapApplet->canZoomOut())
+                    items.push_back(MenuItem("Zoom Out", MenuAction::MAP_ZOOM_OUT, MenuPage::EXIT));
+                if (mapApplet->isZoomLocked())
+                    items.push_back(MenuItem("Reset Zoom", MenuAction::MAP_ZOOM_RESET, MenuPage::EXIT));
+            }
+        }
+
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
@@ -1163,6 +1304,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case NODE_CONFIG_POSITION: {
         previousPage = MenuPage::NODE_CONFIG;
         items.push_back(MenuItem("Back", previousPage));
+
+        items.push_back(MenuItem::Header("Device GPS"));
+
 #if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
         const auto mode = config.position.gps_mode;
         if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
@@ -1170,11 +1314,92 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         } else {
             gpsEnabled = (mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED);
             items.push_back(MenuItem("GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION, &gpsEnabled));
+
+            nodeConfigLabels.emplace_back(
+                "GPS Poll: " + getUInt32OptionLabel(GPS_UPDATE_INTERVAL_OPTIONS,
+                                                    sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]),
+                                                    config.position.gps_update_interval, "Default"));
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION,
+                                     MenuPage::NODE_CONFIG_POSITION_GPS_UPDATE_INTERVAL));
         }
 #endif
+
+        items.push_back(MenuItem::Header("Position Packet"));
+
+        nodeConfigLabels.emplace_back(
+            "Broadcast: " + getUInt32OptionLabel(POSITION_BROADCAST_OPTIONS,
+                                                 sizeof(POSITION_BROADCAST_OPTIONS) / sizeof(POSITION_BROADCAST_OPTIONS[0]),
+                                                 config.position.position_broadcast_secs));
+        items.push_back(
+            MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_BROADCAST_INTERVAL));
+
+        items.push_back(MenuItem("Smart Pos", MenuAction::TOGGLE_SMART_POSITION, MenuPage::NODE_CONFIG_POSITION,
+                                 &config.position.position_broadcast_smart_enabled));
+
+        if (config.position.position_broadcast_smart_enabled) {
+            nodeConfigLabels.emplace_back("Smart Int: " +
+                                          getUInt32OptionLabel(SMART_INTERVAL_OPTIONS,
+                                                               sizeof(SMART_INTERVAL_OPTIONS) / sizeof(SMART_INTERVAL_OPTIONS[0]),
+                                                               config.position.broadcast_smart_minimum_interval_secs));
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_SMART_INTERVAL));
+
+            nodeConfigLabels.emplace_back("Smart Dist: " + localizeDistance(config.position.broadcast_smart_minimum_distance));
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_SMART_DISTANCE));
+        }
+
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
+
+    case NODE_CONFIG_POSITION_BROADCAST_INTERVAL:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("Max time between sends"));
+        for (const auto &option : POSITION_BROADCAST_OPTIONS) {
+            nodeConfigLabels.emplace_back(option.label);
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_POSITION_BROADCAST_INTERVAL,
+                                     MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_POSITION_SMART_INTERVAL:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("Fastest smart resend"));
+        for (const auto &option : SMART_INTERVAL_OPTIONS) {
+            nodeConfigLabels.emplace_back(option.label);
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_SMART_BROADCAST_INTERVAL,
+                                     MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_POSITION_SMART_DISTANCE:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("Move this far to send"));
+        for (const auto &option : SMART_DISTANCE_OPTIONS) {
+            nodeConfigLabels.emplace_back(localizeDistance(option));
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_SMART_BROADCAST_DISTANCE,
+                                     MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_POSITION_GPS_UPDATE_INTERVAL:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("GPS poll cadence"));
+        for (const auto &option : GPS_UPDATE_INTERVAL_OPTIONS) {
+            nodeConfigLabels.emplace_back(option.label);
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_GPS_UPDATE_INTERVAL, MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
 
     case NODE_CONFIG_POWER: {
         previousPage = MenuPage::NODE_CONFIG;
@@ -2288,26 +2513,29 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     const int16_t divY = top + height;
     height += fontSmall.lineHeight() * 0.2; // Padding *below* the divider. (Above first menu item)
 
-    // Create a variable number of columns
-    // Either 3 or 4, depending on whether we have GPS
-    // Todo
-    constexpr uint8_t N_COL = 3;
-    int16_t colL[N_COL];
-    int16_t colC[N_COL];
-    int16_t colR[N_COL];
-    for (uint8_t i = 0; i < N_COL; i++) {
-        colL[i] = left + ((width / N_COL) * i);
-        colC[i] = colL[i] + ((width / N_COL) / 2);
-        colR[i] = colL[i] + (width / N_COL);
+    // Create a variable number of columns.
+#if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
+    const bool showGpsInfo = config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
+#else
+    const bool showGpsInfo = false;
+#endif
+    const uint8_t columnCount = showGpsInfo ? 4 : 3;
+    int16_t colL[4] = {};
+    int16_t colC[4] = {};
+    int16_t colR[4] = {};
+    for (uint8_t i = 0; i < columnCount; i++) {
+        colL[i] = left + ((width / columnCount) * i);
+        colC[i] = colL[i] + ((width / columnCount) / 2);
+        colR[i] = colL[i] + (width / columnCount);
     }
 
     // Info blocks, left to right
 
     // Voltage
     float voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
-    char voltageStr[6]; // "XX.XV"
-    sprintf(voltageStr, "%.2fV", voltage);
-    printAt(colC[0], labelT, "Bat", CENTER, TOP);
+    char voltageStr[8]; // e.g. "4.12"
+    snprintf(voltageStr, sizeof(voltageStr), "%.2f", voltage);
+    printAt(colC[0], labelT, "Bat V", CENTER, TOP);
     printAt(colC[0], valT, voltageStr, CENTER, TOP);
 
     // Divider
@@ -2315,8 +2543,8 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
         drawPixel(colR[0], y, BLACK);
 
     // Channel Util
-    char chUtilStr[4]; // "XX%"
-    sprintf(chUtilStr, "%2.f%%", airTime->channelUtilizationPercent());
+    char chUtilStr[8]; // e.g. "100%"
+    snprintf(chUtilStr, sizeof(chUtilStr), "%2.f%%", airTime->channelUtilizationPercent());
     printAt(colC[1], labelT, "Ch", CENTER, TOP);
     printAt(colC[1], valT, chUtilStr, CENTER, TOP);
 
@@ -2325,20 +2553,34 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
         drawPixel(colR[1], y, BLACK);
 
     // Duty Cycle (AirTimeTx)
-    char dutyUtilStr[4]; // "XX%"
-    sprintf(dutyUtilStr, "%2.f%%", airTime->utilizationTXPercent());
+    char dutyUtilStr[8]; // e.g. "100%"
+    snprintf(dutyUtilStr, sizeof(dutyUtilStr), "%2.f%%", airTime->utilizationTXPercent());
     printAt(colC[2], labelT, "Duty", CENTER, TOP);
     printAt(colC[2], valT, dutyUtilStr, CENTER, TOP);
 
-    /*
-    // Divider
-    for (int16_t y = valT; y <= divY; y += 3)
-        drawPixel(colR[2], y, BLACK);
+    if (showGpsInfo) {
+        // Divider
+        for (int16_t y = valT; y <= divY; y += 3)
+            drawPixel(colR[2], y, BLACK);
 
-    // GPS satellites - todo
-    printAt(colC[3], labelT, "Sats", CENTER, TOP);
-    printAt(colC[3], valT, "ToDo", CENTER, TOP);
-    */
+        const bool gpsDisabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+        const char *gpsLabel = "GPS";
+        printAt(colC[3], labelT, gpsLabel, CENTER, TOP);
+
+        if (gpsDisabled) {
+            const int16_t labelW = getTextWidth(gpsLabel);
+            const int16_t strikeY = labelT + (fontSmall.lineHeight() / 2);
+            drawLine(colC[3] - (labelW / 2), strikeY, colC[3] + ((labelW - 1) / 2), strikeY, BLACK);
+        }
+
+        if (!gpsDisabled && gpsStatus != nullptr && gpsStatus->getIsConnected()) {
+            char satsStr[12];
+            snprintf(satsStr, sizeof(satsStr), "%lu", (unsigned long)gpsStatus->getNumSatellites());
+            printAt(colC[3], valT, satsStr, CENTER, TOP);
+        } else {
+            printAt(colC[3], valT, "--", CENTER, TOP);
+        }
+    }
 
     // Horizontal divider, at bottom of system info panel
     for (int16_t x = 0; x < width; x += 2) // Divider, centered in the padding between first system panel and first item
