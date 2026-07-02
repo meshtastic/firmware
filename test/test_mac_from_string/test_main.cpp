@@ -49,7 +49,7 @@ void test_colon_separated_lowercase()
 
 void test_no_colons_packed_hex()
 {
-    // The CLI form produced by some tools — 12 hex chars, no separators.
+    // The CLI form produced by some tools - 12 hex chars, no separators.
     uint8_t dmac[6] = {0};
     TEST_ASSERT_TRUE(MAC_from_string("AABBCCDDEEFF", dmac));
     TEST_ASSERT_EQUAL_HEX8(0xAA, dmac[0]);
@@ -75,7 +75,7 @@ void test_does_not_read_external_state()
 {
     // The function must derive every byte from its parameter, not from any
     // global. Provide a unique MAC and verify all six bytes match the input
-    // exactly — leaves no room for the function to be smuggling bytes from
+    // exactly - leaves no room for the function to be smuggling bytes from
     // elsewhere.
     uint8_t dmac[6] = {0};
     TEST_ASSERT_TRUE(MAC_from_string("12:34:56:78:9A:BC", dmac));
@@ -149,7 +149,7 @@ void test_partial_hex_failure_preserves_dmac()
 {
     // First five bytes are valid hex; the sixth ("ZZ") is not. Without the
     // temp-buffer staging, dmac would be partially overwritten with the five
-    // good bytes plus stale data in slot 5 — silently producing a wrong MAC
+    // good bytes plus stale data in slot 5 - silently producing a wrong MAC
     // since the only caller that uses this in getMacAddr() ignores the bool
     // return value.
     uint8_t dmac[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11};

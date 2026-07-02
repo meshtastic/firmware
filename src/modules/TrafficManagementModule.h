@@ -33,7 +33,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     TrafficManagementModule();
     ~TrafficManagementModule();
 
-    // Singleton — no copying or moving
+    // Singleton - no copying or moving
     TrafficManagementModule(const TrafficManagementModule &) = delete;
     TrafficManagementModule &operator=(const TrafficManagementModule &) = delete;
 
@@ -116,10 +116,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     //   unknown active: getUnknownCount() != 0  (low 6 bits only)
     //
     // next_hop: routing hint written only from ACK-confirmed NextHopRouter decisions.
-    // No TTL — keeps the slot alive across maintenance sweeps.
+    // No TTL - keeps the slot alive across maintenance sweeps.
     //
 #if _meshtastic_Config_DeviceConfig_Role_MAX > 15
-#warning "Device role enum max exceeds 15 — TMM 4-bit role cache (rate_count[7:6]/unknown_count[7:6]) will truncate new values"
+#warning "Device role enum max exceeds 15 - TMM 4-bit role cache (rate_count[7:6]/unknown_count[7:6]) will truncate new values"
 #endif
     struct __attribute__((packed)) UnifiedCacheEntry {
         NodeNum node;
@@ -152,7 +152,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // =========================================================================
     //
     // Plain array, linear scan (same idiom as WarmNodeStore). A lookup walks at
-    // most cacheSize() × 10 B — microseconds at LoRa packet rates, not worth a
+    // most cacheSize() × 10 B - microseconds at LoRa packet rates, not worth a
     // hash table. Insertion on a full cache evicts the stalest entry,
     // preferring entries without a next_hop hint (those are the long-tail
     // routing state this cache exists to keep).
@@ -270,7 +270,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // Resolve a sender's advertised device role for the position hot path. The tier-3
     // cache (this entry's getCachedRole) is authoritative and is kept fresh by
-    // updateCachedRoleFromNodeInfo() — updated when NodeDB learns a role, not re-derived
+    // updateCachedRoleFromNodeInfo() - updated when NodeDB learns a role, not re-derived
     // per packet. Only on first tracking (isNew) do we scan NodeDB (hot store → warm
     // store, via getNodeRole) to seed the cache, so a resident special-role node is
     // correct from its first position; after that the read is O(1) and survives the node

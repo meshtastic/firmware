@@ -51,8 +51,10 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
     NodeNum sourceNum = getFrom(&mp);
     const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
-    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed) {
-        LOG_WARN("Dropping unsigned NodeInfo from node 0x%08x that previously signed", sourceNum);
+    // Broadcasts only: senders never sign unicast NodeInfo, so dropping it would break exchanges
+    // with signer nodes. Backstops ingress that skips Router's downgrade drop (e.g. decoded MQTT).
+    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
+        LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
         return true;
     }
 

@@ -125,7 +125,7 @@ static inline int get_max_num_nodes()
 #elif defined(NRF52840_XXAA)
 // Keyed on the NRF52840_XXAA build flag, not ARCH_NRF52: the latter (from
 // architecture.h via configuration.h) isn't defined this early in every include
-// chain. Backed by the raw-flash ring below LittleFS — see WarmNodeStore.h.
+// chain. Backed by the raw-flash ring below LittleFS - see WarmNodeStore.h.
 #define WARM_NODE_COUNT 200
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
 #define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm cache in PSRAM (~80 KB)
@@ -137,7 +137,7 @@ static inline int get_max_num_nodes()
 #define WARM_NODE_COUNT 150 // RP2040 (264 KB) / RP2350 (520 KB): bounded so warm.dat write fits the 8s watchdog (#10746)
 #else
 // nRF52840 is handled explicitly above (200, raw-flash ring). Any other nRF52 (non-XXAA) and any
-// future non-ESP32/non-RP LittleFS part fall through to this 320 default — flag for review if such a
+// future non-ESP32/non-RP LittleFS part fall through to this 320 default - flag for review if such a
 // RAM-constrained nRF52 target is ever added.
 #define WARM_NODE_COUNT 320 // other LittleFS-backed parts (e.g. non-nRF52840 nRF52)
 #endif                      // platform
@@ -178,7 +178,7 @@ static inline int get_max_num_nodes()
 #elif defined(ARCH_ESP32)
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 400 // classic ESP32 / S2 / C3: tightest free heap, ~4 KB (#10705)
 #else
-// nRF52 (incl. nRF52840) and RP2040/RP2350 fall through here — there is no nRF/RP branch above,
+// nRF52 (incl. nRF52840) and RP2040/RP2350 fall through here - there is no nRF/RP branch above,
 // by design. These parts have no ESP32-style WiFi+BLE coexistence eating the heap, so the larger
 // 1000-entry (~10 KB) cache fits: nRF52840 is BLE-only on 256 KB RAM; RP2040/RP2350 have 264/520 KB.
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // nRF52 / RP2040 / RP2350 / other non-ESP32

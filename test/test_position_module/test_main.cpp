@@ -22,7 +22,7 @@ static void test_withinPrecisionCell_movingLonLeavesCell()
     TEST_ASSERT_FALSE(PositionModule::positionWithinPrecisionCell(0x12340000, 0x22340000, 0x12340000, 0x22350000, 16));
 }
 
-// precision 0 means position sharing is off — never treat as stationary/suppressible.
+// precision 0 means position sharing is off - never treat as stationary/suppressible.
 static void test_withinPrecisionCell_zeroPrecisionNeverSuppresses()
 {
     TEST_ASSERT_FALSE(PositionModule::positionWithinPrecisionCell(0x12340000, 0x22340000, 0x12340000, 0x22340000, 0));

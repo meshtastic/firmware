@@ -17,8 +17,8 @@
  *     reflash. The DFU bootloader path keeps working for routine app
  *     updates because the bootloader doesn't need SWD.
  *   - The only way to clear APPROTECT is an SWD-side `nrfjprog --recover`
- *     (CTRL-AP ERASEALL), which wipes the entire chip — bootloader,
- *     application, LittleFS, and the encrypted DEK — destroying all
+ *     (CTRL-AP ERASEALL), which wipes the entire chip - bootloader,
+ *     application, LittleFS, and the encrypted DEK - destroying all
  *     on-device state in the process. That destructive coupling is the
  *     point: an attacker cannot clear APPROTECT to extract user data
  *     without also wiping the data they were trying to read.

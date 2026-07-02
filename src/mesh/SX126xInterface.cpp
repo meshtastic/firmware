@@ -251,11 +251,14 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = -9;
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE) {
+        // Don't abort: this power is operator config (tx_power/SX126X_MAX_POWER); a value above the
+        // driver's max would crash the daemon before reloadConfig() persists. Flag it and keep prior power.
+        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keeping previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
 
-    // Apply RX gain mode — valid in STDBY (datasheet §9.6), matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY (datasheet §9.6), matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("SX126X setRxBoostedGainMode %s%d", radioLibErr, err);
@@ -426,7 +429,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 
     LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
 
-    // 1. Warm sleep — powers down the entire analog frontend, resetting AGC state.
+    // 1. Warm sleep - powers down the entire analog frontend, resetting AGC state.
     //    A plain standby→startReceive cycle does NOT reset the AGC.
     lora.sleep(true);
 

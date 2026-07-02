@@ -30,7 +30,7 @@
 static constexpr NodeNum kLocalNode = 0x11111111; // last byte 0x11
 
 // ---------------------------------------------------------------------------
-// MockNodeDB — inject nodes with controlled last byte, hop distance, age, role, favorite flag.
+// MockNodeDB - inject nodes with controlled last byte, hop distance, age, role, favorite flag.
 // ---------------------------------------------------------------------------
 class MockNodeDB : public NodeDB
 {
@@ -67,7 +67,7 @@ class MockNodeDB : public NodeDB
 };
 
 // ---------------------------------------------------------------------------
-// Test shim — expose getNextHop and the route-health helpers; reset health between tests.
+// Test shim - expose getNextHop and the route-health helpers; reset health between tests.
 // Nulls cryptLock so the Router base can be (re)constructed (same pattern as test_mqtt MockRouter).
 // ---------------------------------------------------------------------------
 class NextHopRouterTestShim : public NextHopRouter
@@ -125,7 +125,7 @@ void setUp(void)
 void tearDown(void) {}
 
 // ===========================================================================
-// Group 1 — resolveLastByte (M1)
+// Group 1 - resolveLastByte (M1)
 // ===========================================================================
 
 void test_resolve_none_when_empty(void)
@@ -136,7 +136,7 @@ void test_resolve_none_when_empty(void)
 
 void test_resolve_zero_byte_is_none(void)
 {
-    // 0 is the NO_RELAY_NODE / NO_NEXT_HOP_PREFERENCE sentinel — never resolves.
+    // 0 is the NO_RELAY_NODE / NO_NEXT_HOP_PREFERENCE sentinel - never resolves.
     mockNodeDB->addNode(0x22222200, 0, true, 60); // last byte maps to 0xFF, not 0
     TEST_ASSERT_EQUAL(LastByteResolution::None, mockNodeDB->resolveLastByte(0x00, true).status);
     TEST_ASSERT_EQUAL(LastByteResolution::None, mockNodeDB->resolveLastByte(0x00, false).status);
@@ -227,7 +227,7 @@ void test_resolve_unique_helper(void)
 }
 
 // ===========================================================================
-// Group 2 — getNextHop (M2 send-path gate + M3 decay)
+// Group 2 - getNextHop (M2 send-path gate + M3 decay)
 // ===========================================================================
 
 static constexpr NodeNum DEST = 0x000000B0; // DM destination (last byte 0xB0, distinct from 0xAB)
@@ -283,7 +283,7 @@ void test_getnexthop_decays_stale_route(void)
 }
 
 // ===========================================================================
-// Group 3 — route-health helpers (M3)
+// Group 3 - route-health helpers (M3)
 // ===========================================================================
 
 void test_health_fresh_not_stale(void)
@@ -379,7 +379,7 @@ void test_health_lru_eviction_bounds_table(void)
 }
 
 // ===========================================================================
-// Group 4 — shouldDecrementHopLimit favorite-router resolution (M2, site 4)
+// Group 4 - shouldDecrementHopLimit favorite-router resolution (M2, site 4)
 // ===========================================================================
 
 void test_hoplimit_preserve_unique_favorite_router(void)

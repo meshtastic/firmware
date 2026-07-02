@@ -30,7 +30,7 @@ static constexpr const char *CERT_PATH = "/eth_cert_v2.der";
 static constexpr const char *KEY_PATH = "/eth_key_v2.der";
 static constexpr const char *IP_PATH = "/eth_cert_ip_v2.txt";
 
-// Random callback for mbedtls — sources entropy from the RP2350 ROSC TRNG via
+// Random callback for mbedtls - sources entropy from the RP2350 ROSC TRNG via
 // pico-sdk get_rand_64(). Used directly as f_rng in mbedtls calls so we don't
 // have to plumb a full mbedtls_entropy_context + ctr_drbg. The hardware TRNG
 // is cryptographically suitable per pico-sdk docs (ROSC + whitening).
@@ -175,7 +175,7 @@ static bool generateCert(IPAddress ip, EthCertMaterial &out)
         }
 
         // ExtendedKeyUsage: serverAuth. NSS / Firefox refuse to treat a cert
-        // as a TLS server cert without this extension since 2023 — the error
+        // as a TLS server cert without this extension since 2023 - the error
         // surfaces as a non-overridable "Secure Connection Failed" with no
         // "Accept the Risk" path.
         mbedtls_asn1_sequence ekuSeq;
@@ -293,13 +293,13 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
     // current process still has the in-memory cert ready for use.
     //
     // Clear the IP commit-marker FIRST so a reset mid-write can't leave the marker
-    // pointing at a half-written (or stale-paired) cert/key — the load path only
+    // pointing at a half-written (or stale-paired) cert/key - the load path only
     // trusts the cache when the marker matches. Writing the marker LAST commits the
     // new pair atomically w.r.t. the loader.
     writeText(IP_PATH, "");
     if (!writeBinary(CERT_PATH, out.certDer.data(), out.certDer.size()) ||
         !writeBinary(KEY_PATH, out.keyDer.data(), out.keyDer.size()) || !writeText(IP_PATH, ipStr)) {
-        LOG_WARN("ETH CERT: persist failed — will regenerate next boot");
+        LOG_WARN("ETH CERT: persist failed - will regenerate next boot");
     } else {
         LOG_INFO("ETH CERT: persisted to LittleFS");
     }
@@ -310,7 +310,7 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
 // Worker that defers cert gen off the Periodic thread (which has a tight stack
 // and ticks every 5s alongside reconnect / NTP / MQTT). Waits for a non-zero IP,
 // generates/loads the cert for it, then keeps polling at CERT_RECHECK_MS so a
-// DHCP lease change to a new IP regenerates the cert — the SAN must track the
+// DHCP lease change to a new IP regenerates the cert - the SAN must track the
 // current address or browsers reject the new one. The steady-state poll is just
 // localIP() + compare; ECDSA keygen only reruns when the IP actually changes,
 // and it runs on this thread's own stack (not the Periodic's).
@@ -337,7 +337,7 @@ class EthCertThread : public concurrency::OSThread
         // regenerates whenever its saved IP != ip, so the cert SAN follows.
         bool ok = ensureCertForIp(ip, material_);
         if (!ok) {
-            LOG_ERROR("ETH CERT: pipeline FAILED — TLS server will not start");
+            LOG_ERROR("ETH CERT: pipeline FAILED - TLS server will not start");
             // Don't leave isReady() reporting true with empty material: a later TLS
             // teardown (e.g. a W5500 reset) would then fail initTlsContext() and stay
             // disabled. Clear readiness so the TLS worker waits and the next poll

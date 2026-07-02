@@ -125,7 +125,7 @@ bool readRegister(uint8_t address, uint8_t reg, uint8_t &value)
     twim->TXD.PTR = (uint32_t)&reg;
     twim->TXD.MAXCNT = 1;
     // LASTTX_SUSPEND shortcut: peripheral suspends automatically after the TX
-    // byte, so EVENTS_SUSPENDED is set before we even poll — no clearing race.
+    // byte, so EVENTS_SUSPENDED is set before we even poll - no clearing race.
     twim->SHORTS = TWIM_SHORTS_LASTTX_SUSPEND_Msk;
     twim->TASKS_RESUME = 1;
     twim->TASKS_STARTTX = 1;

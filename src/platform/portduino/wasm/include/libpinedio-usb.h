@@ -2,7 +2,7 @@
 //
 // Same API surface as the upstream libpinedio-usb.h that the firmware's
 // Ch341Hal (src/platform/portduino/USBHal.h) compiles against, but WITHOUT the
-// libusb / pthread dependencies — the implementation (libpinedio_webusb.c)
+// libusb / pthread dependencies - the implementation (libpinedio_webusb.c)
 // forwards to a JS WebUSB bridge via Emscripten. The struct keeps only the
 // fields Ch341Hal actually touches (serial_number, product_string, in_error,
 // options[]); GPIO/CS state now lives on the JS side.

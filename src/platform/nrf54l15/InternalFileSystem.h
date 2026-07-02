@@ -1,9 +1,9 @@
-// InternalFileSystem.h — Zephyr LittleFS backend for nRF54L15
+// InternalFileSystem.h - Zephyr LittleFS backend for nRF54L15
 //
 // Implements the Adafruit InternalFileSystem API subset used by Meshtastic,
 // backed by Zephyr's fs/littlefs on the storage_partition of the nRF54L15's
 // internal RRAM. Partition size is taken from the DTS at compile time via
-// FIXED_PARTITION_SIZE(storage_partition) — the DK overlay currently maps
+// FIXED_PARTITION_SIZE(storage_partition) - the DK overlay currently maps
 // ~700 KB into slot1 (see zephyr/boards/nrf54l15dk_nrf54l15_cpuapp.overlay).
 //
 // Mount point: /lfs

@@ -14,6 +14,9 @@
 #include "TypeConversions.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/Telemetry/UnitConversions.h"
+#include <cfloat>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <unity.h>
@@ -411,6 +414,33 @@ void test_convert_to_node_info_user_only_when_has_user_bit_set(void)
     TEST_ASSERT_EQUAL_STRING("!00000001", info2.user.id);
 }
 
+// Regression for UnitConversions::displaySafeFloat: drop non-finite values and clamp magnitude so a
+// crafted telemetry float can't overflow Arduino String(float)'s fixed char[33].
+static void test_displaySafeFloat_bounds_and_finiteness()
+{
+    // Non-finite -> 0
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, UnitConversions::displaySafeFloat(NAN));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, UnitConversions::displaySafeFloat(INFINITY));
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, UnitConversions::displaySafeFloat(-INFINITY));
+    // Huge magnitudes -> clamped to +/-1e9
+    TEST_ASSERT_EQUAL_FLOAT(1e9f, UnitConversions::displaySafeFloat(FLT_MAX));
+    TEST_ASSERT_EQUAL_FLOAT(-1e9f, UnitConversions::displaySafeFloat(-FLT_MAX));
+    TEST_ASSERT_EQUAL_FLOAT(1e9f, UnitConversions::displaySafeFloat(3.0e30f));
+    // In-range values pass through unchanged
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, UnitConversions::displaySafeFloat(0.0f));
+    TEST_ASSERT_EQUAL_FLOAT(23.5f, UnitConversions::displaySafeFloat(23.5f));
+    TEST_ASSERT_EQUAL_FLOAT(-40.0f, UnitConversions::displaySafeFloat(-40.0f));
+    TEST_ASSERT_EQUAL_FLOAT(120000.0f, UnitConversions::displaySafeFloat(120000.0f));
+
+    // The clamped output, formatted the way telemetry does, must fit Arduino String(float)'s char[33].
+    const float attackers[] = {FLT_MAX, -FLT_MAX, 3.0e30f, 1.0e9f, -1.0e9f};
+    for (float v : attackers) {
+        char buf[33];
+        int n = snprintf(buf, sizeof(buf), "%.2f", (double)UnitConversions::displaySafeFloat(v));
+        TEST_ASSERT_TRUE_MESSAGE(n > 0 && n < (int)sizeof(buf), "clamped float would overflow String(float) char[33]");
+    }
+}
+
 // ---------- entry point -------------------------------------------------------
 
 void setup()
@@ -446,6 +476,7 @@ void setup()
     RUN_TEST(test_convert_to_node_info_extracts_bitfield_bools);
     RUN_TEST(test_convert_to_node_info_extracts_bitfield_bools_none_set);
     RUN_TEST(test_convert_to_node_info_user_only_when_has_user_bit_set);
+    RUN_TEST(test_displaySafeFloat_bounds_and_finiteness);
     exit(UNITY_END());
 }
 

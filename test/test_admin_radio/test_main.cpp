@@ -235,7 +235,7 @@ static const RegionInfo testRegions[] = {
     {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
      meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO"},
 
-    // Sentinel — must be last
+    // Sentinel - must be last
     {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
      meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET"},
 };

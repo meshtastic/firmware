@@ -302,9 +302,38 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
     return false;
 }
 
+// Re-decode nested string-bearing payloads before local phone delivery so PB_VALIDATE_UTF8 rejects
+// malformed NodeInfo/Waypoint data a strict phone decoder could crash on. Mesh relay is unaffected.
+bool MeshService::phonePayloadIsDecodable(const meshtastic_Data &d)
+{
+    // User/Waypoint are all-static nanopb messages (no PB_ENABLE_MALLOC/callback fields), so the
+    // decoded scratch owns no heap and needs no pb_release.
+    switch (d.portnum) {
+    case meshtastic_PortNum_NODEINFO_APP: {
+        meshtastic_User u = meshtastic_User_init_zero;
+        return pb_decode_from_bytes(d.payload.bytes, d.payload.size, &meshtastic_User_msg, &u);
+    }
+    case meshtastic_PortNum_WAYPOINT_APP: {
+        meshtastic_Waypoint w = meshtastic_Waypoint_init_zero;
+        return pb_decode_from_bytes(d.payload.bytes, d.payload.size, &meshtastic_Waypoint_msg, &w);
+    }
+    default:
+        return true;
+    }
+}
+
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
     perhapsDecode(p);
+
+    // Withhold decoded nested payloads a strict phone decoder would reject; still-encrypted packets
+    // pass through (the phone may hold the key).
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !phonePayloadIsDecodable(p->decoded)) {
+        LOG_WARN("Dropping undecodable portnum=%d payload from phone delivery (from=0x%08x)", p->decoded.portnum, p->from);
+        releaseToPool(p);
+        fromNum++; // notify observers so the phone can resync
+        return;
+    }
 
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD

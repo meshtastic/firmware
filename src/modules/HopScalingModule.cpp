@@ -23,7 +23,7 @@ constexpr uint32_t RUN_INTERVAL_MS = 5 * 60 * 1000UL; // Emit micro-summary ever
 // Persistence
 // Note: this only needs incrementing if the published arrangement changes. For testing purposes, or prior to widespread release,
 // it can stay the same even if the internal layout changes.
-constexpr uint32_t HISTOGRAM_STATE_MAGIC = 0x48535432; // 'HST2' — layout v2
+constexpr uint32_t HISTOGRAM_STATE_MAGIC = 0x48535432; // 'HST2' - layout v2
 constexpr uint8_t HISTOGRAM_STATE_VERSION = 1;
 constexpr const char *HISTOGRAM_STATE_FILE = "/prefs/hopScalingState.bin";
 
@@ -282,7 +282,7 @@ void HopScalingModule::rollHour()
     }
 
     // 2. Walk scaled hop buckets to produce a hop-limit recommendation.
-    //     effectiveMin: walk threshold — first hop whose cumulative count reaches this.
+    //     effectiveMin: walk threshold - first hop whose cumulative count reaches this.
     //     effectiveMax: ceiling on the one-hop extension check with GENEROUS politeness.
     const uint16_t effectiveMin = TARGET_AFFECTED_NODES;
     const uint16_t effectiveMax = MAX_TARGET_NODES;
@@ -351,7 +351,7 @@ void HopScalingModule::rollHour()
     // 5. Tick down the hold counter; once it reaches zero, halve filteringDenominator toward
     //    samplingDenominator once per rollHour() (= once per hour) rather than a single jump:
     //    avoids a sudden large change in the hop-walk count when samplingDenominator cascaded
-    //    down significantly during the hold period.  No new hold is placed on each step — the
+    //    down significantly during the hold period.  No new hold is placed on each step - the
     //    13-roll hold already guaranteed that re-admitted nodes have full seenHoursAgo history;
     //    further pacing is provided naturally by the 1-step-per-hour rate.  denominatorHistory
     //    is updated automatically by the shift at the top of rollHour(), so no backfill here.
@@ -405,7 +405,7 @@ void HopScalingModule::trimIfNeeded()
         // down yet) are left untouched: eviction at samplingDenominator retains exactly those
         // entries, so the old higher gate remains accurate for those historical hours.
         // Slots below the new value must be raised because the eviction removed entries that
-        // had been admitted at the looser old gate — the remaining entries represent a 1/N
+        // had been admitted at the looser old gate - the remaining entries represent a 1/N
         // subsample where N is the new filteringDenominator, not the old smaller value.
         for (uint8_t h = 0; h < 13; h++)
             denominatorHistory[h] = std::max(denominatorHistory[h], filteringDenominator);

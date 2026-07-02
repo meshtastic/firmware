@@ -107,7 +107,7 @@ class StreamAPI : public PhoneAPI
     /// re-used `fromRadioScratch` / `txBuf` and corrupted whatever the main
     /// path had already encoded. Symptoms on the host were
     /// `google.protobuf.message.DecodeError: Error parsing message with type
-    /// 'meshtastic.protobuf.FromRadio'` — any tool with
+    /// 'meshtastic.protobuf.FromRadio'` - any tool with
     /// `config.security.debug_log_api_enabled=true` under traffic would see
     /// torn frames every few messages.
     ///

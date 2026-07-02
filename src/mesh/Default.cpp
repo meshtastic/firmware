@@ -71,7 +71,7 @@ uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t d
     int8_t throttle =
         (type == TrafficType::POSITION) ? myRegion->profile->positionThrottle : myRegion->profile->telemetryThrottle;
 
-    // throttle <= 0 means unset; 1 is the neutral multiplier — skip the multiply for performance
+    // throttle <= 0 means unset; 1 is the neutral multiplier - skip the multiply for performance
     if (throttle <= 1)
         return baseMs;
 

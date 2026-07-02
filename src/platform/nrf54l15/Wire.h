@@ -1,10 +1,10 @@
 /**
- * Wire.h — Arduino TwoWire (I2C) shim for Zephyr / nRF54L15.
+ * Wire.h - Arduino TwoWire (I2C) shim for Zephyr / nRF54L15.
  *
  * Bus binding: the Zephyr device tree alias `i2c30` (TWIM30 hardware
  * peripheral, HP domain, 3.0 V) is resolved at compile time via
  * DEVICE_DT_GET in Wire.cpp. SDA/SCL pins are configured in the board
- * overlay via pinctrl — `begin(sda, scl)` overloads are accepted for
+ * overlay via pinctrl - `begin(sda, scl)` overloads are accepted for
  * Arduino API compatibility but the pin arguments are ignored.
  *
  * Buffer sizes are sized for the worst-case I2C consumer we plan to use
@@ -28,7 +28,7 @@ class TwoWire
     TwoWire();
 
     // ── Bus lifecycle ─────────────────────────────────────────────────
-    // begin() variants — pin arguments are accepted for API compatibility
+    // begin() variants - pin arguments are accepted for API compatibility
     // but ignored: SDA/SCL are fixed by the Zephyr overlay pinctrl. freq
     // is also fixed by overlay clock-frequency (use setClock() at runtime).
     void begin();
@@ -63,7 +63,7 @@ class TwoWire
     size_t readBytes(char *buf, size_t len) { return readBytes((uint8_t *)buf, len); }
     void flush() {}
 
-    // Slave callbacks unsupported — peripheral-only stub.
+    // Slave callbacks unsupported - peripheral-only stub.
     void onReceive(void (*)(int)) {}
     void onRequest(void (*)(void)) {}
 
@@ -80,4 +80,4 @@ class TwoWire
 };
 
 extern TwoWire Wire;
-extern TwoWire Wire1; // alias to Wire — only one I2C bus on this board
+extern TwoWire Wire1; // alias to Wire - only one I2C bus on this board

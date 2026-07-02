@@ -48,7 +48,7 @@ bool PacketAPI::receivePacket(void)
         isConnected = true;
         data_received = true;
 
-        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+        powerFSM.trigger(EVENT_INPUT);
         lastContactMsec = millis();
 
         meshtastic_ToRadio *mr;

@@ -237,7 +237,7 @@ static void serialEnter()
 {
     LOG_POWERFSM("State: serialEnter");
 #ifndef ARCH_NRF52
-    // nRF52 runs BLE on SoftDevice independently of USB serial — no need to disable it.
+    // nRF52 runs BLE on SoftDevice independently of USB serial - no need to disable it.
     // (Same rationale as nbEnter() which already guards this with #ifdef ARCH_ESP32)
     setBluetoothEnable(false);
 #endif

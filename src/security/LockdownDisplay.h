@@ -26,17 +26,17 @@ namespace meshtastic_security
  *      storage-locked: the device stays fully functional on the mesh,
  *      only the display is gated. The latch is set by lockScreen() when
  *      the stock idle timeout powers the screen off (hooked in
- *      Screen::setOn) — so it reuses config.display.screen_on_secs
+ *      Screen::setOn) - so it reuses config.display.screen_on_secs
  *      rather than running a second timer. It is cleared only by
  *      unlockScreen(), called from PhoneAPI's lockdown_auth handler when
  *      a client authenticates with the passphrase over any transport.
  *      Button/joystick input can wake the backlight but does NOT clear
- *      the latch — the woken screen shows the LOCKED frame, not content.
+ *      the latch - the woken screen shows the LOCKED frame, not content.
  *      This closes the "operator walked away from an unlocked device"
  *      leak without conflating it with the storage-lock security state.
  *
  *      The latch starts TRUE at boot so a token-auto-unlocked cold boot
- *      comes up redacted — otherwise an attacker holding a screen-locked
+ *      comes up redacted - otherwise an attacker holding a screen-locked
  *      device could power-cycle it (RAM latch resets) to recover a
  *      content screen. After any boot, the operator must authenticate
  *      from a client to reveal content.
@@ -45,7 +45,7 @@ namespace meshtastic_security
  *   - graphics/Screen.cpp (OLED via OLEDDisplayUi): GATED, renders a centered
  *     "LOCKED" + battery when shouldRedactDisplay() is true.
  *
- * KNOWN GAPS — these renderers still leak content under lockdown
+ * KNOWN GAPS - these renderers still leak content under lockdown
  *   - graphics/InkHUD/        (e-ink rich UI on supported boards)
  *   - graphics/niche/         (TFT niche graphics)
  *   - meshtastic/device-ui    (T-Deck/TFT, separate submodule)

@@ -31,7 +31,7 @@ else:
         The rule format depends on the host:
           Windows (CMake's RunCMake wraps every command):
             COMMAND = cmd.exe /C "cd /D DIR && arm-none-eabi-gcc.exe ... -o linker.cmd && cmake.exe -E cmake_transform_depfile ..."
-          POSIX (Linux/macOS — no wrapper):
+          POSIX (Linux/macOS - no wrapper):
             COMMAND = cd DIR && arm-none-eabi-gcc ... -o linker.cmd && cmake -E cmake_transform_depfile ...
 
         Returns (gcc_cmd_string, cwd_path) or raises RuntimeError.
@@ -51,7 +51,7 @@ else:
 
                 command_val = stripped[len("COMMAND = ") :]
 
-                # On Windows the value is wrapped in `cmd.exe /C "..."` — strip
+                # On Windows the value is wrapped in `cmd.exe /C "..."` - strip
                 # the wrapper. On POSIX hosts the inner sequence is the value
                 # itself (no quoting layer).
                 m = re.search(r'/C\s+"(.*)"\s*$', command_val)
@@ -88,7 +88,7 @@ else:
         linker_cmd = os.path.join(zephyr_dir, "linker.cmd")
 
         if os.path.exists(linker_cmd):
-            return  # Already present — nothing to do
+            return  # Already present - nothing to do
 
         ninja_build = os.path.join(build_dir, "build.ninja")
         if not os.path.exists(ninja_build):

@@ -5,7 +5,7 @@ const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaC
                                                          bool usePreset)
 {
 
-    // If use_preset is false, always return "Custom" — callers such as RadioInterface and Channels
+    // If use_preset is false, always return "Custom" - callers such as RadioInterface and Channels
     // rely on this being a stable literal for channel-name hashing and default-channel detection.
     if (!usePreset) {
         return "Custom";

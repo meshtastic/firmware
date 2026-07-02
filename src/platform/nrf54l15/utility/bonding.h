@@ -1,4 +1,4 @@
-// utility/bonding.h — stub for nRF54L15/Zephyr
+// utility/bonding.h - stub for nRF54L15/Zephyr
 // NodeDB.cpp includes this when ARCH_NRF52 is defined.
 // Bluetooth is excluded; this stub satisfies the include chain.
 #pragma once

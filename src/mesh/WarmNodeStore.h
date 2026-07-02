@@ -23,21 +23,21 @@
  * Warm ("long-tail") node tier.
  *
  * Minimal identity record (NodeNum, last_heard, Curve25519 public key) for nodes
- * evicted from the hot NodeInfoLite store, so DMs to/from them keep encrypting —
+ * evicted from the hot NodeInfoLite store, so DMs to/from them keep encrypting -
  * the key is expensive to re-learn, the rest rebuilds from traffic in seconds.
  * Flat fixed array, linear scan (only on hot-store misses), LRU by last_heard
  * with keyed entries outranking keyless.
  *
  * Persistence: nRF52840 uses a 12 KB raw-flash record-ring below LittleFS
- * (append + replay + compact-on-rotate — see the backend in WarmNodeStore.cpp,
+ * (append + replay + compact-on-rotate - see the backend in WarmNodeStore.cpp,
  * link-guarded by nrf52840_s140_v7.ld). Everywhere else: /prefs/warm.dat.
  */
 struct WarmNodeEntry {
     NodeNum num;            // 0 = empty slot
-    uint32_t last_heard;    // recency for LRU ordering — see the metadata steal below
+    uint32_t last_heard;    // recency for LRU ordering - see the metadata steal below
     uint8_t public_key[32]; // all-zero = no key (a real key is never all-zero)
 };
-static_assert(sizeof(WarmNodeEntry) == 40, "WarmNodeEntry must stay 40 B — persistence format depends on it");
+static_assert(sizeof(WarmNodeEntry) == 40, "WarmNodeEntry must stay 40 B - persistence format depends on it");
 
 // Metadata packed into the low bits of last_heard.
 //
@@ -49,7 +49,7 @@ static_assert(sizeof(WarmNodeEntry) == 40, "WarmNodeEntry must stay 40 B — per
 //
 // Safe because: a real timestamp can never be all-ones (the tombstone sentinel) before
 // 2106, and tombstones/erased flash are detected via num before last_heard is read. Only
-// the LOW bits are stolen — the high (era) bits are untouched, so the time range is intact.
+// the LOW bits are stolen - the high (era) bits are untouched, so the time range is intact.
 static constexpr uint32_t WARM_META_BITS = 6;                          // role(4) + protected(2)
 static constexpr uint32_t WARM_META_MASK = (1u << WARM_META_BITS) - 1; // 0x3F → 64 s quantum
 static constexpr uint32_t WARM_TIME_MASK = ~WARM_META_MASK;            // 0xFFFFFFC0

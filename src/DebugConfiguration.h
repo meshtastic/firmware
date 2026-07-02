@@ -153,7 +153,7 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 #define defaultBLEPin 123456
 
 #if HAS_ETHERNET && defined(USE_ARDUINO_ETHERNET)
-#include <Ethernet.h> // arduino-libraries/Ethernet — supports W5500 auto-detect
+#include <Ethernet.h> // arduino-libraries/Ethernet - supports W5500 auto-detect
 #elif HAS_ETHERNET && defined(USE_CH390D)
 #include <ESP32_CH390.h>
 #elif HAS_ETHERNET && !defined(USE_WS5500)

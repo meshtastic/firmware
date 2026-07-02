@@ -2,6 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RTC.h"
 #include "TelemetrySensor.h"
@@ -35,6 +36,10 @@ class PMSA003ISensor : public TelemetrySensor
     uint8_t buffer[PMSA003I_FRAME_LENGTH]{};
     TwoWire *_bus{};
     uint8_t _address{};
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
+    ReClockI2C reClockI2C;
+#endif
 };
 
 #endif

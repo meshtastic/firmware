@@ -32,7 +32,7 @@ static constexpr uint32_t MEDIUM_THRESHOLD_MS = 30000;
 static constexpr int32_t ACTIVE_INTERVAL_MS = 20;
 static constexpr int32_t MEDIUM_INTERVAL_MS = 100;
 static constexpr int32_t IDLE_INTERVAL_MS = 500;
-// Matches the keep-alive idle window in ethApiHandlers — if the handler
+// Matches the keep-alive idle window in ethApiHandlers - if the handler
 // loop calls read() and netRecv blocked for 10 s, the 3 s idle deadline
 // inside parseRequest would be irrelevant and the OSThread would stay stuck
 // long after a quiet browser closed its end of the TCP socket.
@@ -52,7 +52,7 @@ static int picoRand(void * /*ctx*/, unsigned char *out, size_t len)
     return 0;
 }
 
-// One-shot TLS context lives in BSS — keeps mbedtls allocations off the
+// One-shot TLS context lives in BSS - keeps mbedtls allocations off the
 // OSThread stack (lesson from Phase 2.1-bis: stack budget is tight on M33).
 static EthernetServer *tlsServer = nullptr;
 static mbedtls_x509_crt certChain;
@@ -73,7 +73,7 @@ static int netSend(void *ctx, const unsigned char *buf, size_t len)
     // Block-with-yield until the W5500 TX buffer can absorb the chunk.
     // Returning WANT_WRITE without delay made mbedtls_ssl_handshake() spin
     // at ~180k iter/s when Chrome was slow to drain the socket during the
-    // ECDHE-ECDSA ServerKeyExchange — the original code logged exactly that
+    // ECDHE-ECDSA ServerKeyExchange - the original code logged exactly that
     // signature (ret=-0x6880 / WANT_WRITE) tight-looping forever. Firefox
     // happened to read fast enough that the buffer never filled.
     uint32_t t0 = millis();
@@ -96,12 +96,12 @@ static int netRecv(void *ctx, unsigned char *buf, size_t len)
     // Block-with-timeout: spin until bytes arrive, the peer closes, or we
     // exceed the per-recv budget. Pure non-blocking (return WANT_READ) would
     // require mbedtls_ssl_handshake to be driven from the runOnce dispatcher
-    // — overkill for the Phase 2.2 skeleton with a single in-flight session.
+    // - overkill for the Phase 2.2 skeleton with a single in-flight session.
     //
     // Pet the 8 s hardware watchdog from inside the poll loop. We sit here
     // for up to RECV_TIMEOUT_MS waiting for the next keep-alive request, and
     // a quiet client can string two such waits back-to-back (6 s) plus the
-    // earlier handshake/handler time — easily past the watchdog deadline.
+    // earlier handshake/handler time - easily past the watchdog deadline.
     // The main loop()'s watchdog_update() never runs while the OSThread is
     // inside serveClient(), so it has to be done here.
     uint32_t t0 = millis();
@@ -152,7 +152,7 @@ class MbedTlsStream : public IStreamReadWrite
         size_t pending = mbedtls_ssl_get_bytes_avail(ssl_);
         if (pending > 0)
             return (int)pending;
-        // Best-effort: report network bytes (rough proxy — handlers usually
+        // Best-effort: report network bytes (rough proxy - handlers usually
         // call read() in a loop and tolerate slow streams).
         return client_->available();
     }
@@ -197,7 +197,7 @@ class EthTlsApiServerThread : public concurrency::OSThread
             if (!isEthCertReady())
                 return 500;
             if (!initTlsContext())
-                return INT32_MAX; // hard fail — TLS server stays disabled
+                return INT32_MAX; // hard fail - TLS server stays disabled
             loadedCertGen_ = getEthCertGeneration();
             tlsReady = true;
         }
@@ -330,7 +330,7 @@ void deInitEthTlsApiServer()
 {
     // A W5500 chip reset leaves tlsServer bound to a dead socket and the cached
     // mbedTLS context stale. Reset the worker back to Phase A (free the context,
-    // drop the listener, clear tlsReady) WITHOUT deleting the OSThread — its next
+    // drop the listener, clear tlsReady) WITHOUT deleting the OSThread - its next
     // runOnce re-waits for isEthCertReady() and rebuilds the context + rebinds
     // TCP/443. Safe to free here: this runs in reconnectETH (ethConnect thread),
     // and the cooperative scheduler guarantees tlsThread is not mid-runOnce, so

@@ -123,7 +123,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             filename[sizeof(filename) - 1] = '\0';
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
-                // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate — remove first.
+                // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate - remove first.
                 spiLock->lock();
                 if (FSCom.exists(filename))
                     FSCom.remove(filename);

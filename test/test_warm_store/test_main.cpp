@@ -1,7 +1,7 @@
-// Unit tests for the warm ("long-tail") node tier — src/mesh/WarmNodeStore.cpp.
+// Unit tests for the warm ("long-tail") node tier - src/mesh/WarmNodeStore.cpp.
 // Covers admission/eviction policy (keyed entries outrank keyless), take()
 // rehydration semantics, and a tolerant persistence round trip.
-#include "MeshTypes.h" // BEFORE TestUtil.h — provides WARM_NODE_COUNT via mesh-pb-constants.h
+#include "MeshTypes.h" // BEFORE TestUtil.h - provides WARM_NODE_COUNT via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>
 

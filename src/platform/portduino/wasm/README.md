@@ -1,8 +1,8 @@
-# ARCH_PORTDUINO_WASM — meshtasticd in WebAssembly (LoRa over WebUSB)
+# ARCH_PORTDUINO_WASM - meshtasticd in WebAssembly (LoRa over WebUSB)
 
 Builds the full portduino firmware (`setup()`/`loop()`) to WebAssembly with
 Emscripten, so a real Meshtastic node runs in a browser tab (or headless Node)
-and drives a LoRa radio over **WebUSB** through a CH341 USB-to-SPI bridge — the
+and drives a LoRa radio over **WebUSB** through a CH341 USB-to-SPI bridge - the
 same `Ch341Hal` path the desktop `meshtasticd` uses, with the libusb backend
 swapped for a WebUSB one. The desktop/native portduino build is untouched.
 
@@ -11,7 +11,7 @@ swapped for a WebUSB one. The desktop/native portduino build is untouched.
 | file                       | role                                                                                                                                     |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `portduino_glue_wasm.cpp`  | LoRa config (MeshToad default + `wasm_set_lora_*` setters, no YAML), VFS mount, region/MAC helpers, and the `wasm_api_*` PhoneAPI bridge |
-| `portduino_main_wasm.cpp`  | `wasm_setup()` / `wasm_loop_once()` — JS drives the cooperative loop                                                                     |
+| `portduino_main_wasm.cpp`  | `wasm_setup()` / `wasm_loop_once()` - JS drives the cooperative loop                                                                     |
 | `libpinedio_webusb.c`      | WebUSB libpinedio backend (sync C ↔ async WebUSB via Asyncify `EM_ASYNC_JS`)                                                             |
 | `include/libpinedio-usb.h` | the 12-fn libpinedio API the backend implements                                                                                          |
 | `stubs/`                   | `argp.h` shim + jsoncpp serializer stub (MQTT-only, excluded)                                                                            |
@@ -28,7 +28,7 @@ This is a normal PlatformIO env (`[env:native-wasm]`) built with the
 [meshtastic/platform-wasm](https://github.com/meshtastic/platform-wasm) platform
 (emcc/em++), exactly like any other board target.
 
-Prereq: an **Emscripten SDK** on `PATH` — `source <emsdk>/emsdk_env.sh` (or
+Prereq: an **Emscripten SDK** on `PATH` - `source <emsdk>/emsdk_env.sh` (or
 `export EMSDK=<path>`) so the platform builder can locate `emcc`.
 
 ```sh
@@ -63,7 +63,7 @@ pump();
 ```
 
 **API control:** feed a `ToRadio` protobuf with `wasm_api_to_radio(ptr,len)` and
-drain `FromRadio` with `wasm_api_from_radio(out,max)` — the firmware's own
+drain `FromRadio` with `wasm_api_from_radio(out,max)` - the firmware's own
 `PhoneAPI`, unframed. The official `@meshtastic/core` SDK drives it through a
 ~40-line in-process transport (see the `meshtasticd-wasm-node` repo, which hosts
 the dev server, the SDK-UI page, the headless node-usb runner, and the TCP :4403
@@ -71,7 +71,7 @@ bridge for the Python CLI). WebUSB is Chromium-only.
 
 **Reboot:** the firmware can't restart itself in wasm, so a reboot (admin/phone
 command, factory reset, or the 60 s stuck-TX watchdog) hands off to the host. In
-a browser it calls `location.reload()` — NodeDB state survives via IDBFS, so the
+a browser it calls `location.reload()` - NodeDB state survives via IDBFS, so the
 node comes back with the same identity. Headless, provide a `Module.onReboot`
 callback to handle it (re-instantiate the module, `process.exit()` for a
 supervisor to restart, etc.); without one it just logs and keeps running.

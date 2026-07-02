@@ -175,7 +175,7 @@ class PhoneAPI
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
     /// Per-connection auth: tracked in a small file-scope slot table keyed
     /// by PhoneAPI*. Adding state members directly to PhoneAPI broke
-    /// USB-CDC enumeration on current nRF52 framework — even one extra
+    /// USB-CDC enumeration on current nRF52 framework - even one extra
     /// per-instance uint32_t was enough. Keeping all state out-of-line
     /// avoids the issue.
     void setAdminAuthorized(bool authorized);
@@ -257,10 +257,10 @@ class PhoneAPI
     APIType api_type = TYPE_NONE;
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
-    // No per-instance auth members — see method-level note. All state lives
+    // No per-instance auth members - see method-level note. All state lives
     // in a file-scope slot table in PhoneAPI.cpp keyed by `this` pointer.
 
-    // Pending LockdownStatus storage is NOT a class member — having a
+    // Pending LockdownStatus storage is NOT a class member - having a
     // meshtastic_LockdownStatus (~50 bytes with the char[33] lock_reason)
     // as a PhoneAPI member broke USB-CDC enumeration on the nRF52 Adafruit
     // framework. The exact mechanism wasn't pinned down, but moving the
@@ -310,7 +310,7 @@ class PhoneAPI
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
     /// Synchronously handle a lockdown_auth AdminMessage from the local
     /// client. Runs inside handleToRadioPacket so the originating
-    /// connection is reachable via `this` — avoids the async context
+    /// connection is reachable via `this` - avoids the async context
     /// loss that broke the previous AdminModule path. Always consumes the
     /// packet (returns true): lockdown_auth is local-only and must not be
     /// forwarded to the mesh router.

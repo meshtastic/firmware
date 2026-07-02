@@ -349,7 +349,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
 
-    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer — align with nRF52 system_off semantics.
+    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer - align with nRF52 system_off semantics.
     if (msecToWake != portMAX_DELAY)
         esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();
