@@ -691,7 +691,8 @@ class Screen : public concurrency::OSThread
     // Test-only: emits one LOG_INFO line on every frame transition so the
     // pytest harness can assert which frame is shown. Gated behind a macro
     // so the chatty log doesn't ship in release builds. Enabled via
-    // build_testing_profile(enable_ui_log=True) in mcp-server/userprefs.py.
+    // build_testing_profile(enable_ui_log=True) in the meshtastic-mcp harness
+    // (https://github.com/meshtastic/meshtastic-mcp).
     // Member function (not free) because FramesetInfo is a private nested
     // type - only methods of Screen can reach it.
     void logFrameChange(const char *reason, uint8_t targetIdx);

@@ -2,12 +2,12 @@
 
 > **TL;DR**
 >
-> |                |                                                                           |
-> | -------------- | ------------------------------------------------------------------------- |
-> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)        |
-> | Hardware tests | `./mcp-server/run-tests.sh`                                               |
-> | Format         | `trunk fmt`                                                               |
-> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `CLAUDE.md` (Claude Code) |
+> |                |                                                                                                                        |
+> | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                                                     |
+> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout) |
+> | Format         | `trunk fmt`                                                                                                            |
+> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `CLAUDE.md` (Claude Code)                                              |
 >
 > **Need this? It's here.**
 >
@@ -18,7 +18,7 @@
 > | New module skeleton                         | inherit `ProtobufModule<T>` in `src/mesh/ProtobufModule.h` |
 > | Observer / event wiring                     | `src/Observer.h`                                           |
 
-This repository is the [Meshtastic](https://meshtastic.org) firmware - a C++17 embedded codebase targeting ESP32 / nRF52 / RP2040 / STM32WL / Linux-Portduino LoRa mesh radios - plus a Python MCP server in `mcp-server/` that AI agents use to flash, configure, and test connected devices.
+This repository is the [Meshtastic](https://meshtastic.org) firmware - a C++17 embedded codebase targeting ESP32 / nRF52 / RP2040 / STM32WL / Linux-Portduino LoRa mesh radios. The Python MCP server that AI agents use to flash, configure, and test connected devices now lives in its own repo, [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp); this repo registers it via `.mcp.json` (run through `uvx`) so its tools are available automatically.
 
 ## Primary instruction file
 
@@ -35,15 +35,15 @@ This file (`AGENTS.md`) is a short pointer + quick reference for agents that don
 | Clean + rebuild                  | `pio run -e <env> -t clean && pio run -e <env>`                                                                                                                       |
 | Flash a device                   | `pio run -e <env> -t upload --upload-port <port>` (or use the `pio_flash` MCP tool)                                                                                   |
 | Run firmware unit tests (native) | `./bin/run-tests.sh` (preferred - ASan/LSan + RED/AMBER/GREEN verdict); or raw: `~/.platformio/penv/bin/python -m platformio test -e native > /tmp/test_out.txt 2>&1` |
-| Run MCP hardware tests           | `./mcp-server/run-tests.sh`                                                                                                                                           |
-| Live TUI test runner             | `mcp-server/.venv/bin/meshtastic-mcp-test-tui`                                                                                                                        |
+| Run MCP hardware tests           | From a [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) checkout: `MESHTASTIC_FIRMWARE_ROOT=/path/to/firmware ./run-tests.sh`                           |
+| Live TUI test runner             | `uvx --from git+https://github.com/meshtastic/meshtastic-mcp meshtastic-mcp-test-tui`                                                                                 |
 | Format before commit             | `trunk fmt`                                                                                                                                                           |
 | Regenerate protobuf bindings     | `bin/regen-protos.sh`                                                                                                                                                 |
 | Generate CI matrix               | `./bin/generate_ci_matrix.py all [--level pr]`                                                                                                                        |
 
 ## MCP server (device + test automation)
 
-The `mcp-server/` package exposes ~32 MCP tools for device discovery, building, flashing, serial monitoring, and live-node administration. Tools are grouped as:
+The [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) server exposes ~32 MCP tools for device discovery, building, flashing, serial monitoring, and live-node administration. Tools are grouped as:
 
 - **Discovery**: `list_devices`, `list_boards`, `get_board`
 - **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 factory), `update_flash` (ESP32 OTA), `touch_1200bps`
@@ -53,19 +53,13 @@ The `mcp-server/` package exposes ~32 MCP tools for device discovery, building, 
 - **userPrefs admin**: `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_*`, `nrfutil_*`, `picotool_*`
 
-Setup: `cd mcp-server && python3 -m venv .venv && .venv/bin/pip install -e '.[test]'`. The repo registers the server via `.mcp.json` - Claude Code picks it up automatically.
+Setup: nothing to build - `.mcp.json` runs the server via `uvx --from git+https://github.com/meshtastic/meshtastic-mcp meshtastic-mcp`, so Claude Code picks it up automatically. To run the pytest hardware harness, clone [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) and set `MESHTASTIC_FIRMWARE_ROOT` to this firmware checkout.
 
-See `mcp-server/README.md` for argument shapes and the **MCP Server & Hardware Test Harness** section of `.github/copilot-instructions.md` for agent usage rules (tool surface, fixture contract, firmware integration points, recovery playbooks).
+See the meshtastic-mcp repo's README for argument shapes and the **MCP Server & Hardware Test Harness** section of `.github/copilot-instructions.md` for agent usage rules (tool surface, fixture contract, firmware integration points, recovery playbooks).
 
 ## Slash commands (AI-assisted workflows)
 
-Three test-and-diagnose workflows exist as slash commands:
-
-- **`/test` (Claude Code) / `/mcp-test` (Copilot)** - run the hardware test suite and interpret failures
-- **`/diagnose` / `/mcp-diagnose`** - read-only device health report
-- **`/repro` / `/mcp-repro`** - flakiness triage: re-run one test N times, diff firmware logs between passes and failures
-
-Bodies live in `.claude/commands/` and `.github/prompts/` respectively. `.claude/commands/README.md` is the index.
+The test-and-diagnose workflows (`/test`, `/diagnose`, `/repro`, `/leakhunt`) now ship with the [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) repo as skills - run them from a checkout of that repo (with `MESHTASTIC_FIRMWARE_ROOT` pointed here). The MCP tools they build on are still available in this repo via `.mcp.json`.
 
 ## Encryption at a glance
 
@@ -108,8 +102,8 @@ Sequence these; don't parallelize on the same port.
 
 1. Build locally: `pio run -e <env>`
 2. Flash the test device: `pio_flash(env=..., port=..., confirm=True)`
-3. Run the suite: `./mcp-server/run-tests.sh tests/<tier>` or `/test tests/<tier>`
-4. On failure, open `mcp-server/tests/report.html` → `Meshtastic debug` section for the firmware log tail + device state dump
+3. Run the suite from a meshtastic-mcp checkout: `MESHTASTIC_FIRMWARE_ROOT=/path/to/firmware ./run-tests.sh tests/<tier>` (or the `/test` skill)
+4. On failure, open the run's `tests/report.html` → `Meshtastic debug` section for the firmware log tail + device state dump
 5. Iterate
 
 ### Debugging a flaky test
@@ -120,25 +114,23 @@ Sequence these; don't parallelize on the same port.
 
 ## Where to look
 
-| Path                              | What's there                                                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `src/`                            | Firmware C++ source (`mesh/`, `modules/`, `platform/`, `graphics/`, `gps/`, `motion/`, `mqtt/`, …)                       |
-| `src/mesh/`                       | Core: NodeDB, Router, Channels, CryptoEngine, radio interfaces, StreamAPI, PhoneAPI                                      |
-| `src/modules/`                    | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                          |
-| `variants/`                       | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                             |
-| `protobufs/`                      | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                              |
-| `test/`                           | Firmware unit tests (19 suites; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                      |
-| `mcp-server/`                     | Python MCP server + pytest hardware integration tests                                                                    |
-| `mcp-server/tests/`               | Tiered pytest suite: `unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/` |
-| `.claude/commands/`               | Claude Code slash command bodies                                                                                         |
-| `.github/prompts/`                | Copilot prompt bodies (mirrors of the Claude Code ones)                                                                  |
-| `.github/copilot-instructions.md` | **Primary agent instructions - read this**                                                                               |
-| `.github/workflows/`              | CI pipelines                                                                                                             |
-| `.mcp.json`                       | MCP server registration for Claude Code                                                                                  |
+| Path                                                           | What's there                                                                                                                                                                                   |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`                                                         | Firmware C++ source (`mesh/`, `modules/`, `platform/`, `graphics/`, `gps/`, `motion/`, `mqtt/`, …)                                                                                             |
+| `src/mesh/`                                                    | Core: NodeDB, Router, Channels, CryptoEngine, radio interfaces, StreamAPI, PhoneAPI                                                                                                            |
+| `src/modules/`                                                 | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                                                                                                |
+| `variants/`                                                    | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                                                                                                   |
+| `protobufs/`                                                   | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                                                                                                    |
+| `test/`                                                        | Firmware unit tests (19 suites; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                                                                                            |
+| [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) | Standalone MCP server + tiered pytest hardware harness (`unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/`) - registered here via `.mcp.json` |
+| `.github/prompts/`                                             | Copilot prompt bodies (firmware scaffolding: new module / sensor / variant)                                                                                                                    |
+| `.github/copilot-instructions.md`                              | **Primary agent instructions - read this**                                                                                                                                                     |
+| `.github/workflows/`                                           | CI pipelines                                                                                                                                                                                   |
+| `.mcp.json`                                                    | MCP server registration for Claude Code                                                                                                                                                        |
 
 ## Recovery one-liners
 
-- **`userPrefs.jsonc` dirty after a test run?** Re-run `./mcp-server/run-tests.sh` once (pre-flight self-heals from the sidecar). If still dirty: `git checkout userPrefs.jsonc`.
+- **`userPrefs.jsonc` dirty after a test run?** Re-run the meshtastic-mcp harness once (pre-flight self-heals from the sidecar). If still dirty: `git checkout userPrefs.jsonc`.
 - **nRF52 not responding?** `mcp__meshtastic__touch_1200bps(port=...)` drops it into the DFU bootloader, then `pio_flash` re-installs.
 - **Device fully wedged (no DFU)?** `mcp__meshtastic__uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles it via USB hub PPPS. Needs `uhubctl` installed (`brew install uhubctl` / `apt install uhubctl`); on Linux without udev rules, permission errors fail fast, so use `sudo uhubctl` yourself or configure udev access.
 - **Port busy?** `lsof <port>` to find the holder. Usually a stale `pio device monitor` or zombie `meshtastic_mcp` process. Kill it.
