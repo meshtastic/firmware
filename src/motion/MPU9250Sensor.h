@@ -17,13 +17,9 @@
 #define MPU9250_UP_AXIS_PY 3
 #define MPU9250_UP_AXIS_NY 4
 
-// InvenSense MPU-9250 (and MPU-9255) 9-axis IMU driver.
-// The package contains an MPU-6500 accel/gyro die plus an AK8963 magnetometer
-// die. We drive both directly over I2C: the MPU-6500 at deviceAddress() and the
-// AK8963 at AK8963_ADDR via the MPU's I2C bypass mode.
-// This driver covers the RAK1905 WisBlock module (MPU-9250) — a viable
-// replacement for the EOL RAK12034 (BMX160) when tilt-compensated heading is
-// needed alongside RAK1904 (LIS3DH) options.
+// InvenSense MPU-9250/MPU-9255 9-axis IMU driver (e.g. RAK1905 WisBlock).
+// Drives the MPU-6500 accel die at deviceAddress() and the AK8963 magnetometer
+// at AK8963_ADDR over I2C bypass mode.
 class MPU9250Sensor : public MotionSensor
 {
   private:
@@ -38,10 +34,8 @@ class MPU9250Sensor : public MotionSensor
     static constexpr const char *compassCalibrationFileName = "/prefs/compass_mpu9250.dat";
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
-    // Exponential moving average on raw accel + mag to keep the heading stable
-    // during device rotation. The compass-only fusion path is stateless, so any
-    // dynamic acceleration shows up immediately as heading noise; filtering the
-    // inputs is the cheapest mitigation.
+    // Per-axis EMA on raw accel + mag: the stateless compass fusion turns dynamic
+    // acceleration into heading noise, so filtering the inputs steadies rotation.
     static constexpr float accelFilterAlpha = 0.15f;
     static constexpr float magFilterAlpha = 0.20f;
     FusionVector accelFiltered = {{0, 0, 0}};
