@@ -792,9 +792,10 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
         if (nodeInfoLiteHasXeddsaSigned(node)) {
             if (currentResolution == ScreenResolution::High) {
-                graphics::NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + 1, xeddsa_shield_width,
-                                                                   xeddsa_shield_height, xeddsa_shield, display);
-                username_buffer = (xeddsa_shield_width * 2) + 2;
+                graphics::NodeListRenderer::drawScaledXBitmap16x16(x + 2, getTextPositions(display)[line] + 1,
+                                                                   xeddsa_shield_width, xeddsa_shield_height, xeddsa_shield,
+                                                                   display);
+                username_buffer = (xeddsa_shield_width * 2) + 4;
             } else {
                 display->drawXbm(x, getTextPositions(display)[line] + 3, xeddsa_shield_width, xeddsa_shield_height,
                                  xeddsa_shield);
