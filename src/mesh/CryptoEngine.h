@@ -24,6 +24,9 @@ struct CryptoKey {
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 #define XEDDSA_SIGNATURE_SIZE 64
+// Encoded size the signature adds to the Data protobuf: 1 tag byte (field 10 < 16) +
+// 1 length byte (64 < 128) + 64 signature bytes. test_packet_signing asserts this stays exact.
+#define XEDDSA_SIGNATURE_FIELD_BYTES (XEDDSA_SIGNATURE_SIZE + 2)
 
 class CryptoEngine
 {
