@@ -215,9 +215,29 @@ int32_t StatusLEDModule::runOnce()
 #ifdef PCA_LED_ENABLE
     io.digitalWrite(PCA_LED_ENABLE, CHARGE_LED_state);
 #endif
+
 #ifdef LED_POWER
+#ifdef LED_POWER_CRITICAL
+    // Split behavior only when the two LEDs are on distinct pins. If a board maps
+    // LED_POWER and LED_POWER_CRITICAL to the same GPIO, the two writes would race
+    // (second wins) and invert normal/critical; fall back to a single write there.
+    // Both are compile-time constants, so the unused branch folds away at build time.
+    if (LED_POWER != LED_POWER_CRITICAL) {
+        if (power_state == critical) {
+            digitalWrite(LED_POWER, 0);
+            digitalWrite(LED_POWER_CRITICAL, CHARGE_LED_state);
+        } else {
+            digitalWrite(LED_POWER, CHARGE_LED_state);
+            digitalWrite(LED_POWER_CRITICAL, 0);
+        }
+    } else {
+        digitalWrite(LED_POWER, CHARGE_LED_state);
+    }
+#else
     digitalWrite(LED_POWER, CHARGE_LED_state);
 #endif
+#endif
+
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif
