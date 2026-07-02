@@ -2,14 +2,14 @@
 
 Complements v1's reportlog-tail worker. ``tests/conftest.py`` owns a
 session-scoped autouse fixture (``_firmware_log_stream``) that mirrors
-every ``meshtastic.log.line`` pubsub event to ``tests/fwlog.jsonl`` —
+every ``meshtastic.log.line`` pubsub event to ``tests/fwlog.jsonl`` -
 one JSON object per line:
 
     {"ts": 1729100000.123, "port": "/dev/cu.usbmodem1101", "line": "..."}
 
 The TUI tails that file from a worker thread; each new line becomes a
 :class:`FirmwareLogLine` message posted to the App. Same pattern as the
-reportlog tail worker — truncate on launch, tolerate missing file for
+reportlog tail worker - truncate on launch, tolerate missing file for
 30 s, back off at EOF.
 
 Kept in its own module so the (large) ``test_tui.py`` stays focused on
@@ -30,14 +30,14 @@ class FirmwareLogTailer(threading.Thread):
 
     ``post`` is the App's ``post_message`` (or any callable that accepts a
     single payload arg). We pass parsed dicts rather than constructing
-    Textual Message objects here — keeps this module free of the
+    Textual Message objects here - keeps this module free of the
     textual dependency so it's unit-testable in a bare venv.
 
     Parameters
     ----------
     path:
         Path to ``tests/fwlog.jsonl``. The file may not exist yet at
-        startup — pytest only creates it once the session fixture runs.
+        startup - pytest only creates it once the session fixture runs.
     post:
         Callable invoked with a dict ``{"ts", "port", "line"}`` for every
         new line parsed from the file.

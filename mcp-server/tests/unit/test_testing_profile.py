@@ -113,7 +113,7 @@ def test_owner_names_included_when_provided() -> None:
 
 def test_psk_seed_isolation_across_ci_runs() -> None:
     """The core claim: two test labs running concurrently with different
-    session seeds produce different PSKs — their meshes cannot decode each
+    session seeds produce different PSKs - their meshes cannot decode each
     other's traffic."""
     lab_a = userprefs.build_testing_profile(psk_seed="lab-A-nightly")
     lab_b = userprefs.build_testing_profile(psk_seed="lab-B-nightly")

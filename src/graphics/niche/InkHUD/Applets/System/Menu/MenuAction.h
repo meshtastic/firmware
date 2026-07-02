@@ -129,6 +129,11 @@ enum MenuAction {
     // Administration
     RESET_NODEDB_ALL,
     RESET_NODEDB_KEEP_FAVORITES,
+    WIPE_MESSAGES_ALL,
+    // Map zoom (MapApplet and FavoritesMapApplet)
+    MAP_ZOOM_IN,
+    MAP_ZOOM_OUT,
+    MAP_ZOOM_RESET,
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -6,7 +6,7 @@ name: Post Web Flasher Build Placeholder
 #
 # SECURITY: this uses pull_request_target (write token, runs for fork PRs) but is
 # safe because it never checks out or runs PR code and posts a fully static body
-# — no PR title, branch name, or other untrusted input is used anywhere.
+# - no PR title, branch name, or other untrusted input is used anywhere.
 
 on:
   pull_request_target:
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Post web flasher build-in-progress placeholder
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- web-flasher-link -->';
@@ -31,14 +31,14 @@ jobs:
 
             // Trusted authors only (matches the real workflow). author_association
             // can't reflect private org membership for the token, so concealed
-            // members appear as CONTRIBUTOR — include it, or maintainers are excluded.
+            // members appear as CONTRIBUTOR - include it, or maintainers are excluded.
             const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'];
             if (!allowedAssociations.includes(pr.author_association)) {
               core.info(`Author association ${pr.author_association} is not trusted; skipping.`);
               return;
             }
 
-            // Only seed a placeholder when no flasher comment exists yet — never
+            // Only seed a placeholder when no flasher comment exists yet - never
             // overwrite a real (or existing placeholder) comment.
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: pr.number, per_page: 100,

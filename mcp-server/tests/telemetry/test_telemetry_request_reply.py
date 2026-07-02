@@ -1,6 +1,6 @@
 """Telemetry: on-demand device-metrics request gets a prompt reply.
 
-Complementary to ``test_device_telemetry_broadcast`` — that one witnesses the
+Complementary to ``test_device_telemetry_broadcast`` - that one witnesses the
 firmware's *periodic* broadcast (900 s default interval, up to ~7 min worst
 case). This one exercises the *request/reply* path: TX sends a
 ``meshtastic_Telemetry`` with the ``device_metrics`` variant-tag set and
@@ -13,14 +13,14 @@ Validates:
   * ``sendData(portNum=TELEMETRY_APP, want_response=True)`` encodes + routes
     to RX (directed, PKI-encrypted to RX's pubkey)
   * RX's ``DeviceTelemetryModule::handleReceivedProtobuf`` dispatches to
-    ``allocReply`` — which is only invoked by the framework when
+    ``allocReply`` - which is only invoked by the framework when
     ``want_response`` is set on the incoming packet
   * The reply carries a ``DeviceMetrics`` sub-message with at least one
     non-zero field (uptime_seconds is guaranteed non-zero a few seconds
     after boot, so it reliably survives protobuf's default-value
     serialization stripping)
   * The reply routes back to TX and gets matched against the original
-    request via ``request_id`` — using the library's ``onResponse``
+    request via ``request_id`` - using the library's ``onResponse``
     callback mechanism, which stores the handler at
     ``responseHandlers[sent_packet.id]`` and dispatches when a packet
     arrives with ``decoded.request_id == sent_packet.id``. This is more
@@ -74,7 +74,7 @@ def test_telemetry_request_reply(mesh_pair: dict[str, Any]) -> None:
     # onResponse, not pubsub), but keeping a concrete topic avoids the
     # surprise of a pubsub wildcard receiving every packet type.
     with ReceiveCollector(tx_port, topic="meshtastic.receive.telemetry") as tx_listener:
-        # Bilateral PKI warmup — nudge BOTH sides to rebroadcast their
+        # Bilateral PKI warmup - nudge BOTH sides to rebroadcast their
         # NodeInfo (with current pubkey) before the directed send.
         #  * Nudging only RX gets RX's key → TX, but leaves RX with a
         #    potentially stale TX pubkey → RX NAKs our request with
@@ -92,7 +92,7 @@ def test_telemetry_request_reply(mesh_pair: dict[str, Any]) -> None:
             if last_rec.get("user", {}).get("publicKey"):
                 break
             if time.monotonic() - last_nudge > 15.0:
-                # Re-nudge both sides — LoRa collisions can drop either
+                # Re-nudge both sides - LoRa collisions can drop either
                 # direction's NodeInfo broadcast independently.
                 nudge_nodeinfo_port(rx_port)
                 tx_listener.broadcast_nodeinfo_ping()
@@ -113,14 +113,14 @@ def test_telemetry_request_reply(mesh_pair: dict[str, Any]) -> None:
         # An empty `Telemetry()` has `which_variant = UNSET (0)`, so we MUST
         # explicitly set the variant. `CopyFrom(DeviceMetrics())` with a
         # default-constructed sub-message is the canonical Python-protobuf
-        # idiom for "set the oneof tag without populating fields" — matching
+        # idiom for "set the oneof tag without populating fields" - matching
         # how `MeshInterface.sendTelemetry()` constructs requests for the
         # other variants.
         #
         # Matching the reply: the meshtastic client's `onResponse` callback
         # mechanism fires ONLY for packets whose `decoded.request_id` equals
         # the original outgoing packet's `id`. That's exactly the semantic
-        # we want — rejects periodic broadcasts (no request_id), rejects
+        # we want - rejects periodic broadcasts (no request_id), rejects
         # stale replies to prior requests (different request_id), and
         # tolerates the firmware's reply_id/request_id naming quirk
         # (firmware's `setReplyTo` writes the original packet's id into
@@ -160,7 +160,7 @@ def test_telemetry_request_reply(mesh_pair: dict[str, Any]) -> None:
             f"{[hex(p.get('from') or 0) for p in tx_listener.snapshot()]!r}"
         )
 
-        # Sanity: the reply's origin matches — a firmware bug that routed
+        # Sanity: the reply's origin matches - a firmware bug that routed
         # the response to the wrong sender would make onResponse fire on
         # the wrong packet.
         assert got.get("from") == rx_node_num, (
@@ -177,7 +177,7 @@ def test_telemetry_request_reply(mesh_pair: dict[str, Any]) -> None:
         # A populated reply must contain at least one DeviceMetrics field.
         # Protobuf's JSON serializer strips default-valued (zero) fields,
         # so a bare `deviceMetrics: {}` would mean the firmware wrote the
-        # sub-message but every field was zero — plausible right at boot
+        # sub-message but every field was zero - plausible right at boot
         # but not for a device that's been running long enough for a test
         # session's warmup + NodeInfo exchange (~10-30 s uptime minimum).
         populated = [k for k in _DEVICE_METRICS_FIELDS if k in dm]

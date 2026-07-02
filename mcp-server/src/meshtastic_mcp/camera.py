@@ -1,19 +1,19 @@
 """Cross-platform USB-webcam capture for UI tests + the `capture_screen` tool.
 
 Backends:
-- `opencv` — cv2.VideoCapture (AVFoundation on macOS, V4L2 on Linux).
-- `ffmpeg` — subprocess shelling out to the system `ffmpeg` binary. Slower
+- `opencv` - cv2.VideoCapture (AVFoundation on macOS, V4L2 on Linux).
+- `ffmpeg` - subprocess shelling out to the system `ffmpeg` binary. Slower
   per frame, but zero Python deps beyond stdlib.
-- `null` — no-op stub returning a 1×1 black PNG. Used when no camera is
+- `null` - no-op stub returning a 1×1 black PNG. Used when no camera is
   configured; keeps code paths alive without forcing every operator to
   hook up hardware.
 
 Environment variables (read at `get_camera()` call time):
-- `MESHTASTIC_UI_CAMERA_BACKEND` — one of `opencv` / `ffmpeg` / `null` /
+- `MESHTASTIC_UI_CAMERA_BACKEND` - one of `opencv` / `ffmpeg` / `null` /
   `auto` (default). `auto` picks opencv if `cv2` imports, else ffmpeg if
   `ffmpeg --version` resolves, else null.
-- `MESHTASTIC_UI_CAMERA_DEVICE` — generic default (index or path).
-- `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` — per-role override, e.g.
+- `MESHTASTIC_UI_CAMERA_DEVICE` - generic default (index or path).
+- `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` - per-role override, e.g.
   `MESHTASTIC_UI_CAMERA_DEVICE_ESP32S3=0` for the OLED-bearing heltec-v3.
   Role suffix is uppercased before lookup.
 
@@ -76,7 +76,7 @@ class OpenCVBackend:
                 "On macOS check TCC Camera permission; on Linux check /dev/video* and v4l2 access."
             )
 
-        # Drop the first few frames — auto-exposure + white-balance settle.
+        # Drop the first few frames - auto-exposure + white-balance settle.
         for _ in range(warmup_frames):
             self._cap.read()
         # Detect a stuck black-frame camera early rather than silently
@@ -159,7 +159,7 @@ class FfmpegBackend:
         return out.stdout
 
     def close(self) -> None:
-        pass  # stateless — each capture spawns a new process
+        pass  # stateless - each capture spawns a new process
 
 
 # ---------- Null backend ---------------------------------------------------
@@ -197,7 +197,7 @@ def get_camera(role: str | None = None) -> CameraBackend:
     """Return a CameraBackend for the given device role (e.g. `"esp32s3"`).
 
     Falls back to `NullBackend` if no camera is configured or the selected
-    backend fails to init — tests should treat captures as best-effort
+    backend fails to init - tests should treat captures as best-effort
     evidence, not a blocker.
     """
     backend = os.environ.get("MESHTASTIC_UI_CAMERA_BACKEND", "auto").lower()

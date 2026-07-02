@@ -29,6 +29,8 @@ template <class T> class ServerAPI : public StreamAPI, private concurrency::OSTh
     /// We override this method to prevent publishing EVENT_SERIAL_CONNECTED/DISCONNECTED for wifi links (we want the board to
     /// stay in the POWERED state to prevent disabling wifi)
     virtual void onConnectionChanged(bool connected) override {}
+    virtual bool canWriteFrame(size_t frameLen) override;
+    virtual void onFrameWriteFailed(size_t frameLen, size_t writtenLen) override;
 
     virtual int32_t runOnce() override; // Check for dropped client connections
 };

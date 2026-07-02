@@ -33,13 +33,13 @@ def test_traceroute_one_hop(mesh_pair: dict[str, Any]) -> None:
     Why the listener is on TX (not RX):
         The traceroute RESPONSE is addressed to TX (the original requester).
         The meshtastic Python client publishes `meshtastic.receive.traceroute`
-        on the interface that received that response — which is TX's iface.
+        on the interface that received that response - which is TX's iface.
         A listener on RX would only see the inbound REQUEST, which lacks
         the SNR-towards / SNR-back fields the firmware only fills on reply.
 
     Why we ping RX's NodeInfo before sending:
         Traceroute requests are directed sends (wantResponse=True, specific
-        destinationId) — subject to the same PKI_SEND_FAIL_PUBLIC_KEY trap
+        destinationId) - subject to the same PKI_SEND_FAIL_PUBLIC_KEY trap
         as `test_direct_with_ack`. We open RX briefly to trigger the
         on-demand NodeInfo broadcast, then wait for TX's nodesByNum to
         populate RX's publicKey before calling sendTraceRoute.
@@ -54,7 +54,7 @@ def test_traceroute_one_hop(mesh_pair: dict[str, Any]) -> None:
     with ReceiveCollector(
         tx_port, topic="meshtastic.receive.traceroute"
     ) as tx_listener:
-        # Bilateral PKI warmup — traceroute requests are directed and
+        # Bilateral PKI warmup - traceroute requests are directed and
         # PKI-encrypted, so both sides need current pubkeys. See
         # `_receive.py::nudge_nodeinfo` and the test_direct_with_ack
         # comment for the full rationale (one-sided nudge lets err=35
@@ -105,7 +105,7 @@ def test_traceroute_one_hop(mesh_pair: dict[str, Any]) -> None:
         )
 
         # sendTraceRoute already waited for the response internally, but
-        # pubsub dispatch runs on the meshtastic-python reader thread —
+        # pubsub dispatch runs on the meshtastic-python reader thread -
         # give it a short grace window to queue the packet.
         packet = tx_listener.wait_for(
             lambda p: p.get("from") == rx_node_num,
@@ -138,7 +138,7 @@ def test_traceroute_one_hop(mesh_pair: dict[str, Any]) -> None:
             f"traceroute `routeBack` should be empty on a 2-device direct "
             f"mesh; got {back_hops!r}"
         )
-        # `snr_towards` has len(route) + 1 entries — one per hop plus a final
+        # `snr_towards` has len(route) + 1 entries - one per hop plus a final
         # entry for the destination's receive SNR. Direct mesh → len(route)
         # is 0 → exactly 1 SNR entry.
         assert len(snr_towards) == 1, (

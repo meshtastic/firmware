@@ -1,4 +1,4 @@
-"""Fake NodeDB fixture push — Portduino file copy + hardware XModem upload.
+"""Fake NodeDB fixture push - Portduino file copy + hardware XModem upload.
 
 The fixture pipeline is two-stage:
   1. `bin/gen-fake-nodedb-seed.py` produces a deterministic JSONL describing N
@@ -78,7 +78,7 @@ def _crc16_ccitt(data: bytes, *, init: int = 0x0000) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Compile step — shells out to bin/seed-json-to-proto.py so the MCP module
+# Compile step - shells out to bin/seed-json-to-proto.py so the MCP module
 # doesn't have to duplicate the proto-encoding logic.
 # ---------------------------------------------------------------------------
 def _compile_proto(jsonl_path: pathlib.Path, out_path: pathlib.Path) -> None:
@@ -117,7 +117,7 @@ def _resolve_seed_jsonl(size: int, custom: str | None) -> pathlib.Path:
 
 
 # ---------------------------------------------------------------------------
-# Portduino push — file copy into ~/.portduino/<config>/prefs/
+# Portduino push - file copy into ~/.portduino/<config>/prefs/
 # ---------------------------------------------------------------------------
 def _portduino_prefs_dir(config_name: str) -> pathlib.Path:
     home = pathlib.Path.home()
@@ -152,7 +152,7 @@ def _push_portduino(
 
 
 # ---------------------------------------------------------------------------
-# Hardware push — XModem over BLE/serial via the meshtastic Python interface.
+# Hardware push - XModem over BLE/serial via the meshtastic Python interface.
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class _AckEvent:
@@ -165,7 +165,7 @@ def _wait_for_response(q: "queue.Queue[_AckEvent]", timeout_s: float) -> _AckEve
         return q.get(timeout=timeout_s)
     except queue.Empty as exc:
         raise FixtureError(
-            f"XModem response timeout after {timeout_s:.1f}s — device not responding"
+            f"XModem response timeout after {timeout_s:.1f}s - device not responding"
         ) from exc
 
 
@@ -180,14 +180,14 @@ def _push_hardware(
     try:
         from meshtastic.protobuf import mesh_pb2, xmodem_pb2
         from pubsub import pub
-    except ImportError as exc:  # pragma: no cover — dep missing
+    except ImportError as exc:  # pragma: no cover - dep missing
         raise FixtureError(
             f"hardware push requires the meshtastic + pypubsub packages: {exc}"
         ) from exc
 
     if is_tcp_port(port):
         raise FixtureError(
-            "hardware push over TCP/portduino is not supported — use "
+            "hardware push over TCP/portduino is not supported - use "
             "target='portduino' to drop the fixture directly into the prefs dir."
         )
 
@@ -322,7 +322,7 @@ def _push_hardware(
 
 
 # ---------------------------------------------------------------------------
-# Public entry point — registered as an MCP tool in server.py.
+# Public entry point - registered as an MCP tool in server.py.
 # ---------------------------------------------------------------------------
 def push_fake_nodedb(
     size: int,
@@ -338,11 +338,11 @@ def push_fake_nodedb(
     """Compile a fresh-timestamp NodeDatabase fixture and push it to a device.
 
     Args:
-      size: 250, 500, 1000, or 2000 — selects which committed seed JSONL to use.
+      size: 250, 500, 1000, or 2000 - selects which committed seed JSONL to use.
       target: "portduino" (file copy to ~/.portduino/<config>/prefs/) or
               "hardware" (XModem upload to /prefs/nodes.proto + reboot).
       port: required for target="hardware". Serial path (e.g. /dev/cu.usbmodemXXXX)
-            or BLE identifier. TCP endpoints are rejected — use target="portduino"
+            or BLE identifier. TCP endpoints are rejected - use target="portduino"
             instead.
       portduino_config: which Portduino instance dir under ~/.portduino/. Default "default".
       backup_existing: portduino only. Move nodes.proto -> nodes.proto.bak.<ts>
@@ -354,7 +354,7 @@ def push_fake_nodedb(
                          test scenario.
 
     Returns:
-        dict with transport, bytes, sha256, etc. — depends on target.
+        dict with transport, bytes, sha256, etc. - depends on target.
 
     """
     if size not in _VALID_SIZES:
@@ -371,7 +371,7 @@ def push_fake_nodedb(
     if target == "hardware":
         if not confirm:
             raise FixtureError(
-                "hardware push writes flash and triggers a reboot — pass confirm=True."
+                "hardware push writes flash and triggers a reboot - pass confirm=True."
             )
         if not port:
             raise FixtureError(

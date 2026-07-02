@@ -182,7 +182,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
 
     // Reconcile the preset with the explicitly chosen region: a preset locked to another
     // region would leave config.lora invalid until applyModemConfig() repairs it with
-    // error/critical-error side effects — or, for the swappable EU trio, the clamp would
+    // error/critical-error side effects - or, for the swappable EU trio, the clamp would
     // flip the region right back. The user picked the region, so the preset follows it.
     const RegionInfo *newRegion = getRegion(region);
     if (config.lora.use_preset && !newRegion->supportsPreset(config.lora.modem_preset)) {
@@ -214,6 +214,11 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
         snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
     }
+#if !MESHTASTIC_EXCLUDE_GPS
+    // Enable gps if it was previously disabled due to region not being set
+    if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+        gps->enable();
+#endif
     service->reloadConfig(changes);
 }
 
@@ -277,7 +282,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 
             // Guard: without a reboot, reconfigure() applies the region directly, so reject
             // regions this node can't use up front: unrecognized codes, licensed-only regions,
-            // and radio hardware mismatches (2.4 GHz vs sub-GHz) — the same checks the admin
+            // and radio hardware mismatches (2.4 GHz vs sub-GHz) - the same checks the admin
             // set-config path applies, but side-effect-free: ignoring a menu selection should
             // not record a critical error or notify clients. getRadio() used to catch hardware
             // mismatches post-reboot only.
@@ -463,7 +468,7 @@ static constexpr int MAX_PRESET_OPTIONS = 16;
 
 static BannerOverlayOptions buildRegionPresetBanner()
 {
-    // Static storage reused each call — safe because the banner is shown immediately after.
+    // Static storage reused each call - safe because the banner is shown immediately after.
     static const char *optionsArray[MAX_PRESET_OPTIONS];
     static int optionsEnumArray[MAX_PRESET_OPTIONS];
     static char presetLabelBuf[MAX_PRESET_OPTIONS][12]; // scratch space for name copies
@@ -1572,6 +1577,7 @@ void menuHandler::manageNodeMenu()
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
                 LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
+                // set_favorite() already logs PROTECTED_CAP_WARN_FMT on a cap refusal; don't double-log here.
                 nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
             }
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1615,15 +1621,23 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
+            bool changed = false;
             if (nodeInfoLiteIsIgnored(n)) {
                 nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
-            } else {
-                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+                changed = true;
+            } else if (nodeDB->setProtectedFlag(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
+                changed = true;
+            } else {
+                LOG_WARN(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", menuHandler::pickedNodeNum, MAX_NUM_NODES - 2);
             }
-            nodeDB->notifyObservers(true);
-            nodeDB->saveToDisk();
+            // Only persist/notify when the ignore bit actually moved; a cap
+            // refusal changed nothing and shouldn't trigger a prefs save.
+            if (changed) {
+                nodeDB->notifyObservers(true);
+                nodeDB->saveToDisk();
+            }
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
