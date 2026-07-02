@@ -20,7 +20,7 @@ geography.
    build/fixtures/nodedb/nodes_v25_<N>.proto  ← .gitignored, fresh timestamps
               ↓
    - Portduino: cp to ~/.portduino/<config>/prefs/nodes.proto
-   - Hardware: XModem upload via mcp-server's push_fake_nodedb tool
+   - Hardware: XModem upload via the meshtastic-mcp push_fake_nodedb tool
 ```
 
 ## What's committed
@@ -121,10 +121,11 @@ cp build/fixtures/nodedb/nodes_v25_1000.proto ~/.portduino/default/prefs/nodes.p
 # Run the native binary; loadFromDisk picks it up at boot.
 ```
 
-### Push to USB-attached hardware via mcp-server
+### Push to USB-attached hardware via meshtastic-mcp
 
 ```python
-# From within the mcp-server tool surface:
+# From within the meshtastic-mcp tool surface
+# (https://github.com/meshtastic/meshtastic-mcp):
 push_fake_nodedb(
     size=500,
     target="hardware",
