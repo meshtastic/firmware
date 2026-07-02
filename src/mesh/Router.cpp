@@ -100,7 +100,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         return true;
     }
 
-    // router_preserve_hops: not suitable right now — removed from config until
+    // router_preserve_hops: not suitable right now - removed from config until
     // the right heuristics for when to preserve vs. exhaust hops are established.
     // #if HAS_TRAFFIC_MANAGEMENT
     //     if (moduleConfig.has_traffic_management &&
@@ -560,7 +560,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
             }
         } else {
-            // Unsigned packet — only reject the class of packet a signing node always signs:
+            // Unsigned packet - only reject the class of packet a signing node always signs:
             // an unencrypted broadcast small enough to also carry a signature (see perhapsEncode()).
             // Unicast packets and oversized broadcasts are never signed, so they must not be
             // hard-failed here even if this node has signed before.

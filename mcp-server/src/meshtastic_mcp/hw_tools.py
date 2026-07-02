@@ -1,7 +1,7 @@
 """Direct wrappers around vendor flashing tools: esptool, nrfutil, picotool.
 
 These are escape hatches. Prefer the pio-based tools in flash.py when they
-cover the operation — pio knows the correct offsets, protocols, and filters
+cover the operation - pio knows the correct offsets, protocols, and filters
 for every supported board. Use these when pio doesn't: to erase a bricked
 ESP32, DFU-flash an nRF52 zip package, or inspect an RP2040's bootloader.
 
@@ -216,7 +216,7 @@ def _parse_picotool_info(stdout: str) -> dict[str, Any]:
 
 def picotool_info(port: str | None = None) -> dict[str, Any]:
     """Read device info from a Pico in BOOTSEL mode. `port` is informational
-    only — picotool auto-detects."""
+    only - picotool auto-detects."""
     connection.reject_if_tcp(port, "picotool_info")
     binary = config.picotool_bin()
     res = _run(binary, ["info", "-a"], timeout=_TIMEOUT_SHORT)

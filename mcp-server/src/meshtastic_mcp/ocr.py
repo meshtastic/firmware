@@ -1,10 +1,10 @@
 """OCR wrapper for UI tests + the `capture_screen` tool.
 
 Auto-selects a reader in priority order:
-  1. `easyocr` (deep-learning, high quality on OLED screens — but ~100 MB
+  1. `easyocr` (deep-learning, high quality on OLED screens - but ~100 MB
      model download on first use).
   2. `pytesseract` (requires system `tesseract` binary on PATH).
-  3. `null` — returns `""` with a warning. Tests fall back to log + image
+  3. `null` - returns `""` with a warning. Tests fall back to log + image
      evidence when OCR is unavailable.
 
 Override via `MESHTASTIC_UI_OCR_BACKEND=easyocr|pytesseract|null|auto`
@@ -132,7 +132,7 @@ def warm() -> None:
     Pytest session fixture calls this once so the first real capture doesn't
     eat the model-load latency.
     """
-    # A 64×32 white PNG — decodes clean, no text to extract.
+    # A 64×32 white PNG - decodes clean, no text to extract.
     white_png = bytes.fromhex(
         "89504e470d0a1a0a0000000d49484452000000400000002008060000007ccac28e"
         "0000001c49444154785eedc1010d000000c2a0f74f6d0d370000000000000080"

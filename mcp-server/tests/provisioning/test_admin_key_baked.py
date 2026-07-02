@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from meshtastic_mcp import admin, flash
 
-# Deterministic 32-byte "admin key" — just the byte values 0..31 for easy
+# Deterministic 32-byte "admin key" - just the byte values 0..31 for easy
 # recognition in the output, formatted as a C brace-init.
 _ADMIN_KEY_BYTES = list(range(32))
 _ADMIN_KEY_BRACE = "{ " + ", ".join(f"0x{b:02x}" for b in _ADMIN_KEY_BYTES) + " }"
@@ -71,7 +71,7 @@ def test_admin_key_baked(
         ), f"admin_key bytes not visible in security config: {security!r}"
         assert (
             key_field is not None
-        ), "security.admin_key field absent — baking key 0 didn't stick"
+        ), "security.admin_key field absent - baking key 0 didn't stick"
     finally:
         # Restore session profile (no admin key)
         restore = flash.erase_and_flash(

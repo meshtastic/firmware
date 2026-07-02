@@ -11,15 +11,15 @@ mesh exercises:
   * when the established relay drops and returns, delivery recovers rather than
     black-holing (the M3 stale-route decay / re-learn path).
 
-TOPOLOGY REQUIREMENT — why this usually SKIPS:
+TOPOLOGY REQUIREMENT - why this usually SKIPS:
   A NextHop relay only happens when the two endpoints are NOT direct neighbors.
   Three co-located radios all hear each other, so A→C is a single direct hop and
-  next_hop never engages. To run this test the bench must be a *line* — A — B — C
-  — with the endpoints out of each other's direct RF range (physical distance or
+  next_hop never engages. To run this test the bench must be a *line* - A - B - C
+  - with the endpoints out of each other's direct RF range (physical distance or
   attenuators). The `multihop_topology` fixture detects this automatically: it
   warms the mesh, looks for a pair that is ≥1 hop apart, confirms the relay via
   traceroute, and `pytest.skip`s cleanly when the bench is all-direct. So this
-  file is safe to commit and run anywhere — it only *asserts* when the topology
+  file is safe to commit and run anywhere - it only *asserts* when the topology
   genuinely requires a relay.
 
 REQUIREMENTS:
@@ -56,12 +56,12 @@ def _hops_away(rec: dict[str, Any]) -> int | None:
 def _warm_mesh(ports: list[str], rounds: int = 2, settle: float = 6.0) -> None:
     """Flood a fresh NodeInfo from every node so the whole mesh (including
     multi-hop pairs, reached via relayed broadcasts) populates pubkeys and hop
-    distances. Best-effort — a single node failing to nudge shouldn't abort."""
+    distances. Best-effort - a single node failing to nudge shouldn't abort."""
     for _ in range(rounds):
         for port in ports:
             try:
                 nudge_nodeinfo_port(port)
-            except Exception:  # noqa: BLE001 — warmup is best-effort
+            except Exception:  # noqa: BLE001 - warmup is best-effort
                 pass
             time.sleep(0.5)
         time.sleep(settle)
@@ -135,7 +135,7 @@ def multihop_topology(baked_mesh: dict[str, Any]) -> dict[str, Any]:
     _warm_mesh([port for port, _ in by_role.values()])
 
     # Find an ordered pair that is ≥1 hop apart, using each node's own nodeDB
-    # (cheap — no traceroute yet). On an all-direct bench nothing qualifies.
+    # (cheap - no traceroute yet). On an all-direct bench nothing qualifies.
     multihop_pair: tuple[str, str] | None = None
     for a_role in roles:
         a_port, _ = by_role[a_role]
@@ -157,8 +157,8 @@ def multihop_topology(baked_mesh: dict[str, Any]) -> dict[str, Any]:
 
     if not multihop_pair:
         pytest.skip(
-            "no multi-hop pair found — every device appears to be a direct "
-            "neighbor. Arrange the bench as a line (A — B — C) with the "
+            "no multi-hop pair found - every device appears to be a direct "
+            "neighbor. Arrange the bench as a line (A - B - C) with the "
             "endpoints out of direct RF range (distance or attenuators) so a "
             "relay is actually required, then re-run."
         )
@@ -231,21 +231,21 @@ def test_multihop_dm_delivers(multihop_topology: dict[str, Any]) -> None:
 
     assert got is not None, (
         f"multi-hop directed DM {tx_role}→{rx_role} via relay "
-        f"{relay_role!r} never landed — NextHop multi-hop delivery is broken"
+        f"{relay_role!r} never landed - NextHop multi-hop delivery is broken"
     )
 
 
 @pytest.mark.timeout(600)
 def test_multihop_relay_recovery(
     multihop_topology: dict[str, Any],
-    power_cycle,  # noqa: ARG001 — forces the uhubctl-availability skip
+    power_cycle,  # noqa: ARG001 - forces the uhubctl-availability skip
 ) -> None:
     """Delivery recovers after the established relay drops and returns.
 
     Establishes a baseline DM (route via relay learned), powers the relay OFF
     (confirming TX survives sending across a downed relay), then powers it back
-    ON and asserts directed delivery resumes — the M3 stale-route decay /
-    re-learn path. With a strict A — B — C line there is no path while B is down,
+    ON and asserts directed delivery resumes - the M3 stale-route decay /
+    re-learn path. With a strict A - B - C line there is no path while B is down,
     so we only assert TX doesn't crash during the outage; the delivery assertion
     is after B returns.
     """
@@ -266,7 +266,7 @@ def test_multihop_relay_recovery(
     post = f"mh-recover-post-{int(time.time())}"
 
     # Baseline: confirm delivery works (so the route via the relay is learned)
-    # before we perturb anything — otherwise a later failure is ambiguous.
+    # before we perturb anything - otherwise a later failure is ambiguous.
     with ReceiveCollector(rx_port, topic="meshtastic.receive.text") as rx:
         rx.broadcast_nodeinfo_ping()
         with connect(port=tx_port) as tx_iface:
@@ -279,7 +279,7 @@ def test_multihop_relay_recovery(
                     lambda p: p.get("decoded", {}).get("text") == base, timeout=45
                 )
                 is not None
-            ), "baseline multi-hop delivery failed — skipping recovery to avoid a false result"
+            ), "baseline multi-hop delivery failed - skipping recovery to avoid a false result"
 
     # Power the relay OFF.
     try:
@@ -304,7 +304,7 @@ def test_multihop_relay_recovery(
             )
             assert pkt is not None
             time.sleep(8.0)  # let retransmissions + route decay run
-    except Exception as exc:  # noqa: BLE001 — restore bench state before failing
+    except Exception as exc:  # noqa: BLE001 - restore bench state before failing
         _power.power_on(relay_role)
         resolve_port_by_role(relay_role, timeout_s=30.0)
         raise AssertionError(
@@ -316,7 +316,7 @@ def test_multihop_relay_recovery(
     time.sleep(0.5)
     try:
         resolve_port_by_role(relay_role, timeout_s=30.0)
-    except Exception:  # noqa: BLE001 — relay port isn't one we connect to directly
+    except Exception:  # noqa: BLE001 - relay port isn't one we connect to directly
         pass
     time.sleep(8.0)
     _warm_mesh([tx_port, rx_port], rounds=1)  # re-flood so the relay re-learns
@@ -343,5 +343,5 @@ def test_multihop_relay_recovery(
 
     assert got is not None, (
         f"after relay {relay_role!r} returned, multi-hop DM {tx_role}→{rx_role} "
-        "never resumed — stale-route recovery (M3) may be broken"
+        "never resumed - stale-route recovery (M3) may be broken"
     )

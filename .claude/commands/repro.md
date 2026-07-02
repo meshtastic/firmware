@@ -5,7 +5,7 @@ argument-hint: <test-node-id> [count=5]
 
 <!-- markdownlint-disable MD029 -->
 
-# `/repro` — flakiness triage for one test
+# `/repro` - flakiness triage for one test
 
 Re-run a single pytest node ID N times in isolation, track pass rate, and surface what's _different_ in the firmware logs between the passing attempts and the failing ones. Turns "it's flaky, I guess" into "it fails when X, passes when Y."
 
@@ -13,7 +13,7 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
 
 1. **Parse `$ARGUMENTS`**: first token is the pytest node id (e.g. `tests/mesh/test_direct_with_ack.py::test_direct_with_ack_roundtrip[nrf52->esp32s3]`); second token is an integer count (default `5`, cap at `20`). If the first token doesn't look like a test path (no `::` and no `tests/` prefix), treat the whole `$ARGUMENTS` as a `-k` filter instead.
 
-2. **Sanity-check the hub first** (so we're not measuring "nothing plugged in" N times): call `mcp__meshtastic__list_devices`. If the test name contains `nrf52` or `esp32s3` and the matching VID isn't present, stop and report — re-running won't help.
+2. **Sanity-check the hub first** (so we're not measuring "nothing plugged in" N times): call `mcp__meshtastic__list_devices`. If the test name contains `nrf52` or `esp32s3` and the matching VID isn't present, stop and report - re-running won't help.
 
 3. **Loop N times**. For each iteration:
 
@@ -37,10 +37,10 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
 
 5. **On mixed outcomes**: diff the firmware log tails between a representative passing attempt and a representative failing attempt. Focus on:
    - Error-level lines only present in failures (`PKI_UNKNOWN_PUBKEY`, `Alloc an err=`, `Skip send`, `No suitable channel`)
-   - Timing around the assertion event — did a broadcast go out, was there an ACK, did NAK fire?
+   - Timing around the assertion event - did a broadcast go out, was there an ACK, did NAK fire?
    - Device state fields that changed (nodesByNum entries, region/preset, channel_num)
 
-   Surface the top 3 differences as a "passes when / fails when" table. Don't dump full logs — pull specific lines with uptime timestamps.
+   Surface the top 3 differences as a "passes when / fails when" table. Don't dump full logs - pull specific lines with uptime timestamps.
 
 5a. **Archive recorder slices per attempt** (no extra device interaction; the recorder runs autouse). Right after each attempt finishes, capture its `(start_ts, end_ts)` and call `mcp__meshtastic__recorder_export(start=<start>, end=<end>, dest_dir="mcp-server/tests/repro_artifacts/<safe-test-id>/attempt_<n>/")`. This drops a `logs.jsonl`, `telemetry.jsonl`, `packets.jsonl`, and `events.jsonl` snapshot scoped to the attempt window. Use these for cross-attempt diffs in step 5: `jq '.line' logs.jsonl` is faster than re-running the test, and the telemetry slice lets you compare heap behavior across attempts.
 
@@ -59,12 +59,12 @@ Re-run a single pytest node ID N times in isolation, track pass rate, and surfac
 
 ## Examples
 
-- `/repro tests/mesh/test_direct_with_ack.py::test_direct_with_ack_roundtrip[esp32s3->nrf52] 10` — runs 10 times, diffs firmware logs.
-- `/repro broadcast_delivers` — no `::`, no `tests/`, so interpreted as `-k broadcast_delivers`; runs every matching test the default 5 times.
-- `/repro tests/telemetry/test_device_telemetry_broadcast.py 3` — shorter run for a slow test.
+- `/repro tests/mesh/test_direct_with_ack.py::test_direct_with_ack_roundtrip[esp32s3->nrf52] 10` - runs 10 times, diffs firmware logs.
+- `/repro broadcast_delivers` - no `::`, no `tests/`, so interpreted as `-k broadcast_delivers`; runs every matching test the default 5 times.
+- `/repro tests/telemetry/test_device_telemetry_broadcast.py 3` - shorter run for a slow test.
 
 ## Constraints
 
-- Don't exceed `count=20` per invocation — airtime and USB wear add up. If the user asks for 50, negotiate down.
+- Don't exceed `count=20` per invocation - airtime and USB wear add up. If the user asks for 50, negotiate down.
 - Don't rebuild firmware as part of triage; flakes that only reproduce under different firmware belong in a separate session.
 - If the FIRST attempt fails AND the rest all pass, that's a classic "state leak from a prior test" → say so and suggest running with `--force-bake` or starting from a clean state rather than chasing the first failure.

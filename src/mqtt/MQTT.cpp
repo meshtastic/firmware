@@ -545,7 +545,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         }
         // Perform a lightweight TCP connectivity check without using connectPubSub(),
         // which mutates the module's isConnected state. This only checks if the server
-        // is reachable — it does not establish an MQTT session.
+        // is reachable - it does not establish an MQTT session.
         // Settings are always saved regardless of the result.
         if (isConnectedToNetwork()) {
             MQTTClient testClient;

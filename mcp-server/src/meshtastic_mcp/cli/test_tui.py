@@ -6,19 +6,19 @@ The TUI *wraps* ``run-tests.sh``; it never replaces it. Same script, same
 env-var resolution, same ``userPrefs.jsonc`` session fixture. Four data
 sources drive live state:
 
-1. ``tests/reportlog.jsonl`` — written by ``pytest-reportlog``. Tailed in a
+1. ``tests/reportlog.jsonl`` - written by ``pytest-reportlog``. Tailed in a
    worker thread; each JSON line is published as a :class:`ReportLogEvent`
    message. This is the authoritative source for tree population + per-test
    outcome.
-2. The pytest subprocess ``stdout`` + ``stderr`` streams — line-by-line,
+2. The pytest subprocess ``stdout`` + ``stderr`` streams - line-by-line,
    published as :class:`PytestLine` messages and rendered verbatim in the
    pytest pane.
-3. ``tests/fwlog.jsonl`` — firmware log stream. Written by the
+3. ``tests/fwlog.jsonl`` - firmware log stream. Written by the
    ``_firmware_log_stream`` autouse session fixture in ``conftest.py``
    (mirrors every ``meshtastic.log.line`` pubsub event), tailed by the
    :class:`FirmwareLogTailer` worker, displayed in a wrap-enabled
    RichLog with cycleable port filter.
-4. ``devices.list_devices()`` + ``info.device_info(port)`` — polled only at
+4. ``devices.list_devices()`` + ``info.device_info(port)`` - polled only at
    startup and again after ``RunFinished``. Device polling while pytest
    holds a SerialInterface would deadlock on the exclusive port lock; the
    existing ``hub_devices`` fixture is session-scoped so there is no safe
@@ -64,7 +64,7 @@ from typing import Any, Iterator
 #   bake → unit → mesh → telemetry → monitor → fleet → admin → provisioning
 # so the counters table reads top-to-bottom in execution order.
 #
-# "bake" is the synthetic tier for `tests/test_00_bake.py` — the file sits
+# "bake" is the synthetic tier for `tests/test_00_bake.py` - the file sits
 # at the `tests/` root rather than under a tier subdirectory, so without
 # this mapping `_tier_of_nodeid` would return "other" and the bake outcomes
 # would be silently dropped from both the tier table and the history
@@ -139,7 +139,7 @@ class LeafReport:
     duration_s: float = 0.0
     longrepr: str = ""
     # Captured stdout / stderr / firmware-log sections from the test's
-    # `TestReport.sections` — shown in the failure-detail modal.
+    # `TestReport.sections` - shown in the failure-detail modal.
     sections: list[tuple[str, str]] = field(default_factory=list)
     # Wall-clock start/stop from the TestReport event. Used by the
     # reproducer exporter (`x`) to filter `tests/fwlog.jsonl` down to
@@ -175,7 +175,7 @@ class State:
     """Shared state owned by the App; written by workers under `lock`.
 
     UI code reads via Textual Message handlers which run on the UI thread
-    in the order workers called `post_message` — so reads don't need the
+    in the order workers called `post_message` - so reads don't need the
     lock themselves.
     """
 
@@ -184,7 +184,7 @@ class State:
         default_factory=lambda: {t: TierCounters(tier=t) for t in TIERS}
     )
     leaves: dict[str, LeafReport] = field(default_factory=dict)
-    # Ordered list of nodeids in the order they were first seen — lets us
+    # Ordered list of nodeids in the order they were first seen - lets us
     # rebuild the tree deterministically.
     nodeid_order: list[str] = field(default_factory=list)
     devices: list[DeviceRow] = field(default_factory=list)
@@ -212,13 +212,13 @@ def _tier_of_nodeid(nodeid: str) -> str:
     """Map a pytest nodeid to its tier bucket. Unknown → 'other'.
 
     `tests/test_00_bake.py::...` is special-cased to the synthetic `bake`
-    tier — it's a top-level file (no tier subdirectory) so the generic
+    tier - it's a top-level file (no tier subdirectory) so the generic
     "second path segment" logic would miss it and route the bake outcomes
     into the non-existent `other` bucket.
     """
     parts = nodeid.split("/", 2)
     if len(parts) >= 2 and parts[0] == "tests":
-        # Bake file sits at `tests/test_00_bake.py` — dedicated bucket.
+        # Bake file sits at `tests/test_00_bake.py` - dedicated bucket.
         if parts[1].startswith("test_00_bake"):
             return "bake"
         candidate = parts[1]
@@ -249,7 +249,7 @@ def _roles_from_nodeid(nodeid: str) -> set[str]:
     - ``test_foo[nrf52]``            → {"nrf52"}           (baked_single)
     - ``test_foo[nrf52->esp32s3]``   → {"nrf52", "esp32s3"} (mesh_pair)
 
-    Unparametrized tests (no bracket) return an empty set — the caller
+    Unparametrized tests (no bracket) return an empty set - the caller
     should fall back to "this test involves ALL detected devices" rather
     than pretending it touches none.
     """
@@ -329,7 +329,7 @@ def _format_duration(seconds: float) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Textual imports (lazy — only when main() runs, so `_parse_events` can be
+# Textual imports (lazy - only when main() runs, so `_parse_events` can be
 # imported by smoke tests without requiring textual installed in every env)
 # ---------------------------------------------------------------------------
 
@@ -367,7 +367,7 @@ def _import_textual() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# main() — the important scaffolding lives here so that when we bail out
+# main() - the important scaffolding lives here so that when we bail out
 # before entering the Textual event loop (missing terminal, --help, etc.)
 # nothing has grabbed the screen yet.
 # ---------------------------------------------------------------------------
@@ -414,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
     # workers race pytest file-creation; starting from a known-empty state
     # avoids mid-line-decode confusion from the prior run. The fwlog session
     # fixture also truncates on its end, and run-tests.sh truncates the
-    # flashlog — triple-truncate is deliberate (whichever side creates the
+    # flashlog - triple-truncate is deliberate (whichever side creates the
     # file first, it starts empty).
     for p in (reportlog, fwlog, flashlog):
         try:
@@ -434,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     # as it arrives. The TUI tails that file and routes each line to the
     # pytest pane so the operator sees live flash progress during long
     # `pio run -t upload` / `esptool erase_flash` operations. run-tests.sh
-    # also sets this when invoked directly — `setdefault` so the wrapper's
+    # also sets this when invoked directly - `setdefault` so the wrapper's
     # value wins when present.
     os.environ.setdefault("MESHTASTIC_MCP_FLASH_LOG", str(flashlog))
 
@@ -442,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     # env / argv handling without getting into Textual's alternate screen.
     if args.no_tui:
         cmd = [str(run_tests), *pytest_args]
-        os.execv(str(run_tests), cmd)  # noqa: S606 — intentional
+        os.execv(str(run_tests), cmd)  # noqa: S606 - intentional
 
     # Textual UI import is deferred so `--help` and `--no-tui` do not pay
     # the ~40 MB startup cost.
@@ -512,7 +512,7 @@ def _build_app(
     force Textual's import cost.
     """
 
-    # Helper modules — lazy-imported here so the top-of-file import cost
+    # Helper modules - lazy-imported here so the top-of-file import cost
     # only kicks in when main() has decided to run the TUI.
     from . import _flashlog as _flashlog_mod
     from . import _fwlog as _fwlog_mod
@@ -540,7 +540,7 @@ def _build_app(
             super().__init__()
 
     class FlashLogLine(tx.Message):
-        """Plain-text line from `tests/flash.log` — pio / esptool / nrfutil /
+        """Plain-text line from `tests/flash.log` - pio / esptool / nrfutil /
         picotool output tee'd by `pio._run_capturing`. Routed to the pytest
         pane so the operator sees live flash progress during `test_00_bake`
         instead of 3 minutes of pytest-captured silence."""
@@ -550,7 +550,7 @@ def _build_app(
             super().__init__()
 
     class UiCaptureLine(tx.Message):
-        """Live line from the UI-tier camera transcript — one per
+        """Live line from the UI-tier camera transcript - one per
         `frame_capture()` call. Posted only when the camera panel is
         enabled via `MESHTASTIC_UI_TUI_CAMERA=1`."""
 
@@ -640,7 +640,7 @@ def _build_app(
     class DevicePollerWorker(threading.Thread):
         """Poll list_devices() + device_info() at startup and after RunFinished.
 
-        Deliberately NOT polling during the run — `hub_devices` is a
+        Deliberately NOT polling during the run - `hub_devices` is a
         session-scoped fixture holding SerialInterfaces across the whole
         session, and device_info() would deadlock on the exclusive port
         lock. Header shows "(stale)" during the gap.
@@ -806,7 +806,7 @@ def _build_app(
         def on_mount(self) -> None:
             log = self.query_one("#coverage-log", tx.RichLog)
             if not self._path.is_file():
-                log.write("(no coverage data — tool_coverage.json not written yet)")
+                log.write("(no coverage data - tool_coverage.json not written yet)")
                 log.write("")
                 log.write("Coverage is emitted at pytest_sessionfinish; this")
                 log.write("file appears after the suite completes.")
@@ -937,7 +937,7 @@ def _build_app(
             # Firmware-log port filter: None = all, else exact port match.
             self._fwlog_filter: str | None = None
             # Ordered set of distinct ports we've seen firmware log lines
-            # from — the `l` key cycles through these.
+            # from - the `l` key cycles through these.
             self._fwlog_ports: list[str] = []
             # Cross-run history.
             self._history_store = _history_mod.HistoryStore(
@@ -970,7 +970,7 @@ def _build_app(
                             highlight=False,
                             markup=False,
                             # `wrap=True` so long firmware log lines (some
-                            # hit ~200 chars — full packet hex dumps plus
+                            # hit ~200 chars - full packet hex dumps plus
                             # source tags) don't get truncated at the
                             # right edge. The right pane is ~50% of the
                             # terminal so even a wide terminal has a
@@ -981,7 +981,7 @@ def _build_app(
                         )
                     if self._ui_camera_enabled:
                         yield tx.Static(
-                            "UI camera — latest capture + transcript   (MESHTASTIC_UI_TUI_CAMERA=1)",
+                            "UI camera - latest capture + transcript   (MESHTASTIC_UI_TUI_CAMERA=1)",
                             id="uicap-header",
                         )
                         with tx.Horizontal(id="uicap-pane"):
@@ -1004,11 +1004,11 @@ def _build_app(
 
         def on_mount(self) -> None:
             # Tier-counters table. `add_column` (singular) lets us pick
-            # the key explicitly — `add_columns` (plural) in textual 8.x
+            # the key explicitly - `add_columns` (plural) in textual 8.x
             # returns auto-generated keys that are tedious to track
             # separately, and update_cell(column_key=<label>) silently
             # no-ops because the key is not the label. "Progress" is the
-            # new v2 column — a small [=====  ] bar; see `_progress_bar`.
+            # new v2 column - a small [=====  ] bar; see `_progress_bar`.
             tier_table = self.query_one("#tier-table", tx.DataTable)
             for col in (
                 "Tier",
@@ -1023,7 +1023,7 @@ def _build_app(
             for t in TIERS:
                 tier_table.add_row(t, "0", "0", "0", "0", "0", "", key=t)
             # Device table. "Status" shows which test (if any) is currently
-            # running on this device — derived from the running_nodeid plus
+            # running on this device - derived from the running_nodeid plus
             # role inference from the nodeid's `[...]` parametrization.
             dev_table = self.query_one("#device-table", tx.DataTable)
             for col in (
@@ -1042,14 +1042,14 @@ def _build_app(
             self._device_worker.start()
             self._reportlog_worker = ReportlogWorker(self, self._reportlog, self._stop)
             self._reportlog_worker.start()
-            # Firmware log tail worker — publishes FirmwareLogLine messages.
+            # Firmware log tail worker - publishes FirmwareLogLine messages.
             self._fwlog_worker = _fwlog_mod.FirmwareLogTailer(
                 path=self._fwlog,
                 post=lambda rec: self.post_message(FirmwareLogLine(rec)),
                 stop=self._stop,
             )
             self._fwlog_worker.start()
-            # Flash log tail worker — plain-text pio/esptool/nrfutil/picotool
+            # Flash log tail worker - plain-text pio/esptool/nrfutil/picotool
             # output tee'd by `pio._run_capturing`. Routes each line into the
             # pytest pane so the operator has live feedback during long flash
             # operations (`pio run -t upload` is ~3 min of silence otherwise).
@@ -1059,7 +1059,7 @@ def _build_app(
                 stop=self._stop,
             )
             self._flashlog_worker.start()
-            # UI-capture transcript tailer — only runs when the camera panel
+            # UI-capture transcript tailer - only runs when the camera panel
             # is enabled. Watches tests/ui_captures/**/transcript.md for new
             # lines as UI tests execute.
             if self._ui_camera_enabled:
@@ -1078,7 +1078,7 @@ def _build_app(
             # Header tick (seed / runtime / sparkline re-renders at 1 Hz).
             # Also refreshes the device-status column so the per-test elapsed
             # time climbs live during silent test bodies (flash, long mesh
-            # timeouts, etc.) — cheap: device-table is 1-2 rows.
+            # timeouts, etc.) - cheap: device-table is 1-2 rows.
             self.set_interval(1.0, self._on_tick)
 
         def _header_text(self) -> str:
@@ -1114,8 +1114,8 @@ def _build_app(
 
             The device-status cell embeds the running test's elapsed time
             (`RUNNING: test_bake_nrf52 (1:23)`), which needs to re-render
-            each second during long silent test bodies. Cheap — O(devices),
-            which is 1–2 rows in practice. Skipped when no test is
+            each second during long silent test bodies. Cheap - O(devices),
+            which is 1-2 rows in practice. Skipped when no test is
             running so we don't burn cycles when the TUI is idle.
             """
             self._refresh_header()
@@ -1134,7 +1134,7 @@ def _build_app(
             #     --junitxml=tests/junit.xml -v --tb=short
             # plus an unconditional `--report-log` append at the end. If we
             # pre-append `--report-log` here when `extra_args` is empty, $#
-            # becomes 1 and the whole defaults block is skipped — pytest
+            # becomes 1 and the whole defaults block is skipped - pytest
             # then runs without the `tests/` positional (discovers from the
             # mcp-server root and potentially drags in production modules
             # named `test_*.py`), without the HTML/junit reports the /test
@@ -1234,11 +1234,11 @@ def _build_app(
                 #                      bake doesn't match. Without this
                 #                      branch, those tests would never
                 #                      register in the tree and the tier
-                #                      counters would silently lie — e.g.
+                #                      counters would silently lie - e.g.
                 #                      the telemetry tier showed 0/0/0
                 #                      while 4 tests were actually skipped.
                 #   `rerun` (pytest-rerunfailures): rewind to pending.
-                # Teardown outcomes are intentionally ignored — a
+                # Teardown outcomes are intentionally ignored - a
                 # teardown failure shouldn't overwrite the call's
                 # authoritative pass/fail.
                 if when == "call" and outcome in ("passed", "failed", "skipped"):
@@ -1250,7 +1250,7 @@ def _build_app(
                 return
             if rt == "SessionFinish":
                 return
-            # Unknown — ignore silently.
+            # Unknown - ignore silently.
 
         def on_pytest_line(self, message: Any) -> None:
             log = self.query_one("#pytest-log", tx.RichLog)
@@ -1271,8 +1271,8 @@ def _build_app(
         def on_ui_capture_line(self, message: Any) -> None:
             """Route a UI-capture transcript line into the camera panel.
 
-            Each line is already formatted by frame_capture — e.g.
-            `1. **initial** — frame 2/8 name=home — OCR: ...`. We write
+            Each line is already formatted by frame_capture - e.g.
+            `1. **initial** - frame 2/8 name=home - OCR: ...`. We write
             the text into the RichLog AND try to render the corresponding
             PNG on the left side (requires rich-pixels, Pillow).
             """
@@ -1288,7 +1288,7 @@ def _build_app(
         def _render_latest_ui_capture(self, test_id: str, line: str) -> None:
             """Find the PNG that corresponds to `line` and render it on the
             left of the uicap pane. Soft-fails if rich-pixels isn't
-            installed or the PNG isn't found — operator still has the text
+            installed or the PNG isn't found - operator still has the text
             transcript on the right.
             """
             try:
@@ -1297,7 +1297,7 @@ def _build_app(
             except ImportError:
                 return
 
-            # Transcript lines look like `1. **label** — ...`. Pull the leading
+            # Transcript lines look like `1. **label** - ...`. Pull the leading
             # integer to locate the capture file.
             import re as _re
 
@@ -1306,7 +1306,7 @@ def _build_app(
                 return
             step = int(m.group(1))
 
-            # Captures directory is sibling of tests/ — mirror the path the
+            # Captures directory is sibling of tests/ - mirror the path the
             # tailer watches. Search both likely layouts (in-mcp-server vs.
             # firmware-root invocation).
             candidates = [
@@ -1317,7 +1317,7 @@ def _build_app(
             if captures_root is None:
                 return
 
-            # Drill into <session_seed>/<test_id>/ — test_id is the
+            # Drill into <session_seed>/<test_id>/ - test_id is the
             # sanitized nodeid the tailer already passed through.
             matches = list(captures_root.rglob(f"{test_id}/{step:03d}-*.png"))
             if not matches:
@@ -1351,7 +1351,7 @@ def _build_app(
             port = rec.get("port")
             line = rec.get("line", "")
             # Track distinct ports for `l` filter cycling. The ordered-set
-            # trick — list membership — is fine here because `_fwlog_ports`
+            # trick - list membership - is fine here because `_fwlog_ports`
             # is tiny (2-3 entries for a typical lab).
             if port and port not in self._fwlog_ports:
                 self._fwlog_ports.append(port)
@@ -1368,7 +1368,7 @@ def _build_app(
             log = self.query_one("#fwlog-log", tx.RichLog)
             port_tag = ""
             if port:
-                # Show only the last path component — `/dev/cu.usbmodem1101`
+                # Show only the last path component - `/dev/cu.usbmodem1101`
                 # is long; `usbmodem1101` is enough when the filter is
                 # "all".
                 tail = port.rsplit("/", 1)[-1]
@@ -1393,13 +1393,13 @@ def _build_app(
             for row in message.rows:
                 info = row.info or {}
                 role = row.role or "?"
-                fw = info.get("firmware_version", "—")
-                hw = info.get("hw_model", "—")
-                region = info.get("region", "—")
-                channel = info.get("primary_channel", "—")
+                fw = info.get("firmware_version", "-")
+                hw = info.get("hw_model", "-")
+                region = info.get("region", "-")
+                channel = info.get("primary_channel", "-")
                 peers = info.get("num_nodes")
                 if peers is None:
-                    peers = "—"
+                    peers = "-"
                 else:
                     peers = str(max(int(peers) - 1, 0))  # exclude self
                 status = self._status_for_role(role)
@@ -1421,7 +1421,7 @@ def _build_app(
 
             A running test whose nodeid doesn't carry an explicit role
             parametrization (no `[...]` bracket) is treated as touching
-            every device — that matches how `test_bidirectional` and the
+            every device - that matches how `test_bidirectional` and the
             pytest_sessionstart-level tests work in practice.
 
             The trailing `(M:SS)` is live-updated by `_on_tick` at 1 Hz
@@ -1436,7 +1436,7 @@ def _build_app(
                 return "idle"
             short = _testname_of_nodeid(nodeid)
             # Compute elapsed for the live counter. Budget 8 chars at the
-            # end of the cell — `(12:34)` plus a space. Shorten `short`
+            # end of the cell - `(12:34)` plus a space. Shorten `short`
             # first, then tack on the elapsed suffix.
             started = self._state.running_started_at
             elapsed_suffix = ""
@@ -1454,7 +1454,7 @@ def _build_app(
             """Update the Status cell for every detected device.
 
             Called whenever `running_nodeid` transitions (setup → call).
-            Cheap: O(devices) which is 1–2 rows in practice.
+            Cheap: O(devices) which is 1-2 rows in practice.
             """
             try:
                 dev_table = self.query_one("#device-table", tx.DataTable)
@@ -1468,7 +1468,7 @@ def _build_app(
                     )
                 except Exception:
                     # Row key might not exist yet if a snapshot hasn't
-                    # populated it — harmless; next snapshot will carry
+                    # populated it - harmless; next snapshot will carry
                     # the fresh status value.
                     pass
 
@@ -1481,7 +1481,7 @@ def _build_app(
             # Trigger a fresh device poll now that ports are free again.
             if self._device_worker is not None:
                 self._device_worker.trigger()
-            # Persist a history record — one line per run, tailed by the
+            # Persist a history record - one line per run, tailed by the
             # sparkline on every subsequent TUI launch.
             duration_s = time.monotonic() - self._start_time
             passed = sum(t.passed for t in self._state.tiers.values())
@@ -1526,13 +1526,13 @@ def _build_app(
             leaf = self._state.leaves.get(nodeid)
             if leaf is None:
                 # First event for this nodeid is the report itself (no
-                # collection event seen) — register on the fly.
+                # collection event seen) - register on the fly.
                 self._register_leaf(nodeid)
                 leaf = self._state.leaves[nodeid]
             prev = leaf.outcome
             leaf.outcome = outcome
             leaf.duration_s = float(ev.get("duration", 0.0) or 0.0)
-            # Wall-clock start/stop — pytest-reportlog emits these as
+            # Wall-clock start/stop - pytest-reportlog emits these as
             # float seconds (Unix epoch). Used by the reproducer exporter
             # to window fwlog.jsonl down to just the failure's context.
             start = ev.get("start")
@@ -1661,7 +1661,7 @@ def _build_app(
             if getattr(node, "data", None):
                 target = str(node.data)  # leaf: full nodeid
             else:
-                # Internal node — derive a pytest arg.
+                # Internal node - derive a pytest arg.
                 labels = []
                 cur: Any = node
                 while cur is not None and cur.parent is not None:
@@ -1720,7 +1720,7 @@ def _build_app(
                 self.bell()
                 return
             try:
-                # macOS + Linux cover — falls through silently on failure.
+                # macOS + Linux cover - falls through silently on failure.
                 opener = "open" if sys.platform == "darwin" else "xdg-open"
                 subprocess.Popen([opener, str(self._report_html)])  # noqa: S603,S607
             except Exception:
@@ -1863,7 +1863,7 @@ def _build_app(
                 # interrupted (SIGINT during a test body) it may linger.
                 self._state.running_nodeid = None
                 self._state.running_started_at = None
-            # Device status cells need to go back to "idle" — otherwise
+            # Device status cells need to go back to "idle" - otherwise
             # the prior run's RUNNING: marker sticks until the next test
             # actually starts.
             self._refresh_device_status()
@@ -1881,7 +1881,7 @@ def _build_app(
             log = self.query_one("#pytest-log", tx.RichLog)
             log.write("")
             log.write("[tui] --- re-run ---")
-            # Clear the fwlog pane too — it's fresh context for the new run.
+            # Clear the fwlog pane too - it's fresh context for the new run.
             try:
                 self.query_one("#fwlog-log", tx.RichLog).clear()
             except Exception:

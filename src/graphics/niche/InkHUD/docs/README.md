@@ -260,7 +260,7 @@ If you need to create several similar applets, it might make sense to create a r
 
 ##### Map Tiles
 
-Map tiles are stored in `MapTile.h` (`src/graphics/niche/InkHUD/Applets/Bases/Map/MapTile.h`). The file committed to the repository contains no tile data by default — the map applets work without tiles, falling back to the original marker-only display.
+Map tiles are stored in `MapTile.h` (`src/graphics/niche/InkHUD/Applets/Bases/Map/MapTile.h`). The file committed to the repository contains no tile data by default - the map applets work without tiles, falling back to the original marker-only display.
 
 Tiles are 256×256 pixels, 1-bit (column-major bit packing), compressed per tile with LZ4 to keep flash usage low.
 
@@ -489,8 +489,8 @@ We keep this separate latest-message cache for this purpose, because:
 
 Broadcasts and DMs take different paths into `messageStore`:
 
-- **Broadcasts** — `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
-- **DMs** — `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
+- **Broadcasts** - `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
+- **DMs** - `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
 
 #### Saving / Loading
 
