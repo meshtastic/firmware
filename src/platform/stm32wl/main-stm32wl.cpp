@@ -23,7 +23,7 @@
 #define BOOTLOADER_MAGIC 0xD00DB007UL
 #define SYS_MEM_BASE 0x1FFF0000UL
 
-// Placed in .noinit — not zeroed at startup, survives NVIC_SystemReset().
+// Placed in .noinit - not zeroed at startup, survives NVIC_SystemReset().
 __attribute__((section(".noinit"), used)) volatile uint32_t g_bootloaderMagic;
 
 // Fires before main() / HAL_Init(). Must use only core Cortex-M registers.

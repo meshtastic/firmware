@@ -24,11 +24,11 @@ from meshtastic_mcp.input_events import InputEventCode
 from ._screen_log import FrameEvent, get_current_frame, wait_for_frame
 
 # Roles that carry a screen the UI tier can drive. Only esp32s3 (heltec-v3
-# SSD1306) qualifies today — nrf52 (rak4631) has no display.
+# SSD1306) qualifies today - nrf52 (rak4631) has no display.
 UI_CAPABLE_ROLES = ("esp32s3",)
 
 # Where per-test captures land. One subdirectory per session seed, then per
-# sanitized test nodeid — identical pattern to other pytest artifacts.
+# sanitized test nodeid - identical pattern to other pytest artifacts.
 CAPTURES_ROOT = Path(__file__).resolve().parent.parent / "ui_captures"
 
 
@@ -104,11 +104,11 @@ def _ocr_warm() -> None:
     """Pay easyocr's ~100 MB / cold-start cost ONCE per session.
 
     Subsequent `ocr_text()` calls hit the cached reader and return quickly.
-    Swallows errors — if OCR isn't installed, warm is a no-op.
+    Swallows errors - if OCR isn't installed, warm is a no-op.
     """
     try:
         ocr_mod.warm()
-    except Exception:  # noqa: BLE001 — belt: never block the suite on OCR init
+    except Exception:  # noqa: BLE001 - belt: never block the suite on OCR init
         pass
 
 
@@ -119,7 +119,7 @@ def _ui_screen_kept_on(
     """Keep the OLED on throughout the UI tier so input events aren't dropped.
 
     Why: `InputBroker::handleInputEvent` (src/input/InputBroker.cpp:118-122)
-    silently DROPS any event that arrives while the screen is off — it just
+    silently DROPS any event that arrives while the screen is off - it just
     wakes the screen and returns. Every first event in each test would
     disappear. We set `display.screen_on_secs = 86400` at session start
     (effectively "always on" for the test window) and restore the prior
@@ -156,7 +156,7 @@ def _ui_screen_kept_on(
         time.sleep(1.5)  # Let the screen finish its wake transition.
     except (
         Exception
-    ):  # noqa: BLE001 — best-effort; ui_home_state surfaces the real error
+    ):  # noqa: BLE001 - best-effort; ui_home_state surfaces the real error
         pass
 
     try:
@@ -193,7 +193,7 @@ class FrameCapture:
         self._transcript_path = dir_path / "transcript.md"
         self._dir.mkdir(parents=True, exist_ok=True)
         self._transcript_path.write_text(
-            f"# {nodeid} — {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n\n",
+            f"# {nodeid} - {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n\n",
             encoding="utf-8",
         )
 
@@ -242,7 +242,7 @@ class FrameCapture:
             )
             ocr_summary = (ocr_str or "").replace("\n", " / ")[:80]
             fh.write(
-                f"{self._step}. **{label}** — {frame_str} — OCR: `{ocr_summary}`\n"
+                f"{self._step}. **{label}** - {frame_str} - OCR: `{ocr_summary}`\n"
             )
         return entry
 
@@ -273,7 +273,7 @@ def _send_event(port: str, event: InputEventCode) -> None:
     try:
         admin_mod.send_input_event(event_code=int(event), port=port)
     except Exception:  # noqa: BLE001
-        # Treat a failed event as soft — the subsequent frame-log assertion
+        # Treat a failed event as soft - the subsequent frame-log assertion
         # surfaces the real problem with better context.
         pass
 
@@ -298,7 +298,7 @@ def ui_home_state(
     instead of letting every test body fail with a confusing assertion.
 
     Autouse scope is restricted to `tests/ui/` by virtue of this fixture
-    living in that directory's conftest.py — no explicit nodeid guard
+    living in that directory's conftest.py - no explicit nodeid guard
     needed (and earlier attempts at one were wrong, matching `/tests/ui/`
     against a nodeid that has no leading slash).
     """
@@ -313,7 +313,7 @@ def ui_home_state(
     start_len = len(lines)
 
     # First: a wake event. The screen should already be kept on by
-    # `_ui_screen_kept_on`, but belt + suspenders — if it somehow
+    # `_ui_screen_kept_on`, but belt + suspenders - if it somehow
     # powered off (sleep after factory_reset, etc.), this first FN_F1
     # gets dropped by InputBroker's screenWasOff guard. That's fine;
     # the second FN_F1 below lands cleanly.
@@ -322,14 +322,14 @@ def ui_home_state(
     _send_event(port, InputEventCode.FN_F1)
 
     # Wait for the fn_f1 transition log. Any new `reason=fn_f1` line
-    # after call-start counts — we don't care about the name (it should
+    # after call-start counts - we don't care about the name (it should
     # be `home` or `deviceFocused` depending on board-specific frame order).
     from ._screen_log import wait_for_reason
 
     try:
         wait_for_reason(lines, "fn_f1", timeout_s=5.0)
     except TimeoutError:
-        # One more try — FreeRTOS queue may be draining slowly.
+        # One more try - FreeRTOS queue may be draining slowly.
         _send_event(port, InputEventCode.FN_F1)
         try:
             wait_for_reason(lines, "fn_f1", timeout_s=5.0)
@@ -345,12 +345,12 @@ def ui_home_state(
                     f"ui_home_state: events fire but none reach Screen "
                     f"(saw {len(frame_lines)} frame line(s), "
                     f"{len(processing_lines)} admin inject(s)). "
-                    f"Device may be in an unusual state — try `--force-bake`."
+                    f"Device may be in an unusual state - try `--force-bake`."
                 )
             else:
                 pytest.skip(
                     "ui_home_state: no `Screen: frame` log after FN_F1. "
-                    "Firmware not baked with USERPREFS_UI_TEST_LOG — "
+                    "Firmware not baked with USERPREFS_UI_TEST_LOG - "
                     "run with `--force-bake` to reflash, or verify the "
                     "macro is active in the bake."
                 )

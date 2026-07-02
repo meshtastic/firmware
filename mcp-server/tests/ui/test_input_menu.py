@@ -1,7 +1,7 @@
 """SELECT on the home frame opens the home menu; BACK closes it.
 
 The home menu is an overlay (menuHandler::homeBaseMenu), not a frame
-transition — so we verify via OCR difference between before/after
+transition - so we verify via OCR difference between before/after
 captures rather than a `Screen: frame` log line. The underlying
 mechanism is still InputBroker → Screen::handleInputEvent → menu
 callback.
@@ -39,25 +39,25 @@ def test_select_opens_home_menu(
     opened = frame_capture("after-select")
 
     # The menu is an overlay (not a frame change). We cannot use log
-    # assertion — instead, OCR should differ because a menu list is now
+    # assertion - instead, OCR should differ because a menu list is now
     # drawn on top.
     initial_text = (initial.get("ocr_text") or "").strip()
     opened_text = (opened.get("ocr_text") or "").strip()
     if initial_text and opened_text:
         # When OCR is available, require *some* difference between the two
-        # frames — even a single menu title changes the transcribed text.
+        # frames - even a single menu title changes the transcribed text.
         assert initial_text != opened_text, (
             f"expected OCR diff after SELECT; both read {initial_text!r}. "
             "If both are empty, check camera alignment + OCR backend."
         )
 
-    # Back out — the menu dismisses on BACK.
+    # Back out - the menu dismisses on BACK.
     send_event(ui_port, InputEventCode.BACK)
     time.sleep(0.8)
     closed = frame_capture("after-back")
 
     # Soft check: OCR after BACK should look different from the menu
-    # (either back to home or onto a previous frame — BACK's exact
+    # (either back to home or onto a previous frame - BACK's exact
     # behavior when the menu is up vs. not-up varies). We don't assert
     # equality because OLED rendering is pixel-stable but camera sampling
     # introduces noise.

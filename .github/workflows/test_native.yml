@@ -50,7 +50,7 @@ jobs:
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
           # The Python harness sends exit_simulator and exits; the simulator is
           # expected to terminate on its own. Give it a moment, then verify.
-          # If it is still alive the exit handshake is broken — fail loudly and
+          # If it is still alive the exit handshake is broken - fail loudly and
           # do NOT fall through to `wait`, which would otherwise block until the
           # job's hard timeout.
           for i in $(seq 1 10); do

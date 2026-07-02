@@ -36,7 +36,7 @@ import pytest
 # Ensure the MCP server is on `sys.path` without requiring installation in
 # development mode for every checkout (we DO install in .venv but this makes
 # `pytest tests/` work from a fresh clone too). The path mutation must
-# happen before `meshtastic_mcp.*` imports below — hence the `noqa: E402`
+# happen before `meshtastic_mcp.*` imports below - hence the `noqa: E402`
 # markers on those imports (ruff's "module-level import not at top of file"
 # rule doesn't understand path-bootstrapping patterns).
 _HERE = pathlib.Path(__file__).resolve().parent
@@ -106,8 +106,8 @@ def pytest_collection_modifyitems(
 
     def sort_key(item: pytest.Item) -> tuple[int, str]:
         path = str(getattr(item, "fspath", "") or item.nodeid)
-        # Session-start bake runs FIRST. `baked_mesh` only verifies state —
-        # nothing else actually reflashes — so if test_00_bake doesn't run
+        # Session-start bake runs FIRST. `baked_mesh` only verifies state -
+        # nothing else actually reflashes - so if test_00_bake doesn't run
         # before the tier tests, `--force-bake` silently becomes a no-op for
         # the tier tests and only flashes at the very end of the session.
         # Top-level nodeid ("tests/test_00_bake.py") otherwise falls into the
@@ -128,7 +128,7 @@ def pytest_collection_modifyitems(
         # after it starts from a known re-enumerated + re-verified state.
         if "/recovery/" in path or "tests/recovery" in path:
             return (4, item.nodeid)
-        # UI tier slots here — read-only w.r.t. mesh state, only mutates
+        # UI tier slots here - read-only w.r.t. mesh state, only mutates
         # the on-screen UI (BACK×5 guard restores home before each test).
         if "/ui/" in path or "tests/ui" in path:
             return (5, item.nodeid)
@@ -152,12 +152,12 @@ def pytest_collection_modifyitems(
 def session_seed(request: pytest.FixtureRequest) -> str:
     """Deterministic PSK seed for this pytest session.
 
-    Logged in the HTML report header so two runs can be correlated — and so a
+    Logged in the HTML report header so two runs can be correlated - and so a
     flaky-looking test can be reproduced exactly by passing the seed back via
     an env var (future extension).
     """
     # Pytest session `starttime` isn't directly exposed on the pytest API we
-    # care about, so derive from process start time — unique enough for human
+    # care about, so derive from process start time - unique enough for human
     # purposes and stable across the session.
     seed = os.environ.get("MESHTASTIC_MCP_SEED") or f"pytest-{int(time.time())}"
     return seed
@@ -169,7 +169,7 @@ def test_profile(session_seed: str) -> dict[str, Any]:
 
     `enable_ui_log=True` stamps `USERPREFS_UI_TEST_LOG` so the firmware
     emits `Screen: frame N/M name=... reason=...` log lines per UI
-    transition — consumed by the `tests/ui/` tier. Harmless on boards
+    transition - consumed by the `tests/ui/` tier. Harmless on boards
     without a screen (the `#ifdef` sits behind `HAS_SCREEN`).
     """
     return userprefs.build_testing_profile(
@@ -186,25 +186,25 @@ def test_profile(session_seed: str) -> dict[str, Any]:
 def _session_userprefs(test_profile: dict[str, Any]) -> Any:
     """Snapshot `userPrefs.jsonc`, apply the session test profile, restore at
     session end. Guards against the suite leaving test-profile USERPREFS
-    values baked into the file — if that happened, any firmware build a
+    values baked into the file - if that happened, any firmware build a
     contributor ran next would silently inherit the test PSK / test channel
     name / test admin key etc.
 
     Layered safety:
       1. In-memory snapshot taken before any mutation; teardown writes it back.
-      2. Sidecar `userPrefs.jsonc.mcp-session-bak` on disk — belt to the
+      2. Sidecar `userPrefs.jsonc.mcp-session-bak` on disk - belt to the
          in-memory suspenders. If Python segfaults or SIGKILLs, the next
          session self-heals from this file at startup.
       3. `atexit.register()` fallback: if pytest exits abnormally (Ctrl-C
          mid-test, fatal exception before teardown), the atexit hook still
          restores from the in-memory snapshot.
       4. Startup self-heal: if the sidecar exists at session start, a prior
-         session crashed without cleanup — the sidecar IS the truth; restore
+         session crashed without cleanup - the sidecar IS the truth; restore
          from it before taking this session's snapshot. That way a crash
          during test A doesn't propagate dirty state into test B's baseline.
 
     Autouse + depends on `test_profile` so it applies on every run (even
-    unit-only) — cheap, unified code path, no ordering surprises.
+    unit-only) - cheap, unified code path, no ordering surprises.
     """
     path = userprefs.jsonc_path()
     backup_path = path.with_name(path.name + ".mcp-session-bak")
@@ -214,7 +214,7 @@ def _session_userprefs(test_profile: dict[str, Any]) -> Any:
         yield
         return
 
-    # (4) Startup self-heal — prior session crashed without teardown.
+    # (4) Startup self-heal - prior session crashed without teardown.
     if backup_path.is_file():
         try:
             sidecar_bytes = backup_path.read_bytes()
@@ -241,7 +241,7 @@ def _session_userprefs(test_profile: dict[str, Any]) -> Any:
     except Exception as exc:
         print(f"[userprefs] could not write sidecar: {exc!r}", file=sys.stderr)
 
-    # (3) atexit fallback — fires even if pytest aborts before fixture teardown.
+    # (3) atexit fallback - fires even if pytest aborts before fixture teardown.
     restored = {"done": False}
 
     def _atexit_restore() -> None:
@@ -263,8 +263,8 @@ def _session_userprefs(test_profile: dict[str, Any]) -> Any:
     # Apply the session test profile on top of the snapshot. The firmware
     # reads userPrefs.jsonc at build time via `bin/platformio-custom.py`,
     # so every `pio run` during the session picks up the test values.
-    # Delegate to `userprefs.merge_active` — the public API that already
-    # parses, merges, validates, and writes — rather than reaching into
+    # Delegate to `userprefs.merge_active` - the public API that already
+    # parses, merges, validates, and writes - rather than reaching into
     # the private parser/renderer machinery from here.
     try:
         userprefs.merge_active(test_profile)
@@ -276,7 +276,7 @@ def _session_userprefs(test_profile: dict[str, Any]) -> Any:
         # tests that don't (unit) still run. But the restore below is
         # unconditional, so we can't leave a half-written file behind.
         print(
-            f"[userprefs] failed to apply test profile: {exc!r} — "
+            f"[userprefs] failed to apply test profile: {exc!r} - "
             f"file left at original state",
             file=sys.stderr,
         )
@@ -298,7 +298,7 @@ def _session_userprefs(test_profile: dict[str, Any]) -> Any:
             # exception from the yielded body); use a flag so the cleanup
             # control-flow stays linear and exceptions propagate normally.
             print(
-                f"[userprefs] teardown restore failed: {exc!r} — "
+                f"[userprefs] teardown restore failed: {exc!r} - "
                 f"sidecar {backup_path} retained for manual recovery",
                 file=sys.stderr,
             )
@@ -388,7 +388,7 @@ def hub_devices(hub_profile: dict[str, dict[str, Any]]) -> dict[str, str]:
     """
     # include_unknown=True so non-whitelisted VIDs (e.g. CP2102 at 0x10c4) that
     # are configured as hub roles still match. The hub_profile itself gates
-    # which VIDs we consider — no risk of unrelated serial ports sneaking in.
+    # which VIDs we consider - no risk of unrelated serial ports sneaking in.
     found = devices_module.list_devices(include_unknown=True)
     # Coalesce alt roles into their base name (esp32s3_alt → esp32s3)
     resolved: dict[str, str] = {}
@@ -413,7 +413,7 @@ def hub_devices(hub_profile: dict[str, dict[str, Any]]) -> dict[str, str]:
 def _reset_transmit_history_state(role: str, port: str) -> str:
     """Wipe `/prefs/transmit_history.dat` + in-memory throttle cache via
     delete_file_request + reboot. Returns the post-reboot port (nRF52
-    re-enumerates). Best-effort — errors log to stderr + return original
+    re-enumerates). Best-effort - errors log to stderr + return original
     port so a flaky start doesn't block the session.
     """
     from ._port_discovery import resolve_port_by_role
@@ -467,7 +467,7 @@ def _session_clear_transmit_history(hub_devices: dict[str, str]) -> None:
     if not hub_devices:
         yield
         return
-    # Iterate over a snapshot — _reset_transmit_history_state can mutate
+    # Iterate over a snapshot - _reset_transmit_history_state can mutate
     # hub_devices mid-loop via the update below, and dict-iteration isn't
     # safe during mutation.
     for role, port in list(hub_devices.items()):
@@ -491,12 +491,12 @@ def baked_mesh(
     comparing the live config to the expected profile.
 
     Raises with an actionable error if state is missing or mismatched:
-        "device nrf52 at /dev/cu.X not baked with session profile —
+        "device nrf52 at /dev/cu.X not baked with session profile -
          run test_00_bake.py first or pass --force-bake"
 
     Returns a per-role dict with `{port, iface_fresh: callable, my_node_num}`.
     """
-    # Verify every role that's present — don't require a fixed set.
+    # Verify every role that's present - don't require a fixed set.
     # Tests that NEED a specific role (mesh_pair, bidirectional) check
     # presence in their own fixtures and skip there with an actionable
     # message. That keeps single-device tests runnable on a one-device
@@ -518,7 +518,7 @@ def baked_mesh(
         try:
             live = info.device_info(port=port, timeout_s=12.0)
         except Exception as exc:
-            # Per-role failure — drop this role from the baked set and let
+            # Per-role failure - drop this role from the baked set and let
             # any test parametrized against it skip with the actionable
             # message. Other roles still proceed.
             per_role_errors[role] = f"device_info failed: {exc!r}"
@@ -576,11 +576,11 @@ def baked_mesh(
         # the SerialInterface. Operators who want log capture can opt in via the
         # `set_debug_log_api` MCP tool (or `admin.set_debug_log_api` directly) on
         # a case-by-case basis. The autouse `_debug_log_buffer` fixture is still
-        # armed below — if a test explicitly enables the flag, its output will
+        # armed below - if a test explicitly enables the flag, its output will
         # be captured and attached to failures. Firmware-side fix would need
-        # a separate tx buffer or a mutex — out of scope for the MCP harness.
+        # a separate tx buffer or a mutex - out of scope for the MCP harness.
 
-    # If EVERY detected role errored, skip the session — nothing testable.
+    # If EVERY detected role errored, skip the session - nothing testable.
     # Otherwise yield the partial set. Tests parametrized against a role
     # not in `out` will skip via the `baked_single`/`mesh_pair` presence
     # check with "role not present on the hub".
@@ -608,7 +608,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     the test still COLLECTS cleanly (it'll just skip via the
     `hub_devices` missing-role check inside the fixture).
 
-    Honors `--hub-profile=<yaml>` for non-default hardware — when set, only
+    Honors `--hub-profile=<yaml>` for non-default hardware - when set, only
     roles defined in the YAML are parametrized. (So e.g. a yaml with only
     `esp32s3` skips every `[nrf52]` variant at collection time.)
     """
@@ -675,7 +675,7 @@ def baked_single(
     """Function-scoped: a single verified baked device.
 
     Auto-parametrized by `pytest_generate_tests` over every detected hub
-    role — so any test taking this fixture runs once per connected device
+    role - so any test taking this fixture runs once per connected device
     (e.g. `test_owner_survives_reboot[nrf52]` +
     `test_owner_survives_reboot[esp32s3]`). Tests never hardcode a role
     and never skip a device that happens to be connected.
@@ -727,7 +727,7 @@ def power_cycle(
 ) -> Callable[..., str]:
     """Return a callable `(role, delay_s=2) -> new_port` that hard-resets the
     hub port hosting `role`. Skips the test cleanly when uhubctl isn't
-    installed — never want "no uhubctl" to look like a test failure.
+    installed - never want "no uhubctl" to look like a test failure.
 
     The callable mutates `hub_devices[role]` in place so subsequent fixture
     lookups pick up the post-cycle port (mirrors the pattern in
@@ -905,19 +905,19 @@ def _firmware_log_stream() -> Any:
     firmware logs *in memory* for pytest-html failure attachments, but a
     live viewer (``meshtastic-mcp-test-tui``) can't read in-process
     pubsub events from a different process. This fixture adds a
-    session-long, durable mirror — one JSON object per line, with
-    ``port``, ``ts``, and ``line`` fields — that the TUI tails from a
+    session-long, durable mirror - one JSON object per line, with
+    ``port``, ``ts``, and ``line`` fields - that the TUI tails from a
     worker thread.
 
     Schema (kept trivially small so the file grows slowly):
 
         {"ts": 1729100000.123, "port": "/dev/cu.usbmodem1101", "line": "INFO  | ... [SerialConsole] Boot..."}
 
-    The file is truncated at session start (no append across runs — the
+    The file is truncated at session start (no append across runs - the
     TUI also unlinks it on launch, so double-truncate is deliberate).
     Gitignored via ``mcp-server/.gitignore``.
 
-    Runs alongside ``_debug_log_buffer`` — both subscribe to the same
+    Runs alongside ``_debug_log_buffer`` - both subscribe to the same
     pubsub topic; pubsub fans out to every subscriber so there's no
     interference.
     """
@@ -943,7 +943,7 @@ def _firmware_log_stream() -> Any:
     def handler(line: str, interface: Any) -> None:
         # `interface` is the meshtastic SerialInterface; `.devPath`
         # carries the /dev/cu.* we care about. Defensive about missing
-        # attribute — the pubsub handler must never raise.
+        # attribute - the pubsub handler must never raise.
         try:
             port = getattr(interface, "devPath", None) or getattr(
                 interface, "stream", None
@@ -959,7 +959,7 @@ def _firmware_log_stream() -> Any:
                 fh.write(json.dumps(record) + "\n")
                 fh.flush()
         except Exception:
-            # Swallow — firmware log mirroring is best-effort.
+            # Swallow - firmware log mirroring is best-effort.
             pass
 
     pub.subscribe(handler, "meshtastic.log.line")
@@ -980,7 +980,7 @@ def _firmware_log_stream() -> Any:
 def _debug_log_buffer(request: pytest.FixtureRequest) -> Any:
     """Per-test capture of `meshtastic.log.line` pubsub events.
 
-    Automatic — every test gets this for free. The pubsub topic fires when
+    Automatic - every test gets this for free. The pubsub topic fires when
     a connected device has `security.debug_log_api_enabled=True` AND the
     client (us) is talking protobufs over its SerialInterface. `baked_mesh`
     flips the flag on at session start, so every subsequent test that opens
@@ -989,7 +989,7 @@ def _debug_log_buffer(request: pytest.FixtureRequest) -> Any:
 
     The captured lines are attached to the test's pytest-html failure report
     by `pytest_runtest_makereport`, so mesh/telemetry failures ship with the
-    firmware-side log context inline — no separate pio monitor, no
+    firmware-side log context inline - no separate pio monitor, no
     port-lock conflict.
     """
     import threading as _threading
@@ -1026,7 +1026,7 @@ def _run_with_timeout(fn: Callable[[], Any], timeout: float) -> Any:
     `meshtastic.SerialInterface` construction can hang indefinitely on a
     misconfigured or unresponsive port. pytest-timeout fires from the main
     thread via SIGALRM, which doesn't protect code running inside
-    `pytest_runtest_makereport` — that hook runs outside the test's timer. So
+    `pytest_runtest_makereport` - that hook runs outside the test's timer. So
     we wrap each device query in a bounded worker.
     """
     import concurrent.futures
@@ -1064,7 +1064,7 @@ def _attach_ui_captures(item: pytest.Item, report: Any) -> None:
         label = f"{cap.get('step', '?')}: {cap.get('label', '')}"
         frame = cap.get("frame") or {}
         frame_str = (
-            f" — frame {frame.get('idx')} {frame.get('name')!r}" if frame else ""
+            f" - frame {frame.get('idx')} {frame.get('name')!r}" if frame else ""
         )
         if png_path:
             try:
@@ -1085,7 +1085,7 @@ def _attach_ui_captures(item: pytest.Item, report: Any) -> None:
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> Any:
     """On test failure, attach serial capture + device state as report artifacts.
 
-    Hard-bounded by `_run_with_timeout` — if the device is unreachable (stuck
+    Hard-bounded by `_run_with_timeout` - if the device is unreachable (stuck
     port, unbaked firmware, dead board), the dump is skipped rather than
     hanging the session.
 
@@ -1096,7 +1096,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     outcome = yield
     report = outcome.get_result()
 
-    # Attach UI captures on any outcome (pass + fail) — these are the whole
+    # Attach UI captures on any outcome (pass + fail) - these are the whole
     # point of the UI tier. Do this before the failure-only branch below so
     # passing tests still get their image strip.
     if report.when == "call":
@@ -1108,7 +1108,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     extras: list[str] = []
 
     # Attach firmware log stream captured via the StreamAPI (populated only
-    # when the device has security.debug_log_api_enabled=True — baked_mesh
+    # when the device has security.debug_log_api_enabled=True - baked_mesh
     # flips this on at session start). Cheap and high-signal: last 200 lines
     # of firmware log interleaved with whatever the test was doing.
     log_buffer = getattr(item, "_debug_log_buffer", None)

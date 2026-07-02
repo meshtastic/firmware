@@ -248,7 +248,7 @@ void PacketHistory::hashRemove(NodeNum sender, PacketId id)
             return;
         uint16_t idx = hashIndex[bucket];
         if (idx < recentPacketsCapacity && recentPackets[idx].sender == sender && recentPackets[idx].id == id) {
-            // Found it — delete and re-insert subsequent entries to maintain probe chain integrity
+            // Found it - delete and re-insert subsequent entries to maintain probe chain integrity
             hashIndex[bucket] = HASH_EMPTY;
             uint32_t next = (bucket + 1) & hashMask;
             for (uint32_t j = 0; j < hashCapacity; j++) {
@@ -488,7 +488,7 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
 /* Check if a certain node was a relayer of a packet in the history given iterator
  * @return true if node was indeed a relayer, false if not
  * NOTE: intentionally byte-domain. Both `relayer` and relayed_by[] are on-wire last bytes, so this
- * answers "did a relayer with this byte touch the packet" — correct without resolving to a NodeNum.
+ * answers "did a relayer with this byte touch the packet" - correct without resolving to a NodeNum.
  * The collision risk is neutralized where the result is consumed (route learning in
  * NextHopRouter::sniffReceived now gates the write through NodeDB::resolveUniqueLastByte). */
 bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole)

@@ -2,7 +2,7 @@
 
 ``pio.py`` / ``hw_tools.py`` tee subprocess output (``pio run -t upload``,
 ``esptool erase_flash``, ``nrfutil dfu``, etc.) to ``tests/flash.log``
-line-by-line as it arrives — controlled by the ``MESHTASTIC_MCP_FLASH_LOG``
+line-by-line as it arrives - controlled by the ``MESHTASTIC_MCP_FLASH_LOG``
 env var that ``run-tests.sh`` sets. The TUI tails that file so the operator
 sees live flash progress in the pytest pane instead of 3 minutes of silence
 during ``test_00_bake``.
@@ -25,7 +25,7 @@ class FlashLogTailer(threading.Thread):
     ``post`` is invoked with a single ``str`` for every new line. Lines are
     stripped of trailing newlines; empty lines after stripping are dropped.
 
-    The file may not exist yet when this thread starts — it's truncated by
+    The file may not exist yet when this thread starts - it's truncated by
     ``run-tests.sh`` at session start, but if the tailer races the shell,
     we tolerate FileNotFoundError for up to ``wait_s`` seconds.
     """

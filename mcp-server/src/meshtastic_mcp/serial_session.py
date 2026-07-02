@@ -1,6 +1,6 @@
 """Long-running serial monitor sessions via `pio device monitor`.
 
-Why pio instead of raw pyserial: pio applies the board's monitor_filters —
+Why pio instead of raw pyserial: pio applies the board's monitor_filters -
 `esp32_exception_decoder` symbolicates crash stacks, `time` adds timestamps,
 etc. Raw pyserial would give us bytes; pio gives us developer-grade logs.
 
@@ -53,7 +53,7 @@ def _drain(session: SerialSession) -> None:
     own port. This is the text-mode tap path: when no SerialInterface is
     open, the firmware emits full formatted lines (level + clock + uptime
     + thread + `[heap N]` prefix on DEBUG_HEAP builds + body), and we
-    fan them out to whoever is listening. Pubsub is best-effort —
+    fan them out to whoever is listening. Pubsub is best-effort -
     publish failures must never block the reader.
     """
     # Lazy import: pubsub isn't required just to import this module

@@ -3,7 +3,7 @@
 `Screen::handleInputEvent` dispatches FN_F5 unconditionally to
 `ui->switchToFrame(4)`. The OLEDDisplayUi library typically clamps or
 silently ignores out-of-range indices, but firmware bugs have existed
-here — this test protects against a regression that would wedge the UI.
+here - this test protects against a regression that would wedge the UI.
 
 If this test fails, first check: did the device actually crash (Guru
 Meditation in the log)? Or did switchToFrame accept an OOB index and
@@ -33,7 +33,7 @@ def test_fn_f5_out_of_bounds(
 
     if start.count > 5:
         pytest.skip(
-            f"device has {start.count} frames; FN_F5 is in-bounds — not testing OOB here"
+            f"device has {start.count} frames; FN_F5 is in-bounds - not testing OOB here"
         )
 
     frame_capture("initial-home")
@@ -43,11 +43,11 @@ def test_fn_f5_out_of_bounds(
     try:
         wait_for_reason(lines, "fn_f5", timeout_s=3.0)
     except TimeoutError:
-        # Firmware may have ignored the event entirely — acceptable.
+        # Firmware may have ignored the event entirely - acceptable.
         pass
 
     # Capture whatever is on screen (OCR will tell us if something weird
-    # happened). Device must remain responsive — subsequent events should
+    # happened). Device must remain responsive - subsequent events should
     # still land.
     frame_capture("after-fn_f5-oob")
 
@@ -57,5 +57,5 @@ def test_fn_f5_out_of_bounds(
     post = wait_for_reason(lines, "next", timeout_s=5.0)
     assert (
         post is not None
-    ), "UI wedged after OOB FN_F5 — RIGHT no longer produces frame log"
+    ), "UI wedged after OOB FN_F5 - RIGHT no longer produces frame log"
     frame_capture("after-recovery-right")

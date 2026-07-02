@@ -4,7 +4,7 @@ This is the most-critical admin behavior not tested elsewhere. If
 config persistence breaks in a firmware release, every deployed device
 gets bricked on its next reboot (channels lost, region lost, owner lost,
 everything back to Meshtastic stock). The fleet blast radius is "every
-unit on every shelf" — easily worth one explicit test per release.
+unit on every shelf" - easily worth one explicit test per release.
 
 Pattern: single-device (``baked_single``, one test per role). Mutate a
 benign, easy-to-observe LoRa field (``lora.hop_limit``), confirm
@@ -12,9 +12,9 @@ pre-reboot, reboot, rediscover port (nRF52 may re-enumerate), verify
 the value survived, restore original for downstream tests.
 
 Why ``lora.hop_limit`` specifically:
-  * Non-destructive — doesn't change region, channel, or PSK, so
+  * Non-destructive - doesn't change region, channel, or PSK, so
     downstream mesh tests still work regardless of the flipped value.
-  * Bounded small-integer (1..7) — easy to flip to a definitively
+  * Bounded small-integer (1..7) - easy to flip to a definitively
     different value and read back.
   * Persisted via ``writeConfig("lora")`` which is the same path
     every other LoRa config mutation uses, so we're really testing
@@ -64,7 +64,7 @@ def test_lora_hop_limit_survives_reboot(
 
         # Pre-reboot sanity: the write reached the device and
         # get_config reflects it in-memory. If this fails, the persist
-        # test below is moot — something's wrong with the write path
+        # test below is moot - something's wrong with the write path
         # itself, not with persistence.
         assert _get_hop_limit(port) == new_value, (
             f"pre-reboot readback failed: set {new_value}, got "
@@ -92,12 +92,12 @@ def test_lora_hop_limit_survives_reboot(
         assert post == new_value, (
             f"lora.hop_limit did not survive reboot: set to {new_value} "
             f"pre-reboot, read back {post} post-reboot. Config persistence "
-            f"is broken — downstream fleet impact would be total."
+            f"is broken - downstream fleet impact would be total."
         )
     finally:
         # Restore so downstream tests see the original hop_limit.
         # Wrapped in its own try to avoid masking the real assertion
-        # if the restore itself races the reboot — the worst case
+        # if the restore itself races the reboot - the worst case
         # there is a non-default hop_limit sticks around, which is
         # benign (mesh still works at hop_limit 3 or 5).
         try:

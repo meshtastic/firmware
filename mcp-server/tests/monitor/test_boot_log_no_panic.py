@@ -1,4 +1,4 @@
-"""Monitor: boot log is clean — no panic markers in the first 60 seconds.
+"""Monitor: boot log is clean - no panic markers in the first 60 seconds.
 
 This is the single highest-signal test for catching firmware regressions.
 If a commit broke something critical at boot (stack overflow, NULL deref, HAL
@@ -36,7 +36,7 @@ def test_boot_log_no_panic(
     role_env,
     wait_until,
 ) -> None:
-    """Runs once per connected role — each device must boot cleanly,
+    """Runs once per connected role - each device must boot cleanly,
     independently. A panic on one role shouldn't mask another."""
     role = baked_single["role"]
     port = baked_single["port"]
@@ -52,7 +52,7 @@ def test_boot_log_no_panic(
     time.sleep(60.0)
 
     lines = cap.snapshot(max_lines=4000)
-    assert lines, "serial capture returned no log lines — monitor may have failed"
+    assert lines, "serial capture returned no log lines - monitor may have failed"
     blob = "\n".join(lines).lower()
 
     hits = [marker for marker in _PANIC_MARKERS if marker in blob]

@@ -1,5 +1,5 @@
 /**
- * SPI.h — Arduino SPI shim for Zephyr/nRF54L15
+ * SPI.h - Arduino SPI shim for Zephyr/nRF54L15
  *
  * Provides the Arduino SPIClass interface backed by Zephyr's SPI API. The
  * backing controller is SPIM00 (HP domain, 3.0 V); the implementation in
@@ -7,7 +7,7 @@
  * bus is configured in zephyr/boards/nrf54l15dk_nrf54l15_cpuapp.overlay.
  * RadioLib uses ArduinoHal which calls transfer() byte-by-byte.
  *
- * CS pin is handled by RadioLib via digitalWrite() — hardware CS is not used.
+ * CS pin is handled by RadioLib via digitalWrite() - hardware CS is not used.
  */
 
 #pragma once
@@ -25,7 +25,7 @@ struct SPISettings {
     uint8_t bitOrder;
     uint8_t dataMode;
 
-    // Arduino API allows `SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0))` — implicit form is intentional.
+    // Arduino API allows `SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0))` - implicit form is intentional.
     // cppcheck-suppress noExplicitConstructor
     SPISettings(uint32_t clock = 4000000, uint8_t bitOrder = MSBFIRST, uint8_t dataMode = SPI_MODE0)
         : clock(clock), bitOrder(bitOrder), dataMode(dataMode)
@@ -46,7 +46,7 @@ class SPIClass
     void setClockDivider(uint8_t div) {}
     void setFrequency(uint32_t freq) {}
 
-    // Real Zephyr SPI implementation — defined in nrf54l15_arduino.cpp
+    // Real Zephyr SPI implementation - defined in nrf54l15_arduino.cpp
     uint8_t transfer(uint8_t data);
     uint16_t transfer16(uint16_t data);
     void transfer(void *buf, size_t count);

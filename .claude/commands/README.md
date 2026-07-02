@@ -15,11 +15,11 @@ The Claude Code commands and Copilot prompts cover the same three workflows but 
 - **Claude Code** (`/test`) uses `$ARGUMENTS` for pass-through, has direct access to Bash + all MCP tools registered in the user's settings, and runs in the terminal context.
 - **Copilot** (`/mcp-test`) runs in VS Code's agent mode; it has terminal + MCP access too but typically asks the operator to confirm inputs interactively.
 
-A contributor using either IDE gets equivalent assistance. Keep the two in sync when behavior changes — the diff of intent should be minimal.
+A contributor using either IDE gets equivalent assistance. Keep the two in sync when behavior changes - the diff of intent should be minimal.
 
 ## House rules
 
-- **No destructive writes without explicit operator approval.** Skills that could reflash, factory-reset, or reboot a device must describe the action and stop — the operator authorizes.
+- **No destructive writes without explicit operator approval.** Skills that could reflash, factory-reset, or reboot a device must describe the action and stop - the operator authorizes.
 - **Interpret failures, don't just echo them.** The skill body should pull firmware log lines from `mcp-server/tests/report.html` (the `Meshtastic debug` section, attached by `tests/conftest.py::pytest_runtest_makereport`) and classify the failure.
 - **Keep MCP tool calls sequential per port.** SerialInterface holds an exclusive port lock; two parallel tool calls on the same port deadlock.
 - **Never speculate about root cause.** If the evidence doesn't support a classification, say "unknown" and list what you'd need to disambiguate.

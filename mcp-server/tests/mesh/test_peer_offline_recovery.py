@@ -5,16 +5,16 @@ off mid-send via uhubctl, then powered back on.
 
 Flow (parametrized over every directed mesh_pair):
   1. Bilateral PKI warmup (same pattern as test_direct_with_ack).
-  2. TX sends a broadcast text "msg-1" — RX confirms receipt via pubsub.
+  2. TX sends a broadcast text "msg-1" - RX confirms receipt via pubsub.
   3. Power OFF RX via uhubctl. The RX device disappears from the OS.
   4. TX sends a directed text "msg-2" with wantAck=True. Firmware retries
      internally for ~30s before giving up. Assertion: the packet object
-     was accepted by the TX stack (non-None) — we don't assert an ACK
+     was accepted by the TX stack (non-None) - we don't assert an ACK
      since there's no peer to send one.
   5. Power ON RX. Wait for re-enumeration + boot.
-  6. Bilateral PKI re-nudge — RX's in-RAM PKI cache was wiped on reboot,
+  6. Bilateral PKI re-nudge - RX's in-RAM PKI cache was wiped on reboot,
      so the first directed send may err=35 without a fresh NodeInfo ping.
-  7. TX sends a directed "msg-3" — RX receives it via pubsub, confirming
+  7. TX sends a directed "msg-3" - RX receives it via pubsub, confirming
      the mesh recovered.
 
 Skips cleanly if uhubctl isn't installed (via the `power_cycle` fixture's
@@ -38,7 +38,7 @@ from ._receive import ReceiveCollector, nudge_nodeinfo
 @pytest.mark.timeout(360)
 def test_peer_offline_then_recovers(
     mesh_pair: dict[str, Any],
-    power_cycle,  # noqa: ARG001 — forces uhubctl-availability skip
+    power_cycle,  # noqa: ARG001 - forces uhubctl-availability skip
     hub_devices: dict[str, str],
 ) -> None:
     tx_port = mesh_pair["tx"]["port"]
@@ -80,7 +80,7 @@ def test_peer_offline_then_recovers(
                 timeout=30,
             )
             assert got is not None, (
-                f"baseline directed send ({tx_role}→{rx_role}) didn't land — "
+                f"baseline directed send ({tx_role}→{rx_role}) didn't land - "
                 "skipping offline test to avoid false positive"
             )
 
@@ -111,7 +111,7 @@ def test_peer_offline_then_recovers(
             assert packet is not None
             # Give firmware a moment to do a retry or two while RX is down.
             time.sleep(5.0)
-    except Exception as exc:  # noqa: BLE001 — TX should survive the peer being gone
+    except Exception as exc:  # noqa: BLE001 - TX should survive the peer being gone
         # Restore RX before reraising so the bench state is sane.
         _power.power_on(rx_role)
         resolve_port_by_role(rx_role, timeout_s=30.0)
@@ -151,5 +151,5 @@ def test_peer_offline_then_recovers(
 
     assert got is not None, (
         f"post-recovery directed send {unique_post!r} ({tx_role}→{rx_role}) "
-        "never landed — recovery path may be broken"
+        "never landed - recovery path may be broken"
     )
