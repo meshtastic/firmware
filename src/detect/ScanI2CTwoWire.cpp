@@ -441,8 +441,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         logFoundDevice("DPS310", (uint8_t)addr.address);
                         type = DPS310;
                         break;
+                    case 0x11:
+                        logFoundDevice("SPA06-003", (uint8_t)addr.address);
+                        type = SPA06;
+                        break;
                     }
-                    if (type == DPS310) {
+                    if (type == DPS310 || type == SPA06) {
                         break;
                     }
                 default:
