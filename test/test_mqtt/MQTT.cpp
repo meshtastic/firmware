@@ -27,12 +27,6 @@
 #include <utility>
 #include <variant>
 
-#if defined(UNIT_TEST)
-#define IS_RUNNING_TESTS 1
-#else
-#define IS_RUNNING_TESTS 0
-#endif
-
 namespace
 {
 // Minimal router needed to receive messages from MQTT.
@@ -862,7 +856,7 @@ void test_configCustomHostAndPort(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// An unreachable server is still a valid config — settings always save.
+// An unreachable server is still a valid config - settings always save.
 // A warning notification is sent in non-test builds, but isValidConfig returns true.
 void test_configWithUnreachableServerIsStillValid(void)
 {

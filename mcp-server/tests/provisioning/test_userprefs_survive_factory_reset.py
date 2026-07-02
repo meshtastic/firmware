@@ -2,7 +2,7 @@
 
 Real operator concern: "if someone resets my fleet device, will it come back
 on my private mesh or on Meshtastic defaults?" A baked USERPREFS recipe
-should be the factory floor for the device — reset goes back to THAT state,
+should be the factory floor for the device - reset goes back to THAT state,
 not to stock Meshtastic.
 """
 
@@ -51,12 +51,12 @@ def test_baked_prefs_survive_factory_reset(
     # Trigger non-full factory reset
     admin.factory_reset(port=port, confirm=True, full=False)
 
-    # Device re-enumerates — rediscover its port before probing. nRF52's
+    # Device re-enumerates - rediscover its port before probing. nRF52's
     # CDC endpoint drops and comes back with a new `/dev/cu.usbmodem*`
     # path on macOS; ESP32-S3 usually keeps the same path but the helper
     # works either way (it just returns the current path for this role).
     # Early sleep lets the USB kernel driver settle before we start
-    # polling — list_devices during a transient re-enumeration can return
+    # polling - list_devices during a transient re-enumeration can return
     # an empty list and the helper's poll-with-backoff handles that too,
     # so the sleep is optimization not correctness.
     time.sleep(10.0)

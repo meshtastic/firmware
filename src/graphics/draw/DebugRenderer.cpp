@@ -97,10 +97,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
 #ifdef ARCH_ESP32
         if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
                                           (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796) || ARCH_PORTDUINO) &&                                                 \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
+#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12,
                                    8, imgQuestionL1);
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12,
@@ -110,10 +107,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
                                    8, imgQuestion);
 #endif
         } else {
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) &&                                                                   \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
+#if (defined(USE_EINK) || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 16,
                                    8, imgSFL1);
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 16,
@@ -126,10 +120,7 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
 #endif
     } else {
         // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796) || ARCH_PORTDUINO) &&                                                 \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
+#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
@@ -460,7 +451,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, getTextPositions(display)[line++], frequencyslot);
 
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === Fifth Row: Channel Utilization ===
     const char *chUtil = "ChUtil:";
     char chUtilPercentage[10];
@@ -491,9 +482,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // Weighting for nonlinear segments
     float milestone1 = 25;
     float milestone2 = 40;
-    float weight1 = 0.45; // Weight for 0–25%
-    float weight2 = 0.35; // Weight for 25–40%
-    float weight3 = 0.20; // Weight for 40–100%
+    float weight1 = 0.45; // Weight for 0-25%
+    float weight2 = 0.35; // Weight for 25-40%
+    float weight3 = 0.20; // Weight for 40-100%
     float totalWeight = weight1 + weight2 + weight3;
 
     int seg1 = chutil_bar_max_fill * (weight1 / totalWeight);
@@ -592,7 +583,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         // Label
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->drawString(labelX, getTextPositions(display)[line], label);
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
         // Bar
         int barY = getTextPositions(display)[line] + (FONT_HEIGHT_SMALL - barHeight) / 2;
         display->setColor(WHITE);

@@ -16,7 +16,7 @@ from meshtastic_mcp.connection import connect
 
 @pytest.mark.timeout(180)
 def test_mesh_formation_within_60s(mesh_pair: dict[str, Any], wait_until) -> None:
-    """Runs for every directed role pair — so we prove `A sees B in its node
+    """Runs for every directed role pair - so we prove `A sees B in its node
     DB` AND `B sees A in its node DB` independently. A one-sided pass can
     mask a real problem (e.g. device A's RX works but its TX is dead).
     """

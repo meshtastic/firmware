@@ -4,7 +4,7 @@ Opens a ReceiveCollector on EVERY role, sends a uniquely-tagged broadcast
 from each role in turn, and asserts every OTHER role saw it. One atomic
 test that answers "is the mesh actually working both directions?".
 
-Not parametrized — it inherently involves the full hub.
+Not parametrized - it inherently involves the full hub.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def test_bidirectional_mesh_communication(
         time.sleep(2.0)
 
         # From each role, send a uniquely-tagged broadcast. We MUST send through
-        # the already-open collector — opening a new SerialInterface here would
+        # the already-open collector - opening a new SerialInterface here would
         # race the collector's exclusive lock on the port.
         tags: dict[str, str] = {}
         for sender in roles:

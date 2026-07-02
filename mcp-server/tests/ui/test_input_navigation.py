@@ -25,9 +25,9 @@ def test_input_right_cycles_frames(
 ) -> None:
     lines: list[str] = request.node._debug_log_buffer
     start = get_current_frame(lines)
-    assert start is not None, "no frame log yet — USERPREFS_UI_TEST_LOG not wired?"
+    assert start is not None, "no frame log yet - USERPREFS_UI_TEST_LOG not wired?"
     # FN_F1 in ui_home_state lands on frame 0. The name at frame 0 varies
-    # by board (home on heltec-v3, deviceFocused on others) — accept either.
+    # by board (home on heltec-v3, deviceFocused on others) - accept either.
     assert start.name in (
         "home",
         "deviceFocused",

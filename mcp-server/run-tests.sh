@@ -50,11 +50,11 @@ if [[ -f $USERPREFS_SIDECAR ]]; then
 fi
 
 # If userPrefs.jsonc has uncommitted changes BEFORE the run starts, that's
-# worth warning about — tests will snapshot this dirty state and restore to
+# worth warning about - tests will snapshot this dirty state and restore to
 # it at the end, which may not be what the operator wants.
 if command -v git >/dev/null 2>&1; then
 	cd "$FIRMWARE_ROOT"
-	# Capture the git status into a local first — SC2312 flags command
+	# Capture the git status into a local first - SC2312 flags command
 	# substitution inside `[[ -n ... ]]` because the exit code of `git
 	# status` is masked. A two-step assignment makes the failure path
 	# explicit (non-git, missing file) and keeps the bracket test clean.
@@ -84,7 +84,7 @@ fi
 # nrfutil, picotool) to this file line-by-line as it arrives when this env
 # var is set. The TUI tails it so the operator sees live flash progress
 # instead of 3 minutes of silence during `test_00_bake.py`. Plain CLI users
-# also benefit — the log is a post-run diagnostic even without the TUI.
+# also benefit - the log is a post-run diagnostic even without the TUI.
 # Truncate at session start so each run gets a clean log.
 export MESHTASTIC_MCP_FLASH_LOG="$SCRIPT_DIR/tests/flash.log"
 : >"$MESHTASTIC_MCP_FLASH_LOG"
@@ -120,7 +120,7 @@ for dev in devices.list_devices(include_unknown=True):
     except (TypeError, ValueError):
         continue
     role = ROLE_BY_VID.get(vid)
-    # First port wins per role — matches hub_devices fixture semantics.
+    # First port wins per role - matches hub_devices fixture semantics.
     if role and role not in out:
         out[role] = dev["port"]
 
@@ -164,7 +164,7 @@ fi
 # Surface what pytest is about to do with respect to the bake phase: the
 # operator should see "will verify + bake if needed" by default, so a
 # 3-minute flash appearing mid-run isn't a surprise. Detection of the
-# explicit overrides is best-effort — we just scan $@ for the known flags.
+# explicit overrides is best-effort - we just scan $@ for the known flags.
 _bake_mode="auto (verify + bake if needed)"
 for _arg in "$@"; do
 	case "$_arg" in
@@ -188,13 +188,15 @@ echo
 
 # ---------- Invoke pytest -------------------------------------------------
 # If no devices detected, only the unit tier would produce meaningful
-# PASS/FAIL — every hardware test would SKIP with "role not present". We
+# PASS/FAIL - every hardware test would SKIP with "role not present". We
 # narrow to tests/unit explicitly so the summary reads as "no hardware,
 # unit suite only" instead of "big skip count looks suspicious".
+# Keep terminal output condensed (`-q -r fE`) so skip-heavy runs do not print
+# each skipped test in full; skip counts still appear in pytest's summary.
 if [[ -z $DETECTED && $# -eq 0 ]]; then
 	echo "[pre-flight] no supported devices detected; running unit tier only."
 	echo
-	exec "$VENV_PY" -m pytest tests/unit -v --report-log=tests/reportlog.jsonl
+	exec "$VENV_PY" -m pytest tests/unit -q -r fE --report-log=tests/reportlog.jsonl
 fi
 
 # Default pytest args when the user passed none. Power users can invoke
@@ -204,17 +206,19 @@ fi
 # has an internal skip-if-already-baked check (`_bake_role`: query device_info,
 # compare region + primary_channel to the session profile, skip on match).
 # So the fast path is ~8-10 s of verification overhead when the devices are
-# already baked — negligible next to the 2-6 min suite runtime. Letting
+# already baked - negligible next to the 2-6 min suite runtime. Letting
 # test_00_bake.py run means a fresh device, a re-seeded session, or a post-
 # factory-reset device gets flashed automatically instead of silently
 # skipping half the hardware tests with "not baked with session profile"
 # errors. Power users who know their hardware is current and want to shave
 # those seconds can pass `--assume-baked` explicitly.
+# Defaults also use condensed reporting (`-q -r fE`) to avoid listing every
+# skipped test verbatim while still surfacing failures/errors and summary data.
 if [[ $# -eq 0 ]]; then
 	set -- tests/ \
 		--html=tests/report.html --self-contained-html \
 		--junitxml=tests/junit.xml \
-		-v --tb=short
+		-q -r fE --tb=short
 fi
 
 # UI tier requires opencv-python-headless (and ideally easyocr). If it's
@@ -233,27 +237,27 @@ for _arg in "$@"; do
 	esac
 done
 if [[ $_running_ui -eq 1 && $_cv2_ok -eq 0 ]]; then
-	printf '\033[33m[pre-flight] tests/ui tier detected, but opencv-python-headless is not installed — deselecting.\033[0m\n'
+	printf '\033[33m[pre-flight] tests/ui tier detected, but opencv-python-headless is not installed - deselecting.\033[0m\n'
 	printf '             install with: .venv/bin/pip install -e "mcp-server/.[ui]"\n'
 	echo
 	set -- "$@" --ignore=tests/ui
 fi
 
-# Recovery tier needs `uhubctl` on PATH — it power-cycles devices via USB
+# Recovery tier needs `uhubctl` on PATH - it power-cycles devices via USB
 # hub PPPS. The tier's conftest already skips cleanly, so this is just a
 # friendly heads-up before the skip happens. `baked_single`'s auto-
 # recovery hook also benefits from having uhubctl available across the
 # whole suite.
 if ! command -v uhubctl >/dev/null 2>&1; then
-	printf "\033[33m[pre-flight] uhubctl not found on PATH — recovery tier will skip, and\n"
+	printf "\033[33m[pre-flight] uhubctl not found on PATH - recovery tier will skip, and\n"
 	printf "             wedged-device auto-recovery is disabled.\033[0m\n"
 	printf "             install with: brew install uhubctl (macOS) or apt install uhubctl (Debian/Ubuntu).\n"
 	echo
 fi
 
 # Always emit `tests/reportlog.jsonl` (unless the operator explicitly passed
-# their own `--report-log=...`). Consumers — notably the
-# `meshtastic-mcp-test-tui` TUI — tail the reportlog for live per-test state.
+# their own `--report-log=...`). Consumers - notably the
+# `meshtastic-mcp-test-tui` TUI - tail the reportlog for live per-test state.
 # Appending here means power-user invocations like `./run-tests.sh tests/mesh`
 # also produce it, not just the all-defaults invocation.
 _has_report_log=0

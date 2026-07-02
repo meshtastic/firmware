@@ -1,5 +1,5 @@
 {
-  "title": "Meshtastic Firmware — Recorder Stream",
+  "title": "Meshtastic Firmware - Recorder Stream",
   "description": "Live view of `.mtlog/` streams shipped by `mtlog_to_datadog.py`. Heap, packet volume, log levels, errors. One row per port.",
   "widgets": [
     {
@@ -25,7 +25,7 @@
     },
     {
       "definition": {
-        "title": "Heap slope (bytes/min) — last 1h",
+        "title": "Heap slope (bytes/min) - last 1h",
         "type": "query_value",
         "precision": 0,
         "requests": [

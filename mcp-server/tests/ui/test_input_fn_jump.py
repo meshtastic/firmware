@@ -39,7 +39,7 @@ def test_fn_jump_direct_frame(
 ) -> None:
     lines: list[str] = request.node._debug_log_buffer
     start = get_current_frame(lines)
-    assert start is not None, "no frame log yet — USERPREFS_UI_TEST_LOG not wired?"
+    assert start is not None, "no frame log yet - USERPREFS_UI_TEST_LOG not wired?"
     assert start.name in (
         "home",
         "deviceFocused",

@@ -1,6 +1,6 @@
 """USERPREFS: build-time constants baked into the firmware binary.
 
-The firmware repo has `userPrefs.jsonc` at its root — a JSONC file with every
+The firmware repo has `userPrefs.jsonc` at its root - a JSONC file with every
 available USERPREFS_* key listed, most commented out. At build time,
 `bin/platformio-custom.py` reads it, strips comments, and emits
 `-DUSERPREFS_<KEY>=<value>` build flags into the compile step. Firmware code
@@ -10,7 +10,7 @@ owner name, LoRa region, OEM branding, MQTT credentials, etc.
 This module:
   1. Parses `userPrefs.jsonc` (preserving which keys are active vs commented)
   2. Greps `src/` for the set of keys the firmware actually consumes (the
-     real discovery manifest — anything here that isn't in the jsonc is still
+     real discovery manifest - anything here that isn't in the jsonc is still
      a valid override)
   3. Provides a context manager for temporarily swapping in overrides during
      a build/flash, then restoring the original file
@@ -111,7 +111,7 @@ def read_state() -> dict[str, Any]:
 def _scan_consumed_keys() -> dict[str, list[str]]:
     """Grep firmware src/ for USERPREFS_* references.
 
-    Returns {key: [relative_file_paths]} — only includes files under `src/`.
+    Returns {key: [relative_file_paths]} - only includes files under `src/`.
     """
     src_dir = config.firmware_root() / "src"
     if not src_dir.is_dir():
@@ -153,7 +153,7 @@ def build_manifest() -> dict[str, Any]:
       - `declared_in_jsonc` bool (key appears anywhere in userPrefs.jsonc)
       - `consumed_by` list of source files that reference it
       - `inferred_type`: one of "brace", "number", "bool", "enum", "string"
-        — matches platformio-custom.py's value-wrapping switch
+        - matches platformio-custom.py's value-wrapping switch
     """
     state = read_state()
     consumed = _scan_consumed_keys()
@@ -210,7 +210,7 @@ def infer_type(value: str | None) -> str:
 def _format_jsonc_line(key: str, value: str, commented: bool) -> str:
     prefix = "  // " if commented else "  "
     # Escape backslashes and quotes inside value the way platformio-custom.py
-    # expects — the original jsonc uses raw strings for most content. Keep it
+    # expects - the original jsonc uses raw strings for most content. Keep it
     # literal; callers are responsible for correct escaping if they pass
     # dict/enum-init values that contain quotes.
     return f'{prefix}"{key}": "{value}",'
@@ -289,7 +289,7 @@ def _stringify(value: Any) -> str:
 
     bool → "true" / "false"; int/float → str(); anything else → str(value).
     Callers passing brace-init strings (`"{ 0x01, 0x02, ... }"`) must format
-    them themselves — this function doesn't try to synthesize them.
+    them themselves - this function doesn't try to synthesize them.
     """
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -420,9 +420,9 @@ def build_testing_profile(
         short_name: optional owner short-name stamp (≤4 chars). None = unset.
         long_name: optional owner long-name stamp. None = unset.
         disable_mqtt: if True (default), disables the MQTT module and the
-            uplink/downlink bridge on the primary channel — so private test
+            uplink/downlink bridge on the primary channel - so private test
             traffic never leaks to a public broker.
-        disable_position: if True, disables GPS + position broadcasts — useful
+        disable_position: if True, disables GPS + position broadcasts - useful
             when test devices sit on a bench without antennas.
         enable_ui_log: if True, stamps `USERPREFS_UI_TEST_LOG=true` so the
             firmware emits one `Screen: frame N/M name=... reason=...` log

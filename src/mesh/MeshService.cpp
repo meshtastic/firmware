@@ -288,14 +288,14 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 LOG_DEBUG("Skip position ping; no fresh position since boot");
                 return false;
             }
-            LOG_INFO("Send position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
             return true;
         }
     } else {
 #endif
         if (nodeInfoModule) {
-            LOG_INFO("Send nodeinfo ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            LOG_INFO("Send nodeinfo ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
     }
@@ -334,7 +334,9 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
     if (toPhoneQueue.enqueue(p, 0) == false) {
         LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
-        abort();
+        releaseToPool(p);
+        fromNum++; // notify observers so phone can resync
+        return;
     }
     fromNum++;
 }
@@ -351,7 +353,8 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
 
     if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
         LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
-        abort();
+        releaseMqttClientProxyMessageToPool(m);
+        return;
     }
     fromNum++;
 }
@@ -383,7 +386,8 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 
     if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
         LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
-        abort();
+        releaseClientNotificationToPool(n);
+        return;
     }
     fromNum++;
 }

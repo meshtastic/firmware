@@ -12,7 +12,21 @@
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 namespace graphics
 {
-enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, text_input };
+enum notificationTypeEnum {
+    none,
+    text_banner,
+    selection_picker,
+    node_picker,
+    number_picker,
+    hex_picker,
+    text_input,
+    // BLE pairing PIN banner. Treated specially by the lockdown short-circuit
+    // in Screen.cpp: the PIN is ephemeral (regenerated per pair attempt) and
+    // not a real secret, so we allow ui->update() to composite it over the
+    // LOCKED frame. Without this, a first-pair on a locked device cannot
+    // complete because the PIN never renders.
+    pairing_pin,
+};
 
 struct BannerOverlayOptions {
     const char *message;
@@ -623,6 +637,11 @@ class Screen : public concurrency::OSThread
     void toggleFrameVisibility(const std::string &frameName);
     bool isFrameHidden(const std::string &frameName) const;
 
+    // Persist / restore which frames are hidden, across reboots.
+    // Stored as a single uint32 bitmask in /prefs (see Screen.cpp for the format).
+    void loadFrameVisibility();
+    void saveFrameVisibility();
+
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off
     void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
@@ -674,7 +693,7 @@ class Screen : public concurrency::OSThread
     // so the chatty log doesn't ship in release builds. Enabled via
     // build_testing_profile(enable_ui_log=True) in mcp-server/userprefs.py.
     // Member function (not free) because FramesetInfo is a private nested
-    // type — only methods of Screen can reach it.
+    // type - only methods of Screen can reach it.
     void logFrameChange(const char *reason, uint8_t targetIdx);
 #endif
 
@@ -737,6 +756,11 @@ class Screen : public concurrency::OSThread
         bool show_favorites = false;
         bool chirpy = true;
     } hiddenFrames;
+
+    // Convert hiddenFrames to a uint32 bitmask. Bit positions are fixed per
+    // frame name (see Screen.cpp).
+    uint32_t packHiddenFrames() const;
+    void applyHiddenFramesMask(uint32_t mask);
 
     /// Try to start drawing ASAP
     void setFastFramerate();

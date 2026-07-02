@@ -4,8 +4,10 @@
 #include "configuration.h"
 
 #ifdef ARCH_ESP32
-// "legacy adc calibration driver is deprecated, please migrate to use esp_adc/adc_cali.h and esp_adc/adc_cali_scheme.h
-#include <esp_adc_cal.h>
+// #include <driver/adc.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
+#include <esp_adc/adc_oneshot.h>
 #include <soc/adc_channel.h>
 #endif
 
@@ -15,7 +17,7 @@
 
 // Device specific curves go in variant.h
 #ifndef OCV_ARRAY
-#if defined(ARCH_STM32WL) && BATTERY_PIN == AVBAT
+#if defined(ARCH_STM32) && BATTERY_PIN == AVBAT
 // STM32 VDD/VBAT absolute maximum is 4V so use an LFP curve
 #define OCV_ARRAY 3650, 3400, 3340, 3320, 3300, 3280, 3270, 3260, 3240, 3200, 2500
 #else
@@ -26,11 +28,6 @@
 /*Note: 12V lead acid is 6 cells, most board accept only 1 cell LiIon/LiPo*/
 #ifndef NUM_CELLS
 #define NUM_CELLS 1
-#endif
-
-#ifdef BAT_MEASURE_ADC_UNIT
-extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
-#include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR

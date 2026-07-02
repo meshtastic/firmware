@@ -310,9 +310,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
         uint32_t lastTelemetry =
             transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY) : 0;
         if (((lastTelemetry == 0) ||
-             !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
-                                                              moduleConfig.telemetry.environment_update_interval,
-                                                              default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(
+                 lastTelemetry, Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
+                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes,
+                                                                        TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
@@ -435,7 +436,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         bool isCooldownOver = (now - lastAlertTime > 60000);
 
         if (isOwnTelemetry && bannerMsg && isCooldownOver) {
-            LOG_INFO("drawFrame: IAQ %d (own) — showing banner: %s", m.iaq, bannerMsg);
+            LOG_INFO("drawFrame: IAQ %d (own) - showing banner: %s", m.iaq, bannerMsg);
             screen->showSimpleBanner(bannerMsg, 3000);
 
             // Only buzz if IAQ is over 200

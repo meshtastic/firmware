@@ -22,7 +22,7 @@ def test_channel_url_roundtrip(
 ) -> None:
     """Runs once per connected role. Verify:
     1. `get_channel_url()` on a baked device returns a non-empty URL.
-    2. The URL parses — `set_channel_url(url)` accepts it without error.
+    2. The URL parses - `set_channel_url(url)` accepts it without error.
     3. After set, `get_channel_url()` returns the same (canonicalized) URL.
     4. Primary channel name survives round-trip.
     """
@@ -34,7 +34,7 @@ def test_channel_url_roundtrip(
         "meshtastic" in url_before.lower() or "#" in url_before
     ), f"URL does not look like a Meshtastic channel URL: {url_before!r}"
 
-    # Re-apply the same URL — no-op in content but exercises the setURL path.
+    # Re-apply the same URL - no-op in content but exercises the setURL path.
     applied = admin.set_channel_url(url=url_before, port=port)
     assert applied["ok"] is True
     assert applied["channels_imported"] >= 1

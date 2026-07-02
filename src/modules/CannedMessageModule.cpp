@@ -6,6 +6,7 @@
 #include "CannedMessageModule.h"
 #include "Channels.h"
 #include "FSCommon.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
@@ -83,7 +84,11 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;
@@ -123,7 +128,11 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;
@@ -1360,7 +1369,7 @@ int32_t CannedMessageModule::runOnce()
             case INPUT_BROKER_RIGHT:
                 break;
             default:
-                // Only insert ASCII printable characters (32–126)
+                // Only insert ASCII printable characters (32-126)
                 if (this->payload >= 32 && this->payload <= 126) {
                     requestFocus();
                     if (this->cursor == this->freetext.length()) {
@@ -2103,23 +2112,23 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
     switch (preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+    case PRESET(LONG_SLOW):
+    case PRESET(LONG_MODERATE):
+    case PRESET(LONG_FAST):
         return -6.0f;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+    case PRESET(MEDIUM_SLOW):
+    case PRESET(MEDIUM_FAST):
         return -5.5f;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+    case PRESET(SHORT_SLOW):
+    case PRESET(SHORT_FAST):
+    case PRESET(SHORT_TURBO):
         return -4.5f;
     default:
         return -6.0f;
     }
 }
 
-// Return Good/Fair/Bad label and set 1–5 bars based on SNR and RSSI
+// Return Good/Fair/Bad label and set 1-5 bars based on SNR and RSSI
 static const char *getSignalGrade(float snr, int32_t rssi, float snrLimit, int &bars)
 {
     // 5-bar logic: strength inside Good/Fair/Bad category

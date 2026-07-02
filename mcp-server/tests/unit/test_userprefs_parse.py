@@ -2,7 +2,7 @@
 write, and the `temporary_overrides` context manager's byte-for-byte restore.
 
 None of these require hardware. They validate the contract that the flash/
-testing-profile tools rely on — if these fail, the provisioning tier will
+testing-profile tools rely on - if these fail, the provisioning tier will
 produce confusing mismatches.
 """
 
@@ -63,7 +63,7 @@ def test_infer_type_matches_platformio_custom_py() -> None:
 
 def test_temporary_overrides_restores_byte_for_byte(sample_jsonc: Path) -> None:
     """The context manager MUST leave the file bit-identical on exit, even on
-    exception — this is the safety guarantee build/flash tools rely on."""
+    exception - this is the safety guarantee build/flash tools rely on."""
     original = sample_jsonc.read_bytes()
 
     with userprefs.temporary_overrides({"USERPREFS_CHANNEL_0_NAME": "OverrideTest"}):
@@ -104,7 +104,7 @@ def test_build_manifest_surfaces_all_keys(sample_jsonc: Path) -> None:
     """Manifest should union the jsonc set with firmware-src consumers.
 
     In the sample tmpdir there's no `src/` so `consumed_by` is empty for all
-    entries; that's fine — the manifest still lists every jsonc key.
+    entries; that's fine - the manifest still lists every jsonc key.
     """
     manifest = userprefs.build_manifest()
     keys = {e["key"] for e in manifest["entries"]}

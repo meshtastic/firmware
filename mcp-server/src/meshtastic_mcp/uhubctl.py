@@ -1,11 +1,11 @@
-"""USB hub power control via `uhubctl` — hard-recovery for wedged devices +
+"""USB hub power control via `uhubctl` - hard-recovery for wedged devices +
 deliberate offline-peer simulation for mesh tests.
 
 Why: when a Meshtastic device's serial port wedges (stuck in a boot loop,
 frozen USB CDC, crashed firmware that didn't reboot), the only recovery is
 a physical unplug. uhubctl toggles VBUS per-port on any hub with Per-Port
-Power Switching (PPPS) support — which is most externally-powered hubs
-from the last ~5 years — so the harness can power-cycle a device
+Power Switching (PPPS) support - which is most externally-powered hubs
+from the last ~5 years - so the harness can power-cycle a device
 programmatically.
 
 Architecture:
@@ -24,7 +24,7 @@ without root, but Linux without udev rules (or old macOS with specific
 driver quirks) still needs it. We run uhubctl non-root; if stderr
 matches the classic permission pattern we raise `UhubctlError` with an
 install hint pointing at the uhubctl docs. Auto-wrapping with `sudo`
-would prompt in the middle of test runs — bad for CI.
+would prompt in the middle of test runs - bad for CI.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class UhubctlError(RuntimeError):
 # ---------- Role → VID map -------------------------------------------------
 
 # Mirrors the default hub_profile in `mcp-server/tests/conftest.py:335`.
-# Note: esp32s3 and esp32s3_alt share a logical role — we search both.
+# Note: esp32s3 and esp32s3_alt share a logical role - we search both.
 ROLE_VIDS: dict[str, tuple[int, ...]] = {
     "nrf52": (0x239A,),
     "esp32s3": (0x303A, 0x10C4),
@@ -75,8 +75,8 @@ def _normalize_role(role: str) -> str:
 # ---------- Core subprocess runner -----------------------------------------
 
 
-# If uhubctl hits a permission problem — most commonly Linux without the
-# udev rules, or a macOS variant where the kernel holds the hub driver —
+# If uhubctl hits a permission problem - most commonly Linux without the
+# udev rules, or a macOS variant where the kernel holds the hub driver -
 # it prints something like "Permission denied. Try running as root".
 # Linux error text varies; we match a broad substring rather than exact.
 _PERM_ERROR_PATTERNS = (
@@ -170,7 +170,7 @@ def parse_list_output(output: str) -> list[dict[str, Any]]:
 def list_hubs() -> list[dict[str, Any]]:
     """Enumerate every hub uhubctl can see, with per-port device attachments.
 
-    Pure read — no power state changes. Useful as a pre-flight check before
+    Pure read - no power state changes. Useful as a pre-flight check before
     a destructive `power_off` call.
     """
     result = _run_uhubctl([], timeout=15.0)
@@ -189,7 +189,7 @@ def find_port_for_vid(
 ) -> list[tuple[str, int]]:
     """Return ALL (location, port) matches for a device VID (optionally +PID).
 
-    `only_ppps=True` filters out hubs that don't advertise PPPS — we can't
+    `only_ppps=True` filters out hubs that don't advertise PPPS - we can't
     control them anyway. Callers that want to diagnose a missing device can
     pass `only_ppps=False` to see if the device is on a non-controllable
     hub (and raise a clearer error).

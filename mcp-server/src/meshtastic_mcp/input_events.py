@@ -2,7 +2,7 @@
 
 Used by `admin.send_input_event` + `tests/ui/` so callers can say
 `InputEventCode.RIGHT` instead of hard-coding 20. Values MUST stay in sync
-with the firmware enum — unit test `tests/unit/test_input_event_codes.py`
+with the firmware enum - unit test `tests/unit/test_input_event_codes.py`
 pins the mapping.
 """
 

@@ -25,7 +25,7 @@ def _recovery_tier_guard() -> None:
         )
 
     # Probe: can we even list hubs? (A macOS user without sudo gets a
-    # permission error here — we'd rather find out once at tier-start than
+    # permission error here - we'd rather find out once at tier-start than
     # 6 tests later.)
     from meshtastic_mcp import uhubctl
 
@@ -39,6 +39,6 @@ def _recovery_tier_guard() -> None:
 
     if not any(h["ppps"] for h in hubs):
         pytest.skip(
-            "no PPPS-capable hubs detected — recovery tier has nothing to exercise.",
+            "no PPPS-capable hubs detected - recovery tier has nothing to exercise.",
             allow_module_level=True,
         )
