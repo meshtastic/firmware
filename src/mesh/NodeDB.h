@@ -337,11 +337,11 @@ class NodeDB
     WarmNodeStore warmStore;
 #endif
 
-    /// Copy the 32-byte public key for node n — hot store first, then the warm
+    /// Copy the 32-byte public key for node n - hot store first, then the warm
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
-    /// Resolve a node's device role — hot store (with user) first, then the role
+    /// Resolve a node's device role - hot store (with user) first, then the role
     /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
     /// nodes that have aged out of the hot store.
     meshtastic_Config_DeviceConfig_Role getNodeRole(NodeNum n);
@@ -412,7 +412,7 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        // Decode-stream size ceiling only — no buffer this big is allocated (load
+        // Decode-stream size ceiling only - no buffer this big is allocated (load
         // streams from the file). Sized for the largest file any prior firmware
         // could write (250-node ESP32-S3, satellites uncapped) so capacity
         // downgrades / peer backups still decode; excess is trimmed after load.
@@ -480,7 +480,7 @@ class NodeDB
     /// Returns true iff every encrypted file decrypted and decoded cleanly.
     /// On false the caller MUST treat the storage as corrupt: leave the
     /// connection unauthenticated, emit a LOCKED(storage_corrupt) status,
-    /// and refuse to call setAdminAuthorized — otherwise a subsequent
+    /// and refuse to call setAdminAuthorized - otherwise a subsequent
     /// set_config would re-encrypt a wrong baseline (the locked-default
     /// values still resident in `config` / `channelFile` / `nodeDatabase`)
     /// and overwrite the operator's persisted state.
@@ -489,7 +489,7 @@ class NodeDB
     /// Disable lockdown: decrypt every encrypted pref file back to plaintext,
     /// then remove the DEK / token / counter / backoff artifacts. Requires
     /// EncryptedStorage to be unlocked (DEK in RAM). Returns false if any
-    /// file failed to revert — in which case the DEK is still present and the
+    /// file failed to revert - in which case the DEK is still present and the
     /// device remains in lockdown so the operator can retry. APPROTECT is not
     /// reversed. Called from the main loop via lockdownDisablePending.
     bool disableLockdownToPlaintext();
@@ -571,7 +571,7 @@ class NodeDB
     bool migrateLegacyNodeDatabase();
 
     // Route satellite-store decode entries straight into our maps instead of
-    // temp vectors. Must be paired — disarm before any other NodeDatabase decode.
+    // temp vectors. Must be paired - disarm before any other NodeDatabase decode.
     void armNodeDatabaseDecodeTargets();
     void disarmNodeDatabaseDecodeTargets();
 };

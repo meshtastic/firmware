@@ -94,7 +94,7 @@ meshtastic_Position TypeConversions::ConvertToPosition(meshtastic_PositionLite l
     position.time = lite.time;
     // Preserve the peer's broadcast precision; falls back to 0 for entries cached
     // before the precision_bits field existed in PositionLite (pre-migration data).
-    // iOS treats 0 as "unspecified precision" and won't render the pin — so for
+    // iOS treats 0 as "unspecified precision" and won't render the pin - so for
     // unset values, declare full precision so the stored lat/lon renders as a point.
     position.precision_bits = lite.precision_bits == 0 ? 32 : lite.precision_bits;
 

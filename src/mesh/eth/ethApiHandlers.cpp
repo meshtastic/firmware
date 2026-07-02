@@ -26,7 +26,7 @@ static constexpr const char *PROTOBUF_SCHEMA =
 // PhoneAPI subclass for the Ethernet HTTP transport. Mirrors mesh/http/HttpAPI
 // but lives outside the MESHTASTIC_EXCLUDE_WEBSERVER gate (which is ESP32-only).
 // A single instance is shared between the HTTP and HTTPS servers since they
-// represent the same logical "phone" — same state machine, same packet queue.
+// represent the same logical "phone" - same state machine, same packet queue.
 class EthHttpAPI : public PhoneAPI
 {
   public:
@@ -192,7 +192,7 @@ static bool handleFromRadio(IStreamReadWrite &client, const Request &req)
     // Buffer all packets first so we can emit an accurate Content-Length and
     // keep the connection alive. Phase 2 used Connection: close framing, which
     // forced clients to redo the TLS handshake (~625 ms) for every single
-    // /fromradio poll — client.meshtastic.org needs dozens of those during
+    // /fromradio poll - client.meshtastic.org needs dozens of those during
     // initial sync, so the user-visible load time was 15-30 s of pure
     // handshakes. With Content-Length + keep-alive a whole sync rides one
     // handshake. Buffer is dynamic (std::vector) so the common 1-packet case
@@ -290,7 +290,7 @@ void handleApiClient(IStreamReadWrite &client)
     // the parent OSThread is not returning to mainController, and the
     // RP2350 hardware watchdog (8 s default in arduino-pico) only gets
     // pet by the main loop. A client.meshtastic.org sync produces ~80
-    // back-to-back requests over a single TLS session — well past the
+    // back-to-back requests over a single TLS session - well past the
     // watchdog deadline. yield() between requests lets the rest of core0
     // (Periodic ticks, NTP, MQTT, LoRa packet pump) run + pets the
     // watchdog; the cap puts a hard ceiling so a chatty client can never
@@ -320,7 +320,7 @@ void handleApiClient(IStreamReadWrite &client)
             keepAlive = handleToRadio(client, req);
         } else {
             sendError(client, 404, "Not Found", "unknown endpoint");
-            return; // errors are terminal — Connection: close framing
+            return; // errors are terminal - Connection: close framing
         }
         // A handler that emitted an error advertised Connection: close. Stop the
         // keep-alive loop so any unread/leftover body bytes (e.g. after a 408

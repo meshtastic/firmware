@@ -1,9 +1,9 @@
 name: Build PortDuino WASM
 
-# Reusable workflow — called as the `build-wasm` job of the main CI workflow
+# Reusable workflow - called as the `build-wasm` job of the main CI workflow
 # (main_matrix.yml), so the WebAssembly portduino node is built like every other
 # platform. Builds the [env:native-wasm] target (src/platform/portduino/wasm/) with
-# `pio run -e native-wasm` so it can't silently bit-rot. Software/CI only — asserts the
+# `pio run -e native-wasm` so it can't silently bit-rot. Software/CI only - asserts the
 # full mesh stack + RadioLib + Crypto compile and link to meshnode.{mjs,wasm}
 # via the meshtastic/platform-wasm PlatformIO platform (emcc/Asyncify). It does
 # NOT exercise the radio (that's CH341/WebUSB, hardware).

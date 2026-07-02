@@ -331,7 +331,7 @@ void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
 #if HAS_TRAFFIC_MANAGEMENT
     // Mirror into the TMM overflow cache. Traceroute is the highest-confidence
     // source (full known route), and this captures the target even when it isn't
-    // in the hot NodeDB — same rationale as the ACK-confirmed path in NextHopRouter.
+    // in the hot NodeDB - same rationale as the ACK-confirmed path in NextHopRouter.
     if (trafficManagementModule)
         trafficManagementModule->setNextHop(target, nextHopByte);
 #endif

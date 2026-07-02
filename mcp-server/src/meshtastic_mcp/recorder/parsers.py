@@ -5,7 +5,7 @@ Two flavors of log line cross our pubsub subscription:
      accumulates bytes between protobuf frames and emits the full
      firmware-formatted line, e.g.
          "INFO  | 12:34:56 12345 [Main] Booting"
-     — level, HH:MM:SS, uptime seconds, thread bracket, then message.
+     - level, HH:MM:SS, uptime seconds, thread bracket, then message.
   2. LogRecord protobuf path (debug_log_api enabled): the lib calls
      `_handleLogLine(record.message)` with ONLY the message body. The
      level/source/time fields on the LogRecord are dropped before
@@ -29,7 +29,7 @@ from typing import Any
 
 # Match: LEVEL | HH:MM:SS UPTIME [Thread] message
 # HH:MM:SS may be ??:??:?? when RTC isn't valid. The level alternation
-# below is the canonical list — DebugConfiguration.h's MESHTASTIC_LOG_LEVEL_*
+# below is the canonical list - DebugConfiguration.h's MESHTASTIC_LOG_LEVEL_*
 # macros must stay in sync with these strings.
 _LINE_RE = re.compile(
     r"""
@@ -84,7 +84,7 @@ _HEAP_BRACKET_RE = re.compile(r"^heap\s+(?P<heap>\d+)$")
 def parse_log_line(line: str) -> dict[str, Any]:
     """Best-effort decompose a raw firmware log line.
 
-    Returns a dict with at least `line` (the original, unmodified — ANSI
+    Returns a dict with at least `line` (the original, unmodified - ANSI
     codes preserved for fidelity). Adds `level`, `tag`, `clock`,
     `uptime_s`, and `msg` when the full prefix is present.
 
@@ -93,7 +93,7 @@ def parse_log_line(line: str) -> dict[str, Any]:
         (the BLE/StreamAPI path inherited the colored body in some builds).
         We strip ANSI before regex matching so the prefix survives.
       - DEBUG_HEAP injects `[heap N]` after the thread bracket. When NO
-        thread name is set, the heap takes the thread bracket position —
+        thread name is set, the heap takes the thread bracket position -
         looks like `[heap 12345] msg`. We detect that shape and move it
         out of `tag` and into `heap_free`.
 
@@ -137,7 +137,7 @@ def parse_log_line(line: str) -> dict[str, Any]:
         msg = m.group("msg")
         out["msg"] = msg
     else:
-        # No prefix — bare LogRecord.message body. Inspect the whole
+        # No prefix - bare LogRecord.message body. Inspect the whole
         # line for DEBUG_HEAP-style content; the heap-prefix and
         # thread-leak patterns can survive on either path.
         msg = clean
@@ -204,7 +204,7 @@ _TELEMETRY_VARIANTS = (
 
 def extract_telemetry(packet: dict[str, Any]) -> dict[str, Any] | None:
     """Pull the telemetry variant + flat fields out of a `meshtastic.receive.telemetry`
-    packet. Returns None when the shape isn't what we expect — so the
+    packet. Returns None when the shape isn't what we expect - so the
     caller can fall back to a generic packets.jsonl row.
     """
     if not isinstance(packet, dict):
@@ -251,7 +251,7 @@ def summarize_packet(
     packet: dict[str, Any], *, payload_hex_len: int = 64
 ) -> dict[str, Any]:
     """Reduce a packet dict to a stable, queryable summary. Drops the
-    full payload bytes — the recorder records summaries, not pcaps.
+    full payload bytes - the recorder records summaries, not pcaps.
     """
     if not isinstance(packet, dict):
         return {"raw_type": type(packet).__name__}

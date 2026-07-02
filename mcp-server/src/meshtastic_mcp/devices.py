@@ -29,7 +29,7 @@ def _tcp_endpoint_from_env() -> dict[str, Any] | None:
 
     If the env var is malformed (non-integer port, path-like host, etc.),
     return an entry with `likely_meshtastic=False` and the parser error in
-    the description, rather than raising — `list_devices` is the diagnostic
+    the description, rather than raising - `list_devices` is the diagnostic
     tool a user reaches for when their env var isn't working, so it must
     not crash on misconfiguration.
     """
@@ -48,7 +48,7 @@ def _tcp_endpoint_from_env() -> dict[str, Any] | None:
         # user can see exactly what they set and why it was rejected.
         # Don't double the scheme if the user already prefixed `tcp://`.
         port = host if host.startswith(connection.TCP_SCHEME) else f"tcp://{host}"
-        description = f"meshtasticd (TCP) — invalid MESHTASTIC_MCP_TCP_HOST: {e}"
+        description = f"meshtasticd (TCP) - invalid MESHTASTIC_MCP_TCP_HOST: {e}"
         likely = False
     return {
         "port": port,
@@ -122,7 +122,7 @@ def list_devices(include_unknown: bool = False) -> list[dict[str, Any]]:
     # Stable ordering: likely_meshtastic first; within rank, TCP wins over
     # USB (explicit env-var configuration takes precedence over USB
     # enumeration); then by port path. A misconfigured TCP entry has
-    # likely_meshtastic=False and lands among the other ignored entries —
+    # likely_meshtastic=False and lands among the other ignored entries -
     # it does NOT pre-empt real USB devices at the top of the list.
     results.sort(
         key=lambda r: (
