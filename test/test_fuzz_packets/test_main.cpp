@@ -15,13 +15,17 @@
 //   Group E5  AdminModule dispatch over adversarial AdminMessage (local from==0, setter/node-op tags)
 //   Group E6  MeshBeaconListenerModule handler over adversarial MeshBeacon (un-terminated message, offer PSK)
 //   Group E7  NodeDB::updateUser / updateFrom over adversarial nodeId + User / MeshPacket
+//   Group E8  PositionModule handler over adversarial Position (self/remote origin, fixed_position, RTC path)
+//   Group E9  DeviceTelemetryModule handler over adversarial Telemetry (all variant tags)
+//   Group E10 NeighborInfoModule handler over adversarial NeighborInfo (neighbor-count edges)
 //
-// Handler-path coverage of the remaining ProtobufModule handlers (Position, the Telemetry family,
-// NeighborInfo, StoreForward, KeyVerification) is intentionally NOT added here: their constructors
-// pull in globals this fixture does not stand up (nodeStatus, GPS, disk-backed state), so driving
-// them would test the fixture, not the parser. Those message types are instead fuzzed at the decode
-// level in test/test_fuzz_decode (the extended FUZZ_TYPES table), which is where their untrusted-input
-// surface actually lives.
+// The remaining two handlers are covered at the decode level (test/test_fuzz_decode FUZZ_TYPES) rather
+// than here, for reasons intrinsic to each - not a fixture gap:
+//   - KeyVerificationModule::handleReceivedProtobuf early-returns unless its private currentState has
+//     been advanced past IDLE by a prior handshake step, so a from-scratch handler call can only ever
+//     exercise the guard chain; the parse surface is what matters and it lives at decode.
+//   - StoreForwardModule needs PSRAM bring-up in its ctor and dispatches through the global
+//     storeForwardModule self-pointer + router, i.e. driving it tests the wiring, not the parser.
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -36,7 +40,10 @@
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 #include "modules/AdminModule.h"
+#include "modules/NeighborInfoModule.h"
 #include "modules/NodeInfoModule.h"
+#include "modules/PositionModule.h"
+#include "modules/Telemetry/DeviceTelemetry.h"
 #include "modules/TraceRouteModule.h"
 #include <cstdio>
 #include <cstring>
@@ -663,6 +670,157 @@ void test_E7_nodedb_update_fuzz(void)
     TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->getNumMeshNodes() <= (size_t)MAX_NUM_NODES, "NodeDB overran MAX_NUM_NODES");
 }
 
+// ===========================================================================
+// Groups E8-E10 - remaining ProtobufModule handlers driven directly at
+// handleReceivedProtobuf. We bypass the ProtobufModule base's allocReply/send
+// machinery (calling the handler, not handleReceived), so no router is needed;
+// the fixture's nodeDB/service/channels plus the auto-initialized nodeStatus/
+// powerStatus globals (defined in main.cpp) are enough. Each module derives from
+// OSThread, so each shim is a function-local static (ThreadController lifetime -
+// see the note in test_E2). Contract: no crash / no ASan finding on any input.
+// ===========================================================================
+class PositionModuleTestShim : public PositionModule
+{
+  public:
+    using PositionModule::handleReceivedProtobuf;
+};
+class DeviceTelemetryModuleTestShim : public DeviceTelemetryModule
+{
+  public:
+    using DeviceTelemetryModule::handleReceivedProtobuf;
+};
+class NeighborInfoModuleTestShim : public NeighborInfoModule
+{
+  public:
+    using NeighborInfoModule::handleReceivedProtobuf;
+};
+
+// Craft an RX MeshPacket header for a decoded-payload handler: adversarial from/to/id/hops, but a
+// channel index kept in range (the router resolves and validates mp.channel before dispatch, so an
+// out-of-range index can't reach a handler over the air - fuzzing it would test channels.getByIndex,
+// not the handler).
+static void fuzzRxHeader(meshtastic_MeshPacket &mp, meshtastic_PortNum portnum)
+{
+    mp.from = fuzzNodeNum();
+    mp.to = (rngRange(2)) ? LOCAL_NODE : NODENUM_BROADCAST;
+    mp.id = rngNext();
+    mp.channel = (uint8_t)rngRange(channels.getNumChannels());
+    mp.rx_snr = (float)((int)rngRange(40) - 20);
+    mp.rx_rssi = -(int)rngRange(130);
+    mp.hop_start = (uint8_t)rngRange(8); // 0..7, wire-bounded
+    mp.hop_limit = (uint8_t)rngRange(8);
+    mp.want_ack = (rngRange(2) == 0);
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.portnum = portnum;
+}
+
+void test_E8_position_handler_fuzz(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)(BASE_SEED ^ 0xE8));
+    rngSeed(BASE_SEED ^ 0xE8);
+
+    static PositionModuleTestShim shim;
+
+    for (unsigned k = 0; k < 6000; k++) {
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        fuzzRxHeader(mp, meshtastic_PortNum_POSITION_APP);
+        // Occasionally claim to be from us (drives the fixed_position / setLocalPosition self-update path).
+        if (rngRange(4) == 0)
+            mp.from = LOCAL_NODE;
+        config.position.fixed_position = (rngRange(2) == 0);
+
+        meshtastic_Position p = meshtastic_Position_init_zero;
+        p.latitude_i = (int32_t)rngNext();
+        p.longitude_i = (int32_t)rngNext();
+        p.altitude = (int32_t)rngNext();
+        p.altitude_hae = (int32_t)rngNext();
+        p.PDOP = rngNext();
+        p.sats_in_view = rngNext();
+        p.precision_bits = rngRange(40); // includes >32 (the default-precision fallback)
+        p.time = (rngRange(2) == 0) ? 0 : rngNext();
+        p.timestamp = rngNext();
+        (void)shim.handleReceivedProtobuf(mp, &p);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->getNumMeshNodes() <= (size_t)MAX_NUM_NODES, "NodeDB overran MAX_NUM_NODES");
+}
+
+void test_E9_telemetry_handler_fuzz(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)(BASE_SEED ^ 0xE9));
+    rngSeed(BASE_SEED ^ 0xE9);
+
+    static DeviceTelemetryModuleTestShim shim;
+
+    for (unsigned k = 0; k < 6000; k++) {
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        fuzzRxHeader(mp, meshtastic_PortNum_TELEMETRY_APP);
+
+        meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+        t.time = rngNext();
+        // Cycle across the telemetry variants; only device_metrics is consumed here, the rest must be
+        // ignored without touching uninitialized union members.
+        switch (rngRange(5)) {
+        case 0:
+            t.which_variant = meshtastic_Telemetry_device_metrics_tag;
+            t.variant.device_metrics.has_battery_level = (rngRange(2) == 0);
+            t.variant.device_metrics.battery_level = rngNext();
+            t.variant.device_metrics.voltage = (float)((int)rngNext());
+            t.variant.device_metrics.channel_utilization = (float)((int)rngNext());
+            t.variant.device_metrics.air_util_tx = (float)((int)rngNext());
+            t.variant.device_metrics.uptime_seconds = rngNext();
+            break;
+        case 1:
+            t.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+            t.variant.environment_metrics.temperature = (float)((int)rngNext());
+            t.variant.environment_metrics.relative_humidity = (float)((int)rngNext());
+            break;
+        case 2:
+            t.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
+            t.variant.air_quality_metrics.pm10_standard = rngNext();
+            break;
+        case 3:
+            t.which_variant = meshtastic_Telemetry_power_metrics_tag;
+            t.variant.power_metrics.ch1_voltage = (float)((int)rngNext());
+            break;
+        default:
+            t.which_variant = 0; // no variant set
+            break;
+        }
+        (void)shim.handleReceivedProtobuf(mp, &t);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->getNumMeshNodes() <= (size_t)MAX_NUM_NODES, "NodeDB overran MAX_NUM_NODES");
+}
+
+void test_E10_neighborinfo_handler_fuzz(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)(BASE_SEED ^ 0xEA));
+    rngSeed(BASE_SEED ^ 0xEA);
+
+    static const pb_size_t NB_MAX =
+        sizeof(((meshtastic_NeighborInfo *)0)->neighbors) / sizeof(((meshtastic_NeighborInfo *)0)->neighbors[0]); // 10
+
+    static NeighborInfoModuleTestShim shim;
+
+    for (unsigned k = 0; k < 6000; k++) {
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        fuzzRxHeader(mp, meshtastic_PortNum_NEIGHBORINFO_APP);
+
+        meshtastic_NeighborInfo nb = meshtastic_NeighborInfo_init_zero;
+        nb.node_id = fuzzNodeNum();
+        nb.last_sent_by_id = fuzzNodeNum();
+        nb.node_broadcast_interval_secs = rngNext();
+        nb.neighbors_count = (pb_size_t)rngRange(NB_MAX + 1); // clamp as nanopb would on decode
+        for (pb_size_t i = 0; i < nb.neighbors_count; i++) {
+            nb.neighbors[i].node_id = fuzzNodeNum();
+            nb.neighbors[i].snr = (float)((int)rngRange(40) - 20);
+            nb.neighbors[i].last_rx_time = rngNext();
+            nb.neighbors[i].node_broadcast_interval_secs = rngNext();
+        }
+        (void)shim.handleReceivedProtobuf(mp, &nb);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->getNumMeshNodes() <= (size_t)MAX_NUM_NODES, "NodeDB overran MAX_NUM_NODES");
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -690,6 +848,15 @@ void setup()
 
     printf("\n=== Group E7: NodeDB update fuzz ===\n");
     RUN_TEST(test_E7_nodedb_update_fuzz);
+
+    printf("\n=== Group E8: Position handler fuzz ===\n");
+    RUN_TEST(test_E8_position_handler_fuzz);
+
+    printf("\n=== Group E9: Telemetry handler fuzz ===\n");
+    RUN_TEST(test_E9_telemetry_handler_fuzz);
+
+    printf("\n=== Group E10: NeighborInfo handler fuzz ===\n");
+    RUN_TEST(test_E10_neighborinfo_handler_fuzz);
 
     exit(UNITY_END());
 }

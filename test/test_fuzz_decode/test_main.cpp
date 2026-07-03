@@ -66,6 +66,7 @@ union AnyMsg {
     meshtastic_Config config;
     meshtastic_Channel channel;
     meshtastic_ChannelSettings channelSettings;
+    meshtastic_KeyVerification keyVerification;
 };
 
 struct FuzzType {
@@ -91,6 +92,7 @@ static const FuzzType FUZZ_TYPES[] = {
     {"Config", &meshtastic_Config_msg},                   // admin set_config payload union
     {"Channel", &meshtastic_Channel_msg},                 // admin set_channel payload
     {"ChannelSettings", &meshtastic_ChannelSettings_msg},
+    {"KeyVerification", &meshtastic_KeyVerification_msg}, // PKI key-verification handshake payload
 };
 static const size_t NUM_FUZZ_TYPES = sizeof(FUZZ_TYPES) / sizeof(FUZZ_TYPES[0]);
 
