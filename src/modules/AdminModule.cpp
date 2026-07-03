@@ -89,7 +89,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     assert(r);
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
-    // While storage is locked, drop every admin payload — both local and
+    // While storage is locked, drop every admin payload - both local and
     // remote (PKC, mesh-relayed). Lockdown unlock is the prerequisite for
     // any admin operation: operators must authenticate via lockdown_auth
     // first. The lockdown_auth path itself is handled synchronously in
@@ -100,9 +100,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // operator has even unlocked it.
     // Only gate when lockdown is ACTIVE. A lockdown-capable build that hasn't
     // been provisioned (or was disabled) is not unlocked either, but must
-    // still serve admin normally — so check isLockdownActive() first.
+    // still serve admin normally - so check isLockdownActive() first.
     if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
-        LOG_WARN("AdminModule: dropping admin payload — storage locked");
+        LOG_WARN("AdminModule: dropping admin payload - storage locked");
         return handled;
     }
 #endif
@@ -136,7 +136,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // local packets into the remote-PKC key check.
         //
         // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
-        // gate lives in PhoneAPI::handleToRadioPacket — any local admin
+        // gate lives in PhoneAPI::handleToRadioPacket - any local admin
         // payload other than lockdown_auth is dropped there if the
         // originating connection is unauthorized. By the time we reach
         // this branch the connection has already proven the passphrase,
@@ -168,7 +168,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             // Note: PKC admin does NOT automatically authorize the
             // originating local PhoneAPI connection for content
             // redaction purposes. PKC and the per-connection lockdown
-            // auth slot are independent gates — operators using PKC
+            // auth slot are independent gates - operators using PKC
             // admin from a local app should still send lockdown_auth
             // separately to unlock the redacted FromRadio stream.
             // (The previous auto-authorize path read a shared
@@ -217,7 +217,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     // lockdown_auth is handled synchronously in
-    // PhoneAPI::handleToRadioPacket — see handleLockdownAuthInline. A
+    // PhoneAPI::handleToRadioPacket - see handleLockdownAuthInline. A
     // packet should not normally reach AdminModule under that flag set,
     // but if it ever does (e.g. injected via a non-PhoneAPI path), drop
     // it silently rather than leaking a partial response.
@@ -301,7 +301,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             break;
         }
 
-        // Hardware supports 2.4 GHz — apply the config.
+        // Hardware supports 2.4 GHz - apply the config.
         // Fail closed: null instance is treated as incapable.
         if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
             LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
@@ -493,7 +493,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 saveChanges(SEGMENT_NODEDATABASE, false);
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
-            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+            } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
                 sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", r->set_favorite_node, MAX_NUM_NODES - 2);
             } else {
                 LOG_WARN("Remote set_favorite_node for 0x%08x refused: protected-node cap", r->set_favorite_node);
@@ -522,7 +522,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 nodeDB->eraseNodeSatellites(node->num);
                 saveChanges(SEGMENT_NODEDATABASE, false);
-            } else if (mp.from == 0) { // local request from the phone — tell the user why it didn't take
+            } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
                 sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
             } else {
                 LOG_WARN("Remote set_ignored_node for 0x%08x refused: protected-node cap", r->set_ignored_node);
@@ -1271,7 +1271,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_mesh_beacon = true;
         moduleConfig.mesh_beacon = beaconCfg;
         shouldReboot = false;
-        // Payload content changed — invalidate the broadcaster's cache.
+        // Payload content changed - invalidate the broadcaster's cache.
         if (meshBeaconBroadcastModule)
             meshBeaconBroadcastModule->invalidateCache();
         break;
@@ -1487,6 +1487,13 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        case meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG:
+            configName = "MeshBeacon";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+            res.get_module_config_response.payload_variant.mesh_beacon = moduleConfig.mesh_beacon;
+            break;
+#endif
         }
         LOG_INFO("Get module config: %s", configName);
 

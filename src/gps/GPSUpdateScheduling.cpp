@@ -20,7 +20,7 @@ void GPSUpdateScheduling::informGotLock()
 
 // Search finished without obtaining a fix. We still need to mark the end time so
 // the next sleep is timed correctly, but we must not feed the timeout duration
-// into predictedMsToGetLock — doing so poisons msUntilNextSearch() and causes
+// into predictedMsToGetLock - doing so poisons msUntilNextSearch() and causes
 // down() to fall into GPS_IDLE, leaving the chip awake on subsequent indoor cycles.
 void GPSUpdateScheduling::informSearchFailed()
 {

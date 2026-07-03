@@ -190,7 +190,7 @@ ProcessMessage InkHUD::ThreadedMessageApplet::handleReceived(const meshtastic_Me
     if (mp.to != NODENUM_BROADCAST)
         return ProcessMessage::CONTINUE;
 
-    // Store in the global messageStore — this handles sender, timestamp, channel, text, and ack status
+    // Store in the global messageStore - this handles sender, timestamp, channel, text, and ack status
     messageStore.addFromPacket(mp);
 
     // If this was an incoming message, suggest that our applet becomes foreground, if permitted

@@ -1917,7 +1917,7 @@ std::unique_ptr<GPS> GPS::createGps()
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
 #ifdef ARCH_PORTDUINO
-    // Skip chip-specific probing for gpsd — it's a generic NMEA stream.
+    // Skip chip-specific probing for gpsd - it's a generic NMEA stream.
     if (!portduino_config.gpsd_host.empty())
         new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
 #endif
