@@ -682,15 +682,12 @@ void test_fuzz_nodenum_blitz(void)
     shim.clear();
     shim.setHistogramDenominator(HopScalingModule::DENOM_MIN); // sample-all: maximum admission / churn
 
-    const NodeNum edges[] = {0u, 0xFFFFFFFFu, kLocalNode, NODENUM_BROADCAST, 1u};
-    const size_t numEdges = sizeof(edges) / sizeof(edges[0]);
-
     for (unsigned k = 0; k < 40000; k++) {
         NodeNum id;
         switch (rngRange(4)) {
         case 0:
-            id = edges[rngRange(numEdges)];
-            break; // boundary node numbers
+            id = rngEdgeNodeNum(&kLocalNode, 1);
+            break; // shared boundary pool (0/1/broadcast) + local node
         case 1:
             id = rngNext() & 0xFFu;
             break; // tiny pool: forces hash reuse (update path) and collisions

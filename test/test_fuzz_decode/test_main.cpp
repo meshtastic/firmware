@@ -163,8 +163,7 @@ static void decodeFuzzPass(bool protoish, uint64_t seed)
                 len = genProtoish(buf, sizeof(buf));
             } else {
                 len = rngRange(sizeof(buf) + 1);
-                for (size_t i = 0; i < len; i++)
-                    buf[i] = rngByte();
+                rngFill(buf, len);
             }
             memset(&out, 0, sizeof(out));
             // Return value intentionally ignored: true or false are both acceptable. What must never
@@ -327,8 +326,7 @@ void test_D2f_pb_string_length(void)
     for (unsigned k = 0; k < 20000; k++) {
         uint8_t buf[64];
         size_t maxLen = 1 + rngRange(sizeof(buf));
-        for (size_t i = 0; i < maxLen; i++)
-            buf[i] = rngByte();
+        rngFill(buf, maxLen);
         size_t len = pb_string_length((const char *)buf, maxLen);
         TEST_ASSERT_TRUE_MESSAGE(len <= maxLen, "pb_string_length returned > max_len");
         if (len > 0)

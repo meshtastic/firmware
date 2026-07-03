@@ -1,15 +1,8 @@
 #pragma once
-// ---------------------------------------------------------------------------
-// Deterministic RNG for the in-tree fuzz suites - a seeded 64-bit LCG using the
-// Knuth MMIX constants. No rand()/time(), so a failing fuzz iteration always
-// reproduces exactly from the printed seed. Shared by test_fuzz_decode,
-// test_fuzz_packets, test_hop_scaling, and test_traffic_management; each suite
-// keeps its own BASE_SEED/FUZZ_SEED constant and seeds this generator per group.
-//
-// Functions are `static inline` so a suite that does not use rngByte() does not
-// trip -Wunused-function. State (g_fuzzRng) is per translation unit, which is
-// exactly what a single-file Unity suite wants.
-// ---------------------------------------------------------------------------
+// Seeded 64-bit LCG (Knuth MMIX constants) shared by the fuzz suites - no rand()/time(), so a failing
+// iteration reproduces exactly from the printed seed. `static inline` + per-TU state suits single-file
+// Unity suites; each suite keeps its own BASE_SEED/FUZZ_SEED and seeds per group.
+#include <cstddef>
 #include <cstdint>
 
 static uint64_t g_fuzzRng = 0;
@@ -30,4 +23,19 @@ static inline uint8_t rngByte()
 static inline uint32_t rngRange(uint32_t n) // uniform-ish in [0, n)
 {
     return n ? (rngNext() % n) : 0;
+}
+static inline void rngFill(void *buf, size_t n)
+{
+    uint8_t *b = (uint8_t *)buf;
+    for (size_t i = 0; i < n; i++)
+        b[i] = rngByte();
+}
+// One of the boundary NodeNums every fuzz suite should hit - 0, 1, broadcast (0xFFFFFFFF ==
+// NODENUM_BROADCAST) - plus any suite-specific well-known nodes (local/remote/target) passed in.
+static inline uint32_t rngEdgeNodeNum(const uint32_t *wellKnown = nullptr, size_t wellKnownN = 0)
+{
+    static const uint32_t edges[] = {0u, 1u, 0xFFFFFFFFu};
+    const size_t numEdges = sizeof(edges) / sizeof(edges[0]);
+    size_t i = rngRange((uint32_t)(numEdges + wellKnownN));
+    return (i < numEdges) ? edges[i] : wellKnown[i - numEdges];
 }

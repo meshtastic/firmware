@@ -19,13 +19,8 @@
 //   Group E9  DeviceTelemetryModule handler over adversarial Telemetry (all variant tags)
 //   Group E10 NeighborInfoModule handler over adversarial NeighborInfo (neighbor-count edges)
 //
-// The remaining two handlers are covered at the decode level (test/test_fuzz_decode FUZZ_TYPES) rather
-// than here, for reasons intrinsic to each - not a fixture gap:
-//   - KeyVerificationModule::handleReceivedProtobuf early-returns unless its private currentState has
-//     been advanced past IDLE by a prior handshake step, so a from-scratch handler call can only ever
-//     exercise the guard chain; the parse surface is what matters and it lives at decode.
-//   - StoreForwardModule needs PSRAM bring-up in its ctor and dispatches through the global
-//     storeForwardModule self-pointer + router, i.e. driving it tests the wiring, not the parser.
+// KeyVerificationModule (handler inert until a prior handshake advances its private state) and
+// StoreForwardModule (needs PSRAM + router wiring) are instead covered at the decode level in test_fuzz_decode.
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -57,8 +52,10 @@
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum REMOTE_NODE = 0x0B0B0B0B;
 
-// Deterministic RNG (rngSeed/rngNext/rngByte/rngRange) - shared seeded LCG.
+// Deterministic RNG (rngSeed/rngNext/rngByte/rngRange/rngFill/rngEdgeNodeNum) - shared seeded LCG.
+#include "support/AdminModuleTestShim.h"
 #include "support/DeterministicRng.h"
+#include "support/MockMeshService.h"
 static constexpr uint64_t BASE_SEED = 0x00BADF00DULL;
 
 // ---------------------------------------------------------------------------
@@ -98,15 +95,6 @@ class MockNodeDB : public NodeDB
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
-
-// MockMeshService - the admin/node-op handlers reach `service` for client notifications (the
-// protected-node-cap warning path). Release any notification straight back to the pool so 6000
-// iterations can't leak it. Mirrors test/test_admin_radio.
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
 
 static MockMeshService *mockService = nullptr;
 
@@ -166,10 +154,8 @@ void test_E1_perhaps_decode_fuzz(void)
         p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
         p.pki_encrypted = (rngRange(2) == 0);
 
-        size_t n = rngRange(sizeof(p.encrypted.bytes) + 1); // 0..256, always in bounds
-        for (size_t i = 0; i < n; i++)
-            p.encrypted.bytes[i] = rngByte();
-        p.encrypted.size = n;
+        p.encrypted.size = rngRange(sizeof(p.encrypted.bytes) + 1); // 0..256, always in bounds
+        rngFill(p.encrypted.bytes, p.encrypted.size);
 
         DecodeState st = perhapsDecode(&p);
         // Any verdict is fine; the contract is that arbitrary ciphertext never crashes the pipeline.
@@ -204,8 +190,7 @@ static meshtastic_User fuzzUser()
     u.hw_model = (meshtastic_HardwareModel)rngRange(256);
     u.role = (meshtastic_Config_DeviceConfig_Role)rngRange(16);
     u.public_key.size = rngRange(33); // 0..32
-    for (size_t i = 0; i < u.public_key.size && i < sizeof(u.public_key.bytes); i++)
-        u.public_key.bytes[i] = rngByte();
+    rngFill(u.public_key.bytes, u.public_key.size);
     return u;
 }
 
@@ -295,10 +280,8 @@ void test_E3_traceroute_route_processing_fuzz(void)
 
         if (rngRange(5) == 0) {
             // Pure-random payload: processUpgradedPacket must reject it at decode and not crash.
-            size_t n = rngRange(sizeof(mp.decoded.payload.bytes) + 1);
-            for (size_t i = 0; i < n; i++)
-                mp.decoded.payload.bytes[i] = rngByte();
-            mp.decoded.payload.size = n;
+            mp.decoded.payload.size = rngRange(sizeof(mp.decoded.payload.bytes) + 1);
+            rngFill(mp.decoded.payload.bytes, mp.decoded.payload.size);
         } else {
             meshtastic_RouteDiscovery r =
                 makeRoute(rngRange(ROUTE_MAX + 1), rngRange(ROUTE_MAX + 1), rngRange(ROUTE_MAX + 1), rngRange(ROUTE_MAX + 1));
@@ -372,8 +355,7 @@ void test_E4_phone_forward_gate(void)
     for (unsigned k = 0; k < 8000; k++) {
         uint8_t buf[64];
         size_t n = rngRange(sizeof(buf) + 1);
-        for (size_t i = 0; i < n; i++)
-            buf[i] = rngByte();
+        rngFill(buf, n);
         meshtastic_PortNum port = (rngRange(2)) ? meshtastic_PortNum_WAYPOINT_APP : meshtastic_PortNum_NODEINFO_APP;
         d = makeData(port, buf, n);
 
@@ -392,37 +374,16 @@ void test_E4_phone_forward_gate(void)
 
 // ===========================================================================
 // Group E5 - AdminModule dispatch over adversarial AdminMessage
+// (AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.)
 // ===========================================================================
-// The shim is named AdminModuleTestShim to inherit the friendship AdminModule.h declares for that
-// exact name - that is how we reach the protected handler, flip hasOpenEditTransaction, and drain
-// myReply. (Separate translation unit from the identically-named shims in test_admin_radio /
-// test_mesh_beacon, so no ODR clash.)
-class AdminModuleTestShim : public AdminModule
-{
-  public:
-    using AdminModule::handleReceivedProtobuf;
-    // Defer persistence: with an "open edit transaction" saveChanges() is a pure no-op - no
-    // service->reloadConfig / saveToDisk, and no reboot() - so every setter exercises the in-RAM
-    // parse/dispatch/validation logic without disk or reboot side effects.
-    void deferSaves() { hasOpenEditTransaction = true; }
-    // Setters take the error path (allocErrorResponse) which allocates from packetPool; drain it each
-    // iteration or the pool leaks under LSan.
-    void drainReply()
-    {
-        if (myReply) {
-            packetPool.release(myReply);
-            myReply = nullptr;
-        }
-    }
-};
-
 // A scoped subset of setter / node-list tags - the ones reachable without a fully-booted module graph.
 // EXCLUDES: side-effecting tags even with saves deferred (reboot*, shutdown, *factory_reset*,
 // nodedb_reset, ota, enter_dfu, delete_file, *_preferences, exit_simulator, begin/commit_edit_settings);
 // get_* reply builders (un-mocked service paths); set_owner (needs global nodeInfoModule) and
 // set_fixed_position (needs global positionModule) - their payloads are covered by E2/E7 and
-// test_fuzz_decode. set_config and set_channel ARE fuzzed - they found two crashes, both now fixed (see
-// FINDINGS). The module-config variant is constrained below only to skip the beacon variant's global.
+// test_fuzz_decode. set_config and set_channel ARE fuzzed - they found two crashes (a SIGFPE in LoRa
+// validation and unbounded getKey recursion), both fixed; E5 re-fuzzes the triggers as regression
+// guards. The module-config variant is constrained below only to skip the beacon variant's global.
 static const pb_size_t SAFE_ADMIN_TAGS[] = {
     meshtastic_AdminMessage_set_config_tag,
     meshtastic_AdminMessage_set_module_config_tag,
@@ -458,19 +419,22 @@ static const pb_size_t SAFE_MODULE_CONFIG_TAGS[] = {
 };
 static const size_t NUM_SAFE_MODULE_CONFIG_TAGS = sizeof(SAFE_MODULE_CONFIG_TAGS) / sizeof(SAFE_MODULE_CONFIG_TAGS[0]);
 
-// A node number spanning the interesting edges (0, self, broadcast, arbitrary).
+// A node number spanning the shared edge pool (0/1/broadcast + self) or broad random.
 static NodeNum fuzzNodeNum()
 {
-    switch (rngRange(4)) {
-    case 0:
-        return 0;
-    case 1:
-        return LOCAL_NODE;
-    case 2:
-        return NODENUM_BROADCAST;
-    default:
-        return rngNext();
-    }
+    return (rngRange(4) == 0) ? rngNext() : rngEdgeNodeNum(&LOCAL_NODE, 1);
+}
+
+// Randomize a ChannelSettings name + PSK (shared by the set_channel case and fuzzBeacon). Name is
+// random-length but NUL-terminated (nanopb terminates decoded strings, so un-terminated isn't
+// wire-reachable); PSK is 0..32 bytes including empty.
+static void fuzzChannelSettings(meshtastic_ChannelSettings &s)
+{
+    size_t nameLen = rngRange(sizeof(s.name));
+    for (size_t i = 0; i < sizeof(s.name); i++)
+        s.name[i] = (i < nameLen) ? (char)(1 + rngRange(255)) : '\0';
+    s.psk.size = rngRange(sizeof(s.psk.bytes) + 1);
+    rngFill(s.psk.bytes, s.psk.size);
 }
 
 // Build a wire-plausible-but-adversarial AdminMessage: size-bearing fields (pubkey, psk) stay within
@@ -483,7 +447,7 @@ static meshtastic_AdminMessage fuzzAdminMessage()
     switch (r.which_payload_variant) {
     case meshtastic_AdminMessage_set_config_tag:
         // LoRa only (position variant would deref global gps). use_preset fuzzed both ways, incl. the
-        // manual bandwidth==0 path that used to SIGFPE the validator (FINDINGS #1, fixed).
+        // manual bandwidth==0 path that used to SIGFPE the validator.
         r.set_config.which_payload_variant = meshtastic_Config_lora_tag;
         r.set_config.payload_variant.lora.region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
         r.set_config.payload_variant.lora.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
@@ -497,19 +461,12 @@ static meshtastic_AdminMessage fuzzAdminMessage()
         break;
     case meshtastic_AdminMessage_set_channel_tag: {
         // Fuzz role + PSK; an empty-PSK SECONDARY at the primary slot used to recurse forever in
-        // Channels::getKey (FINDINGS #2, fixed).
+        // Channels::getKey.
         meshtastic_Channel &c = r.set_channel;
         c.index = (int32_t)rngRange(16); // includes out-of-range (getByIndex bounds-checks)
         c.has_settings = true;
         c.role = (meshtastic_Channel_Role)rngRange(4);
-        // Random length, always NUL-terminated (nanopb terminates decoded strings; un-terminated isn't
-        // wire-reachable and would only fabricate a strlen OOB).
-        size_t nameLen = rngRange(sizeof(c.settings.name));
-        for (size_t i = 0; i < sizeof(c.settings.name); i++)
-            c.settings.name[i] = (i < nameLen) ? (char)(1 + rngRange(255)) : '\0';
-        c.settings.psk.size = rngRange(sizeof(c.settings.psk.bytes) + 1); // 0..32 (0 = empty)
-        for (size_t i = 0; i < c.settings.psk.size; i++)
-            c.settings.psk.bytes[i] = rngByte();
+        fuzzChannelSettings(c.settings);
         break;
     }
     case meshtastic_AdminMessage_add_contact_tag:
@@ -581,24 +538,19 @@ class MeshBeaconListenerModuleTestShim : public MeshBeaconListenerModule
 static meshtastic_MeshBeacon fuzzBeacon()
 {
     meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
-    // message[101]: random prefix, and half the time NO NUL terminator, to stress the
-    // strnlen(b->message, sizeof-1) bound in the handler. Prefix avoids embedded NUL so the
-    // un-terminated case actually reaches the full buffer.
-    size_t n = rngRange(sizeof(b.message) + 4); // may exceed capacity
-    for (size_t i = 0; i < sizeof(b.message); i++)
-        b.message[i] = (i < n) ? (char)(1 + rngRange(255)) : '\0';
-    if (rngRange(2))
-        b.message[sizeof(b.message) - 1] = (char)(1 + rngRange(255)); // force un-terminated
-    b.has_offer_channel = (rngRange(2) == 0);
-    if (b.has_offer_channel) {
-        meshtastic_ChannelSettings &s = b.offer_channel;
-        size_t nameLen = rngRange(sizeof(s.name)); // NUL-terminated (wire-plausible), see set_channel note
-        for (size_t i = 0; i < sizeof(s.name); i++)
-            s.name[i] = (i < nameLen) ? (char)(1 + rngRange(255)) : '\0';
-        s.psk.size = rngRange(sizeof(s.psk.bytes) + 1);
-        for (size_t i = 0; i < s.psk.size; i++)
-            s.psk.bytes[i] = rngByte();
+    if (rngRange(2)) {
+        // Un-terminated: every byte non-NUL, so strnlen(message, sizeof-1) must run to its bound.
+        for (size_t i = 0; i < sizeof(b.message); i++)
+            b.message[i] = (char)(1 + rngRange(255));
+    } else {
+        // NUL-terminated random-length prefix.
+        size_t n = rngRange(sizeof(b.message));
+        for (size_t i = 0; i < sizeof(b.message); i++)
+            b.message[i] = (i < n) ? (char)(1 + rngRange(255)) : '\0';
     }
+    b.has_offer_channel = (rngRange(2) == 0);
+    if (b.has_offer_channel)
+        fuzzChannelSettings(b.offer_channel);
     b.offer_region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
     b.has_offer_preset = (rngRange(2) == 0);
     b.offer_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
@@ -621,10 +573,17 @@ void test_E6_beacon_listener_fuzz(void)
         mp.decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
 
         meshtastic_MeshBeacon b = fuzzBeacon();
-        // Contract: never over-reads message[] (the strnlen bound) and never crashes on any offer.
-        (void)beacon.handleReceivedProtobuf(mp, &b);
+        bool hasOffer =
+            b.has_offer_channel || b.offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET || b.has_offer_preset;
+
+        // The listener must never consume the packet (it flows on to the phone)...
+        TEST_ASSERT_FALSE(beacon.handleReceivedProtobuf(mp, &b));
+        // ...and any offer content must land in the client-visible cache, keyed to the sender.
+        if (hasOffer) {
+            TEST_ASSERT_TRUE(MeshBeaconListenerModule::lastReceivedOffer.valid);
+            TEST_ASSERT_EQUAL_UINT32(mp.from, MeshBeaconListenerModule::lastReceivedOffer.sender);
+        }
     }
-    TEST_ASSERT_TRUE(true); // reaching here = no ASan fault across all iterations
 }
 #endif // !MESHTASTIC_EXCLUDE_BEACON
 
@@ -659,10 +618,8 @@ void test_E7_nodedb_update_fuzz(void)
             mp.hop_limit = (uint8_t)rngRange(8);
             mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
             mp.decoded.portnum = (meshtastic_PortNum)rngRange(80);
-            size_t n = rngRange(sizeof(mp.decoded.payload.bytes) + 1);
-            for (size_t i = 0; i < n; i++)
-                mp.decoded.payload.bytes[i] = rngByte();
-            mp.decoded.payload.size = n;
+            mp.decoded.payload.size = rngRange(sizeof(mp.decoded.payload.bytes) + 1);
+            rngFill(mp.decoded.payload.bytes, mp.decoded.payload.size);
             nodeDB->updateFrom(mp);
         }
     }
@@ -876,13 +833,3 @@ void setup()
 void loop() {}
 
 #endif
-
-// ---------------------------------------------------------------------------
-// FINDINGS (surfaced by Group E5 - two remote-DoS crashes reachable from an authorized admin, now FIXED;
-// E5 fuzzes both triggers again as regression guards):
-//   1. SIGFPE in LoRa validation: set_config with use_preset=false + bandwidth=0 -> numFreqSlots==0 ->
-//      hash % numFreqSlots divides by zero. Fixed by guarding the modulo (RadioInterface.cpp).
-//   2. Stack overflow in Channels::getKey: a SECONDARY at the primary slot with an empty PSK recursed
-//      into getKey(primaryIndex) forever. Fixed by skipping the borrow when chIndex==primaryIndex
-//      (Channels.cpp).
-// ---------------------------------------------------------------------------

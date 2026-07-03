@@ -1605,14 +1605,8 @@ static void test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp(void)
 // ---------------------------------------------------------------------------
 // Fuzz - crafted-nodenum blitz of the unified cache
 // ---------------------------------------------------------------------------
-// The scenarios above check specific throttle/dedup behaviors. This one is adversarial: it floods
-// handleReceived (and alterReceived) with packets whose from/to/id/portnum/payload/hops are crafted -
-// heavy on a tiny node-number pool so the fixed-size unified cache (rate/unknown/position counters,
-// packed 6-bit fields) churns and evicts hard - while advancing the virtual clock across the rate,
-// unknown, and position windows. The nodeinfo direct-response path is deliberately left off (see the
-// note at the top of the test body). Contract: no crash / no OOB on the cache regardless of input;
-// counters stay bounded. Runs under ASan/LSan. hop_start/hop_limit stay in 0..7 (the wire caps hops at
-// 7). Reproduces from the printed seed.
+// Floods handleReceived/alterReceived with crafted packets over a tiny node pool so the fixed-size
+// cache churns hard while the virtual clock sweeps the rate/unknown/position windows; no crash, counters bounded.
 static constexpr uint64_t FUZZ_SEED = 0x00D07E5701ULL;
 
 static void test_tm_fuzz_nodenum_blitz(void)
@@ -1633,8 +1627,9 @@ static void test_tm_fuzz_nodenum_blitz(void)
 
     static TrafficManagementModuleTestShim module; // static: OSThread-derived (see note in test_fuzz_packets E2)
 
-    const NodeNum pool[] = {0u, kLocalNode, kRemoteNode, kTargetNode, NODENUM_BROADCAST, 1u, 0xFFFFFFFFu};
-    const size_t poolN = sizeof(pool) / sizeof(pool[0]);
+    // Shared boundary pool (0/1/broadcast) plus this suite's well-known nodes.
+    const NodeNum wellKnown[] = {kLocalNode, kRemoteNode, kTargetNode};
+    const size_t wellKnownN = sizeof(wellKnown) / sizeof(wellKnown[0]);
     const meshtastic_PortNum ports[] = {
         meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_POSITION_APP,
         meshtastic_PortNum_ROUTING_APP,      meshtastic_PortNum_ADMIN_APP,    meshtastic_PortNum_TELEMETRY_APP,
@@ -1644,8 +1639,8 @@ static void test_tm_fuzz_nodenum_blitz(void)
     const unsigned ITERS = 30000;
     for (unsigned k = 0; k < ITERS; k++) {
         meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
-        p.from = (rngRange(8) == 0) ? (NodeNum)rngNext() : pool[rngRange(poolN)];
-        p.to = pool[rngRange(poolN)];
+        p.from = (rngRange(8) == 0) ? (NodeNum)rngNext() : rngEdgeNodeNum(wellKnown, wellKnownN);
+        p.to = rngEdgeNodeNum(wellKnown, wellKnownN);
         p.id = rngNext();
         p.channel = 0;
         p.hop_start = (uint8_t)rngRange(8); // 0..7, wire-bounded
@@ -1655,10 +1650,8 @@ static void test_tm_fuzz_nodenum_blitz(void)
         if (rngRange(5) == 0) {
             // Undecoded / unknown packet - exercises the unknown-packet threshold path.
             p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-            size_t n = rngRange(sizeof(p.encrypted.bytes) + 1);
-            for (size_t i = 0; i < n; i++)
-                p.encrypted.bytes[i] = (uint8_t)rngNext();
-            p.encrypted.size = n;
+            p.encrypted.size = rngRange(sizeof(p.encrypted.bytes) + 1);
+            rngFill(p.encrypted.bytes, p.encrypted.size);
         } else {
             p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
             p.decoded.portnum = (rngRange(8) == 0) ? (meshtastic_PortNum)rngRange(80) : ports[rngRange(portsN)];
@@ -1675,10 +1668,8 @@ static void test_tm_fuzz_nodenum_blitz(void)
                     pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
             } else {
                 // Random payload bytes: TMM's nested User/Position decode must fail cleanly.
-                size_t n = rngRange(sizeof(p.decoded.payload.bytes) + 1);
-                for (size_t i = 0; i < n; i++)
-                    p.decoded.payload.bytes[i] = (uint8_t)rngNext();
-                p.decoded.payload.size = n;
+                p.decoded.payload.size = rngRange(sizeof(p.decoded.payload.bytes) + 1);
+                rngFill(p.decoded.payload.bytes, p.decoded.payload.size);
             }
         }
 

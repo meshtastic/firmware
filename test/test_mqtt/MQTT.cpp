@@ -975,13 +975,8 @@ void test_configWithTLSEnabled(void)
 // ===========================================================================
 // Fuzz - adversarial MQTT downlink ingress (the non-RF path a broker can push)
 // ===========================================================================
-// onReceiveProto() decodes a ServiceEnvelope from broker bytes, matches it to a downlink-enabled
-// channel, screens isFromUs / the XEdDSA receive policy, then perhapsDecode()s the inner packet. This
-// blitzes that whole chain two ways: (a) raw garbage bytes that must fail envelope decode cleanly, and
-// (b) a well-formed envelope wrapping a crafted inner MeshPacket (decoded/encrypted, self/remote
-// origin, admin portnum, out-of-range hops, random payload) over crafted channel_id/gateway_id.
-// Contract: no crash / no ASan or LSan finding on any input, and at most one packet enqueued per
-// delivered envelope. Runs under the coverage env. Reproduces from the printed seed.
+// Blitzes the onReceiveProto() chain with (a) raw garbage that must fail envelope decode cleanly and
+// (b) well-formed envelopes wrapping crafted inner packets. Contract: no crash, at most one enqueue per envelope.
 constexpr uint64_t MQTT_FUZZ_SEED = 0x00E3A71C0FULL;
 
 void test_receiveFuzzServiceEnvelope(void)
@@ -997,8 +992,7 @@ void test_receiveFuzzServiceEnvelope(void)
             // (a) Raw bytes: mostly random, must be rejected at DecodedServiceEnvelope without crashing.
             uint8_t raw[128];
             size_t n = rngRange(sizeof(raw) + 1);
-            for (size_t i = 0; i < n; i++)
-                raw[i] = rngByte();
+            rngFill(raw, n);
             unitTest->deliverRaw("msh/2/e/test/!87654321", raw, n);
         } else {
             // (b) Well-formed envelope around a crafted inner packet.
@@ -1017,16 +1011,12 @@ void test_receiveFuzzServiceEnvelope(void)
                 p.decoded.want_response = (rngRange(2) == 0);
                 p.decoded.has_bitfield = (rngRange(2) == 0);
                 p.decoded.bitfield = (uint32_t)rngNext();
-                size_t n = rngRange(64);
-                for (size_t i = 0; i < n; i++)
-                    p.decoded.payload.bytes[i] = rngByte();
-                p.decoded.payload.size = n;
+                p.decoded.payload.size = rngRange(64);
+                rngFill(p.decoded.payload.bytes, p.decoded.payload.size);
             } else {
                 p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-                size_t n = rngRange(64);
-                for (size_t i = 0; i < n; i++)
-                    p.encrypted.bytes[i] = rngByte();
-                p.encrypted.size = n;
+                p.encrypted.size = rngRange(64);
+                rngFill(p.encrypted.bytes, p.encrypted.size);
             }
             unitTest->publish(&p, gatewayIds[rngRange(3)], channelIds[rngRange(4)]);
         }
