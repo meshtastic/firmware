@@ -142,9 +142,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: init");
 
+#if !MESHTASTIC_EXCLUDE_I2C
             // Re-scan I2C bus
             auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
             i2cScanFinished(i2cScanner.get());
+#endif
 
             // check if we have at least one sensor
             if (!sensors.empty()) {
