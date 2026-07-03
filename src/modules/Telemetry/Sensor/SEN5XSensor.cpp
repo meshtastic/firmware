@@ -51,9 +51,11 @@ bool SEN5XSensor::findModel()
     const uint8_t nameSize = 48;
     uint8_t name[nameSize];
     size_t charNumber = readBuffer(&name[0], nameSize);
+    bool foundModel = false;
+
     if (charNumber == 0) {
         LOG_ERROR("%s: Error getting device name", sensorName);
-        return false;
+        return foundModel;
     }
 
     // We only check the last character that defines the model SEN5X
@@ -61,18 +63,21 @@ bool SEN5XSensor::findModel()
     case 48:
         model = SEN50;
         LOG_INFO("%s: found sensor model SEN50", sensorName);
+        foundModel = true;
         break;
     case 52:
         model = SEN54;
         LOG_INFO("%s: found sensor model SEN54", sensorName);
+        foundModel = true;
         break;
     case 53:
         model = SEN55;
         LOG_INFO("%s: found sensor model SEN55", sensorName);
+        foundModel = true;
         break;
     }
 
-    return true;
+    return foundModel;
 }
 
 bool SEN5XSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
@@ -81,6 +86,7 @@ bool SEN5XSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
 
     _bus = bus;
     _address = address;
+
 #ifdef SEN5X_I2C_CLOCK_SPEED
     _port = port;
     reClockI2C.setup(_bus, _port);
@@ -90,6 +96,7 @@ bool SEN5XSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
         LOG_DEBUG("SEN5X: can't find SEN5X model");
         return false;
     }
+
     return true;
 }
 
