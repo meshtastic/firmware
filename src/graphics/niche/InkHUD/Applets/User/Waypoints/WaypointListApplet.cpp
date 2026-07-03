@@ -312,8 +312,8 @@ std::string InkHUD::WaypointListApplet::distanceText(const WaypointCard &entry)
     if (!tryGetOwnPosition(ownPos))
         return "";
 
-    const float meters =
-        GeoCoord::latLongToMeter(entry.latitude_i * 1e-7, entry.longitude_i * 1e-7, ownPos.latitude_i * 1e-7, ownPos.longitude_i * 1e-7);
+    const float meters = GeoCoord::latLongToMeter(entry.latitude_i * 1e-7, entry.longitude_i * 1e-7, ownPos.latitude_i * 1e-7,
+                                                  ownPos.longitude_i * 1e-7);
     if (meters < 0)
         return "";
 

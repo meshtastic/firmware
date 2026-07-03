@@ -12,6 +12,7 @@
 #define WAYPOINT_HISTORY_LIMIT 10
 #endif
 
+#include "Observer.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
 #include <deque>
@@ -22,7 +23,7 @@ struct StoredWaypoint {
     uint32_t receivedTime = 0;
 };
 
-class WaypointStore
+class WaypointStore : public Observable<const WaypointStore *>
 {
   public:
     explicit WaypointStore(const std::string &label);
@@ -45,6 +46,7 @@ class WaypointStore
   private:
     void addStoredWaypoint(const StoredWaypoint &entry);
     bool removeWaypointById(uint32_t id);
+    void notifyChanged();
 
     std::deque<StoredWaypoint> waypoints;
     std::string filename;

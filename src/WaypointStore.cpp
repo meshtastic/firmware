@@ -72,6 +72,11 @@ WaypointStore::WaypointStore(const std::string &label)
     filename = "/Waypoints_" + label + ".wpts";
 }
 
+void WaypointStore::notifyChanged()
+{
+    notifyObservers(this);
+}
+
 uint32_t WaypointStore::age(const StoredWaypoint &entry)
 {
     const uint32_t now = getTime();
@@ -135,6 +140,8 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
         if (removed)
             markWaypointStoreUnsaved();
 #endif
+        if (removed)
+            notifyChanged();
         return true;
     }
 
@@ -143,6 +150,7 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
 #if ENABLE_WAYPOINT_PERSISTENCE
     markWaypointStoreUnsaved();
 #endif
+    notifyChanged();
 
     return true;
 }
@@ -159,6 +167,8 @@ void WaypointStore::addWaypoint(const meshtastic_Waypoint &wp, uint32_t received
         if (removed)
             markWaypointStoreUnsaved();
 #endif
+        if (removed)
+            notifyChanged();
         return;
     }
 
@@ -167,6 +177,7 @@ void WaypointStore::addWaypoint(const meshtastic_Waypoint &wp, uint32_t received
 #if ENABLE_WAYPOINT_PERSISTENCE
     markWaypointStoreUnsaved();
 #endif
+    notifyChanged();
 }
 
 bool WaypointStore::purgeExpired(uint32_t now)
@@ -194,6 +205,8 @@ bool WaypointStore::purgeExpired(uint32_t now)
     if (changed)
         markWaypointStoreUnsaved();
 #endif
+    if (changed)
+        notifyChanged();
 
     return changed;
 }
@@ -292,6 +305,7 @@ void WaypointStore::loadFromFlash()
 
 void WaypointStore::clearAllWaypoints()
 {
+    const bool hadWaypoints = !waypoints.empty();
     std::deque<StoredWaypoint>().swap(waypoints);
 
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
@@ -310,6 +324,9 @@ void WaypointStore::clearAllWaypoints()
     g_waypointStoreHasUnsavedChanges = false;
     g_lastWaypointAutoSaveMs = millis();
 #endif
+
+    if (hadWaypoints)
+        notifyChanged();
 }
 
 void WaypointStore::replayToGeofence() const

@@ -27,8 +27,16 @@ class PositionsApplet : public MapApplet, public SinglePortModule
     void onRender(bool full) override;
 
   protected:
-    void onActivate() override { loopbackOk = true; }
-    void onDeactivate() override { loopbackOk = false; }
+    void onActivate() override
+    {
+        MapApplet::onActivate();
+        loopbackOk = true;
+    }
+    void onDeactivate() override
+    {
+        loopbackOk = false;
+        MapApplet::onDeactivate();
+    }
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     NodeNum lastFrom = 0; // Sender of most recent (non-local) position packet

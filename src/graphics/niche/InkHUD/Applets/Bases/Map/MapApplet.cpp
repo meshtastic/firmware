@@ -90,11 +90,7 @@ void InkHUD::MapApplet::drawWaypointFallbackMarker(const WaypointMarker &entry, 
 }
 
 // Observe GPS position updates so the map redraws whenever a new location arrives.
-InkHUD::MapApplet::MapApplet()
-{
-    if (gpsStatus)
-        gpsStatusObserver.observe(&gpsStatus->onNewStatus);
-}
+InkHUD::MapApplet::MapApplet() {}
 
 int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
 {
@@ -104,6 +100,31 @@ int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
         return 0;
 
     requestUpdate();
+    return 0;
+}
+
+void InkHUD::MapApplet::onActivate()
+{
+    if (gpsStatus)
+        gpsStatusObserver.observe(&gpsStatus->onNewStatus);
+    waypointStoreObserver.observe(&waypointStore);
+}
+
+void InkHUD::MapApplet::onDeactivate()
+{
+    if (gpsStatus)
+        gpsStatusObserver.unobserve(&gpsStatus->onNewStatus);
+    waypointStoreObserver.unobserve(&waypointStore);
+}
+
+int InkHUD::MapApplet::onWaypointStoreChanged(const WaypointStore *store)
+{
+    (void)store;
+
+    if (!isActive())
+        return 0;
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
     return 0;
 }
 

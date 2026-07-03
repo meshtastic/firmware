@@ -17,6 +17,7 @@ The base applet doesn't handle any events; this is left to the derived applets.
 #include "configuration.h"
 #include <list>
 
+#include "WaypointStore.h"
 #include "graphics/niche/InkHUD/Applet.h"
 
 #include "GPSStatus.h"
@@ -32,6 +33,8 @@ class MapApplet : public Applet
   public:
     MapApplet();
     void onRender(bool full) override;
+    void onActivate() override;
+    void onDeactivate() override;
 
     MapApplet *asMapApplet() override { return this; } // Identify as MapApplet without RTTI
 
@@ -57,6 +60,9 @@ class MapApplet : public Applet
     int onGpsStatusUpdate(const meshtastic::Status *status);
     CallbackObserver<MapApplet, const meshtastic::Status *> gpsStatusObserver =
         CallbackObserver<MapApplet, const meshtastic::Status *>(this, &MapApplet::onGpsStatusUpdate);
+    int onWaypointStoreChanged(const WaypointStore *store);
+    CallbackObserver<MapApplet, const WaypointStore *> waypointStoreObserver =
+        CallbackObserver<MapApplet, const WaypointStore *>(this, &MapApplet::onWaypointStoreChanged);
 
     static bool s_zoomLocked;
     static int s_lockedZoom;
