@@ -20,6 +20,7 @@
 #include "SafeFile.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
+#include "WaypointStore.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -796,6 +797,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     }
 #if HAS_SCREEN
     messageStore.clearAllMessages();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.clearAllWaypoints();
 #endif
 
 #if WARM_NODE_COUNT > 0

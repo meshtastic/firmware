@@ -2,6 +2,10 @@
 #include "Observer.h"
 #include "SinglePortModule.h"
 
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
+
 /**
  * Waypoint message handling for meshtastic
  */
@@ -14,6 +18,7 @@ class WaypointModule : public SinglePortModule, public Observable<const UIFrameE
     WaypointModule() : SinglePortModule("waypoint", meshtastic_PortNum_WAYPOINT_APP) {}
 #if HAS_SCREEN
     bool shouldDraw();
+    void onDeviceTimeChanged();
 #endif
   protected:
     /** Called to handle a particular incoming message
@@ -28,6 +33,11 @@ class WaypointModule : public SinglePortModule, public Observable<const UIFrameE
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 #endif
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+  private:
+    static const StoredWaypoint *latestDrawableWaypoint();
+#endif
 };
 
 extern WaypointModule *waypointModule;

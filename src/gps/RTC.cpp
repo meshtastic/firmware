@@ -3,6 +3,7 @@
 #include "detect/ScanI2C.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
+#include "modules/WaypointModule.h"
 #include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>
@@ -19,6 +20,17 @@ static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality n
         LOG_DEBUG("Time source acquired (%s -> %s), triggering NodeInfo recheck", RtcName(oldQuality), RtcName(newQuality));
         nodeInfoModule->triggerImmediateNodeInfoCheck();
     }
+}
+
+static void triggerWaypointRefreshOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
+{
+#if !MESHTASTIC_EXCLUDE_WAYPOINT && HAS_SCREEN
+    if (waypointModule && (oldQuality != newQuality || newQuality > RTCQualityNone))
+        waypointModule->onDeviceTimeChanged();
+#else
+    (void)oldQuality;
+    (void)newQuality;
+#endif
 }
 
 RTCQuality getRTCQuality()
@@ -125,6 +137,7 @@ RTCSetResult readFromRTC()
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
             triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            triggerWaypointRefreshOnTimeSource(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -171,6 +184,7 @@ RTCSetResult readFromRTC()
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
             triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            triggerWaypointRefreshOnTimeSource(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -207,6 +221,7 @@ RTCSetResult readFromRTC()
                 zeroOffsetSecs = tv.tv_sec;
                 currentQuality = RTCQualityDevice;
                 triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+                triggerWaypointRefreshOnTimeSource(oldQuality, currentQuality);
             }
             return RTCSetResultSuccess;
         }
@@ -341,6 +356,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 
         readFromRTC();
         triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+        triggerWaypointRefreshOnTimeSource(oldQuality, currentQuality);
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time

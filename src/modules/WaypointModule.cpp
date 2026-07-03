@@ -1,12 +1,19 @@
 #include "WaypointModule.h"
-#include "GeofenceModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
+#include <algorithm>
+#include <cctype>
+#include <string>
 
-#if HAS_SCREEN
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "GeofenceModule.h"
+#include "WaypointStore.h"
+#endif
+
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
 #include "graphics/TimeFormatters.h"
@@ -16,24 +23,172 @@
 
 WaypointModule *waypointModule;
 
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
+namespace
+{
+
+std::string utf8FromCodepoint(uint32_t codepoint)
+{
+    char buf[5] = {};
+    if (codepoint <= 0x7F) {
+        buf[0] = static_cast<char>(codepoint);
+        return std::string(buf, 1);
+    }
+    if (codepoint <= 0x7FF) {
+        buf[0] = static_cast<char>(0xC0 | (codepoint >> 6));
+        buf[1] = static_cast<char>(0x80 | (codepoint & 0x3F));
+        return std::string(buf, 2);
+    }
+    if (codepoint <= 0xFFFF) {
+        buf[0] = static_cast<char>(0xE0 | (codepoint >> 12));
+        buf[1] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        buf[2] = static_cast<char>(0x80 | (codepoint & 0x3F));
+        return std::string(buf, 3);
+    }
+    if (codepoint <= 0x10FFFF) {
+        buf[0] = static_cast<char>(0xF0 | (codepoint >> 18));
+        buf[1] = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+        buf[2] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        buf[3] = static_cast<char>(0x80 | (codepoint & 0x3F));
+        return std::string(buf, 4);
+    }
+    return "";
+}
+
+void drawFallbackWaypointIcon(OLEDDisplay *display, int16_t left, int16_t top, uint16_t boxSize)
+{
+    const int16_t cx = left + (boxSize / 2);
+    const int16_t circleY = top + std::max<int16_t>(2, boxSize / 3);
+    const int16_t r = std::max<int16_t>(1, boxSize / 4);
+    display->drawCircle(cx, circleY, r);
+    display->drawLine(cx, circleY + r, cx, top + boxSize - 2);
+    display->drawPixel(cx - 1, top + boxSize - 2);
+    display->drawPixel(cx + 1, top + boxSize - 2);
+}
+
+void drawWaypointIcon(OLEDDisplay *display, const meshtastic_Waypoint &wp, int16_t left, int16_t top, uint16_t boxSize)
+{
+    if (!wp.icon) {
+        drawFallbackWaypointIcon(display, left, top, boxSize);
+        return;
+    }
+
+    const std::string utf8 = utf8FromCodepoint(wp.icon);
+    if (utf8.empty()) {
+        drawFallbackWaypointIcon(display, left, top, boxSize);
+        return;
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawString(left, top, utf8.c_str());
+}
+
+void formatWaypointDistance(char *out, size_t outSize, float meters, bool includeBearing, float bearingDegrees)
+{
+    out[0] = '\0';
+
+    if (includeBearing) {
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            const float feet = meters * METERS_TO_FEET;
+            snprintf(out, outSize, feet < (2 * MILES_TO_FEET) ? "%.0fft %.0f deg" : "%.1fmi %.0f deg",
+                     feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingDegrees);
+        } else {
+            snprintf(out, outSize, meters < 2000 ? "%.0fm %.0f deg" : "%.1fkm %.0f deg", meters < 2000 ? meters : meters / 1000,
+                     bearingDegrees);
+        }
+        return;
+    }
+
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        const float feet = meters * METERS_TO_FEET;
+        snprintf(out, outSize, feet < (2 * MILES_TO_FEET) ? "%.0fft" : "%.1fmi",
+                 feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET);
+    } else {
+        snprintf(out, outSize, meters < 2000 ? "%.0fm" : "%.1fkm", meters < 2000 ? meters : meters / 1000);
+    }
+}
+
+void formatWaypointCoordinates(char *out, size_t outSize, const meshtastic_Waypoint &wp)
+{
+    if (!(wp.has_latitude_i && wp.has_longitude_i)) {
+        snprintf(out, outSize, "--");
+        return;
+    }
+
+    snprintf(out, outSize, "%.4f,%.4f", wp.latitude_i * 1e-7, wp.longitude_i * 1e-7);
+}
+
+void formatWaypointExpire(char *out, size_t outSize, const meshtastic_Waypoint &wp)
+{
+    if (wp.expire == 0) {
+        out[0] = '\0';
+        return;
+    }
+
+    const uint32_t now = getValidTime(RTCQuality::RTCQualityDevice);
+    if (now == 0) {
+        out[0] = '\0';
+        return;
+    }
+    if (wp.expire <= now) {
+        snprintf(out, outSize, "exp");
+        return;
+    }
+
+    const uint32_t left = wp.expire - now;
+    if (left < 60)
+        snprintf(out, outSize, "exp %lus", (unsigned long)left);
+    else if (left < 3600)
+        snprintf(out, outSize, "exp %lum", (unsigned long)((left + 59) / 60));
+    else if (left < 86400)
+        snprintf(out, outSize, "exp %luh", (unsigned long)((left + 3599) / 3600));
+    else
+        snprintf(out, outSize, "exp %lud", (unsigned long)((left + 86399) / 86400));
+}
+
+std::string trimmedWaypointText(const char *text)
+{
+    if (!text)
+        return "";
+
+    std::string value(text);
+    const auto first = std::find_if(value.begin(), value.end(), [](unsigned char c) { return !std::isspace(c); });
+    if (first == value.end())
+        return "";
+
+    const auto last = std::find_if(value.rbegin(), value.rend(), [](unsigned char c) { return !std::isspace(c); }).base();
+    return std::string(first, last);
+}
+
+} // namespace
+
+const StoredWaypoint *WaypointModule::latestDrawableWaypoint()
+{
+    for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
+        if (!WaypointStore::isExpired(entry))
+            return &entry;
+    }
+
+    return nullptr;
+}
+#endif
+
 ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     auto &p = mp.decoded;
     LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
-    // We only store/display messages destined for us.
-    // Keep a copy of the most recent text message.
-    devicestate.rx_waypoint = mp;
-    devicestate.has_rx_waypoint = true;
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    (void)mp;
+    return ProcessMessage::CONTINUE;
+#else
+    StoredWaypoint stored;
+    if (!waypointStore.addFromPacket(mp, &stored))
+        return ProcessMessage::CONTINUE;
 
-    // Feed the geofence engine: it keeps its own in-memory store of geofencing waypoints (the
-    // single rx_waypoint above only remembers the last one shown on screen).
-    if (geofenceModule) {
-        meshtastic_Waypoint wp{};
-        if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp))
-            geofenceModule->onWaypointReceived(wp);
-    }
+    if (geofenceModule)
+        geofenceModule->onWaypointReceived(stored.waypoint);
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 
@@ -56,62 +211,75 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 #endif
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+#endif
 }
 
 #if HAS_SCREEN
 bool WaypointModule::shouldDraw()
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
-    if (!screen || !devicestate.has_rx_waypoint)
+    if (!screen || waypointStore.getWaypoints().empty())
         return false;
 
-    meshtastic_Waypoint wp{}; // <- replaces memset
-    if (pb_decode_from_bytes(devicestate.rx_waypoint.decoded.payload.bytes, devicestate.rx_waypoint.decoded.payload.size,
-                             &meshtastic_Waypoint_msg, &wp)) {
-        return wp.expire > getTime();
-    }
-    return false; // no LOG_ERROR, no flag writes
+    return latestDrawableWaypoint() != nullptr;
 #else
     return false;
 #endif
 }
 
-/// Draw the last waypoint we received
-void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void WaypointModule::onDeviceTimeChanged()
 {
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
     if (!screen)
         return;
+
+    UIFrameEvent e;
+    e.action = shouldDraw() ? UIFrameEvent::Action::REGENERATE_FRAMESET : UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
+    notifyObservers(&e);
+#endif
+}
+
+/// Draw the newest non-expired waypoint we received
+void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    (void)state;
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    (void)display;
+    (void)x;
+    (void)y;
+    return;
+#else
+    if (!screen)
+        return;
+
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
 
-    // === Set Title
     const char *titleStr = "Waypoint";
-
-    // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
     const int *textPos = graphics::getTextPositions(display);
 
-    // Decode the waypoint
-    const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_Waypoint wp{};
-    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp)) {
-        devicestate.has_rx_waypoint = false;
+    const StoredWaypoint *entry = latestDrawableWaypoint();
+    if (!entry)
         return;
-    }
+    const meshtastic_Waypoint &wp = entry->waypoint;
 
-    // Get timestamp info. Will pass as a field to drawColumns
     char lastStr[20];
-    getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
+    getTimeAgoStr(WaypointStore::age(*entry), lastStr, sizeof(lastStr));
 
-    // Will contain distance information, passed as a field to drawColumns
     char distStr[20] = "";
+    char coordStr[40];
+    char expireStr[16];
+    formatWaypointCoordinates(coordStr, sizeof(coordStr), wp);
+    formatWaypointExpire(expireStr, sizeof(expireStr), wp);
 
-    // Get our node, to use our own position
+    const std::string description = trimmedWaypointText(wp.description);
+    const bool hasDescription = !description.empty();
+    const int topTextLines = hasDescription ? 4 : 3;
+
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-
-    // Match compass sizing/placement to favorite node screen logic.
     const int w = display->getWidth();
     int16_t compassRadius = 8;
     int16_t compassX = x + w - compassRadius - 8;
@@ -127,8 +295,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         compassX = x + SCREEN_WIDTH - compassRadius - 8;
         compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
     } else {
-        // Waypoint content uses rows 1..4, so place the compass below that block.
-        const int yBelowContent = textPos[4] + FONT_HEIGHT_SMALL + 2;
+        const int yBelowContent = textPos[topTextLines] + FONT_HEIGHT_SMALL + 2;
         const int margin = 4;
 #if defined(USE_EINK)
         const int iconSize = (graphics::currentResolution == graphics::ScreenResolution::High) ? 16 : 8;
@@ -155,55 +322,32 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const char *statusLine1 = nullptr;
     const char *statusLine2 = nullptr;
 
-    // Distance only needs our own position fix; compass/bearing additionally needs heading.
     meshtastic_PositionLite ownPos;
     const bool haveOwnPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ownPos);
     if (hasOwnPositionFix && haveOwnPos) {
-        const meshtastic_PositionLite &op = ownPos;
-        const float d =
-            GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-
-        // Always show distance once we have an own-position fix, even without heading.
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            float feet = d * METERS_TO_FEET;
-            snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft" : "%.1fmi",
-                     feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET);
-        } else {
-            snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm" : "%.1fkm", d < 2000 ? d : d / 1000);
-        }
+        const float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(ownPos.latitude_i),
+                                                 DegD(ownPos.longitude_i));
 
         float myHeading = 0.0f;
         const bool hasHeading =
-            graphics::CompassRenderer::getHeadingRadians(DegD(op.latitude_i), DegD(op.longitude_i), myHeading);
+            graphics::CompassRenderer::getHeadingRadians(DegD(ownPos.latitude_i), DegD(ownPos.longitude_i), myHeading);
         if (hasHeading) {
-            // Draw compass circle
             display->drawCircle(compassX, compassY, compassRadius);
             graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
 
-            // Compass bearing to waypoint
             float bearingToOther =
-                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
+                GeoCoord::bearing(DegD(ownPos.latitude_i), DegD(ownPos.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
             bearingToOther = graphics::CompassRenderer::adjustBearingForCompassMode(bearingToOther, myHeading);
             graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
 
             const float bearingToOtherDegrees = graphics::CompassRenderer::radiansToDegrees360(bearingToOther);
-
-            // Distance to waypoint with relative bearing when heading is available.
-            if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-                float feet = d * METERS_TO_FEET;
-                snprintf(distStr, sizeof(distStr), feet < (2 * MILES_TO_FEET) ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
-                         feet < (2 * MILES_TO_FEET) ? feet : feet / MILES_TO_FEET, bearingToOtherDegrees);
-            } else {
-                snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°", d < 2000 ? d : d / 1000,
-                         bearingToOtherDegrees);
-            }
-
+            formatWaypointDistance(distStr, sizeof(distStr), d, true, bearingToOtherDegrees);
         } else {
+            formatWaypointDistance(distStr, sizeof(distStr), d, false, 0.0f);
             statusLine1 = "No";
             statusLine2 = "Heading";
         }
     } else {
-        // No own fix yet, so compass/bearing data would be misleading.
         statusLine1 = "No";
         statusLine2 = "Fix";
     }
@@ -215,11 +359,39 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         display->drawString(compassX, compassY, statusLine2);
     }
 
-    display->setTextAlignment(TEXT_ALIGN_LEFT); // Something above me changes to a different alignment, forcing a fix here!
-    display->drawString(0, textPos[line++], lastStr);
-    display->drawString(0, textPos[line++], wp.name);
-    display->drawString(0, textPos[line++], wp.description);
-    if (distStr[0])
-        display->drawString(0, textPos[line++], distStr);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    const uint16_t iconWidth = FONT_HEIGHT_SMALL;
+    const uint16_t iconGap = 3;
+    const uint16_t nameX = iconWidth + iconGap;
+
+    const int16_t row1Y = textPos[line++];
+    const uint16_t distWidth = distStr[0] ? display->getStringWidth(distStr) + 4 : 0;
+    const uint16_t nameWidth =
+        (display->getWidth() > nameX + distWidth) ? (display->getWidth() - nameX - distWidth) : (display->getWidth() - nameX);
+    drawWaypointIcon(display, wp, 0, row1Y, iconWidth);
+    display->drawStringMaxWidth(nameX, row1Y, nameWidth, wp.name);
+    if (distStr[0]) {
+        display->setTextAlignment(TEXT_ALIGN_RIGHT);
+        display->drawString(display->getWidth(), row1Y, distStr);
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+    }
+
+    if (hasDescription)
+        display->drawStringMaxWidth(nameX, textPos[line++], display->getWidth() - nameX, description.c_str());
+
+    const int16_t rowMetaY = textPos[line++];
+    const uint16_t expireWidth = expireStr[0] ? display->getStringWidth(expireStr) + 4 : 0;
+    const uint16_t coordWidth = (display->getWidth() > expireWidth) ? (display->getWidth() - expireWidth) : display->getWidth();
+    display->drawStringMaxWidth(0, rowMetaY, coordWidth, coordStr);
+    if (expireStr[0]) {
+        display->setTextAlignment(TEXT_ALIGN_RIGHT);
+        display->drawString(display->getWidth(), rowMetaY, expireStr);
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+    }
+
+    if (line <= 4)
+        display->drawStringMaxWidth(0, textPos[line++], display->getWidth(), lastStr);
+#endif
 }
 #endif

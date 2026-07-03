@@ -131,9 +131,7 @@ typedef struct _meshtastic_DeviceState {
     /* Previously used to manage GPS factory resets.
  Deprecated in 2.5.23 */
     bool did_gps_reset;
-    /* We keep the last received waypoint stored in the device flash,
- so we can show it on the screen.
- Might be null */
+    /* Deprecated: waypoint history now lives in WaypointStore. */
     bool has_rx_waypoint;
     meshtastic_MeshPacket rx_waypoint;
     /* The mesh's nodes with their available gpio pins for RemoteHardware module */
