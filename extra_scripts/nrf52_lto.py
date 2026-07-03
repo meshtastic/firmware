@@ -234,6 +234,8 @@ def _assert_variant_survived(source, target, env):
     if not objs:
         return  # env links no in-repo board variant
     problems = []
+    elf_kind = {}
+    obj_kind = {}
     try:
         for obj in objs:
             # An LTO object carries .gnu.lto_* sections; their names live in the shstrtab,
@@ -255,14 +257,16 @@ def _assert_variant_survived(source, target, env):
 
         elf = env.subst("$BUILD_DIR/${PROGNAME}.elf")
         elf_kind = _kinds(subprocess.check_output([_NM, elf], universal_newlines=True))
-        obj_kind = {}
         for obj in objs:
             obj_kind.update(
                 _kinds(subprocess.check_output([_NM, obj], universal_newlines=True))
             )
-    except Exception as exc:  # tooling hiccup: warn loudly, don't wedge the build
-        print("nrf52_lto: WARNING - variant guard skipped (%s)" % exc)
-        return
+    except Exception as exc:  # tooling hiccup (e.g. an nm that can't read slim LTO
+        # objects): warn and skip the symbol comparison, but never let it mask a
+        # violation the .gnu.lto byte-scan above already recorded in `problems`.
+        print("nrf52_lto: WARNING - variant guard incomplete (%s)" % exc)
+        if not problems:
+            return
     for sym in _VARIANT_OVERRIDES:
         if (
             obj_kind.get(sym, "").upper() == "T"
