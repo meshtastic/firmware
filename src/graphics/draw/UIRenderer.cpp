@@ -788,12 +788,34 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Print node's long name (e.g. "Backpack Node")
     if (username) {
+        int username_buffer = 0;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if (nodeInfoLiteHasXeddsaSigned(node)) {
+            if (currentResolution == ScreenResolution::High) {
+                graphics::NodeListRenderer::drawScaledXBitmap16x16(x + 2, getTextPositions(display)[line] + 1,
+                                                                   xeddsa_shield_width, xeddsa_shield_height, xeddsa_shield,
+                                                                   display);
+                username_buffer = (xeddsa_shield_width * 2) + 4;
+            } else {
+                display->drawXbm(x, getTextPositions(display)[line] + 3, xeddsa_shield_width, xeddsa_shield_height,
+                                 xeddsa_shield);
+                username_buffer = xeddsa_shield_width + 2;
+            }
+        }
+#endif
 #if GRAPHICS_TFT_COLORING_ENABLED
         const int usernameWidth = UIRenderer::measureStringWithEmotes(display, username);
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if (nodeInfoLiteHasXeddsaSigned(node)) {
+            setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black,
+                                       x + usernameWidth, getTextPositions(display)[line], username_buffer, FONT_HEIGHT_SMALL);
+        }
+#endif
         setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black, x,
                                    getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
 #endif
-        UIRenderer::drawStringWithEmotes(display, x, getTextPositions(display)[line++], username, FONT_HEIGHT_SMALL, 1, false);
+        UIRenderer::drawStringWithEmotes(display, x + username_buffer, getTextPositions(display)[line++], username,
+                                         FONT_HEIGHT_SMALL, 1, false);
     }
 
 #if !MESHTASTIC_EXCLUDE_STATUS && !MESHTASTIC_EXCLUDE_STATUSDB
