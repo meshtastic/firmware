@@ -107,6 +107,14 @@ def _get_projenv():
     return _projenv_cache[0]
 
 
+def _variant_ccflags(target, source, env, for_signature):
+    # Deferred CCFLAGS for the board variant recompile. SCons calls this while substituting the
+    # compile command (build phase), so projenv's CCFLAGS now include the -DAPP_VERSION... flags
+    # that bin/platformio-custom.py appends as a POST extra_script. -fno-lto goes last to override
+    # the inherited -flto and keep the variant's strong initVariant() out of whole-image LTO.
+    return list(_get_projenv()["CCFLAGS"]) + ["-fno-lto"]
+
+
 def _no_lto(node):
     try:
         path = node.get_abspath()
@@ -128,12 +136,19 @@ def _no_lto(node):
     if _is_board_variant(node, path):
         # The board variant is a project source, not a framework object: it can #include
         # configuration.h/sleep.h, which need the -DAPP_VERSION... define and the generated-
-        # protobuf include path (pb.h). Recompile it with projenv (which has both) -- using the
-        # bare framework env here fails with "APP_VERSION must be set" / "pb.h: No such file".
+        # protobuf include path (pb.h). Recompile it with projenv, which carries both.
+        #
+        # TIMING: those -DAPP_VERSION... flags are appended to projenv by bin/platformio-custom.py,
+        # which is an unprefixed extra_script -> PlatformIO runs it as a POST script, i.e. AFTER
+        # $BUILD_SCRIPT, where this build middleware already fired. So projenv["CCFLAGS"] read HERE
+        # is a pre-append snapshot with no -DAPP_VERSION -> the recompile dies with
+        # "APP_VERSION must be set". Defer the read to a callable construction variable: SCons
+        # invokes it during command substitution (after every SConscript, post-scripts included),
+        # by which point projenv carries the version flags. -fno-lto is appended last so it wins.
         build_env = _get_projenv()
         return build_env.Object(
             node,
-            CCFLAGS=build_env["CCFLAGS"] + ["-fno-lto"],
+            CCFLAGS=_variant_ccflags,
             CPPPATH=build_env["CPPPATH"] + _extra_inc,
         )
     return node
