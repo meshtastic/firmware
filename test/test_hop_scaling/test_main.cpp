@@ -719,9 +719,10 @@ void test_fuzz_nodenum_blitz(void)
         shim.samplePacketForHistogram(id, hop);
 
         // Occasionally swing the sampling denominator and roll the hour to drive trim / eviction /
-        // the hourly rolling + scaling under sustained churn.
+        // the hourly rolling + scaling under sustained churn. Denominators stay powers of two (1..128) -
+        // the only states the module actually produces (its passesFilter uses hash & (denom-1)).
         if (rngRange(256) == 0)
-            shim.setHistogramDenominator((uint8_t)(HopScalingModule::DENOM_MIN + rngRange(HopScalingModule::DENOM_MAX)));
+            shim.setHistogramDenominator((uint8_t)(1u << rngRange(8))); // 1, 2, 4, ... 128
         if (rngRange(512) == 0) {
             mockTime += ONE_HOUR_MS;
             shim.rollHourTest();
