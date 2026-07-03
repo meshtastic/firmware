@@ -236,7 +236,10 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
         memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
-            if (ch.role == meshtastic_Channel_Role_SECONDARY) {
+            // A secondary with no PSK borrows the primary's key. Skip the borrow when chIndex ==
+            // primaryIndex: a crafted set_channel can mark the primary slot itself SECONDARY with an
+            // empty PSK, and the unguarded getKey(primaryIndex) then recurses forever (stack overflow).
+            if (ch.role == meshtastic_Channel_Role_SECONDARY && chIndex != primaryIndex) {
                 LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
                 k = getKey(primaryIndex);
             } else {

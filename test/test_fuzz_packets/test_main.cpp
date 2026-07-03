@@ -428,29 +428,25 @@ class AdminModuleTestShim : public AdminModule
     }
 };
 
-// Tags restricted to setters / node-list ops that stay within NodeDB + config + RTC. Deliberately
-// EXCLUDES:
-//   - process/filesystem side effects even with saves deferred: reboot*, shutdown, *factory_reset*,
-//     nodedb_reset, ota_request, enter_dfu_mode, delete_file, *_preferences (backup/restore),
-//     exit_simulator, begin/commit_edit_settings (would flip hasOpenEditTransaction back off);
-//   - get_* reply builders (drive un-mocked service reply paths);
-//   - set_owner (asserts the global nodeInfoModule via reloadOwner) and set_fixed_position (derefs the
-//     global positionModule) - both assume a fully-booted module graph this fixture does not stand up.
-//     Their meshtastic_User / meshtastic_Position payloads are already fuzzed by E2/E7 and by
-//     test/test_fuzz_decode.
-//   - set_channel: exercising it surfaced a pre-existing infinite recursion in Channels::getKey
-//     (Channels.cpp:241) - a secondary channel with an empty PSK whose primary is itself a
-//     secondary-with-empty-PSK recurses until the stack overflows. That is a Channels concern (a real
-//     crafted-set_channel crash, see the FINDINGS note at the end of this file), not the admin-dispatch
-//     surface E5 guards. Excluded here to keep E5 green; the channel/PSK layer has its own tests.
-// The inner config/module variants are likewise constrained below (LoRa-only config, non-beacon module
-// config) for the same reason. This is a scoped subset, not full dispatch-switch coverage.
+// A scoped subset of setter / node-list tags - the ones reachable without a fully-booted module graph.
+// EXCLUDES: side-effecting tags even with saves deferred (reboot*, shutdown, *factory_reset*,
+// nodedb_reset, ota, enter_dfu, delete_file, *_preferences, exit_simulator, begin/commit_edit_settings);
+// get_* reply builders (un-mocked service paths); set_owner (needs global nodeInfoModule) and
+// set_fixed_position (needs global positionModule) - their payloads are covered by E2/E7 and
+// test_fuzz_decode. set_config and set_channel ARE fuzzed - they found two crashes, both now fixed (see
+// FINDINGS). The module-config variant is constrained below only to skip the beacon variant's global.
 static const pb_size_t SAFE_ADMIN_TAGS[] = {
-    meshtastic_AdminMessage_set_config_tag,        meshtastic_AdminMessage_set_module_config_tag,
-    meshtastic_AdminMessage_set_favorite_node_tag, meshtastic_AdminMessage_remove_favorite_node_tag,
-    meshtastic_AdminMessage_set_ignored_node_tag,  meshtastic_AdminMessage_remove_ignored_node_tag,
-    meshtastic_AdminMessage_toggle_muted_node_tag, meshtastic_AdminMessage_remove_by_nodenum_tag,
-    meshtastic_AdminMessage_add_contact_tag,       meshtastic_AdminMessage_remove_fixed_position_tag,
+    meshtastic_AdminMessage_set_config_tag,
+    meshtastic_AdminMessage_set_module_config_tag,
+    meshtastic_AdminMessage_set_channel_tag,
+    meshtastic_AdminMessage_set_favorite_node_tag,
+    meshtastic_AdminMessage_remove_favorite_node_tag,
+    meshtastic_AdminMessage_set_ignored_node_tag,
+    meshtastic_AdminMessage_remove_ignored_node_tag,
+    meshtastic_AdminMessage_toggle_muted_node_tag,
+    meshtastic_AdminMessage_remove_by_nodenum_tag,
+    meshtastic_AdminMessage_add_contact_tag,
+    meshtastic_AdminMessage_remove_fixed_position_tag,
     meshtastic_AdminMessage_set_time_only_tag,
 };
 static const size_t NUM_SAFE_ADMIN_TAGS = sizeof(SAFE_ADMIN_TAGS) / sizeof(SAFE_ADMIN_TAGS[0]);
@@ -498,22 +494,36 @@ static meshtastic_AdminMessage fuzzAdminMessage()
     r.which_payload_variant = SAFE_ADMIN_TAGS[rngRange(NUM_SAFE_ADMIN_TAGS)];
     switch (r.which_payload_variant) {
     case meshtastic_AdminMessage_set_config_tag:
-        // LoRa-only: the validated region/preset/channel-num path (the position variant would deref the
-        // global gps). use_preset is pinned true: with use_preset=false + bandwidth=0 the LoRa validator
-        // divides by zero (RadioInterface.cpp:1118, numFreqSlots==0) - a real crash this fixture would
-        // otherwise trip on every run. That divide-by-zero is RadioInterface's concern (see
-        // test_admin_radio's dedicated validateConfigLora coverage), not the admin-dispatch surface E5
-        // guards; pinning use_preset keeps E5 focused and green. See notes at the end of this file.
+        // LoRa only (position variant would deref global gps). use_preset fuzzed both ways, incl. the
+        // manual bandwidth==0 path that used to SIGFPE the validator (FINDINGS #1, fixed).
         r.set_config.which_payload_variant = meshtastic_Config_lora_tag;
         r.set_config.payload_variant.lora.region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
         r.set_config.payload_variant.lora.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
-        r.set_config.payload_variant.lora.use_preset = true;
+        r.set_config.payload_variant.lora.use_preset = (rngRange(2) == 0);
+        r.set_config.payload_variant.lora.bandwidth = rngRange(512); // includes 0
         r.set_config.payload_variant.lora.channel_num = rngNext();
         break;
     case meshtastic_AdminMessage_set_module_config_tag:
-        // Non-beacon module variant (the beacon variant derefs the global meshBeaconBroadcastModule).
+        // Non-beacon variant (beacon derefs global meshBeaconBroadcastModule).
         r.set_module_config.which_payload_variant = SAFE_MODULE_CONFIG_TAGS[rngRange(NUM_SAFE_MODULE_CONFIG_TAGS)];
         break;
+    case meshtastic_AdminMessage_set_channel_tag: {
+        // Fuzz role + PSK; an empty-PSK SECONDARY at the primary slot used to recurse forever in
+        // Channels::getKey (FINDINGS #2, fixed).
+        meshtastic_Channel &c = r.set_channel;
+        c.index = (int32_t)rngRange(16); // includes out-of-range (getByIndex bounds-checks)
+        c.has_settings = true;
+        c.role = (meshtastic_Channel_Role)rngRange(4);
+        // Random length, always NUL-terminated (nanopb terminates decoded strings; un-terminated isn't
+        // wire-reachable and would only fabricate a strlen OOB).
+        size_t nameLen = rngRange(sizeof(c.settings.name));
+        for (size_t i = 0; i < sizeof(c.settings.name); i++)
+            c.settings.name[i] = (i < nameLen) ? (char)(1 + rngRange(255)) : '\0';
+        c.settings.psk.size = rngRange(sizeof(c.settings.psk.bytes) + 1); // 0..32 (0 = empty)
+        for (size_t i = 0; i < c.settings.psk.size; i++)
+            c.settings.psk.bytes[i] = rngByte();
+        break;
+    }
     case meshtastic_AdminMessage_add_contact_tag:
         r.add_contact.node_num = fuzzNodeNum();
         r.add_contact.has_user = true;
@@ -719,21 +729,11 @@ void loop() {}
 #endif
 
 // ---------------------------------------------------------------------------
-// FINDINGS (surfaced by Group E5 while developing it; both are pre-existing firmware crashes reachable
-// from an authorized admin - local from==0, admin channel, or PKC - i.e. remote DoS. E5 is scoped
-// around them so it stays green; each wants a real fix + a targeted regression case here afterwards.)
-//
-//   1. Integer divide-by-zero in LoRa config validation (SIGFPE).
-//      A set_config LoRaConfig with use_preset=false and bandwidth=0 reaches
-//      RadioInterface::checkOrClampConfigLora with check_bw==0, so freqSlotWidth==0
-//      (RadioInterface.cpp:1092), numFreqSlots rounds to 0, and `hash(name) % numFreqSlots`
-//      (RadioInterface.cpp:1118) divides by zero. E5 works around it by pinning use_preset=true.
-//      Fix: reject/clamp when freqSlotWidth or numFreqSlots would be 0.
-//
-//   2. Unbounded recursion / stack overflow in Channels::getKey (Channels.cpp:241).
-//      A SECONDARY channel with an empty PSK resolves its key via getKey(primaryIndex); if the primary
-//      is itself a secondary-with-empty-PSK (or the primary index points back into such a chain), the
-//      recursion never terminates and the stack overflows. Reachable via a crafted set_channel. E5
-//      excludes the set_channel tag entirely. Fix: iterate instead of recurse, or cap the hop / detect
-//      a non-primary target.
+// FINDINGS (surfaced by Group E5 - two remote-DoS crashes reachable from an authorized admin, now FIXED;
+// E5 fuzzes both triggers again as regression guards):
+//   1. SIGFPE in LoRa validation: set_config with use_preset=false + bandwidth=0 -> numFreqSlots==0 ->
+//      hash % numFreqSlots divides by zero. Fixed by guarding the modulo (RadioInterface.cpp).
+//   2. Stack overflow in Channels::getKey: a SECONDARY at the primary slot with an empty PSK recursed
+//      into getKey(primaryIndex) forever. Fixed by skipping the borrow when chIndex==primaryIndex
+//      (Channels.cpp).
 // ---------------------------------------------------------------------------

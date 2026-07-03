@@ -1115,8 +1115,11 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
-    uint32_t presetNameHashSlot = hash(presetNameDisplay) % numFreqSlots;
+    // Guard the modulo: numFreqSlots is 0 for a bandwidth-0 manual config or an UNSET region (both
+    // reachable from a crafted set_config), and % 0 is a SIGFPE. The channel_num check below then
+    // rejects/clamps the config normally.
+    uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
+    uint32_t presetNameHashSlot = numFreqSlots ? (hash(presetNameDisplay) % numFreqSlots) : 0;
 
     if (loraConfig.override_frequency == 0) {
 
