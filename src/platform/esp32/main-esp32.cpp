@@ -52,8 +52,24 @@ static bool isNetworkConfiguredToDisableBluetooth()
 #endif
 }
 
+static bool isPaxcounterActiveForBoot()
+{
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
+    return moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled && !config.bluetooth.enabled &&
+           !config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
 static bool shouldReleaseBluetoothMemory()
 {
+    // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
+    // ESP32 BLE controller memory for scanning.
+    if (isPaxcounterActiveForBoot()) {
+        return false;
+    }
+
     // On ESP32 targets WiFi and BLE share radio resources. When WiFi is configured for this boot,
     // BLE will not be started, so its reserved memory can be returned to the heap until reboot.
     if (isNetworkConfiguredToDisableBluetooth()) {

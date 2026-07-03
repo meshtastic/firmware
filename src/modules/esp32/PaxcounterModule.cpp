@@ -7,6 +7,34 @@
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
 #include <assert.h>
+#include <esp_event.h>
+#include <freertos/timers.h>
+
+// Arduino WiFi has a wifiscan.h too, so declare the libpax scanner hooks here.
+void set_wifi_channels(uint16_t channels_map);
+void wifi_sniffer_init(uint16_t wifi_channel_switch_interval);
+void switchWifiChannel(TimerHandle_t xTimer);
+extern TimerHandle_t WifiChanTimer;
+
+static void startWifiChannelTimer(uint16_t wifi_channel_switch_interval)
+{
+    if (wifi_channel_switch_interval == 0) {
+        return;
+    }
+
+    WifiChanTimer =
+        xTimerCreate("WifiChannelTimer", pdMS_TO_TICKS(wifi_channel_switch_interval * 10), pdTRUE, (void *)0, switchWifiChannel);
+    assert(WifiChanTimer);
+    xTimerStart(WifiChanTimer, 0);
+}
+
+static void ensureDefaultEventLoop()
+{
+    esp_err_t result = esp_event_loop_create_default();
+    if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
+        LOG_WARN("Paxcounter could not create ESP event loop: %d", result);
+    }
+}
 
 PaxcounterModule *paxcounterModule;
 
@@ -90,8 +118,8 @@ int32_t PaxcounterModule::runOnce()
             configuration.blecounter = 1;
             configuration.blescantime = 0; // infinite
             configuration.wificounter = 1;
-            // configuration.wifi_channel_map = WIFI_CHANNEL_ALL;
-            // configuration.wifi_channel_switch_interval = 50;
+            configuration.LIBPAX_WIFI_CHANNEL_map = LIBPAX_WIFI_CHANNEL_ALL;
+            configuration.LIBPAX_WIFI_CHANNEL_switch_interval = 50;
             configuration.wifi_rssi_threshold = Default::getConfiguredOrDefault(moduleConfig.paxcounter.wifi_threshold, -80);
             configuration.ble_rssi_threshold = Default::getConfiguredOrDefault(moduleConfig.paxcounter.ble_threshold, -80);
             libpax_update_config(&configuration);
@@ -101,7 +129,12 @@ int32_t PaxcounterModule::runOnce()
                                 Default::getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval,
                                                                 default_telemetry_broadcast_interval_secs),
                                 0);
+            // libpax sets the WiFi country in counter_start(), so start channel rotation after that.
+            ensureDefaultEventLoop();
+            set_wifi_channels(configuration.LIBPAX_WIFI_CHANNEL_map);
+            wifi_sniffer_init(0);
             libpax_counter_start();
+            startWifiChannelTimer(configuration.LIBPAX_WIFI_CHANNEL_switch_interval);
         } else {
             sendInfo(NODENUM_BROADCAST);
         }
