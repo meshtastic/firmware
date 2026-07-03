@@ -15,8 +15,19 @@ static inline int getStringWidth(OLEDDisplay *display, const char *text, size_t 
 #if defined(OLED_UA) || defined(OLED_RU)
     return display->getStringWidth(text, len, true);
 #else
-    (void)len;
-    return display->getStringWidth(text);
+    // OLEDDisplay::getStringWidth (utf8=false) indexes the font jump table by (c - firstChar) with a
+    // signed char and no bounds check, so any byte outside printable ASCII (high bytes, but also
+    // control bytes like a stray 0x0A) reads outside the font array. Measure a sanitized copy in which
+    // unrepresentable bytes count as a '?' placeholder; printable ASCII is passed through unchanged.
+    char safe[64];
+    if (len > sizeof(safe) - 1)
+        len = sizeof(safe) - 1;
+    for (size_t i = 0; i < len; i++) {
+        const uint8_t c = static_cast<uint8_t>(text[i]);
+        safe[i] = (c >= 0x20 && c <= 0x7E) ? static_cast<char>(c) : '?';
+    }
+    safe[len] = '\0';
+    return display->getStringWidth(safe, len, false);
 #endif
 }
 

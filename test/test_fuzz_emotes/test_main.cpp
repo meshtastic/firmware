@@ -15,31 +15,21 @@
 
 #include "graphics/EmoteRenderer.h"
 #include <OLEDDisplay.h>
+#include <OLEDDisplayFonts.h>
 #include <cstdlib>
 #include <cstring>
 
 #include "support/DeterministicRng.h"
 static constexpr uint64_t BASE_SEED = 0x00E3070EULL;
 
-// Minimal headless display. The bug under test is the over-READ of the caller's STRING inside
-// EmoteRenderer's getUtf8ChunkWidth memcpy; getStringWidth() then only measures the (safe, local)
-// chunk. But the stock OLEDDisplay::getStringWidth indexes the font jump table with a signed char,
-// so any byte >= 0x80 yields a negative index and reads outside a real font array - an unrelated
-// vendored-library over-read that would mask the finding. We dodge it with a synthetic font:
-// firstChar = 0 and fontData pointed into the middle of a large buffer, so every index the library
-// computes (7 + 4*c, c in [-128,127]) lands inside the buffer and returns a constant width.
-static uint8_t g_fakeFont[4096];
-
+// Headless display with a REAL font, so the fuzz exercises the production width path end to end:
+// EmoteRenderer's getUtf8ChunkWidth memcpy (guarded by the utf8CharLen clamp) AND the getStringWidth
+// helper's byte sanitizer (which keeps the stock library's signed-char font indexing in bounds for
+// bytes outside printable ASCII). getStringWidth only walks the font jump table, never a frame buffer.
 class FakeDisplay : public OLEDDisplay
 {
   public:
-    FakeDisplay()
-    {
-        memset(g_fakeFont, 6, sizeof(g_fakeFont)); // every glyph reports width 6
-        uint8_t *font = g_fakeFont + sizeof(g_fakeFont) / 2;
-        font[FIRST_CHAR_POS] = 0; // firstChar 0 -> index = 7 + 4*c stays in-bounds for signed c
-        setFont(font);
-    }
+    FakeDisplay() { setFont(ArialMT_Plain_10); }
     void display() override {}
     int getBufferOffset() override { return 0; }
     size_t write(uint8_t) override { return 1; }
