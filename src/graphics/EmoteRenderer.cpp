@@ -31,6 +31,14 @@ size_t utf8CharLen(uint8_t c)
     return 1;
 }
 
+// Bytes the UTF-8 char at s[pos] occupies, clamped to what actually remains. A truncated multi-byte
+// lead (e.g. a lone 0xF0) near the end otherwise makes a walker read past the buffer - the payload of
+// a TEXT message is opaque bytes, so such truncated sequences are attacker-reachable.
+static inline size_t utf8CharLenClamped(const char *s, size_t pos, size_t len)
+{
+    return std::min(utf8CharLen(static_cast<uint8_t>(s[pos])), len - pos);
+}
+
 static inline bool isPossibleEmoteLead(uint8_t c)
 {
     // All supported emoji labels in emotes.cpp are currently in these UTF-8 lead ranges.
@@ -209,7 +217,7 @@ static LineMetrics analyzeLineInternal(OLEDDisplay *display, const char *line, s
             continue;
         }
 
-        const size_t charLen = utf8CharLen(static_cast<uint8_t>(line[i]));
+        const size_t charLen = utf8CharLenClamped(line, i, lineLen);
         if (display)
             metrics.width += getUtf8ChunkWidth(display, line + i, charLen);
         i += charLen;
@@ -257,7 +265,7 @@ static int appendTextSpanAndMeasure(OLEDDisplay *display, int cursorX, int fontY
     while (pos < len) {
         size_t chunkLen = 0;
         while (pos + chunkLen < len) {
-            const size_t charLen = utf8CharLen(static_cast<uint8_t>(text[pos + chunkLen]));
+            const size_t charLen = utf8CharLenClamped(text, pos + chunkLen, len);
             if (chunkLen + charLen >= sizeof(chunk))
                 break;
             chunkLen += charLen;
@@ -328,7 +336,7 @@ size_t truncateToWidth(OLEDDisplay *display, const char *line, char *out, size_t
                 continue;
             }
 
-            const size_t charLen = utf8CharLen(static_cast<uint8_t>(line[i]));
+            const size_t charLen = utf8CharLenClamped(line, i, lineLen);
             tokenWidth = getUtf8ChunkWidth(display, line + i, charLen);
             advance = charLen;
         }
@@ -417,11 +425,11 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, 
             if (findEmoteAt(line, lineLen, next, nextMatchLen, emoteSet, emoteCount) != nullptr)
                 break;
 
-            next += utf8CharLen(static_cast<uint8_t>(line[next]));
+            next += utf8CharLenClamped(line, next, lineLen);
         }
 
         if (next == i)
-            next += utf8CharLen(static_cast<uint8_t>(line[i]));
+            next += utf8CharLenClamped(line, i, lineLen);
 
         cursorX = appendTextSpanAndMeasure(display, cursorX, fontY, line + i, next - i, true, fauxBold && inBold);
         i = next;
