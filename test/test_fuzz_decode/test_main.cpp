@@ -22,7 +22,12 @@
 
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/admin.pb.h"
+#include "mesh/generated/meshtastic/channel.pb.h"
+#include "mesh/generated/meshtastic/config.pb.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#include "mesh/generated/meshtastic/mesh_beacon.pb.h"
+#include "mesh/generated/meshtastic/module_config.pb.h"
+#include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/storeforward.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "meshUtils.h"
@@ -75,6 +80,12 @@ union AnyMsg {
     meshtastic_Routing routing;
     meshtastic_AdminMessage adminMessage;
     meshtastic_StoreAndForward storeAndForward;
+    meshtastic_MeshBeacon meshBeacon;
+    meshtastic_ServiceEnvelope serviceEnvelope;
+    meshtastic_ModuleConfig moduleConfig;
+    meshtastic_Config config;
+    meshtastic_Channel channel;
+    meshtastic_ChannelSettings channelSettings;
 };
 
 struct FuzzType {
@@ -94,6 +105,12 @@ static const FuzzType FUZZ_TYPES[] = {
     {"Routing", &meshtastic_Routing_msg},
     {"AdminMessage", &meshtastic_AdminMessage_msg},
     {"StoreAndForward", &meshtastic_StoreAndForward_msg},
+    {"MeshBeacon", &meshtastic_MeshBeacon_msg},           // beacon offer: char[101] message + PSK-bearing ChannelSettings
+    {"ServiceEnvelope", &meshtastic_ServiceEnvelope_msg}, // MQTT downlink wrapper - unusual (non-RF) ingress
+    {"ModuleConfig", &meshtastic_ModuleConfig_msg},       // admin set_module_config payload union
+    {"Config", &meshtastic_Config_msg},                   // admin set_config payload union
+    {"Channel", &meshtastic_Channel_msg},                 // admin set_channel payload
+    {"ChannelSettings", &meshtastic_ChannelSettings_msg},
 };
 static const size_t NUM_FUZZ_TYPES = sizeof(FUZZ_TYPES) / sizeof(FUZZ_TYPES[0]);
 

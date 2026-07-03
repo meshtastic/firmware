@@ -12,6 +12,16 @@
 //   Group E2  NodeInfoModule handler over arbitrary User structs
 //   Group E3  TraceRoute route-processing over adversarial RouteDiscovery (route/snr count edges)
 //   Group E4  MeshService phone-forward gate (nested-string validation)
+//   Group E5  AdminModule dispatch over adversarial AdminMessage (local from==0, setter/node-op tags)
+//   Group E6  MeshBeaconListenerModule handler over adversarial MeshBeacon (un-terminated message, offer PSK)
+//   Group E7  NodeDB::updateUser / updateFrom over adversarial nodeId + User / MeshPacket
+//
+// Handler-path coverage of the remaining ProtobufModule handlers (Position, the Telemetry family,
+// NeighborInfo, StoreForward, KeyVerification) is intentionally NOT added here: their constructors
+// pull in globals this fixture does not stand up (nodeStatus, GPS, disk-backed state), so driving
+// them would test the fixture, not the parser. Those message types are instead fuzzed at the decode
+// level in test/test_fuzz_decode (the extended FUZZ_TYPES table), which is where their untrusted-input
+// surface actually lives.
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -25,12 +35,17 @@
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
+#include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/TraceRouteModule.h"
 #include <cstdio>
 #include <cstring>
 #include <pb_decode.h>
 #include <vector>
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum REMOTE_NODE = 0x0B0B0B0B;
@@ -96,15 +111,30 @@ class MockNodeDB : public NodeDB
 
 static MockNodeDB *mockNodeDB = nullptr;
 
+// MockMeshService - the admin/node-op handlers reach `service` for client notifications (the
+// protected-node-cap warning path). Release any notification straight back to the pool so 6000
+// iterations can't leak it. Mirrors test/test_admin_radio.
+class MockMeshService : public MeshService
+{
+  public:
+    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
+};
+
+static MockMeshService *mockService = nullptr;
+
 void setUp(void)
 {
     config = meshtastic_LocalConfig_init_zero;
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
     owner = meshtastic_User_init_zero;
 
     mockNodeDB = new MockNodeDB();
     mockNodeDB->clearTestNodes();
     nodeDB = mockNodeDB;
     myNodeInfo.my_node_num = LOCAL_NODE;
+
+    mockService = new MockMeshService();
+    service = mockService;
 
     channels.initDefaults();
     channels.onConfigChanged();
@@ -115,6 +145,10 @@ void tearDown(void)
     delete mockNodeDB;
     mockNodeDB = nullptr;
     nodeDB = nullptr;
+
+    service = nullptr;
+    delete mockService;
+    mockService = nullptr;
 }
 
 // ===========================================================================
@@ -368,6 +402,275 @@ void test_E4_phone_forward_gate(void)
     }
 }
 
+// ===========================================================================
+// Group E5 - AdminModule dispatch over adversarial AdminMessage
+// ===========================================================================
+// The shim is named AdminModuleTestShim to inherit the friendship AdminModule.h declares for that
+// exact name - that is how we reach the protected handler, flip hasOpenEditTransaction, and drain
+// myReply. (Separate translation unit from the identically-named shims in test_admin_radio /
+// test_mesh_beacon, so no ODR clash.)
+class AdminModuleTestShim : public AdminModule
+{
+  public:
+    using AdminModule::handleReceivedProtobuf;
+    // Defer persistence: with an "open edit transaction" saveChanges() is a pure no-op - no
+    // service->reloadConfig / saveToDisk, and no reboot() - so every setter exercises the in-RAM
+    // parse/dispatch/validation logic without disk or reboot side effects.
+    void deferSaves() { hasOpenEditTransaction = true; }
+    // Setters take the error path (allocErrorResponse) which allocates from packetPool; drain it each
+    // iteration or the pool leaks under LSan.
+    void drainReply()
+    {
+        if (myReply) {
+            packetPool.release(myReply);
+            myReply = nullptr;
+        }
+    }
+};
+
+// Tags restricted to setters / node-list ops that stay within NodeDB + config + RTC. Deliberately
+// EXCLUDES:
+//   - process/filesystem side effects even with saves deferred: reboot*, shutdown, *factory_reset*,
+//     nodedb_reset, ota_request, enter_dfu_mode, delete_file, *_preferences (backup/restore),
+//     exit_simulator, begin/commit_edit_settings (would flip hasOpenEditTransaction back off);
+//   - get_* reply builders (drive un-mocked service reply paths);
+//   - set_owner (asserts the global nodeInfoModule via reloadOwner) and set_fixed_position (derefs the
+//     global positionModule) - both assume a fully-booted module graph this fixture does not stand up.
+//     Their meshtastic_User / meshtastic_Position payloads are already fuzzed by E2/E7 and by
+//     test/test_fuzz_decode.
+//   - set_channel: exercising it surfaced a pre-existing infinite recursion in Channels::getKey
+//     (Channels.cpp:241) - a secondary channel with an empty PSK whose primary is itself a
+//     secondary-with-empty-PSK recurses until the stack overflows. That is a Channels concern (a real
+//     crafted-set_channel crash, see the FINDINGS note at the end of this file), not the admin-dispatch
+//     surface E5 guards. Excluded here to keep E5 green; the channel/PSK layer has its own tests.
+// The inner config/module variants are likewise constrained below (LoRa-only config, non-beacon module
+// config) for the same reason. This is a scoped subset, not full dispatch-switch coverage.
+static const pb_size_t SAFE_ADMIN_TAGS[] = {
+    meshtastic_AdminMessage_set_config_tag,        meshtastic_AdminMessage_set_module_config_tag,
+    meshtastic_AdminMessage_set_favorite_node_tag, meshtastic_AdminMessage_remove_favorite_node_tag,
+    meshtastic_AdminMessage_set_ignored_node_tag,  meshtastic_AdminMessage_remove_ignored_node_tag,
+    meshtastic_AdminMessage_toggle_muted_node_tag, meshtastic_AdminMessage_remove_by_nodenum_tag,
+    meshtastic_AdminMessage_add_contact_tag,       meshtastic_AdminMessage_remove_fixed_position_tag,
+    meshtastic_AdminMessage_set_time_only_tag,
+};
+static const size_t NUM_SAFE_ADMIN_TAGS = sizeof(SAFE_ADMIN_TAGS) / sizeof(SAFE_ADMIN_TAGS[0]);
+
+// ModuleConfig variants that handleSetModuleConfig applies with only in-RAM copy + (deferred) save.
+// Excludes mesh_beacon, whose handler derefs the global meshBeaconBroadcastModule.
+static const pb_size_t SAFE_MODULE_CONFIG_TAGS[] = {
+    meshtastic_ModuleConfig_mqtt_tag,
+    meshtastic_ModuleConfig_serial_tag,
+    meshtastic_ModuleConfig_external_notification_tag,
+    meshtastic_ModuleConfig_store_forward_tag,
+    meshtastic_ModuleConfig_range_test_tag,
+    meshtastic_ModuleConfig_telemetry_tag,
+    meshtastic_ModuleConfig_canned_message_tag,
+    meshtastic_ModuleConfig_audio_tag,
+    meshtastic_ModuleConfig_remote_hardware_tag,
+    meshtastic_ModuleConfig_neighbor_info_tag,
+    meshtastic_ModuleConfig_ambient_lighting_tag,
+    meshtastic_ModuleConfig_detection_sensor_tag,
+    meshtastic_ModuleConfig_paxcounter_tag,
+};
+static const size_t NUM_SAFE_MODULE_CONFIG_TAGS = sizeof(SAFE_MODULE_CONFIG_TAGS) / sizeof(SAFE_MODULE_CONFIG_TAGS[0]);
+
+// A node number spanning the interesting edges (0, self, broadcast, arbitrary).
+static NodeNum fuzzNodeNum()
+{
+    switch (rngRange(4)) {
+    case 0:
+        return 0;
+    case 1:
+        return LOCAL_NODE;
+    case 2:
+        return NODENUM_BROADCAST;
+    default:
+        return rngNext();
+    }
+}
+
+// Build a wire-plausible-but-adversarial AdminMessage: size-bearing fields (pubkey, psk) stay within
+// capacity (as nanopb would enforce on decode) so we find real logic bugs, not fabricated OOB that
+// can't arrive over the air.
+static meshtastic_AdminMessage fuzzAdminMessage()
+{
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_zero;
+    r.which_payload_variant = SAFE_ADMIN_TAGS[rngRange(NUM_SAFE_ADMIN_TAGS)];
+    switch (r.which_payload_variant) {
+    case meshtastic_AdminMessage_set_config_tag:
+        // LoRa-only: the validated region/preset/channel-num path (the position variant would deref the
+        // global gps). use_preset is pinned true: with use_preset=false + bandwidth=0 the LoRa validator
+        // divides by zero (RadioInterface.cpp:1118, numFreqSlots==0) - a real crash this fixture would
+        // otherwise trip on every run. That divide-by-zero is RadioInterface's concern (see
+        // test_admin_radio's dedicated validateConfigLora coverage), not the admin-dispatch surface E5
+        // guards; pinning use_preset keeps E5 focused and green. See notes at the end of this file.
+        r.set_config.which_payload_variant = meshtastic_Config_lora_tag;
+        r.set_config.payload_variant.lora.region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
+        r.set_config.payload_variant.lora.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
+        r.set_config.payload_variant.lora.use_preset = true;
+        r.set_config.payload_variant.lora.channel_num = rngNext();
+        break;
+    case meshtastic_AdminMessage_set_module_config_tag:
+        // Non-beacon module variant (the beacon variant derefs the global meshBeaconBroadcastModule).
+        r.set_module_config.which_payload_variant = SAFE_MODULE_CONFIG_TAGS[rngRange(NUM_SAFE_MODULE_CONFIG_TAGS)];
+        break;
+    case meshtastic_AdminMessage_add_contact_tag:
+        r.add_contact.node_num = fuzzNodeNum();
+        r.add_contact.has_user = true;
+        r.add_contact.user = fuzzUser();
+        r.add_contact.should_ignore = (rngRange(2) == 0);
+        r.add_contact.manually_verified = (rngRange(2) == 0);
+        break;
+    case meshtastic_AdminMessage_remove_fixed_position_tag:
+        r.remove_fixed_position = (rngRange(2) == 0);
+        break;
+    case meshtastic_AdminMessage_set_time_only_tag:
+        r.set_time_only = rngNext();
+        break;
+    default:
+        // The remaining safe tags all share a uint32 nodenum union member (set/remove_favorite,
+        // set/remove_ignored, toggle_muted, remove_by_nodenum).
+        r.set_favorite_node = fuzzNodeNum();
+        break;
+    }
+    return r;
+}
+
+void test_E5_admin_dispatch_fuzz(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)(BASE_SEED ^ 0xE5));
+    rngSeed(BASE_SEED ^ 0xE5);
+
+    static AdminModuleTestShim admin; // static: MeshModule/OSThread lifetime, see the note in test_E2
+
+    // Seed the local node plus a couple of others for the node-list ops to target.
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->addNode(0x0C0C0C0C);
+
+    for (unsigned k = 0; k < 6000; k++) {
+        admin.deferSaves(); // re-assert each iteration: no disk / reboot regardless of the tag
+
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        mp.from = 0; // local BLE/USB/TCP client - bypasses the remote auth gates, reaches the switch
+        mp.to = LOCAL_NODE;
+        mp.id = rngNext();
+        mp.channel = (uint8_t)rngRange(8);
+        mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        mp.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+
+        meshtastic_AdminMessage r = fuzzAdminMessage();
+        // Contract: never crashes / no OOB regardless of the AdminMessage contents.
+        (void)admin.handleReceivedProtobuf(mp, &r);
+        admin.drainReply();
+    }
+    // NodeDB survived; our seed node is still present and the count never overran the cap.
+    TEST_ASSERT_NOT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->getNumMeshNodes() <= (size_t)MAX_NUM_NODES, "NodeDB overran MAX_NUM_NODES");
+}
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+// ===========================================================================
+// Group E6 - MeshBeaconListenerModule handler over adversarial MeshBeacon
+// ===========================================================================
+class MeshBeaconListenerModuleTestShim : public MeshBeaconListenerModule
+{
+  public:
+    using MeshBeaconListenerModule::handleReceivedProtobuf;
+};
+
+static meshtastic_MeshBeacon fuzzBeacon()
+{
+    meshtastic_MeshBeacon b = meshtastic_MeshBeacon_init_zero;
+    // message[101]: random prefix, and half the time NO NUL terminator, to stress the
+    // strnlen(b->message, sizeof-1) bound in the handler. Prefix avoids embedded NUL so the
+    // un-terminated case actually reaches the full buffer.
+    size_t n = rngRange(sizeof(b.message) + 4); // may exceed capacity
+    for (size_t i = 0; i < sizeof(b.message); i++)
+        b.message[i] = (i < n) ? (char)(1 + rngRange(255)) : '\0';
+    if (rngRange(2))
+        b.message[sizeof(b.message) - 1] = (char)(1 + rngRange(255)); // force un-terminated
+    b.has_offer_channel = (rngRange(2) == 0);
+    if (b.has_offer_channel) {
+        meshtastic_ChannelSettings &s = b.offer_channel;
+        size_t nameLen = rngRange(sizeof(s.name)); // NUL-terminated (wire-plausible), see set_channel note
+        for (size_t i = 0; i < sizeof(s.name); i++)
+            s.name[i] = (i < nameLen) ? (char)(1 + rngRange(255)) : '\0';
+        s.psk.size = rngRange(sizeof(s.psk.bytes) + 1);
+        for (size_t i = 0; i < s.psk.size; i++)
+            s.psk.bytes[i] = rngByte();
+    }
+    b.offer_region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
+    b.has_offer_preset = (rngRange(2) == 0);
+    b.offer_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
+    return b;
+}
+
+void test_E6_beacon_listener_fuzz(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)(BASE_SEED ^ 0xE6));
+    rngSeed(BASE_SEED ^ 0xE6);
+
+    static MeshBeaconListenerModuleTestShim beacon; // static: MeshModule lifetime, see the note in test_E2
+
+    for (unsigned k = 0; k < 6000; k++) {
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+        mp.from = fuzzNodeNum();
+        mp.to = NODENUM_BROADCAST;
+        mp.id = rngNext();
+        mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        mp.decoded.portnum = meshtastic_PortNum_MESH_BEACON_APP;
+
+        meshtastic_MeshBeacon b = fuzzBeacon();
+        // Contract: never over-reads message[] (the strnlen bound) and never crashes on any offer.
+        (void)beacon.handleReceivedProtobuf(mp, &b);
+    }
+    TEST_ASSERT_TRUE(true); // reaching here = no ASan fault across all iterations
+}
+#endif // !MESHTASTIC_EXCLUDE_BEACON
+
+// ===========================================================================
+// Group E7 - NodeDB::updateUser / updateFrom over adversarial nodeId + payloads
+// ===========================================================================
+// E2 fuzzes the NodeInfoModule handler; this drives the NodeDB mutators directly with adversarial
+// node numbers (0 / self / broadcast / arbitrary) - the path that stores untrusted identity/telemetry.
+void test_E7_nodedb_update_fuzz(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)(BASE_SEED ^ 0xE7));
+    rngSeed(BASE_SEED ^ 0xE7);
+
+    for (unsigned k = 0; k < 6000; k++) {
+        if (rngRange(2)) {
+            // updateUser: adversarial User (un-terminated strings, oversized-but-bounded pubkey) under
+            // an arbitrary node id and channel index.
+            meshtastic_User u = fuzzUser();
+            NodeNum id = fuzzNodeNum();
+            uint8_t ch = (uint8_t)rngRange(16);
+            (void)nodeDB->updateUser(id, u, ch);
+        } else {
+            // updateFrom: a decoded packet keyed on an arbitrary `from`, exercising the SNR/RSSI/hops
+            // ingestion with a random (often un-decodable) inner payload.
+            meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+            mp.from = fuzzNodeNum();
+            mp.to = (rngRange(2)) ? LOCAL_NODE : NODENUM_BROADCAST;
+            mp.id = rngNext();
+            mp.rx_snr = (float)((int)rngRange(60) - 30);
+            mp.rx_rssi = (int32_t)rngRange(256) - 128;
+            mp.hop_start = (uint8_t)rngRange(8);
+            mp.hop_limit = (uint8_t)rngRange(8);
+            mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+            mp.decoded.portnum = (meshtastic_PortNum)rngRange(80);
+            size_t n = rngRange(sizeof(mp.decoded.payload.bytes) + 1);
+            for (size_t i = 0; i < n; i++)
+                mp.decoded.payload.bytes[i] = rngByte();
+            mp.decoded.payload.size = n;
+            nodeDB->updateFrom(mp);
+        }
+    }
+    // DB stayed internally consistent (count never ran past capacity).
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->getNumMeshNodes() <= (size_t)MAX_NUM_NODES, "NodeDB overran MAX_NUM_NODES");
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -384,6 +687,17 @@ void setup()
 
     printf("\n=== Group E4: phone-forward gate ===\n");
     RUN_TEST(test_E4_phone_forward_gate);
+
+    printf("\n=== Group E5: Admin dispatch fuzz ===\n");
+    RUN_TEST(test_E5_admin_dispatch_fuzz);
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+    printf("\n=== Group E6: Beacon listener fuzz ===\n");
+    RUN_TEST(test_E6_beacon_listener_fuzz);
+#endif
+
+    printf("\n=== Group E7: NodeDB update fuzz ===\n");
+    RUN_TEST(test_E7_nodedb_update_fuzz);
 
     exit(UNITY_END());
 }
@@ -403,3 +717,23 @@ void setup()
 void loop() {}
 
 #endif
+
+// ---------------------------------------------------------------------------
+// FINDINGS (surfaced by Group E5 while developing it; both are pre-existing firmware crashes reachable
+// from an authorized admin - local from==0, admin channel, or PKC - i.e. remote DoS. E5 is scoped
+// around them so it stays green; each wants a real fix + a targeted regression case here afterwards.)
+//
+//   1. Integer divide-by-zero in LoRa config validation (SIGFPE).
+//      A set_config LoRaConfig with use_preset=false and bandwidth=0 reaches
+//      RadioInterface::checkOrClampConfigLora with check_bw==0, so freqSlotWidth==0
+//      (RadioInterface.cpp:1092), numFreqSlots rounds to 0, and `hash(name) % numFreqSlots`
+//      (RadioInterface.cpp:1118) divides by zero. E5 works around it by pinning use_preset=true.
+//      Fix: reject/clamp when freqSlotWidth or numFreqSlots would be 0.
+//
+//   2. Unbounded recursion / stack overflow in Channels::getKey (Channels.cpp:241).
+//      A SECONDARY channel with an empty PSK resolves its key via getKey(primaryIndex); if the primary
+//      is itself a secondary-with-empty-PSK (or the primary index points back into such a chain), the
+//      recursion never terminates and the stack overflows. Reachable via a crafted set_channel. E5
+//      excludes the set_channel tag entirely. Fix: iterate instead of recurse, or cap the hop / detect
+//      a non-primary target.
+// ---------------------------------------------------------------------------
