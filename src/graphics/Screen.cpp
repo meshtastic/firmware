@@ -2,9 +2,9 @@
 BaseUI
 
 Developed and Maintained By:
-- Ronald Garcia (HarukiToreda) – Lead development and implementation.
-- JasonP (Xaositek)  – Screen layout and icon design, UI improvements and testing.
-- TonyG (Tropho) – Project management, structural planning, and testing
+- Ronald Garcia (HarukiToreda) - Lead development and implementation.
+- JasonP (Xaositek)  - Screen layout and icon design, UI improvements and testing.
+- TonyG (Tropho) - Project management, structural planning, and testing
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -126,7 +126,7 @@ static inline void prepareFrameColorRegions()
 // "LOCKED" plus battery so the operator can see the device is alive and
 // charged without leaking any node/channel/message/position content.
 // Draw the LOCKED frame into the host-side framebuffer. Does NOT commit
-// to the panel — the caller is responsible for calling display->display()
+// to the panel - the caller is responsible for calling display->display()
 // once it has composited any overlays on top. Committing here would cause
 // visible flicker between "just LOCKED" and "LOCKED + banner overlay" when
 // the pairing-PIN special-case in updateUiFrame paints the overlay after
@@ -166,8 +166,8 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
         OLEDDisplay *display = screen->getDisplayDevice();
         // Paint LOCKED into the framebuffer WITHOUT committing. We commit
-        // exactly once at the bottom — after any overlay has been composed
-        // on top — so the panel never visibly transitions from "just LOCKED"
+        // exactly once at the bottom - after any overlay has been composed
+        // on top - so the panel never visibly transitions from "just LOCKED"
         // to "LOCKED + overlay" mid-frame. Committing twice per cycle was
         // the source of the H13 flicker.
         drawLockdownLockScreenIntoBuffer(display);
@@ -513,8 +513,21 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         static_cast<SSD1306Spi *>(dispdev)->setHorizontalOffset(32);
         LOG_INFO("SSD1306 init success");
     }
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||    \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
+#elif ARCH_PORTDUINO
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        if (portduino_config.displayPanel != no_screen) {
+            LOG_DEBUG("Make TFTDisplay!");
+            dispdev = new TFTDisplay(address.address, -1, -1, geometry,
+                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+        } else {
+            dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
+                                       (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+            isAUTOOled = true;
+            isI2cScreen = true;
+        }
+    }
+#elif USE_TFTDISPLAY
+    LOG_DEBUG("Make TFTDisplay!");
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
@@ -529,19 +542,6 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     isI2cScreen = true;
-#elif ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        if (portduino_config.displayPanel != no_screen) {
-            LOG_DEBUG("Make TFTDisplay!");
-            dispdev = new TFTDisplay(address.address, -1, -1, geometry,
-                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-        } else {
-            dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
-                                       (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-            isAUTOOled = true;
-            isI2cScreen = true;
-        }
-    }
 #else
     dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
                                (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -668,7 +668,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // 16-50 ms before the next ui->update() lands. Painting the
             // LOCKED frame now ensures the only thing the operator (or
             // someone over their shoulder) can see on wake is the redacted
-            // view. Gated on lockdown — non-lockdown builds keep the
+            // view. Gated on lockdown - non-lockdown builds keep the
             // previous frame as a UX cue that the display is just dimmed.
             // dispdev is dereferenced unguarded throughout this file (incl.
             // displayOff() just below), so no null check here.
@@ -798,7 +798,7 @@ void Screen::setup()
     // M20: e-ink panels physically retain the last-rendered image without
     // power, so a power-cycled lockdown handheld would keep showing
     // operator-identifying content (position, messages, node info) until
-    // the firmware's first natural refresh — which on e-ink can be seconds
+    // the firmware's first natural refresh - which on e-ink can be seconds
     // into boot. Force a full refresh to the LOCKED frame here, immediately
     // after the display is initialised and before any other rendering, so
     // the persistent pixels are wiped to the redacted view before an
@@ -852,8 +852,7 @@ void Screen::setup()
     dispdev->mirrorScreen();
 #else
     if (!config.display.flip_screen) {
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
+#if USE_TFTDISPLAY && !ARCH_PORTDUINO
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
@@ -891,7 +890,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !HAS_CST226SE
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !VARIANT_TOUCHSCREEN
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
@@ -1041,7 +1040,7 @@ int32_t Screen::runOnce()
     bool suppressRegionOnboard = false;
 #ifdef MESHTASTIC_LOCKDOWN
     // While lockdown is active and storage is still locked, config.lora.region
-    // is a deliberate UNSET placeholder — the real region lives in encrypted
+    // is a deliberate UNSET placeholder - the real region lives in encrypted
     // storage and is restored on unlock (see NodeDB's locked-boot path). Don't
     // pop the region picker over the lock screen: it would trap input, and the
     // operator can't set a region until they unlock anyway.
@@ -1479,7 +1478,7 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        //  No more adjustment — force stay on same index
+        //  No more adjustment - force stay on same index
         if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
@@ -1834,7 +1833,7 @@ void Screen::handleOnPress()
 void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
 {
     // Reverse-map an index to a stable name string keyed off FramePositions
-    // field names — so the pytest harness can assert `name=nodelist_nodes`
+    // field names - so the pytest harness can assert `name=nodelist_nodes`
     // without caring about how the positions were ordered this boot.
     const auto &p = framesetInfo.positions;
     const char *name = "unknown";

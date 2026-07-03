@@ -34,6 +34,7 @@
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
 
+#define HAS_SPI_TFT 1
 #define ILI9341_DRIVER
 #define TFT_HEIGHT 240
 #define TFT_WIDTH 320

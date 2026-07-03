@@ -174,7 +174,7 @@ const RegionInfo regions[] = {
     /*
        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
        https://standard.nbtc.go.th/getattachment/Standards/%E0%B8%A1%E0%B8%B2%E0%B8%95%E0%B8%A3%E0%B8%90%E0%B8%B2%E0%B8%99%E0%B8%97%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%97%E0%B8%84%E0%B8%99%E0%B8%B4%E0%B8%84%E0%B8%82%E0%B8%AD%E0%B8%87%E0%B9%80%E0%B8%84%E0%B8%A3%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%87%E0%B9%82%E0%B8%97%E0%B8%A3%E0%B8%84%E0%B8%A1%E0%B8%99%E0%B8%B2%E0%B8%84%E0%B8%A1/1033-2565.pdf.aspx?lang=th-TH
-       Thailand 920–925 MHz set max TX power to 27 dBm and enforce 10% duty cycle, aligned with NBTC regulations.
+       Thailand 920-925 MHz set max TX power to 27 dBm and enforce 10% duty cycle, aligned with NBTC regulations.
     */
     RDEF(TH, 920.0f, 925.0f, 10, 27, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
@@ -246,7 +246,7 @@ const RegionInfo regions[] = {
 
     /*
         ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 2m allocation: 144.000 - 146.000 MHz.
-        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        Power limit is the regulatory ceiling (1 W / 30 dBm) - individual hardware will cap below this
         via its own PA curve; the field here is just the legal upper bound.
 
         Default slot: 26 (144.510 MHz)
@@ -282,6 +282,33 @@ const RegionInfo regions[] = {
         https://www.arrl.org/band-plan
     */
     RDEF(ITU2_125CM, 220.0f, 225.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
+
+    /*
+        ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 70cm allocation: 430.000 - 440.000 MHz.
+        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        via its own PA curve; the field here is just the legal upper bound.
+
+        Default slot: 37 (433.650 MHz)
+    */
+    RDEF(ITU1_70CM, 430.0f, 440.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
+
+    /*
+        ITU Region 2 (Americas) amateur 70cm allocation: 420.000 - 450.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+        Note: Some countries do not allocate 420-430 MHz or 440-450 MHz. Check local law!
+
+        Default slot: 137 (433.650 MHz)
+    */
+    RDEF(ITU2_70CM, 420.0f, 450.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 137),
+
+    /*
+        ITU Region 3 (Asia/Pacific) amateur 70cm allocation: 430.000 - 450.000 MHz.
+        Typical admin rules allow well above 30 dBm for licensed operators.
+        Note: Some countries do not allocate 440-450 MHz. Check local law!
+
+        Default slot: 37 (433.650 MHz)
+    */
+    RDEF(ITU3_70CM, 430.0f, 450.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
@@ -605,6 +632,62 @@ const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     return r;
 }
 
+void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
+{
+    map = meshtastic_LoRaRegionPresetMap_init_zero;
+
+    const size_t maxGroups = sizeof(map.groups) / sizeof(map.groups[0]);
+    const size_t maxRegions = sizeof(map.region_groups) / sizeof(map.region_groups[0]);
+    const size_t maxPresets = sizeof(map.groups[0].presets) / sizeof(map.groups[0].presets[0]);
+
+    // Coalesce regions that share an identical preset list into one group. Two
+    // regions belong to the same group when they share the same RegionProfile
+    // (which owns the preset list + licensing) AND the same default preset.
+    // Keyed by profile pointer, not the preset-array pointer: PROFILE_NARROW and
+    // PROFILE_HAM_100KHZ share PRESETS_NARROW but differ in licensedOnly.
+    const RegionProfile *groupProfile[sizeof(map.groups) / sizeof(map.groups[0])] = {};
+
+    for (const RegionInfo *r = regions; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET; r++) {
+        // No room left to map any further region; once full we can't add more, so
+        // log once and stop. An incomplete map means clients won't constrain the
+        // omitted regions, so this must be discoverable rather than silent.
+        if (map.region_groups_count >= maxRegions) {
+            LOG_ERROR("Region preset map full at %u regions; remaining regions omitted", (unsigned)maxRegions);
+            break;
+        }
+
+        // Find the group this region belongs to, or create it.
+        int gi = -1;
+        for (pb_size_t g = 0; g < map.groups_count; g++) {
+            if (groupProfile[g] == r->profile && map.groups[g].default_preset == r->getDefaultPreset()) {
+                gi = g;
+                break;
+            }
+        }
+        if (gi < 0) {
+            if (map.groups_count >= maxGroups) {
+                // Out of group slots (should not happen for the current table). The
+                // region can't be advertised; skip it but make the gap visible.
+                LOG_ERROR("Region preset map out of group slots (%u); region %d omitted", (unsigned)maxGroups, r->code);
+                continue;
+            }
+            gi = map.groups_count++;
+            groupProfile[gi] = r->profile;
+            meshtastic_LoRaPresetGroup &grp = map.groups[gi];
+            grp.default_preset = r->getDefaultPreset();
+            grp.licensed_only = r->profile->licensedOnly;
+            grp.presets_count = 0;
+            for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++)
+                grp.presets[grp.presets_count++] = r->profile->presets[i];
+        }
+
+        // Map this region to its group (capacity checked at the top of the loop).
+        meshtastic_LoRaRegionPresets &rg = map.region_groups[map.region_groups_count++];
+        rg.region = r->code;
+        rg.group_index = (uint8_t)gi;
+    }
+}
+
 /**
  * Get duty cycle for current region. EU_866: 10% for routers, 2.5% for mobile.
  */
@@ -714,11 +797,12 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(meshtastic_MeshPacket *p)
     return delay;
 }
 
+// Node IDs and packet IDs are formatted as 0x%08x in logs, and !%08x in user-facing display.
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     std::string out =
-        DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
+        DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=%d", prefix, p->id,
                               p->from, p->to, p->transport_mechanism, p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
@@ -732,13 +816,13 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
             out += DEBUG_PORT.mt_sprintf(" PKI");
 
         if (s.source != 0)
-            out += DEBUG_PORT.mt_sprintf(" source=%08x", s.source);
+            out += DEBUG_PORT.mt_sprintf(" source=0x%08x", s.source);
 
         if (s.dest != 0)
-            out += DEBUG_PORT.mt_sprintf(" dest=%08x", s.dest);
+            out += DEBUG_PORT.mt_sprintf(" dest=0x%08x", s.dest);
 
         if (s.request_id)
-            out += DEBUG_PORT.mt_sprintf(" requestId=%0x", s.request_id);
+            out += DEBUG_PORT.mt_sprintf(" requestId=0x%08x", s.request_id);
 
         /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)

@@ -31,7 +31,7 @@
 #endif
 #endif
 
-// Internal alias used everywhere in code – do NOT redefine elsewhere.
+// Internal alias used everywhere in code - do NOT redefine elsewhere.
 #define MAX_MESSAGES_SAVED MESSAGE_HISTORY_LIMIT
 
 // Maximum text payload size per message in bytes.
@@ -68,14 +68,16 @@ struct StoredMessage {
     bool isBootRelative;  // true = millis()/1000 fallback; false = epoch/RTC absolute
     AckStatus ackStatus;  // Delivery status (only meaningful for our own sent messages)
 
-    // Text storage metadata — rebuilt from flash at boot
+    // Text storage metadata - rebuilt from flash at boot
     uint16_t textOffset; // Offset into global text pool (valid only after loadFromFlash())
     uint16_t textLength; // Length of text in bytes
+
+    bool xeddsaSigned; // true if packet carried a verified XEdDSA signature
 
     // Default constructor initializes all fields safely
     StoredMessage()
         : timestamp(0), sender(0), channelIndex(0), dest(0xffffffff), type(MessageType::BROADCAST), isBootRelative(false),
-          ackStatus(AckStatus::NONE), textOffset(0), textLength(0)
+          ackStatus(AckStatus::NONE), textOffset(0), textLength(0), xeddsaSigned(false)
     {
     }
 };

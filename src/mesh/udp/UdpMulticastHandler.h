@@ -72,12 +72,15 @@ class UdpMulticastHandler final
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
-            // Drop packets with spoofed local origin — no legitimate LAN node should send from=0 or our own nodeNum
+            // Drop packets with spoofed local origin - no legitimate LAN node should send from=0 or our own nodeNum
             if (isFromUs(&mp)) {
-                LOG_WARN("UDP packet with spoofed local from=0x%x, dropping", mp.from);
+                LOG_WARN("UDP packet with spoofed local from=0x%08x, dropping", mp.from);
                 return;
             }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
+            // Preserve the whole MeshPacket as received: while payload_variant is encrypted, `channel` is a hash (and is 0 for
+            // PKI DMs), so it must be copied verbatim for the router to attempt PKI/channel decryption. Keep
+            // pki_encrypted/public_key too so downstream auth/metadata can reflect PKI usage correctly.
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
             p->rx_snr = 0;
