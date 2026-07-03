@@ -75,6 +75,24 @@ bool SEN5XSensor::findModel()
     return true;
 }
 
+bool SEN5XSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
+{
+    LOG_INFO("SEN5X: probing sensor");
+
+    _bus = bus;
+    _address = address;
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    _port = port;
+    reClockI2C.setup(_bus, _port);
+#endif /* SEN5X_I2C_CLOCK_SPEED */
+
+    if (!findModel()) {
+        LOG_DEBUG("SEN5X: can't find SEN5X model");
+        return false;
+    }
+    return true;
+}
+
 bool SEN5XSensor::sendCommand(uint16_t command)
 {
     uint8_t nothing;
