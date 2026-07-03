@@ -6,7 +6,6 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
-#include <assert.h>
 #include <esp_event.h>
 #include <freertos/timers.h>
 
@@ -24,7 +23,10 @@ static void startWifiChannelTimer(uint16_t wifi_channel_switch_interval)
 
     WifiChanTimer =
         xTimerCreate("WifiChannelTimer", pdMS_TO_TICKS(wifi_channel_switch_interval * 10), pdTRUE, (void *)0, switchWifiChannel);
-    assert(WifiChanTimer);
+    if (!WifiChanTimer) {
+        LOG_WARN("Paxcounter could not create WiFi channel switch timer");
+        return;
+    }
     xTimerStart(WifiChanTimer, 0);
 }
 

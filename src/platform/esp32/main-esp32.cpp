@@ -67,6 +67,7 @@ static bool shouldReleaseBluetoothMemory()
     // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
     // ESP32 BLE controller memory for scanning.
     if (isPaxcounterActiveForBoot()) {
+        LOG_DEBUG("Skipping Bluetooth memory release because Paxcounter is active");
         return false;
     }
 
