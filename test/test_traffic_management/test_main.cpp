@@ -1633,27 +1633,16 @@ static void test_tm_fuzz_nodenum_blitz(void)
     printf("  seed=0x%llx\n", (unsigned long long)FUZZ_SEED);
     rngSeed(FUZZ_SEED);
 
-    // Activate every tracked window + the direct-response path.
+    // Activate the cache-tracked windows (the crafted-nodenum target). The nodeinfo direct-response
+    // path (nodeinfo_direct_response_max_hops) is left OFF: it calls service->sendToMesh, and driving
+    // that at fuzz volume needs a fully-wired MeshService/phone queue this fixture doesn't provide - the
+    // deterministic test_tm_nodeinfo_directResponse_* tests cover it with single packets instead.
     moduleConfig.traffic_management.rate_limit_window_secs = 60;
     moduleConfig.traffic_management.rate_limit_max_packets = 3;
     moduleConfig.traffic_management.unknown_packet_threshold = 4;
     moduleConfig.traffic_management.position_min_interval_secs = 300;
-    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
-    config.lora.config_ok_to_mqtt = true;
     installWellKnownPrimaryChannel();
-
-    // Router + service + a cached target node so the cache-hit nodeinfo response path is reachable.
-    static MockRouter tmRouter;
-    static bool wired = false;
-    if (!wired) {
-        tmRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
-        wired = true;
-    }
-    static MeshService tmService;
-    router = &tmRouter;
-    service = &tmService;
-    mockNodeDB->setCachedNode(kTargetNode);
 
     static TrafficManagementModuleTestShim module; // static: OSThread-derived (see note in test_fuzz_packets E2)
 
@@ -1719,8 +1708,6 @@ static void test_tm_fuzz_nodenum_blitz(void)
 
     // The cache never inspected more packets than we fed, and the run reached here without an ASan fault.
     TEST_ASSERT_TRUE_MESSAGE(module.getStats().packets_inspected <= ITERS, "packets_inspected overcounted");
-    router = nullptr;
-    service = nullptr;
 }
 } // namespace
 

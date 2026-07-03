@@ -574,8 +574,9 @@ void test_E5_admin_dispatch_fuzz(void)
         (void)admin.handleReceivedProtobuf(mp, &r);
         admin.drainReply();
     }
-    // NodeDB survived; our seed node is still present and the count never overran the cap.
-    TEST_ASSERT_NOT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
+    // Reaching here = no crash across all iterations. The node-list ops (set_ignored/add_contact) create
+    // nodes, so the DB may fill and evict our seed nodes - that's legitimate; the invariant is only that
+    // the count never overran the cap.
     TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->getNumMeshNodes() <= (size_t)MAX_NUM_NODES, "NodeDB overran MAX_NUM_NODES");
 }
 
