@@ -360,10 +360,16 @@ void MessageStore::clearAllMessages()
     resetMessagePool();
 
 #ifdef FSCom
-    concurrency::LockGuard guard(spiLock);
     SafeFile f(filename.c_str(), false);
     uint8_t count = 0;
-    f.write(&count, 1); // write "0 messages"
+
+    // SafeFile already does its own spiLock in its constructor and close().
+    // Avoid nesting spiLocks, as this will hang until watchdog reset!
+    {
+        concurrency::LockGuard guard(spiLock);
+        f.write(&count, 1); // write "0 messages"
+    }
+
     f.close();
 #endif
 
