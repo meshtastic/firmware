@@ -907,6 +907,18 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM);
         break;
 
+    case SET_REGION_ITU1_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU1_70CM);
+        break;
+
+    case SET_REGION_ITU2_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM);
+        break;
+
+    case SET_REGION_ITU3_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM);
+        break;
+
     // Roles
     case SET_ROLE_CLIENT:
         applyDeviceRole(meshtastic_Config_DeviceConfig_Role_CLIENT);
