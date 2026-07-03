@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include "meshUtils.h"
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "GeofenceModule.h"
@@ -177,7 +178,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     auto &p = mp.decoded;
-    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
+    LOG_INFO("Received waypoint msg from=0x%08x, id=0x%08x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
 #if MESHTASTIC_EXCLUDE_WAYPOINT
     (void)mp;
@@ -266,6 +267,11 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         return;
     const meshtastic_Waypoint &wp = entry->waypoint;
 
+    // Sanitize before these reach the OLED renderer (defense-in-depth vs PB_VALIDATE_UTF8).
+    sanitizeUtf8(wp.name, sizeof(wp.name));
+    sanitizeUtf8(wp.description, sizeof(wp.description));
+
+    // Get timestamp info. Will pass as a field to drawColumns
     char lastStr[20];
     getTimeAgoStr(WaypointStore::age(*entry), lastStr, sizeof(lastStr));
 

@@ -372,11 +372,11 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
 
 void InkHUD::MapApplet::onRender(bool full)
 {
-    // Map center is always the node centroid — tiles are background only.
+    // Map center is always the node centroid - tiles are background only.
     getMapCenter(&latCenter, &lngCenter);
     calculateAllMarkers();
 
-    // Show placeholder only if we have no position at all — no tiles, no own node
+    // Show placeholder only if we have no position at all - no tiles, no own node
     if (!enoughMarkers() && !centerIsOurNode) {
         printAt(X(0.5), Y(0.5) - (getFont().lineHeight() / 2), "Node positions", CENTER, MIDDLE);
         printAt(X(0.5), Y(0.5) + (getFont().lineHeight() / 2), "will appear here", CENTER, MIDDLE);
@@ -421,7 +421,7 @@ void InkHUD::MapApplet::onRender(bool full)
         float chosenMetersToPx = metersToPxFit;                 // fallback: fit-scale (may downsample)
 
         if (s_zoomLocked && s_lockedZoom >= 0) {
-            // Use locked zoom at native 1:1 scale — never zoom out for new nodes
+            // Use locked zoom at native 1:1 scale - never zoom out for new nodes
             chosenZoom = s_lockedZoom;
             float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << chosenZoom))) * cosf(latRad);
             chosenMetersToPx = 1.0f / mpp;
@@ -435,7 +435,7 @@ void InkHUD::MapApplet::onRender(bool full)
                 float mpp = (2.0f * M_PI * R / (256.0f * (float)(1 << zooms[zi]))) * cosf(latRad);
                 float nativeMetersToPx = 1.0f / mpp;
                 if (nativeMetersToPx <= metersToPxFit) {
-                    // This zoom at native scale shows all nodes — use it (highest detail that fits)
+                    // This zoom at native scale shows all nodes - use it (highest detail that fits)
                     chosenZoom = zooms[zi];
                     chosenMetersToPx = nativeMetersToPx;
                     break;
@@ -763,7 +763,7 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
     // When zoom is locked, keep center exactly on own node / zero-hop centroid.
     // Skip bounding-box shift so new distant nodes don't move the zoomed view.
     if (s_zoomLocked) {
-        // Own node has no position — re-center on zero-hop centroid instead.
+        // Own node has no position - re-center on zero-hop centroid instead.
         if (!centerIsOurNode) {
             uint32_t count = 0;
             float xAvg = 0, yAvg = 0, zAvg = 0;
@@ -1047,7 +1047,7 @@ void InkHUD::MapApplet::calculateAllMarkers()
         if (node->num == nodeDB->getNodeNum())
             continue;
 
-        // Skip nodes with unknown hop count — partial info, not useful to plot
+        // Skip nodes with unknown hop count - partial info, not useful to plot
         if (!node->has_hops_away)
             continue;
 

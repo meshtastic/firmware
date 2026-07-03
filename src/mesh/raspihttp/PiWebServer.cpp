@@ -46,7 +46,7 @@ Author: Marc Philipp Hammermann
 mail:   marchammermann@googlemail.com
 
 */
-// Mirrors the guard in PiWebServer.h — see comment there. macOS Homebrew
+// Mirrors the guard in PiWebServer.h - see comment there. macOS Homebrew
 // provides ulfius + deps; Linux pulls them via apt. Either way, this
 // translation unit only compiles when the headers are present.
 #ifdef ARCH_PORTDUINO

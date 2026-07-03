@@ -263,11 +263,12 @@ void test_XEdDSA_max_payload(void)
     TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, payload, len, signature));
 }
 
-// Signing the same message twice yields signatures that both verify. This XEdDSA implementation is
-// deterministic in practice (the two signatures are typically byte-identical, even though
-// HardwareRNG::fill provides real entropy on this platform), so we assert only the security-relevant
-// property — every produced signature verifies — rather than asserting (non-)determinism.
-void test_XEdDSA_repeated_sign_verifies(void)
+// XEdDSA is a randomized (hedged) scheme: the nonce mixes in Z, caller-supplied randomness
+// (Signal spec; meshtastic/Crypto#3). CryptoEngine::xeddsa_sign seeds Z from the hardware RNG, so
+// signing the same message twice yields *different* signatures that both verify. This pins that
+// the randomization is actually wired through end to end - if signing regresses to deterministic
+// (Z dropped by the library, or xeddsa_sign stops seeding entropy), the inequality assertion fails.
+void test_XEdDSA_repeated_sign_is_randomized(void)
 {
     uint8_t pub[32], priv[32], sig1[64], sig2[64];
     uint8_t message[] = "same message";
@@ -277,6 +278,8 @@ void test_XEdDSA_repeated_sign_verifies(void)
     TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sig1));
     TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, message, sizeof(message), sig2));
 
+    TEST_ASSERT_TRUE_MESSAGE(memcmp(sig1, sig2, sizeof(sig1)) != 0,
+                             "signatures must differ - XEdDSA Z randomization is not wired through");
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, message, sizeof(message), sig1));
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, message, sizeof(message), sig2));
 }
@@ -326,7 +329,7 @@ void setup()
     RUN_TEST(test_XEdDSA_empty_key_sign_fails);
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
-    RUN_TEST(test_XEdDSA_repeated_sign_verifies);
+    RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
     exit(UNITY_END()); // stop unit testing
 }
 

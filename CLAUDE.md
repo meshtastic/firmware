@@ -2,12 +2,12 @@
 
 > **TL;DR**
 >
-> |                |                                                                    |
-> | -------------- | ------------------------------------------------------------------ |
-> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED) |
-> | Hardware tests | `./mcp-server/run-tests.sh`                                        |
-> | Format         | `trunk fmt`                                                        |
-> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `AGENTS.md`        |
+> |                |                                                                                                                        |
+> | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                                                     |
+> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout) |
+> | Format         | `trunk fmt`                                                                                                            |
+> | Mirror docs    | `.github/copilot-instructions.md` (canonical) · `AGENTS.md`                                                            |
 >
 > **Need this? It's here.**
 >
