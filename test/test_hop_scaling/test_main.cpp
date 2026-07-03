@@ -107,6 +107,26 @@ static uint32_t makeDistributedNodeId(uint32_t baseId, uint32_t ordinal, uint32_
 }
 
 // ---------------------------------------------------------------------------
+// Deterministic RNG (seeded LCG, Knuth MMIX) - a failing fuzz iteration reproduces from the printed
+// seed. Mirrors the generators in test/test_fuzz_packets and test/test_fuzz_decode.
+// ---------------------------------------------------------------------------
+static uint64_t g_rng = 0;
+static void rngSeed(uint64_t s)
+{
+    g_rng = s ? s : 0x9E3779B97F4A7C15ULL;
+}
+static uint32_t rngNext()
+{
+    g_rng = g_rng * 6364136223846793005ULL + 1442695040888963407ULL;
+    return (uint32_t)(g_rng >> 32);
+}
+static uint32_t rngRange(uint32_t n)
+{
+    return n ? (rngNext() % n) : 0;
+}
+static constexpr uint64_t FUZZ_SEED = 0x00F0B5CA1EULL;
+
+// ---------------------------------------------------------------------------
 // Helpers - mesh topology builders
 // ---------------------------------------------------------------------------
 
@@ -661,6 +681,59 @@ static void test_memory_layout()
 // Unity setup / teardown / main
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Fuzz - crafted-nodenum blitz of the hop histogram
+// ---------------------------------------------------------------------------
+// The scenario tests above check the scaling *math* with realistic topologies. This one is adversarial:
+// it floods samplePacketForHistogram with node numbers chosen to maximize table churn (a tiny colliding
+// pool, boundary values, broad random) plus denominator swings and hourly rolls, and asserts the fixed
+// 128-entry table's invariants hold on every step. hopCount is kept in 0..MAX_HOP: the wire caps hops at
+// 7 (3-bit protobuf field), so out-of-range hops are not a reachable input. Runs under ASan/LSan.
+void test_fuzz_nodenum_blitz(void)
+{
+    TEST_MSG_FMT("=== Fuzz: crafted-nodenum histogram blitz (seed=0x%llx) ===", (unsigned long long)FUZZ_SEED);
+    rngSeed(FUZZ_SEED);
+
+    static HopScalingTestShim shim; // static: OSThread-derived (Unity longjmp skips dtors on a failed assert)
+    shim.clear();
+    shim.setHistogramDenominator(HopScalingModule::DENOM_MIN); // sample-all: maximum admission / churn
+
+    const NodeNum edges[] = {0u, 0xFFFFFFFFu, kLocalNode, NODENUM_BROADCAST, 1u};
+    const size_t numEdges = sizeof(edges) / sizeof(edges[0]);
+
+    for (unsigned k = 0; k < 40000; k++) {
+        NodeNum id;
+        switch (rngRange(4)) {
+        case 0:
+            id = edges[rngRange(numEdges)];
+            break; // boundary node numbers
+        case 1:
+            id = rngNext() & 0xFFu;
+            break; // tiny pool: forces hash reuse (update path) and collisions
+        default:
+            id = ((NodeNum)rngNext() << 1) ^ rngNext();
+            break; // broad random
+        }
+        uint8_t hop = (uint8_t)rngRange(HopScalingModule::MAX_HOP + 1); // 0..7, wire-bounded
+
+        shim.samplePacketForHistogram(id, hop);
+
+        // Occasionally swing the sampling denominator and roll the hour to drive trim / eviction /
+        // the hourly rolling + scaling under sustained churn.
+        if (rngRange(256) == 0)
+            shim.setHistogramDenominator((uint8_t)(HopScalingModule::DENOM_MIN + rngRange(HopScalingModule::DENOM_MAX)));
+        if (rngRange(512) == 0) {
+            mockTime += ONE_HOUR_MS;
+            shim.rollHourTest();
+        }
+
+        // Invariants that must hold on every step regardless of input.
+        TEST_ASSERT_TRUE_MESSAGE(shim.getEntryCount() <= HopScalingModule::CAPACITY, "histogram overran CAPACITY");
+        TEST_ASSERT_TRUE_MESSAGE(shim.getFillPercentage() <= 100, "fill percentage exceeded 100");
+        TEST_ASSERT_TRUE_MESSAGE(shim.getLastRequiredHop() <= HOP_MAX, "required-hop recommendation exceeded HOP_MAX");
+    }
+}
+
 void setUp(void)
 {
     if (!mockNodeDB)
@@ -711,6 +784,9 @@ void setup()
     RUN_TEST(test_filtering_denom_hold_counts_down);
     RUN_TEST(test_filtering_denom_steps_down_gradually);
     RUN_TEST(test_full_at_denom_max_drops_entry);
+
+    printf("\n=== Fuzz ===\n");
+    RUN_TEST(test_fuzz_nodenum_blitz);
 
     printf("\n=== Summary ===\n");
     RUN_TEST(test_memory_layout);
