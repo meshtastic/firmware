@@ -35,28 +35,8 @@
 #include <cstring>
 #include <pb_decode.h>
 
-// ---------------------------------------------------------------------------
-// Deterministic RNG - seeded 64-bit LCG (Knuth MMIX constants). No rand()/time so a failing
-// iteration reproduces exactly from the printed base seed.
-// ---------------------------------------------------------------------------
-static uint64_t g_rng = 0;
-static void rngSeed(uint64_t s)
-{
-    g_rng = s ? s : 0x9E3779B97F4A7C15ULL;
-}
-static uint32_t rngNext()
-{
-    g_rng = g_rng * 6364136223846793005ULL + 1442695040888963407ULL;
-    return (uint32_t)(g_rng >> 32);
-}
-static uint8_t rngByte()
-{
-    return (uint8_t)(rngNext() & 0xFF);
-}
-static uint32_t rngRange(uint32_t n) // uniform-ish in [0, n)
-{
-    return n ? (rngNext() % n) : 0;
-}
+// Deterministic RNG (rngSeed/rngNext/rngByte/rngRange) - shared seeded LCG.
+#include "support/DeterministicRng.h"
 
 static constexpr uint64_t BASE_SEED = 0x00C0FFEEULL;
 static constexpr unsigned DECODE_ITERS = 3000; // per type, per pass (ASan-instrumented, keep bounded)

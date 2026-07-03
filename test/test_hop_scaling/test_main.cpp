@@ -106,24 +106,8 @@ static uint32_t makeDistributedNodeId(uint32_t baseId, uint32_t ordinal, uint32_
     return baseId + salt + (ordinal * 33u);
 }
 
-// ---------------------------------------------------------------------------
-// Deterministic RNG (seeded LCG, Knuth MMIX) - a failing fuzz iteration reproduces from the printed
-// seed. Mirrors the generators in test/test_fuzz_packets and test/test_fuzz_decode.
-// ---------------------------------------------------------------------------
-static uint64_t g_rng = 0;
-static void rngSeed(uint64_t s)
-{
-    g_rng = s ? s : 0x9E3779B97F4A7C15ULL;
-}
-static uint32_t rngNext()
-{
-    g_rng = g_rng * 6364136223846793005ULL + 1442695040888963407ULL;
-    return (uint32_t)(g_rng >> 32);
-}
-static uint32_t rngRange(uint32_t n)
-{
-    return n ? (rngNext() % n) : 0;
-}
+// Deterministic RNG (rngSeed/rngNext/rngRange) - shared seeded LCG.
+#include "support/DeterministicRng.h"
 static constexpr uint64_t FUZZ_SEED = 0x00F0B5CA1EULL;
 
 // ---------------------------------------------------------------------------

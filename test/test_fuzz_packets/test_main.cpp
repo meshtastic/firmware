@@ -50,27 +50,8 @@
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum REMOTE_NODE = 0x0B0B0B0B;
 
-// ---------------------------------------------------------------------------
-// Deterministic RNG (seeded LCG)
-// ---------------------------------------------------------------------------
-static uint64_t g_rng = 0;
-static void rngSeed(uint64_t s)
-{
-    g_rng = s ? s : 0x9E3779B97F4A7C15ULL;
-}
-static uint32_t rngNext()
-{
-    g_rng = g_rng * 6364136223846793005ULL + 1442695040888963407ULL;
-    return (uint32_t)(g_rng >> 32);
-}
-static uint8_t rngByte()
-{
-    return (uint8_t)(rngNext() & 0xFF);
-}
-static uint32_t rngRange(uint32_t n)
-{
-    return n ? (rngNext() % n) : 0;
-}
+// Deterministic RNG (rngSeed/rngNext/rngByte/rngRange) - shared seeded LCG.
+#include "support/DeterministicRng.h"
 static constexpr uint64_t BASE_SEED = 0x00BADF00DULL;
 
 // ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 #include "modules/TrafficManagementModule.h"
+#include "support/DeterministicRng.h" // rngSeed/rngNext/rngRange - shared seeded LCG
 #include <climits>
 #include <cstring>
 #include <memory>
@@ -1608,24 +1609,10 @@ static void test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp(void)
 // handleReceived (and alterReceived) with packets whose from/to/id/portnum/payload/hops are crafted -
 // heavy on a tiny node-number pool so the fixed-size unified cache (rate/unknown/position counters,
 // packed 6-bit fields) churns and evicts hard - while advancing the virtual clock across the rate,
-// unknown, and position windows. Router + MeshService + a cached node are wired so the direct-nodeinfo
-// -response path (router->allocForSending + service->sendToMesh) is exercised too. Contract: no crash /
-// no OOB on the cache regardless of input; counters stay bounded. Runs under ASan/LSan. hop_start/
-// hop_limit stay in 0..7 (the wire caps hops at 7). Reproduces from the printed seed.
-static uint64_t g_rng = 0;
-static void rngSeed(uint64_t s)
-{
-    g_rng = s ? s : 0x9E3779B97F4A7C15ULL;
-}
-static uint32_t rngNext()
-{
-    g_rng = g_rng * 6364136223846793005ULL + 1442695040888963407ULL;
-    return (uint32_t)(g_rng >> 32);
-}
-static uint32_t rngRange(uint32_t n)
-{
-    return n ? (rngNext() % n) : 0;
-}
+// unknown, and position windows. The nodeinfo direct-response path is deliberately left off (see the
+// note at the top of the test body). Contract: no crash / no OOB on the cache regardless of input;
+// counters stay bounded. Runs under ASan/LSan. hop_start/hop_limit stay in 0..7 (the wire caps hops at
+// 7). Reproduces from the printed seed.
 static constexpr uint64_t FUZZ_SEED = 0x00D07E5701ULL;
 
 static void test_tm_fuzz_nodenum_blitz(void)
