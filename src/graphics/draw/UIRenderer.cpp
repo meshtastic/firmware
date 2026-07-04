@@ -1278,7 +1278,12 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     const char *shortName = owner.short_name ? owner.short_name : "";
     char combinedName[96];
 #if defined(GAT562)
-    snprintf(combinedName, sizeof(combinedName), "%s", getDeviceName());
+    const char *bleName = getDeviceName();
+    if (longName[0] && strcmp(longName, bleName) != 0) {
+        snprintf(combinedName, sizeof(combinedName), "%s", longName);
+    } else {
+        snprintf(combinedName, sizeof(combinedName), "%s", bleName);
+    }
 #else
     if (longName[0] && shortName[0]) {
         snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortName);

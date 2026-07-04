@@ -257,22 +257,6 @@ Router *router = NULL; // Users of router don't care what sort of subclass imple
 
 const char *firmware_version = optstr(APP_VERSION_SHORT);
 
-#if defined(GAT562)
-static bool isGat562DefaultDeviceName(const char *name, const char *suffix)
-{
-    if (!name || !name[0])
-        return false;
-
-    char defaultName[20];
-    snprintf(defaultName, sizeof(defaultName), "GAT562_%s", suffix);
-    if (strcmp(name, defaultName) == 0)
-        return true;
-
-    snprintf(defaultName, sizeof(defaultName), "GAT562 %s", suffix);
-    return strcmp(name, defaultName) == 0;
-}
-#endif
-
 const char *getDeviceName()
 {
     uint8_t dmac[6];
@@ -282,13 +266,7 @@ const char *getDeviceName()
     // Meshtastic_ab3c or Shortname_abcd
     static char name[40];
 #if defined(GAT562)
-    char suffix[5];
-    snprintf(suffix, sizeof(suffix), "%02x%02x", dmac[4], dmac[5]);
-    if (owner.long_name[0] && !isGat562DefaultDeviceName(owner.long_name, suffix)) {
-        snprintf(name, sizeof(name), "%s", owner.long_name);
-    } else {
-        snprintf(name, sizeof(name), "GAT562_%s", suffix);
-    }
+    snprintf(name, sizeof(name), "GAT562_%02x%02x", dmac[4], dmac[5]);
     return name;
 #else
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
