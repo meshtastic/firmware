@@ -42,7 +42,6 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
         int32_t longitude_i = 0;
         uint32_t expire = 0;
         uint32_t icon = 0;
-        bool has_geofence = false;
         char name[31] = {};
         char description[101] = {};
     };
@@ -71,7 +70,6 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
     std::string coordinateText(const WaypointCard &entry, bool landscape);
     std::string distanceText(const WaypointCard &entry);
     std::string expireText(uint32_t expireEpoch);
-    std::string geofenceText(const WaypointCard &entry);
     std::string utf8FromCodepoint(uint32_t codepoint);
     bool canRenderWaypointIcon(const WaypointCard &entry, std::string *mapped = nullptr);
     uint8_t fallbackBadgeNumber(const WaypointCard &entry);

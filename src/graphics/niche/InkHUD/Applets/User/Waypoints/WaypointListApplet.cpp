@@ -349,9 +349,7 @@ std::string InkHUD::WaypointListApplet::expireText(uint32_t expireEpoch)
 
     const uint32_t left = expireEpoch - now;
     char buf[12];
-    if (left < 60)
-        snprintf(buf, sizeof(buf), "%lus", (unsigned long)left);
-    else if (left < 3600)
+    if (left < 3600)
         snprintf(buf, sizeof(buf), "%lum", (unsigned long)((left + 59) / 60));
     else if (left < 86400)
         snprintf(buf, sizeof(buf), "%luh", (unsigned long)((left + 3599) / 3600));
@@ -360,15 +358,10 @@ std::string InkHUD::WaypointListApplet::expireText(uint32_t expireEpoch)
     return buf;
 }
 
-std::string InkHUD::WaypointListApplet::geofenceText(const WaypointCard &entry)
-{
-    return entry.has_geofence ? "GF" : "";
-}
-
 uint32_t InkHUD::WaypointListApplet::nextExpiryUpdateMs(uint32_t secondsLeft)
 {
     if (secondsLeft < 60)
-        return 1000UL;
+        return secondsLeft * 1000UL;
 
     const uint32_t step = (secondsLeft < 3600) ? 60UL : (secondsLeft < 86400 ? 3600UL : 86400UL);
     return ((((secondsLeft - 1) % step) + 1) * 1000UL);
@@ -473,7 +466,6 @@ bool InkHUD::WaypointListApplet::fillWaypointCard(const meshtastic_Waypoint &wp,
     entry.longitude_i = wp.longitude_i;
     entry.expire = wp.expire;
     entry.icon = wp.icon;
-    entry.has_geofence = (wp.geofence_radius > 0) || wp.has_bounding_box;
     strncpy(entry.name, wp.name, sizeof(entry.name) - 1);
     strncpy(entry.description, wp.description, sizeof(entry.description) - 1);
     return true;
@@ -616,7 +608,6 @@ void InkHUD::WaypointListApplet::onRender(bool full)
         const std::string distance = distanceText(entry);
         const std::string coord = coordinateText(entry, landscape);
         const std::string expire = expireText(entry.expire);
-        const std::string geofence = geofenceText(entry);
 
         const int16_t nameLeft = iconW + gap;
         int16_t nameRight = width() - 1;
@@ -640,11 +631,6 @@ void InkHUD::WaypointListApplet::onRender(bool full)
         }
 
         int16_t metaRight = width() - 1;
-        if (!geofence.empty()) {
-            // Keep geofence state right-aligned with expiry in the metadata row.
-            printAt(metaRight, metaY, geofence, RIGHT, TOP);
-            metaRight -= getTextWidth(geofence) + gap;
-        }
         if (!expire.empty()) {
             printAt(metaRight, metaY, expire, RIGHT, TOP);
             metaRight -= getTextWidth(expire) + gap;
