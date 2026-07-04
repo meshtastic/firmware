@@ -138,9 +138,7 @@ void formatWaypointExpire(char *out, size_t outSize, const meshtastic_Waypoint &
     }
 
     const uint32_t left = wp.expire - now;
-    if (left < 60)
-        snprintf(out, outSize, "exp %lus", (unsigned long)left);
-    else if (left < 3600)
+    if (left < 3600)
         snprintf(out, outSize, "exp %lum", (unsigned long)((left + 59) / 60));
     else if (left < 86400)
         snprintf(out, outSize, "exp %luh", (unsigned long)((left + 3599) / 3600));

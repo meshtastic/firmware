@@ -21,9 +21,13 @@ namespace NicheGraphics::InkHUD
 class Notification
 {
   public:
-    enum Type : uint8_t { NOTIFICATION_MESSAGE_BROADCAST, NOTIFICATION_MESSAGE_DIRECT, NOTIFICATION_GEOFENCE } type;
+    enum Type : uint8_t {
+        NOTIFICATION_MESSAGE_BROADCAST,
+        NOTIFICATION_MESSAGE_DIRECT,
+        NOTIFICATION_GEOFENCE
+    } type = NOTIFICATION_MESSAGE_BROADCAST;
 
-    uint32_t timestamp;
+    uint32_t timestamp = 0;
 
     uint8_t getChannel() const { return channel; }
     uint32_t getSender() const { return sender; }
@@ -53,8 +57,8 @@ class Notification
     friend class NotificationApplet;
 
   protected:
-    uint8_t channel;
-    uint32_t sender;
+    uint8_t channel = 0;
+    uint32_t sender = 0;
     char geofenceNodeName[40] = {};
     char geofenceName[40] = {};
     bool geofenceEntered = false;

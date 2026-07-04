@@ -140,8 +140,12 @@ void InkHUD::NotificationApplet::showNotification(const Notification &n)
     if (!settings->optionalFeatures.notifications)
         return;
 
-    dismiss();
+    if (hasNotification && isForeground() && currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE &&
+        n.type != Notification::Type::NOTIFICATION_GEOFENCE)
+        return;
 
+    const bool hadNotification = hasNotification;
+    Notification previousNotification = currentNotification;
     hasNotification = true;
     currentNotification = n;
     prepareCurrentNotificationLayout();
@@ -149,9 +153,15 @@ void InkHUD::NotificationApplet::showNotification(const Notification &n)
         bringToForeground();
         inkhud->forceUpdate();
     } else {
-        hasNotification = false;
-        clearPreparedLines();
-        resetTileHeight();
+        if (hadNotification) {
+            currentNotification = previousNotification;
+            hasNotification = true;
+            prepareCurrentNotificationLayout();
+        } else {
+            hasNotification = false;
+            clearPreparedLines();
+            resetTileHeight();
+        }
     }
 }
 

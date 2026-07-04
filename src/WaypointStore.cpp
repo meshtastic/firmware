@@ -255,47 +255,43 @@ void WaypointStore::loadFromFlash()
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
     concurrency::LockGuard guard(spiLock);
 
-    if (!FSCom.exists(filename.c_str()))
-        return;
+    if (FSCom.exists(filename.c_str())) {
+        auto f = FSCom.open(filename.c_str(), FILE_O_READ);
+        if (f) {
+            uint8_t version = 0;
+            uint8_t count = 0;
+            f.readBytes(reinterpret_cast<char *>(&version), 1);
+            f.readBytes(reinterpret_cast<char *>(&count), 1);
 
-    auto f = FSCom.open(filename.c_str(), FILE_O_READ);
-    if (!f)
-        return;
+            if (version != WAYPOINT_STORE_VERSION) {
+                LOG_WARN("WaypointStore version mismatch (%u)", version);
+                f.close();
+            } else {
+                if (count > WAYPOINT_HISTORY_LIMIT)
+                    count = WAYPOINT_HISTORY_LIMIT;
 
-    uint8_t version = 0;
-    uint8_t count = 0;
-    f.readBytes(reinterpret_cast<char *>(&version), 1);
-    f.readBytes(reinterpret_cast<char *>(&count), 1);
+                for (uint8_t i = 0; i < count; ++i) {
+                    StoredWaypointRecord rec = {};
+                    if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
+                        break;
 
-    if (version != WAYPOINT_STORE_VERSION) {
-        LOG_WARN("WaypointStore version mismatch (%u)", version);
-        f.close();
-        return;
-    }
+                    if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
+                        LOG_WARN("WaypointStore skipping corrupt record %u", i);
+                        continue;
+                    }
 
-    if (count > WAYPOINT_HISTORY_LIMIT)
-        count = WAYPOINT_HISTORY_LIMIT;
-
-    for (uint8_t i = 0; i < count; ++i) {
-        StoredWaypointRecord rec = {};
-        if (f.readBytes(reinterpret_cast<char *>(&rec), sizeof(rec)) != sizeof(rec))
-            break;
-
-        if (rec.payloadLength == 0 || rec.payloadLength > sizeof(rec.payload)) {
-            LOG_WARN("WaypointStore skipping corrupt record %u", i);
-            continue;
+                    StoredWaypoint entry;
+                    if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
+                        continue;
+                    if (isExpired(entry.waypoint))
+                        continue;
+                    entry.receivedTime = rec.receivedTime;
+                    waypoints.push_back(entry);
+                }
+                f.close();
+            }
         }
-
-        StoredWaypoint entry;
-        if (!decodeWaypointPayload(rec.payload, rec.payloadLength, entry.waypoint))
-            continue;
-        if (isExpired(entry.waypoint))
-            continue;
-        entry.receivedTime = rec.receivedTime;
-        waypoints.push_back(entry);
     }
-
-    f.close();
 #endif
 
 #if ENABLE_WAYPOINT_PERSISTENCE
