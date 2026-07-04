@@ -10,6 +10,7 @@
 #include "concurrency/LockGuard.h"
 #include "gps/RTC.h"
 #include "modules/GeofenceModule.h"
+#include <cstring>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -30,7 +31,7 @@ struct __attribute__((packed)) StoredWaypointRecord {
 
 bool decodeWaypointPayload(const uint8_t *payload, size_t payloadLength, meshtastic_Waypoint &wp)
 {
-    wp = meshtastic_Waypoint_init_zero;
+    memset(&wp, 0, sizeof(wp));
     return pb_decode_from_bytes(payload, payloadLength, &meshtastic_Waypoint_msg, &wp);
 }
 
