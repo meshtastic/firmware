@@ -13,10 +13,7 @@ class SCD30Sensor : public TelemetrySensor
 {
   private:
     SensirionI2cScd30 scd30;
-    TwoWire *_bus{};
-    uint8_t _address{};
 #ifdef SCD30_I2C_CLOCK_SPEED
-    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
     ReClockI2C reClockI2C;
 #endif
 

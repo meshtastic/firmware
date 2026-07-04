@@ -60,21 +60,31 @@ LIB_ISR = ("/bluefruit.cpp", "/Wire_nRF52.cpp", "/PDM.cpp", "/RotaryEncoder.cpp"
 # 2026-06-30). NOTE: only the real board variant (built from /variants/...) -- NOT the guarded
 # src/platform/extra_variants/*/variant.cpp no-op stubs, which don't tolerate the -fno-lto recompile.
 #
-# Anchor to THIS repo's variants/ tree: a board variant's abspath is
+# Anchor to THIS repo's variants/ tree: a board variant lives at
 # <PROJECT_DIR>/variants/<arch>/<board>/variant.cpp. Anchoring deliberately excludes
 #   - PlatformIO's framework-owned .../framework-arduinoadafruitnrf52/variants/*/variant.cpp
 #   - the src/platform/extra_variants/*/variant.cpp stubs (they live under src/, not variants/)
 # both of which also end in "/variant.cpp" but must NOT be recompiled here.
+#
+# CAUTION: middleware nodes come from the SCons variant-dir mirror, so node.get_abspath() is
+# $BUILD_DIR/variants/.../variant.cpp -- NOT the repo path. Matching the anchor against the
+# mirrored path never hits, which silently re-enables LTO on the variant (the post-link guard
+# below turns that into a red build). srcnode() undoes the mirror and yields the real source
+# path -- the same trick piobuild.py itself uses for middleware pattern matching.
 _PROJECT_VARIANTS = (
     env.subst("$PROJECT_DIR").replace("\\", "/").rstrip("/") + "/variants/"
 )
 
 
-def _is_board_variant(path):
+def _is_board_variant(node, path):
+    try:
+        src = node.srcnode().get_abspath().replace("\\", "/")
+    except Exception:
+        src = path
     return (
-        path.endswith("/variant.cpp")
-        and path.startswith(_PROJECT_VARIANTS)
-        and "extra_variants" not in path
+        src.endswith("/variant.cpp")
+        and src.startswith(_PROJECT_VARIANTS)
+        and "extra_variants" not in src
     )
 
 
@@ -97,6 +107,14 @@ def _get_projenv():
     return _projenv_cache[0]
 
 
+def _variant_ccflags(target, source, env, for_signature):
+    # Deferred CCFLAGS for the board variant recompile. SCons calls this while substituting the
+    # compile command (build phase), so projenv's CCFLAGS now include the -DAPP_VERSION... flags
+    # that bin/platformio-custom.py appends as a POST extra_script. -fno-lto goes last to override
+    # the inherited -flto and keep the variant's strong initVariant() out of whole-image LTO.
+    return list(_get_projenv()["CCFLAGS"]) + ["-fno-lto"]
+
+
 def _no_lto(node):
     try:
         path = node.get_abspath()
@@ -115,15 +133,22 @@ def _no_lto(node):
             CCFLAGS=env["CCFLAGS"] + ["-fno-lto"],
             CPPPATH=env["CPPPATH"] + _extra_inc,
         )
-    if _is_board_variant(path):
+    if _is_board_variant(node, path):
         # The board variant is a project source, not a framework object: it can #include
         # configuration.h/sleep.h, which need the -DAPP_VERSION... define and the generated-
-        # protobuf include path (pb.h). Recompile it with projenv (which has both) -- using the
-        # bare framework env here fails with "APP_VERSION must be set" / "pb.h: No such file".
+        # protobuf include path (pb.h). Recompile it with projenv, which carries both.
+        #
+        # TIMING: those -DAPP_VERSION... flags are appended to projenv by bin/platformio-custom.py,
+        # which is an unprefixed extra_script -> PlatformIO runs it as a POST script, i.e. AFTER
+        # $BUILD_SCRIPT, where this build middleware already fired. So projenv["CCFLAGS"] read HERE
+        # is a pre-append snapshot with no -DAPP_VERSION -> the recompile dies with
+        # "APP_VERSION must be set". Defer the read to a callable construction variable: SCons
+        # invokes it during command substitution (after every SConscript, post-scripts included),
+        # by which point projenv carries the version flags. -fno-lto is appended last so it wins.
         build_env = _get_projenv()
         return build_env.Object(
             node,
-            CCFLAGS=build_env["CCFLAGS"] + ["-fno-lto"],
+            CCFLAGS=_variant_ccflags,
             CPPPATH=build_env["CPPPATH"] + _extra_inc,
         )
     return node
@@ -199,7 +224,89 @@ def _assert_isr_handlers_survived(source, target, env):
     )
 
 
+# --- post-link guard #2: the board variant's strong overrides must reach the ELF -----------
+# The active variant.cpp overrides the core's weak initVariant() (cores/nRF5/main.cpp). If the
+# -fno-lto middleware above stops matching it -- e.g. a path-shape change; the middleware sees
+# $BUILD_DIR-mirrored nodes, and anchoring against the repo path already broke the match once
+# (2026-07) -- LTO resolves the core's call to the empty weak stub, the board's early hardware
+# setup silently vanishes (promicro DIY: PIN_3V3_EN rail never driven -> SX1262 CHIP_NOT_FOUND),
+# and the build stays green. Turn that into a red build:
+#   1. the linked variant.cpp.o must not be an LTO object (proves the -fno-lto recompile fired);
+#   2. any override the object defines strong must resolve strong in the ELF.
+_VARIANT_OVERRIDES = (
+    "_Z11initVariantv",
+)  # extend if the core grows more weak variant hooks
+
+
+def _assert_variant_survived(source, target, env):
+    import subprocess
+    import sys
+
+    objs = glob.glob(
+        os.path.join(env.subst("$BUILD_DIR"), "variants", "**", "variant.cpp.o"),
+        recursive=True,
+    )
+    if not objs:
+        return  # env links no in-repo board variant
+    problems = []
+    elf_kind = {}
+    obj_kind = {}
+    try:
+        for obj in objs:
+            # An LTO object carries .gnu.lto_* sections; their names live in the shstrtab,
+            # so a byte scan is a sufficient (and toolchain-free) detector.
+            with open(obj, "rb") as f:
+                if b".gnu.lto" in f.read():
+                    problems.append(
+                        "%s was compiled WITH LTO -- the -fno-lto middleware did not match it"
+                        % obj
+                    )
+
+        def _kinds(nm_out):
+            kinds = {}
+            for line in nm_out.split("\n"):
+                f = line.split()
+                if len(f) >= 3:
+                    kinds[f[-1]] = f[-2]
+            return kinds
+
+        elf = env.subst("$BUILD_DIR/${PROGNAME}.elf")
+        elf_kind = _kinds(subprocess.check_output([_NM, elf], universal_newlines=True))
+        for obj in objs:
+            obj_kind.update(
+                _kinds(subprocess.check_output([_NM, obj], universal_newlines=True))
+            )
+    except Exception as exc:  # tooling hiccup (e.g. an nm that can't read slim LTO
+        # objects): warn and skip the symbol comparison, but never let it mask a
+        # violation the .gnu.lto byte-scan above already recorded in `problems`.
+        print("nrf52_lto: WARNING - variant guard incomplete (%s)" % exc)
+        if not problems:
+            return
+    for sym in _VARIANT_OVERRIDES:
+        if (
+            obj_kind.get(sym, "").upper() == "T"
+            and elf_kind.get(sym, "W").upper() != "T"
+        ):
+            problems.append(
+                "%s is strong in variant.cpp.o but weak/absent in the ELF "
+                "(LTO resolved the core's call to the empty weak stub)" % sym
+            )
+    if problems:
+        sys.stderr.write(
+            "\n*** nrf52 LTO guard: board variant DROPPED from the image ***\n%s\n"
+            "The variant's early hardware setup (initVariant) will never run on this board.\n"
+            "Check _is_board_variant() in extra_scripts/nrf52_lto.py -- middleware nodes are\n"
+            "$BUILD_DIR-mirrored; match srcnode() paths, not node.get_abspath().\n\n"
+            % "\n".join("  - " + p for p in problems)
+        )
+        from SCons.Script import Exit
+
+        Exit(1)
+    print("nrf52_lto: variant guard OK -- board variant kept out of LTO")
+
+
 # Attach to the phony "buildprog" alias, NOT the .elf file node: SCons can skip a post-action
 # on a file target during an incremental relink (observed), but the buildprog alias runs every
 # build -- so the guard fires on local incremental rebuilds and clean CI builds alike.
 env.AddPostAction("buildprog", _assert_isr_handlers_survived)
+env.AddPostAction("buildprog", _assert_variant_survived)

@@ -103,10 +103,10 @@ int32_t MMC5983MASensor::runOnce()
         FusionVector ga = {.axis = {accelX, accelY, accelZ}};
         FusionVector ma = {.axis = {magX, magY, magZ}};
         if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
-            ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
-            ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+            ma = FusionRemap(ma, FusionRemapAlignmentNXNYPZ);
+            ga = FusionRemap(ga, FusionRemapAlignmentNXNYPZ);
         }
-        heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma) + MMC5983MA_HEADING_OFFSET_DEG;
+        heading = FusionCompass(ga, ma, FusionConventionNed) + MMC5983MA_HEADING_OFFSET_DEG;
     } else {
         heading = atan2f(magY, magX) * RAD_TO_DEG + MMC5983MA_HEADING_OFFSET_DEG;
     }

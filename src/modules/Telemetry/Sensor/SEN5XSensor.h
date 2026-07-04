@@ -61,10 +61,7 @@ struct _SEN5XMeasurements {
 class SEN5XSensor : public TelemetrySensor
 {
   private:
-    TwoWire *_bus{};
-    uint8_t _address{};
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
     ReClockI2C reClockI2C;
 #endif
 
@@ -158,6 +155,7 @@ See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
 
   public:
     SEN5XSensor();
+    bool probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port);
     virtual bool initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev) override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 

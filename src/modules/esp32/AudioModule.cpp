@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if defined(ARCH_ESP32) && defined(USE_SX1280)
+#if defined(ARCH_ESP32) && defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "AudioModule.h"
 #include "FSCommon.h"
 #include "MeshService.h"
