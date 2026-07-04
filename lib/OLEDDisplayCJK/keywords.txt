@@ -1,0 +1,100 @@
+#######################################
+# Syntax Coloring Map List
+#######################################
+
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+INVERSE    LITERAL1
+
+TEXT_ALIGN_LEFT    LITERAL1
+TEXT_ALIGN_RIGHT    LITERAL1
+TEXT_ALIGN_CENTER    LITERAL1
+TEXT_ALIGN_CENTER_BOTH    LITERAL1
+
+GEOMETRY_128_64    LITERAL1
+GEOMETRY_128_32    LITERAL1
+GEOMETRY_RAWMODE    LITERAL1
+
+ArialMT_Plain_10    LITERAL1
+ArialMT_Plain_16    LITERAL1
+ArialMT_Plain_24    LITERAL1
+
+SLIDE_UP    LITERAL1
+SLIDE_DOWN    LITERAL1
+SLIDE_LEFT    LITERAL1
+SLIDE_RIGHT    LITERAL1
+
+TOP    LITERAL1
+RIGHT    LITERAL1
+BOTTOM    LITERAL1
+LEFT    LITERAL1
+
+LEFT_RIGHT    LITERAL1
+RIGHT_LEFT    LITERAL1
+
+IN_TRANSITION    LITERAL1
+FIXED    LITERAL1
+
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+OLEDDisplay    KEYWORD1
+OLEDDisplayUi    KEYWORD1
+
+SH1106Wire    KEYWORD1
+SH1106Brzo    KEYWORD1
+SH1106Spi    KEYWORD1
+
+SSD1306Wire    KEYWORD1
+SSD1306Brzo    KEYWORD1
+SSD1306I2C    KEYWORD1
+SSD1306Spi    KEYWORD1
+
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+allocateBuffer    KEYWORD2
+init    KEYWORD2
+resetDisplay    KEYWORD2
+setColor    KEYWORD2
+getColor    KEYWORD2
+setPixel    KEYWORD2
+setPixelColor    KEYWORD2
+clearPixel    KEYWORD2
+drawLine    KEYWORD2
+drawRect    KEYWORD2
+fillRect    KEYWORD2
+drawCircle    KEYWORD2
+drawCircleQuads    KEYWORD2
+fillCircle    KEYWORD2
+fillRing    KEYWORD2
+drawHorizontalLine    KEYWORD2
+drawVerticalLine    KEYWORD2
+drawProgressBar    KEYWORD2
+drawFastImage    KEYWORD2
+drawXbm    KEYWORD2
+drawIco16x16    KEYWORD2
+drawString    KEYWORD2
+drawStringMaxWidth    KEYWORD2
+getStringWidth    KEYWORD2
+setTextAlignment    KEYWORD2
+setFont    KEYWORD2
+setFontTableLookupFunction    KEYWORD2
+displayOn    KEYWORD2
+displayOff    KEYWORD2
+invertDisplay    KEYWORD2
+normalDisplay    KEYWORD2
+setContrast    KEYWORD2
+setBrightness    KEYWORD2
+resetOrientation    KEYWORD2
+flipScreenVertically    KEYWORD2
+mirrorScreen    KEYWORD2
+display    KEYWORD2
+setLogBuffer    KEYWORD2
+drawLogBuffer    KEYWORD2
+getWidth    KEYWORD2
+getHeight    KEYWORD2

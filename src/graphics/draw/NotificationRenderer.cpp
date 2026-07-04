@@ -1038,10 +1038,8 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             // Cancel virtual keyboard - call callback with empty string to indicate timeout
             auto callback = textInputCallback; // Store callback before clearing
 
-            // Clean up first to prevent re-entry
-            delete virtualKeyboard;
-            virtualKeyboard = nullptr;
-            textInputCallback = nullptr;
+            // Clean up through the keyboard owner to keep both legacy pointers in sync.
+            OnScreenKeyboardModule::instance().stop(false);
             resetBanner();
 
             // Call callback after cleanup
@@ -1060,9 +1058,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             bool handled = OnScreenKeyboardModule::processVirtualKeyboardInput(inEvent, virtualKeyboard);
             if (!handled && inEvent.inputEvent == INPUT_BROKER_CANCEL) {
                 auto callback = textInputCallback;
-                delete virtualKeyboard;
-                virtualKeyboard = nullptr;
-                textInputCallback = nullptr;
+                OnScreenKeyboardModule::instance().stop(false);
                 resetBanner();
                 if (callback) {
                     callback("");

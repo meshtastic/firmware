@@ -1,0 +1,719 @@
+<!--The MIT License (MIT)
+
+Copyright (c) 2017 by Xavier Grosjean
+
+Based on work 
+Copyright (c) 2016 by Daniel Eichhorn
+Copyright (c) 2016 by Fabrice Weinberg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-->
+<!--
+ Standalone page to draw icons in matrix and generates the map definition with the format required by 
+ library for OLED SD1306 screen: https://github.com/squix78/esp8266-oled-ssd1306
+ 100% quick and dirty vanilla ECS6, no framework or library was injured for this project.
+
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      #form, #chars table {
+        user-select: none; 
+        -moz-user-select: none; 
+        margin-top: 5px;
+      }
+      #chars table, tr, td, th {
+        border-collapse: collapse;
+      }
+      #chars td, th {
+        border: 1px solid #CCC;
+        width: 12px;
+        height: 15px;
+      }
+      #chars th[action] {
+        cursor:pointer;
+      }
+      #chars th[action="up"], #chars th[action="down"], #chars th[action="left"], #chars th[action="right"] {
+        font-size: 10px;
+      }
+      #chars td.on {
+        background-color: #00F;
+      }
+      
+      #addChar, #generate {
+        display: none;
+      }
+      body.started #addChar, body.started #generate {
+        display: inline;
+      }
+      body.started #create {
+        display: none;
+      }
+      #page {
+        position:relative;
+      }
+      #page>div {
+        position: relative;
+        float: left;
+      }
+
+      #output {
+        margin-left: 20px;
+        margin-top: 12px;
+        font-size:12px;
+        user-select: all;
+        -moz-user-select: all;
+        max-width:60%;
+      }
+      
+      #header {
+        margin-top: 10px;
+      }
+      #inputText {
+        width: 100%;
+        height:120px;
+      }
+      
+    </style>
+  </head>
+  <body>
+    <div id="form">
+      <table width="100%">
+        <tr>
+          <td>Font array name:</td><td><input placeholder="Font array name" type="text" id="name" value="My_Font"/></td>
+          <td width="75%" rowspan="5">
+            <textarea id="inputText" placeholder="Or paste a char array font definition here">
+const uint8_t My_Font[] PROGMEM = {
+  0x0A, // Width: 10
+  0x0D, // Height: 13
+  0x01, // First char: 1
+  0x02, // Number of chars: 2
+  // Jump Table:
+  0x00, 0x00, 0x13, 0x0A, // 1
+  0x00, 0x13, 0x14, 0x0A, // 2
+  // Font Data:
+  0xF0, 0x03, 0x10, 0x02, 0xF0, 0x03, 0x10, 0x02, 0xF0, 0x03, 0x10, 0x02, 0xF0, 0x03, 0x10, 0x02, 0xF0, 0x03, 0xC0, // 1
+  0x00, 0x0C, 0x80, 0x0B, 0x70, 0x08, 0x0C, 0x08, 0xF3, 0x0A, 0xF3, 0x0A, 0x0C, 0x08, 0x70, 0x08, 0x80, 0x0B, 0x00, 0x0C, // 2
+};              
+            </textarea></td>
+        </tr>
+        <tr>
+          <td>First char code:</td><td><input placeholder="First char code" type="number" id="code" value="1" min="1"/></td>
+        </tr>
+        <tr>
+          <td>Width:</td><td><input placeholder="Font width" type="number" id="width" value="10"/></td>
+        </tr>
+        <tr>
+          <td>Height:</td><td><input placeholder="Font height" type="number" id="height" value="13" max="64"/></td>
+        </tr>
+        <tr>
+          <td>NewWidth:</td><td><input placeholder="New Font width" type="number" id="newwidth" value="0"/></td>
+        </tr>
+        <tr>
+          <td>NewHeight:</td><td><input placeholder="New Font height" type="number" id="newheight" value="0" max="64"/></td>
+        </tr>
+        <tr>
+          <td colspan="3"> </td>     <!--slightly improves layout-->
+        </tr>
+        <tr>
+          <td colspan="2">
+            <button id="create">Create</button>
+            <br/>Shift all
+            <button id="shiftUp">Up</button>
+            <button id="shiftDown">Down</button>
+            <button id="shiftLeft">Left</button>
+            <button id="shiftRight">Right</button><br/>
+            <button id="generate">Generate</button>
+            <button id="savetoFile">Save To File</button>
+          </td>
+          <td><input type="file" id="fileinput" />  <button id="parse">Parse</button></td>
+        </tr>
+      </table>
+      <br/>
+    </div>
+    <div id="page">
+      <div id="charxContainer" ondragstart="return false;">
+        <div id="chars"></div><br/>
+        <button id="addChar">Add a character</button>
+      </div>
+      <div id="output">
+        <div class="output" id="header"> </div>
+        <div class="output" id="jump"> </div>
+        <div class="output" id="data"> </div>
+      </div>
+    </div>
+    <script>
+    (function() {
+      let font;
+      
+      class Font {
+        constructor() {
+          this.height = parseInt(document.getElementById('height').value);
+          this.width = parseInt(document.getElementById('width').value);
+          this.currentCharCode = parseInt(document.getElementById('code').value);
+          this.fontContainer = document.getElementById('chars');
+          this.bytesForHeight = (1 + ((this.height - 1) >> 3));  // number of bytes needed for this font height
+          document.body.className = "started";
+          document.getElementById('height').disabled = true;
+          document.getElementById('width').disabled = true;          
+        }
+        
+        // Should we have a Char and a Pixel class ? not sure it's worth it.
+        // Let's use the DOM to store everything for now
+        
+        static updateCaption(element, code) {
+          element.textContent = `Char #${code} [`+String.fromCharCode(code)+']';
+        }
+        
+        // Add a pixel matrix to draw a new character
+        // jumpaData not used for now: some day, use the last byte for optimisation 
+        addChar(jumpData, charData) {
+          let charContainer = this.fontContainer.appendChild(document.createElement("table"));
+          charContainer.setAttribute("code", this.currentCharCode);
+          let caption = charContainer.appendChild(document.createElement("caption"));
+          Font.updateCaption(caption, this.currentCharCode);
+          let header = charContainer.appendChild(document.createElement("tr"));
+          header.innerHTML = '<th  title="Delete this char" action="delete">&cross;</th>'
+              + '<th title="Add a char above" action="add">+</th>'
+              + '<th title="Shift pixels to the left" action="left">&larr;</th>'
+              + '<th title="Shift pixels down" action="down">&darr;</th>'
+              + '<th title="Shift pixels up" action="up">&uarr;</th>'
+              + '<th title="Shift pixels to the right" action="right">&rarr;</th>'
+              + '<th title="Copy from another character" action="copy">&copy;</th>'
+              + '<th title="Reset all pixels" action="clean">&empty;</th>';
+          // If data is provided, decode it to pixel initialization friendly structure
+          let pixelInit = [];
+          if (charData && charData.length) {
+            // charData byte count needs to be a multiple of bytesForHeight. End bytes with value 0 may have been trimmed
+            let missingBytes = charData.length % this.bytesForHeight;
+            for(let b = 0; b < missingBytes ; b++) {
+              charData.push(0);
+            }
+            while(charData.length) {
+              let row = charData.splice(0, this.bytesForHeight).reverse();
+              let pixelRow = [];
+              for (let b = 0; b < row.length; b++) {
+                let mask = 0x80;
+                let byte = row[b];
+                for (let bit = 0; bit < 8; bit++) {
+                  if (byte & mask) {
+                    pixelRow.push(1);
+                  } else {
+                    pixelRow.push(0);
+                  }
+                  mask = mask >> 1;
+                }
+              }
+              pixelRow.splice(0, pixelRow.length - this.height);
+              //Font.output('data', pixelRow);
+              pixelInit.push(pixelRow.reverse());
+            }
+          }
+          
+          for(let r = 0; r < this.height; r++) {
+          	let rowContainer = charContainer.appendChild(document.createElement("tr"));
+            for(let c = 0; c < this.width; c++) {
+          		let pixContainer = rowContainer.appendChild(document.createElement("td"));
+              pixContainer.setAttribute('action', 'toggle');
+          		// If there is some init data, set the pixel accordingly
+              if (pixelInit.length && pixelInit[c]) {
+                if (pixelInit[c][r]) {
+                  pixContainer.className = 'on';
+                }
+              }          		
+            }
+          }
+          this.currentCharCode++;
+          return charContainer;
+        }
+        
+        static togglePixel(pixel) {
+          pixel.className = pixel.className === 'on' ? '': 'on';
+        }
+        
+        // Return anInt as hex string
+        static toHexString(aByte) {
+          let zero = aByte < 16?'0':'';
+          return `0x${zero}${aByte.toString(16).toUpperCase()}`
+        }
+        
+        // Return least significant byte as hex string
+        static getLsB(anInt) {
+          return Font.toHexString(anInt & 0xFF);      
+        }
+        // Return most significant byte as hex string
+        static getMsB(anInt) {
+          return Font.toHexString(anInt>>>8);      
+        }
+       
+        static output(targetId, msg) {
+          let output = document.getElementById(targetId);
+          let line = output.appendChild(document.createElement('div'));
+          line.textContent = msg;
+        }
+        static emptyChars() {
+          document.getElementById('chars').textContent = '';
+        }
+        static emptyOutput() {
+          document.getElementById('header').textContent = '';
+          document.getElementById('jump').textContent = '';
+          document.getElementById('data').textContent = '';
+        }
+		
+        saveFile() {
+          let filename = document.getElementById('name').value.replace(/[^a-zA-Z0-9_$]/g, '_') + ".h";
+          let data = document.getElementById("output").innerText;
+          if(data.length < 10) return;
+          let blobObject = new Blob([data], {type:'text/plain'}); 
+    
+          if(window.navigator.msSaveBlob) {
+            window.navigator.msSaveBlob(blobObject, filename);
+          } else {
+            let a = document.createElement("a");
+            a.setAttribute("href", URL.createObjectURL(blobObject));
+            a.setAttribute("download", filename);
+            if (document.createEvent) {
+              let event = document.createEvent('MouseEvents');
+              event.initEvent('click', true, true);
+              a.dispatchEvent(event);
+            } else {
+              a.click();
+            }
+          }  
+        }
+			
+        // Read from the <td> css class the pixels that need to be on
+        // generates the jump table and font data 
+        generate() {
+          // this.width -= 3;  // hack to narrow an existing font
+          var newheight = parseInt(document.getElementById('newheight').value);
+          if(newheight){
+            this.height = newheight;
+            this.bytesForHeight = (1 + ((this.height - 1) >> 3));
+          }
+          var newwidth = parseInt(document.getElementById('newwidth').value);
+          if(newwidth){
+             this.width = newwidth;	
+          }
+
+          Font.emptyOutput();
+          let chars = this.fontContainer.getElementsByTagName('table');
+          let firstCharCode = parseInt(document.getElementById('code').value);
+          let name = document.getElementById('name').value.replace(/[^a-zA-Z0-9_$]/g, '_');
+          
+          let bits2add = this.bytesForHeight*8 - this.height;  // number of missing bits to fill leftmost byte
+          let charCount = chars.length;
+          let charAddr = 0;
+          // Comments are used when parsing back a generated font
+          Font.output('jump', '  // Jump Table:');
+          Font.output('data', '  // Font Data:');
+          // Browse each character
+          for(let ch = 0; ch < charCount; ch++) {
+            // Fix renumbering in case first char code was modified  
+            Font.updateCaption(chars[ch].getElementsByTagName('caption')[0], ch + firstCharCode);
+            let charBytes = [];
+            let charCode = ch + firstCharCode;
+            let rows = chars[ch].getElementsByTagName('tr');
+            let charNotZero = false;
+            // Browse each column
+            for(let col = 0; col < this.width ; col++) {
+              let bits = ""; // using string because js uses 32b ints when performing bit operations
+              // Browse each row starting from the bottom one, going up, and accumulate pixels in
+              // a string: this rotates the glyph
+              // Beware, row 0 is table headers.
+          //for(let r = rows.length-1; r >=1 ; r--) {
+
+              for(let r = this.height; r >=1 ; r--) {
+                let pixelState = rows[r].children[col].className;
+                bits += (pixelState === 'on' ? '1': '0');           
+              }
+              // Need to complete missing bits to have a sizeof byte multiple number of bits
+              for(let b = 0; b < bits2add; b++) {
+                bits =  '0' + bits;
+              }
+              // Font.output('data', `  // ${bits}`);  // Debugging help: rotated bitmap
+
+              // read bytes from the end
+              for(let b = bits.length - 1; b >= 7; b -= 8) {
+                //Font.output('data', `  // ${bits.substr(b-7, 8)}`);  // Debugging help: rotated bitmap
+                let byte = parseInt(bits.substr(b-7, 8), 2);
+                if (byte !== 0) {
+                  charNotZero = true;
+                }
+                charBytes.push(Font.toHexString(byte));
+              } 
+            }
+            // Compute the used width of the character:  
+            // rightmost column with pixels plus one
+            // one column is spread over several bytes...
+            let charWidth = 0;
+            for(let i=charBytes.length - 1; i >= 0; i-=this.bytesForHeight) {
+              let sum = 0;
+              for(let j=0; j < this.bytesForHeight; j++) {
+                sum += parseInt(charBytes[i - j], 16);
+              }
+              if(sum !== 0) {
+                charWidth = (i + 1)/this.bytesForHeight + 1;
+                break;
+              }
+            }
+
+            // Memory optim: Remove bytes with value 0 at the end of the array.
+            while(parseInt(charBytes[charBytes.length-1], 16) === 0 && charBytes.length > 1) {
+              charBytes.pop();
+            }
+            if (charNotZero) {
+              Font.output('data', `  ${charBytes.join(', ')},  // ${charCode}`);
+              Font.output('jump', `  ${Font.getMsB(charAddr)}, ${Font.getLsB(charAddr)}, ${Font.toHexString(charBytes.length)}, ${Font.toHexString(charWidth)},  // ${charCode} `);
+              charAddr += charBytes.length;
+            } else {
+              Font.output('jump', `  0xFF, 0xFF, 0x00, ${Font.toHexString(this.width)},  // ${charCode} `);
+            }
+          }
+          Font.output('data', '};');
+          
+          Font.output('header', "// Font generated or edited with the glyphEditor");
+          Font.output('header', `const uint8_t ${name}[] PROGMEM = {`);
+          // Comments are used when parsing back a generated font
+          Font.output('header', `  ${Font.toHexString(this.width)}, // Width: ${this.width}`);
+          Font.output('header', `  ${Font.toHexString(this.height)}, // Height: ${this.height}`);          
+          Font.output('header', `  ${Font.toHexString(firstCharCode)}, // First char: ${firstCharCode}`);
+          Font.output('header', `  ${Font.toHexString(charCount)}, // Number of chars: ${charCount}`);
+        }
+      }
+	  
+      document.getElementById('fileinput').addEventListener('change', function(e) {
+        let f = e.target.files[0]; 
+        if (f) {
+          let r = new FileReader();
+          r.onload = function(e) { 
+            let contents = e.target.result;
+                alert( "Got the file.\n" 
+                +"name: " + f.name + "\n"
+                +"type: " + f.type + "\n"
+                +"size: " + f.size + " bytes\n"
+                +"starts with: " + contents.substr(0, contents.indexOf("\n")) 
+            );
+              document.getElementById("inputText").value = contents;
+          };
+          r.readAsText(f);
+        } else { 
+          alert("Failed to load file");
+        }
+        });
+      
+      document.getElementById('savetoFile').addEventListener('click', function() {
+        font.saveFile();
+      });
+      
+      document.getElementById('shiftUp').addEventListener('click', function() {
+        var chars = document.getElementById("chars");
+        var tables = chars.getElementsByTagName("table");
+        for(var i=0; i< tables.length; i++) {
+          shiftUp(tables[i]);
+        }
+      });
+      
+      document.getElementById('shiftDown').addEventListener('click', function() {
+        var chars = document.getElementById("chars");
+        var tables = chars.getElementsByTagName("table");
+        for(var i=0; i< tables.length; i++) {
+          shiftDown(tables[i]);
+        }
+      });
+      document.getElementById('shiftLeft').addEventListener('click', function() {
+        var chars = document.getElementById("chars");
+        var tables = chars.getElementsByTagName("table");
+        for(var i=0; i< tables.length; i++) {
+          shiftLeft(tables[i]);
+        }
+      });
+      document.getElementById('shiftRight').addEventListener('click', function() {
+        var chars = document.getElementById("chars");
+        var tables = chars.getElementsByTagName("table");
+        for(var i=0; i< tables.length; i++) {
+          shiftRight(tables[i]);
+        }
+      });
+      
+      document.getElementById('generate').addEventListener('click', function() {
+        font.generate();
+      });
+      document.getElementById('addChar').addEventListener('click', function() {
+        font.addChar();
+      });
+      document.getElementById('inputText').addEventListener('click', function(e) {
+        let target = e.target;
+        target.select();
+      });
+      document.getElementById('chars').addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        let target = e.target;
+        let action = target.getAttribute('action') || '';
+        if (action === '') return;
+        let result, code, nextContainer, previousContainer, pixels ;
+        let currentContainer = target.parentNode.parentNode;
+        switch(action) {
+          case 'add':
+            code = currentContainer.getAttribute('code');
+            nextContainer = font.addChar();
+            currentContainer.parentNode.insertBefore(nextContainer, currentContainer);
+            do {
+              nextContainer.setAttribute('code', code);
+              Font.updateCaption(nextContainer.getElementsByTagName('caption')[0], code);
+              code ++;
+            } while (nextContainer = nextContainer.nextSibling);
+            break;
+
+          case 'delete':
+            result = confirm("Delete this character ?");
+            if (!result) return;
+            code = currentContainer.getAttribute('code');
+            nextContainer = currentContainer;
+            while (nextContainer = nextContainer.nextSibling) {
+              nextContainer.setAttribute('code', code);
+              Font.updateCaption(nextContainer.getElementsByTagName('caption')[0], code);
+              code ++;
+            }
+            currentContainer.parentNode.removeChild(currentContainer);
+            break;
+
+          // Shift pixels to the left  
+          case 'left':
+            shiftLeft(currentContainer);
+            break;
+          
+          // Shift pixels to the right
+          case 'right':
+            shiftRight(currentContainer);
+            break;
+
+          // Shift pixels down
+          case 'down':
+            shiftDown(currentContainer);
+			break;
+
+          // Shift pixels up
+          case 'up':
+            shiftUp(currentContainer);
+            break;
+
+          case 'toggle':
+            Font.togglePixel(target);
+            break;
+
+          case 'clean':
+            result = confirm("Delete the pixels ?");
+            if (!result) return;
+            pixels = currentContainer.getElementsByTagName('td');
+            for (let p = 0; p < pixels.length; p++) {
+              pixels[p].className = '';
+            }
+            break;
+          
+          case 'copy':
+             let charNumber = parseInt(prompt("Source char #: "));
+             let chars = font.fontContainer.getElementsByTagName('table');
+             let tableOffset = charNumber - parseInt(document.getElementById('code').value);
+             let srcPixels = chars[tableOffset].getElementsByTagName('td');
+             let targetPixels = currentContainer.getElementsByTagName('td');
+             for(let i=0; i < srcPixels.length; i++) {
+               // First tds are in the th row, for editing actions. Skip them
+               if (targetPixels[i].parentNode.localName === 'th') continue; // In case we give them css at some point...
+               targetPixels[i].className = srcPixels[i].className;
+             }
+            break;
+          default:
+            // no.
+        }
+        
+      });
+      function shiftUp(container) {
+        var pixels = container.getElementsByTagName('td');
+        for(p = 0; p < pixels.length; p++) {
+          if(p < font.width*(font.height -1)) {
+            pixels[p].className = pixels[p + font.width].className;
+          } else {
+            pixels[p].className = '';
+          }
+        }  
+      }
+      function shiftDown(container) {
+        var pixels = container.getElementsByTagName('td');
+        for(p = pixels.length-1; p >=0 ; p--) {
+          if(p >= font.width) {
+           pixels[p].className = pixels[p - font.width].className;
+          } else {
+           pixels[p].className = '';
+          }
+        } 
+      }
+      function shiftLeft(container) {
+        var pixels = container.getElementsByTagName('td');
+        for(p = 0; p < pixels.length; p++) {
+          if((p + 1) % font.width) {
+             pixels[p].className = pixels[p + 1].className;
+          } else {
+             pixels[p].className = '';
+          }
+        }
+      }
+      
+      function shiftRight(container) {
+        var pixels = container.getElementsByTagName('td');
+        for(p = pixels.length-1; p >=0 ; p--) {
+          if(p % font.width) {
+            pixels[p].className = pixels[p - 1].className;
+          } else {
+            pixels[p].className = '';
+          }
+        }
+      }
+      
+      document.getElementById('chars').addEventListener('mouseover', function(e) {
+        let target = e.target;
+        let action = target.getAttribute('action');
+        if (action !== 'toggle' || e.buttons !== 1) return;
+        Font.togglePixel(target);
+      });
+      document.getElementById('chars').addEventListener('dragstart', function() {
+        return false;
+      });
+
+      document.getElementById('create').addEventListener('click', function() {
+      	font = new Font();
+        font.addChar();
+      });
+
+      // parse a char array declaration for an existing font.
+      // parsing heavily relies on comments.
+      document.getElementById('parse').addEventListener('click', function() {
+        if (document.getElementById('chars').childElementCount) {
+          let result = confirm("Confirm you want to overwrite the existing grids ?");
+          if (!result) return;          
+        } 
+        let lines = document.getElementById('inputText').value.split('\n');
+        let name = '';
+        let height = 0;
+        let width = 0;
+        let firstCharCode = 0;
+        let jumpTable = [];
+        let charData = [];
+        let readingJumpTable = false;
+        let readingData = false;
+        
+        for(let l = 0 ; l < lines.length; l++) {
+          // TODO ? keep C compilation directives to copy them (not lowercased :)) to newly generated char array
+          let line = lines[l].trim();
+          //alert(line);
+          let fields;
+
+          // Declaration line: grab the name
+          if (line.indexOf('PROGMEM') > 0) {
+            fields = line.split(' ');
+            name = fields[2].replace(/[\[\]]/g, '');
+            continue;
+          }
+          line = line.toLowerCase();
+          // Todo: could rely on line order...
+          // width line: grab the width
+          if (line.indexOf('width') > 0) {
+            fields = line.split(',');
+            width = fields[0];
+            continue;
+          }
+          // height line: grab the height 
+          if (line.indexOf('height') > 0) {
+            fields = line.split(',');
+            height = fields[0];
+            continue;
+          }
+          // first char code line: grab the first char code 
+          if (line.indexOf('first char') > 0) {
+            fields = line.split(',');
+            firstCharCode = fields[0];
+            continue;
+          }
+          // End of array declaration
+          // TODO warn if more lines: next fonts are ignored
+          if (line.indexOf('};') === 0) {
+            break;
+          }
+          
+          if (readingJumpTable || readingData) {
+            if (line.indexOf('#') !== 0 && line.length !== 0 && line.indexOf('//') !== 0) {
+              line = line.replace(/\/\/.*/, ''); // get rid of end of line comments
+              fields = line.split(',');
+              let newEntry = [];
+              for(let f=0; f < fields.length; f++) {
+                let value = parseInt(fields[f]);
+                if (isNaN(value)) continue;
+                if (readingData) {
+                  charData.push(value);
+                }
+                if (readingJumpTable) {
+                  newEntry.push(value);
+                }
+              }
+              if (readingJumpTable) {
+                jumpTable.push(newEntry);
+              }
+            }            
+          }
+          
+          // Begining of data
+          if (line.indexOf('font data') > 0) {
+            readingData = true;
+            readingJumpTable = false;
+          }
+          // Begining of jump table
+          if (line.indexOf('jump table') > 0) {
+            readingJumpTable = true;
+          }
+        }
+        if (!name || !height || !width || !firstCharCode) {
+          alert("Does not look like a parsable font. Try again.");
+          return;
+        }
+        
+        Font.emptyChars();
+        Font.emptyOutput();
+        document.getElementById('name').value = name;
+        document.getElementById('height').value = parseInt(height);
+        document.getElementById('width').value = parseInt(width);
+        document.getElementById('code').value = parseInt(firstCharCode);
+      	font = new Font();
+      	for(let c = 0 ; c < jumpTable.length; c++) {
+      	  let jumpEntry = jumpTable[c];
+      	  let charEntry = [];
+      	  // displayable character 
+      	  if (jumpEntry[0] !== 255 || jumpEntry[1] !== 255) {
+      	    charEntry = charData.splice(0, jumpEntry[2]);
+          }
+      	  font.addChar(jumpEntry, charEntry);
+        }
+        document.body.className = "started";
+      });        
+      
+      })();
+    </script>  
+  </body>
+</html>

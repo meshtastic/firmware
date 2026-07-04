@@ -4,6 +4,7 @@
 #include <OLEDDisplay.h>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace graphics
 {
@@ -38,10 +39,14 @@ class VirtualKeyboard
     void moveCursorRight();
     void handlePress();
     void handleLongPress();
+    void handleBackspace();
 
     // Timeout management
     void resetTimeout();
     bool isTimedOut() const;
+
+    // Chinese IME
+    void toggleIME();
 
   private:
     static const uint8_t KEYBOARD_ROWS = 4;
@@ -59,6 +64,22 @@ class VirtualKeyboard
     uint8_t cursorRow;
     uint8_t cursorCol;
 
+    enum _IMEStatus { ACTIVE, INACTIVE } IMEStatus = INACTIVE;
+    uint8_t processedWords = 0;
+#if defined(TINYLORA_ADVANCED_IME)
+    int resultsOffset = 0;
+    int resultsfulllen = 0;
+    std::vector<std::string> displayList = {};
+    std::vector<uint8_t> selectionPos = {};
+#else
+    uint8_t selectableChars = 0;
+    int selectListfulllen = 0;
+    int selectListOffset = 0;
+    std::string selectList = "";
+    std::vector<uint8_t> selectListLayout = {};
+#endif
+    std::vector<uint8_t> inputTextLayout = {};
+
     // Timeout management for auto-exit
     uint32_t lastActivityTime;
     static const uint32_t TIMEOUT_MS = 60000; // 1 minute timeout
@@ -74,7 +95,14 @@ class VirtualKeyboard
     char getCharForKey(const VirtualKey &key, bool isLongPress = false);
     void insertCharacter(char c);
     void deleteCharacter();
+    uint8_t getLastUtf8CharLength() const;
     void submitText();
+    uint8_t getUtf8Length(const char *c, uint8_t pos);
+#if !defined(TINYLORA_ADVANCED_IME)
+    uint8_t getChineseChar(uint8_t c);
+#endif
+    void selectChineseChar(uint8_t chridx);
+    void showNextSelection();
 };
 
 } // namespace graphics

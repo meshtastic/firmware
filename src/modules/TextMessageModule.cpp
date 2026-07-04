@@ -8,6 +8,9 @@
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/MessageRenderer.h"
+#if defined(GAT562) && defined(GAT562_NOTIFY_NEOPIXEL_PIN)
+#include "graphics/GAT562NotifyLed.h"
+#endif
 #include "main.h"
 TextMessageModule *textMessageModule;
 
@@ -22,6 +25,9 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     textPacketListIndex = (textPacketListIndex + 1) % TEXT_PACKET_LIST_SIZE;
 
     IF_SCREEN(
+        if (!isFromUs(&mp) && screen) {
+            screen->setOn(true);
+        }
         // Guard against running in MeshtasticUI or with no screen
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             // Store in the central message history
@@ -32,6 +38,11 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
             auto *display = screen ? screen->getDisplayDevice() : nullptr;
             graphics::MessageRenderer::handleNewMessage(display, sm, mp);
         })
+#if defined(GAT562) && defined(GAT562_NOTIFY_NEOPIXEL_PIN)
+    if (!isFromUs(&mp)) {
+        graphics::GAT562NotifyLed::instance().triggerMessage();
+    }
+#endif
     // Only trigger screen wake if configuration allows it
     if (shouldWakeOnReceivedMessage()) {
         powerFSM.trigger(EVENT_RECEIVED_MSG);

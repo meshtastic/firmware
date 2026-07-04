@@ -1,6 +1,9 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "buzz/BuzzerFeedbackThread.h"
+#if defined(GAT562) && defined(GAT562_NOTIFY_NEOPIXEL_PIN)
+#include "graphics/GAT562NotifyLed.h"
+#endif
 #include "modules/SystemCommandsModule.h"
 #endif
 #include "modules/StatusLEDModule.h"
@@ -126,6 +129,9 @@ void setupModules()
     }
 #endif
     statusLEDModule = new StatusLEDModule();
+#if defined(GAT562) && defined(GAT562_NOTIFY_NEOPIXEL_PIN)
+    graphics::GAT562NotifyLed::instance();
+#endif
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
 #endif

@@ -1,0 +1,30 @@
+{
+  "name": "OLEDDisplayCJK",
+  "version": "4.6.1",
+  "keywords": "ssd1306, oled, display, i2c",
+  "description": "I2C display driver for SSD1306 OLED displays connected to ESP8266, ESP32, Mbed-OS",
+  "license": "MIT",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/ThingPulse/esp8266-oled-ssd1306"
+  },
+  "authors":
+  [
+    {
+        "name": "Daniel Eichhorn, ThingPulse",
+        "email": "squix78@gmail.com",
+        "url": "https://thingpulse.com"
+    },
+    {
+        "name": "Fabrice Weinberg",
+        "email": "fabrice@weinberg.me"
+    }
+  ],
+  "frameworks": "arduino",
+  "platforms": [
+    "espressif8266",
+    "espressif32",
+    "nordicnrf52"
+  ]
+}

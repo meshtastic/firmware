@@ -1222,9 +1222,11 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 void GPS::writePinEN(bool on)
 {
     // Abort: if conflict with Canned Messages when using Wisblock(?)
+#if !defined(GAT562)
     if ((HW_VENDOR == meshtastic_HardwareModel_RAK4631 || HW_VENDOR == meshtastic_HardwareModel_WISMESH_TAP) &&
         (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1))
         return;
+#endif
 
     // Write and log
     enablePin->set(on);
@@ -1446,6 +1448,12 @@ int32_t GPS::runOnce()
             return disable();
         }
         GPSInitFinished = true;
+#if defined(GAT562)
+        hasValidLocation = false;
+        p = meshtastic_Position_init_default;
+        p.timestamp = getTime();
+        shouldPublish = true;
+#endif
         publishUpdate();
     }
 
@@ -1523,11 +1531,22 @@ int32_t GPS::runOnce()
             LOG_WARN("Couldn't publish a valid location: didn't get a GPS lock in time");
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
+#if defined(GAT562)
+                // GAT562 should keep showing the last known fix after a refresh
+                // timeout. Still mark this search as failed so scheduling keeps
+                // the official retry/backoff behavior, but do not publish an
+                // empty GPSStatus that would erase the valid fix from NodeDB/UI.
+                hasValidLocation = false;
+                shouldPublish = false;
+                fixHoldEnds = 0;
+                LOG_DEBUG("GAT562: retaining previous GPS fix after refresh timeout");
+#else
                 p = meshtastic_Position_init_default;
                 hasValidLocation = false;
                 shouldPublish = true;
 #ifdef GPS_DEBUG
                 LOG_DEBUG("hasValidLocation FALLING EDGE");
+#endif
 #endif
             }
         }
@@ -1920,6 +1939,12 @@ std::unique_ptr<GPS> GPS::createGps()
     // Skip chip-specific probing for gpsd — it's a generic NMEA stream.
     if (!portduino_config.gpsd_host.empty())
         new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
+#endif
+
+#if defined(GAT562)
+    // GAT562 uses a powered external NMEA GPS on fixed UART pins. Some modules
+    // do not answer vendor probes reliably, so treat the stream as generic NMEA.
+    new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
 #endif
 
     GpioVirtPin *virtPin = new GpioVirtPin();

@@ -18,6 +18,9 @@
 #include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
+#if defined(GAT562)
+#include "gat_iot_logo.h"
+#endif
 #include "main.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
@@ -1274,6 +1277,9 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
     const char *shortName = owner.short_name ? owner.short_name : "";
     char combinedName[96];
+#if defined(GAT562)
+    snprintf(combinedName, sizeof(combinedName), "%s", getDeviceName());
+#else
     if (longName[0] && shortName[0]) {
         snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortName);
     } else if (longName[0]) {
@@ -1283,6 +1289,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         strncpy(combinedName, shortName, sizeof(combinedName) - 1);
         combinedName[sizeof(combinedName) - 1] = '\0';
     }
+#endif
     if (SCREEN_WIDTH - UIRenderer::measureStringWithEmotes(display, combinedName) > 10) {
         textWidth = UIRenderer::measureStringWithEmotes(display, combinedName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
@@ -1498,6 +1505,43 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 #else
+#if defined(GAT562)
+    display->drawXbm(x + (SCREEN_WIDTH - gat_iot_logo_width) / 2, y + 8, gat_iot_logo_width, gat_iot_logo_height,
+                     gat_iot_logo_bits);
+
+    display->setFont(FONT_MEDIUM);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *title = "GAT-IoT";
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 1, title);
+    if (gBootSplashBoldPass)
+        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 1, title);
+
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    if (upperMsg) {
+        display->drawString(x + 0, y + 0, upperMsg);
+        if (gBootSplashBoldPass)
+            display->drawString(x + 1, y + 0, upperMsg);
+    }
+
+    const char *version = xstr(APP_VERSION_SHORT);
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH - 1, y + 0, version);
+    if (gBootSplashBoldPass)
+        display->drawString(x + SCREEN_WIDTH, y + 0, version);
+    if (owner.short_name && owner.short_name[0]) {
+        const char *shortName = owner.short_name;
+        display->drawString(x + SCREEN_WIDTH - 1, y + FONT_HEIGHT_SMALL, shortName);
+        if (gBootSplashBoldPass)
+            display->drawString(x + SCREEN_WIDTH, y + FONT_HEIGHT_SMALL, shortName);
+        int shortNameW = display->getStringWidth(shortName);
+        display->drawLine(x + SCREEN_WIDTH - shortNameW - 1, y + FONT_HEIGHT_SMALL * 2 - 1, x + SCREEN_WIDTH - 1,
+                          y + FONT_HEIGHT_SMALL * 2 - 1);
+    }
+    screen->forceDisplay();
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+#else
     display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
                      icon_width, icon_height, icon_bits);
 
@@ -1537,6 +1581,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
+#endif
 #endif
 }
 

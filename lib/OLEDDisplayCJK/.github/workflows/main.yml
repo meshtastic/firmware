@@ -1,0 +1,39 @@
+# documentation at https://docs.platformio.org/en/latest/integration/ci/github-actions.html
+
+name: PlatformIO CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [examples/SSD1306UiDemo, examples/SSD1306SimpleDemo, examples/SSD1306DrawingDemo, examples/SSD1306OTADemo, examples/SSD1306ClockDemo, examples/SSD1306TwoScreenDemo]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: ${{ runner.os }}-pip-
+    - name: Cache PlatformIO
+      uses: actions/cache@v3
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+    - name: Set up Python
+      uses: actions/setup-python@v5
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade platformio intelhex
+    - name: Install library dependencies
+      run: pio pkg install -g -l "paulstoffregen/Time@^1.6"
+    - name: Run PlatformIO
+      run: pio ci --lib="." --board=nodemcuv2 --board=d1_mini --board=esp-wrover-kit --board=esp32doit-devkit-v1
+      env:
+        PLATFORMIO_CI_SRC: ${{ matrix.example }}

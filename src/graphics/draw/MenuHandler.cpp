@@ -11,6 +11,9 @@
 #include "NodeDB.h"
 #include "buzz.h"
 #include "graphics/Screen.h"
+#if defined(GAT562)
+#include "graphics/GAT562Arcade.h"
+#endif
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
 #include "graphics/draw/MessageRenderer.h"
@@ -1197,7 +1200,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Arcade, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1226,6 +1229,11 @@ void menuHandler::systemBaseMenu()
     }
     optionsEnumArray[options++] = PowerMenu;
 
+#if defined(GAT562)
+    optionsArray[options] = "Arcade";
+    optionsEnumArray[options++] = Arcade;
+#endif
+
     if (test_enabled) {
         optionsArray[options] = "Test Menu";
         optionsEnumArray[options++] = Test;
@@ -1249,6 +1257,10 @@ void menuHandler::systemBaseMenu()
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::PowerMenu;
             screen->runNow();
+#if defined(GAT562)
+        } else if (selected == Arcade) {
+            graphics::GAT562Arcade::instance().start();
+#endif
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::TestMenu;
             screen->runNow();

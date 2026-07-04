@@ -265,6 +265,10 @@ const char *getDeviceName()
 
     // Meshtastic_ab3c or Shortname_abcd
     static char name[20];
+#if defined(GAT562)
+    snprintf(name, sizeof(name), "GAT562_%02x%02x", dmac[4], dmac[5]);
+    return name;
+#else
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
     if (strcmp(owner.short_name, name) != 0) {
@@ -273,6 +277,7 @@ const char *getDeviceName()
         snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
     }
     return name;
+#endif
 }
 
 uint32_t timeLastPowered = 0;
@@ -343,6 +348,14 @@ void setup()
 
     // initialize power HAL layer as early as possible
     powerHAL_init();
+
+#if defined(GAT562) && defined(ARCH_NRF52) && defined(PIN_BUTTON1)
+    pinMode(PIN_BUTTON1, INPUT_PULLUP);
+    delay(20);
+    if (powerHAL_isVBUSConnected() && digitalRead(PIN_BUTTON1) == LOW) {
+        enterDfuMode();
+    }
+#endif
 
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
@@ -1352,6 +1365,13 @@ void loop()
 #endif
 
     service->loop();
+    if (RadioLibInterface::instance != nullptr) {
+        static uint32_t lastNoiseFloorUpdate;
+        if (!Throttle::isWithinTimespanMs(lastNoiseFloorUpdate, 5000)) {
+            lastNoiseFloorUpdate = millis();
+            RadioLibInterface::instance->updateNoiseFloor();
+        }
+    }
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     if (inputBroker)
         inputBroker->processInputEventQueue();

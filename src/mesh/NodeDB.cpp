@@ -81,7 +81,11 @@ EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_NodeDatabase nodeDatabase;
 meshtastic_LocalConfig config;
+#if defined(GAT562)
+meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 60};
+#else
 meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
+#endif
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
@@ -397,6 +401,26 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
+#if defined(GAT562)
+static constexpr uint32_t gat562_default_gps_update_interval_secs = 120;
+
+static bool isHexDigit(char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static bool isDefaultShortName(const char *name)
+{
+    return name && isHexDigit(name[0]) && isHexDigit(name[1]) && isHexDigit(name[2]) && isHexDigit(name[3]) && name[4] == '\0';
+}
+
+static bool isDefaultLongName(const char *name)
+{
+    return !name || name[0] == '\0' || strncmp(name, "GAT562 ", 7) == 0 || strncmp(name, "GAT562_", 7) == 0 ||
+           strncmp(name, "Meshtastic ", 11) == 0;
+}
+#endif
+
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
@@ -638,6 +662,60 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#if defined(GAT562)
+#if defined(GPS_RX_PIN)
+    if (config.position.rx_gpio != GPS_RX_PIN) {
+        config.position.rx_gpio = GPS_RX_PIN;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
+#if defined(GPS_TX_PIN)
+    if (config.position.tx_gpio != GPS_TX_PIN) {
+        config.position.tx_gpio = GPS_TX_PIN;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
+#if defined(PIN_GPS_EN)
+    if (config.position.gps_en_gpio != PIN_GPS_EN) {
+        config.position.gps_en_gpio = PIN_GPS_EN;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+    if (config.position.gps_update_interval == 0 || config.position.gps_update_interval == 10) {
+        config.position.gps_update_interval = gat562_default_gps_update_interval_secs;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
+#if defined(GAT562)
+    uint8_t gat562Mac[6];
+    getMacAddr(gat562Mac);
+    char gat562BleSuffix[5];
+    snprintf(gat562BleSuffix, sizeof(gat562BleSuffix), "%02x%02x", gat562Mac[4], gat562Mac[5]);
+    if (isDefaultShortName(owner.short_name) && strcmp(owner.short_name, gat562BleSuffix) != 0) {
+        snprintf(owner.short_name, sizeof(owner.short_name), "%s", gat562BleSuffix);
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_DEVICESTATE;
+    }
+    if (isDefaultLongName(owner.long_name) && strstr(owner.long_name, gat562BleSuffix) == nullptr) {
+        snprintf(owner.long_name, sizeof(owner.long_name), "GAT562_%s", gat562BleSuffix);
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_DEVICESTATE;
+    }
+    if (config.display.screen_on_secs == 30 || config.display.screen_on_secs == default_screen_on_secs) {
+        config.display.screen_on_secs = 60;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
 #ifdef USERPREFS_FIRMWARE_EDITION
     myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
 #endif
@@ -993,6 +1071,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
+#if defined(GAT562) && defined(GPS_RX_PIN)
+    config.position.rx_gpio = GPS_RX_PIN;
+#endif
+#if defined(GAT562) && defined(GPS_TX_PIN)
+    config.position.tx_gpio = GPS_TX_PIN;
+#endif
 
 #if defined(USERPREFS_CONFIG_GPS_MODE)
     config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
@@ -1140,7 +1224,9 @@ void NodeDB::initConfigIntervals()
 #else
     config.position.gps_update_interval = default_gps_update_interval;
 #endif
-
+#if defined(GAT562)
+    config.position.gps_update_interval = gat562_default_gps_update_interval_secs;
+#endif
 #ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
     config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
 #else
@@ -1153,6 +1239,9 @@ void NodeDB::initConfigIntervals()
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
 
     config.display.screen_on_secs = default_screen_on_secs;
+#if defined(GAT562)
+    config.display.screen_on_secs = 60;
+#endif
 
 #if defined(USE_POWERSAVE)
     config.power.is_power_saving = true;
@@ -1875,7 +1964,11 @@ void NodeDB::installDefaultDeviceState()
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
     snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
+#if defined(GAT562)
+    snprintf(owner.long_name, sizeof(owner.long_name), "GAT562_%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
+#endif
 #endif
 
     clampLongName(owner.long_name); // vendor userprefs may exceed the local cap
@@ -1883,7 +1976,11 @@ void NodeDB::installDefaultDeviceState()
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
+#if defined(GAT562)
+    snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#else
     snprintf(owner.short_name, sizeof(owner.short_name), "%04x", getNodeNum() & 0x0ffff);
+#endif
 #endif
 
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum

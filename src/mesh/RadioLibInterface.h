@@ -137,6 +137,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     int32_t getNoiseFloor();
 
+    int16_t getDisplayRSSI() { return iface ? (int16_t)iface->getRSSI() : getCurrentRSSI(); }
+    float getDisplaySNR() { return iface ? iface->getSNR() : 0.0f; }
+
     /**
      * Calculate the average noise floor from collected samples
      */
