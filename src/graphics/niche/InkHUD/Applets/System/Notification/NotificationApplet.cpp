@@ -325,32 +325,38 @@ void InkHUD::NotificationApplet::onButtonLongPress()
 
 void InkHUD::NotificationApplet::onExitShort()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onExitLong()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavUp()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavDown()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavLeft()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavRight()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 // Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification
@@ -371,6 +377,11 @@ bool InkHUD::NotificationApplet::isApproved()
     }
 
     return true;
+}
+
+bool InkHUD::NotificationApplet::dismissOnAuxInput() const
+{
+    return currentNotification.type != Notification::Type::NOTIFICATION_GEOFENCE;
 }
 
 // Mark that the notification should no-longer be rendered

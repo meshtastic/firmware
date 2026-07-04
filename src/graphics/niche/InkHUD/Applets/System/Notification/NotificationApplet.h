@@ -70,6 +70,7 @@ class NotificationApplet : public SystemApplet
     void clearPreparedLines();
     void resetTileHeight();
     void prepareCurrentNotificationLayout();
+    bool dismissOnAuxInput() const;
     std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
     bool hasNotification = false;                       // Only used for assert. Todo: remove?
