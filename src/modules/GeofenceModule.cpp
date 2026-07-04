@@ -78,6 +78,17 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
     return notifyOnExit ? Crossing::Exit : Crossing::None;
 }
 
+GeofenceModule::Crossing GeofenceModule::classifyTrackedUpdate(bool hasTrackedState, bool trackedInside, bool hasPreviousPosition,
+                                                               bool previousInside, bool isInside, bool notifyOnEnter,
+                                                               bool notifyOnExit)
+{
+    if (hasTrackedState)
+        return classify(false, trackedInside, isInside, notifyOnEnter, notifyOnExit);
+    if (hasPreviousPosition)
+        return classify(false, previousInside, isInside, notifyOnEnter, notifyOnExit);
+    return classify(true, false, isInside, notifyOnEnter, notifyOnExit);
+}
+
 // --- Store management -------------------------------------------------------------------------
 
 void GeofenceModule::removeGeofence(uint32_t waypointId)
@@ -182,7 +193,8 @@ void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp)
 
 // --- Evaluation ------------------------------------------------------------------------------
 
-void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p)
+void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition, int32_t previousLat_i,
+                                      int32_t previousLon_i)
 {
     if (geofences.empty())
         return;
@@ -205,13 +217,18 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
             insideAny(lat, lon, g.latitude_i, g.longitude_i, g.geofence_radius, g.has_bounding_box, g.bounding_box);
         const uint64_t key = crossingKey(g.id, node);
         CrossingState *state = findCrossingState(key);
-        const bool firstSighting = (state == nullptr);
-        const bool wasInside = firstSighting ? false : state->inside;
+        const bool hasTrackedState = (state != nullptr);
+        const bool previousInside =
+            hasPreviousPosition
+                ? insideAny(previousLat_i, previousLon_i, g.latitude_i, g.longitude_i, g.geofence_radius, g.has_bounding_box,
+                            g.bounding_box)
+                : false;
 
-        const Crossing crossing = classify(firstSighting, wasInside, isInside, g.notify_on_enter, g.notify_on_exit);
+        const Crossing crossing = classifyTrackedUpdate(hasTrackedState, hasTrackedState ? state->inside : false, hasPreviousPosition,
+                                                        previousInside, isInside, g.notify_on_enter, g.notify_on_exit);
 
         // Record/baseline the current state (bounded — drop new pairs once the map is full).
-        if (firstSighting) {
+        if (!hasTrackedState) {
             if (crossingInside.size() < GEOFENCE_MAX_CROSSING) {
                 crossingInside.push_back(CrossingState{key, isInside});
             } else {
@@ -260,12 +277,24 @@ void GeofenceModule::notify(const Geofence &g, NodeNum node, bool entered)
     LOG_INFO("Geofence: %s %s '%s'", who, entered ? "entered" : "left", g.name);
 
 #if HAS_SCREEN
+    if (screen)
+        powerFSM.trigger(EVENT_RECEIVED_MSG); // wake the screen so the banner is seen
+#endif
+
+    GeofenceNotificationEvent event;
+    strncpy(event.nodeName, who, sizeof(event.nodeName) - 1);
+    event.nodeName[sizeof(event.nodeName) - 1] = '\0';
+    event.entered = entered;
+    strncpy(event.geofenceName, g.name, sizeof(event.geofenceName) - 1);
+    event.geofenceName[sizeof(event.geofenceName) - 1] = '\0';
+    notifyObservers(&event);
+
+#if HAS_SCREEN && !defined(MESHTASTIC_INCLUDE_INKHUD)
     if (screen) {
         char banner[120];
-        snprintf(banner, sizeof(banner), "%s\n%s\n%s", who, entered ? "entered" : "left", g.name);
+        snprintf(banner, sizeof(banner), "%s\n%s %s", who, entered ? "IN" : "OUT", g.name);
         screen->showSimpleBanner(banner, 5000);
     }
-    powerFSM.trigger(EVENT_RECEIVED_MSG); // wake the screen so the banner is seen
 #endif
 
     if (externalNotificationModule)

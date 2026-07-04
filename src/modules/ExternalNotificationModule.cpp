@@ -511,6 +511,8 @@ void ExternalNotificationModule::startNotification()
     if (!generic && !vibra && !buzzer)
         return;
 
+    buzzerShouldAlert |= buzzer;
+
     nagCycleCutoff =
         millis() + (moduleConfig.external_notification.nag_timeout ? (moduleConfig.external_notification.nag_timeout * 1000)
                                                                    : moduleConfig.external_notification.output_ms);

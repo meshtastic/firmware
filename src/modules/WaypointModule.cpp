@@ -6,6 +6,7 @@
 #include "graphics/draw/CompassRenderer.h"
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <string>
 #include "meshUtils.h"
 
@@ -63,8 +64,8 @@ void drawFallbackWaypointIcon(OLEDDisplay *display, int16_t left, int16_t top, u
     const int16_t r = std::max<int16_t>(1, boxSize / 4);
     display->drawCircle(cx, circleY, r);
     display->drawLine(cx, circleY + r, cx, top + boxSize - 2);
-    display->drawPixel(cx - 1, top + boxSize - 2);
-    display->drawPixel(cx + 1, top + boxSize - 2);
+    display->setPixel(cx - 1, top + boxSize - 2);
+    display->setPixel(cx + 1, top + boxSize - 2);
 }
 
 void drawWaypointIcon(OLEDDisplay *display, const meshtastic_Waypoint &wp, int16_t left, int16_t top, uint16_t boxSize)
@@ -267,9 +268,15 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         return;
     const meshtastic_Waypoint &wp = entry->waypoint;
 
-    // Sanitize before these reach the OLED renderer (defense-in-depth vs PB_VALIDATE_UTF8).
-    sanitizeUtf8(wp.name, sizeof(wp.name));
-    sanitizeUtf8(wp.description, sizeof(wp.description));
+    char safeName[sizeof(wp.name)];
+    memcpy(safeName, wp.name, sizeof(safeName));
+    safeName[sizeof(safeName) - 1] = '\0';
+    sanitizeUtf8(safeName, sizeof(safeName));
+
+    char safeDescription[sizeof(wp.description)];
+    memcpy(safeDescription, wp.description, sizeof(safeDescription));
+    safeDescription[sizeof(safeDescription) - 1] = '\0';
+    sanitizeUtf8(safeDescription, sizeof(safeDescription));
 
     // Get timestamp info. Will pass as a field to drawColumns
     char lastStr[20];
@@ -281,7 +288,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     formatWaypointCoordinates(coordStr, sizeof(coordStr), wp);
     formatWaypointExpire(expireStr, sizeof(expireStr), wp);
 
-    const std::string description = trimmedWaypointText(wp.description);
+    const std::string description = trimmedWaypointText(safeDescription);
     const bool hasDescription = !description.empty();
     const int topTextLines = hasDescription ? 4 : 3;
 
@@ -376,7 +383,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     const uint16_t nameWidth =
         (display->getWidth() > nameX + distWidth) ? (display->getWidth() - nameX - distWidth) : (display->getWidth() - nameX);
     drawWaypointIcon(display, wp, 0, row1Y, iconWidth);
-    display->drawStringMaxWidth(nameX, row1Y, nameWidth, wp.name);
+    display->drawStringMaxWidth(nameX, row1Y, nameWidth, safeName);
     if (distStr[0]) {
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
         display->drawString(display->getWidth(), row1Y, distStr);

@@ -4,10 +4,17 @@
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 
+#include "Observer.h"
 #include "mesh/MeshTypes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
 #include <vector>
+
+struct GeofenceNotificationEvent {
+    char nodeName[40] = {};
+    bool entered = false;
+    char geofenceName[sizeof(meshtastic_Waypoint::name)] = {};
+};
 
 /**
  * GeofenceModule — raises on-device enter/exit alerts when a tracked node crosses the geofence
@@ -21,14 +28,15 @@
  * Behaviour matches the client spec (meshtastic/design#114):
  *   - Inside test: within the circle (distance <= geofence_radius) OR inside the bounding box.
  *   - Per-pair (waypointId, nodeNum) inside/outside state. The FIRST sighting of a pair only sets a
- *     baseline (no notification), so a fresh boot can't fire spurious alerts.
+ *     baseline (no notification), unless the caller can supply the node's immediately previous
+ *     cached position, in which case that previous sample is used to infer the transition.
  *   - Only a genuine inside<->outside transition notifies: enter if notify_on_enter, exit if
  *     notify_on_exit. notify_favorites_only gates alerts to the receiver's own favourites.
  *   - All state is in-memory; it need not survive a restart (the baseline rule handles relaunch).
  *
  * Crossing is judged against OTHER nodes' reported positions, not this device's own location.
  */
-class GeofenceModule
+class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
 {
   public:
     GeofenceModule();
@@ -62,13 +70,20 @@ class GeofenceModule
     /// The first sighting of a pair only establishes a baseline and returns None.
     static Crossing classify(bool firstSighting, bool wasInside, bool isInside, bool notifyOnEnter, bool notifyOnExit);
 
+    /// Decide what to notify for an update when tracked state may not exist yet. If we already
+    /// track the pair, trackedInside wins. Otherwise, a supplied previous sample becomes the
+    /// baseline; without either, the update only establishes baseline state.
+    static Crossing classifyTrackedUpdate(bool hasTrackedState, bool trackedInside, bool hasPreviousPosition,
+                                          bool previousInside, bool isInside, bool notifyOnEnter, bool notifyOnExit);
+
     // --- Engine API (device side) ---
 
     /// Ingest a waypoint (from WaypointModule): upsert or remove its geofence in the in-memory store.
     void onWaypointReceived(const meshtastic_Waypoint &wp);
 
     /// Evaluate a received node position (from PositionModule) against all known geofences.
-    void evaluatePosition(NodeNum node, const meshtastic_Position &p);
+    void evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition = false, int32_t previousLat_i = 0,
+                          int32_t previousLon_i = 0);
 
   private:
     // Trimmed copy of a geofencing waypoint we are tracking (name kept for the alert text).

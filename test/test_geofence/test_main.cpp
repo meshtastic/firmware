@@ -196,6 +196,24 @@ static void test_classify_exitFiresOnlyWhenEnabled()
     TEST_ASSERT_TRUE(GeofenceModule::classify(false, true, false, false, false) == Crossing::None);
 }
 
+static void test_classifyTrackedUpdate_firstInsideUsesPreviousOutside()
+{
+    TEST_ASSERT_TRUE(
+        GeofenceModule::classifyTrackedUpdate(false, false, true, false, true, true, true) == Crossing::Enter);
+}
+
+static void test_classifyTrackedUpdate_firstOutsideUsesPreviousInside()
+{
+    TEST_ASSERT_TRUE(
+        GeofenceModule::classifyTrackedUpdate(false, false, true, true, false, true, true) == Crossing::Exit);
+}
+
+static void test_classifyTrackedUpdate_noPreviousStillBaselines()
+{
+    TEST_ASSERT_TRUE(
+        GeofenceModule::classifyTrackedUpdate(false, false, false, false, true, true, true) == Crossing::None);
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -227,6 +245,9 @@ void setup()
     RUN_TEST(test_classify_noTransitionNeverNotifies);
     RUN_TEST(test_classify_enterFiresOnlyWhenEnabled);
     RUN_TEST(test_classify_exitFiresOnlyWhenEnabled);
+    RUN_TEST(test_classifyTrackedUpdate_firstInsideUsesPreviousOutside);
+    RUN_TEST(test_classifyTrackedUpdate_firstOutsideUsesPreviousInside);
+    RUN_TEST(test_classifyTrackedUpdate_noPreviousStillBaselines);
     exit(UNITY_END());
 }
 

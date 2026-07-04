@@ -492,6 +492,8 @@ We keep this separate latest-message cache for this purpose, because:
 - we want to expose both the most recent broadcast and most recent DM independently
 - applets like `DMApplet` and `NotificationApplet` need quick access without scanning the full message history
 
+This cache is only for text messages. `NotificationApplet` also handles geofence notifications, but those arrive as live events from `GeofenceModule` and do not use `LatestMessage`.
+
 #### How messages reach the store
 
 Broadcasts and DMs take different paths into `messageStore`:
@@ -612,6 +614,8 @@ Applets themselves do also listen separately for various events, but for the pur
 
 `Events::onReceiveTextMessage()` is the central handler for all incoming text messages. It updates the `LatestMessage` cache and, for DMs, also adds the message to `messageStore` (since `ThreadedMessageApplet` only handles broadcasts). See `Persistence::LatestMessage` for details on how the two message types are stored.
 
+Text messages are only one notification source. `NotificationApplet` also observes `GeofenceModule`, which emits generic enter / exit events that InkHUD can present without adding InkHUD-specific logic to waypoint handling.
+
 #### Buttons
 
 Button input is sometimes handled by a system applet. `InkHUD::Events` determines whether the button should be handled by a specific system applet, or should instead trigger a default behavior
@@ -677,7 +681,7 @@ Regardless of whether it is foreground or background, an activated applet should
 
 #### Autoshow
 
-Autoshow is a feature which allows the user to select which applets (if any) they would like to be shown automatically. If autoshow is enabled for an applet, it will be brought to foreground when it has new information to display. The user grants this privilege on a per-applet basis, using the on-screen menu. If an event causes an applet to be autoshown, NotificationApplet should not be shown for the same event.
+Autoshow is a feature which allows the user to select which applets (if any) they would like to be shown automatically. If autoshow is enabled for an applet, it will be brought to foreground when it has new information to display. The user grants this privilege on a per-applet basis, using the on-screen menu. If an event causes an applet to be autoshown, `NotificationApplet` should not be shown for the same event.
 
 An applet needs to decide when it has information worthy of autoshowing. It signals this by calling `requestAutoshow`, in addition to the usual `requestUpdate` call.
 
@@ -691,6 +695,8 @@ This class is a slight extension of `Applet`. It adds extra flags for some speci
 
 We store reference to these as a `vector<SystemApplets*>`. This parallels how we treat user applets, and makes rendering convenient.
 Because system applets do have unique roles, there are times when we will need to interact with a specific applet. Rather than keeping an extra set of references, we access them from the `vector<SystemApplet*>`. Use `InkHUD::getSystemApplet` to access the applet by its `Applet::name` value, and then typecast.
+
+`NotificationApplet` is a system applet. It renders the top-edge popup used for text-message and geofence notifications. Its tile defaults to 20 px tall, stays one line when possible, and temporarily grows to fit up to two lines when a notification would otherwise overflow.
 
 ---
 
@@ -724,7 +730,9 @@ Highlighting is only used when `nextTile` is fired by an aux button. It does not
 
 #### System Tiles
 
-_System applets_ are applets with special roles, which require special handling. Examples include `BatteryIconApplet.h` and `LogoApplet.h`. _Mostly_, these applets do not render to user tiles. Instead, they are given their own unique tile, which is positioned / dimensioned manually. The only reference we keep to these special tiles is stored within the linked system applet. They can be accessed with `Applet::getTile`.
+_System applets_ are applets with special roles, which require special handling. Examples include `BatteryIconApplet.h`, `LogoApplet.h`, and `NotificationApplet.h`. _Mostly_, these applets do not render to user tiles. Instead, they are given their own unique tile, which is positioned / dimensioned manually. The only reference we keep to these special tiles is stored within the linked system applet. They can be accessed with `Applet::getTile`.
+
+These tiles do not all have to remain fixed-size. `NotificationApplet` normally uses a 20 px high tile, but may briefly increase its height while showing a wrapped two-line popup, then restore the default height when dismissed.
 
 ---
 
