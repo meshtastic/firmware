@@ -174,6 +174,104 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
 
 #endif
 
+#ifdef HELTEC_RC32
+
+uint32_t readNv3001bBits(uint8_t bits, uint8_t dummy, uint8_t sck, uint8_t mosi)
+{
+    uint32_t ret = 0;
+    pinMode(mosi, INPUT_PULLUP);
+    for (uint8_t i = 0; i < dummy; i++) {
+        digitalWrite(sck, HIGH);
+        delayMicroseconds(1);
+        digitalWrite(sck, LOW);
+        delayMicroseconds(1);
+    }
+    for (uint8_t i = 0; i < bits; i++) {
+        ret <<= 1;
+        digitalWrite(sck, HIGH);
+        delayMicroseconds(1);
+        if (digitalRead(mosi))
+            ret |= 1;
+        digitalWrite(sck, LOW);
+        delayMicroseconds(1);
+    }
+    return ret;
+}
+
+void writeNv3001bCommand(uint8_t val, uint8_t sck, uint8_t mosi, uint8_t dc)
+{
+    pinMode(mosi, OUTPUT);
+    digitalWrite(dc, LOW);
+    for (uint8_t mask = 0x80; mask; mask >>= 1) {
+        digitalWrite(sck, LOW);
+        digitalWrite(mosi, (val & mask) ? HIGH : LOW);
+        delayMicroseconds(1);
+        digitalWrite(sck, HIGH);
+        delayMicroseconds(1);
+    }
+}
+
+uint32_t readNv3001bRegister(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc)
+{
+    digitalWrite(cs, LOW);
+    writeNv3001bCommand(cmd, sck, mosi, dc);
+    digitalWrite(dc, HIGH);
+    uint32_t ret = readNv3001bBits(bits, dummy, sck, mosi);
+    pinMode(mosi, OUTPUT);
+    digitalWrite(mosi, HIGH);
+    digitalWrite(cs, HIGH);
+    digitalWrite(sck, LOW);
+    return ret;
+}
+
+uint32_t get_nv3001b_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst, uint8_t en, uint8_t bl)
+{
+    constexpr uint32_t EXPECTED_ID = 0x300101;
+
+    pinMode(en, OUTPUT);
+    digitalWrite(en, TFT_EN_ON);
+    delay(100);
+    pinMode(bl, OUTPUT);
+    digitalWrite(bl, TFT_BACKLIGHT_ON);
+    delay(100);
+
+    pinMode(cs, OUTPUT);
+    pinMode(sck, OUTPUT);
+    pinMode(mosi, OUTPUT);
+    pinMode(dc, OUTPUT);
+    pinMode(rst, OUTPUT);
+    digitalWrite(cs, HIGH);
+    digitalWrite(dc, HIGH);
+    digitalWrite(sck, LOW);
+    digitalWrite(mosi, HIGH);
+    digitalWrite(rst, HIGH);
+    delay(100);
+    digitalWrite(rst, LOW);
+    delay(120);
+    digitalWrite(rst, HIGH);
+    delay(120);
+
+    uint32_t rddid = readNv3001bRegister(0x04, 24, 1, cs, sck, mosi, dc);
+    uint32_t rdid = (readNv3001bRegister(0xDA, 8, 0, cs, sck, mosi, dc) << 16) |
+                    (readNv3001bRegister(0xDB, 8, 0, cs, sck, mosi, dc) << 8) |
+                    readNv3001bRegister(0xDC, 8, 0, cs, sck, mosi, dc);
+    uint32_t id = rddid == EXPECTED_ID ? rddid : rdid;
+
+    LOG_INFO("Heltec RC32 NV3001B RDDID=%06x RDID=%06x", rddid, rdid);
+    if (id != EXPECTED_ID) {
+        LOG_INFO("Heltec RC32 NV3001B display not detected");
+        digitalWrite(bl, TFT_BACKLIGHT_OFF);
+        digitalWrite(en, TFT_EN_OFF);
+        delay(1);
+        pinMode(en, INPUT);
+    } else {
+        LOG_INFO("Heltec RC32 NV3001B display detected");
+    }
+    return id;
+}
+
+#endif
+
 // When armed by loadFromDisk, the decode callback writes satellite entries
 // straight into these maps instead of the temp vectors. Nullptr = legacy
 // push_back-to-vector path for backup/restore and other decoders.
@@ -1043,6 +1141,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         hasScreen = false;
     }
 #endif // HELTEC_MESH_NODE_T114
+#ifdef HELTEC_RC32
+    uint32_t nv3001b_id = get_nv3001b_id(TFT_CS, TFT_SCL, TFT_SDA, TFT_RS, TFT_RST, TFT_EN, TFT_BL);
+    if (nv3001b_id != 0x300101) {
+        hasScreen = false;
+    }
+#endif // HELTEC_RC32
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (portduino_config.displayPanel)

@@ -404,8 +404,16 @@ void InputBroker::Init()
 #endif
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
-#if defined(M5STACK_UNITC6L)
-        i2cButton = new i2cButtonThread("i2cButtonThread");
+#if defined(M5STACK_UNITC6L) || defined(HELTEC_RC32)
+        if (!i2cButton) {
+            i2cButton = new i2cButtonThread("i2cButtonThread");
+#if defined(HELTEC_RC32)
+            if (!i2cButton->init()) {
+                delete i2cButton;
+                i2cButton = nullptr;
+            }
+#endif
+        }
 #endif
 #ifdef INPUTBROKER_MATRIX_TYPE
         kbMatrixImpl = new KbMatrixImpl();
