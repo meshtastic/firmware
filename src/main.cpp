@@ -348,6 +348,12 @@ void setup()
     // initialize power HAL layer as early as possible
     powerHAL_init();
 
+#if defined(ARCH_ESP32) && defined(LED_HEARTBEAT)
+    pinMode(LED_HEARTBEAT, OUTPUT);
+    digitalWrite(LED_HEARTBEAT, LED_STATE_ON);
+#endif
+
+
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
     digitalWrite(LED_POWER, LED_STATE_ON);
