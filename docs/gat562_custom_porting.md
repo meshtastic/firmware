@@ -70,6 +70,9 @@ these changes as a separate patch set and re-validate them on hardware.
 
 - BLE behavior
   - Keep upstream BLE connection/security/service logic intact.
+  - Default BLE/display name is `GAT562_xxxx`, using the device suffix.
+  - If the phone app changes the device long name, reboot must preserve and
+    display the user name instead of forcing `GAT562_xxxx` again.
   - GAT562 may customize displayed name and pairing screen, but must not fork
     the core BLE connection path.
   - Previous connection failure was caused by deviating from upstream BLE logic;

@@ -416,8 +416,21 @@ static bool isDefaultShortName(const char *name)
 
 static bool isDefaultLongName(const char *name)
 {
-    return !name || name[0] == '\0' || strncmp(name, "GAT562 ", 7) == 0 || strncmp(name, "GAT562_", 7) == 0 ||
-           strncmp(name, "Meshtastic ", 11) == 0;
+    return !name || name[0] == '\0' || strncmp(name, "Meshtastic ", 11) == 0;
+}
+
+static bool isGat562DefaultLongName(const char *name, const char *suffix)
+{
+    if (!name || !name[0])
+        return true;
+
+    char defaultName[20];
+    snprintf(defaultName, sizeof(defaultName), "GAT562_%s", suffix);
+    if (strcmp(name, defaultName) == 0)
+        return true;
+
+    snprintf(defaultName, sizeof(defaultName), "GAT562 %s", suffix);
+    return strcmp(name, defaultName) == 0;
 }
 #endif
 
@@ -705,7 +718,7 @@ NodeDB::NodeDB()
         if (!configDecodeFailed)
             saveWhat |= SEGMENT_DEVICESTATE;
     }
-    if (isDefaultLongName(owner.long_name) && strstr(owner.long_name, gat562BleSuffix) == nullptr) {
+    if (isDefaultLongName(owner.long_name) || isGat562DefaultLongName(owner.long_name, gat562BleSuffix)) {
         snprintf(owner.long_name, sizeof(owner.long_name), "GAT562_%s", gat562BleSuffix);
         if (!configDecodeFailed)
             saveWhat |= SEGMENT_DEVICESTATE;
