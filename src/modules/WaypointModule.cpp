@@ -4,11 +4,11 @@
 #include "configuration.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/CompassRenderer.h"
+#include "meshUtils.h"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <string>
-#include "meshUtils.h"
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "GeofenceModule.h"

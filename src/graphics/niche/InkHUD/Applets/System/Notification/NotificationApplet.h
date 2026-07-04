@@ -73,12 +73,12 @@ class NotificationApplet : public SystemApplet
     bool dismissOnAuxInput() const;
     std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
-    bool hasNotification = false;                       // Only used for assert. Todo: remove?
+    bool hasNotification = false; // Only used for assert. Todo: remove?
     bool preparedWrapped = false;
     uint8_t preparedLineCount = 0;
     uint16_t preparedTextHeight = 0;
     std::array<PreparedLine, MAX_WRAPPED_LINES> preparedLines = {};
-    Notification currentNotification = Notification();  // Set when something notification-worthy happens. Used by render()
+    Notification currentNotification = Notification(); // Set when something notification-worthy happens. Used by render()
 };
 
 } // namespace NicheGraphics::InkHUD

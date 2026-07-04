@@ -96,9 +96,10 @@ void GeofenceModule::removeGeofence(uint32_t waypointId)
     geofences.erase(std::remove_if(geofences.begin(), geofences.end(),
                                    [waypointId](const Geofence &geofence) { return geofence.id == waypointId; }),
                     geofences.end());
-    crossingInside.erase(std::remove_if(crossingInside.begin(), crossingInside.end(),
-                                        [waypointId](const CrossingState &state) { return (uint32_t)(state.key >> 32) == waypointId; }),
-                         crossingInside.end());
+    crossingInside.erase(
+        std::remove_if(crossingInside.begin(), crossingInside.end(),
+                       [waypointId](const CrossingState &state) { return (uint32_t)(state.key >> 32) == waypointId; }),
+        crossingInside.end());
 }
 
 void GeofenceModule::purgeExpired(uint32_t now)
@@ -109,10 +110,9 @@ void GeofenceModule::purgeExpired(uint32_t now)
         if (geofences[i].expire != 0 && geofences[i].expire <= now) {
             uint32_t id = geofences[i].id;
             geofences.erase(geofences.begin() + i);
-            crossingInside.erase(
-                std::remove_if(crossingInside.begin(), crossingInside.end(),
-                               [id](const CrossingState &state) { return (uint32_t)(state.key >> 32) == id; }),
-                crossingInside.end());
+            crossingInside.erase(std::remove_if(crossingInside.begin(), crossingInside.end(),
+                                                [id](const CrossingState &state) { return (uint32_t)(state.key >> 32) == id; }),
+                                 crossingInside.end());
         } else {
             i++;
         }
@@ -218,16 +218,15 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
         const uint64_t key = crossingKey(g.id, node);
         CrossingState *state = findCrossingState(key);
         const bool hasTrackedState = (state != nullptr);
-        const bool previousInside =
-            hasPreviousPosition
-                ? insideAny(previousLat_i, previousLon_i, g.latitude_i, g.longitude_i, g.geofence_radius, g.has_bounding_box,
-                            g.bounding_box)
-                : false;
+        const bool previousInside = hasPreviousPosition ? insideAny(previousLat_i, previousLon_i, g.latitude_i, g.longitude_i,
+                                                                    g.geofence_radius, g.has_bounding_box, g.bounding_box)
+                                                        : false;
 
-        const Crossing crossing = classifyTrackedUpdate(hasTrackedState, hasTrackedState ? state->inside : false, hasPreviousPosition,
-                                                        previousInside, isInside, g.notify_on_enter, g.notify_on_exit);
+        const Crossing crossing =
+            classifyTrackedUpdate(hasTrackedState, hasTrackedState ? state->inside : false, hasPreviousPosition, previousInside,
+                                  isInside, g.notify_on_enter, g.notify_on_exit);
 
-        // Record/baseline the current state (bounded — drop new pairs once the map is full).
+        // Record/baseline the current state (bounded - drop new pairs once the map is full).
         if (!hasTrackedState) {
             if (crossingInside.size() < GEOFENCE_MAX_CROSSING) {
                 crossingInside.push_back(CrossingState{key, isInside});

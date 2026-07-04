@@ -113,7 +113,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
     if (geofenceModule && !isLocal) {
         meshtastic_PositionLite previousPos;
-        if (nodeDB->copyNodePosition(getFrom(&mp), previousPos) && (previousPos.latitude_i != 0 || previousPos.longitude_i != 0)) {
+        if (nodeDB->copyNodePosition(getFrom(&mp), previousPos) &&
+            (previousPos.latitude_i != 0 || previousPos.longitude_i != 0)) {
             hasPreviousPosition = true;
             previousLat_i = previousPos.latitude_i;
             previousLon_i = previousPos.longitude_i;

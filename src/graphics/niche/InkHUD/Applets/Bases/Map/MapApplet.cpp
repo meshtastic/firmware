@@ -751,12 +751,14 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
             if (!waypointHasMapGeometry(entry.waypoint))
                 continue;
 
-            const float latDeg = waypointHasAnchor(entry.waypoint)
-                                     ? (entry.waypoint.latitude_i * 1e-7f)
-                                     : ((entry.waypoint.bounding_box.latitude_south_i + entry.waypoint.bounding_box.latitude_north_i) * 0.5e-7f);
-            const float lngDeg = waypointHasAnchor(entry.waypoint)
-                                     ? (entry.waypoint.longitude_i * 1e-7f)
-                                     : ((entry.waypoint.bounding_box.longitude_west_i + entry.waypoint.bounding_box.longitude_east_i) * 0.5e-7f);
+            const float latDeg =
+                waypointHasAnchor(entry.waypoint)
+                    ? (entry.waypoint.latitude_i * 1e-7f)
+                    : ((entry.waypoint.bounding_box.latitude_south_i + entry.waypoint.bounding_box.latitude_north_i) * 0.5e-7f);
+            const float lngDeg =
+                waypointHasAnchor(entry.waypoint)
+                    ? (entry.waypoint.longitude_i * 1e-7f)
+                    : ((entry.waypoint.bounding_box.longitude_west_i + entry.waypoint.bounding_box.longitude_east_i) * 0.5e-7f);
             float latRad = latDeg * DEG_TO_RAD;
             float lngRad = lngDeg * DEG_TO_RAD;
             float x = cos(latRad) * cos(lngRad);
@@ -893,10 +895,12 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
                             southernmost, easternmost, westernmost);
 
         if (entry.waypoint.has_bounding_box) {
-            includeMapPoint(entry.waypoint.bounding_box.latitude_south_i * 1e-7f, entry.waypoint.bounding_box.longitude_west_i * 1e-7f,
-                            lngCenter, northernmost, southernmost, easternmost, westernmost);
-            includeMapPoint(entry.waypoint.bounding_box.latitude_north_i * 1e-7f, entry.waypoint.bounding_box.longitude_east_i * 1e-7f,
-                            lngCenter, northernmost, southernmost, easternmost, westernmost);
+            includeMapPoint(entry.waypoint.bounding_box.latitude_south_i * 1e-7f,
+                            entry.waypoint.bounding_box.longitude_west_i * 1e-7f, lngCenter, northernmost, southernmost,
+                            easternmost, westernmost);
+            includeMapPoint(entry.waypoint.bounding_box.latitude_north_i * 1e-7f,
+                            entry.waypoint.bounding_box.longitude_east_i * 1e-7f, lngCenter, northernmost, southernmost,
+                            easternmost, westernmost);
         }
     }
 

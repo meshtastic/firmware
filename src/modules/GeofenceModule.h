@@ -17,7 +17,7 @@ struct GeofenceNotificationEvent {
 };
 
 /**
- * GeofenceModule — raises on-device enter/exit alerts when a tracked node crosses the geofence
+ * GeofenceModule - raises on-device enter/exit alerts when a tracked node crosses the geofence
  * carried by a Waypoint (Waypoint.geofence_radius and/or Waypoint.bounding_box).
  *
  * Geofences travel with the waypoint across the mesh; there is no app-local geofence model. This
@@ -62,7 +62,7 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     static bool hasGeofence(const meshtastic_Waypoint &wp);
 
     /// True if this waypoint should be tracked for alerts: it has a geofence, asks for an enter or
-    /// exit notification, isn't expired (now == 0 => treat as live), and — when it has a circle —
+    /// exit notification, isn't expired (now == 0 => treat as live), and - when it has a circle -
     /// carries a centre. A box-only geofence needs no centre (its corners are absolute).
     static bool shouldTrack(const meshtastic_Waypoint &wp, uint32_t now);
 
@@ -73,8 +73,8 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     /// Decide what to notify for an update when tracked state may not exist yet. If we already
     /// track the pair, trackedInside wins. Otherwise, a supplied previous sample becomes the
     /// baseline; without either, the update only establishes baseline state.
-    static Crossing classifyTrackedUpdate(bool hasTrackedState, bool trackedInside, bool hasPreviousPosition,
-                                          bool previousInside, bool isInside, bool notifyOnEnter, bool notifyOnExit);
+    static Crossing classifyTrackedUpdate(bool hasTrackedState, bool trackedInside, bool hasPreviousPosition, bool previousInside,
+                                          bool isInside, bool notifyOnEnter, bool notifyOnExit);
 
     // --- Engine API (device side) ---
 

@@ -198,20 +198,17 @@ static void test_classify_exitFiresOnlyWhenEnabled()
 
 static void test_classifyTrackedUpdate_firstInsideUsesPreviousOutside()
 {
-    TEST_ASSERT_TRUE(
-        GeofenceModule::classifyTrackedUpdate(false, false, true, false, true, true, true) == Crossing::Enter);
+    TEST_ASSERT_TRUE(GeofenceModule::classifyTrackedUpdate(false, false, true, false, true, true, true) == Crossing::Enter);
 }
 
 static void test_classifyTrackedUpdate_firstOutsideUsesPreviousInside()
 {
-    TEST_ASSERT_TRUE(
-        GeofenceModule::classifyTrackedUpdate(false, false, true, true, false, true, true) == Crossing::Exit);
+    TEST_ASSERT_TRUE(GeofenceModule::classifyTrackedUpdate(false, false, true, true, false, true, true) == Crossing::Exit);
 }
 
 static void test_classifyTrackedUpdate_noPreviousStillBaselines()
 {
-    TEST_ASSERT_TRUE(
-        GeofenceModule::classifyTrackedUpdate(false, false, false, false, true, true, true) == Crossing::None);
+    TEST_ASSERT_TRUE(GeofenceModule::classifyTrackedUpdate(false, false, false, false, true, true, true) == Crossing::None);
 }
 
 void setUp(void) {}
