@@ -61,7 +61,7 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
     bool tryGetOwnPosition(meshtastic_PositionLite &out);
     uint32_t nextExpiryUpdateMs(uint32_t secondsLeft);
     uint32_t nextRefreshIntervalMs();
-    std::string buildRenderKey();
+    uint32_t buildRenderHash();
     bool fillWaypointCard(const meshtastic_Waypoint &wp, WaypointCard &entry);
     void syncListState();
 
@@ -81,7 +81,8 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
 
     std::deque<WaypointCard> waypoints;
     uint8_t scrollOffset = 0;
-    std::string lastRenderKey;
+    uint32_t lastRenderHash = 0;
+    bool hasRenderHash = false;
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -5,6 +5,7 @@
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
+#include <algorithm>
 #include <cstring>
 
 #if HAS_SCREEN
@@ -21,6 +22,12 @@ GeofenceModule *geofenceModule;
 // geofencing waypoints; the crossing-state map grows with (waypoints x nodes).
 static constexpr size_t GEOFENCE_MAX_WAYPOINTS = 32;
 static constexpr size_t GEOFENCE_MAX_CROSSING = 256;
+
+GeofenceModule::GeofenceModule()
+{
+    geofences.reserve(GEOFENCE_MAX_WAYPOINTS);
+    crossingInside.reserve(GEOFENCE_MAX_CROSSING);
+}
 
 // --- Pure helpers -----------------------------------------------------------------------------
 
@@ -75,18 +82,12 @@ GeofenceModule::Crossing GeofenceModule::classify(bool firstSighting, bool wasIn
 
 void GeofenceModule::removeGeofence(uint32_t waypointId)
 {
-    for (size_t i = 0; i < geofences.size(); i++) {
-        if (geofences[i].id == waypointId) {
-            geofences.erase(geofences.begin() + i);
-            break;
-        }
-    }
-    for (auto it = crossingInside.begin(); it != crossingInside.end();) {
-        if ((uint32_t)(it->first >> 32) == waypointId)
-            it = crossingInside.erase(it);
-        else
-            ++it;
-    }
+    geofences.erase(std::remove_if(geofences.begin(), geofences.end(),
+                                   [waypointId](const Geofence &geofence) { return geofence.id == waypointId; }),
+                    geofences.end());
+    crossingInside.erase(std::remove_if(crossingInside.begin(), crossingInside.end(),
+                                        [waypointId](const CrossingState &state) { return (uint32_t)(state.key >> 32) == waypointId; }),
+                         crossingInside.end());
 }
 
 void GeofenceModule::purgeExpired(uint32_t now)
@@ -97,16 +98,24 @@ void GeofenceModule::purgeExpired(uint32_t now)
         if (geofences[i].expire != 0 && geofences[i].expire <= now) {
             uint32_t id = geofences[i].id;
             geofences.erase(geofences.begin() + i);
-            for (auto it = crossingInside.begin(); it != crossingInside.end();) {
-                if ((uint32_t)(it->first >> 32) == id)
-                    it = crossingInside.erase(it);
-                else
-                    ++it;
-            }
+            crossingInside.erase(
+                std::remove_if(crossingInside.begin(), crossingInside.end(),
+                               [id](const CrossingState &state) { return (uint32_t)(state.key >> 32) == id; }),
+                crossingInside.end());
         } else {
             i++;
         }
     }
+}
+
+GeofenceModule::CrossingState *GeofenceModule::findCrossingState(uint64_t key)
+{
+    for (auto &state : crossingInside) {
+        if (state.key == key)
+            return &state;
+    }
+
+    return nullptr;
 }
 
 bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint32_t now)
@@ -195,16 +204,16 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
         const bool isInside =
             insideAny(lat, lon, g.latitude_i, g.longitude_i, g.geofence_radius, g.has_bounding_box, g.bounding_box);
         const uint64_t key = crossingKey(g.id, node);
-        auto it = crossingInside.find(key);
-        const bool firstSighting = (it == crossingInside.end());
-        const bool wasInside = firstSighting ? false : it->second;
+        CrossingState *state = findCrossingState(key);
+        const bool firstSighting = (state == nullptr);
+        const bool wasInside = firstSighting ? false : state->inside;
 
         const Crossing crossing = classify(firstSighting, wasInside, isInside, g.notify_on_enter, g.notify_on_exit);
 
         // Record/baseline the current state (bounded — drop new pairs once the map is full).
         if (firstSighting) {
             if (crossingInside.size() < GEOFENCE_MAX_CROSSING) {
-                crossingInside[key] = isInside;
+                crossingInside.push_back(CrossingState{key, isInside});
             } else {
                 static bool warnedCrossingFull = false;
                 if (!warnedCrossingFull) {
@@ -214,7 +223,7 @@ void GeofenceModule::evaluatePosition(NodeNum node, const meshtastic_Position &p
                 }
             }
         } else {
-            it->second = isInside;
+            state->inside = isInside;
         }
 
         if (crossing == Crossing::None)

@@ -7,7 +7,6 @@
 #include "mesh/MeshTypes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
-#include <map>
 #include <vector>
 
 /**
@@ -32,6 +31,8 @@
 class GeofenceModule
 {
   public:
+    GeofenceModule();
+
     enum class Crossing { None, Enter, Exit };
 
     // --- Pure, side-effect-free helpers (unit-tested without device globals) ---
@@ -85,17 +86,23 @@ class GeofenceModule
         char name[sizeof(meshtastic_Waypoint::name)];
     };
 
+    struct CrossingState {
+        uint64_t key;
+        bool inside;
+    };
+
     static uint64_t crossingKey(uint32_t waypointId, NodeNum node) { return ((uint64_t)waypointId << 32) | node; }
 
     void purgeExpired(uint32_t now);
     void removeGeofence(uint32_t waypointId);
+    CrossingState *findCrossingState(uint64_t key);
     void notify(const Geofence &g, NodeNum node, bool entered);
 
     std::vector<Geofence> geofences;
     // (waypointId, nodeNum) -> last known inside state. Bounded: once it is full, new pairs are
     // dropped (they stay in the "first sighting" baseline state and won't alert) until a tracked
     // waypoint is removed/expires and frees space.
-    std::map<uint64_t, bool> crossingInside;
+    std::vector<CrossingState> crossingInside;
 };
 
 extern GeofenceModule *geofenceModule;

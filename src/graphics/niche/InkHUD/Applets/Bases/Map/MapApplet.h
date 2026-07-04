@@ -15,7 +15,7 @@ The base applet doesn't handle any events; this is left to the derived applets.
 #pragma once
 
 #include "configuration.h"
-#include <list>
+#include <vector>
 
 #include "WaypointStore.h"
 #include "graphics/niche/InkHUD/Applet.h"
@@ -80,6 +80,13 @@ class MapApplet : public Applet
         float northMeters = 0;
         uint32_t id = 0;
         uint32_t icon = 0;
+        uint32_t geofenceRadiusMeters = 0;
+        bool hasMarker = false;
+        bool hasBoundingBox = false;
+        float boxWestMeters = 0;
+        float boxEastMeters = 0;
+        float boxSouthMeters = 0;
+        float boxNorthMeters = 0;
     };
 
     bool mapWaypointIconGlyph(uint32_t codepoint, std::string &glyph);
@@ -97,8 +104,8 @@ class MapApplet : public Applet
     float lngCenter = 0;          // Map center: longitude
     bool centerIsOurNode = false; // True if map is centered on our own position (GPS or phone)
 
-    std::list<Marker> markers;
-    std::list<WaypointMarker> waypointMarkers;
+    std::vector<Marker> markers;
+    std::vector<WaypointMarker> waypointMarkers;
     uint32_t widthMeters = 0;  // Map width: meters
     uint32_t heightMeters = 0; // Map height: meters
 };

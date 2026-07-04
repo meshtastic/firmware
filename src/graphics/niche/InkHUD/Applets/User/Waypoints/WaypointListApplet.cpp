@@ -14,6 +14,21 @@
 
 using namespace NicheGraphics;
 
+namespace
+{
+
+uint32_t fnv1aAppend(uint32_t hash, const char *text)
+{
+    while (*text) {
+        hash ^= (uint8_t)*text++;
+        hash *= 16777619u;
+    }
+
+    return hash;
+}
+
+} // namespace
+
 InkHUD::WaypointListApplet::WaypointListApplet()
     : SinglePortModule("WaypointListApplet", meshtastic_PortNum_WAYPOINT_APP), concurrency::OSThread("WaypointListApplet")
 {
@@ -42,9 +57,10 @@ int32_t InkHUD::WaypointListApplet::runOnce()
         needsUpdate = true;
 
     if (isActive() && !waypoints.empty()) {
-        const std::string renderKey = buildRenderKey();
-        if (renderKey != lastRenderKey) {
-            lastRenderKey = renderKey;
+        const uint32_t renderHash = buildRenderHash();
+        if (!hasRenderHash || renderHash != lastRenderHash) {
+            lastRenderHash = renderHash;
+            hasRenderHash = true;
             needsUpdate = true;
         }
 
@@ -61,7 +77,7 @@ void InkHUD::WaypointListApplet::seedFromStore()
 {
     waypoints.clear();
     scrollOffset = 0;
-    lastRenderKey.clear();
+    hasRenderHash = false;
 
     const auto &storedWaypoints = waypointStore.getWaypoints();
     for (auto it = storedWaypoints.rbegin(); it != storedWaypoints.rend(); ++it) {
@@ -394,21 +410,26 @@ uint32_t InkHUD::WaypointListApplet::nextRefreshIntervalMs()
     return intervalMs;
 }
 
-std::string InkHUD::WaypointListApplet::buildRenderKey()
+uint32_t InkHUD::WaypointListApplet::buildRenderHash()
 {
-    std::string key;
-    key.reserve(waypoints.size() * 32);
+    uint32_t hash = 2166136261u;
 
     for (const WaypointCard &entry : waypoints) {
-        key += std::to_string(entry.id);
-        key.push_back('|');
-        key += distanceText(entry);
-        key.push_back('|');
-        key += expireText(entry.expire);
-        key.push_back(';');
+        char idBuf[11];
+        snprintf(idBuf, sizeof(idBuf), "%lu", (unsigned long)entry.id);
+        hash = fnv1aAppend(hash, idBuf);
+        hash = fnv1aAppend(hash, "|");
+
+        const std::string distance = distanceText(entry);
+        hash = fnv1aAppend(hash, distance.c_str());
+        hash = fnv1aAppend(hash, "|");
+
+        const std::string expire = expireText(entry.expire);
+        hash = fnv1aAppend(hash, expire.c_str());
+        hash = fnv1aAppend(hash, ";");
     }
 
-    return key;
+    return hash;
 }
 
 std::string InkHUD::WaypointListApplet::utf8FromCodepoint(uint32_t codepoint)
@@ -462,7 +483,7 @@ void InkHUD::WaypointListApplet::syncListState()
 {
     const bool landscape = width() > height();
     scrollOffset = std::min<uint8_t>(scrollOffset, maxScrollOffset(landscape));
-    lastRenderKey.clear();
+    hasRenderHash = false;
     // Re-arm the timer whenever visible waypoint state changes.
     updateRefreshTimer();
 }
