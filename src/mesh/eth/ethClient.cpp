@@ -45,6 +45,33 @@ using namespace concurrency;
 
 static Periodic *ethEvent;
 
+#ifdef RAK_ETH_CUSTOM_HOSTNAME
+#include <cctype>
+
+// Advertise a DHCP hostname (option 12) derived from the Meshtastic device name.
+// getDeviceName() returns e.g. "MyNode_a1b2", but '_' is not a valid DNS label
+// character, so map every non-alphanumeric run to a single '-' and trim edges,
+// yielding a recognizable, DNS-safe hostname such as "MyNode-a1b2".
+static const char *getEthHostname()
+{
+    static char ethHostname[HOST_NAME_MAX_LENGTH + 1];
+    const char *src = getDeviceName();
+    size_t j = 0;
+    for (size_t i = 0; src[i] != '\0' && j < sizeof(ethHostname) - 1; i++) {
+        char c = src[i];
+        if (isalnum((unsigned char)c)) {
+            ethHostname[j++] = c;
+        } else if (j > 0 && ethHostname[j - 1] != '-') {
+            ethHostname[j++] = '-'; // collapse invalid chars (incl. '_') into one hyphen
+        }
+    }
+    while (j > 0 && ethHostname[j - 1] == '-') // no trailing hyphen
+        j--;
+    ethHostname[j] = '\0';
+    return ethHostname;
+}
+#endif
+
 static int32_t reconnectETH()
 {
     if (config.network.eth_enabled) {
@@ -109,6 +136,10 @@ static int32_t reconnectETH()
             ETH_SPI_PORT.begin();
 #endif
             Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
+#endif
+
+#ifdef RAK_ETH_CUSTOM_HOSTNAME
+            Ethernet.setHostname(getEthHostname()); // re-apply hostname after chip reset, before begin()
 #endif
 
             int status = 0;
@@ -266,6 +297,11 @@ bool initEthernet()
 
         getMacAddr(mac); // FIXME use the BLE MAC for now...
         mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
+
+#ifdef RAK_ETH_CUSTOM_HOSTNAME
+        Ethernet.setHostname(getEthHostname()); // advertised to the DHCP server; must precede begin()
+        LOG_INFO("Ethernet hostname %s", getEthHostname());
+#endif
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("Start Ethernet DHCP");
