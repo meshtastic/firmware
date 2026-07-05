@@ -276,6 +276,10 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     safeDescription[sizeof(safeDescription) - 1] = '\0';
     sanitizeUtf8(safeDescription, sizeof(safeDescription));
 
+    // Sanitize before these reach the OLED renderer (defense-in-depth vs PB_VALIDATE_UTF8).
+    sanitizeUtf8(wp.name, sizeof(wp.name));
+    sanitizeUtf8(wp.description, sizeof(wp.description));
+
     // Get timestamp info. Will pass as a field to drawColumns
     char lastStr[20];
     getTimeAgoStr(WaypointStore::age(*entry), lastStr, sizeof(lastStr));

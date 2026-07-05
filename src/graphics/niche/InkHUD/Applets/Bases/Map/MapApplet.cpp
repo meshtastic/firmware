@@ -14,6 +14,14 @@ int InkHUD::MapApplet::s_lockedZoom = -1;
 int InkHUD::MapApplet::s_lastRenderedZoom = -1;
 int InkHUD::MapApplet::s_autoFitZoom = -1;
 
+static bool usesGridTileLayout();
+static int gridTilesPerBlock();
+static int tileZoomAt(int tileIndex);
+static int tileTxAt(int tileIndex);
+static int tileTyAt(int tileIndex);
+static int tileMetadataZoomCount();
+static int tileMetadataZoomAt(int index);
+
 namespace
 {
 
@@ -126,7 +134,6 @@ void InkHUD::MapApplet::drawWaypointFallbackMarker(const WaypointMarker &entry, 
     printAt(x, y + 1, badgeText, CENTER, MIDDLE);
 }
 
-// Observe GPS position updates so the map redraws whenever a new location arrives.
 InkHUD::MapApplet::MapApplet() {}
 
 int InkHUD::MapApplet::onGpsStatusUpdate(const meshtastic::Status *status)
@@ -182,8 +189,8 @@ void InkHUD::MapApplet::zoomIn()
 
     // Jump to the next tile zoom strictly above current, not just +1
     int next = -1;
-    for (int i = 0; i < map_tile_count; i++) {
-        int z = map_tile_zooms[i];
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
         if (z > baseZoom && (next < 0 || z < next))
             next = z;
     }
@@ -207,8 +214,8 @@ bool InkHUD::MapApplet::canZoomIn() const
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
     if (map_tile_count == 0)
         return ref < ZOOM_MAX_NO_TILES;
-    for (int i = 0; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] > ref)
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        if (tileMetadataZoomAt(i) > ref)
             return true;
     }
     return false;
@@ -237,8 +244,8 @@ void InkHUD::MapApplet::zoomOut()
 
     // Jump to the next tile zoom strictly below current, not just -1
     int next = -1;
-    for (int i = 0; i < map_tile_count; i++) {
-        int z = map_tile_zooms[i];
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
         if (z < baseZoom && (next < 0 || z > next))
             next = z;
     }
@@ -259,8 +266,8 @@ bool InkHUD::MapApplet::canZoomOut() const
     int ref = s_zoomLocked ? s_lockedZoom : s_lastRenderedZoom;
     if (map_tile_count == 0)
         return s_autoFitZoom >= 0 ? ref > s_autoFitZoom : false;
-    for (int i = 0; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] < ref)
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        if (tileMetadataZoomAt(i) < ref)
             return true;
     }
     return false;
@@ -315,10 +322,79 @@ static int lz4_decompress(const uint8_t *src, int src_len, uint8_t *dst, int dst
 
 // Tiles are 1 bit/pixel, column-major: [bx=0..31][y=0..255], 8 pixels per byte.
 static uint8_t s_tileCacheBuffer[8192];
+static constexpr uint8_t MAP_TILE_LAYOUT_SPARSE = 0;
+static constexpr uint8_t MAP_TILE_LAYOUT_GRID = 1;
+static constexpr uint8_t MAP_TILE_KIND_LZ4 = 0;
+static constexpr uint8_t MAP_TILE_KIND_WHITE = 1;
+static constexpr uint8_t MAP_TILE_KIND_BLACK = 2;
+
+static bool usesGridTileLayout()
+{
+    return map_tile_layout == MAP_TILE_LAYOUT_GRID && map_tile_grid_cols > 0 && map_tile_grid_rows > 0 &&
+           map_tile_block_count > 0;
+}
+
+static int gridTilesPerBlock()
+{
+    return (int)map_tile_grid_cols * (int)map_tile_grid_rows;
+}
+
+static int tileZoomAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_zooms[tileIndex];
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    return map_tile_block_zooms[blockIndex];
+}
+
+static int tileTxAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_tx[tileIndex];
+    int rows = map_tile_grid_rows;
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    int localIndex = tilesPerBlock > 0 ? (tileIndex % tilesPerBlock) : 0;
+    return map_tile_block_tx[blockIndex] + (rows > 0 ? (localIndex / rows) : 0);
+}
+
+static int tileTyAt(int tileIndex)
+{
+    if (!usesGridTileLayout())
+        return map_tile_ty[tileIndex];
+    int rows = map_tile_grid_rows;
+    int tilesPerBlock = gridTilesPerBlock();
+    int blockIndex = tilesPerBlock > 0 ? (tileIndex / tilesPerBlock) : 0;
+    int localIndex = tilesPerBlock > 0 ? (tileIndex % tilesPerBlock) : 0;
+    return map_tile_block_ty[blockIndex] + (rows > 0 ? (localIndex % rows) : 0);
+}
+
+static int tileMetadataZoomCount()
+{
+    if (usesGridTileLayout())
+        return map_tile_block_count;
+    return map_tile_count;
+}
+
+static int tileMetadataZoomAt(int index)
+{
+    return usesGridTileLayout() ? map_tile_block_zooms[index] : map_tile_zooms[index];
+}
 
 static const uint8_t *decodeSparseTile(int tileIndex)
 {
-    int n = lz4_decompress(map_tile_data[tileIndex], map_tile_sizes[tileIndex], s_tileCacheBuffer, sizeof(s_tileCacheBuffer));
+    const uint8_t kind = map_tile_kinds[tileIndex];
+    if (kind == MAP_TILE_KIND_WHITE) {
+        memset(s_tileCacheBuffer, 0x00, sizeof(s_tileCacheBuffer));
+        return s_tileCacheBuffer;
+    }
+    if (kind == MAP_TILE_KIND_BLACK) {
+        memset(s_tileCacheBuffer, 0xFF, sizeof(s_tileCacheBuffer));
+        return s_tileCacheBuffer;
+    }
+    const uint8_t *compressed = map_tile_data + map_tile_offsets[tileIndex];
+    int n = lz4_decompress(compressed, map_tile_sizes[tileIndex], s_tileCacheBuffer, sizeof(s_tileCacheBuffer));
     return n == sizeof(s_tileCacheBuffer) ? s_tileCacheBuffer : nullptr;
 }
 
@@ -336,14 +412,14 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
 
     // Find best tile zoom: highest available <= zoom, or lowest available if none below.
     int tileZoom = -1;
-    for (int i = 0; i < map_tile_count; i++) {
-        int z = map_tile_zooms[i];
+    for (int i = 0; i < tileMetadataZoomCount(); i++) {
+        int z = tileMetadataZoomAt(i);
         if (z <= zoom && (tileZoom < 0 || z > tileZoom))
             tileZoom = z;
     }
     if (tileZoom < 0) {
-        for (int i = 0; i < map_tile_count; i++) {
-            int z = map_tile_zooms[i];
+        for (int i = 0; i < tileMetadataZoomCount(); i++) {
+            int z = tileMetadataZoomAt(i);
             if (tileZoom < 0 || z < tileZoom)
                 tileZoom = z;
         }
@@ -365,11 +441,11 @@ void InkHUD::MapApplet::drawMapTileBackground(int zoom)
     const float maxWy = gpxY + height() * 0.5f * tileWorldPx;
 
     for (int i = 0; i < map_tile_count; i++) {
-        if (map_tile_zooms[i] != tileZoom)
+        if (tileZoomAt(i) != tileZoom)
             continue;
 
-        const int tx = map_tile_tx[i];
-        const int ty = map_tile_ty[i];
+        const int tx = tileTxAt(i);
+        const int ty = tileTyAt(i);
         const float tileMinWx = tx * 256.0f;
         const float tileMaxWx = tileMinWx + 256.0f;
         const float tileMinWy = ty * 256.0f;
@@ -433,16 +509,16 @@ void InkHUD::MapApplet::onRender(bool full)
         // Collect unique zooms, sort descending (highest detail first)
         int zooms[16] = {};
         int nzooms = 0;
-        for (int i = 0; i < map_tile_count && nzooms < 16; i++) {
+        for (int i = 0; i < tileMetadataZoomCount() && nzooms < 16; i++) {
             bool found = false;
             for (int j = 0; j < nzooms; j++) {
-                if (zooms[j] == map_tile_zooms[i]) {
+                if (zooms[j] == tileMetadataZoomAt(i)) {
                     found = true;
                     break;
                 }
             }
             if (!found)
-                zooms[nzooms++] = map_tile_zooms[i];
+                zooms[nzooms++] = tileMetadataZoomAt(i);
         }
         for (int i = 0; i < nzooms - 1; i++) {
             for (int j = i + 1; j < nzooms; j++) {
