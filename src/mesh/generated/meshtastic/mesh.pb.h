@@ -333,6 +333,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2 = 139,
     /* Meshnology W10 */
     meshtastic_HardwareModel_MESHNOLOGY_W10 = 140,
+    /* Lilygo T-Deck Max */
+    meshtastic_HardwareModel_T_DECK_MAX = 141,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

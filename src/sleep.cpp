@@ -36,6 +36,10 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 extern ExtensionIOXL9555 io;
 #endif
 
+#ifdef T_DECK_MAX
+#include "HynTouch.h"
+#endif
+
 #ifdef HAS_PPM
 #include <XPowersLib.h>
 extern XPowersPPM *PPM;
@@ -249,6 +253,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     if (screen)
         screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
+#if defined(T_DECK_MAX) && defined(HAS_EINK_FRONTLIGHT) && defined(PIN_EINK_BL)
+    analogWrite(PIN_EINK_BL, 0);
+#endif
+
     if (!skipSaveNodeDb) {
         nodeDB->saveToDisk();
     }
@@ -336,10 +344,14 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 
 #ifdef HAS_PPM
     if (PPM) {
-        // BQ25896 PMIC shutdown is a hard power-off state.
+        // PPM charger shutdown is a hard power-off state.
         // Only use it for "sleep forever" / explicit shutdown, because timed deep sleep
         // must remain wakeable by RTC timer.
         if (msecToWake == portMAX_DELAY) {
+#ifdef T_DECK_MAX
+            hyn_sleep();
+            io.digitalWrite(EXPANDS_TOUCH_RST, LOW);
+#endif
             LOG_INFO("PPM shutdown");
             console->flush();
             PPM->shutdown();
