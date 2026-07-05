@@ -468,7 +468,7 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
         const uint16_t len = ((uint16_t)hdr[2] << 8) | (uint16_t)hdr[3];
 
         if (hdr[1] == SERIALHAL_MAGIC) {
-            // SerialHal response frame — this is what we want.
+            // SerialHal response frame - this is what we want.
             if (len > meshtastic_SerialHalResponse_size) {
                 return false;
             }
@@ -479,7 +479,7 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
             }
             return true;
         } else if (hdr[1] == START2) {
-            // Normal FromRadio frame emitted by the device — drain and discard
+            // Normal FromRadio frame emitted by the device - drain and discard
             // its payload so we stay in sync, then loop to find a SerialHal frame.
             if (len > 0) {
                 std::vector<uint8_t> discard(len);
@@ -489,7 +489,7 @@ bool SerialHal::readFrame(std::vector<uint8_t> &payload, int firstByteTimeoutMs)
             }
             // continue looping, look for next frame
         } else {
-            // Unknown second byte after START1 — restart search for framing.
+            // Unknown second byte after START1 - restart search for framing.
             continue;
         }
     }

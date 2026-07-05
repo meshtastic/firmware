@@ -93,7 +93,7 @@ int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
                 serialHalRxActive.store(true);
                 RedirectablePrint::setSerialHalLogSuppressed(true);
             } else {
-                rxPtr = 0; // unrecognised second byte — not our frame
+                rxPtr = 0; // unrecognised second byte - not our frame
                 serialHalRxActive.store(false);
                 RedirectablePrint::setSerialHalLogSuppressed(false);
             }
@@ -174,7 +174,7 @@ int32_t StreamAPI::readStream()
                     RedirectablePrint::setSerialHalLogSuppressed(true);
                     LOG_WARN("StreamAPI: Detected SerialHal command frame");
                 } else {
-                    rxPtr = 0; // unrecognised second byte — not our frame
+                    rxPtr = 0; // unrecognised second byte - not our frame
                     serialHalRxActive.store(false);
                     RedirectablePrint::setSerialHalLogSuppressed(false);
                 }
