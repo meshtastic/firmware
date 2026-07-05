@@ -2179,23 +2179,52 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 }
 #endif
 
+#ifdef FSCom
+// Shared by the FLASH and SD backup locations so the two paths can't drift apart
+static meshtastic_BackupPreferences buildBackupPreferences()
+{
+    meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
+    backup.version = DEVICESTATE_CUR_VER;
+    backup.timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
+    backup.has_config = true;
+    backup.config = config;
+    backup.has_module_config = true;
+    backup.module_config = moduleConfig;
+    backup.has_channels = true;
+    backup.channels = channelFile;
+    backup.has_owner = true;
+    backup.owner = owner;
+    return backup;
+}
+
+static void applyRestoredPreferences(const meshtastic_BackupPreferences &backup, int restoreWhat)
+{
+    if (restoreWhat & SEGMENT_CONFIG) {
+        config = backup.config;
+        LOG_DEBUG("Restored config");
+    }
+    if (restoreWhat & SEGMENT_MODULECONFIG) {
+        moduleConfig = backup.module_config;
+        LOG_DEBUG("Restored module config");
+    }
+    if (restoreWhat & SEGMENT_DEVICESTATE) {
+        devicestate.owner = backup.owner;
+        LOG_DEBUG("Restored device state");
+    }
+    if (restoreWhat & SEGMENT_CHANNELS) {
+        channelFile = backup.channels;
+        LOG_DEBUG("Restored channels");
+    }
+}
+#endif
+
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
     bool success = false;
     lastBackupAttempt = millis();
 #ifdef FSCom
     if (location == meshtastic_AdminMessage_BackupLocation_FLASH) {
-        meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        backup.version = DEVICESTATE_CUR_VER;
-        backup.timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
-        backup.has_config = true;
-        backup.config = config;
-        backup.has_module_config = true;
-        backup.module_config = moduleConfig;
-        backup.has_channels = true;
-        backup.channels = channelFile;
-        backup.has_owner = true;
-        backup.owner = owner;
+        meshtastic_BackupPreferences backup = buildBackupPreferences();
 
         size_t backupSize;
         pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, &backup);
@@ -2212,17 +2241,7 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
         }
     } else if (location == meshtastic_AdminMessage_BackupLocation_SD) {
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
-        meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        backup.version = DEVICESTATE_CUR_VER;
-        backup.timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
-        backup.has_config = true;
-        backup.config = config;
-        backup.has_module_config = true;
-        backup.module_config = moduleConfig;
-        backup.has_channels = true;
-        backup.channels = channelFile;
-        backup.has_owner = true;
-        backup.owner = owner;
+        meshtastic_BackupPreferences backup = buildBackupPreferences();
 
         std::vector<uint8_t> buffer(meshtastic_BackupPreferences_size);
         pb_ostream_t stream = pb_ostream_from_buffer(buffer.data(), buffer.size());
@@ -2270,22 +2289,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
         success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
                             &meshtastic_BackupPreferences_msg, &backup);
         if (success) {
-            if (restoreWhat & SEGMENT_CONFIG) {
-                config = backup.config;
-                LOG_DEBUG("Restored config");
-            }
-            if (restoreWhat & SEGMENT_MODULECONFIG) {
-                moduleConfig = backup.module_config;
-                LOG_DEBUG("Restored module config");
-            }
-            if (restoreWhat & SEGMENT_DEVICESTATE) {
-                devicestate.owner = backup.owner;
-                LOG_DEBUG("Restored device state");
-            }
-            if (restoreWhat & SEGMENT_CHANNELS) {
-                channelFile = backup.channels;
-                LOG_DEBUG("Restored channels");
-            }
+            applyRestoredPreferences(backup, restoreWhat);
 
             success = saveToDisk(restoreWhat);
             if (success) {
@@ -2327,22 +2331,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             LOG_ERROR("Failed to decode backup preferences from SD card");
             return false;
         }
-        if (restoreWhat & SEGMENT_CONFIG) {
-            config = backup.config;
-            LOG_DEBUG("Restored config");
-        }
-        if (restoreWhat & SEGMENT_MODULECONFIG) {
-            moduleConfig = backup.module_config;
-            LOG_DEBUG("Restored module config");
-        }
-        if (restoreWhat & SEGMENT_DEVICESTATE) {
-            devicestate.owner = backup.owner;
-            LOG_DEBUG("Restored device state");
-        }
-        if (restoreWhat & SEGMENT_CHANNELS) {
-            channelFile = backup.channels;
-            LOG_DEBUG("Restored channels");
-        }
+        applyRestoredPreferences(backup, restoreWhat);
         success = saveToDisk(restoreWhat);
         if (success) {
             LOG_INFO("Restored preferences from SD card backup");
