@@ -239,7 +239,9 @@ static int tileTyAt(int tileIndex)
 
 static int tileMetadataZoomCount()
 {
-    return usesGridTileLayout() ? map_tile_block_count : map_tile_count;
+    if (usesGridTileLayout())
+        return map_tile_block_count;
+    return map_tile_count;
 }
 
 static int tileMetadataZoomAt(int index)
