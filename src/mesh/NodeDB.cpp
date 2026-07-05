@@ -914,6 +914,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
 
+#ifdef USERPREFS_LORACONFIG_TX_POWER
+    config.lora.tx_power = USERPREFS_LORACONFIG_TX_POWER;
+#endif
+
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else

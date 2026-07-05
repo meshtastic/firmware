@@ -87,6 +87,9 @@ void Channels::initDefaultLoraConfig()
     loraConfig.tx_power = 0; // default
     loraConfig.channel_num = 0;
 
+#ifdef USERPREFS_LORACONFIG_TX_POWER
+    loraConfig.tx_power = USERPREFS_LORACONFIG_TX_POWER;
+#endif
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #endif
