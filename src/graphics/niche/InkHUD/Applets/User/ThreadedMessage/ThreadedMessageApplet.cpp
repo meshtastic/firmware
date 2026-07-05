@@ -190,12 +190,17 @@ ProcessMessage InkHUD::ThreadedMessageApplet::handleReceived(const meshtastic_Me
     if (mp.to != NODENUM_BROADCAST)
         return ProcessMessage::CONTINUE;
 
-    // Store in the global messageStore - this handles sender, timestamp, channel, text, and ack status
-    messageStore.addFromPacket(mp);
-
-    // If this was an incoming message, suggest that our applet becomes foreground, if permitted
-    if (getFrom(&mp) != nodeDB->getNodeNum())
+    // Incoming broadcasts are stored centrally by Events::onReceiveTextMessage (for every
+    // channel, regardless of which applets exist). Only store our own outgoing/loopback
+    // messages here - Events short-circuits outgoing - to avoid double-storing incoming
+    // broadcasts on channels 0/1.
+    if (getFrom(&mp) == nodeDB->getNodeNum()) {
+        // Outgoing (e.g. canned messages generated on this node)
+        messageStore.addFromPacket(mp);
+    } else {
+        // Incoming: suggest that our applet becomes foreground, if permitted
         requestAutoshow();
+    }
 
     // Redraw the applet, perhaps.
     requestUpdate(); // Want to update display, if applet is foreground

@@ -496,8 +496,10 @@ We keep this separate latest-message cache for this purpose, because:
 
 Broadcasts and DMs take different paths into `messageStore`:
 
-- **Broadcasts** - `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
-- **DMs** - `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
+Storage is partitioned by **direction**, so each message is added to `messageStore` exactly once:
+
+- **Incoming text (DMs and broadcasts)** - stored centrally by `Events::onReceiveTextMessage()` via `messageStore.addFromPacket()`, for *every* channel (not just the channels that happen to have a `ThreadedMessageApplet`). The result is also cached in `latestMessage.dm` / `latestMessage.broadcast` for fast access by `AllMessageApplet` and `NotificationApplet`. Non-text broadcasts that reach this observer (detection sensor, alert, range test - see `MeshService::isTextPayload`) update only the transient cache and are deliberately *not* persisted.
+- **Outgoing / loopback broadcasts** (e.g. canned messages generated on this node) - `Events` short-circuits outgoing messages, so these are stored by `ThreadedMessageApplet::handleReceived()` instead. `ThreadedMessageApplet` only stores outgoing text (incoming is owned by `Events`), which keeps incoming broadcasts on channels 0/1 from being double-stored.
 
 #### Saving / Loading
 
@@ -610,7 +612,7 @@ Applets themselves do also listen separately for various events, but for the pur
 
 #### Text Messages
 
-`Events::onReceiveTextMessage()` is the central handler for all incoming text messages. It updates the `LatestMessage` cache and, for DMs, also adds the message to `messageStore` (since `ThreadedMessageApplet` only handles broadcasts). See `Persistence::LatestMessage` for details on how the two message types are stored.
+`Events::onReceiveTextMessage()` is the central handler for all incoming text messages. It updates the `LatestMessage` cache and adds incoming text messages (both DMs and broadcasts, on every channel) to `messageStore`. `ThreadedMessageApplet` handles only our own outgoing/loopback broadcasts, so nothing is double-stored. See `Persistence::LatestMessage` for details on how the two message types are stored.
 
 #### Buttons
 

@@ -541,9 +541,13 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
         // DMs never pass through ThreadedMessageApplet, so add them to the global store here
         // so they survive reboots. Derive the latestMessage cache entry from the stored result.
         inkhud->persistence->latestMessage.dm = messageStore.addFromPacket(*packet);
+    } else if (packet->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+        // Persist incoming text broadcasts for every channel; ThreadedMessageApplet stores
+        // outgoing only, so no double-store (outgoing on applet-less channels stays a known gap).
+        inkhud->persistence->latestMessage.broadcast = messageStore.addFromPacket(*packet);
     } else {
-        // Broadcasts are added to the global store by ThreadedMessageApplet::handleReceived().
-        // Here we only update the latestMessage cache used by AllMessageApplet / NotificationApplet.
+        // Non-text broadcasts (detection/alert/range test, see isTextPayload) update only the
+        // transient cache, never persistent history - avoids range-test traffic evicting messages.
         StoredMessage &sm = inkhud->persistence->latestMessage.broadcast;
         sm.sender = packet->from;
         sm.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);
