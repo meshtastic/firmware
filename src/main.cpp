@@ -794,6 +794,17 @@ void setup()
     delay(10);
 #endif
     drv.begin();
+
+    // Bits	Field	        Value	Meaning
+    // 7	N_ERM_LRA	    1	    LRA mode (vs 0 = ERM)
+    // 6:4	FB_BRAKE_FACTOR	3	    4× brake factor
+    // 3:2	LOOP_GAIN	    1	    medium loop gain
+    // 1:0	BEMF_GAIN	    2	    back-EMF gain
+
+#if defined(DRV2605_USE_LRA)
+    drv.writeRegister8(DRV2605_REG_FEEDBACK, 0xB6);
+#endif
+
     drv.selectLibrary(1);
     // I2C trigger by sending 'go' command
     drv.setMode(DRV2605_MODE_INTTRIG);
