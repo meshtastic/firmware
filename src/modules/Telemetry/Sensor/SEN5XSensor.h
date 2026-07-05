@@ -2,7 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
-#include "../../../detect/ReClockI2C.h"
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RTC.h"
 #include "TelemetrySensor.h"
