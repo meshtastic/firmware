@@ -45,7 +45,7 @@ void earlyInitVariant()
 {
     // 3.3V rail: toggle RT9080_EN HIGH → LOW → HIGH with 100 ms dwell so the
     // LDO enters enable from a known state. The single-shot HIGH in main.cpp
-    // is not enough on this hardware — if the chip was in a half-enabled
+    // is not enough on this hardware - if the chip was in a half-enabled
     // state from a previous reset, the rail brown-outs once LoRa TX fires.
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);

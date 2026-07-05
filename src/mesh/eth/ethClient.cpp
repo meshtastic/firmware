@@ -9,8 +9,15 @@
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
 #include "mesh/eth/ethOTA.h"
 #endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+#include "mesh/eth/ethApiServer.h"
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
+#include "mesh/eth/ethCert.h"
+#include "mesh/eth/ethTlsApiServer.h"
+#endif
 #ifdef USE_ARDUINO_ETHERNET
-#include <Ethernet.h> // arduino-libraries/Ethernet — supports W5100/W5200/W5500
+#include <Ethernet.h> // arduino-libraries/Ethernet - supports W5100/W5200/W5500
 // Shorter DHCP timeout so LoRa startup isn't blocked when no DHCP server is present.
 #define ETH_DHCP_TIMEOUT_MS 10000
 #else
@@ -58,6 +65,16 @@ static int32_t reconnectETH()
             syslog.disable();
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
             deInitApiServer();
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+            // Drop the HTTP/80 listener; the restart path below rebinds it. Without
+            // this the singleton guard makes initEthApiServer() a no-op and the
+            // phone API stays dead on a stale socket until reboot.
+            deInitEthApiServer();
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
+            // Same for HTTPS/443 + its mbedTLS context.
+            deInitEthTlsApiServer();
 #endif
 #if HAS_UDP_MULTICAST
             if (udpHandler) {
@@ -160,6 +177,19 @@ static int32_t reconnectETH()
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
             initEthOTA();
 #endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_API)
+            initEthApiServer();
+#endif
+#if HAS_ETHERNET && defined(HAS_ETHERNET_TLS_API) && defined(ARCH_RP2040)
+            // Phase 2.1-bis - cert gen runs on its own OSThread so ECDSA keygen
+            // + DER encoding + LittleFS write don't share the Periodic stack
+            // (which overflowed in the original inline attempt). The thread
+            // polls for a non-zero IP itself and runs once.
+            initEthCertThread();
+            // Phase 2.2 - TLS server skeleton on TCP/443. The worker waits
+            // until the cert thread signals isEthCertReady() before binding.
+            initEthTlsApiServer();
+#endif
 
             ethStartupComplete = true;
         }
@@ -190,6 +220,7 @@ static int32_t reconnectETH()
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
     ethOTALoop();
 #endif
+    // ethApiServer runs on its own OSThread (20ms ticks) - not polled here.
 
     return 5000; // every 5 seconds
 }

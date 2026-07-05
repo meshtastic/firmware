@@ -1,8 +1,22 @@
-# Native Unit Tests — Authoring Guide
+# Native Unit Tests - Authoring Guide
 
 This directory contains C++ unit tests that run on the host machine via PlatformIO's native environment. Tests use the [Unity](http://www.throwtheswitch.org/unity) framework.
 
 ## Running Tests
+
+**Preferred: use `bin/run-tests.sh`** - it runs the `coverage` env (ASan/LSan sanitizers), cross-checks the number of suites that actually ran, and emits an unambiguous RED/AMBER/GREEN verdict:
+
+```bash
+./bin/run-tests.sh                          # all suites
+./bin/run-tests.sh -f test_traffic_management  # single suite
+./bin/run-tests.sh -f test_traffic_management > /tmp/test_out.txt 2>&1; tail -5 /tmp/test_out.txt
+```
+
+Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER.
+
+> **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
+
+**Raw `pio test` (no sanitizers, no verdict logic)** - use when you need to override the env or inspect verbose Unity output:
 
 ```bash
 # All test suites
@@ -17,7 +31,7 @@ pio test -e native -f test_your_module -vvv
 
 **Never pipe through `| tail -N` to shorten output.** PlatformIO prints build errors at the top of output and test results at the bottom; `tail` will show stale cached results from a prior successful build while hiding the compile error that caused the current run to fail.
 
-**Preferred pattern — redirect to file, then grep:**
+**Preferred pattern for raw pio - redirect to file, then grep:**
 
 ```bash
 # Redirect all output to a file; grep for errors and results after it exits
@@ -99,7 +113,7 @@ See `.github/actions/setup-native/action.yml` for the canonical list.
 test/test_your_module/test_main.cpp
 ```
 
-One file per suite. No per-test `platformio.ini` is needed — tests build under the `[env:native]` environment defined in the root `platformio.ini`.
+One file per suite. No per-test `platformio.ini` is needed - tests build under the `[env:native]` environment defined in the root `platformio.ini`.
 
 ### 2. File Skeleton
 
@@ -114,14 +128,14 @@ One file per suite. No per-test `platformio.ini` is needed — tests build under
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 #include "modules/YourModule.h"
-#include <cstdio>    // required for printf() — used for blank-line group separators
+#include <cstdio>    // required for printf() - used for blank-line group separators
 #include <cstring>
 #include <memory>
 
 // --- Test output helpers ---
 // printf() writes directly to stdout and appears in -vv output as a plain line (no prefix).
 // Use it for blank-line group separators: printf("\n");
-// TEST_MESSAGE() emits a "file:line:INFO: <text>" line — visible at -vv and above.
+// TEST_MESSAGE() emits a "file:line:INFO: <text>" line - visible at -vv and above.
 // Use TEST_MSG_FMT for formatted diagnostic lines inside tests.
 #define MSG_BUF_LEN 200
 #define TEST_MSG_FMT(fmt, ...) do { \
@@ -145,13 +159,13 @@ void tearDown(void) { /* runs after every test */ }
 
 void setup()
 {
-    initializeTestEnvironment();   // MUST call — sets up RTC, OSThread, console
+    initializeTestEnvironment();   // MUST call - sets up RTC, OSThread, console
     UNITY_BEGIN();
 
     printf("\n=== Example group ===\n");           // header line to help find tests
 
     RUN_TEST(test_example);
-    exit(UNITY_END());             // exit() required — Unity runner expects it
+    exit(UNITY_END());             // exit() required - Unity runner expects it
 }
 
 void loop() {}
@@ -224,7 +238,7 @@ class YourModuleTestShim : public YourModule
 {
   public:
     // Pull protected methods into public scope via using.
-    // IMPORTANT: using requires the method to be protected (or public) in the base —
+    // IMPORTANT: using requires the method to be protected (or public) in the base -
     // friend alone does NOT satisfy this. See pitfall #6.
     using YourModule::runOnce;
     using YourModule::someProtectedMethod;
@@ -234,7 +248,7 @@ class YourModuleTestShim : public YourModule
 };
 ```
 
-For methods you want to expose via `using`, use the conditional access-specifier pattern in the header — **not** plain `friend`:
+For methods you want to expose via `using`, use the conditional access-specifier pattern in the header - **not** plain `friend`:
 
 ```cpp
 // In YourModule.h, inside the class body:
@@ -295,7 +309,7 @@ void setUp(void) {
 
 ### 2. File-Scope Mutable Globals Persist Across Tests
 
-Variables like `static uint8_t someDenominator = 8;` in the module `.cpp` file retain mutations from previous tests. This is distinct from member variables — it affects all instances.
+Variables like `static uint8_t someDenominator = 8;` in the module `.cpp` file retain mutations from previous tests. This is distinct from member variables - it affects all instances.
 
 **Fix:** Add a `static void resetGlobal()` method to the module and call it in `setUp()`.
 
@@ -338,7 +352,7 @@ Fixed-size data structures (hash sets, ring buffers) overflow when tests inject 
 
 ### 6. Granting test access to private/protected members
 
-PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several production headers (`TransmitHistory.h`, `CryptoEngine.h`, `MQTT.h`, `RTC.h`) use this to gate test-only visibility changes. PlatformIO also defines `UNIT_TEST` in the same builds for backward compatibility, but that spelling is deprecated — always use `PIO_UNIT_TESTING` in new code. The established pattern for exposing a private method to a test shim **without widening production visibility**:
+PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several production headers (`TransmitHistory.h`, `CryptoEngine.h`, `MQTT.h`, `RTC.h`) use this to gate test-only visibility changes. PlatformIO also defines `UNIT_TEST` in the same builds for backward compatibility, but that spelling is deprecated - always use `PIO_UNIT_TESTING` in new code. The established pattern for exposing a private method to a test shim **without widening production visibility**:
 
 ```cpp
 #ifdef PIO_UNIT_TESTING
@@ -349,7 +363,7 @@ PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several producti
     bool myMethod();
 ```
 
-**Critical C++ rule:** a `using` declaration in a derived class (e.g. `using Base::myMethod`) requires `myMethod` to be `protected` or `public` in the base — `friend` alone does **not** satisfy this. Adding `friend class TestShim` while leaving the method `private` will still fail to compile. Use the conditional access-specifier pattern above, not `friend`.
+**Critical C++ rule:** a `using` declaration in a derived class (e.g. `using Base::myMethod`) requires `myMethod` to be `protected` or `public` in the base - `friend` alone does **not** satisfy this. Adding `friend class TestShim` while leaving the method `private` will still fail to compile. Use the conditional access-specifier pattern above, not `friend`.
 
 ## setUp/tearDown Checklist
 
@@ -358,7 +372,7 @@ PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several producti
 - [ ] Set `nodeDB = mockNodeDB`
 - [ ] Delete persisted state files (`FSCom.remove(...)`)
 - [ ] Reset file-scope mutable globals
-- [ ] Reset mock clock to a safe base value (e.g. `mockTime = ONE_HOUR_MS`) — prevents unsigned subtraction underflow in time-dependent logic
+- [ ] Reset mock clock to a safe base value (e.g. `mockTime = ONE_HOUR_MS`) - prevents unsigned subtraction underflow in time-dependent logic
 - [ ] Disable randomness/jitter flags
 - [ ] In `tearDown`: null the global singleton pointer, restore flags
 
@@ -366,11 +380,11 @@ PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several producti
 
 A well-structured test suite follows this pattern:
 
-1. **Topology/scenario builders** — static helper functions that set up specific test conditions
-2. **Injection helpers** — simulate realistic traffic, time, or event patterns
-3. **Scenario tests** — each builds a scenario, runs the module, asserts on outcomes
-4. **Lifecycle tests** — state persistence, startup from blank, restart recovery
-5. **Summary test** (optional) — emits a scenario table into the log for quick CI review
+1. **Topology/scenario builders** - static helper functions that set up specific test conditions
+2. **Injection helpers** - simulate realistic traffic, time, or event patterns
+3. **Scenario tests** - each builds a scenario, runs the module, asserts on outcomes
+4. **Lifecycle tests** - state persistence, startup from blank, restart recovery
+5. **Summary test** (optional) - emits a scenario table into the log for quick CI review
 
 ## Existing Test Suites
 

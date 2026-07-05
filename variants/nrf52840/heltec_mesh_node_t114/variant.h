@@ -36,7 +36,7 @@ extern "C" {
 #define HELTEC_MESH_NODE_T114
 
 #define USE_ST7789
-
+#define HAS_SPI_TFT 1
 #define ST7789_NSS 11
 #define ST7789_RS 12  // DC
 #define ST7789_SDA 41 // MOSI

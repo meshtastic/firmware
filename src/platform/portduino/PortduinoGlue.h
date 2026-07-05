@@ -8,7 +8,12 @@
 #include "LR11x0Interface.h"
 #include "Module.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#ifndef ARCH_PORTDUINO_WASM
+// The browser (WASM) node configures the radio via the wasm_set_lora_* setters
+// instead of a YAML file, so it has no yaml-cpp dependency. Everything that uses
+// YAML below (emit_yaml / loadConfig / readGPIOFromYaml) is likewise guarded.
 #include "yaml-cpp/yaml.h"
+#endif
 
 extern struct portduino_status_struct {
     bool LoRa_in_error = false;
@@ -64,7 +69,9 @@ bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+#ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
+#endif
 std::string exec(const char *cmd);
 
 extern struct portduino_config_struct {
@@ -116,6 +123,9 @@ extern struct portduino_config_struct {
 
     // GPS
     bool has_gps = false;
+    std::string gps_serial_path = "";
+    std::string gpsd_host = "";
+    int gpsd_port = 2947;
 
     // I2C
     std::string i2cdev = "";
@@ -224,6 +234,7 @@ extern struct portduino_config_struct {
                                 &tbRightPin,
                                 &tbPressPin};
 
+#ifndef ARCH_PORTDUINO_WASM
     std::string emit_yaml()
     {
         YAML::Emitter out;
@@ -359,6 +370,18 @@ extern struct portduino_config_struct {
             }
             out << YAML::EndSeq;
             out << YAML::EndMap; // GPIO
+        }
+
+        if (has_gps) {
+            out << YAML::Key << "GPS" << YAML::Value << YAML::BeginMap;
+            if (!gpsd_host.empty()) {
+                out << YAML::Key << "GpsdHost" << YAML::Value << gpsd_host;
+                if (gpsd_port != 2947)
+                    out << YAML::Key << "GpsdPort" << YAML::Value << gpsd_port;
+            } else if (!gps_serial_path.empty()) {
+                out << YAML::Key << "SerialPath" << YAML::Value << gps_serial_path;
+            }
+            out << YAML::EndMap; // GPS
         }
 
         if (i2cdev != "") {
@@ -578,4 +601,5 @@ extern struct portduino_config_struct {
         out << YAML::EndMap; // General
         return out.c_str();
     }
+#endif // !ARCH_PORTDUINO_WASM
 } portduino_config;
