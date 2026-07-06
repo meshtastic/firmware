@@ -17,6 +17,12 @@
 #ifndef MAX_RX_TOPHONE
 #if defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3))
 #define MAX_RX_TOPHONE 8
+#elif defined(NRF52840_XXAA)
+// Each slot is a ~340 B MeshPacket in the static pool (Router.cpp MAX_PACKETS_STATIC), so 32 slots
+// cost ~11 KB of .bss on the RAM-tightest platform (2.8.0 field reports: 99% heap). 16 still doubles
+// the 8 classic ESP32 has shipped with for years; drops start when a stalled phone/serial client has
+// 16 packets queued.
+#define MAX_RX_TOPHONE 16
 #else
 #define MAX_RX_TOPHONE 32
 #endif
@@ -126,7 +132,10 @@ static inline int get_max_num_nodes()
 // Keyed on the NRF52840_XXAA build flag, not ARCH_NRF52: the latter (from
 // architecture.h via configuration.h) isn't defined this early in every include
 // chain. Backed by the raw-flash ring below LittleFS - see WarmNodeStore.h.
-#define WARM_NODE_COUNT 200
+// 100 (was 200): the RAM cache is 40 B/entry calloc'd from the ~115 KB heap
+// arena, which 2.8.0 field reports showed at 99% use; 120 hot + 100 warm
+// identities still covers meshes well past the hot cap.
+#define WARM_NODE_COUNT 100
 #elif (defined(CONFIG_IDF_TARGET_ESP32S3) && defined(BOARD_HAS_PSRAM)) || defined(ARCH_PORTDUINO)
 #define WARM_NODE_COUNT 2000 // PSRAM-equipped ESP32-S3 / native host; warm cache in PSRAM (~80 KB)
 #elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32P4)
@@ -136,10 +145,11 @@ static inline int get_max_num_nodes()
 #elif defined(ARCH_RP2040)
 #define WARM_NODE_COUNT 150 // RP2040 (264 KB) / RP2350 (520 KB): bounded so warm.dat write fits the 8s watchdog (#10746)
 #else
-// nRF52840 is handled explicitly above (200, raw-flash ring). Any other nRF52 (non-XXAA) and any
-// future non-ESP32/non-RP LittleFS part fall through to this 320 default - flag for review if such a
-// RAM-constrained nRF52 target is ever added.
-#define WARM_NODE_COUNT 320 // other LittleFS-backed parts (e.g. non-nRF52840 nRF52)
+// nRF52840 is handled explicitly above (raw-flash ring). Any other nRF52 (non-XXAA) and any future
+// non-ESP32/non-RP LittleFS part lands here. Reviewed after the 2.8.0 nRF52840 heap-exhaustion
+// reports: fail small (match nRF52840) so an unclassified RAM-constrained part can't boot-allocate
+// 12.8 KB; RAM-rich targets should opt up explicitly in their variant.
+#define WARM_NODE_COUNT 100 // other LittleFS-backed parts (e.g. non-nRF52840 nRF52)
 #endif                      // platform
 #endif                      // WARM_NODE_COUNT
 
@@ -177,11 +187,16 @@ static inline int get_max_num_nodes()
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 500 // 512 KB+ SRAM, no PSRAM (S3/C6/P4): ~5 KB heap (#10705)
 #elif defined(ARCH_ESP32)
 #define TRAFFIC_MANAGEMENT_CACHE_SIZE 400 // classic ESP32 / S2 / C3: tightest free heap, ~4 KB (#10705)
+#elif defined(NRF52840_XXAA)
+// Keyed on NRF52840_XXAA (not ARCH_NRF52) for the same include-order reason as WARM_NODE_COUNT above.
+// The 256 KB part shares its ~115 KB heap arena with SoftDevice and the FreeRTOS task stacks; 2.8.0
+// field reports hit 99% heap use with the old 1000-entry (~10 KB) cache. 250 entries (2.5 KB) still
+// tracks >2x the 120-node hot store; LRU victim recycling absorbs busier meshes.
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 250
 #else
-// nRF52 (incl. nRF52840) and RP2040/RP2350 fall through here - there is no nRF/RP branch above,
-// by design. These parts have no ESP32-style WiFi+BLE coexistence eating the heap, so the larger
-// 1000-entry (~10 KB) cache fits: nRF52840 is BLE-only on 256 KB RAM; RP2040/RP2350 have 264/520 KB.
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 1000 // nRF52 / RP2040 / RP2350 / other non-ESP32
+// RP2040/RP2350 and anything unclassified land here: match the classic-ESP32 tier rather than
+// defaulting large. RAM-rich targets should opt up explicitly in their variant.
+#define TRAFFIC_MANAGEMENT_CACHE_SIZE 400
 #endif
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE
 
