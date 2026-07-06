@@ -14,9 +14,12 @@
 // SoftDevice + FreeRTOS stacks).
 //
 //   MEM_CLASS_TINY    <32 KB free heap      STM32WL
-//   MEM_CLASS_SMALL   ~100-250 KB           nRF52840, classic ESP32/S2/C3, RP2040
-//   MEM_CLASS_MEDIUM  ~250-500 KB, no PSRAM ESP32-S3/C6/P4 without PSRAM, RP2350
+//   MEM_CLASS_SMALL   ~100-250 KB           nRF52840, classic ESP32/S2/C3, RP2040/RP2350
+//   MEM_CLASS_MEDIUM  ~250-500 KB, no PSRAM ESP32-S3/C6/P4 without PSRAM
 //   MEM_CLASS_LARGE   PSRAM or host         ESP32-S3+PSRAM, portduino
+//
+// RP2350 (520 KB) rides with RP2040 in SMALL to keep this header a behavioral
+// no-op; it is a MEDIUM candidate whenever someone wants to tune it up.
 //
 // Compare ordinally: #if MESHTASTIC_MEM_CLASS >= MEM_CLASS_MEDIUM ...
 //
