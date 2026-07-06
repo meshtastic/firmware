@@ -24,6 +24,8 @@
 #include "airtime.h"
 #include "modules/AdminModule.h"
 #include "modules/MeshBeaconModule.h"
+#include "support/AdminModuleTestShim.h"
+#include "support/MockMeshService.h"
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -50,16 +52,8 @@ namespace
 constexpr NodeNum kLocalNode = 0xAAAA0001;
 constexpr NodeNum kRemoteNode = 0xBBBB0002;
 
-// ---------------------------------------------------------------------------
-// Minimal MockMeshService - stubs out side-effecting virtuals.
-// handleToRadio is non-virtual so it runs the real implementation; we guard
-// against the router->sendLocal path by setting a MockRouter below.
-// ---------------------------------------------------------------------------
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
+// MockMeshService (test/support) stubs the side-effecting virtuals; handleToRadio is non-virtual so
+// it runs the real implementation - the router->sendLocal path is guarded by MockRouter below.
 
 // ---------------------------------------------------------------------------
 // MockRouter: captures every packet handed to send() instead of transmitting.
@@ -93,14 +87,7 @@ class MockRouter : public Router
     std::vector<meshtastic_ChannelSettings> primaryAtSend;
 };
 
-// ---------------------------------------------------------------------------
-// AdminModuleTestShim - exposes protected handleSetModuleConfig.
-// ---------------------------------------------------------------------------
-class AdminModuleTestShim : public AdminModule
-{
-  public:
-    using AdminModule::handleSetModuleConfig;
-};
+// AdminModuleTestShim (test/support) exposes protected handleSetModuleConfig.
 
 // ---------------------------------------------------------------------------
 // MeshBeaconBroadcastModuleTestShim - exposes private internals for testing.

@@ -18,6 +18,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/Router.h"
 #include "modules/TrafficManagementModule.h"
+#include "support/DeterministicRng.h" // rngSeed/rngNext/rngRange - shared seeded LCG
 #include <climits>
 #include <cstring>
 #include <memory>
@@ -1600,6 +1601,92 @@ static void test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp(void)
     // channels always have a public PSK so getPositionPrecisionForChannel caps at 15.
     TEST_ASSERT_EQUAL_UINT32(13, out.precision_bits);
 }
+
+// ---------------------------------------------------------------------------
+// Fuzz - crafted-nodenum blitz of the unified cache
+// ---------------------------------------------------------------------------
+// Floods handleReceived/alterReceived with crafted packets over a tiny node pool so the fixed-size
+// cache churns hard while the virtual clock sweeps the rate/unknown/position windows; no crash, counters bounded.
+static constexpr uint64_t FUZZ_SEED = 0x00D07E5701ULL;
+
+static void test_tm_fuzz_nodenum_blitz(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)FUZZ_SEED);
+    rngSeed(FUZZ_SEED);
+
+    // Activate the cache-tracked windows (the crafted-nodenum target). The nodeinfo direct-response
+    // path (nodeinfo_direct_response_max_hops) is left OFF: it calls service->sendToMesh, and driving
+    // that at fuzz volume needs a fully-wired MeshService/phone queue this fixture doesn't provide - the
+    // deterministic test_tm_nodeinfo_directResponse_* tests cover it with single packets instead.
+    moduleConfig.traffic_management.rate_limit_window_secs = 60;
+    moduleConfig.traffic_management.rate_limit_max_packets = 3;
+    moduleConfig.traffic_management.unknown_packet_threshold = 4;
+    moduleConfig.traffic_management.position_min_interval_secs = 300;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    installWellKnownPrimaryChannel();
+
+    static TrafficManagementModuleTestShim module; // static: OSThread-derived (see note in test_fuzz_packets E2)
+
+    // Shared boundary pool (0/1/broadcast) plus this suite's well-known nodes.
+    const NodeNum wellKnown[] = {kLocalNode, kRemoteNode, kTargetNode};
+    const size_t wellKnownN = sizeof(wellKnown) / sizeof(wellKnown[0]);
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_POSITION_APP,
+        meshtastic_PortNum_ROUTING_APP,      meshtastic_PortNum_ADMIN_APP,    meshtastic_PortNum_TELEMETRY_APP,
+    };
+    const size_t portsN = sizeof(ports) / sizeof(ports[0]);
+
+    const unsigned ITERS = 30000;
+    for (unsigned k = 0; k < ITERS; k++) {
+        meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+        p.from = (rngRange(8) == 0) ? (NodeNum)rngNext() : rngEdgeNodeNum(wellKnown, wellKnownN);
+        p.to = rngEdgeNodeNum(wellKnown, wellKnownN);
+        p.id = rngNext();
+        p.channel = 0;
+        p.hop_start = (uint8_t)rngRange(8); // 0..7, wire-bounded
+        p.hop_limit = (uint8_t)rngRange(8);
+        p.decoded.want_response = (rngRange(2) == 0);
+
+        if (rngRange(5) == 0) {
+            // Undecoded / unknown packet - exercises the unknown-packet threshold path.
+            p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+            p.encrypted.size = rngRange(sizeof(p.encrypted.bytes) + 1);
+            rngFill(p.encrypted.bytes, p.encrypted.size);
+        } else {
+            p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+            p.decoded.portnum = (rngRange(8) == 0) ? (meshtastic_PortNum)rngRange(80) : ports[rngRange(portsN)];
+            p.decoded.has_bitfield = true;
+            p.decoded.bitfield = (uint32_t)rngNext();
+            if (p.decoded.portnum == meshtastic_PortNum_POSITION_APP && rngRange(2)) {
+                meshtastic_Position pos = meshtastic_Position_init_zero;
+                pos.has_latitude_i = true;
+                pos.has_longitude_i = true;
+                pos.latitude_i = (int32_t)rngNext();
+                pos.longitude_i = (int32_t)rngNext();
+                pos.precision_bits = rngRange(40); // includes >32 (the default-precision fallback)
+                p.decoded.payload.size =
+                    pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
+            } else {
+                // Random payload bytes: TMM's nested User/Position decode must fail cleanly.
+                p.decoded.payload.size = rngRange(sizeof(p.decoded.payload.bytes) + 1);
+                rngFill(p.decoded.payload.bytes, p.decoded.payload.size);
+            }
+        }
+
+        (void)module.handleReceived(p);
+        if (rngRange(3) == 0)
+            module.alterReceived(p);
+
+        // Advance the virtual clock so rate / unknown / position windows open and close under churn.
+        if (rngRange(16) == 0)
+            TrafficManagementModule::s_testNowMs += (rngRange(120) + 1) * 1000u;
+        if (rngRange(1024) == 0)
+            (void)module.runOnce(); // maintenance sweep: cache aging / eviction
+    }
+
+    // The cache never inspected more packets than we fed, and the run reached here without an ASan fault.
+    TEST_ASSERT_TRUE_MESSAGE(module.getStats().packets_inspected <= ITERS, "packets_inspected overcounted");
+}
 } // namespace
 
 void setUp(void)
@@ -1669,6 +1756,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_lostAndFoundRole_getsAlterReceivedPrecisionClamp);
     RUN_TEST(test_tm_unknownRole_noDbEntry_appliesFullInterval);
     RUN_TEST(test_tm_unknownRole_noUserBit_appliesFullInterval);
+    RUN_TEST(test_tm_fuzz_nodenum_blitz);
     exit(UNITY_END());
 }
 
