@@ -4,6 +4,7 @@
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -275,7 +276,16 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-    Bluefruit.begin();
+    if (!Bluefruit.begin()) {
+        // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
+        // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
+        // current Bluefruit config. Without this check the node would silently run without BLE.
+        // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
+        // raise the ORIGIN accordingly.
+        LOG_ERROR("Bluefruit.begin failed - SoftDevice RAM reservation too small for this config");
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
+        return;
+    }
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
