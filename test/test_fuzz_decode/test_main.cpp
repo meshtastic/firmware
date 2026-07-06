@@ -22,7 +22,12 @@
 
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/admin.pb.h"
+#include "mesh/generated/meshtastic/channel.pb.h"
+#include "mesh/generated/meshtastic/config.pb.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
+#include "mesh/generated/meshtastic/mesh_beacon.pb.h"
+#include "mesh/generated/meshtastic/module_config.pb.h"
+#include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/storeforward.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "meshUtils.h"
@@ -30,28 +35,8 @@
 #include <cstring>
 #include <pb_decode.h>
 
-// ---------------------------------------------------------------------------
-// Deterministic RNG - seeded 64-bit LCG (Knuth MMIX constants). No rand()/time so a failing
-// iteration reproduces exactly from the printed base seed.
-// ---------------------------------------------------------------------------
-static uint64_t g_rng = 0;
-static void rngSeed(uint64_t s)
-{
-    g_rng = s ? s : 0x9E3779B97F4A7C15ULL;
-}
-static uint32_t rngNext()
-{
-    g_rng = g_rng * 6364136223846793005ULL + 1442695040888963407ULL;
-    return (uint32_t)(g_rng >> 32);
-}
-static uint8_t rngByte()
-{
-    return (uint8_t)(rngNext() & 0xFF);
-}
-static uint32_t rngRange(uint32_t n) // uniform-ish in [0, n)
-{
-    return n ? (rngNext() % n) : 0;
-}
+// Deterministic RNG (rngSeed/rngNext/rngByte/rngRange) - shared seeded LCG.
+#include "support/DeterministicRng.h"
 
 static constexpr uint64_t BASE_SEED = 0x00C0FFEEULL;
 static constexpr unsigned DECODE_ITERS = 3000; // per type, per pass (ASan-instrumented, keep bounded)
@@ -75,6 +60,13 @@ union AnyMsg {
     meshtastic_Routing routing;
     meshtastic_AdminMessage adminMessage;
     meshtastic_StoreAndForward storeAndForward;
+    meshtastic_MeshBeacon meshBeacon;
+    meshtastic_ServiceEnvelope serviceEnvelope;
+    meshtastic_ModuleConfig moduleConfig;
+    meshtastic_Config config;
+    meshtastic_Channel channel;
+    meshtastic_ChannelSettings channelSettings;
+    meshtastic_KeyVerification keyVerification;
 };
 
 struct FuzzType {
@@ -94,6 +86,13 @@ static const FuzzType FUZZ_TYPES[] = {
     {"Routing", &meshtastic_Routing_msg},
     {"AdminMessage", &meshtastic_AdminMessage_msg},
     {"StoreAndForward", &meshtastic_StoreAndForward_msg},
+    {"MeshBeacon", &meshtastic_MeshBeacon_msg},           // beacon offer: char[101] message + PSK-bearing ChannelSettings
+    {"ServiceEnvelope", &meshtastic_ServiceEnvelope_msg}, // MQTT downlink wrapper - unusual (non-RF) ingress
+    {"ModuleConfig", &meshtastic_ModuleConfig_msg},       // admin set_module_config payload union
+    {"Config", &meshtastic_Config_msg},                   // admin set_config payload union
+    {"Channel", &meshtastic_Channel_msg},                 // admin set_channel payload
+    {"ChannelSettings", &meshtastic_ChannelSettings_msg},
+    {"KeyVerification", &meshtastic_KeyVerification_msg}, // PKI key-verification handshake payload
 };
 static const size_t NUM_FUZZ_TYPES = sizeof(FUZZ_TYPES) / sizeof(FUZZ_TYPES[0]);
 
@@ -164,8 +163,7 @@ static void decodeFuzzPass(bool protoish, uint64_t seed)
                 len = genProtoish(buf, sizeof(buf));
             } else {
                 len = rngRange(sizeof(buf) + 1);
-                for (size_t i = 0; i < len; i++)
-                    buf[i] = rngByte();
+                rngFill(buf, len);
             }
             memset(&out, 0, sizeof(out));
             // Return value intentionally ignored: true or false are both acceptable. What must never
@@ -328,8 +326,7 @@ void test_D2f_pb_string_length(void)
     for (unsigned k = 0; k < 20000; k++) {
         uint8_t buf[64];
         size_t maxLen = 1 + rngRange(sizeof(buf));
-        for (size_t i = 0; i < maxLen; i++)
-            buf[i] = rngByte();
+        rngFill(buf, maxLen);
         size_t len = pb_string_length((const char *)buf, maxLen);
         TEST_ASSERT_TRUE_MESSAGE(len <= maxLen, "pb_string_length returned > max_len");
         if (len > 0)

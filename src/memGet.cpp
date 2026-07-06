@@ -9,6 +9,7 @@
  */
 #include "memGet.h"
 #include "configuration.h"
+#include "memory/MemAudit.h"
 
 #if defined(MESHTASTIC_DYNAMIC_SBRK_HEAP)
 #include <malloc.h>
@@ -118,4 +119,5 @@ void displayPercentHeapFree()
     }
     int percent = (int)((freeHeap * 100) / totalHeap);
     LOG_INFO("Heap free: %d%% (%u/%u bytes)", percent, freeHeap, totalHeap);
+    memaudit::logBreakdown("heap"); // per-subsystem breakdown rides along with the periodic heap log
 }

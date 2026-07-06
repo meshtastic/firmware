@@ -6,6 +6,7 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "gps/RTC.h"
+#include "memory/MemAudit.h"
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
@@ -28,8 +29,10 @@ static inline void resetMessagePool()
         g_messagePool = static_cast<char *>(malloc(MESSAGE_TEXT_POOL_SIZE));
         if (!g_messagePool) {
             LOG_ERROR("MessageStore: Failed to allocate %d bytes for message pool", MESSAGE_TEXT_POOL_SIZE);
+            memaudit::set("msgstore", 0);
             return;
         }
+        memaudit::set("msgstore", MESSAGE_TEXT_POOL_SIZE);
     }
     g_poolWritePos = 0;
     memset(g_messagePool, 0, MESSAGE_TEXT_POOL_SIZE);

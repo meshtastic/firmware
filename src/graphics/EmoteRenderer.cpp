@@ -15,8 +15,19 @@ static inline int getStringWidth(OLEDDisplay *display, const char *text, size_t 
 #if defined(OLED_UA) || defined(OLED_RU)
     return display->getStringWidth(text, len, true);
 #else
-    (void)len;
-    return display->getStringWidth(text);
+    // OLEDDisplay::getStringWidth (utf8=false) indexes the font jump table by (c - firstChar) with a
+    // signed char and no bounds check, so any byte outside printable ASCII (high bytes, but also
+    // control bytes like a stray 0x0A) reads outside the font array. Measure a sanitized copy in which
+    // unrepresentable bytes count as a '?' placeholder; printable ASCII is passed through unchanged.
+    char safe[64];
+    if (len > sizeof(safe) - 1)
+        len = sizeof(safe) - 1;
+    for (size_t i = 0; i < len; i++) {
+        const uint8_t c = static_cast<uint8_t>(text[i]);
+        safe[i] = (c >= 0x20 && c <= 0x7E) ? static_cast<char>(c) : '?';
+    }
+    safe[len] = '\0';
+    return display->getStringWidth(safe, len, false);
 #endif
 }
 
@@ -29,6 +40,14 @@ size_t utf8CharLen(uint8_t c)
     if ((c & 0xF8) == 0xF0)
         return 4;
     return 1;
+}
+
+// Bytes the UTF-8 char at s[pos] occupies, clamped to what actually remains. A truncated multi-byte
+// lead (e.g. a lone 0xF0) near the end otherwise makes a walker read past the buffer - the payload of
+// a TEXT message is opaque bytes, so such truncated sequences are attacker-reachable.
+static inline size_t utf8CharLenClamped(const char *s, size_t pos, size_t len)
+{
+    return std::min(utf8CharLen(static_cast<uint8_t>(s[pos])), len - pos);
 }
 
 static inline bool isPossibleEmoteLead(uint8_t c)
@@ -209,7 +228,7 @@ static LineMetrics analyzeLineInternal(OLEDDisplay *display, const char *line, s
             continue;
         }
 
-        const size_t charLen = utf8CharLen(static_cast<uint8_t>(line[i]));
+        const size_t charLen = utf8CharLenClamped(line, i, lineLen);
         if (display)
             metrics.width += getUtf8ChunkWidth(display, line + i, charLen);
         i += charLen;
@@ -257,7 +276,7 @@ static int appendTextSpanAndMeasure(OLEDDisplay *display, int cursorX, int fontY
     while (pos < len) {
         size_t chunkLen = 0;
         while (pos + chunkLen < len) {
-            const size_t charLen = utf8CharLen(static_cast<uint8_t>(text[pos + chunkLen]));
+            const size_t charLen = utf8CharLenClamped(text, pos + chunkLen, len);
             if (chunkLen + charLen >= sizeof(chunk))
                 break;
             chunkLen += charLen;
@@ -328,7 +347,7 @@ size_t truncateToWidth(OLEDDisplay *display, const char *line, char *out, size_t
                 continue;
             }
 
-            const size_t charLen = utf8CharLen(static_cast<uint8_t>(line[i]));
+            const size_t charLen = utf8CharLenClamped(line, i, lineLen);
             tokenWidth = getUtf8ChunkWidth(display, line + i, charLen);
             advance = charLen;
         }
@@ -417,11 +436,11 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const char *line, 
             if (findEmoteAt(line, lineLen, next, nextMatchLen, emoteSet, emoteCount) != nullptr)
                 break;
 
-            next += utf8CharLen(static_cast<uint8_t>(line[next]));
+            next += utf8CharLenClamped(line, next, lineLen);
         }
 
         if (next == i)
-            next += utf8CharLen(static_cast<uint8_t>(line[i]));
+            next += utf8CharLenClamped(line, i, lineLen);
 
         cursorX = appendTextSpanAndMeasure(display, cursorX, fontY, line + i, next - i, true, fauxBold && inBold);
         i = next;

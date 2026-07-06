@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #if USE_TFTDISPLAY
 
 #if ARCH_PORTDUINO
@@ -1228,6 +1229,7 @@ TFTDisplay::~TFTDisplay()
         free(repaintChunkBuffer);
         repaintChunkBuffer = nullptr;
     }
+    memaudit::set("display", 0);
 }
 
 // Write the buffer to the display memory
@@ -1654,6 +1656,7 @@ bool TFTDisplay::connect()
             LOG_ERROR("Not enough memory to create TFT line buffer\n");
             return false;
         }
+        memaudit::add("display", sizeof(uint16_t) * displayWidth);
     }
     if (this->repaintChunkBuffer == NULL) {
         this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
@@ -1662,6 +1665,7 @@ bool TFTDisplay::connect()
             LOG_ERROR("Not enough memory to create TFT repaint chunk buffer\n");
             return false;
         }
+        memaudit::add("display", sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
     }
     return true;
 }

@@ -6,6 +6,7 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "configuration.h"
+#include "memory/MemAudit.h"
 #include "power/PowerHAL.h"
 #include <ErriezCRC32.h>
 #include <vector>
@@ -62,6 +63,7 @@ WarmNodeStore::WarmNodeStore()
 #else
     entries = static_cast<WarmNodeEntry *>(calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
 #endif
+    memaudit::set("warm", entries ? WARM_NODE_COUNT * sizeof(WarmNodeEntry) : 0);
 #if defined(NRF52840_XXAA)
     memset(pageOf, kNoPage, sizeof(pageOf));
 #endif
@@ -71,6 +73,7 @@ WarmNodeStore::~WarmNodeStore()
 {
     free(entries); // always malloc-family (calloc / ps_calloc)
     entries = nullptr;
+    memaudit::set("warm", 0);
 }
 
 WarmNodeEntry *WarmNodeStore::find(NodeNum num) const

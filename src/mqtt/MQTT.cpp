@@ -470,8 +470,16 @@ void MQTT::reconnect()
             reconnectCount++;
             LOG_ERROR("Failed to contact MQTT server directly (%d/%d)", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
+#if defined(USE_WS5500) || defined(USE_CH390D)
+                LOG_WARN("MQTT connect failed repeatedly; waiting for Ethernet reconnect");
+#else
                 needReconnect = true;
-                wifiReconnect->setIntervalFromNow(0);
+                if (wifiReconnect) {
+                    wifiReconnect->setIntervalFromNow(0);
+                } else {
+                    LOG_WARN("MQTT connect failed repeatedly, but WiFi reconnect is unavailable");
+                }
+#endif
                 reconnectCount = 0;
             }
 #endif

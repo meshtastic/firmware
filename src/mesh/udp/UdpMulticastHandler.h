@@ -33,6 +33,8 @@ class UdpMulticastHandler final
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
             LOG_DEBUG("UDP Listening on IP: %u.%u.%u.%u:%u", udpIpAddress[0], udpIpAddress[1], udpIpAddress[2], udpIpAddress[3],
                       UDP_MULTICAST_DEFAUL_PORT);
+#elif defined(USE_WS5500) || defined(USE_CH390D)
+            LOG_DEBUG("UDP Listening on IP: %s", ETH.localIP().toString().c_str());
 #else
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
 #endif
@@ -96,6 +98,10 @@ class UdpMulticastHandler final
         }
 #if defined(ARCH_NRF52)
         if (!isEthernetAvailable()) {
+            return false;
+        }
+#elif defined(USE_WS5500) || defined(USE_CH390D)
+        if (!ETH.connected()) {
             return false;
         }
 #elif !defined(ARCH_PORTDUINO)

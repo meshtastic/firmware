@@ -5,12 +5,7 @@
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
-
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
+#include "support/MockMeshService.h"
 
 static MockMeshService *mockMeshService;
 
