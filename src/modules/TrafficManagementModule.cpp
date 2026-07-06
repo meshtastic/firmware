@@ -12,6 +12,7 @@
 #include "airtime.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
+#include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include <Arduino.h>
@@ -163,6 +164,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     cache = new UnifiedCacheEntry[allocSize]();
 #endif
 
+    memaudit::set("tmm", cache ? allocSize * sizeof(UnifiedCacheEntry) : 0);
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
@@ -177,6 +179,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     } else {
         TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
     }
+    memaudit::set("tmm_ni", nodeInfoPayload ? nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry) : 0);
 #else
     TM_LOG_DEBUG("NodeInfo PSRAM cache not available on this target");
 #endif
@@ -198,6 +201,7 @@ TrafficManagementModule::~TrafficManagementModule()
             delete[] cache;
         cache = nullptr;
     }
+    memaudit::set("tmm", 0);
 #endif
 
     if (nodeInfoPayload) {
@@ -207,6 +211,7 @@ TrafficManagementModule::~TrafficManagementModule()
             delete[] nodeInfoPayload;
         nodeInfoPayload = nullptr;
     }
+    memaudit::set("tmm_ni", 0);
 }
 
 // =============================================================================
