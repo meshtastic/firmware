@@ -41,6 +41,9 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+#include "memGet.h"
+#endif
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -1153,6 +1156,23 @@ void setup()
 
     // We manually run this to update the NodeStatus
     nodeDB->notifyObservers(true);
+
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+    // Boot heap watermark guardrail (off by default; CI/test builds enable it with
+    // -DMESHTASTIC_HEAP_WATERMARK_CHECK). On nRF52840 the heap arena is the linker gap
+    // after .bss, so static RAM growth silently eats the heap 1:1 - flag it loudly when
+    // less than 20% of the heap is still free at the end of setup().
+    {
+        uint32_t heapTotal = memGet.getHeapSize();
+        // Platforms without heap accounting report UINT32_MAX (or 0); skip those
+        if (heapTotal != 0 && heapTotal != UINT32_MAX) {
+            uint32_t heapFree = memGet.getFreeHeap();
+            if (heapFree < heapTotal / 5) {
+                LOG_ERROR("Boot heap watermark: only %u of %u bytes free (<20%%)", heapFree, heapTotal);
+            }
+        }
+    }
+#endif
 }
 
 #endif

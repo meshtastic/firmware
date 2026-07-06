@@ -337,7 +337,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: report
         run: |
-          ARGS="./current-sizes.json"
+          ARGS="./current-sizes.json --budgets bin/ram_budgets.json"
           if [ -f ./develop-sizes.json ]; then
             ARGS="$ARGS --baseline develop:./develop-sizes.json"
           fi
@@ -374,6 +374,34 @@ jobs:
             ./size-report.md
             ./pr-number.txt
           retention-days: 5
+
+  # RAM/flash guardrails: fails CI when an env listed in bin/ram_budgets.json
+  # exceeds its static RAM (.data+.bss) or flash budget. Kept separate from
+  # firmware-size-report, which is informational and continue-on-error.
+  size-budget-gate:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download current manifests
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          path: ./manifests/
+          pattern: manifest-*
+          merge-multiple: true
+
+      - name: Collect current firmware sizes
+        run: |
+          mkdir -p ./manifests/
+          python3 bin/collect_sizes.py ./manifests/ ./current-sizes.json
+
+      - name: Enforce RAM/flash budgets
+        run: python3 bin/size_report.py ./current-sizes.json --budgets bin/ram_budgets.json --enforce-budgets
 
   release-artifacts:
     permissions: # Needed for 'gh release upload'.
