@@ -285,7 +285,7 @@ const RegionInfo regions[] = {
 
     /*
         ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 70cm allocation: 430.000 - 440.000 MHz.
-        Power limit is the regulatory ceiling (1 W / 30 dBm) — individual hardware will cap below this
+        Power limit is the regulatory ceiling (1 W / 30 dBm) - individual hardware will cap below this
         via its own PA curve; the field here is just the legal upper bound.
 
         Default slot: 37 (433.650 MHz)
