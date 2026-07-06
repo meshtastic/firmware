@@ -41,7 +41,8 @@
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
+// Live in-flight packet bytes are tracked under "pktpool(live)" in the MemAudit breakdown
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool("pktpool(live)");
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
 // On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
@@ -50,7 +51,8 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
+// Live in-flight packet bytes are tracked under "pktpool(live)" in the MemAudit breakdown
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool("pktpool(live)");
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
@@ -58,7 +60,8 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
+// Static pool RAM is BSS, not heap; "pktpool(live)" still shows in-flight packet bytes
+static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool("pktpool(live)");
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 #endif
 

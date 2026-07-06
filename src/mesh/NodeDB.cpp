@@ -22,6 +22,7 @@
 #include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
@@ -1796,6 +1797,25 @@ bool NodeDB::enforceSatelliteCaps()
 #endif
 
     (void)trim; // all four maps may be compiled out
+
+    // Approximate satellite heap usage: each std::map entry is one rb-tree node,
+    // value_type plus ~44 B of node overhead (parent/left/right pointers, color,
+    // allocator rounding on 32-bit targets - an estimate, not exact bookkeeping).
+    size_t satBytes = 0;
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    satBytes += nodePositions.size() * (sizeof(decltype(nodePositions)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    satBytes += nodeTelemetry.size() * (sizeof(decltype(nodeTelemetry)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    satBytes += nodeEnvironment.size() * (sizeof(decltype(nodeEnvironment)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    satBytes += nodeStatus.size() * (sizeof(decltype(nodeStatus)::value_type) + 44);
+#endif
+    memaudit::set("satmaps", satBytes);
+
     return trimmedAny;
 }
 
@@ -2080,6 +2100,7 @@ void NodeDB::nodeDBSelfCare()
     // Normalise the backing store to the hot cap so getOrCreateMeshNode always
     // has spare slots to append into (it indexes meshNodes->at(numMeshNodes++)).
     meshNodes->resize(MAX_NUM_NODES);
+    memaudit::set("nodedb", MAX_NUM_NODES * sizeof(meshtastic_NodeInfoLite));
 
     const bool satsTrimmed = enforceSatelliteCaps();
 
