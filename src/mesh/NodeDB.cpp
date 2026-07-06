@@ -22,6 +22,7 @@
 #include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
@@ -723,7 +724,7 @@ template <typename Map> std::vector<NodeNum> snapshotSatelliteNodeNums(const Map
 }
 
 // Drop the stalest entry of `map` (staleness proxied via the owner's
-// last_heard; 0 = owner evicted, i.e. an orphan — first out). Never evicts our
+// last_heard; 0 = owner evicted, i.e. an orphan - first out). Never evicts our
 // own node's entry. Caller holds satelliteMutex. Returns false if nothing
 // could be evicted.
 template <typename Map> bool evictStalestSatellite(NodeDB &db, Map &map)
@@ -914,6 +915,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
 
+#ifdef USERPREFS_LORACONFIG_TX_POWER
+    config.lora.tx_power = USERPREFS_LORACONFIG_TX_POWER;
+#endif
+
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
@@ -1024,7 +1029,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(ELECROW_ThinkNode_M9)) &&          \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) || defined(ELECROW_ThinkNode_M9)) &&            \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1792,12 +1797,31 @@ bool NodeDB::enforceSatelliteCaps()
 #endif
 
     (void)trim; // all four maps may be compiled out
+
+    // Approximate satellite heap usage: each std::map entry is one rb-tree node,
+    // value_type plus ~44 B of node overhead (parent/left/right pointers, color,
+    // allocator rounding on 32-bit targets - an estimate, not exact bookkeeping).
+    size_t satBytes = 0;
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    satBytes += nodePositions.size() * (sizeof(decltype(nodePositions)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    satBytes += nodeTelemetry.size() * (sizeof(decltype(nodeTelemetry)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    satBytes += nodeEnvironment.size() * (sizeof(decltype(nodeEnvironment)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    satBytes += nodeStatus.size() * (sizeof(decltype(nodeStatus)::value_type) + 44);
+#endif
+    memaudit::set("satmaps", satBytes);
+
     return trimmedAny;
 }
 
 #if WARM_NODE_COUNT > 0
 // Classify an evicted node's hop-protected category for the warm tier. Favorite/ignored/
-// verified are local flags (rarely reach warm — they're eviction-protected — but classify
+// verified are local flags (rarely reach warm - they're eviction-protected - but classify
 // them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
 static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
 {
@@ -1940,7 +1964,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     // check if the file is encrypted and decrypt before protobuf decode
     if (EncryptedStorage::isEncrypted(filename)) {
         // ZeroizingArrayPtr wipes the decrypted plaintext (which contains config
-        // secrets — channel PSKs, security private_key, etc.) before delete[],
+        // secrets - channel PSKs, security private_key, etc.) before delete[],
         // so it isn't recoverable from the heap after this function returns.
         auto decBuf = meshtastic_security::make_zeroizing_array(protoSize);
         if (!decBuf) {
@@ -2028,7 +2052,7 @@ void NodeDB::demoteOldestHotNodesToWarm()
         warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
                          warmProtectedCategory(n));
         // Demotion drops the node from the header table, so drop its satellites
-        // too (the eviction chokepoint) — they'd otherwise orphan until the next
+        // too (the eviction chokepoint) - they'd otherwise orphan until the next
         // enforceSatelliteCaps pass.
         eraseNodeSatellites(n.num);
         demoted++;
@@ -2076,10 +2100,11 @@ void NodeDB::nodeDBSelfCare()
     // Normalise the backing store to the hot cap so getOrCreateMeshNode always
     // has spare slots to append into (it indexes meshNodes->at(numMeshNodes++)).
     meshNodes->resize(MAX_NUM_NODES);
+    memaudit::set("nodedb", MAX_NUM_NODES * sizeof(meshtastic_NodeInfoLite));
 
     const bool satsTrimmed = enforceSatelliteCaps();
 
-    // Ensure self exists, sits at index 0, and carries current owner info — after
+    // Ensure self exists, sits at index 0, and carries current owner info - after
     // any demotion has freed a slot. Covers the foreign/fixture case where the
     // loaded file did not contain us at all.
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(self);
@@ -2090,7 +2115,7 @@ void NodeDB::nodeDBSelfCare()
     }
 
     // One-shot rewrite: only when we healed something, and never while storage
-    // is locked — a locked boot loads placeholder defaults that must not be written
+    // is locked - a locked boot loads placeholder defaults that must not be written
     // over the encrypted store; reloadFromDisk() re-runs self-care once unlocked.
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     const bool storageLocked = EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked();
@@ -2171,7 +2196,7 @@ void NodeDB::loadFromDisk()
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     // Only take the locked-boot defaults path when lockdown is ACTIVE (the
     // device is provisioned) AND storage is still locked. A lockdown-capable
-    // build that has never been provisioned — or that was disabled — falls
+    // build that has never been provisioned - or that was disabled - falls
     // through to the normal plaintext load below and behaves like stock.
     if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
         // Encrypted storage is locked. Install defaults and wait for the
@@ -2188,7 +2213,7 @@ void NodeDB::loadFromDisk()
         // would otherwise honour USERPREFS_CONFIG_LORA_REGION (the common shape
         // for managed deployments) and the LongFast default channel synthesised
         // by installDefaultChannels, so the device would beacon nodeinfo /
-        // telemetry on the public default PSK before any unlock — and process
+        // telemetry on the public default PSK before any unlock - and process
         // incoming default-channel packets the same way. Forcing region=UNSET
         // gates both TX and RX in RadioLibInterface (see the region==UNSET
         // checks in startSend and readData); tx_enabled=false is belt-and-
@@ -2262,7 +2287,7 @@ void NodeDB::loadFromDisk()
 
     // Left UNTRIMMED on purpose: trim/demote/satellite-cap/self-pin/rewrite all
     // run in nodeDBSelfCare() once getNodeNum() is valid (still 0 here on a cold
-    // boot, so we could only assume index 0 == self — the very bug being fixed).
+    // boot, so we could only assume index 0 == self - the very bug being fixed).
 #if WARM_NODE_COUNT > 0
     // Load the warm tier so its on-disk snapshot is available before the node DB
     // is exercised (and before nodeDBSelfCare() demotes any overflow into it).
@@ -2445,7 +2470,7 @@ void NodeDB::loadFromDisk()
     }
 
     // Always-on traffic management: a device that has NEVER configured TMM
-    // (has_traffic_management false — AdminModule always sets the has_ flag on
+    // (has_traffic_management false - AdminModule always sets the has_ flag on
     // write, even when disabling) gets the fork defaults. Explicitly configured
     // devices keep their exact settings.
     if (!moduleConfig.has_traffic_management) {
@@ -2479,7 +2504,7 @@ void NodeDB::loadFromDisk()
     // without saving to disk, so we force a save here to ensure encrypted files exist.
     //
     // Only when lockdown is ACTIVE. A capable-but-off device must leave its
-    // files as plaintext — encryptAndWrite would fail anyway (no DEK), but
+    // files as plaintext - encryptAndWrite would fail anyway (no DEK), but
     // skipping the whole block avoids the wasted attempts and error logs.
     if (EncryptedStorage::isLockdownActive()) {
         const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
@@ -2548,7 +2573,7 @@ void NodeDB::loadFromDisk()
 // Serializes reloadFromDisk against itself. Other readers of config /
 // channelFile / nodeDatabase don't take this lock today, so this only
 // prevents reload-vs-reload races (e.g. fast successive unlocks). It is
-// not a full data-race fix for those structs — that would require
+// not a full data-race fix for those structs - that would require
 // thread-shared locking discipline across the whole codebase, beyond
 // the audit's M7 scope. The radio standby+reconfigure below keeps the
 // radio out of the window where SX12xx registers are mid-swap.
@@ -2561,7 +2586,7 @@ static concurrency::Lock g_reloadFromDiskMutex;
  * reconfigure() to push the now-real settings to the chip.
  *
  * Returns true iff every encrypted file decrypted and decoded cleanly.
- * On false the caller MUST treat storage as corrupt — see header.
+ * On false the caller MUST treat storage as corrupt - see header.
  */
 bool NodeDB::reloadFromDisk()
 {
@@ -2580,7 +2605,7 @@ bool NodeDB::reloadFromDisk()
     loadFromDisk();
 
     if (storageCorruptThisLoad) {
-        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload — surfacing as corrupt");
+        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload - surfacing as corrupt");
         // Leave the radio sleeping. Caller will lock storage and emit
         // a LOCKED(storage_corrupt) status; we must not reconfigure
         // the chip with the locked-default placeholder values still
@@ -2629,7 +2654,7 @@ bool NodeDB::disableLockdownToPlaintext()
         }
     }
 
-    // All files are plaintext now — remove the lockdown artifacts. Deleting
+    // All files are plaintext now - remove the lockdown artifacts. Deleting
     // /prefs/.dek is the atomic commit: after it, isLockdownActive() is false.
     EncryptedStorage::removeLockdownArtifacts();
     return true;
@@ -2652,11 +2677,11 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     // Encrypt all files except uiconfig (no secrets) and the DEK file (self-encrypted).
     // Only when lockdown is ACTIVE (provisioned). A lockdown-capable but DISABLED
     // device has no DEK, so encryptAndWrite would fail and config would never
-    // persist — it must save plaintext exactly like stock firmware. Once enabled,
+    // persist - it must save plaintext exactly like stock firmware. Once enabled,
     // the reloadFromDisk migrate pass re-saves these plaintext files encrypted.
     if (EncryptedStorage::isLockdownActive() && strcmp(filename, uiconfigFileName) != 0) {
         // ZeroizingArrayPtr wipes the unencrypted protobuf encoding (which contains
-        // config secrets — channel PSKs, security private_key, etc.) before delete[],
+        // config secrets - channel PSKs, security private_key, etc.) before delete[],
         // so plaintext copies aren't left in heap memory after encryption completes.
         auto pbBuf = meshtastic_security::make_zeroizing_array(protoSize);
         if (!pbBuf) {
@@ -2853,7 +2878,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     // reset the 8s HW watchdog so the second write gets a full budget (issue #10746).
     watchdog_update();
 #endif
-    // Same cadence as the node DB; failure is logged but must not propagate —
+    // Same cadence as the node DB; failure is logged but must not propagate -
     // a false return from here would trigger saveToDisk()'s fsFormat() path.
     warmStore.saveIfDirty();
 #endif
@@ -2874,14 +2899,14 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     // When lockdown is ACTIVE but storage is still locked, encryptAndWrite()
     // returns false for every file. That would cause saveToDisk()'s nRF52 retry
     // path to call FSCom.format(), wiping all encrypted proto files from flash.
-    // Return true here — "nothing to save, not an error."
+    // Return true here - "nothing to save, not an error."
     //
     // Gate on isLockdownActive(): a lockdown-capable but DISABLED device (never
     // provisioned) also has isUnlocked()==false, but it must persist plaintext
-    // normally — skipping here would silently drop every config write (e.g. the
+    // normally - skipping here would silently drop every config write (e.g. the
     // LoRa region) until the device is provisioned.
     if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
-        LOG_WARN("NodeDB: saveToDisk skipped — encrypted storage locked");
+        LOG_WARN("NodeDB: saveToDisk skipped - encrypted storage locked");
         return true;
     }
 #endif
@@ -3009,7 +3034,7 @@ HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
         return HopStartStatus::INVALID;
 
     if (p.hop_start == 0) {
-        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition —
+        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition -
         // the packet was never meant to travel any hops, so no hop_start ambiguity applies.
         if (p.hop_limit == 0)
             return HopStartStatus::VALID;
@@ -3204,7 +3229,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
     if (contact.should_ignore) {
         // Block the contact and drop its rich satellite data, but keep the
-        // public key copied above — an ignored peer keeps a usable identity
+        // public key copied above - an ignored peer keeps a usable identity
         // (a verifiable target) rather than a bare node number.
         if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
@@ -3264,14 +3289,20 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
             if (!duplicateWarned) {
                 duplicateWarned = true;
+                // Sanitize before embedding long_name in the phone-facing ClientNotification string
+                // (defense-in-depth vs PB_VALIDATE_UTF8).
+                char safeName[sizeof(p.long_name)];
+                strncpy(safeName, p.long_name, sizeof(safeName));
+                safeName[sizeof(safeName) - 1] = '\0';
+                sanitizeUtf8(safeName, sizeof(safeName));
                 char warning[] =
                     "Remote device %s has advertised your public key. This may indicate a compromised key. You may need "
                     "to regenerate your public keys.";
-                LOG_WARN(warning, p.long_name);
+                LOG_WARN(warning, safeName);
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 cn->level = meshtastic_LogRecord_Level_WARNING;
                 cn->time = getValidTime(RTCQualityFromNet);
-                snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
+                snprintf(cn->message, sizeof(cn->message), warning, safeName);
                 service->sendClientNotification(cn);
             }
             return false;
@@ -3355,7 +3386,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 #if HAS_VARIABLE_HOPS
         // Only sample genuine RF-origin packets. The transport check excludes packets received
         // directly from the broker (TRANSPORT_MQTT), but an MQTT-origin packet rebroadcast onto
-        // LoRa by a gateway arrives as TRANSPORT_LORA with via_mqtt set — count those would
+        // LoRa by a gateway arrives as TRANSPORT_LORA with via_mqtt set - count those would
         // inflate the local mesh-size estimate with non-RF nodes (and they usually carry
         // hop_start==0, landing in the hop-0 bucket that pulls the recommendation lowest), so
         // exclude via_mqtt too.
@@ -3706,7 +3737,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // Don't append past the end of the vector. The protected-node cap
         // (numProtectedNodes() <= MAX_NUM_NODES-2) means the eviction above frees
         // a slot in normal operation; this guards the legacy case of a pre-cap
-        // database that is full of protected nodes — refuse rather than overrun.
+        // database that is full of protected nodes - refuse rather than overrun.
         if (numMeshNodes >= MAX_NUM_NODES)
             return NULL;
         // Pre-size before append when run before nodeDBSelfCare() (boot keygen); else at() aborts on nRF52.

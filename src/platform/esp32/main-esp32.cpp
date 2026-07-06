@@ -52,8 +52,25 @@ static bool isNetworkConfiguredToDisableBluetooth()
 #endif
 }
 
+static bool isPaxcounterActiveForBoot()
+{
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
+    return moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled && !config.bluetooth.enabled &&
+           !config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
 static bool shouldReleaseBluetoothMemory()
 {
+    // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
+    // ESP32 BLE controller memory for scanning.
+    if (isPaxcounterActiveForBoot()) {
+        LOG_DEBUG("Skipping Bluetooth memory release because Paxcounter is active");
+        return false;
+    }
+
     // On ESP32 targets WiFi and BLE share radio resources. When WiFi is configured for this boot,
     // BLE will not be started, so its reserved memory can be returned to the heap until reboot.
     if (isNetworkConfiguredToDisableBluetooth()) {
@@ -349,7 +366,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
 
-    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer — align with nRF52 system_off semantics.
+    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer - align with nRF52 system_off semantics.
     if (msecToWake != portMAX_DELAY)
         esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();
