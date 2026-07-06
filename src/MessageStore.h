@@ -72,10 +72,12 @@ struct StoredMessage {
     uint16_t textOffset; // Offset into global text pool (valid only after loadFromFlash())
     uint16_t textLength; // Length of text in bytes
 
+    bool xeddsaSigned; // true if packet carried a verified XEdDSA signature
+
     // Default constructor initializes all fields safely
     StoredMessage()
         : timestamp(0), sender(0), channelIndex(0), dest(0xffffffff), type(MessageType::BROADCAST), isBootRelative(false),
-          ackStatus(AckStatus::NONE), textOffset(0), textLength(0)
+          ackStatus(AckStatus::NONE), textOffset(0), textLength(0), xeddsaSigned(false)
     {
     }
 };

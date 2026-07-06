@@ -374,15 +374,15 @@ via the `LOG_INFO "Route to … stale"` / "Resetting next hop" lines). Use this 
 
 ### 3. Hardware via meshtastic MCP (auto-detect; 3+ devices for a real hop)
 
-- `mcp-server/tests/mesh/test_nexthop_multihop_recovery.py` - **the multi-hop validator
+- `meshtastic-mcp/tests/mesh/test_nexthop_multihop_recovery.py` - **the multi-hop validator
   for this work** (added on this branch). Self-discovers an A - relay - C line, asserts a
   directed DM is delivered across the relay (next_hop + M1/M2/M3 engaged), and asserts
   delivery recovers after the relay is power-cycled (M3). Skips unless the bench is a true
   multi-hop line (≥3 roles via `--hub-profile`, endpoints out of direct RF range).
-- `mcp-server/tests/mesh/test_direct_with_ack.py` - happy-path regression: a fresh/unique
+- `meshtastic-mcp/tests/mesh/test_direct_with_ack.py` - happy-path regression: a fresh/unique
   route still delivers a want_ack DM on the first/second try (M4's gate must keep this
   green).
-- `mcp-server/tests/mesh/test_peer_offline_recovery.py` - 2-device recovery validator: peer
+- `meshtastic-mcp/tests/mesh/test_peer_offline_recovery.py` - 2-device recovery validator: peer
   off mid-conversation then back. Must stay green and ideally recover in fewer attempts.
 
 ### 4. Build / format sanity
@@ -411,7 +411,7 @@ production; sanity-check RAM headroom on the smallest nRF52 build for the ~384 B
   without it. The intermediate-node failure-count path and the M4 A/B therefore have unit
   coverage of their logic but no end-to-end multi-node run yet.
 - **Hardware / multi-hop tier** - a committable bench test now exists:
-  `mcp-server/tests/mesh/test_nexthop_multihop_recovery.py`. It self-discovers a real
+  `meshtastic-mcp/tests/mesh/test_nexthop_multihop_recovery.py`. It self-discovers a real
   multi-hop pair (A - relay - C), asserts a directed DM is delivered across the relay, and
   asserts delivery recovers after the relay is power-cycled (the M3 path). It
   `pytest.skip`s cleanly unless the bench is a true line with endpoints out of direct RF

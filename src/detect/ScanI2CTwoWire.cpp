@@ -156,44 +156,11 @@ bool ScanI2CTwoWire::i2cCommandResponseLength(ScanI2C::DeviceAddress addr, uint1
 }
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
-// FIXME Move to a separate file for detection of sensors that require more complex interactions?
-// For SEN5X detection
-// Note, this code needs to be called before setting the I2C bus speed
-// for the screen at high speed. The speed needs to be at 100kHz, otherwise
-// detection will not work
-String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
+#include "../modules/Telemetry/Sensor/SEN5XSensor.h"
+bool probeSEN5X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
 {
-    uint8_t cmd[] = {0xD0, 0x14};
-    uint8_t response[48] = {0};
-
-    i2cBus->beginTransmission(address);
-    i2cBus->write(cmd, 2);
-    if (i2cBus->endTransmission() != 0)
-        return "";
-
-    delay(20);
-    if (i2cBus->requestFrom(address, (uint8_t)48) != 48)
-        return "";
-
-    for (int i = 0; i < 48 && i2cBus->available(); ++i) {
-        response[i] = i2cBus->read();
-    }
-
-    char productName[33] = {0};
-    int j = 0;
-    for (int i = 0; i < 48 && j < 32; i += 3) {
-        if (response[i] >= 32 && response[i] <= 126)
-            productName[j++] = response[i];
-        else
-            break;
-
-        if (response[i + 1] >= 32 && response[i + 1] <= 126)
-            productName[j++] = response[i + 1];
-        else
-            break;
-    }
-
-    return String(productName);
+    SEN5XSensor sen5xsensor;
+    return sen5xsensor.probe(i2cBus, address, port);
 }
 #endif
 
@@ -861,46 +828,24 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = ICM42607P;
                         logFoundDevice("ICM-42607-P", (uint8_t)addr.address);
                         break;
-                    }
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
-                    String prod = "";
-                    prod = readSEN5xProductName(i2cBus, addr.address);
-                    if (prod.startsWith("SEN55")) {
-                        type = SEN5X;
-                        logFoundDevice("Sensirion SEN55", addr.address);
-                        break;
-                    } else if (prod.startsWith("SEN54")) {
-                        type = SEN5X;
-                        logFoundDevice("Sensirion SEN54", addr.address);
-                        break;
-                    } else if (prod.startsWith("SEN50")) {
-                        type = SEN5X;
-                        logFoundDevice("Sensirion SEN50", addr.address);
-                        break;
-                    }
-#endif
-                    // Disambiguate shared 0x68/0x69 addresses via WHO_AM_I (0x75: 0x71 MPU-9250,
-                    // 0x73 MPU-9255, 0x68 MPU-6050); must run before the BMX160-by-address fallback.
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x75), 1);
-                    if (registerValue == 0x71 || registerValue == 0x73) {
+                    } else if (registerValue == 0x71 || registerValue == 0x73) {
+                        // MPU-9250 (0x71) / MPU-9255 (0x73) share 0x68/0x69 with MPU-6050 and BMX160;
+                        // WHO_AM_I disambiguates them here.
                         type = MPU9250;
                         logFoundDevice(registerValue == 0x73 ? "MPU9255" : "MPU9250", (uint8_t)addr.address);
                         break;
-                    }
-                    if (registerValue == 0x68) {
+                    } else if (registerValue == 0x68) { // WHO_AM_I from datasheet
                         type = MPU6050;
                         logFoundDevice("MPU6050", (uint8_t)addr.address);
                         break;
                     }
-                    if (addr.address == BMX160_ADDR) {
-                        type = BMX160;
-                        logFoundDevice("BMX160", (uint8_t)addr.address);
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+                    if (probeSEN5X(i2cBus, addr.address, port)) {
+                        type = SEN5X;
+                        logFoundDevice("SEN5X", addr.address);
                         break;
                     }
-                    // Fallback for the shared 0x68 address: assume MPU-6050
-                    type = MPU6050;
-                    logFoundDevice("MPU6050", (uint8_t)addr.address);
-                    break;
+#endif
                 }
                 break;
 
