@@ -9,9 +9,8 @@
 
 // this file defines constants which come from mesh.options
 //
-// Sizing policy: RAM-shaped cache tiers below key off MESHTASTIC_MEM_CLASS
-// (see memory/MemClass.h) so unclassified chips fail safe-small. Branches that
-// deviate from their class are pinned by something other than RAM and say why.
+// RAM-shaped cache tiers key off MESHTASTIC_MEM_CLASS (memory/MemClass.h) so
+// unclassified chips fail safe-small; class-deviant branches say why inline.
 
 // Tricky macro to let you find the sizeof a type member
 #define member_size(type, member) sizeof(((type *)0)->member)
@@ -119,6 +118,13 @@ static inline int get_max_num_nodes()
 #endif                    // platform
 #endif                    // MAX_NUM_NODES
 
+/// Packet-history capacity: 2x the hot store so dedup/relayer state survives a
+/// full mesh, floored at 100. Shared by PacketHistory's constructor clamp and
+/// the boot-cache budget assert below so the two cannot drift.
+#ifndef PACKETHISTORY_MAX
+#define PACKETHISTORY_MAX (MAX_NUM_NODES * 2 > 100 ? (uint32_t)(MAX_NUM_NODES * 2) : (uint32_t)100)
+#endif
+
 /// Per-map cap (position/telemetry/environment/status): only the freshest
 /// MAX_SATELLITE_NODES nodes keep satellite payloads, the rest just the
 /// NodeInfoLite header. RAM-bound (the maps are internal-SRAM, not PSRAM), so
@@ -216,9 +222,8 @@ static inline int get_max_num_nodes()
 // If this fires on a new feature: shrink the cache for this class, or raise the
 // class budget in MemClass.h as a visible, reviewable decision.
 #if !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(ARCH_PORTDUINO)
-static_assert((uint32_t)TRAFFIC_MANAGEMENT_CACHE_SIZE * 10u + (uint32_t)WARM_NODE_COUNT * 40u +
-                      20u * (uint32_t)(MAX_NUM_NODES * 2 > 100 ? MAX_NUM_NODES * 2 : 100) /* PACKETHISTORY_MAX mirror */
-                  <= MESHTASTIC_BOOT_CACHE_BUDGET,
+static_assert((uint32_t)TRAFFIC_MANAGEMENT_CACHE_SIZE * 10u + (uint32_t)WARM_NODE_COUNT * 40u + 20u * PACKETHISTORY_MAX <=
+                  MESHTASTIC_BOOT_CACHE_BUDGET,
               "Boot-allocated mesh caches exceed this memory class's budget - shrink a tier or consciously raise "
               "MESHTASTIC_BOOT_CACHE_BUDGET in memory/MemClass.h");
 #endif

@@ -1,41 +1,21 @@
 #pragma once
 
-// Central memory-class ladder: every RAM-sized cache in the tree keys its
-// per-platform tier off MESHTASTIC_MEM_CLASS instead of growing its own chip
-// #ifdef ladder. Born out of the 2.8.0 nRF52840 heap exhaustion: each cache's
-// private ladder fell through to its *largest* non-PSRAM tier for any chip it
-// didn't name, and nRF52 was never named. Here the unknown-chip default is the
-// SMALL class - a new target boots with small caches until someone classifies
-// it below, deliberately.
-//
-// Classes rank *usable app heap after platform overheads* (SoftDevice, WiFi+BLE
-// stacks), not raw RAM. That is why classic ESP32 (520 KB raw, ~200-250 KB free
-// with radios up) shares a class with nRF52840 (256 KB raw, ~115 KB arena after
-// SoftDevice + FreeRTOS stacks).
+// Central memory-class ladder: RAM-sized caches key their per-platform tier off
+// MESHTASTIC_MEM_CLASS. Classes rank *usable app heap after platform overheads*
+// (SoftDevice, WiFi+BLE stacks) - not raw RAM - and an unclassified chip lands in
+// SMALL on purpose: small caches are a recoverable default, an exhausted heap is not.
 //
 //   MEM_CLASS_TINY    <32 KB free heap      STM32WL
 //   MEM_CLASS_SMALL   ~100-250 KB           nRF52840, classic ESP32/S2/C3, RP2040/RP2350
 //   MEM_CLASS_MEDIUM  ~250-500 KB, no PSRAM ESP32-S3/C6/P4 without PSRAM
 //   MEM_CLASS_LARGE   PSRAM or host         ESP32-S3+PSRAM, portduino
 //
-// RP2350 (520 KB) rides with RP2040 in SMALL to keep this header a behavioral
-// no-op; it is a MEDIUM candidate whenever someone wants to tune it up.
-//
-// Compare ordinally: #if MESHTASTIC_MEM_CLASS >= MEM_CLASS_MEDIUM ...
-//
-// Overrides: a variant may predefine MESHTASTIC_MEM_CLASS (variant.h or
-// -D build flag) or any individual cache constant - every consumer ladder
-// stays #ifndef-guarded, so the most specific definition wins.
-//
-// Deliberately NOT classed here: MAX_NUM_NODES (bounded by nodes.proto fitting
-// the platform's filesystem, i.e. flash-shaped, not heap-shaped) and any cache
-// whose size is pinned by a hardware quirk - those branches say why inline
-// (e.g. WARM_NODE_COUNT on RP2040 is watchdog-bound).
-//
-// This header is included very early (mesh-pb-constants.h), so it may only use
-// macros that exist without configuration.h: toolchain/board -D flags
-// (NRF52840_XXAA, CONFIG_IDF_TARGET_*, BOARD_HAS_PSRAM) and the ARCH_* macros
-// the surrounding ladders already depend on.
+// Compare ordinally (>=). RP2350 rides with RP2040 so this header stays a behavioral
+// no-op (MEDIUM candidate later). Variants may predefine MESHTASTIC_MEM_CLASS or any
+// cache constant - consumer ladders stay #ifndef-guarded. MAX_NUM_NODES is deliberately
+// unclassed (flash-shaped: nodes.proto vs filesystem). Included before configuration.h,
+// so only toolchain/board -D macros and the ARCH_* macros the ladders already use are
+// safe here.
 
 #define MEM_CLASS_TINY 1
 #define MEM_CLASS_SMALL 2
@@ -57,11 +37,9 @@
 #endif
 #endif // MESHTASTIC_MEM_CLASS
 
-// Compile-time ceiling for the boot-allocated mesh caches sized off this class
-// (TMM cache + warm store + packet history). mesh-pb-constants.h static_asserts
-// their sum against it, so the next cache-adding PR fails to build instead of
-// exhausting a 115 KB arena in the field. Raising a budget is allowed - it is a
-// one-line diff a reviewer can see and question.
+// Ceiling for the boot-allocated mesh caches (TMM + warm store + packet history);
+// mesh-pb-constants.h static_asserts their sum, so an oversized cache fails the build.
+// Raising a budget is allowed - as a visible, reviewable one-line diff.
 #ifndef MESHTASTIC_BOOT_CACHE_BUDGET
 #if MESHTASTIC_MEM_CLASS <= MEM_CLASS_TINY
 #define MESHTASTIC_BOOT_CACHE_BUDGET (8 * 1024)
