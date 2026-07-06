@@ -257,6 +257,50 @@ void test_ws_v1_migration_discardsLastHeard()
     b.saveIfDirty();
 }
 
+// Shrink safety: a warm.dat snapshot recording more entries than this build's
+// WARM_NODE_COUNT (e.g. written before a per-platform tier reduction) must be
+// rejected cleanly at the header check - load() starts empty instead of reading
+// past entries[]. (The nRF52840 raw-flash ring backend has no such cliff: it
+// replays records through place(), whose LRU admission keeps the newest.)
+void test_ws_load_rejectsOversizedSnapshot()
+{
+    WarmNodeStore a;
+    a.absorb(0xA00, 111, NULL);
+    if (!a.saveIfDirty()) {
+        TEST_IGNORE_MESSAGE("Filesystem not available in this test environment");
+        return;
+    }
+
+    // Patch the header's count field (offset 8) to one past capacity.
+    std::vector<uint8_t> buf;
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_READ);
+        if (!f) {
+            TEST_IGNORE_MESSAGE("warm.dat not readable in this environment");
+            return;
+        }
+        buf.resize(f.size());
+        f.read(buf.data(), buf.size());
+        f.close();
+    }
+    TEST_ASSERT_TRUE(buf.size() >= 16);
+    const uint16_t oversized = (uint16_t)(WARM_NODE_COUNT + 1);
+    memcpy(buf.data() + 8, &oversized, sizeof(oversized));
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_WRITE);
+        TEST_ASSERT_TRUE((bool)f);
+        f.write(buf.data(), buf.size());
+        f.close();
+    }
+
+    WarmNodeStore b;
+    b.load();
+    TEST_ASSERT_EQUAL(0, b.count()); // rejected as invalid, started empty
+
+    b.clear();
+    b.saveIfDirty();
+}
+
 WS_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -273,6 +317,7 @@ WS_TEST_ENTRY void setup()
     RUN_TEST(test_ws_remove_and_clear);
     RUN_TEST(test_ws_persistence_roundTrip);
     RUN_TEST(test_ws_v1_migration_discardsLastHeard);
+    RUN_TEST(test_ws_load_rejectsOversizedSnapshot);
     exit(UNITY_END());
 }
 
