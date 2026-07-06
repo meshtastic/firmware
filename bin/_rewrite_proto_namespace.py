@@ -7,7 +7,7 @@ attribute access) to use the new namespace (e.g., `meshtastic_v25`).
 
 Why: the .proto files declare `package meshtastic;`, so protoc emits
 `from meshtastic import mesh_pb2 as ...` lines. That would shadow the PyPI
-`meshtastic` package which other parts of the mcp-server depend on. Renaming
+`meshtastic` package which the meshtastic-mcp tooling depends on. Renaming
 to a local namespace keeps both available.
 
 Usage:

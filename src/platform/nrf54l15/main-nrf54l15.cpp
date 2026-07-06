@@ -1,5 +1,5 @@
 /*
- * main-nrf54l15.cpp — Platform entry points for Nordic nRF54L15
+ * main-nrf54l15.cpp - Platform entry points for Nordic nRF54L15
  *
  * Adapted from src/platform/nrf52/main-nrf52.cpp.
  * SoftDevice, Adafruit BLE, and nRFCrypto are NOT available on nRF54L15.
@@ -42,7 +42,7 @@ void variant_nrf54l15LoopHook(void) {}
 // ── PowerHAL ─────────────────────────────────────────────────────────────
 bool powerHAL_isVBUSConnected()
 {
-    // TODO(nrf54l15): nRF54L15 has a USB POWER peripheral — read USBREGSTATUS
+    // TODO(nrf54l15): nRF54L15 has a USB POWER peripheral - read USBREGSTATUS
     return false;
 }
 
@@ -165,7 +165,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         delay(msecToWake);
         NVIC_SystemReset();
     } else {
-        // System off equivalent — halt
+        // System off equivalent - halt
         while (1) {
             __WFI();
         }
@@ -173,7 +173,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 }
 
 // ── Setup / Loop ──────────────────────────────────────────────────────────
-// Forward declaration — defined in NRF54L15Bluetooth.cpp
+// Forward declaration - defined in NRF54L15Bluetooth.cpp
 void nrf54l15_bt_preinit();
 
 void nrf54l15Setup()
@@ -198,7 +198,7 @@ void nrf54l15Setup()
 
 void nrf54l15Loop()
 {
-    // First-call gate for the future WDT init — body will hold real init code, not just the bookkeeping flag.
+    // First-call gate for the future WDT init - body will hold real init code, not just the bookkeeping flag.
     // cppcheck-suppress duplicateConditionalAssign
     if (!watchdog_running) {
         // TODO(nrf54l15): enable WDT here

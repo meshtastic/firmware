@@ -1,7 +1,9 @@
 #include "Channels.h"
+#include "GeoCoord.h"
 #include "PositionPrecision.h"
 #include "TestUtil.h"
 #include "mesh-pb-constants.h"
+#include <cstdint>
 #include <cstring>
 #include <unity.h>
 
@@ -207,6 +209,26 @@ static void test_cryptoKeyIsPublic_invalidKeyIsNotPublic()
     TEST_ASSERT_FALSE(cryptoKeyIsPublic(makeCryptoKey(nullptr, -1)));
 }
 
+// Regression for out-of-bounds indexing in GeoCoord's UTM/MGRS conversion on extreme
+// latitude_i/longitude_i that arrive in a received Position (raw int32, unvalidated on decode).
+// Pre-fix, latitude_i = INT32_MAX made latLongToUTM read latBands[36] on a 21-char string
+// (stack-buffer-overflow at GeoCoord.cpp:128, an AddressSanitizer abort); extreme longitude produced
+// a negative UTM zone feeding the MGRS letter tables. The fix clamps the zone/band/col/row indices.
+// This exercises the fix under the coverage env's ASan.
+static void test_geocoord_extreme_coords_no_oob()
+{
+    const int32_t vals[] = {INT32_MIN,  INT32_MAX,   INT32_MIN + 1, INT32_MAX - 1, 0, 1, -1, 900000000, -900000000, // +/-90 deg
+                            1800000000, -1800000000,                                                                // +/-180 deg
+                            2000000000, -2000000000, 123456789,     -123456789};
+    const size_t n = sizeof(vals) / sizeof(vals[0]);
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++) {
+            GeoCoord g(vals[i], vals[j], 0); // ctor -> setCoords() -> UTM/MGRS/OSGR/OLC
+            // Surviving every extreme pair (no ASan fault) means the index clamps hold.
+            TEST_ASSERT_EQUAL_INT32(vals[i], g.getLatitude());
+        }
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -232,6 +254,7 @@ void setup()
     RUN_TEST(test_cryptoKeyIsPublic_strongKeyIsPrivate);
     RUN_TEST(test_cryptoKeyIsPublic_aes256KeyIsPrivate);
     RUN_TEST(test_cryptoKeyIsPublic_invalidKeyIsNotPublic);
+    RUN_TEST(test_geocoord_extreme_coords_no_oob);
     exit(UNITY_END());
 }
 

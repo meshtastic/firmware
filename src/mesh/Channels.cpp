@@ -87,6 +87,9 @@ void Channels::initDefaultLoraConfig()
     loraConfig.tx_power = 0; // default
     loraConfig.channel_num = 0;
 
+#ifdef USERPREFS_LORACONFIG_TX_POWER
+    loraConfig.tx_power = USERPREFS_LORACONFIG_TX_POWER;
+#endif
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #endif
@@ -443,7 +446,7 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
 bool Channels::isWellKnownChannel(ChannelIndex chIndex)
 {
     const auto &ch = getByIndex(chIndex);
-    // Absent (unencrypted) or single-byte PSK — all the well-known key indexes
+    // Absent (unencrypted) or single-byte PSK - all the well-known key indexes
     if (ch.settings.psk.size > 1)
         return false;
 
@@ -451,7 +454,7 @@ bool Channels::isWellKnownChannel(ChannelIndex chIndex)
     for (int p = _meshtastic_Config_LoRaConfig_ModemPreset_MIN; p <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX; p++) {
         const char *presetName =
             DisplayFormatters::getModemPresetDisplayName(static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(p), false, true);
-        // Presets without a display name fall through to "Invalid" — never a match
+        // Presets without a display name fall through to "Invalid" - never a match
         if (strcmp(presetName, "Invalid") != 0 && strcmp(name, presetName) == 0)
             return true;
     }
