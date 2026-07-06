@@ -58,7 +58,8 @@ enum class AckStatus : uint8_t {
     ACKED = 1,   // got a valid ACK from destination
     NACKED = 2,  // explicitly failed
     TIMEOUT = 3, // no ACK after retry window
-    RELAYED = 4  // got an ACK from relay, not destination
+    RELAYED = 4, // got an ACK from relay, not destination
+    TOO_LARGE = 5
 };
 
 struct StoredMessage {

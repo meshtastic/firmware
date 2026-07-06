@@ -2202,6 +2202,10 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                         last.ackStatus = AckStatus::ACKED;
                     } else if (!isFromDest && isAck) {
                         last.ackStatus = AckStatus::RELAYED;
+                    } else if (decoded.error_reason == meshtastic_Routing_Error_TOO_LARGE) {
+                        last.ackStatus = AckStatus::TOO_LARGE;
+                    } else if (decoded.error_reason == meshtastic_Routing_Error_MAX_RETRANSMIT) {
+                        last.ackStatus = AckStatus::TIMEOUT;
                     } else {
                         last.ackStatus = AckStatus::NACKED;
                     }
