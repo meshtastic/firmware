@@ -20,6 +20,7 @@
 #include "graphics/Screen.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/draw/NodeListRenderer.h"
+#include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #endif
 
@@ -28,6 +29,8 @@ WaypointModule *waypointModule;
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
 namespace
 {
+
+constexpr int16_t WAYPOINT_ROW_GAP = 2;
 
 std::string utf8FromCodepoint(uint32_t codepoint)
 {
@@ -81,8 +84,7 @@ void drawWaypointIcon(OLEDDisplay *display, const meshtastic_Waypoint &wp, int16
         return;
     }
 
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(left, top, utf8.c_str());
+    graphics::UIRenderer::drawStringWithEmotes(display, left, top, utf8, FONT_HEIGHT_SMALL, 1, false);
 }
 
 void formatWaypointDistance(char *out, size_t outSize, float meters, bool includeBearing, float bearingDegrees)
@@ -133,17 +135,17 @@ void formatWaypointExpire(char *out, size_t outSize, const meshtastic_Waypoint &
         return;
     }
     if (wp.expire <= now) {
-        snprintf(out, outSize, "exp");
+        snprintf(out, outSize, "0m");
         return;
     }
 
     const uint32_t left = wp.expire - now;
     if (left < 3600)
-        snprintf(out, outSize, "exp %lum", (unsigned long)((left + 59) / 60));
+        snprintf(out, outSize, "%lum", (unsigned long)((left + 59) / 60));
     else if (left < 86400)
-        snprintf(out, outSize, "exp %luh", (unsigned long)((left + 3599) / 3600));
+        snprintf(out, outSize, "%luh", (unsigned long)((left + 3599) / 3600));
     else
-        snprintf(out, outSize, "exp %lud", (unsigned long)((left + 86399) / 86400));
+        snprintf(out, outSize, "%lud", (unsigned long)((left + 86399) / 86400));
 }
 
 std::string trimmedWaypointText(const char *text)
@@ -160,17 +162,28 @@ std::string trimmedWaypointText(const char *text)
     return std::string(first, last);
 }
 
-} // namespace
-
-const StoredWaypoint *WaypointModule::latestDrawableWaypoint()
+size_t collectDrawableWaypoints(const StoredWaypoint *entries[], size_t maxEntries)
 {
+    size_t count = 0;
     for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
-        if (!WaypointStore::isExpired(entry))
-            return &entry;
+        if (WaypointStore::isExpired(entry))
+            continue;
+        if (count < maxEntries)
+            entries[count] = &entry;
+        ++count;
     }
 
-    return nullptr;
+    return count;
 }
+
+void drawDottedHorizontalDivider(OLEDDisplay *display, int16_t xStart, int16_t xEnd, int16_t y)
+{
+    for (int16_t x = xStart; x <= xEnd; x += 2) {
+        display->setPixel(x, y);
+    }
+}
+
+} // namespace
 #endif
 
 ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -188,7 +201,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::CONTINUE;
 
     if (geofenceModule)
-        geofenceModule->onWaypointReceived(stored.waypoint);
+        geofenceModule->onWaypointReceived(stored.waypoint, stored.creatorNodeNum);
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 
@@ -221,7 +234,8 @@ bool WaypointModule::shouldDraw()
     if (!screen || waypointStore.getWaypoints().empty())
         return false;
 
-    return latestDrawableWaypoint() != nullptr;
+    const StoredWaypoint *entries[WAYPOINT_HISTORY_LIMIT];
+    return collectDrawableWaypoints(entries, WAYPOINT_HISTORY_LIMIT) > 0;
 #else
     return false;
 #endif
@@ -239,7 +253,7 @@ void WaypointModule::onDeviceTimeChanged()
 #endif
 }
 
-/// Draw the newest non-expired waypoint we received
+/// Draw the newest non-expired waypoints we received
 void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     (void)state;
@@ -255,158 +269,120 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    int line = 1;
+    const StoredWaypoint *entries[WAYPOINT_HISTORY_LIMIT];
+    const size_t totalWaypoints = collectDrawableWaypoints(entries, WAYPOINT_HISTORY_LIMIT);
+    if (totalWaypoints == 0)
+        return;
 
-    const char *titleStr = "Waypoint";
+    const char *titleStr = (totalWaypoints == 1) ? "Waypoint" : "Waypoints";
     graphics::drawCommonHeader(display, x, y, titleStr);
     const int *textPos = graphics::getTextPositions(display);
 
-    const StoredWaypoint *entry = latestDrawableWaypoint();
-    if (!entry)
-        return;
-    const meshtastic_Waypoint &wp = entry->waypoint;
-
-    char safeName[sizeof(wp.name)];
-    memcpy(safeName, wp.name, sizeof(safeName));
-    safeName[sizeof(safeName) - 1] = '\0';
-    sanitizeUtf8(safeName, sizeof(safeName));
-
-    char safeDescription[sizeof(wp.description)];
-    memcpy(safeDescription, wp.description, sizeof(safeDescription));
-    safeDescription[sizeof(safeDescription) - 1] = '\0';
-    sanitizeUtf8(safeDescription, sizeof(safeDescription));
-
-    // Sanitize before these reach the OLED renderer (defense-in-depth vs PB_VALIDATE_UTF8).
-    sanitizeUtf8(wp.name, sizeof(wp.name));
-    sanitizeUtf8(wp.description, sizeof(wp.description));
-
-    // Get timestamp info. Will pass as a field to drawColumns
-    char lastStr[20];
-    getTimeAgoStr(WaypointStore::age(*entry), lastStr, sizeof(lastStr));
-
-    char distStr[20] = "";
-    char coordStr[40];
-    char expireStr[16];
-    formatWaypointCoordinates(coordStr, sizeof(coordStr), wp);
-    formatWaypointExpire(expireStr, sizeof(expireStr), wp);
-
-    const std::string description = trimmedWaypointText(safeDescription);
-    const bool hasDescription = !description.empty();
-    const int topTextLines = hasDescription ? 4 : 3;
-
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    const int w = display->getWidth();
-    int16_t compassRadius = 8;
-    int16_t compassX = x + w - compassRadius - 8;
-    int16_t compassY = y + display->getHeight() / 2;
-
-    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-        const int16_t topY = textPos[1];
-        const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
-        const int16_t usableHeight = bottomY - topY - 5;
-        compassRadius = usableHeight / 2;
-        if (compassRadius < 8)
-            compassRadius = 8;
-        compassX = x + SCREEN_WIDTH - compassRadius - 8;
-        compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
-    } else {
-        const int yBelowContent = textPos[topTextLines] + FONT_HEIGHT_SMALL + 2;
-        const int margin = 4;
-#if defined(USE_EINK)
-        const int iconSize = (graphics::currentResolution == graphics::ScreenResolution::High) ? 16 : 8;
-        const int navBarHeight = iconSize + 6;
-#else
-        const int navBarHeight = 0;
-#endif
-        const int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
-        if (availableHeight > 0) {
-            compassRadius = availableHeight / 2;
-            if (compassRadius < 8)
-                compassRadius = 8;
-            if (compassRadius * 2 > SCREEN_WIDTH - 16)
-                compassRadius = (SCREEN_WIDTH - 16) / 2;
-            if (compassRadius < 8)
-                compassRadius = 8;
-            compassX = x + SCREEN_WIDTH / 2;
-            compassY = yBelowContent + availableHeight / 2;
-        }
-    }
-    const uint16_t compassDiam = compassRadius * 2;
-
     const bool hasOwnPositionFix = (ourNode && nodeDB->hasValidPosition(ourNode));
-    const char *statusLine1 = nullptr;
-    const char *statusLine2 = nullptr;
-
-    meshtastic_PositionLite ownPos;
+    meshtastic_PositionLite ownPos = meshtastic_PositionLite_init_zero;
     const bool haveOwnPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ownPos);
-    if (hasOwnPositionFix && haveOwnPos) {
-        const float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(ownPos.latitude_i),
-                                                 DegD(ownPos.longitude_i));
-
-        float myHeading = 0.0f;
-        const bool hasHeading =
-            graphics::CompassRenderer::getHeadingRadians(DegD(ownPos.latitude_i), DegD(ownPos.longitude_i), myHeading);
-        if (hasHeading) {
-            display->drawCircle(compassX, compassY, compassRadius);
-            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
-
-            float bearingToOther =
-                GeoCoord::bearing(DegD(ownPos.latitude_i), DegD(ownPos.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
-            bearingToOther = graphics::CompassRenderer::adjustBearingForCompassMode(bearingToOther, myHeading);
-            graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
-
-            const float bearingToOtherDegrees = graphics::CompassRenderer::radiansToDegrees360(bearingToOther);
-            formatWaypointDistance(distStr, sizeof(distStr), d, true, bearingToOtherDegrees);
-        } else {
-            formatWaypointDistance(distStr, sizeof(distStr), d, false, 0.0f);
-            statusLine1 = "No";
-            statusLine2 = "Heading";
-        }
-    } else {
-        statusLine1 = "No";
-        statusLine2 = "Fix";
-    }
-
-    if (statusLine1) {
-        display->drawCircle(compassX, compassY, compassRadius);
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(compassX, compassY - FONT_HEIGHT_SMALL, statusLine1);
-        display->drawString(compassX, compassY, statusLine2);
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     const uint16_t iconWidth = FONT_HEIGHT_SMALL;
     const uint16_t iconGap = 3;
     const uint16_t nameX = iconWidth + iconGap;
+    const int16_t contentBottom = display->getHeight() - 1;
+    int16_t rowTop = textPos[1];
 
-    const int16_t row1Y = textPos[line++];
-    const uint16_t distWidth = distStr[0] ? display->getStringWidth(distStr) + 4 : 0;
-    const uint16_t nameWidth =
-        (display->getWidth() > nameX + distWidth) ? (display->getWidth() - nameX - distWidth) : (display->getWidth() - nameX);
-    drawWaypointIcon(display, wp, 0, row1Y, iconWidth);
-    display->drawStringMaxWidth(nameX, row1Y, nameWidth, safeName);
-    if (distStr[0]) {
+    for (size_t i = 0; i < totalWaypoints; ++i) {
+        const StoredWaypoint &entry = *entries[i];
+        const meshtastic_Waypoint &wp = entry.waypoint;
+
+        char safeName[sizeof(wp.name)];
+        memcpy(safeName, wp.name, sizeof(safeName));
+        safeName[sizeof(safeName) - 1] = '\0';
+        sanitizeUtf8(safeName, sizeof(safeName));
+
+        char safeDescription[sizeof(wp.description)];
+        memcpy(safeDescription, wp.description, sizeof(safeDescription));
+        safeDescription[sizeof(safeDescription) - 1] = '\0';
+        sanitizeUtf8(safeDescription, sizeof(safeDescription));
+
+        char distStr[20] = "";
+        char coordStr[40];
+        char expireStr[16];
+        formatWaypointCoordinates(coordStr, sizeof(coordStr), wp);
+        formatWaypointExpire(expireStr, sizeof(expireStr), wp);
+
+        const std::string description = trimmedWaypointText(safeDescription);
+        const bool hasDescription = !description.empty();
+        const int16_t row1Y = rowTop;
+        const int16_t row2Y = row1Y + FONT_HEIGHT_SMALL + 1;
+        const int16_t rowMetaY = hasDescription ? (row2Y + FONT_HEIGHT_SMALL + 1) : row2Y;
+        const int16_t cardBottom = rowMetaY + FONT_HEIGHT_SMALL;
+        if (cardBottom > contentBottom)
+            break;
+
+        bool showCompass = false;
+        float myHeading = 0.0f;
+        float bearingToOther = 0.0f;
+        if (hasOwnPositionFix && haveOwnPos && wp.has_latitude_i && wp.has_longitude_i) {
+            const float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(ownPos.latitude_i),
+                                                     DegD(ownPos.longitude_i));
+            formatWaypointDistance(distStr, sizeof(distStr), d, false, 0.0f);
+
+            if (graphics::CompassRenderer::getHeadingRadians(DegD(ownPos.latitude_i), DegD(ownPos.longitude_i), myHeading)) {
+                showCompass = true;
+                bearingToOther = GeoCoord::bearing(DegD(ownPos.latitude_i), DegD(ownPos.longitude_i), DegD(wp.latitude_i),
+                                                   DegD(wp.longitude_i));
+                bearingToOther = graphics::CompassRenderer::adjustBearingForCompassMode(bearingToOther, myHeading);
+            }
+        }
+
+        const int16_t compactRadius = std::max<int16_t>(7, (FONT_HEIGHT_SMALL / 2));
+        const int16_t compactCenterX = display->getWidth() - compactRadius - 3;
+        const int16_t compactCenterY = (hasDescription ? row2Y : row1Y) + FONT_HEIGHT_SMALL;
+        const int16_t compactContentRight = compactCenterX - compactRadius - 4;
+        const char *distanceLabel = distStr[0] ? distStr : "--";
+        const char *expireLabel = expireStr[0] ? expireStr : "--";
+        const uint16_t metaWidth =
+            std::max<uint16_t>(display->getStringWidth(distanceLabel), display->getStringWidth(expireLabel)) + 4;
+        const int16_t metaLeft = std::max<int16_t>(nameX + 16, compactContentRight - metaWidth);
+        const int16_t textRight = metaLeft - 4;
+        const uint16_t nameWidth = (textRight > nameX) ? (textRight - nameX) : 0;
+        const std::string shownName = graphics::UIRenderer::truncateStringWithEmotes(display, safeName, nameWidth);
+        const std::string shownDescription =
+            hasDescription ? graphics::UIRenderer::truncateStringWithEmotes(display, description, nameWidth) : std::string();
+
+        drawWaypointIcon(display, wp, 0, row1Y, iconWidth);
+        graphics::UIRenderer::drawStringWithEmotes(display, nameX, row1Y, shownName, FONT_HEIGHT_SMALL, 1, false);
+        const int16_t underlineY = row1Y + FONT_HEIGHT_SMALL;
+        const int16_t underlineRight =
+            std::min<int16_t>(textRight, nameX + graphics::UIRenderer::measureStringWithEmotes(display, shownName) - 1);
+        if (underlineRight >= nameX)
+            display->drawLine(nameX, underlineY, underlineRight, underlineY);
+
+        if (hasDescription)
+            graphics::UIRenderer::drawStringWithEmotes(display, nameX, row2Y, shownDescription, FONT_HEIGHT_SMALL, 1, false);
+
+        if (showCompass) {
+            display->drawCircle(compactCenterX, compactCenterY, compactRadius);
+            graphics::CompassRenderer::drawNodeHeading(display, compactCenterX, compactCenterY, compactRadius * 2,
+                                                       bearingToOther);
+        } else {
+            display->drawCircle(compactCenterX, compactCenterY, compactRadius);
+        }
+
+        display->drawStringMaxWidth(nameX, rowMetaY, nameWidth, coordStr);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(display->getWidth(), row1Y, distStr);
+        display->drawString(metaLeft + metaWidth - 1, row1Y, distanceLabel);
+        display->drawString(metaLeft + metaWidth - 1, rowMetaY, expireLabel);
         display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+        const int16_t separatorY = cardBottom + 1;
+        const int16_t nextRowTop = separatorY + WAYPOINT_ROW_GAP;
+        if (i + 1 < totalWaypoints && nextRowTop + ((FONT_HEIGHT_SMALL * 2) + 1) <= contentBottom) {
+            drawDottedHorizontalDivider(display, 0, display->getWidth() - 1, separatorY);
+            rowTop = nextRowTop;
+        } else {
+            break;
+        }
     }
-
-    if (hasDescription)
-        display->drawStringMaxWidth(nameX, textPos[line++], display->getWidth() - nameX, description.c_str());
-
-    const int16_t rowMetaY = textPos[line++];
-    const uint16_t expireWidth = expireStr[0] ? display->getStringWidth(expireStr) + 4 : 0;
-    const uint16_t coordWidth = (display->getWidth() > expireWidth) ? (display->getWidth() - expireWidth) : display->getWidth();
-    display->drawStringMaxWidth(0, rowMetaY, coordWidth, coordStr);
-    if (expireStr[0]) {
-        display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(display->getWidth(), rowMetaY, expireStr);
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-    }
-
-    if (line <= 4)
-        display->drawStringMaxWidth(0, textPos[line++], display->getWidth(), lastStr);
 #endif
 }
 #endif

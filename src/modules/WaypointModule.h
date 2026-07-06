@@ -33,11 +33,6 @@ class WaypointModule : public SinglePortModule, public Observable<const UIFrameE
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 #endif
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
-
-#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
-  private:
-    static const StoredWaypoint *latestDrawableWaypoint();
-#endif
 };
 
 extern WaypointModule *waypointModule;

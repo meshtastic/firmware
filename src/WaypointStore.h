@@ -13,6 +13,7 @@
 #endif
 
 #include "Observer.h"
+#include "mesh/MeshTypes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
 #include <deque>
@@ -21,6 +22,7 @@
 struct StoredWaypoint {
     meshtastic_Waypoint waypoint = meshtastic_Waypoint_init_zero;
     uint32_t receivedTime = 0;
+    NodeNum creatorNodeNum = 0;
 };
 
 class WaypointStore : public Observable<const WaypointStore *>
@@ -29,7 +31,7 @@ class WaypointStore : public Observable<const WaypointStore *>
     explicit WaypointStore(const std::string &label);
 
     bool addFromPacket(const meshtastic_MeshPacket &packet, StoredWaypoint *stored = nullptr);
-    void addWaypoint(const meshtastic_Waypoint &wp, uint32_t receivedTime = 0);
+    void addWaypoint(const meshtastic_Waypoint &wp, uint32_t receivedTime = 0, NodeNum creatorNodeNum = 0);
     bool purgeExpired(uint32_t now = 0);
 
     const std::deque<StoredWaypoint> &getWaypoints() const { return waypoints; }

@@ -32,6 +32,7 @@ struct GeofenceNotificationEvent {
  *     cached position, in which case that previous sample is used to infer the transition.
  *   - Only a genuine inside<->outside transition notifies: enter if notify_on_enter, exit if
  *     notify_on_exit. notify_favorites_only gates alerts to the receiver's own favourites.
+ *   - Only the waypoint creator's node should receive enter/exit alerts for that waypoint.
  *   - All state is in-memory; it need not survive a restart (the baseline rule handles relaunch).
  *
  * Crossing is judged against OTHER nodes' reported positions, not this device's own location.
@@ -79,7 +80,7 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     // --- Engine API (device side) ---
 
     /// Ingest a waypoint (from WaypointModule): upsert or remove its geofence in the in-memory store.
-    void onWaypointReceived(const meshtastic_Waypoint &wp);
+    void onWaypointReceived(const meshtastic_Waypoint &wp, NodeNum creatorNodeNum = 0);
 
     /// Evaluate a received node position (from PositionModule) against all known geofences.
     void evaluatePosition(NodeNum node, const meshtastic_Position &p, bool hasPreviousPosition = false, int32_t previousLat_i = 0,
@@ -89,6 +90,7 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     // Trimmed copy of a geofencing waypoint we are tracking (name kept for the alert text).
     struct Geofence {
         uint32_t id;
+        NodeNum creatorNodeNum;
         int32_t latitude_i;
         int32_t longitude_i;
         uint32_t geofence_radius;
@@ -109,7 +111,7 @@ class GeofenceModule : public Observable<const GeofenceNotificationEvent *>
     static uint64_t crossingKey(uint32_t waypointId, NodeNum node) { return ((uint64_t)waypointId << 32) | node; }
 
     void purgeExpired(uint32_t now);
-    void removeGeofence(uint32_t waypointId);
+    void removeGeofence(uint32_t waypointId, NodeNum creatorNodeNum = 0);
     CrossingState *findCrossingState(uint64_t key);
     void notify(const Geofence &g, NodeNum node, bool entered);
 

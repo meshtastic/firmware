@@ -91,10 +91,13 @@ GeofenceModule::Crossing GeofenceModule::classifyTrackedUpdate(bool hasTrackedSt
 
 // --- Store management -------------------------------------------------------------------------
 
-void GeofenceModule::removeGeofence(uint32_t waypointId)
+void GeofenceModule::removeGeofence(uint32_t waypointId, NodeNum creatorNodeNum)
 {
     geofences.erase(std::remove_if(geofences.begin(), geofences.end(),
-                                   [waypointId](const Geofence &geofence) { return geofence.id == waypointId; }),
+                                   [waypointId, creatorNodeNum](const Geofence &geofence) {
+                                       return geofence.id == waypointId &&
+                                              (creatorNodeNum == 0 || geofence.creatorNodeNum == creatorNodeNum);
+                                   }),
                     geofences.end());
     crossingInside.erase(
         std::remove_if(crossingInside.begin(), crossingInside.end(),
@@ -146,21 +149,23 @@ bool GeofenceModule::shouldTrack(const meshtastic_Waypoint &wp, uint32_t now)
     return true;
 }
 
-void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp)
+void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp, NodeNum creatorNodeNum)
 {
     uint32_t now = getTime();
     purgeExpired(now);
 
+    const NodeNum localNodeNum = nodeDB ? nodeDB->getNodeNum() : 0;
+
     // Drop anything we don't track (a plain pin, notifications turned off, an expired or deleted
     // waypoint, or a circle with no centre) from the store.
-    if (!shouldTrack(wp, now)) {
-        removeGeofence(wp.id);
+    if (!shouldTrack(wp, now) || creatorNodeNum == 0 || creatorNodeNum != localNodeNum) {
+        removeGeofence(wp.id, creatorNodeNum);
         return;
     }
 
     Geofence *slot = nullptr;
     for (auto &g : geofences) {
-        if (g.id == wp.id) {
+        if (g.id == wp.id && g.creatorNodeNum == creatorNodeNum) {
             slot = &g;
             break;
         }
@@ -175,6 +180,7 @@ void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp)
     }
 
     slot->id = wp.id;
+    slot->creatorNodeNum = creatorNodeNum;
     slot->latitude_i = wp.latitude_i;
     slot->longitude_i = wp.longitude_i;
     slot->geofence_radius = wp.geofence_radius;
@@ -187,8 +193,9 @@ void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp)
     strncpy(slot->name, wp.name, sizeof(slot->name) - 1);
     slot->name[sizeof(slot->name) - 1] = '\0';
 
-    LOG_INFO("Geofence: tracking waypoint 0x%x '%s' radius=%um box=%d enter=%d exit=%d favOnly=%d", wp.id, slot->name,
-             wp.geofence_radius, wp.has_bounding_box, wp.notify_on_enter, wp.notify_on_exit, wp.notify_favorites_only);
+    LOG_INFO("Geofence: tracking waypoint 0x%x '%s' creator=0x%08x radius=%um box=%d enter=%d exit=%d favOnly=%d", wp.id,
+             slot->name, (unsigned)creatorNodeNum, wp.geofence_radius, wp.has_bounding_box, wp.notify_on_enter, wp.notify_on_exit,
+             wp.notify_favorites_only);
 }
 
 // --- Evaluation ------------------------------------------------------------------------------
@@ -291,8 +298,8 @@ void GeofenceModule::notify(const Geofence &g, NodeNum node, bool entered)
 #if HAS_SCREEN && !defined(MESHTASTIC_INCLUDE_INKHUD)
     if (screen) {
         char banner[120];
-        snprintf(banner, sizeof(banner), "%s\n%s %s", who, entered ? "IN" : "OUT", g.name);
-        screen->showSimpleBanner(banner, 5000);
+        snprintf(banner, sizeof(banner), "%s %s %s", who, entered ? "IN" : "OUT", g.name);
+        screen->showSimpleBanner(banner, 3000);
     }
 #endif
 

@@ -61,6 +61,9 @@ class UIRenderer
 
     // Compass and location screen
     static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static void drawBearingCompassOrStatus(OLEDDisplay *display, int16_t compassX, int16_t compassY, int16_t compassRadius,
+                                           bool showCompass, float myHeading, float bearing, const char *statusLine1,
+                                           const char *statusLine2);
 
     static NodeNum currentFavoriteNodeNum;
     static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
