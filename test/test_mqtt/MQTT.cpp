@@ -224,6 +224,7 @@ MockPubSubServer *pubsub;
 MockRoutingModule *mockRoutingModule;
 MockMeshService *mockMeshService;
 MockRouter *mockRouter;
+MockNodeDB *mockNodeDB;
 
 // Keep running the loop until either conditionMet returns true or 4 seconds elapse.
 // Returns true if conditionMet returns true, returns false on timeout.
@@ -339,6 +340,11 @@ void setUp(void)
     myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 0x12345678}; // Match the expected gateway ID in topic
     localPosition =
         meshtastic_Position{.has_latitude_i = true, .latitude_i = 700000000, .has_longitude_i = true, .longitude_i = 300000000};
+
+    // The shared MockNodeDB node is mutated by the XEdDSA policy tests (signer bit, public
+    // key); reset it so state can't leak between tests.
+    if (mockNodeDB)
+        mockNodeDB->emptyNode = meshtastic_NodeInfoLite();
 
     router = mockRouter = new MockRouter();
     service = mockMeshService = new MockMeshService();
@@ -651,6 +657,86 @@ void test_receiveIgnoresDecodedAdminApp(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+// Small decoded broadcast from a remote node, as a plaintext broker would deliver it.
+static meshtastic_MeshPacket makeDecodedBroadcast()
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = 1;
+    p.to = NODENUM_BROADCAST;
+    p.id = 7;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    p.decoded.payload.size = 5;
+    memcpy(p.decoded.payload.bytes, "hello", 5);
+    return p;
+}
+
+// Decoded (plaintext-broker) downlink skips perhapsDecode's crypto path, so MQTT applies
+// checkXeddsaReceivePolicy at ingress. An unsigned broadcast claiming to come from a node that
+// previously signed must be dropped - without this, a rogue broker peer could impersonate any
+// signing node (audit F3).
+void test_receiveDropsUnsignedBroadcastFromSigner(void)
+{
+    mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// The same unsigned broadcast from a node never seen signing is accepted.
+void test_receiveAcceptsUnsignedBroadcastFromNonSigner(void)
+{
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
+}
+
+// A validly signed decoded downlink verifies at ingress: delivered with xeddsa_signed set and
+// the sender's signer bit learned.
+void test_receiveVerifiesSignedDecodedDownlink(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->emptyNode.public_key.size = 32;
+    memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
+
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
+                                         p.decoded.xeddsa_signature.bytes));
+    p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_TRUE(mockRouter->packets_.front().xeddsa_signed);
+    TEST_ASSERT_TRUE(mockNodeDB->emptyNode.bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+
+// A decoded downlink carrying a signature that fails verification is dropped.
+void test_receiveDropsBadSignatureOnDecodedDownlink(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->emptyNode.public_key.size = 32;
+    memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
+
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
+                                         p.decoded.xeddsa_signature.bytes));
+    p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+#endif // !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+
 // Only the same fields that are transmitted over LoRa should be set in MQTT messages.
 void test_receiveIgnoresUnexpectedFields(void)
 {
@@ -856,7 +942,7 @@ void test_configCustomHostAndPort(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// An unreachable server is still a valid config — settings always save.
+// An unreachable server is still a valid config - settings always save.
 // A warning notification is sent in non-test builds, but isValidConfig returns true.
 void test_configWithUnreachableServerIsStillValid(void)
 {
@@ -880,8 +966,7 @@ void test_configWithTLSEnabled(void)
 void setup()
 {
     initializeTestEnvironment();
-    const std::unique_ptr<MockNodeDB> mockNodeDB(new MockNodeDB());
-    nodeDB = mockNodeDB.get();
+    nodeDB = mockNodeDB = new MockNodeDB(); // freed implicitly by exit(UNITY_END()) below
 
     UNITY_BEGIN();
     RUN_TEST(test_sendDirectlyConnectedDecoded);
@@ -905,6 +990,12 @@ void setup()
     RUN_TEST(test_receiveIgnoresSentMessagesFromOthers);
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    RUN_TEST(test_receiveDropsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
+    RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
+    RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
+#endif
     RUN_TEST(test_receiveIgnoresUnexpectedFields);
     RUN_TEST(test_receiveIgnoresInvalidHopLimit);
     RUN_TEST(test_publishTextMessageDirect);

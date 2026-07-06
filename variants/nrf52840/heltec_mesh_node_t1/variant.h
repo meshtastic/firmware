@@ -31,7 +31,7 @@ extern "C" {
 #define HELTEC_MESH_NODE_T1
 
 // Display (ST7735, 80x160 TFT via SPI1)
-
+#define HAS_SPI_TFT 1
 #define ST7735_CS (0 + 12)
 #define ST7735_RS (0 + 22) // DC
 #define ST7735_SDA (0 + 24)
@@ -82,12 +82,12 @@ extern "C" {
 #define PIN_WIRE_SDA (32 + 3)
 #define PIN_WIRE_SCL (0 + 10)
 
-#define PIN_SENSOR_EN (32 + 6) // Active LOW — controls IMU and compass VDD
+#define PIN_SENSOR_EN (32 + 6) // Active LOW - controls IMU and compass VDD
 #define PIN_SENSOR_EN_ACTIVE LOW
 
-// ICM42607P interrupt pins — populated on PCB, not yet used in firmware
-// #define ICM_42607P_INT_PIN  (32 + 1) // INT1 — P1.01
-// #define ICM_42607P_INT2_PIN (32 + 7) // INT2 — P1.07
+// ICM42607P interrupt pins - populated on PCB, not yet used in firmware
+// #define ICM_42607P_INT_PIN  (32 + 1) // INT1 - P1.01
+// #define ICM_42607P_INT2_PIN (32 + 7) // INT2 - P1.07
 
 // LoRa (SX1262)
 
@@ -104,12 +104,12 @@ extern "C" {
 
 #define SPI_INTERFACES_COUNT 2
 
-// SPI0 — LoRa
+// SPI0 - LoRa
 #define PIN_SPI_MISO (0 + 3)
 #define PIN_SPI_MOSI (32 + 14)
 #define PIN_SPI_SCK (32 + 13)
 
-// SPI1 — Display (ST7735, write-only)
+// SPI1 - Display (ST7735, write-only)
 #define PIN_SPI1_MISO ST7735_MISO
 #define PIN_SPI1_MOSI ST7735_SDA
 #define PIN_SPI1_SCK ST7735_SCK
@@ -155,7 +155,7 @@ extern "C" {
 
 // Power / USB
 
-#define NRF_APM   // USB VBUS detection via nrfx_power_usbstatus_get() — no dedicated charging IC on this board
+#define NRF_APM   // USB VBUS detection via nrfx_power_usbstatus_get() - no dedicated charging IC on this board
 #define HAS_RTC 0 // No external RTC fitted
 
 #ifdef __cplusplus

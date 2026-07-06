@@ -16,6 +16,12 @@ bool usePortraitKeyboardSizing()
 
 InkHUD::KeyboardApplet::KeyboardApplet()
 {
+    for (uint8_t row = 0; row < LEGACY_KBD_ROWS; row++) {
+        legacyRowWidths[row] = 0;
+        for (uint8_t col = 0; col < KBD_COLS; col++)
+            legacyRowWidths[row] += legacyKeyWidths[row * KBD_COLS + col];
+    }
+
     mode = MODE_TEXT;
     lastTypingMode = MODE_TEXT;
     emotePage = 0;
@@ -26,6 +32,11 @@ InkHUD::KeyboardApplet::KeyboardApplet()
 
 void InkHUD::KeyboardApplet::onRender(bool full)
 {
+    if (!useTouchKeyboard()) {
+        renderLegacyKeyboard(full);
+        return;
+    }
+
     const bool showSelection = showSelectionHighlight();
 
     if (full) {
@@ -37,6 +48,94 @@ void InkHUD::KeyboardApplet::onRender(bool full)
     }
 
     prevSelectedKey = selectedKey;
+}
+
+bool InkHUD::KeyboardApplet::useTouchKeyboard() const
+{
+    return inkhud->hasTouchEnabledProvider();
+}
+
+void InkHUD::KeyboardApplet::renderLegacyKeyboard(bool full)
+{
+    uint16_t em = fontSmall.lineHeight();
+    uint16_t keyH = Y(1.0) / LEGACY_KBD_ROWS;
+    int16_t keyTopPadding = (keyH - fontSmall.lineHeight()) / 2;
+
+    if (full) {
+        for (uint8_t row = 0; row < LEGACY_KBD_ROWS; row++) {
+            int16_t keyXPadding = X(1.0) - ((legacyRowWidths[row] * em) >> 4);
+            uint16_t xPos = 0;
+            for (uint8_t col = 0; col < KBD_COLS; col++) {
+                Color fgcolor = BLACK;
+                uint8_t index = row * KBD_COLS + col;
+                uint16_t keyX = ((xPos * em) >> 4) + ((col * keyXPadding) / (KBD_COLS - 1));
+                uint16_t keyY = row * keyH;
+                uint16_t keyW = (legacyKeyWidths[index] * em) >> 4;
+                if (index == selectedKey) {
+                    fgcolor = WHITE;
+                    fillRect(keyX, keyY, keyW, keyH, BLACK);
+                }
+                drawLegacyKeyLabel(keyX, keyY + keyTopPadding, keyW, legacyKeys[index], fgcolor);
+                xPos += legacyKeyWidths[index];
+            }
+        }
+    } else if (selectedKey != prevSelectedKey) {
+        uint8_t row = prevSelectedKey / KBD_COLS;
+        int16_t keyXPadding = X(1.0) - ((legacyRowWidths[row] * em) >> 4);
+        uint16_t xPos = 0;
+        for (uint8_t i = prevSelectedKey - (prevSelectedKey % KBD_COLS); i < prevSelectedKey; i++)
+            xPos += legacyKeyWidths[i];
+        uint16_t keyX = ((xPos * em) >> 4) + (((prevSelectedKey % KBD_COLS) * keyXPadding) / (KBD_COLS - 1));
+        uint16_t keyY = row * keyH;
+        uint16_t keyW = (legacyKeyWidths[prevSelectedKey] * em) >> 4;
+        fillRect(keyX, keyY, keyW, keyH, WHITE);
+        drawLegacyKeyLabel(keyX, keyY + keyTopPadding, keyW, legacyKeys[prevSelectedKey], BLACK);
+
+        row = selectedKey / KBD_COLS;
+        keyXPadding = X(1.0) - ((legacyRowWidths[row] * em) >> 4);
+        xPos = 0;
+        for (uint8_t i = selectedKey - (selectedKey % KBD_COLS); i < selectedKey; i++)
+            xPos += legacyKeyWidths[i];
+        keyX = ((xPos * em) >> 4) + (((selectedKey % KBD_COLS) * keyXPadding) / (KBD_COLS - 1));
+        keyY = row * keyH;
+        keyW = (legacyKeyWidths[selectedKey] * em) >> 4;
+        fillRect(keyX, keyY, keyW, keyH, BLACK);
+        drawLegacyKeyLabel(keyX, keyY + keyTopPadding, keyW, legacyKeys[selectedKey], WHITE);
+    }
+
+    prevSelectedKey = selectedKey;
+}
+
+void InkHUD::KeyboardApplet::drawLegacyKeyLabel(uint16_t left, uint16_t top, uint16_t width, char key, Color color)
+{
+    if (key == '\b') {
+        const uint8_t bsBitmap[] = {0x0f, 0xf8, 0x18, 0x08, 0x32, 0x28, 0x61, 0x48, 0xc0,
+                                    0x88, 0x61, 0x48, 0x32, 0x28, 0x18, 0x08, 0x0f, 0xf8};
+        uint16_t leftPadding = (width - 13) >> 1;
+        drawBitmap(left + leftPadding, top + 1, bsBitmap, 13, 9, color);
+    } else if (key == '\n') {
+        const uint8_t doneBitmap[] = {0x00, 0x30, 0x00, 0x60, 0x00, 0xc0, 0x01, 0x80, 0x03,
+                                      0x00, 0xc6, 0x00, 0x6c, 0x00, 0x38, 0x00, 0x10, 0x00};
+        uint16_t leftPadding = (width - 12) >> 1;
+        drawBitmap(left + leftPadding, top + 1, doneBitmap, 12, 9, color);
+    } else if (key == ' ') {
+        const uint8_t spaceBitmap[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+                                       0x08, 0x80, 0x08, 0xff, 0xf8, 0x00, 0x00, 0x00, 0x00};
+        uint16_t leftPadding = (width - 13) >> 1;
+        drawBitmap(left + leftPadding, top + 1, spaceBitmap, 13, 9, color);
+    } else if (key == '\x1b') {
+        setTextColor(color);
+        std::string keyText = "ESC";
+        uint16_t leftPadding = (width - getTextWidth(keyText)) >> 1;
+        printAt(left + leftPadding, top, keyText);
+    } else {
+        setTextColor(color);
+        if (key >= 0x61)
+            key -= 32;
+        std::string keyText = std::string(1, key);
+        uint16_t leftPadding = (width - getTextWidth(keyText)) >> 1;
+        printAt(left + leftPadding, top, keyText);
+    }
 }
 
 void InkHUD::KeyboardApplet::drawKey(uint8_t index, bool selected)
@@ -104,12 +203,38 @@ void InkHUD::KeyboardApplet::onBackground()
 
 void InkHUD::KeyboardApplet::onButtonShortPress()
 {
+    if (!useTouchKeyboard()) {
+        handleLegacyInput(false);
+        return;
+    }
+
     inputSelectedKey(false);
 }
 
 void InkHUD::KeyboardApplet::onButtonLongPress()
 {
+    if (!useTouchKeyboard()) {
+        handleLegacyInput(true);
+        return;
+    }
+
     inputSelectedKey(true);
+}
+
+void InkHUD::KeyboardApplet::handleLegacyInput(bool longPress)
+{
+    char key = legacyKeys[selectedKey];
+    if (key == '\n') {
+        inkhud->freeTextDone();
+        inkhud->closeKeyboard();
+    } else if (key == '\x1b') {
+        inkhud->freeTextCancel();
+        inkhud->closeKeyboard();
+    } else {
+        if (longPress && key >= 0x61)
+            key -= 32;
+        inkhud->freeText(key);
+    }
 }
 
 void InkHUD::KeyboardApplet::onExitShort()
@@ -126,6 +251,17 @@ void InkHUD::KeyboardApplet::onExitLong()
 
 void InkHUD::KeyboardApplet::onNavUp()
 {
+    if (!useTouchKeyboard()) {
+        if (selectedKey < KBD_COLS)
+            selectedKey += KBD_COLS * (LEGACY_KBD_ROWS - 1);
+        else
+            selectedKey -= KBD_COLS;
+
+        requestUpdate(EInk::UpdateTypes::FAST, false);
+        inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+        return;
+    }
+
     if (selectedKey < KBD_COLS)
         selectedKey += KBD_COLS * (KBD_ROWS - 1);
     else
@@ -137,6 +273,14 @@ void InkHUD::KeyboardApplet::onNavUp()
 
 void InkHUD::KeyboardApplet::onNavDown()
 {
+    if (!useTouchKeyboard()) {
+        selectedKey += KBD_COLS;
+        selectedKey %= LEGACY_KBD_KEY_COUNT;
+        requestUpdate(EInk::UpdateTypes::FAST, false);
+        inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+        return;
+    }
+
     selectedKey += KBD_COLS;
     selectedKey %= KBD_KEY_COUNT;
     normalizeSelection();
@@ -145,6 +289,17 @@ void InkHUD::KeyboardApplet::onNavDown()
 
 void InkHUD::KeyboardApplet::onNavLeft()
 {
+    if (!useTouchKeyboard()) {
+        if (selectedKey % KBD_COLS == 0)
+            selectedKey += KBD_COLS - 1;
+        else
+            selectedKey--;
+
+        requestUpdate(EInk::UpdateTypes::FAST, false);
+        inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+        return;
+    }
+
     if (selectedKey % KBD_COLS == 0)
         selectedKey += KBD_COLS - 1;
     else
@@ -156,6 +311,17 @@ void InkHUD::KeyboardApplet::onNavLeft()
 
 void InkHUD::KeyboardApplet::onNavRight()
 {
+    if (!useTouchKeyboard()) {
+        if (selectedKey % KBD_COLS == KBD_COLS - 1)
+            selectedKey -= KBD_COLS - 1;
+        else
+            selectedKey++;
+
+        requestUpdate(EInk::UpdateTypes::FAST, false);
+        inkhud->forceUpdate(EInk::UpdateTypes::FAST);
+        return;
+    }
+
     if (selectedKey % KBD_COLS == KBD_COLS - 1)
         selectedKey -= KBD_COLS - 1;
     else
@@ -418,6 +584,12 @@ bool InkHUD::KeyboardApplet::isKeyEnabledAt(uint8_t index) const
 
 void InkHUD::KeyboardApplet::normalizeSelection()
 {
+    if (!useTouchKeyboard()) {
+        if (selectedKey >= LEGACY_KBD_KEY_COUNT)
+            selectedKey = 0;
+        return;
+    }
+
     if (selectedKey >= KBD_KEY_COUNT)
         selectedKey = 0;
 
@@ -492,6 +664,10 @@ bool InkHUD::KeyboardApplet::showSelectionHighlight() const
 
 uint16_t InkHUD::KeyboardApplet::getKeyboardHeight()
 {
+    const auto *hud = NicheGraphics::InkHUD::InkHUD::getInstance();
+    if (!hud || !hud->hasTouchEnabledProvider())
+        return static_cast<uint16_t>(fontSmall.lineHeight() * 1.2f) * LEGACY_KBD_ROWS;
+
     // Keep touch keys tall and roomy for finger input.
     // In portrait orientation we increase row height for larger touch targets.
     const uint16_t rowUnit = fontSmall.lineHeight() + 8;
