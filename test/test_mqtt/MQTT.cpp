@@ -12,6 +12,8 @@
 #include "mqtt/MQTT.h"
 #include "mqtt/ServiceEnvelope.h"
 
+#include "support/DeterministicRng.h" // rngSeed/rngNext/rngByte/rngRange - shared seeded LCG (fuzz group)
+
 #include <PubSubClient.h>
 #include <WiFiClient.h>
 
@@ -274,6 +276,13 @@ class MQTTUnitTest : public MQTT
         uint8_t bytes[256];
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
         mqttCallback(const_cast<char *>(topic.str().c_str()), bytes, numBytes);
+    }
+    // Feed arbitrary bytes straight into the subscription callback - the non-RF ingress a malicious or
+    // broken broker could push. Mirrors publish()'s final mqttCallback() call but with an unconstrained
+    // payload, so it exercises DecodedServiceEnvelope decode + onReceiveProto with garbage.
+    void deliverRaw(const std::string &topic, const uint8_t *bytes, size_t n)
+    {
+        mqttCallback(const_cast<char *>(topic.c_str()), const_cast<uint8_t *>(bytes), (unsigned int)n);
     }
     static void restart()
     {
@@ -963,6 +972,65 @@ void test_configWithTLSEnabled(void)
 #endif
 }
 
+// ===========================================================================
+// Fuzz - adversarial MQTT downlink ingress (the non-RF path a broker can push)
+// ===========================================================================
+// Blitzes the onReceiveProto() chain with (a) raw garbage that must fail envelope decode cleanly and
+// (b) well-formed envelopes wrapping crafted inner packets. Contract: no crash, at most one enqueue per envelope.
+constexpr uint64_t MQTT_FUZZ_SEED = 0x00E3A71C0FULL;
+
+void test_receiveFuzzServiceEnvelope(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)MQTT_FUZZ_SEED);
+    rngSeed(MQTT_FUZZ_SEED);
+
+    const char *channelIds[] = {"test", "PKI", "nope", ""};
+    const char *gatewayIds[] = {"!12345678", "!87654321", "!00000000"}; // [0] == our node id -> self path
+
+    for (unsigned k = 0; k < 4000; k++) {
+        if (rngRange(3) == 0) {
+            // (a) Raw bytes: mostly random, must be rejected at DecodedServiceEnvelope without crashing.
+            uint8_t raw[128];
+            size_t n = rngRange(sizeof(raw) + 1);
+            rngFill(raw, n);
+            unitTest->deliverRaw("msh/2/e/test/!87654321", raw, n);
+        } else {
+            // (b) Well-formed envelope around a crafted inner packet.
+            meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+            p.from = (rngRange(3) == 0) ? myNodeInfo.my_node_num : rngNext(); // self origin hits isFromUs
+            p.to = (rngRange(2)) ? myNodeInfo.my_node_num : rngNext();
+            p.id = rngNext();
+            p.channel = (uint8_t)rngByte();
+            p.hop_limit = (uint8_t)rngRange(10); // includes > HOP_MAX (the invalid-hop reject path)
+            p.hop_start = (uint8_t)rngRange(10);
+            p.want_ack = (rngRange(2) == 0);
+            p.pki_encrypted = (rngRange(2) == 0);
+            if (rngRange(2) == 0) {
+                p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+                p.decoded.portnum = (rngRange(6) == 0) ? meshtastic_PortNum_ADMIN_APP : (meshtastic_PortNum)rngRange(80);
+                p.decoded.want_response = (rngRange(2) == 0);
+                p.decoded.has_bitfield = (rngRange(2) == 0);
+                p.decoded.bitfield = (uint32_t)rngNext();
+                p.decoded.payload.size = rngRange(64);
+                rngFill(p.decoded.payload.bytes, p.decoded.payload.size);
+            } else {
+                p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+                p.encrypted.size = rngRange(64);
+                rngFill(p.encrypted.bytes, p.encrypted.size);
+            }
+            unitTest->publish(&p, gatewayIds[rngRange(3)], channelIds[rngRange(4)]);
+        }
+
+        // A single envelope reaches at most one enqueueReceivedMessage; more would be a routing bug.
+        TEST_ASSERT_TRUE_MESSAGE(mockRouter->packets_.size() <= 1, "MQTT downlink enqueued >1 packet per envelope");
+        // Drain capture lists so 4000 iterations stay bounded (values already released to their pools).
+        mockRouter->packets_.clear();
+        mockRoutingModule->ackNacks_.clear();
+        mockMeshService->messages_.clear();
+        mockMeshService->notifications_.clear();
+    }
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -998,6 +1066,7 @@ void setup()
 #endif
     RUN_TEST(test_receiveIgnoresUnexpectedFields);
     RUN_TEST(test_receiveIgnoresInvalidHopLimit);
+    RUN_TEST(test_receiveFuzzServiceEnvelope);
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
