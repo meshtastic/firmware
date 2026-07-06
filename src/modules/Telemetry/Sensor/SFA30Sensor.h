@@ -2,6 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cSfa3x.h>)
 
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RTC.h"
 #include "TelemetrySensor.h"
@@ -19,8 +20,10 @@ class SFA30Sensor : public TelemetrySensor
     uint32_t measureStarted = 0;
 
     SensirionI2cSfa3x sfa30;
-    TwoWire *_bus{};
-    uint8_t _address{};
+#ifdef SFA30_I2C_CLOCK_SPEED
+    ReClockI2C reClockI2C;
+#endif
+
     bool isError(uint16_t response);
 
   public:
