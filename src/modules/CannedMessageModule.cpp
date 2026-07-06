@@ -18,6 +18,7 @@
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/MessageRenderer.h"
+#include "graphics/draw/MessageStatusText.h"
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "graphics/emotes.h"
@@ -151,6 +152,30 @@ static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
     return nodeInfoLiteHasUser(node) && node->public_key.size > 0;
+}
+
+static AckStatus ackStatusForRoutingResult(bool wasBroadcast, bool isFromDest, bool isAck, meshtastic_Routing_Error errorReason)
+{
+    if (isAck) {
+        return (wasBroadcast || isFromDest) ? AckStatus::ACKED : AckStatus::RELAYED;
+    }
+
+    switch (errorReason) {
+    case meshtastic_Routing_Error_TOO_LARGE:
+        return AckStatus::TOO_LARGE;
+    case meshtastic_Routing_Error_MAX_RETRANSMIT:
+        return AckStatus::TIMEOUT;
+    case meshtastic_Routing_Error_NO_CHANNEL:
+        return AckStatus::NO_CHANNEL;
+    case meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY:
+        return AckStatus::PKI_SEND_FAIL_PUBLIC_KEY;
+    case meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY:
+        return AckStatus::PKI_UNKNOWN_PUBKEY;
+    case meshtastic_Routing_Error_PKI_FAILED:
+        return AckStatus::PKI_FAILED;
+    default:
+        return AckStatus::NACKED;
+    }
 }
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
@@ -2165,6 +2190,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             bool isAck = (decoded.error_reason == meshtastic_Routing_Error_NONE);
             bool isFromDest = (mp.from == this->lastSentNode);
             bool wasBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
+            AckStatus ackStatus = ackStatusForRoutingResult(wasBroadcast, isFromDest, isAck, decoded.error_reason);
 
             // Identify the responding node
             if (wasBroadcast && mp.from != nodeDB->getNodeNum()) {
@@ -2196,19 +2222,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             if (!messageStore.getMessages().empty()) {
                 StoredMessage &last = const_cast<StoredMessage &>(messageStore.getMessages().back());
                 if (last.sender == nodeDB->getNodeNum()) { // only update our own messages
-                    if (wasBroadcast && isAck) {
-                        last.ackStatus = AckStatus::ACKED;
-                    } else if (isFromDest && isAck) {
-                        last.ackStatus = AckStatus::ACKED;
-                    } else if (!isFromDest && isAck) {
-                        last.ackStatus = AckStatus::RELAYED;
-                    } else if (decoded.error_reason == meshtastic_Routing_Error_TOO_LARGE) {
-                        last.ackStatus = AckStatus::TOO_LARGE;
-                    } else if (decoded.error_reason == meshtastic_Routing_Error_MAX_RETRANSMIT) {
-                        last.ackStatus = AckStatus::TIMEOUT;
-                    } else {
-                        last.ackStatus = AckStatus::NACKED;
-                    }
+                    last.ackStatus = ackStatus;
                 }
             }
 
@@ -2245,26 +2259,22 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 float snrLimit = getSnrLimit(config.lora.modem_preset);
                 int bars = 0;
                 const char *qualityLabel = getSignalGrade(this->lastRxSnr, this->lastRxRssi, snrLimit, bars);
+                StoredMessage statusMessage;
+                statusMessage.ackStatus = ackStatus;
+                statusMessage.dest = this->lastSentNode;
+                const char *statusText = graphics::MessageStatusText::bannerTextFor(statusMessage);
+                char target[56];
 
-                if (this->ack) {
-                    if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSignal: %s",
-                                 (channelName && channelName[0]) ? channelName : "unknown", qualityLabel);
-                    } else {
-                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s",
-                                 (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
-                    }
-                } else if (isAck && !isFromDest) {
-                    // Relay ACK banner
-                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s",
-                             (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                if (this->lastSentNode == NODENUM_BROADCAST) {
+                    snprintf(target, sizeof(target), "#%s", (channelName && channelName[0]) ? channelName : "unknown");
                 } else {
-                    if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Message failed to\n#%s",
-                                 (channelName && channelName[0]) ? channelName : "unknown");
-                    } else {
-                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", (nodeName && nodeName[0]) ? nodeName : "unknown");
-                    }
+                    snprintf(target, sizeof(target), "@%s", nodeName[0] ? nodeName : "unknown");
+                }
+
+                if (this->ack || (isAck && !isFromDest)) {
+                    snprintf(buf, sizeof(buf), "%s\n%s\n\nSignal: %s", statusText, target, qualityLabel);
+                } else {
+                    snprintf(buf, sizeof(buf), "%s\n%s", statusText, target);
                 }
 
                 opts.message = buf;

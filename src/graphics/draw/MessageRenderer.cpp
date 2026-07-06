@@ -48,6 +48,13 @@ bool scrollStarted = false;
 static bool didReset = false;
 static constexpr int MESSAGE_BLOCK_GAP = 6;
 
+static bool showsFailureMark(AckStatus status)
+{
+    return status == AckStatus::NACKED || status == AckStatus::TIMEOUT || status == AckStatus::TOO_LARGE ||
+           status == AckStatus::NO_CHANNEL || status == AckStatus::PKI_FAILED || status == AckStatus::PKI_UNKNOWN_PUBKEY ||
+           status == AckStatus::PKI_SEND_FAIL_PUBLIC_KEY;
+}
+
 void scrollUp()
 {
     manualScrolling = true;
@@ -949,8 +956,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (ackForLine[i] == AckStatus::ACKED) {
                         // Destination ACK
                         drawCheckMark(display, markX, markY, 8);
-                    } else if (ackForLine[i] == AckStatus::NACKED || ackForLine[i] == AckStatus::TIMEOUT) {
-                        // Failure or timeout
+                    } else if (showsFailureMark(ackForLine[i])) {
+                        // Failure
                         drawXMark(display, markX, markY, 8);
                     } else if (ackForLine[i] == AckStatus::RELAYED) {
                         // Relay ACK

@@ -9,6 +9,7 @@ namespace MessageStatusText
 {
 
 const char *inlineTextFor(const StoredMessage &message);
+const char *bannerTextFor(const StoredMessage &message);
 
 } // namespace MessageStatusText
 } // namespace graphics

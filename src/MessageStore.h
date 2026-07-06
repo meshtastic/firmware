@@ -59,7 +59,11 @@ enum class AckStatus : uint8_t {
     NACKED = 2,  // explicitly failed
     TIMEOUT = 3, // no ACK after retry window
     RELAYED = 4, // got an ACK from relay, not destination
-    TOO_LARGE = 5
+    TOO_LARGE = 5,
+    NO_CHANNEL = 6,
+    PKI_FAILED = 7,
+    PKI_UNKNOWN_PUBKEY = 8,
+    PKI_SEND_FAIL_PUBLIC_KEY = 9
 };
 
 struct StoredMessage {
