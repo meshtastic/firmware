@@ -387,18 +387,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # No continue-on-error / empty-dir fallback: the gate must fail closed when
+      # the data it enforces on cannot be fetched (size_report.py additionally
+      # fails on missing budgeted envs under --enforce-budgets).
       - name: Download current manifests
         uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
           path: ./manifests/
           pattern: manifest-*
           merge-multiple: true
 
       - name: Collect current firmware sizes
-        run: |
-          mkdir -p ./manifests/
-          python3 bin/collect_sizes.py ./manifests/ ./current-sizes.json
+        run: python3 bin/collect_sizes.py ./manifests/ ./current-sizes.json
 
       - name: Enforce RAM/flash budgets
         run: python3 bin/size_report.py ./current-sizes.json --budgets bin/ram_budgets.json --enforce-budgets

@@ -1158,10 +1158,8 @@ void setup()
     nodeDB->notifyObservers(true);
 
 #ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
-    // Boot heap watermark guardrail (off by default; CI/test builds enable it with
-    // -DMESHTASTIC_HEAP_WATERMARK_CHECK). On nRF52840 the heap arena is the linker gap
-    // after .bss, so static RAM growth silently eats the heap 1:1 - flag it loudly when
-    // less than 20% of the heap is still free at the end of setup().
+    // Opt-in CI guardrail: on nRF52840 static RAM growth eats the heap arena 1:1,
+    // so flag loudly when less than 20% of the heap is free at the end of setup().
     {
         uint32_t heapTotal = memGet.getHeapSize();
         // Platforms without heap accounting report UINT32_MAX (or 0); skip those

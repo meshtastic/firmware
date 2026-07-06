@@ -199,21 +199,40 @@ def generate_markdown(new_sizes, baselines, top_n=5):
 
 
 def load_budgets(path):
-    """Load bin/ram_budgets.json, skipping "_comment"-style keys."""
+    """Load bin/ram_budgets.json, skipping "_comment"-style keys.
+
+    Fails loudly on malformed entries: a typo'd budget (zero, negative, or
+    non-integer) must not silently weaken or crash the gate.
+    """
     with open(path) as f:
         raw = json.load(f)
-    return {
+    budgets = {
         env: limits
         for env, limits in raw.items()
         if not env.startswith("_") and isinstance(limits, dict)
     }
+    for env, limits in budgets.items():
+        for key in ("ram_bytes", "flash_bytes"):
+            if key not in limits:
+                continue
+            budget = limits[key]
+            if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+                print(
+                    f"Error: invalid budget in {path}: {env}.{key} = {budget!r} "
+                    "(must be a positive integer)",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+    return budgets
 
 
-def check_budgets(new_sizes, budgets):
+def check_budgets(new_sizes, budgets, fail_on_missing=False):
     """Compare measured sizes against per-env budgets.
 
-    Only envs present in both the budgets file and the measured sizes are
-    checked (a budgeted env that wasn't built in this run is skipped).
+    With fail_on_missing=False a budgeted env (or metric) absent from the
+    measured sizes is reported as "n/a" but does not fail - right for the
+    informational report. The enforcing gate passes fail_on_missing=True so
+    missing data fails closed instead of trivially passing.
     Returns (violations, rows): violations is a list of human-readable failure
     strings; rows is a list of (env, metric_label, measured, budget, over)
     tuples for reporting, with measured=None when the data is unavailable.
@@ -221,17 +240,24 @@ def check_budgets(new_sizes, budgets):
     violations = []
     rows = []
     for env in sorted(budgets):
-        if env not in new_sizes:
-            continue
-        measured = new_sizes[env]
+        measured = new_sizes.get(env)
         for key, label in (("ram_bytes", RAM_LABEL), ("flash_bytes", FLASH_LABEL)):
             budget = budgets[env].get(key)
             if not isinstance(budget, int) or isinstance(budget, bool):
                 continue
-            value = measured.get(key)
+            value = measured.get(key) if measured is not None else None
             if value is None:
-                # Older manifest without this metric: report, don't crash/fail
                 rows.append((env, label, None, budget, False))
+                if fail_on_missing:
+                    reason = (
+                        "env was not built in this run"
+                        if measured is None
+                        else "manifest is missing this metric"
+                    )
+                    violations.append(
+                        f"{env} {label}: no measurement to check against the "
+                        f"budget ({reason}); refusing to pass the gate blind"
+                    )
                 continue
             over = value > budget
             rows.append((env, label, value, budget, over))
@@ -257,7 +283,8 @@ def budget_markdown(rows):
         if value is None:
             lines.append(f"| `{env}` | {label} | n/a | {budget:,} | n/a |")
             continue
-        pct = 100.0 * value / budget
+        # load_budgets() rejects non-positive budgets; guard anyway for direct callers
+        pct = 100.0 * value / budget if budget > 0 else float("inf")
         status = f"{pct:.1f}%" + (" ❌ **OVER BUDGET**" if over else "")
         lines.append(f"| `{env}` | {label} | {value:,} | {budget:,} | {status} |")
     lines.append("")
@@ -303,8 +330,16 @@ def main():
 
     new_sizes = load_sizes(args.new_sizes)
 
-    # Silence output when no targets were built - repo maintainer choice
+    # Silence output when no targets were built - repo maintainer choice.
+    # Under enforcement that would be a silent pass, so fail closed instead.
     if not new_sizes:
+        if args.enforce_budgets:
+            print(
+                f"Error: --enforce-budgets requested but no sizes were found in "
+                f"{args.new_sizes}; refusing to pass the budget gate blind",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         return
 
     baselines = []
@@ -320,7 +355,9 @@ def main():
     violations = []
     if args.budgets:
         budgets = load_budgets(args.budgets)
-        violations, rows = check_budgets(new_sizes, budgets)
+        violations, rows = check_budgets(
+            new_sizes, budgets, fail_on_missing=args.enforce_budgets
+        )
         budget_md = budget_markdown(rows)
         if budget_md:
             md += "\n" + budget_md

@@ -413,8 +413,8 @@ def test_budget_gate_over_flash_budget():
         assert "786,000" in stderr
 
 
-def test_budget_gate_env_not_built():
-    """Budgeted envs that weren't built in this run are skipped, not failed."""
+def test_budget_gate_env_not_built_fails_closed():
+    """Under --enforce-budgets, a budgeted env missing from the sizes fails."""
     with tempfile.TemporaryDirectory() as tmpdir:
         sizes_file = write_json(
             tmpdir, "sizes.json", {"heltec-v3": {"flash_bytes": 1000000}}
@@ -429,11 +429,31 @@ def test_budget_gate_env_not_built():
             "size_report.py",
             [sizes_file, "--budgets", budgets_file, "--enforce-budgets"],
         )
-        assert rc == 0, f"expected pass for unbuilt env, got rc={rc}: {stderr}"
+        assert rc == 1, f"expected fail-closed for unbuilt env, got rc={rc}"
+        assert "not built" in stderr
 
 
-def test_budget_gate_missing_ram_metric():
-    """A budgeted env measured without ram_bytes reports n/a and does not fail."""
+def test_budget_report_env_not_built_shows_na():
+    """Without enforcement, a budgeted env missing from the sizes is just n/a."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        sizes_file = write_json(
+            tmpdir, "sizes.json", {"heltec-v3": {"flash_bytes": 1000000}}
+        )
+        budgets_file = write_json(
+            tmpdir,
+            "budgets.json",
+            {"rak4631": {"ram_bytes": 113000, "flash_bytes": 786000}},
+        )
+
+        rc, stdout, stderr = run_script(
+            "size_report.py", [sizes_file, "--budgets", budgets_file]
+        )
+        assert rc == 0, f"expected report-only pass, got rc={rc}: {stderr}"
+        assert "n/a" in stdout
+
+
+def test_budget_gate_missing_ram_metric_fails_closed():
+    """Under --enforce-budgets, a budgeted env without ram_bytes fails."""
     with tempfile.TemporaryDirectory() as tmpdir:
         sizes_file = write_json(
             tmpdir, "sizes.json", {"rak4631": {"flash_bytes": 765192}}
@@ -448,8 +468,65 @@ def test_budget_gate_missing_ram_metric():
             "size_report.py",
             [sizes_file, "--budgets", budgets_file, "--enforce-budgets"],
         )
-        assert rc == 0, f"expected pass, got rc={rc}: {stderr}"
+        assert rc == 1, f"expected fail-closed for missing metric, got rc={rc}"
+        assert "missing this metric" in stderr
+
+
+def test_budget_report_missing_ram_metric_shows_na():
+    """Without enforcement, a missing metric reports n/a and does not fail."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        sizes_file = write_json(
+            tmpdir, "sizes.json", {"rak4631": {"flash_bytes": 765192}}
+        )
+        budgets_file = write_json(
+            tmpdir,
+            "budgets.json",
+            {"rak4631": {"ram_bytes": 113000, "flash_bytes": 786000}},
+        )
+
+        rc, stdout, stderr = run_script(
+            "size_report.py", [sizes_file, "--budgets", budgets_file]
+        )
+        assert rc == 0, f"expected report-only pass, got rc={rc}: {stderr}"
         assert "n/a" in stdout
+
+
+def test_budget_gate_empty_sizes_fails_closed():
+    """--enforce-budgets with an empty sizes file must fail, not silently pass."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        sizes_file = write_json(tmpdir, "sizes.json", {})
+        budgets_file = write_json(
+            tmpdir, "budgets.json", {"rak4631": {"ram_bytes": 113000}}
+        )
+
+        rc, stdout, stderr = run_script(
+            "size_report.py",
+            [sizes_file, "--budgets", budgets_file, "--enforce-budgets"],
+        )
+        assert rc == 1, f"expected fail-closed for empty sizes, got rc={rc}"
+        assert "no sizes" in stderr
+
+        # Report-only mode keeps the quiet no-op behavior
+        rc, stdout, stderr = run_script("size_report.py", [sizes_file])
+        assert rc == 0
+
+
+def test_budget_invalid_budget_rejected():
+    """Zero/negative/non-int budgets fail loudly instead of crashing or passing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        sizes_file = write_json(
+            tmpdir, "sizes.json", {"rak4631": {"ram_bytes": 110948}}
+        )
+        for bad in (0, -5, "113000", True):
+            budgets_file = write_json(
+                tmpdir, "budgets.json", {"rak4631": {"ram_bytes": bad}}
+            )
+            rc, stdout, stderr = run_script(
+                "size_report.py",
+                [sizes_file, "--budgets", budgets_file, "--enforce-budgets"],
+            )
+            assert rc == 1, f"expected rejection of budget {bad!r}, got rc={rc}"
+            assert "positive integer" in stderr
 
 
 def test_budget_render_without_enforce():
