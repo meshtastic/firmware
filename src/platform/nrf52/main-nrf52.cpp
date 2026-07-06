@@ -61,9 +61,13 @@ void variant_nrf52LoopHook(void) {}
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
 
-// This is a public global so that the debugger can set it to false automatically from our gdbinit
-// @phaseloop comment: most part of codebase, including filesystem flash driver depend on softdevice
-// methods so disabling it may actually crash thing. Proceed with caution.
+// This is a public global so that the debugger can set it to false automatically from our gdbinit.
+// Also cleared at runtime when config.bluetooth.enabled is false: the SoftDevice is then never
+// enabled at all, and the code paths that would otherwise issue sd_* SVCs (checkSDEvents, the
+// GPREGRET writes) either key off this flag or carry direct-register fallbacks. The BSP flash
+// driver checks sd_softdevice_is_enabled() per operation and takes its synchronous path while the
+// SD is disabled - the same path every boot already uses before Bluefruit.begin() - so LittleFS
+// is safe either way.
 
 bool useSoftDevice = true; // Set to false for easier debugging
 
@@ -189,23 +193,25 @@ void getMacAddr(uint8_t *dmac)
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
+    // User disabled bluetooth in config: leave the SoftDevice entirely off and reclaim its
+    // RAM (~3.5 KB Bluefruit heap + ~6 KB of BLE/SOC task stacks). The previous workaround
+    // (#4055 era) fully initialized SoftDevice + Bluefruit and then muted advertising; with
+    // the SD disabled the BSP flash driver stays on its synchronous path, so nothing below
+    // requires it. clearBonds() still lazily brings the stack up for explicit bond
+    // maintenance, and re-enabling bluetooth applies via reboot, so no re-init path is
+    // needed here.
+    if (!config.bluetooth.enabled) {
+        if (useSoftDevice) {
+            LOG_INFO("Bluetooth disabled by config: leaving SoftDevice off");
+            useSoftDevice = false; // checkSDEvents() and the GPREGRET fallbacks key off this
+        }
+        return;
+    }
+
     // For debugging use: don't use bluetooth
     if (!useSoftDevice) {
         if (enable)
             LOG_INFO("Disable NRF52 BLUETOOTH WHILE DEBUGGING");
-        return;
-    }
-
-    // If user disabled bluetooth: init then disable advertising & reduce power
-    // Workaround. Avoid issue where device hangs several days after boot..
-    // Allegedly, no significant increase in power consumption
-    if (!config.bluetooth.enabled) {
-        static bool initialized = false;
-        if (!initialized) {
-            nrf52Bluetooth = new NRF52Bluetooth();
-            nrf52Bluetooth->startDisabled();
-            initialized = true;
-        }
         return;
     }
 
@@ -473,12 +479,18 @@ void cpuDeepSleep(uint32_t msecToWake)
         // Resume on user button press
         // https://github.com/lyusupov/SoftRF/blob/81c519ca75693b696752235d559e881f2e0511ee/software/firmware/source/SoftRF/src/platform/nRF52.cpp#L1738
         constexpr uint32_t DFU_MAGIC_SKIP = 0x6d;
-        sd_power_gpregret_clr(0, 0xFF);           // Clear the register before setting a new values in it for stability reasons
-        sd_power_gpregret_set(0, DFU_MAGIC_SKIP); // Equivalent NRF_POWER->GPREGRET = DFU_MAGIC_SKIP
+        // Clear the register before setting a new value in it for stability reasons, then set
+        // DFU_MAGIC_SKIP. When the SoftDevice was never enabled (bluetooth disabled by config, or
+        // debugging) the sd_* calls return an error without touching the register, so mirror
+        // lfs_assert()'s fallback and write NRF_POWER->GPREGRET directly.
+        if (sd_power_gpregret_clr(0, 0xFF) != NRF_SUCCESS)
+            NRF_POWER->GPREGRET = 0;
+        if (sd_power_gpregret_set(0, DFU_MAGIC_SKIP) != NRF_SUCCESS)
+            NRF_POWER->GPREGRET = DFU_MAGIC_SKIP;
 
-        // FIXME, use system off mode with ram retention for key state?
-        // FIXME, use non-init RAM per
-        // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
+            // FIXME, use system off mode with ram retention for key state?
+            // FIXME, use non-init RAM per
+            // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
 
 #ifdef BATTERY_LPCOMP_INPUT
         // Wake up if power rises again
