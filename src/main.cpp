@@ -38,6 +38,7 @@
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
@@ -1150,6 +1151,9 @@ void setup()
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
+
+    // Log the per-subsystem heap breakdown now that the big allocations are done
+    memaudit::logBreakdown("boot");
 
     // We manually run this to update the NodeStatus
     nodeDB->notifyObservers(true);
