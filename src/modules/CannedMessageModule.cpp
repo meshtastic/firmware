@@ -154,29 +154,6 @@ bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
     return nodeInfoLiteHasUser(node) && node->public_key.size > 0;
 }
 
-static AckStatus ackStatusForRoutingResult(bool wasBroadcast, bool isFromDest, bool isAck, meshtastic_Routing_Error errorReason)
-{
-    if (isAck) {
-        return (wasBroadcast || isFromDest) ? AckStatus::ACKED : AckStatus::RELAYED;
-    }
-
-    switch (errorReason) {
-    case meshtastic_Routing_Error_TOO_LARGE:
-        return AckStatus::TOO_LARGE;
-    case meshtastic_Routing_Error_MAX_RETRANSMIT:
-        return AckStatus::TIMEOUT;
-    case meshtastic_Routing_Error_NO_CHANNEL:
-        return AckStatus::NO_CHANNEL;
-    case meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY:
-        return AckStatus::PKI_SEND_FAIL_PUBLIC_KEY;
-    case meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY:
-        return AckStatus::PKI_UNKNOWN_PUBKEY;
-    case meshtastic_Routing_Error_PKI_FAILED:
-        return AckStatus::PKI_FAILED;
-    default:
-        return AckStatus::NACKED;
-    }
-}
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
  *     starting points of the string this->messageStore
@@ -1150,6 +1127,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         }
     }
     sm.ackStatus = AckStatus::NONE;
+    sm.ackTrackable = true;
+    sm.packetId = this->lastRequestId;
 
     messageStore.addLiveMessage(std::move(sm));
 
@@ -2218,12 +2197,8 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 waitingForAck = false;
             }
 
-            // Update last sent StoredMessage with ACK/NACK/RELAYED result
-            if (!messageStore.getMessages().empty()) {
-                StoredMessage &last = const_cast<StoredMessage &>(messageStore.getMessages().back());
-                if (last.sender == nodeDB->getNodeNum()) { // only update our own messages
-                    last.ackStatus = ackStatus;
-                }
+            if (!messageStore.updateAckStatus(nodeDB->getNodeNum(), mp.decoded.request_id, ackStatus)) {
+                LOG_DEBUG("No tracked message found for ACK id=0x%08x", mp.decoded.request_id);
             }
 
             // Capture radio metrics

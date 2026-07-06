@@ -14,7 +14,7 @@ const char *inlineTextFor(const StoredMessage &message)
 {
     switch (message.ackStatus) {
     case AckStatus::NONE:
-        return "Sending...";
+        return message.ackTrackable ? "Sending..." : "";
     case AckStatus::ACKED:
         return message.dest == NODENUM_BROADCAST ? "Delivered to mesh" : "Delivered to recipient";
     case AckStatus::RELAYED:

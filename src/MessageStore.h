@@ -13,6 +13,7 @@
 #define ENABLE_MESSAGE_PERSISTENCE 1
 #endif
 
+#include "mesh/MeshTypes.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <cstdint>
 #include <deque>
@@ -54,7 +55,7 @@ enum class MessageType : uint8_t {
 
 // Delivery status for messages we sent
 enum class AckStatus : uint8_t {
-    NONE = 0,    // just sent, waiting (no symbol shown)
+    NONE = 0,    // pending only when ackTrackable is true
     ACKED = 1,   // got a valid ACK from destination
     NACKED = 2,  // explicitly failed
     TIMEOUT = 3, // no ACK after retry window
@@ -71,9 +72,11 @@ struct StoredMessage {
     uint32_t sender;      // NodeNum of sender
     uint8_t channelIndex; // Channel index used
     uint32_t dest;        // Destination node (broadcast or direct)
+    PacketId packetId;    // Mesh packet ID for targeted status updates
     MessageType type;     // Derived from dest (explicit classification)
     bool isBootRelative;  // true = millis()/1000 fallback; false = epoch/RTC absolute
     AckStatus ackStatus;  // Delivery status (only meaningful for our own sent messages)
+    bool ackTrackable;    // true when production code can match a routing response to this message
 
     // Text storage metadata - rebuilt from flash at boot
     uint16_t textOffset; // Offset into global text pool (valid only after loadFromFlash())
@@ -83,11 +86,14 @@ struct StoredMessage {
 
     // Default constructor initializes all fields safely
     StoredMessage()
-        : timestamp(0), sender(0), channelIndex(0), dest(0xffffffff), type(MessageType::BROADCAST), isBootRelative(false),
-          ackStatus(AckStatus::NONE), textOffset(0), textLength(0), xeddsaSigned(false)
+        : timestamp(0), sender(0), channelIndex(0), dest(0xffffffff), packetId(0), type(MessageType::BROADCAST),
+          isBootRelative(false), ackStatus(AckStatus::NONE), ackTrackable(false), textOffset(0), textLength(0),
+          xeddsaSigned(false)
     {
     }
 };
+
+AckStatus ackStatusForRoutingResult(bool wasBroadcast, bool isFromDest, bool isAck, meshtastic_Routing_Error errorReason);
 
 class MessageStore
 {
@@ -119,6 +125,8 @@ class MessageStore
 
     // Unified accessor (for UI code, defaults to RAM buffer)
     const std::deque<StoredMessage> &getMessages() const { return liveMessages; }
+
+    bool updateAckStatus(NodeNum sender, PacketId packetId, AckStatus status);
 
     // Helper filters for future use
     std::deque<StoredMessage> getChannelMessages(uint8_t channel) const; // Only broadcast messages on a channel
