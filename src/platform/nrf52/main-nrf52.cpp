@@ -500,9 +500,11 @@ void cpuDeepSleep(uint32_t msecToWake)
 
         // If a rotary encoder press pin is configured, also use it as a wake source
         if (moduleConfig.canned_message.inputbroker_pin_press != 0) {
-            uint32_t pin = moduleConfig.canned_message.inputbroker_pin_press;
+            uint32_t pin = g_ADigitalPinMap[moduleConfig.canned_message.inputbroker_pin_press];
             nrf_gpio_cfg_input(pin, NRF_GPIO_PIN_PULLUP);
             nrf_gpio_cfg_sense_set(pin, NRF_GPIO_PIN_SENSE_LOW);
+            LOG_DEBUG("Deep sleep: encoder press pin %d (NRF %lu) armed as wake source",
+                      moduleConfig.canned_message.inputbroker_pin_press, pin);
         }
 
         auto ok = sd_power_system_off();
