@@ -9,6 +9,7 @@
 #include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
@@ -524,6 +525,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     if (transmitHistory) {
         transmitHistory->clear();
     }
+#if HAS_SCREEN
+    messageStore.clearAllMessages();
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
     installDefaultDeviceState();

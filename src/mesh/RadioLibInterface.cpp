@@ -54,6 +54,12 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 }
 
+static bool radioFrequencyChanged(float previousFreq, float currentFreq)
+{
+    const float delta = currentFreq - previousFreq;
+    return delta > 0.000001f || delta < -0.000001f;
+}
+
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
@@ -228,6 +234,16 @@ bool RadioLibInterface::canSleep()
     return res;
 }
 
+bool RadioLibInterface::reconfigure()
+{
+    const float previousFreq = getFreq();
+    bool result = RadioInterface::reconfigure();
+    if (result && radioFrequencyChanged(previousFreq, getFreq())) {
+        resetNoiseFloor();
+    }
+    return result;
+}
+
 /** Allow other firmware components to ask whether we are currently sending a packet
 Initially implemented to protect T-Echo's capacitive touch button from spurious presses during tx
 */
@@ -331,6 +347,7 @@ void RadioLibInterface::resetNoiseFloor()
 {
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
+    lastNoiseFloorUpdate = 0;
     currentNoiseFloor = NOISE_FLOOR_DEFAULT;
     LOG_INFO("Noise floor reset - rolling window collection will restart");
 }

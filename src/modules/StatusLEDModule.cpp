@@ -131,6 +131,12 @@ int32_t StatusLEDModule::runOnce()
                 CHARGE_LED_state = LED_STATE_OFF;
             }
         }
+    } else {
+#if defined(LED_HEARTBEAT)
+        // If we are using the heartbeat, as in the Thinknode M4, we need to explicitly turn off the charge LED
+        // This probably implies that in the future we need to stop re-using this bool for multiple purposes.
+        CHARGE_LED_state = LED_STATE_OFF;
+#endif
     }
 // If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
 #if defined(LED_HEARTBEAT)
@@ -158,6 +164,7 @@ int32_t StatusLEDModule::runOnce()
         }
     }
 #endif
+#ifdef LED_PAIRING
     if (!config.bluetooth.enabled || PAIRING_LED_starttime + 30 * 1000 < millis() || doing_fast_blink) {
         PAIRING_LED_state = LED_STATE_OFF;
     } else if (ble_state == unpaired) {
@@ -172,6 +179,7 @@ int32_t StatusLEDModule::runOnce()
     } else {
         PAIRING_LED_state = LED_STATE_ON;
     }
+#endif
 
     // Override if disabled in config
     if (config.device.led_heartbeat_disabled) {
@@ -207,9 +215,29 @@ int32_t StatusLEDModule::runOnce()
 #ifdef PCA_LED_ENABLE
     io.digitalWrite(PCA_LED_ENABLE, CHARGE_LED_state);
 #endif
+
 #ifdef LED_POWER
+#ifdef LED_POWER_CRITICAL
+    // Split behavior only when the two LEDs are on distinct pins. If a board maps
+    // LED_POWER and LED_POWER_CRITICAL to the same GPIO, the two writes would race
+    // (second wins) and invert normal/critical; fall back to a single write there.
+    // Both are compile-time constants, so the unused branch folds away at build time.
+    if (LED_POWER != LED_POWER_CRITICAL) {
+        if (power_state == critical) {
+            digitalWrite(LED_POWER, 0);
+            digitalWrite(LED_POWER_CRITICAL, CHARGE_LED_state);
+        } else {
+            digitalWrite(LED_POWER, CHARGE_LED_state);
+            digitalWrite(LED_POWER_CRITICAL, 0);
+        }
+    } else {
+        digitalWrite(LED_POWER, CHARGE_LED_state);
+    }
+#else
     digitalWrite(LED_POWER, CHARGE_LED_state);
 #endif
+#endif
+
 #ifdef LED_PAIRING
     digitalWrite(LED_PAIRING, PAIRING_LED_state);
 #endif

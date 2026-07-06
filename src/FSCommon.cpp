@@ -99,48 +99,87 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
+#include <cstring>
+#include <new>
+#include <stdexcept>
 #include <vector>
 
-/**
- * @brief Get the list of files in a directory.
- *
- * This function returns a list of files in a directory. The list includes the full path of each file.
- * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
- *
- * @param dirname The name of the directory.
- * @param levels The number of levels of subdirectories to list.
- * @return A vector of strings containing the full path of each file in the directory.
- */
-std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
-{
-    std::vector<meshtastic_FileInfo> filenames = {};
 #ifdef FSCom
+namespace
+{
+bool pathEndsWithDot(const char *path)
+{
+    if (!path)
+        return false;
+
+    size_t length = strlen(path);
+    return length > 0 && path[length - 1] == '.';
+}
+
+bool copyFilePath(char *dest, size_t destSize, const char *path, bool *wasLimited)
+{
+    if (!path || destSize == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    if (strlcpy(dest, path, destSize) >= destSize) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    return true;
+}
+
+void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vector<meshtastic_FileInfo> &filenames,
+                  bool *wasLimited)
+{
+    if (!dirname)
+        return;
+
     File root = FSCom.open(dirname, FILE_O_READ);
     if (!root)
-        return filenames;
-    if (!root.isDirectory())
-        return filenames;
+        return;
+    if (!root.isDirectory()) {
+        root.close();
+        return;
+    }
 
     File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
-            if (levels) {
+    // file.name()[0] check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
+    while (file && file.name()[0]) {
+        if (filenames.size() >= maxCount) {
+            if (wasLimited)
+                *wasLimited = true;
+            file.close();
+            break;
+        }
+        const char *fileName = file.name();
+        if (file.isDirectory() && !pathEndsWithDot(fileName)) {
+            char pathBuffer[sizeof(((meshtastic_FileInfo *)nullptr)->file_name)] = {};
 #ifdef ARCH_ESP32
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
+            const char *subDirPath = file.path();
 #else
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
+            const char *subDirPath = fileName;
 #endif
-                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
-                file.close();
+            bool hasSubDirPath = copyFilePath(pathBuffer, sizeof(pathBuffer), subDirPath, wasLimited);
+            file.close();
+
+            if (levels && hasSubDirPath) {
+                collectFiles(pathBuffer, levels - 1, maxCount, filenames, wasLimited);
+            } else if (wasLimited) {
+                *wasLimited = true;
             }
         } else {
             meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
-            strcpy(fileInfo.file_name, file.path());
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.path(), wasLimited);
 #else
-            strcpy(fileInfo.file_name, file.name());
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.name(), wasLimited);
 #endif
-            if (!String(fileInfo.file_name).endsWith(".")) {
+            if (hasFilePath && !pathEndsWithDot(fileInfo.file_name)) {
                 filenames.push_back(fileInfo);
             }
             file.close();
@@ -148,6 +187,41 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
         file = root.openNextFile();
     }
     root.close();
+}
+} // namespace
+#endif
+
+// Callers must hold the SPI lock; recursion prevents taking it here.
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount, bool *wasLimited)
+{
+    std::vector<meshtastic_FileInfo> filenames = {};
+    if (wasLimited)
+        *wasLimited = false;
+#ifdef FSCom
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+    size_t reservedCount = maxCount;
+    while (reservedCount > 0) {
+        try {
+            filenames.reserve(reservedCount);
+            break;
+        } catch (const std::bad_alloc &) {
+            reservedCount /= 2;
+        } catch (const std::length_error &) {
+            reservedCount /= 2;
+        }
+    }
+    if (reservedCount == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return filenames;
+    }
+    if (reservedCount < maxCount) {
+        if (wasLimited)
+            *wasLimited = true;
+        maxCount = reservedCount;
+    }
+#endif
+    collectFiles(dirname, levels, maxCount, filenames, wasLimited);
 #endif
     return filenames;
 }

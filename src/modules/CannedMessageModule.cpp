@@ -83,7 +83,11 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;
@@ -123,7 +127,11 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
     // Do NOT override explicit broadcast replies
     // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;

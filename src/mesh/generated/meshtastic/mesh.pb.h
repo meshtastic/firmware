@@ -308,9 +308,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TDISPLAY_S3_PRO = 126,
     /* Heltec Mesh Node T096 board features an nRF52840 CPU and a TFT screen. */
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T096 = 127,
-    /* Seeed studio T1000-E Pro tracker card. NRF52840 w/ LR2021 radio,
+    /* Seeed studio Mesh Tracker X1card. NRF52840 w/ LR2021 radio,
  GPS, button, buzzer, and sensors. */
-    meshtastic_HardwareModel_TRACKER_T1000_E_PRO = 128,
+    meshtastic_HardwareModel_MESH_TRACKER_X1 = 128,
     /* Elecrow ThinkNode M7, M8 and M9 */
     meshtastic_HardwareModel_THINKNODE_M7 = 129,
     meshtastic_HardwareModel_THINKNODE_M8 = 130,
