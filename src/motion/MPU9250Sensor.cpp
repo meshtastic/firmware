@@ -347,7 +347,7 @@ int32_t MPU9250Sensor::runOnce()
     ma.axis.y = mag.axis.x;
     ma.axis.z = -mag.axis.z;
 
-    // Compensate for non-flat case mounting. FusionCompassCalculateHeading()
+    // Compensate for non-flat case mounting. FusionCompass()
     // assumes Z is the up axis - when the baseboard is mounted vertically
     // (e.g. a case where the LCD sits perpendicular to the board), chip Z is
     // horizontal and the tilt-comp math becomes unstable. Override which chip
@@ -361,29 +361,29 @@ int32_t MPU9250Sensor::runOnce()
 #define MPU9250_UP_AXIS MPU9250_UP_AXIS_PZ
 #endif
 #if MPU9250_UP_AXIS == MPU9250_UP_AXIS_PX
-    ga = FusionAxesSwap(ga, FusionAxesAlignmentNZPYPX);
-    ma = FusionAxesSwap(ma, FusionAxesAlignmentNZPYPX);
+    ga = FusionRemap(ga, FusionRemapAlignmentNZPYPX);
+    ma = FusionRemap(ma, FusionRemapAlignmentNZPYPX);
 #elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_PZ
     // Default orientation (chip +Z up), no remap needed.
 #elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_NX
-    ga = FusionAxesSwap(ga, FusionAxesAlignmentPZPYNX);
-    ma = FusionAxesSwap(ma, FusionAxesAlignmentPZPYNX);
+    ga = FusionRemap(ga, FusionRemapAlignmentPZPYNX);
+    ma = FusionRemap(ma, FusionRemapAlignmentPZPYNX);
 #elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_PY
-    ga = FusionAxesSwap(ga, FusionAxesAlignmentPXNZPY);
-    ma = FusionAxesSwap(ma, FusionAxesAlignmentPXNZPY);
+    ga = FusionRemap(ga, FusionRemapAlignmentPXNZPY);
+    ma = FusionRemap(ma, FusionRemapAlignmentPXNZPY);
 #elif MPU9250_UP_AXIS == MPU9250_UP_AXIS_NY
-    ga = FusionAxesSwap(ga, FusionAxesAlignmentPXPZNY);
-    ma = FusionAxesSwap(ma, FusionAxesAlignmentPXPZNY);
+    ga = FusionRemap(ga, FusionRemapAlignmentPXPZNY);
+    ma = FusionRemap(ma, FusionRemapAlignmentPXPZNY);
 #else
 #error "MPU9250_UP_AXIS must be one of MPU9250_UP_AXIS_PZ/PX/NX/PY/NY"
 #endif
 
     if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
-        ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
-        ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+        ma = FusionRemap(ma, FusionRemapAlignmentNXNYPZ);
+        ga = FusionRemap(ga, FusionRemapAlignmentNXNYPZ);
     }
 
-    float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
+    float heading = FusionCompass(ga, ma, FusionConventionNed);
     heading = applyCompassOrientation(heading);
     if (screen)
         screen->setHeading(heading);
