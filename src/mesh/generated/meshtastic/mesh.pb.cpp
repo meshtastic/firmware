@@ -30,6 +30,9 @@ PB_BIND(meshtastic_StoreForwardPlusPlus, meshtastic_StoreForwardPlusPlus, 2)
 PB_BIND(meshtastic_RemoteShell, meshtastic_RemoteShell, AUTO)
 
 
+PB_BIND(meshtastic_BoundingBox, meshtastic_BoundingBox, AUTO)
+
+
 PB_BIND(meshtastic_Waypoint, meshtastic_Waypoint, AUTO)
 
 

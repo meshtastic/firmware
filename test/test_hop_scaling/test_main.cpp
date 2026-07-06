@@ -23,12 +23,12 @@
 
 static constexpr NodeNum kLocalNode = 0x11111111;
 
-// Shared mock clock — drives HopScalingModule::nowMs()
+// Shared mock clock - drives HopScalingModule::nowMs()
 static uint32_t &mockTime = HopScalingModule::s_testNowMs;
 static constexpr uint32_t ONE_HOUR_MS = 3600UL * 1000UL;
 
 // ---------------------------------------------------------------------------
-// MockNodeDB — not used for hop decisions any more, kept for completeness
+// MockNodeDB - not used for hop decisions any more, kept for completeness
 // ---------------------------------------------------------------------------
 class MockNodeDB : public NodeDB
 {
@@ -56,7 +56,7 @@ class MockNodeDB : public NodeDB
 };
 
 // ---------------------------------------------------------------------------
-// Test shim — expose protected/private members for direct invocation
+// Test shim - expose protected/private members for direct invocation
 // ---------------------------------------------------------------------------
 class HopScalingTestShim : public HopScalingModule
 {
@@ -100,14 +100,14 @@ static MockNodeDB *mockNodeDB = nullptr;
 
 // Create deterministic IDs that produce a broad spread of 16-bit hashes.
 // HopScalingModule admission uses passesFilter(hashNodeId(nodeId), denom), NOT a raw nodeId
-// modulo check — do not assume (nodeId & (denom-1)) == 0 determines whether a node is admitted.
+// modulo check - do not assume (nodeId & (denom-1)) == 0 determines whether a node is admitted.
 static uint32_t makeDistributedNodeId(uint32_t baseId, uint32_t ordinal, uint32_t salt = 0)
 {
     return baseId + salt + (ordinal * 33u);
 }
 
 // ---------------------------------------------------------------------------
-// Helpers — mesh topology builders
+// Helpers - mesh topology builders
 // ---------------------------------------------------------------------------
 
 // Helper: add N nodes at a given hop with ages spread across a time range.
@@ -151,7 +151,7 @@ static void assertCompactHistogramActive(HopScalingTestShim &shim)
 // Topology builders
 // ---------------------------------------------------------------------------
 
-// Scenario A: Dense local mesh — 110 nodes, heavy at hops 0–2.
+// Scenario A: Dense local mesh - 110 nodes, heavy at hops 0-2.
 static void buildDenseLocalMesh()
 {
     mockNodeDB->clearTestNodes();
@@ -164,7 +164,7 @@ static void buildDenseLocalMesh()
     addNodesAtHop(0x7000, 6, 10, 3000);
 }
 
-// Scenario B: Spread sparse mesh — 76 nodes across hops 0–7.
+// Scenario B: Spread sparse mesh - 76 nodes across hops 0-7.
 static void buildSpreadSparseMesh()
 {
     mockNodeDB->clearTestNodes();
@@ -178,7 +178,7 @@ static void buildSpreadSparseMesh()
     addNodesAtHop(0x8000, 7, 10, 3600);
 }
 
-// Scenario C: Deep linear chain — 22 thin nodes, never reaches 40.
+// Scenario C: Deep linear chain - 22 thin nodes, never reaches 40.
 static void buildDeepLinearChain()
 {
     mockNodeDB->clearTestNodes();
@@ -192,7 +192,7 @@ static void buildDeepLinearChain()
     addNodesAtHop(0x8000, 7, 3, 3600);
 }
 
-// Scenario D: Router cluster — 71 nodes, 45 at hop 2.
+// Scenario D: Router cluster - 71 nodes, 45 at hop 2.
 static void buildRouterCluster()
 {
     mockNodeDB->clearTestNodes();
@@ -206,7 +206,7 @@ static void buildRouterCluster()
     addNodesAtHop(0x8000, 7, 3, 3600);
 }
 
-// Scenario E: Megamesh — 199 nodes (DB near capacity).
+// Scenario E: Megamesh - 199 nodes (DB near capacity).
 static void buildMegamesh()
 {
     mockNodeDB->clearTestNodes();
@@ -221,7 +221,7 @@ static void buildMegamesh()
 }
 
 // ---------------------------------------------------------------------------
-// Tests — Topology-driven hop reduction scenarios
+// Tests - Topology-driven hop reduction scenarios
 // ---------------------------------------------------------------------------
 
 void test_dense_local_telemetry()
@@ -491,7 +491,7 @@ void test_startup_blank_state()
 }
 
 // ---------------------------------------------------------------------------
-// Tests — Denominator state machine
+// Tests - Denominator state machine
 // ---------------------------------------------------------------------------
 
 void test_denominator_rises_on_overflow()
@@ -549,7 +549,7 @@ void test_filtering_denom_hold_counts_down()
     TEST_ASSERT_EQUAL_UINT8(4u, shim->getFilteringDenominator());
     TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenomHoldRollsRemaining());
 
-    // Roll 3: hold 1→0, step fires — filteringDenominator halves to max(2, samp=1) = 2.
+    // Roll 3: hold 1→0, step fires - filteringDenominator halves to max(2, samp=1) = 2.
     shim->rollHourTest();
     TEST_MSG_FMT("After hold expires: filt=1/%u samp=1/%u holdRolls=%u", shim->getFilteringDenominator(),
                  shim->getSamplingDenominator(), shim->getFilteringDenomHoldRollsRemaining());
@@ -575,10 +575,10 @@ void test_filtering_denom_steps_down_gradually()
     shim->rollHourTest(); // hold=0 (no decrement), step: 4/2=2 > 1, filt=2
     TEST_ASSERT_EQUAL_UINT8(2u, shim->getFilteringDenominator());
 
-    shim->rollHourTest(); // step: 2/2=1, not > samp=1, filt=samp=1 — converged
+    shim->rollHourTest(); // step: 2/2=1, not > samp=1, filt=samp=1 - converged
     TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenominator());
 
-    shim->rollHourTest(); // filt==samp, outer if is false — no further change
+    shim->rollHourTest(); // filt==samp, outer if is false - no further change
     TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenominator());
     TEST_ASSERT_EQUAL_UINT8(HopScalingModule::DENOM_MIN, shim->getSamplingDenominator());
 

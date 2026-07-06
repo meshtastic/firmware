@@ -160,7 +160,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * Reset AGC by power-cycling the analog frontend.
      * Subclasses override with chip-specific calibration sequences.
-     * Safe to call periodically — skips if currently sending or receiving.
+     * Safe to call periodically - skips if currently sending or receiving.
      */
     virtual void resetAGC();
 

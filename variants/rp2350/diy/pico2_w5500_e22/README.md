@@ -1,4 +1,4 @@
-# Raspberry Pi Pico 2 + W5500 + E22-900M30S — Meshtastic Variant
+# Raspberry Pi Pico 2 + W5500 + E22-900M30S - Meshtastic Variant
 
 Meshtastic support for a **Raspberry Pi Pico 2** (RP2350, 4 MB flash) with an external **W5500** Ethernet module and an **EBYTE E22-900M30S** LoRa module.
 
@@ -20,9 +20,9 @@ Meshtastic support for a **Raspberry Pi Pico 2** (RP2350, 4 MB flash) with an ex
 
 | GPIO | Function                                |
 | ---- | --------------------------------------- |
-| GP24 | VBUS sense — HIGH when USB is connected |
+| GP24 | VBUS sense - HIGH when USB is connected |
 | GP25 | User LED (heartbeat)                    |
-| GP29 | ADC3 — VSYS/3, measures supply voltage  |
+| GP29 | ADC3 - VSYS/3, measures supply voltage  |
 
 ### W5500 Ethernet (SPI0)
 
@@ -33,7 +33,7 @@ Meshtastic support for a **Raspberry Pi Pico 2** (RP2350, 4 MB flash) with an ex
 | SCK          | GP18        |
 | MOSI         | GP19        |
 | RST          | GP20        |
-| INT          | — (nc)      |
+| INT          | - (nc)      |
 | VCC          | 3.3V        |
 | GND          | GND         |
 
@@ -50,10 +50,10 @@ Meshtastic support for a **Raspberry Pi Pico 2** (RP2350, 4 MB flash) with an ex
 | RESET      | GP15        | Active LOW reset                           |
 | DIO1       | GP14        | IRQ interrupt                              |
 | BUSY       | GP2         | Module busy indicator                      |
-| RXEN       | GP3         | LNA enable — held HIGH permanently         |
+| RXEN       | GP3         | LNA enable - held HIGH permanently         |
 | TXEN       | ← DIO2      | See wiring note below                      |
 | VCC        | 3.3V        | Add a 100 µF capacitor close to the module |
-| GND        | GND         | —                                          |
+| GND        | GND         | -                                          |
 
 > See `wiring.svg` in this directory for the full connection diagram.
 
@@ -81,10 +81,10 @@ With this bridge in place, `SX126X_DIO2_AS_RF_SWITCH` causes the SX1262 to drive
 pio run -e pico2_w5500_e22
 ```
 
-### Flash — BOOTSEL mode
+### Flash - BOOTSEL mode
 
 1. Hold the **BOOTSEL** button on the Pico 2.
-2. Connect USB to the PC — it appears as a `RPI-RP2` storage drive.
+2. Connect USB to the PC - it appears as a `RPI-RP2` storage drive.
 3. Copy the `.uf2` file:
 
 ```text
@@ -119,7 +119,7 @@ Services available once connected:
 
 ## Technical notes
 
-### LoRa — RF control
+### LoRa - RF control
 
 | Define                         | Effect                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
@@ -128,7 +128,7 @@ Services available once connected:
 | `SX126X_DIO3_TCXO_VOLTAGE 1.8` | E22 TCXO controlled by DIO3                                 |
 | `-D EBYTE_E22_900M30S`         | Sets `TX_GAIN_LORA=7`, max power 22 dBm                     |
 
-> RXEN and TXEN may both be HIGH simultaneously during TX — this is safe for the E22 RF switch.
+> RXEN and TXEN may both be HIGH simultaneously during TX - this is safe for the E22 RF switch.
 
 ### Ethernet
 
@@ -138,7 +138,7 @@ Services available once connected:
 
 ### HW_VENDOR
 
-Mapped to `meshtastic_HardwareModel_PRIVATE_HW` — no dedicated model exists in the Meshtastic protobuf for this hardware combination yet.
+Mapped to `meshtastic_HardwareModel_PRIVATE_HW` - no dedicated model exists in the Meshtastic protobuf for this hardware combination yet.
 
 ---
 
