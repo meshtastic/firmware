@@ -28,6 +28,7 @@
 
 #include "Nrf52SaadcLock.h"
 #include "concurrency/LockGuard.h"
+#include <hal/nrf_gpio.h>
 #include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
@@ -496,6 +497,13 @@ void cpuDeepSleep(uint32_t msecToWake)
         while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
             ;
 #endif
+
+        // If a rotary encoder press pin is configured, also use it as a wake source
+        if (moduleConfig.canned_message.inputbroker_pin_press != 0) {
+            uint32_t pin = moduleConfig.canned_message.inputbroker_pin_press;
+            nrf_gpio_cfg_input(pin, NRF_GPIO_PIN_PULLUP);
+            nrf_gpio_cfg_sense_set(pin, NRF_GPIO_PIN_SENSE_LOW);
+        }
 
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
