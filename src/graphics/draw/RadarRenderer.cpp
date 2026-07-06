@@ -289,6 +289,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->drawString(x + sw / 2, y + sh / 2 - FONT_HEIGHT_SMALL / 2, "No GPS fix");
+        drawConnectionIconNoWipe(display);
         return;
     }
 
@@ -307,8 +308,15 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     // -----------------------------------------------------------------------
     const bool imuAvailable = screen->hasHeading();
     const bool headingUp = imuAvailable && !s_forceNorthUp;
-    const float headingRad =
-        headingUp ? screen->getHeading() * DEG_TO_RAD : (s_forceNorthUp ? 0.0f : screen->estimatedHeading(myLat, myLon));
+    float headingRad = 0.0f; // north-up fallback
+    if (headingUp) {
+        headingRad = screen->getHeading() * DEG_TO_RAD;
+    } else if (!s_forceNorthUp) {
+        // GPS movement track: estimatedHeading returns degrees, or -1.0f when unavailable.
+        const float estHeadingDeg = screen->estimatedHeading(myLat, myLon);
+        if (estHeadingDeg >= 0.0f)
+            headingRad = estHeadingDeg * DEG_TO_RAD;
+    }
 
     // -----------------------------------------------------------------------
     // Collect remote nodes with valid positions.
