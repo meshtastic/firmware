@@ -19,11 +19,11 @@
 // #include <Adafruit_USBD_Device.h>
 #include "HardwareRNG.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerMon.h"
 #include "error.h"
 #include "main.h"
 #include "meshUtils.h"
-#include "power.h"
 #include <power/PowerHAL.h>
 
 #include "Nrf52SaadcLock.h"
