@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 
-"""Collect firmware binary sizes from manifest (.mt.json) files into a single report."""
+"""Collect firmware binary sizes from manifest (.mt.json) files into a single report.
+
+Output schema (consumed by bin/size_report.py):
+    {"<env>": {"flash_bytes": <int>, "ram_bytes": <int>}}
+
+flash_bytes is the size of the main firmware image (.bin). ram_bytes is the
+static RAM footprint (.data + .bss) emitted into the manifest by
+bin/platformio-custom.py; it is omitted for manifests that predate it, and
+size_report.py renders those as "n/a".
+"""
 
 import json
 import os
@@ -8,7 +17,7 @@ import sys
 
 
 def collect_sizes(manifest_dir):
-    """Scan manifest_dir for .mt.json files and return {board: size_bytes} dict."""
+    """Scan manifest_dir for .mt.json files and return {board: sizes_dict}."""
     sizes = {}
     for fname in sorted(os.listdir(manifest_dir)):
         if not fname.endswith(".mt.json"):
@@ -34,7 +43,11 @@ def collect_sizes(manifest_dir):
                     bin_size = entry["bytes"]
                     break
         if bin_size is not None:
-            sizes[board] = bin_size
+            entry = {"flash_bytes": bin_size}
+            ram_bytes = data.get("ram_bytes")
+            if isinstance(ram_bytes, int) and not isinstance(ram_bytes, bool):
+                entry["ram_bytes"] = ram_bytes
+            sizes[board] = entry
     return sizes
 
 

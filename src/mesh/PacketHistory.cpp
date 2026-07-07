@@ -9,10 +9,6 @@
 #endif
 #include "Throttle.h"
 
-#define PACKETHISTORY_MAX                                                                                                        \
-    max((uint32_t)(MAX_NUM_NODES * 2.0),                                                                                         \
-        (uint32_t)100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
-
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
 #define VERBOSE_PACKET_HISTORY 0     // Set to 1 for verbose logging, 2 for heavy debugging

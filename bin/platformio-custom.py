@@ -45,6 +45,49 @@ def infer_architecture(board_cfg):
         return "stm32"
     return None
 
+def compute_ram_bytes(env):
+    """Static RAM usage (.data + .bss) of the ELF, via the toolchain size tool.
+
+    Deliberately excludes heap/stack placeholder sections (e.g. the nRF52 .heap
+    section): on nRF52840 the heap arena is the linker gap after .bss, so static
+    RAM growth shrinks the usable heap 1:1 - which is exactly why we track it.
+    Returns None when the value cannot be determined; the manifest then simply
+    omits ram_bytes and downstream size reports show "n/a".
+    """
+    elf = env.File(env.subst("$BUILD_DIR/${PROGNAME}.elf"))
+    if not elf.exists():
+        return None
+    size_tool = env.subst("$SIZETOOL") or "size"
+    try:
+        output = subprocess.check_output(
+            [size_tool, "-A", elf.get_abspath()],
+            env=env["ENV"],
+            universal_newlines=True,
+        )
+    except Exception as exc:
+        print(f"mtjson: skipping ram_bytes ({size_tool} failed: {exc})")
+        return None
+    ram = 0
+    found = False
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        name = parts[0]
+        # Main-SRAM static sections: .data/.bss, platform-prefixed variants (e.g.
+        # ESP32 .dram0.data/.dram0.bss), and RISC-V small-data .sdata/.sbss.
+        # ESP-IDF .rtc.* sections live outside the heap-competing SRAM; .heap and
+        # .tdata never match.
+        if name.startswith(".rtc"):
+            continue
+        if name in (".data", ".bss", ".sdata", ".sbss") or name.endswith(".data") or name.endswith(".bss"):
+            try:
+                ram += int(parts[1])
+                found = True
+            except ValueError:
+                continue
+    return ram if found else None
+
 def manifest_gather(source, target, env):
     global manifest_ran
     if manifest_ran:
@@ -98,9 +141,9 @@ def manifest_gather(source, target, env):
                 d["part_name"] = partition_map[p]
             out.append(d)
             print(d)
-    manifest_write(out, env)
+    manifest_write(out, env, compute_ram_bytes(env))
 
-def manifest_write(files, env):
+def manifest_write(files, env, ram_bytes=None):
     # Defensive: also skip manifest writing if we cannot determine architecture
     def get_project_option(name):
         try:
@@ -137,6 +180,10 @@ def manifest_write(files, env):
         "has_mui": False,
         "has_inkhud": False,
     }
+    # Static RAM footprint (.data + .bss); consumed by bin/collect_sizes.py for
+    # the CI size report and the bin/ram_budgets.json budget gate.
+    if ram_bytes is not None:
+        manifest["ram_bytes"] = ram_bytes
     # Get partition table (generated in esp32_pre.py) if it exists
     if env.get("custom_mtjson_part"):
         # custom_mtjson_part is a JSON string, convert it back to a dict
