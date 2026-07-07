@@ -166,7 +166,7 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
     if (stored)
         *stored = entry;
 
-    if (isExpired(entry)) {
+    if (isExpired(entry, entry.receivedTime)) {
         // Respect the lock: only the node a waypoint is locked to may delete it on our device.
         // An unauthorized deletion attempt is ignored entirely, rather than applied locally.
         for (const auto &existing : waypoints) {
@@ -204,7 +204,7 @@ void WaypointStore::addWaypoint(const meshtastic_Waypoint &wp, uint32_t received
     entry.receivedTime = receivedTime ? receivedTime : getTime();
     entry.creatorNodeNum = creatorNodeNum ? creatorNodeNum : (nodeDB ? nodeDB->getNodeNum() : 0);
 
-    if (isExpired(entry)) {
+    if (isExpired(entry, entry.receivedTime)) {
         const bool removed = removeWaypointById(entry.waypoint.id);
         if (removed) {
 #if ENABLE_WAYPOINT_PERSISTENCE
