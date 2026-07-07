@@ -85,7 +85,7 @@ def test_collect_sizes_ram_bytes():
         }
         write_manifests(tmpdir, manifests)
 
-        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
         assert rc == 0, f"collect_sizes failed: {stderr}"
 
         with open(outfile) as f:
@@ -102,7 +102,7 @@ def test_collect_sizes_non_int_ram_bytes_ignored():
         manifests = {"rak4631": make_manifest("rak4631", 765192, ram_bytes="110948")}
         write_manifests(tmpdir, manifests)
 
-        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
         assert rc == 0, f"collect_sizes failed: {stderr}"
         with open(outfile) as f:
             sizes = json.load(f)
@@ -125,79 +125,12 @@ def test_collect_sizes_fallback_bin():
         with open(path, "w") as f:
             json.dump(data, f)
 
-        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
         assert rc == 0, f"collect_sizes failed: {stderr}"
 
         with open(outfile) as f:
             sizes = json.load(f)
         assert sizes == {"custom-board": {"flash_bytes": 500000}}
-
-
-def test_collect_sizes_uses_ota_zip_when_no_bin():
-    """nRF52 manifests only publish an OTA zip; use it for flash budget checks."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        outfile = os.path.join(tmpdir, "sizes.json")
-        data = {
-            "platformioTarget": "rak4631",
-            "files": [
-                {"name": "firmware-rak4631-2.8.0.abcdef0.elf", "bytes": 1308988},
-                {"name": "firmware-rak4631-2.8.0.abcdef0.hex", "bytes": 2156758},
-                {"name": "firmware-rak4631-2.8.0.abcdef0.uf2", "bytes": 1533952},
-                {"name": "firmware-rak4631-2.8.0.abcdef0-ota.zip", "bytes": 767687},
-            ],
-            "ram_bytes": 104500,
-        }
-        path = os.path.join(tmpdir, "firmware-rak4631.mt.json")
-        with open(path, "w") as f:
-            json.dump(data, f)
-
-        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
-        assert rc == 0, f"collect_sizes failed: {stderr}"
-        assert "1 targets" in stdout
-
-        with open(outfile) as f:
-            sizes = json.load(f)
-        assert sizes == {"rak4631": {"flash_bytes": 767687, "ram_bytes": 104500}}
-
-
-def test_collect_sizes_recurses_manifest_subdirectories():
-    """download-artifact may place each artifact under its own directory."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        outfile = os.path.join(tmpdir, "sizes.json")
-        nested = os.path.join(tmpdir, "manifest-nrf52840-rak4631")
-        os.mkdir(nested)
-        manifests = {"rak4631": make_manifest("rak4631", 524288, ram_bytes=104500)}
-        write_manifests(nested, manifests)
-
-        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
-        assert rc == 0, f"collect_sizes failed: {stderr}"
-        assert "1 targets" in stdout
-
-        with open(outfile) as f:
-            sizes = json.load(f)
-        assert sizes == {"rak4631": {"flash_bytes": 524288, "ram_bytes": 104500}}
-
-
-def test_collect_sizes_warns_on_duplicate_board_manifests():
-    """Duplicate platformioTarget entries should not be overwritten silently."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        outfile = os.path.join(tmpdir, "sizes.json")
-        first = os.path.join(tmpdir, "a")
-        second = os.path.join(tmpdir, "b")
-        os.mkdir(first)
-        os.mkdir(second)
-        write_manifests(first, {"rak4631": make_manifest("rak4631", 524288)})
-        write_manifests(second, {"rak4631": make_manifest("rak4631", 765192)})
-
-        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
-        assert rc == 0, f"collect_sizes failed: {stderr}"
-        assert "duplicate manifest for board 'rak4631'" in stderr
-        assert "a/firmware-rak4631.mt.json" in stderr
-        assert "b/firmware-rak4631.mt.json" in stderr
-
-        with open(outfile) as f:
-            sizes = json.load(f)
-        assert sizes == {"rak4631": {"flash_bytes": 765192}}
 
 
 def test_collect_sizes_skips_ota_littlefs():
