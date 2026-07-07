@@ -38,6 +38,10 @@ constexpr int16_t WAYPOINT_ROW_GAP = 2;
 
 std::string utf8FromCodepoint(uint32_t codepoint)
 {
+    // Surrogate halves aren't valid standalone Unicode scalar values.
+    if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
+        return "";
+
     char buf[5] = {};
     if (codepoint <= 0x7F) {
         buf[0] = static_cast<char>(codepoint);
