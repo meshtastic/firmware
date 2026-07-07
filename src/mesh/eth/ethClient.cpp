@@ -26,6 +26,21 @@
 #endif
 #include <SPI.h>
 
+#ifdef ARCH_RP2040
+#include <hardware/watchdog.h>
+#define FEED_WATCHDOG() watchdog_update()
+#else
+#define FEED_WATCHDOG() ((void)0)
+#endif
+
+// reconnectETH() below runs from the main loop's Periodic scheduler, i.e. after
+// rp2040Loop() has armed the 8s RP2350 hardware watchdog - unlike the boot-time
+// initEthernet() call (which blocks inside setup(), before that watchdog exists).
+// A blocking Ethernet.begin() here must stay well under 8s (including the ~200ms
+// reset pulse before it) or a stalled DHCP server turns "retry Ethernet" into
+// "reboot the whole board every 5s".
+#define ETH_RECONNECT_DHCP_TIMEOUT_MS 4000
+
 #if HAS_NETWORKING && !defined(USE_WS5500) && !defined(USE_CH390D)
 
 #ifndef DISABLE_NTP
@@ -127,13 +142,14 @@ static int32_t reconnectETH()
             Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 #endif
 
+            // Feed right before the blocking call: worst case this is ~4s (DHCP) +
+            // ~200ms (reset pulse above) after the last watchdog_update(), leaving
+            // margin under the 8s timeout even with scheduling jitter.
+            FEED_WATCHDOG();
+
             int status = 0;
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
-#ifdef ETH_DHCP_TIMEOUT_MS
-                status = Ethernet.begin(expectedMac, ETH_DHCP_TIMEOUT_MS);
-#else
-                status = Ethernet.begin(expectedMac);
-#endif
+                status = Ethernet.begin(expectedMac, ETH_RECONNECT_DHCP_TIMEOUT_MS);
             } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
                 Ethernet.begin(expectedMac, config.network.ipv4_config.ip, config.network.ipv4_config.dns,
                                config.network.ipv4_config.gateway, config.network.ipv4_config.subnet);
