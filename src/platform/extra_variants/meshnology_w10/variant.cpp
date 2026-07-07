@@ -42,7 +42,9 @@ void lateInitVariant()
         Wire.beginTransmission(0x18); // ES8311 I2C address
         Wire.write(reg);
         Wire.write(val);
-        Wire.endTransmission();
+        uint8_t err = Wire.endTransmission();
+        if (err != 0)
+            LOG_WARN("ES8311 reg 0x%02x write failed (err=%d)", reg, err);
     };
     es8311_write_reg(0x00, 0x80); // reset, power on
     es8311_write_reg(0x01, 0xB5); // MCLK = BCLK

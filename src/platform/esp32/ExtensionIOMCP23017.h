@@ -1,5 +1,6 @@
 #pragma once
 
+#include "concurrency/Lock.h"
 #include <Arduino.h>
 #include <Wire.h>
 
@@ -49,6 +50,9 @@ class ExtensionIOMCP23017
     TwoWire *_wire;
     uint8_t _addr;
     bool _begun;
+    // Serializes register access: the radio HAL (BUSY/DIO1/RESET) and AudioThread (amp enable) both
+    // reach this expander from different threads, and the read-modify-write paths are not atomic.
+    concurrency::Lock _lock;
 };
 
 /** Global instance shared by the early-init hook and the RadioLib HAL. */

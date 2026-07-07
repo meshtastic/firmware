@@ -405,7 +405,7 @@ std::unique_ptr<RadioInterface> initLoRa()
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI1, loraSpiSettings);
     RadioLibHAL = loraHal;
-#elif defined(USE_MCP23017)
+#elif defined(ARCH_ESP32) && defined(USE_MCP23017)
     // Radio control lines (RESET/DIO1/BUSY) are virtual pins on an MCP23017 I2C expander
     LockingArduinoHal *loraHal = new MCP23017LockingArduinoHal(SPI, loraSpiSettings, mcpIoExpander);
     RadioLibHAL = loraHal;

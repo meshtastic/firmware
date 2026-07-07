@@ -3,6 +3,7 @@
 #if defined(ARCH_ESP32) && defined(USE_MCP23017)
 
 #include "ExtensionIOMCP23017.h"
+#include "concurrency/LockGuard.h"
 
 ExtensionIOMCP23017 mcpIoExpander;
 
@@ -65,6 +66,7 @@ void ExtensionIOMCP23017::pinMode(uint8_t pin, uint8_t mode)
 {
     if (pin > 15)
         return;
+    concurrency::LockGuard guard(&_lock);
     if (mode == OUTPUT) {
         updateDirectionBit(pin, true);
     } else {
@@ -85,6 +87,7 @@ void ExtensionIOMCP23017::digitalWrite(uint8_t pin, uint8_t value)
 {
     if (pin > 15)
         return;
+    concurrency::LockGuard guard(&_lock);
     uint8_t reg = olatRegForPin(pin);
     uint8_t v;
     if (!readReg(reg, v)) // skip rather than clobber the bank (e.g. drop LORA_NRST) on a failed read
@@ -101,7 +104,12 @@ int ExtensionIOMCP23017::digitalRead(uint8_t pin)
 {
     if (pin > 15)
         return LOW;
-    uint8_t v = readReg(gpioRegForPin(pin));
+    concurrency::LockGuard guard(&_lock);
+    uint8_t v;
+    if (!readReg(gpioRegForPin(pin), v))
+        return HIGH; // fail-safe: a failed read must not look like "LoRa BUSY released" and let RadioLib
+                     // start an SPI transaction too early. DIO1 is polled via the radio IRQ register, not
+                     // this pin, so reading it high on error is harmless there.
     return (v & bitForPin(pin)) ? HIGH : LOW;
 }
 
@@ -109,8 +117,11 @@ void ExtensionIOMCP23017::enablePinChangeInterrupt(uint8_t pin, bool enable)
 {
     if (pin > 15)
         return;
+    concurrency::LockGuard guard(&_lock);
     uint8_t regG = gpintenRegForPin(pin);
-    uint8_t v = readReg(regG);
+    uint8_t v;
+    if (!readReg(regG, v)) // skip rather than clobber the bank on a failed read
+        return;
     if (enable)
         v |= bitForPin(pin);
     else
@@ -118,7 +129,8 @@ void ExtensionIOMCP23017::enablePinChangeInterrupt(uint8_t pin, bool enable)
     writeReg(regG, v);
     // INTCON: 0 = interrupt on pin change from previous value
     uint8_t regI = intconRegForPin(pin);
-    v = readReg(regI);
+    if (!readReg(regI, v))
+        return;
     v &= ~bitForPin(pin);
     writeReg(regI, v);
 }
@@ -127,12 +139,14 @@ void ExtensionIOMCP23017::clearInterruptLatches()
 {
     if (!_begun)
         return;
+    concurrency::LockGuard guard(&_lock);
     (void)readReg(0x10); // INTCAPA - clears INTA condition
     (void)readReg(0x11); // INTCAPB
 }
 
 uint8_t ExtensionIOMCP23017::readRegister(uint8_t reg)
 {
+    concurrency::LockGuard guard(&_lock);
     return readReg(reg);
 }
 
