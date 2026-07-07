@@ -60,8 +60,23 @@ static int32_t reconnectETH()
         getMacAddr(expectedMac);
         expectedMac[0] &= 0xfe;
 
-        if (memcmp(currentMac, expectedMac, 6) != 0) {
-            LOG_WARN("W5100S MAC mismatch (chip reset detected), reinitializing Ethernet");
+        bool chipWasReset = memcmp(currentMac, expectedMac, 6) != 0;
+        // initEthernet() registers this watchdog even when its own boot-time begin()
+        // never got an address (e.g. DHCP timed out racing a switch's port-forwarding
+        // delay) - previously that meant Ethernet stayed dead until a manual reboot.
+        // Gate the retry on LinkON (a cheap register read): Ethernet.begin() blocks
+        // up to ETH_DHCP_TIMEOUT_MS, so without this a board legitimately running
+        // with no cable/no chip would pay that cost every 5s forever. LinkON also
+        // covers "cable plugged in after boot", since it just means link is up now.
+        bool neverGotAddress =
+            !ethStartupComplete && Ethernet.localIP() == IPAddress(0, 0, 0, 0) && Ethernet.linkStatus() == LinkON;
+
+        if (chipWasReset || neverGotAddress) {
+            if (chipWasReset) {
+                LOG_WARN("W5100S MAC mismatch (chip reset detected), reinitializing Ethernet");
+            } else {
+                LOG_WARN("Ethernet never acquired an address at boot, retrying");
+            }
 
             syslog.disable();
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
@@ -303,14 +318,17 @@ bool initEthernet()
         if (status == 0) {
             if (Ethernet.hardwareStatus() == EthernetNoHardware) {
                 LOG_ERROR("Ethernet shield was not found");
-                return false;
             } else if (Ethernet.linkStatus() == LinkOFF) {
                 LOG_ERROR("Ethernet cable is not connected");
-                return false;
             } else {
                 LOG_ERROR("Unknown Ethernet error");
-                return false;
             }
+            // Previously this returned here without ever creating ethEvent below,
+            // so a boot-time failure (e.g. DHCP racing a switch's port-forwarding
+            // delay) left Ethernet dead until a manual reboot. Register the
+            // watchdog regardless - reconnectETH() retries the begin() sequence
+            // every 5s whenever it sees no address yet.
+            LOG_WARN("Ethernet not ready at boot, will keep retrying in the background");
         } else {
             LOG_INFO("Local IP %u.%u.%u.%u", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2],
                      Ethernet.localIP()[3]);
@@ -324,7 +342,7 @@ bool initEthernet()
 
         ethEvent = new Periodic("ethConnect", reconnectETH);
 
-        return true;
+        return status != 0;
     } else {
         LOG_INFO("Not using Ethernet");
         return false;
