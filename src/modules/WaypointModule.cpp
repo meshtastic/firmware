@@ -176,8 +176,9 @@ size_t collectDrawableWaypoints(const StoredWaypoint *entries[], size_t maxEntri
     for (const StoredWaypoint &entry : waypointStore.getWaypoints()) {
         if (WaypointStore::isExpired(entry))
             continue;
-        if (count < maxEntries)
-            entries[count] = &entry;
+        if (count >= maxEntries)
+            break;
+        entries[count] = &entry;
         ++count;
     }
 
