@@ -29,6 +29,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if HAS_SCREEN
 #include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
+#if defined(USE_HUB75)
+#include "graphics/HUB75Display.h"
+#endif
 
 #include "DisplayFormatters.h"
 #include "TimeFormatters.h"
@@ -496,6 +499,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #else
     dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
+#elif defined(USE_HUB75)
+    dispdev = new HUB75Display(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
