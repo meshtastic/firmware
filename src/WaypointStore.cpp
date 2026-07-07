@@ -255,9 +255,12 @@ void WaypointStore::saveToFlash()
 
     spiLock->lock();
     const uint8_t version = WAYPOINT_STORE_VERSION;
-    uint8_t count = (uint8_t)waypoints.size();
-    if (count > WAYPOINT_HISTORY_LIMIT)
-        count = WAYPOINT_HISTORY_LIMIT;
+    size_t countFull = waypoints.size();
+    if (countFull > WAYPOINT_HISTORY_LIMIT)
+        countFull = WAYPOINT_HISTORY_LIMIT;
+    if (countFull > UINT8_MAX)
+        countFull = UINT8_MAX;
+    const uint8_t count = (uint8_t)countFull;
 
     f.write(&version, 1);
     f.write(&count, 1);
