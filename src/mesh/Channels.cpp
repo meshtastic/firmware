@@ -87,6 +87,9 @@ void Channels::initDefaultLoraConfig()
     loraConfig.tx_power = 0; // default
     loraConfig.channel_num = 0;
 
+#ifdef USERPREFS_LORACONFIG_TX_POWER
+    loraConfig.tx_power = USERPREFS_LORACONFIG_TX_POWER;
+#endif
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #endif
@@ -236,7 +239,9 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
         memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
-            if (ch.role == meshtastic_Channel_Role_SECONDARY) {
+            // A secondary with no PSK borrows the primary's key; the chIndex != primaryIndex check
+            // prevents infinite recursion if the primary slot itself is marked SECONDARY
+            if (ch.role == meshtastic_Channel_Role_SECONDARY && chIndex != primaryIndex) {
                 LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
                 k = getKey(primaryIndex);
             } else {
@@ -306,11 +311,28 @@ void Channels::initDefaults()
 void Channels::onConfigChanged()
 {
     // Make sure the phone hasn't mucked anything up
+    bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
         const meshtastic_Channel &ch = fixupChannel(i);
 
-        if (ch.role == meshtastic_Channel_Role_PRIMARY)
+        if (ch.role == meshtastic_Channel_Role_PRIMARY) {
             primaryIndex = i;
+            hasPrimary = true;
+        }
+    }
+    // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
+    // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
+    if (!hasPrimary) {
+        meshtastic_Channel &stale = getByIndex(primaryIndex);
+        if (stale.role == meshtastic_Channel_Role_SECONDARY) {
+            stale.role = meshtastic_Channel_Role_PRIMARY; // keep the slot's key material
+        } else {
+            // Promoting a DISABLED (zeroed) slot would make a plaintext primary; restore the default
+            primaryIndex = 0;
+            initDefaultChannel(0);
+        }
+        LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
+        fixupChannel(primaryIndex);
     }
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
