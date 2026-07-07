@@ -22,7 +22,7 @@ const char *inlineTextFor(const StoredMessage &message)
     case AckStatus::TOO_LARGE:
         return "Message is too large to send";
     case AckStatus::NO_CHANNEL:
-        return "No channel selected";
+        return "Channel/key mismatch";
     case AckStatus::PKI_FAILED:
         return "Could not send encrypted message";
     case AckStatus::PKI_UNKNOWN_PUBKEY:

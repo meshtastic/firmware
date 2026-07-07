@@ -206,11 +206,13 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     sm.dest = packet.to;
     sm.packetId = packet.id;
 
-    bool isDM = (sm.dest != 0 && sm.dest != NODENUM_BROADCAST);
+    bool isDM = (sm.dest != 0 && !isBroadcast(sm.dest));
 
     sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
     bool isLocalOutgoing = packet.from == 0;
     sm.ackStatus = isLocalOutgoing ? AckStatus::NONE : AckStatus::ACKED;
+    // Only directed local sends have a routing response the Base UI can match.
+    // Channel sends are stored untrackable so AckStatus::NONE renders no inline pending text.
     sm.ackTrackable = isLocalOutgoing && isDM && sm.packetId != 0;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)

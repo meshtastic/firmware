@@ -1047,7 +1047,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->channel = channel;
-    p->want_ack = true;
+    const bool expectsRoutingStatus = dest != 0 && !isBroadcast(dest);
+    p->want_ack = expectsRoutingStatus;
     p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
     this->lastSentNode = dest;
@@ -1082,7 +1083,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
     }
 
-    this->waitingForAck = true;
+    this->waitingForAck = expectsRoutingStatus && this->lastRequestId != 0;
 
     // Send to mesh (PKI-encrypted if conditions above matched)
     service->sendToMesh(p, RX_SRC_LOCAL, true);
@@ -1127,8 +1128,10 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         }
     }
     sm.ackStatus = AckStatus::NONE;
-    sm.ackTrackable = true;
     sm.packetId = this->lastRequestId;
+    // Broadcast want_ack is stripped before transmit, so only directed sends have
+    // a production routing response that can update this stored message.
+    sm.ackTrackable = expectsRoutingStatus && sm.packetId != 0;
 
     messageStore.addLiveMessage(std::move(sm));
 

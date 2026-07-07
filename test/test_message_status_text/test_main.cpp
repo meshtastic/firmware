@@ -34,7 +34,7 @@ static void ensureLocalNodeNum(NodeNum localNode)
     myNodeInfo.my_node_num = localNode;
 }
 
-static meshtastic_MeshPacket makePhoneDm(PacketId packetId, NodeNum dest)
+static meshtastic_MeshPacket makePhoneText(PacketId packetId, NodeNum dest)
 {
     meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_default;
     packet.from = 0;
@@ -96,7 +96,7 @@ static void test_message_too_large_text()
 static void test_no_channel_text()
 {
     StoredMessage message = makeMessage(AckStatus::NO_CHANNEL, NODENUM_BROADCAST);
-    TEST_ASSERT_EQUAL_STRING("No channel selected", graphics::MessageStatusText::inlineTextFor(message));
+    TEST_ASSERT_EQUAL_STRING("Channel/key mismatch", graphics::MessageStatusText::inlineTextFor(message));
 }
 
 static void test_pki_failure_text()
@@ -206,7 +206,7 @@ static void test_phone_originated_dm_is_tracked_from_packet()
     ensureLocalNodeNum(localNode);
     MessageStore store("phone_dm_tracking");
 
-    const StoredMessage &stored = store.addFromPacket(makePhoneDm(packetId, destNode));
+    const StoredMessage &stored = store.addFromPacket(makePhoneText(packetId, destNode));
 
     TEST_ASSERT_EQUAL_UINT32(localNode, stored.sender);
     TEST_ASSERT_EQUAL_UINT32(destNode, stored.dest);
@@ -214,6 +214,32 @@ static void test_phone_originated_dm_is_tracked_from_packet()
     TEST_ASSERT_TRUE(stored.ackTrackable);
     assertAckStatus(AckStatus::NONE, stored.ackStatus);
     assertInlineText("Sending...", stored);
+}
+
+static void test_phone_originated_channel_is_stored_untrackable_from_packet()
+{
+    constexpr NodeNum localNode = 0x11111111;
+    constexpr NodeNum relayNode = 0x33333333;
+    constexpr PacketId packetId = 0xaaaa0001;
+
+    ensureLocalNodeNum(localNode);
+    MessageStore store("phone_channel_untracked");
+
+    const StoredMessage &stored = store.addFromPacket(makePhoneText(packetId, NODENUM_BROADCAST));
+
+    TEST_ASSERT_EQUAL_UINT32(localNode, stored.sender);
+    TEST_ASSERT_EQUAL_UINT32(NODENUM_BROADCAST, stored.dest);
+    TEST_ASSERT_EQUAL_UINT32(packetId, stored.packetId);
+    TEST_ASSERT_FALSE(stored.ackTrackable);
+    assertAckStatus(AckStatus::NONE, stored.ackStatus);
+    assertInlineText("", stored);
+
+    TEST_ASSERT_FALSE(store.updateAckStatusFromRouting(localNode, packetId, relayNode, meshtastic_Routing_Error_NONE));
+
+    const auto &messages = store.getMessages();
+    TEST_ASSERT_EQUAL_UINT32(1U, messages.size());
+    assertAckStatus(AckStatus::NONE, messages.front().ackStatus);
+    assertInlineText("", messages.front());
 }
 
 static void test_phone_originated_dm_updates_from_routing_status()
@@ -230,12 +256,12 @@ static void test_phone_originated_dm_updates_from_routing_status()
 
     ensureLocalNodeNum(localNode);
     MessageStore store("phone_dm_status");
-    store.addFromPacket(makePhoneDm(deliveredPacket, destNode));
-    store.addFromPacket(makePhoneDm(relayedPacket, destNode));
-    store.addFromPacket(makePhoneDm(failedPacket, destNode));
-    store.addFromPacket(makePhoneDm(pkiMissingRecipientKeyPacket, destNode));
-    store.addFromPacket(makePhoneDm(pkiRecipientMissingSenderKeyPacket, destNode));
-    store.addFromPacket(makePhoneDm(tooLargePacket, destNode));
+    store.addFromPacket(makePhoneText(deliveredPacket, destNode));
+    store.addFromPacket(makePhoneText(relayedPacket, destNode));
+    store.addFromPacket(makePhoneText(failedPacket, destNode));
+    store.addFromPacket(makePhoneText(pkiMissingRecipientKeyPacket, destNode));
+    store.addFromPacket(makePhoneText(pkiRecipientMissingSenderKeyPacket, destNode));
+    store.addFromPacket(makePhoneText(tooLargePacket, destNode));
 
     TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, deliveredPacket, destNode, meshtastic_Routing_Error_NONE));
     TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, relayedPacket, relayNode, meshtastic_Routing_Error_NONE));
@@ -288,6 +314,7 @@ void setup()
     RUN_TEST(test_message_store_updates_matching_packet_id);
     RUN_TEST(test_message_store_does_not_update_untracked_pending_message);
     RUN_TEST(test_phone_originated_dm_is_tracked_from_packet);
+    RUN_TEST(test_phone_originated_channel_is_stored_untrackable_from_packet);
     RUN_TEST(test_phone_originated_dm_updates_from_routing_status);
 #endif
 
