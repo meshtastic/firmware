@@ -62,7 +62,7 @@ class menuHandler
         LicensedToNormalConfirm
     };
     static screenMenus menuQueue;
-    static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
+    static uint32_t pickedNodeNum;    // node selected by NodePicker for ManageNodeMenu
     static uint32_t pickedWaypointId; // waypoint selected by removeWaypointMenu for RemoveWaypointConfirm
     static meshtastic_Config_LoRaConfig_RegionCode pendingRegion;
 

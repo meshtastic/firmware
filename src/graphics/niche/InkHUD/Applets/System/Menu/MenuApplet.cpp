@@ -2481,8 +2481,8 @@ void InkHUD::MenuApplet::populateRemoveWaypointPage()
     if (waypointListApplet) {
         for (size_t i = 0; i < waypointListApplet->waypointCount(); i++) {
             removeWaypointIds.push_back(waypointListApplet->waypointIdAt(i));
-            items.push_back(
-                MenuItem(waypointListApplet->waypointLabelAt(i).c_str(), MenuAction::REMOVE_WAYPOINT, MenuPage::REMOVE_WAYPOINT_LIST));
+            items.push_back(MenuItem(waypointListApplet->waypointLabelAt(i).c_str(), MenuAction::REMOVE_WAYPOINT,
+                                     MenuPage::REMOVE_WAYPOINT_LIST));
         }
     }
 }
