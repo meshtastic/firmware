@@ -43,7 +43,7 @@ struct BannerOverlayOptions {
 bool shouldWakeOnReceivedMessage();
 
 #if !HAS_SCREEN
-#include "power.h"
+#include "Power.h"
 namespace graphics
 {
 // Noop class for boards without screen.
@@ -107,6 +107,7 @@ class Screen
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
 #include "PointStruct.h"
+#include "Power.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"
@@ -116,7 +117,6 @@ class Screen
 #include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
 #include "modules/AdminModule.h"
-#include "power.h"
 #include <string>
 #include <vector>
 
