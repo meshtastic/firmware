@@ -177,13 +177,7 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
             break;
         }
 
-        const bool removed = removeWaypointById(entry.waypoint.id);
-        if (removed) {
-#if ENABLE_WAYPOINT_PERSISTENCE
-            markWaypointStoreUnsaved();
-#endif
-            notifyChanged();
-        }
+        removeWaypoint(entry.waypoint.id);
         return true;
     }
 
@@ -205,13 +199,7 @@ void WaypointStore::addWaypoint(const meshtastic_Waypoint &wp, uint32_t received
     entry.creatorNodeNum = creatorNodeNum ? creatorNodeNum : (nodeDB ? nodeDB->getNodeNum() : 0);
 
     if (isExpired(entry, entry.receivedTime)) {
-        const bool removed = removeWaypointById(entry.waypoint.id);
-        if (removed) {
-#if ENABLE_WAYPOINT_PERSISTENCE
-            markWaypointStoreUnsaved();
-#endif
-            notifyChanged();
-        }
+        removeWaypoint(entry.waypoint.id);
         return;
     }
 
@@ -365,6 +353,15 @@ void WaypointStore::loadFromFlash()
 void WaypointStore::clearAllWaypoints()
 {
     const bool hadWaypoints = !waypoints.empty();
+
+    if (geofenceModule) {
+        for (const auto &entry : waypoints) {
+            meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
+            wp.id = entry.waypoint.id;
+            geofenceModule->onWaypointReceived(wp, 0);
+        }
+    }
+
     std::deque<StoredWaypoint>().swap(waypoints);
 
 #if ENABLE_WAYPOINT_PERSISTENCE && defined(FSCom)
