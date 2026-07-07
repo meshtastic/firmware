@@ -85,7 +85,7 @@ def test_collect_sizes_ram_bytes():
         }
         write_manifests(tmpdir, manifests)
 
-        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
         assert rc == 0, f"collect_sizes failed: {stderr}"
 
         with open(outfile) as f:
@@ -102,7 +102,7 @@ def test_collect_sizes_non_int_ram_bytes_ignored():
         manifests = {"rak4631": make_manifest("rak4631", 765192, ram_bytes="110948")}
         write_manifests(tmpdir, manifests)
 
-        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
         assert rc == 0, f"collect_sizes failed: {stderr}"
         with open(outfile) as f:
             sizes = json.load(f)
@@ -125,7 +125,7 @@ def test_collect_sizes_fallback_bin():
         with open(path, "w") as f:
             json.dump(data, f)
 
-        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
         assert rc == 0, f"collect_sizes failed: {stderr}"
 
         with open(outfile) as f:
@@ -189,7 +189,7 @@ def test_collect_sizes_warns_on_duplicate_board_manifests():
         write_manifests(first, {"rak4631": make_manifest("rak4631", 524288)})
         write_manifests(second, {"rak4631": make_manifest("rak4631", 765192)})
 
-        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        rc, _stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
         assert rc == 0, f"collect_sizes failed: {stderr}"
         assert "duplicate manifest for board 'rak4631'" in stderr
         assert "a/firmware-rak4631.mt.json" in stderr
