@@ -406,7 +406,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 
     // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not entering
     // LightSleep.
-#if defined(SENSECAP_INDICATOR)
+#if defined(SENSECAP_INDICATOR) || defined(LORA_DIO1_SOFTWARE_POLL)
     return ESP_SLEEP_WAKEUP_TIMER;
 #endif
 
@@ -586,7 +586,9 @@ bool shouldLoraWake(uint32_t msecToWake)
 
 void enableLoraInterrupt()
 {
-#if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+#if defined(LORA_DIO1_SOFTWARE_POLL)
+    // DIO1 is a virtual pin on an I2C IO expander - it cannot be a GPIO wakeup source
+#elif SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     esp_err_t res;
     res = gpio_pulldown_en((gpio_num_t)LORA_DIO1);
     if (res != ESP_OK) {
