@@ -30,6 +30,13 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
     void onNavDown() override;
     bool onTouchPoint(uint16_t x, uint16_t y, bool longPress) override;
 
+    WaypointListApplet *asWaypointListApplet() override { return this; } // Identify as WaypointListApplet without RTTI
+
+    // Read-only access for MenuApplet's "Remove Waypoint" page
+    size_t waypointCount() const { return waypoints.size(); }
+    uint32_t waypointIdAt(size_t index) const { return waypoints.at(index).id; }
+    std::string waypointLabelAt(size_t index) { return waypointName(waypoints.at(index)); }
+
   protected:
     int32_t runOnce() override;
 
@@ -57,6 +64,7 @@ class WaypointListApplet : public Applet, public SinglePortModule, public concur
     uint8_t rowHeight(const WaypointCard &entry, bool landscape);
     uint8_t maxScrollOffset(bool landscape);
     void scrollBy(int delta);
+    bool rowIndexAt(int16_t y, bool landscape, uint8_t &indexOut); // Which waypoint row is at this y, if any
     bool tryGetOwnPosition(meshtastic_PositionLite &out);
     uint32_t nextExpiryUpdateMs(uint32_t secondsLeft);
     uint32_t nextRefreshIntervalMs();

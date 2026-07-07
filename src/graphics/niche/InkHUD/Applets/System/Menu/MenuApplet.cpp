@@ -11,9 +11,11 @@
 #include "Router.h"
 #include "airtime.h"
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Waypoints/WaypointListApplet.h"
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "modules/WaypointModule.h"
 #include "power.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
@@ -1160,6 +1162,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
     }
 
+    case REMOVE_WAYPOINT: {
+        // cursor - 2 because index 0 is "Back" and index 1 is the "Select to Remove" header
+        const size_t index = cursor - 2;
+        if (waypointModule && index < removeWaypointIds.size())
+            waypointModule->broadcastDelete(removeWaypointIds.at(index));
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -1176,6 +1186,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     items.clear();
     items.shrink_to_fit();
     nodeConfigLabels.clear();
+    removeWaypointIds.clear();
 
     switch (page) {
     case ROOT:
@@ -1199,6 +1210,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             }
         }
 
+        // Remove Waypoint - only when viewing the waypoint list applet
+        {
+            WaypointListApplet *waypointListApplet = borrowedTileOwner ? borrowedTileOwner->asWaypointListApplet() : nullptr;
+            if (waypointListApplet && waypointListApplet->waypointCount() > 0)
+                items.push_back(MenuItem("Remove Waypoint", MenuPage::REMOVE_WAYPOINT_LIST));
+        }
+
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
@@ -1214,6 +1232,14 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case CANNEDMESSAGE_RECIPIENT:
         populateRecipientPage();
         previousPage = MenuPage::SEND;
+        break;
+
+    case REMOVE_WAYPOINT_LIST:
+        previousPage = MenuPage::ROOT;
+        populateRemoveWaypointPage(); // must be first
+        items.insert(items.begin(), MenuItem::Header("Select to Remove"));
+        items.insert(items.begin(), MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case OPTIONS:
@@ -2444,6 +2470,21 @@ void InkHUD::MenuApplet::populateRecipientPage()
     }
 
     items.push_back(MenuItem("Exit", MenuPage::EXIT));
+}
+
+// Dynamically create MenuItem entries for each waypoint in the active WaypointListApplet
+void InkHUD::MenuApplet::populateRemoveWaypointPage()
+{
+    assert(items.size() == 0);
+
+    WaypointListApplet *waypointListApplet = borrowedTileOwner ? borrowedTileOwner->asWaypointListApplet() : nullptr;
+    if (waypointListApplet) {
+        for (size_t i = 0; i < waypointListApplet->waypointCount(); i++) {
+            removeWaypointIds.push_back(waypointListApplet->waypointIdAt(i));
+            items.push_back(
+                MenuItem(waypointListApplet->waypointLabelAt(i).c_str(), MenuAction::REMOVE_WAYPOINT, MenuPage::REMOVE_WAYPOINT_LIST));
+        }
+    }
 }
 
 void InkHUD::MenuApplet::drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height, const std::string &text)

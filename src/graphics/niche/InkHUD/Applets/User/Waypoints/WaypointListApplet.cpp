@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "WaypointStore.h"
+#include "modules/WaypointModule.h"
 
 #include <algorithm>
 #include <cmath>
@@ -201,6 +202,29 @@ uint8_t InkHUD::WaypointListApplet::maxScrollOffset(bool landscape)
     return start;
 }
 
+bool InkHUD::WaypointListApplet::rowIndexAt(int16_t y, bool landscape, uint8_t &indexOut)
+{
+    if (waypoints.empty())
+        return false;
+
+    const uint8_t start = std::min<uint8_t>(scrollOffset, (uint8_t)waypoints.size() - 1);
+    const uint8_t rows = visibleRows(start, landscape);
+    const uint8_t end = std::min<uint8_t>((uint8_t)waypoints.size(), start + rows);
+
+    // Walk the same row layout used by onRender, stopping at whichever row contains y
+    int16_t rowTop = getHeaderHeight() + 2;
+    for (uint8_t i = start; i < end; ++i) {
+        const uint8_t rowH = rowHeight(waypoints.at(i), landscape);
+        if (y < rowTop + rowH) {
+            indexOut = i;
+            return true;
+        }
+        rowTop += rowH;
+    }
+
+    return false;
+}
+
 void InkHUD::WaypointListApplet::scrollBy(int delta)
 {
     const bool landscape = width() > height();
@@ -225,8 +249,21 @@ void InkHUD::WaypointListApplet::onNavDown()
 bool InkHUD::WaypointListApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
 {
     (void)x;
-    if (longPress || waypoints.empty() || y < getHeaderHeight())
+    if (waypoints.empty() || y < getHeaderHeight())
         return false;
+
+    const bool landscape = width() > height();
+
+    // Long press a row to delete that waypoint (broadcasts the deletion to the mesh too)
+    if (longPress) {
+        uint8_t index = 0;
+        if (!rowIndexAt(y, landscape, index))
+            return false;
+
+        if (waypointModule)
+            waypointModule->broadcastDelete(waypoints.at(index).id);
+        return true;
+    }
 
     const uint16_t midpoint = getHeaderHeight() + ((height() - getHeaderHeight()) / 2);
     scrollBy(y < midpoint ? -1 : 1);
