@@ -33,6 +33,7 @@ class WaypointStore : public Observable<const WaypointStore *>
     bool addFromPacket(const meshtastic_MeshPacket &packet, StoredWaypoint *stored = nullptr);
     void addWaypoint(const meshtastic_Waypoint &wp, uint32_t receivedTime = 0, NodeNum creatorNodeNum = 0);
     bool purgeExpired(uint32_t now = 0);
+    bool removeWaypoint(uint32_t id);
 
     const std::deque<StoredWaypoint> &getWaypoints() const { return waypoints; }
 

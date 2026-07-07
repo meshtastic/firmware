@@ -26,6 +26,10 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
 #include "modules/TraceRouteModule.h"
+#include "modules/WaypointModule.h"
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -126,6 +130,7 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
 uint32_t menuHandler::pickedNodeNum = 0;
+uint32_t menuHandler::pickedWaypointId = 0;
 meshtastic_Config_LoRaConfig_RegionCode menuHandler::pendingRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 bool test_enabled = false;
 uint8_t test_count = 0;
@@ -2268,6 +2273,74 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::waypointBaseMenu()
+{
+    enum optionsNumbers { Back, RemoveWaypoint };
+    static const char *optionsArray[] = {"Back", "Remove Waypoint"};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Waypoint Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == RemoveWaypoint) {
+            menuQueue = RemoveWaypointMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::removeWaypointMenu()
+{
+#if MESHTASTIC_EXCLUDE_WAYPOINT
+    menuQueue = MenuNone;
+#else
+    static const char *optionsArray[WAYPOINT_HISTORY_LIMIT + 1];
+    static int optionsEnumArray[WAYPOINT_HISTORY_LIMIT + 1];
+    static uint32_t waypointIds[WAYPOINT_HISTORY_LIMIT + 1];
+    static std::string labelStorage[WAYPOINT_HISTORY_LIMIT + 1];
+
+    optionsArray[0] = "Back";
+    optionsEnumArray[0] = 0;
+    int options = 1;
+
+    for (const auto &entry : waypointStore.getWaypoints()) {
+        if (options > WAYPOINT_HISTORY_LIMIT)
+            break;
+        std::string name = sanitizeString(entry.waypoint.name);
+        if (name.empty())
+            name = "Unnamed Waypoint";
+        labelStorage[options] = name.substr(0, 20);
+        optionsArray[options] = labelStorage[options].c_str();
+        optionsEnumArray[options] = options;
+        waypointIds[options] = entry.waypoint.id;
+        options++;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Remove Waypoint";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 0) {
+            menuQueue = WaypointBaseMenu;
+            screen->runNow();
+            return;
+        }
+        pickedWaypointId = waypointIds[selected];
+        LOG_INFO("Removing waypoint 0x%x", menuHandler::pickedWaypointId);
+        if (waypointModule)
+            waypointModule->broadcastDelete(menuHandler::pickedWaypointId);
+        else
+            waypointStore.removeWaypoint(menuHandler::pickedWaypointId);
+        screen->setFrames(graphics::Screen::FOCUS_DEFAULT);
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
 void menuHandler::traceRouteMenu()
 {
     screen->showNodePicker("Node to Trace", 30000, [](uint32_t nodenum) -> void {
@@ -2857,6 +2930,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case RemoveFavorite:
         removeFavoriteMenu();
+        break;
+    case WaypointBaseMenu:
+        waypointBaseMenu();
+        break;
+    case RemoveWaypointMenu:
+        removeWaypointMenu();
         break;
     case TraceRouteMenu:
         traceRouteMenu();

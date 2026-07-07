@@ -36,6 +36,8 @@ class menuHandler
         NodePickerMenu,
         ManageNodeMenu,
         RemoveFavorite,
+        WaypointBaseMenu,
+        RemoveWaypointMenu,
         TestMenu,
         NumberTest,
         WifiToggleMenu,
@@ -61,6 +63,7 @@ class menuHandler
     };
     static screenMenus menuQueue;
     static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
+    static uint32_t pickedWaypointId; // waypoint selected by removeWaypointMenu for RemoveWaypointConfirm
     static meshtastic_Config_LoRaConfig_RegionCode pendingRegion;
 
     static void OnboardMessage();
@@ -101,6 +104,8 @@ class menuHandler
     static void manageNodeMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
+    static void waypointBaseMenu();
+    static void removeWaypointMenu();
     static void traceRouteMenu();
     static void testMenu();
     static void numberTest();

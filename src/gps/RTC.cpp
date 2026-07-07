@@ -25,7 +25,7 @@ static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality n
 static void triggerWaypointRefreshOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT && HAS_SCREEN
-    if (waypointModule && (oldQuality != newQuality || newQuality > RTCQualityNone))
+    if (waypointModule && oldQuality != newQuality)
         waypointModule->onDeviceTimeChanged();
 #else
     (void)oldQuality;

@@ -299,7 +299,7 @@ void GeofenceModule::notify(const Geofence &g, NodeNum node, bool entered)
     if (screen) {
         char banner[120];
         snprintf(banner, sizeof(banner), "%s %s %s", who, entered ? "IN" : "OUT", g.name);
-        screen->showSimpleBanner(banner, 3000);
+        screen->showSimpleBanner(banner, 5000);
     }
 #endif
 

@@ -124,6 +124,27 @@ bool WaypointStore::removeWaypointById(uint32_t id)
     return false;
 }
 
+bool WaypointStore::removeWaypoint(uint32_t id)
+{
+    const bool removed = removeWaypointById(id);
+    if (!removed)
+        return false;
+
+    if (geofenceModule) {
+        // creatorNodeNum=0 forces an unconditional untrack (removeGeofence() is private).
+        meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
+        wp.id = id;
+        geofenceModule->onWaypointReceived(wp, 0);
+    }
+
+#if ENABLE_WAYPOINT_PERSISTENCE
+    markWaypointStoreUnsaved();
+#endif
+    notifyChanged();
+
+    return true;
+}
+
 void WaypointStore::addStoredWaypoint(const StoredWaypoint &entry)
 {
     removeWaypointById(entry.waypoint.id);
@@ -140,7 +161,7 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
         return false;
 
     entry.receivedTime = packet.rx_time ? packet.rx_time : getTime();
-    entry.creatorNodeNum = packet.from;
+    entry.creatorNodeNum = getFrom(&packet);
 
     if (stored)
         *stored = entry;

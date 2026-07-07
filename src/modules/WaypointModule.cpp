@@ -13,7 +13,10 @@
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "ExternalNotificationModule.h"
 #include "GeofenceModule.h"
+#include "MeshService.h"
 #include "WaypointStore.h"
+#include "mesh/Router.h"
+#include <pb_encode.h>
 #endif
 
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_WAYPOINT
@@ -240,6 +243,45 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 #endif
 }
 
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+bool WaypointModule::broadcastDelete(uint32_t waypointId)
+{
+    meshtastic_Waypoint wp = meshtastic_Waypoint_init_zero;
+    bool found = false;
+    for (const auto &entry : waypointStore.getWaypoints()) {
+        if (entry.waypoint.id == waypointId) {
+            wp = entry.waypoint;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+
+    // Already-expired = the mesh convention for "delete this waypoint".
+    wp.expire = 1;
+
+    meshtastic_MeshPacket *p = router ? router->allocForSending() : nullptr;
+    if (!p)
+        return false;
+
+    p->decoded.portnum = meshtastic_PortNum_WAYPOINT_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Waypoint_msg, &wp);
+
+    if (!service) {
+        packetPool.release(p);
+        return false;
+    }
+
+    service->sendToMesh(p, RX_SRC_USER);
+
+    waypointStore.removeWaypoint(waypointId);
+
+    return true;
+}
+#endif
+
 #if HAS_SCREEN
 bool WaypointModule::shouldDraw()
 {
@@ -260,8 +302,9 @@ void WaypointModule::onDeviceTimeChanged()
     if (!screen)
         return;
 
+    // Refresh only; never steal focus.
     UIFrameEvent e;
-    e.action = shouldDraw() ? UIFrameEvent::Action::REGENERATE_FRAMESET : UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
     notifyObservers(&e);
 #endif
 }
