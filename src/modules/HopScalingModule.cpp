@@ -420,7 +420,7 @@ void HopScalingModule::trimIfNeeded()
                 newCount++;
             }
         }
-        count = newCount;
+        this->count = newCount;
     }
 }
 
