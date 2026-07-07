@@ -15,13 +15,13 @@
 #include <stdio.h>
 
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerMon.h"
 #include "Router.h"
 #include "error.h"
 #include "main.h"
 #include "mesh/MeshService.h"
 #include "meshUtils.h"
-#include "power.h"
 #include <power/PowerHAL.h>
 
 // ── Watchdog ──────────────────────────────────────────────────────────────
