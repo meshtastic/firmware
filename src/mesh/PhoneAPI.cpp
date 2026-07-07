@@ -17,6 +17,7 @@
 #include "TypeConversions.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
+#include "modules/NodeInfoModule.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -34,6 +35,17 @@
 
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
+
+namespace
+{
+constexpr uint8_t FILES_MANIFEST_LEVELS = 3;
+constexpr size_t FILES_MANIFEST_MAX_COUNT = 64;
+
+void releaseFilesManifest(std::vector<meshtastic_FileInfo> &filesManifest)
+{
+    std::vector<meshtastic_FileInfo>().swap(filesManifest);
+}
+} // namespace
 
 PhoneAPI::PhoneAPI()
 {
@@ -69,10 +81,23 @@ void PhoneAPI::handleStartConfig()
         state = STATE_SEND_MY_INFO;
     }
     pauseBluetoothLogging = true;
-    spiLock->lock();
-    filesManifest = getFiles("/", 10);
-    spiLock->unlock();
-    LOG_DEBUG("Got %d files in manifest", filesManifest.size());
+    // Manifest is never read on the node-info-only path (STATE_SEND_FILEMANIFEST
+    // short-circuits to sendConfigComplete), so skip the SPI lock + FS walk.
+    if (config_nonce != SPECIAL_NONCE_ONLY_NODES) {
+        bool filesManifestLimited = false;
+        {
+            concurrency::LockGuard guard(spiLock);
+            filesManifest = getFiles("/", FILES_MANIFEST_LEVELS, FILES_MANIFEST_MAX_COUNT, &filesManifestLimited);
+        }
+        if (filesManifestLimited) {
+            LOG_WARN("Got %zu files in manifest (limited to %zu entries/depth %u)", filesManifest.size(),
+                     FILES_MANIFEST_MAX_COUNT, static_cast<unsigned>(FILES_MANIFEST_LEVELS));
+        } else {
+            LOG_DEBUG("Got %zu files in manifest", filesManifest.size());
+        }
+    } else {
+        releaseFilesManifest(filesManifest);
+    }
 
     LOG_INFO("Start API client config millis=%u", millis());
     // Protect against concurrent BLE callbacks: they run in NimBLE's FreeRTOS task and also touch nodeInfoQueue.
@@ -121,8 +146,7 @@ void PhoneAPI::close()
             nodeInfoQueue.clear();
         }
         packetForPhone = NULL;
-        filesManifest.clear();
-        filesManifest.shrink_to_fit();
+        releaseFilesManifest(filesManifest);
         lastPortNumToRadio.clear();
         fromRadioNum = 0;
         config_nonce = 0;
@@ -190,8 +214,23 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
 #endif
         case meshtastic_ToRadio_heartbeat_tag:
-            LOG_DEBUG("Got client heartbeat");
-            heartbeatReceived = true;
+            // nonce==1 is a special "nodeinfo ping" trigger: force a fresh
+            // NodeInfo broadcast on the 60-second shorterTimeout path so
+            // peers can re-learn our public key after a reboot or
+            // factory_reset without waiting out the normal 10-minute
+            // NodeInfo send cooldown. Mirrors the TCP/UDP path in
+            // `src/mesh/api/PacketAPI.cpp:74-79` for serial clients.
+            // Default nonce (0) remains a plain keepalive that triggers
+            // a queue-status reply.
+            if (toRadioScratch.heartbeat.nonce == 1) {
+                if (nodeInfoModule) {
+                    LOG_INFO("Broadcasting nodeinfo ping (serial)");
+                    nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);
+                }
+            } else {
+                LOG_DEBUG("Got client heartbeat");
+                heartbeatReceived = true;
+            }
             break;
         default:
             // Ignore nop messages
@@ -496,11 +535,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
             // nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
 
-            // Occasional progress logging. (readIndex==2 will be true for the first non-us node)
-            if (readIndex == 2 || readIndex % 20 == 0) {
-                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
-            }
-
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = infoToSend;
             prefetchNodeInfos();
@@ -521,7 +555,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (config_state == filesManifest.size() ||
             config_nonce == SPECIAL_NONCE_ONLY_NODES) { // also handles an empty filesManifest
             config_state = 0;
-            filesManifest.clear();
+            releaseFilesManifest(filesManifest);
             // Skip to complete packet
             sendConfigComplete();
         } else {
@@ -631,9 +665,11 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
 void PhoneAPI::prefetchNodeInfos()
 {
     bool added = false;
+    bool wasEmpty = false;
     // Keep the queue topped up so BLE reads stay responsive even if DB fetches take a moment.
     {
         concurrency::LockGuard guard(&nodeInfoMutex);
+        wasEmpty = nodeInfoQueue.empty();
         while (nodeInfoQueue.size() < kNodePrefetchDepth) {
             auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (!nextNode)
@@ -647,11 +683,15 @@ void PhoneAPI::prefetchNodeInfos()
             info.via_mqtt = isUs ? false : info.via_mqtt;
             info.is_favorite = info.is_favorite || isUs;
             nodeInfoQueue.push_back(info);
+            // Log progress here (at fetch time) so readIndex is accurate and each value logs only once.
+            if (readIndex == 2 || readIndex % 20 == 0) {
+                LOG_DEBUG("nodeinfo: %d/%d", readIndex, nodeDB->getNumMeshNodes());
+            }
             added = true;
         }
     }
 
-    if (added)
+    if (added && wasEmpty)
         onNowHasData(0);
 }
 

@@ -34,12 +34,14 @@ class ScanI2C
         SHT31,
         SHT4X,
         SHTC3,
+        SHTXX,
         LPS22HB,
         QMC6310U,
         QMC6310N,
         QMI8658,
         QMC5883L,
         HMC5883L,
+        MMC5983MA,
         PMSA003I,
         QMA6100P,
         MPU6050,
@@ -65,6 +67,7 @@ class ScanI2C
         STK8BAXX,
         STC8H1K28,
         ICM20948,
+        ICM42607P,
         SCD4X,
         MAX30102,
         TPS65233,
@@ -90,12 +93,14 @@ class ScanI2C
         DA217,
         CHSC6X,
         CST226SE,
+        CST3530,
         BMI270,
         SEN5X,
         SFA30,
         CW2015,
         SCD30,
-        ADS1115
+        ADS1115,
+        SPA06,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
@@ -147,6 +152,8 @@ class ScanI2C
     FoundDevice firstKeyboard() const;
 
     FoundDevice firstAccelerometer() const;
+
+    FoundDevice firstMagnetometer() const;
 
     FoundDevice firstAQI() const;
 

@@ -1,4 +1,5 @@
 #!/usr/bin/bash
+set -e
 export DEBEMAIL="jbennett@incomsystems.biz"
 export PLATFORMIO_LIBDEPS_DIR=pio/libdeps
 export PLATFORMIO_PACKAGES_DIR=pio/packages
@@ -32,5 +33,5 @@ if [[ -n $GPG_KEY_ID ]]; then
 	debuild -S -nc -k"$GPG_KEY_ID"
 else
 	# Build the source deb without signing (forks)
-	debuild -S -nc
+	debuild -S -nc -us -uc
 fi
