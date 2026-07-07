@@ -39,9 +39,13 @@
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+#include "memGet.h"
+#endif
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -1157,8 +1161,26 @@ void setup()
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
 
+    // Log the per-subsystem heap breakdown now that the big allocations are done
+    memaudit::logBreakdown("boot");
+
     // We manually run this to update the NodeStatus
     nodeDB->notifyObservers(true);
+
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+    // Opt-in CI guardrail: on nRF52840 static RAM growth eats the heap arena 1:1,
+    // so flag loudly when less than 20% of the heap is free at the end of setup().
+    {
+        uint32_t heapTotal = memGet.getHeapSize();
+        // Platforms without heap accounting report UINT32_MAX (or 0); skip those
+        if (heapTotal != 0 && heapTotal != UINT32_MAX) {
+            uint32_t heapFree = memGet.getFreeHeap();
+            if (heapFree < heapTotal / 5) {
+                LOG_ERROR("Boot heap watermark: only %u of %u bytes free (<20%%)", heapFree, heapTotal);
+            }
+        }
+    }
+#endif
 }
 
 #endif

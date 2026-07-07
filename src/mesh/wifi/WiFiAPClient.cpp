@@ -563,6 +563,11 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
         syslog.disable();
+#if HAS_UDP_MULTICAST
+        if (udpHandler) {
+            udpHandler->stop();
+        }
+#endif
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:

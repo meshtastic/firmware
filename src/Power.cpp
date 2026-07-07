@@ -552,7 +552,16 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return sgm41562->isInputPowerGood();
 #endif
 #ifdef EXT_PWR_DETECT
-        return digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE;
+        if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
+            return true;
+#ifdef EXT_CHRG_DETECT
+        // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
+        // pin that only asserts once the battery is full) - CHRG being active implies
+        // power is present regardless.
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
+#else
+        return false;
+#endif
 
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
@@ -578,7 +587,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 #if defined(ELECROW_ThinkNode_M6)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
-#elif EXT_CHRG_DETECT
+#elif defined(EXT_CHRG_DETECT)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 #elif defined(BATTERY_CHARGING_INV)
         return !digitalRead(BATTERY_CHARGING_INV);
