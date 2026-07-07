@@ -372,6 +372,7 @@ static constexpr bool txTimerOverwrite = true;
 static constexpr bool txTimerOverwrite = false;
 #endif
 
+// cppcheck-suppress constParameterPointer ; a function pointer can't meaningfully point to const
 bool RadioLibInterface::isIsrTxCallback(void (*callback)())
 {
     return callback == isrTxLevel0;
