@@ -300,7 +300,7 @@ bool MessageStore::updateAckStatusFromRouting(NodeNum sender, PacketId packetId,
 
     for (auto it = liveMessages.rbegin(); it != liveMessages.rend(); ++it) {
         if (it->sender == sender && it->packetId == packetId && it->ackTrackable) {
-            bool wasBroadcast = (it->dest == NODENUM_BROADCAST);
+            bool wasBroadcast = isBroadcast(it->dest);
             bool isFromDest = (ackFrom == it->dest);
             bool isAck = (errorReason == meshtastic_Routing_Error_NONE);
             AckStatus status = ackStatusForRoutingResult(wasBroadcast, isFromDest, isAck, errorReason);

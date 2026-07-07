@@ -10,15 +10,43 @@ namespace graphics
 namespace MessageStatusText
 {
 
+bool isFailureStatus(AckStatus status)
+{
+    switch (status) {
+    case AckStatus::NACKED:
+    case AckStatus::TIMEOUT:
+    case AckStatus::TOO_LARGE:
+    case AckStatus::NO_CHANNEL:
+    case AckStatus::PKI_FAILED:
+    case AckStatus::PKI_UNKNOWN_PUBKEY:
+    case AckStatus::PKI_SEND_FAIL_PUBLIC_KEY:
+    case AckStatus::NO_INTERFACE:
+    case AckStatus::DUTY_CYCLE_LIMIT:
+    case AckStatus::RATE_LIMIT_EXCEEDED:
+    case AckStatus::NO_RESPONSE:
+    case AckStatus::BAD_REQUEST:
+    case AckStatus::NOT_AUTHORIZED:
+    case AckStatus::ADMIN_BAD_SESSION_KEY:
+    case AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED:
+        return true;
+    case AckStatus::NONE:
+    case AckStatus::ACKED:
+    case AckStatus::RELAYED:
+        return false;
+    }
+
+    return false;
+}
+
 const char *inlineTextFor(const StoredMessage &message)
 {
     switch (message.ackStatus) {
     case AckStatus::NONE:
         return message.ackTrackable ? "Sending..." : "";
     case AckStatus::ACKED:
-        return message.dest == NODENUM_BROADCAST ? "Delivered to mesh" : "Delivered to recipient";
+        return isBroadcast(message.dest) ? "Delivered to mesh" : "Delivered to recipient";
     case AckStatus::RELAYED:
-        return message.dest == NODENUM_BROADCAST ? "Delivered to mesh" : "Relayed, not confirmed by recipient";
+        return isBroadcast(message.dest) ? "Delivered to mesh" : "Relayed, not confirmed by recipient";
     case AckStatus::TOO_LARGE:
         return "Message is too large to send";
     case AckStatus::NO_CHANNEL:
@@ -57,7 +85,7 @@ const char *bannerTextFor(const StoredMessage &message)
 {
     switch (message.ackStatus) {
     case AckStatus::RELAYED:
-        return message.dest == NODENUM_BROADCAST ? "Delivered to mesh" : "Relayed, not confirmed\nby recipient";
+        return isBroadcast(message.dest) ? "Delivered to mesh" : "Relayed, not confirmed\nby recipient";
     case AckStatus::TOO_LARGE:
         return "Message is too large\nto send";
     case AckStatus::PKI_FAILED:

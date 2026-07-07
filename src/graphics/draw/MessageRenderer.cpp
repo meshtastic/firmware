@@ -48,16 +48,6 @@ bool scrollStarted = false;
 static bool didReset = false;
 static constexpr int MESSAGE_BLOCK_GAP = 6;
 
-static bool showsFailureMark(AckStatus status)
-{
-    return status == AckStatus::NACKED || status == AckStatus::TIMEOUT || status == AckStatus::TOO_LARGE ||
-           status == AckStatus::NO_CHANNEL || status == AckStatus::PKI_FAILED || status == AckStatus::PKI_UNKNOWN_PUBKEY ||
-           status == AckStatus::PKI_SEND_FAIL_PUBLIC_KEY || status == AckStatus::NO_INTERFACE ||
-           status == AckStatus::DUTY_CYCLE_LIMIT || status == AckStatus::RATE_LIMIT_EXCEEDED ||
-           status == AckStatus::NO_RESPONSE || status == AckStatus::BAD_REQUEST || status == AckStatus::NOT_AUTHORIZED ||
-           status == AckStatus::ADMIN_BAD_SESSION_KEY || status == AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED;
-}
-
 void scrollUp()
 {
     manualScrolling = true;
@@ -424,7 +414,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 include = true;
             break;
         case ThreadMode::DIRECT:
-            if (m.dest != NODENUM_BROADCAST && (m.sender == currentPeer || m.dest == currentPeer))
+            if (!isBroadcast(m.dest) && (m.sender == currentPeer || m.dest == currentPeer))
                 include = true;
             break;
         }
@@ -525,7 +515,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Channel / destination labeling
         char chanType[32] = "";
         if (currentMode == ThreadMode::ALL) {
-            if (m.dest == NODENUM_BROADCAST) {
+            if (isBroadcast(m.dest)) {
                 const char *name = channels.getName(m.channelIndex);
                 if (currentResolution == ScreenResolution::Low || currentResolution == ScreenResolution::UltraLow) {
                     if (strcmp(name, "ShortTurbo") == 0)
@@ -959,7 +949,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (ackForLine[i] == AckStatus::ACKED) {
                         // Destination ACK
                         drawCheckMark(display, markX, markY, 8);
-                    } else if (showsFailureMark(ackForLine[i])) {
+                    } else if (MessageStatusText::isFailureStatus(ackForLine[i])) {
                         // Failure
                         drawXMark(display, markX, markY, 8);
                     } else if (ackForLine[i] == AckStatus::RELAYED) {
@@ -1221,7 +1211,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
-    if (packet.to == 0 || packet.to == NODENUM_BROADCAST) {
+    if (packet.to == 0 || isBroadcast(packet.to)) {
         setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
     } else {
         uint32_t localNode = nodeDB->getNodeNum();

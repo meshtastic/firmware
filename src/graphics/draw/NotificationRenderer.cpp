@@ -517,19 +517,25 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     uint16_t screenHeight = display->height();
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
     uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
-    uint8_t linesShown = lineCount;
+    uint16_t maxMessageLines = visibleTotalLines;
+    if (alertBannerOptions > 0 && maxMessageLines > 0)
+        maxMessageLines--;
+    uint8_t visibleMessageLines = static_cast<uint8_t>(std::min<uint16_t>(lineCount, maxMessageLines));
+    uint8_t optionSlots = visibleTotalLines - visibleMessageLines;
+    uint8_t linesShown = visibleMessageLines;
     std::vector<const char *> linePointers(visibleTotalLines + 1, nullptr);
 
     // copy the linestarts to display to the linePointers holder
-    for (int i = 0; i < lineCount; i++) {
+    for (uint16_t i = 0; i < visibleMessageLines; i++) {
         linePointers[i] = lineStarts[i];
     }
-    std::vector<std::array<char, 64>> scratchLineBuffer(visibleTotalLines - lineCount);
+    std::vector<std::array<char, 64>> scratchLineBuffer(optionSlots);
 
     uint8_t firstOptionToShow = 0;
-    if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
-        if (curSelected > alertBannerOptions - visibleTotalLines + lineCount)
-            firstOptionToShow = alertBannerOptions - visibleTotalLines + lineCount;
+    if (optionSlots > 0 && curSelected > 1 && alertBannerOptions > optionSlots) {
+        uint8_t lastFirstOption = alertBannerOptions - optionSlots;
+        if (curSelected > lastFirstOption)
+            firstOptionToShow = lastFirstOption;
         else
             firstOptionToShow = curSelected - 1;
     } else {
@@ -683,21 +689,27 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     uint16_t screenHeight = display->height();
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
     uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
-    uint8_t linesShown = lineCount;
+    uint16_t maxMessageLines = visibleTotalLines;
+    if (alertBannerOptions > 0 && maxMessageLines > 0)
+        maxMessageLines--;
+    uint8_t visibleMessageLines = static_cast<uint8_t>(std::min<uint16_t>(lineCount, maxMessageLines));
+    uint8_t optionSlots = visibleTotalLines - visibleMessageLines;
+    uint8_t linesShown = visibleMessageLines;
     std::vector<const char *> linePointers(visibleTotalLines + 1, nullptr);
 
     // copy the linestarts to display to the linePointers holder
-    for (int i = 0; i < lineCount; i++) {
+    for (uint16_t i = 0; i < visibleMessageLines; i++) {
         linePointers[i] = lineStarts[i];
     }
 
     uint8_t firstOptionToShow = 0;
     if (alertBannerOptions > 0) {
-        if (visibleTotalLines - lineCount == 1) {
+        if (optionSlots == 1) {
             firstOptionToShow = curSelected;
-        } else if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
-            if (curSelected > alertBannerOptions - visibleTotalLines + lineCount)
-                firstOptionToShow = alertBannerOptions - visibleTotalLines + lineCount;
+        } else if (optionSlots > 1 && curSelected > 1 && alertBannerOptions > optionSlots) {
+            uint8_t lastFirstOption = alertBannerOptions - optionSlots;
+            if (curSelected > lastFirstOption)
+                firstOptionToShow = lastFirstOption;
             else
                 firstOptionToShow = curSelected - 1;
         } else {

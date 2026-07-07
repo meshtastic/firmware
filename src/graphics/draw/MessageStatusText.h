@@ -10,6 +10,7 @@ namespace MessageStatusText
 
 const char *inlineTextFor(const StoredMessage &message);
 const char *bannerTextFor(const StoredMessage &message);
+bool isFailureStatus(AckStatus status);
 
 } // namespace MessageStatusText
 } // namespace graphics

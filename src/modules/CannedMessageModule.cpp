@@ -1111,8 +1111,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     sm.textLength = len;
 
     // Classify broadcast vs DM
-    if (dest == NODENUM_BROADCAST) {
-        sm.dest = NODENUM_BROADCAST;
+    if (isBroadcast(dest)) {
+        sm.dest = dest;
         sm.type = MessageType::BROADCAST;
     } else {
         sm.dest = dest;

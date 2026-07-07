@@ -27,6 +27,11 @@ static void assertInlineText(const char *expected, const StoredMessage &message)
     TEST_ASSERT_EQUAL_STRING(expected, graphics::MessageStatusText::inlineTextFor(message));
 }
 
+static void assertFailureStatus(AckStatus status)
+{
+    TEST_ASSERT_TRUE(graphics::MessageStatusText::isFailureStatus(status));
+}
+
 static void ensureLocalNodeNum(NodeNum localNode)
 {
     if (!nodeDB)
@@ -66,6 +71,16 @@ static void test_channel_implicit_ack_text()
 {
     StoredMessage message = makeMessage(AckStatus::ACKED, NODENUM_BROADCAST);
     TEST_ASSERT_EQUAL_STRING("Delivered to mesh", graphics::MessageStatusText::inlineTextFor(message));
+}
+
+static void test_no_lora_broadcast_uses_mesh_delivery_text()
+{
+    StoredMessage delivered = makeMessage(AckStatus::ACKED, NODENUM_BROADCAST_NO_LORA);
+    StoredMessage relayed = makeMessage(AckStatus::RELAYED, NODENUM_BROADCAST_NO_LORA);
+
+    TEST_ASSERT_EQUAL_STRING("Delivered to mesh", graphics::MessageStatusText::inlineTextFor(delivered));
+    TEST_ASSERT_EQUAL_STRING("Delivered to mesh", graphics::MessageStatusText::inlineTextFor(relayed));
+    TEST_ASSERT_EQUAL_STRING("Delivered to mesh", graphics::MessageStatusText::bannerTextFor(relayed));
 }
 
 static void test_dm_explicit_ack_text()
@@ -129,6 +144,29 @@ static void test_canonical_routing_error_text()
                                                           makeMessage(AckStatus::ADMIN_BAD_SESSION_KEY, 0x12345678)));
     TEST_ASSERT_EQUAL_STRING("Admin key not authorized", graphics::MessageStatusText::inlineTextFor(
                                                              makeMessage(AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED, 0x12345678)));
+}
+
+static void test_failure_status_classifier_covers_status_errors()
+{
+    TEST_ASSERT_FALSE(graphics::MessageStatusText::isFailureStatus(AckStatus::NONE));
+    TEST_ASSERT_FALSE(graphics::MessageStatusText::isFailureStatus(AckStatus::ACKED));
+    TEST_ASSERT_FALSE(graphics::MessageStatusText::isFailureStatus(AckStatus::RELAYED));
+
+    assertFailureStatus(AckStatus::NACKED);
+    assertFailureStatus(AckStatus::TIMEOUT);
+    assertFailureStatus(AckStatus::TOO_LARGE);
+    assertFailureStatus(AckStatus::NO_CHANNEL);
+    assertFailureStatus(AckStatus::PKI_FAILED);
+    assertFailureStatus(AckStatus::PKI_UNKNOWN_PUBKEY);
+    assertFailureStatus(AckStatus::PKI_SEND_FAIL_PUBLIC_KEY);
+    assertFailureStatus(AckStatus::NO_INTERFACE);
+    assertFailureStatus(AckStatus::DUTY_CYCLE_LIMIT);
+    assertFailureStatus(AckStatus::RATE_LIMIT_EXCEEDED);
+    assertFailureStatus(AckStatus::NO_RESPONSE);
+    assertFailureStatus(AckStatus::BAD_REQUEST);
+    assertFailureStatus(AckStatus::NOT_AUTHORIZED);
+    assertFailureStatus(AckStatus::ADMIN_BAD_SESSION_KEY);
+    assertFailureStatus(AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED);
 }
 
 static void test_banner_text_uses_canonical_status_wording()
@@ -298,6 +336,24 @@ static void test_phone_originated_channel_is_stored_untrackable_from_packet()
     assertInlineText("", messages.front());
 }
 
+static void test_phone_originated_no_lora_broadcast_is_stored_untrackable_from_packet()
+{
+    constexpr NodeNum localNode = 0x11111111;
+    constexpr PacketId packetId = 0xaaaa0001;
+
+    ensureLocalNodeNum(localNode);
+    MessageStore store("phone_no_lora_broadcast_untracked");
+
+    const StoredMessage &stored = store.addFromPacket(makePhoneText(packetId, NODENUM_BROADCAST_NO_LORA, true));
+
+    TEST_ASSERT_EQUAL_UINT32(localNode, stored.sender);
+    TEST_ASSERT_EQUAL_UINT32(NODENUM_BROADCAST_NO_LORA, stored.dest);
+    TEST_ASSERT_EQUAL_UINT32(packetId, stored.packetId);
+    TEST_ASSERT_FALSE(stored.ackTrackable);
+    assertAckStatus(AckStatus::NONE, stored.ackStatus);
+    assertInlineText("", stored);
+}
+
 static void test_phone_originated_dm_updates_from_routing_status()
 {
     constexpr NodeNum localNode = 0x11111111;
@@ -359,6 +415,7 @@ void setup()
     RUN_TEST(test_sending_text);
     RUN_TEST(test_untracked_pending_status_has_no_inline_text);
     RUN_TEST(test_channel_implicit_ack_text);
+    RUN_TEST(test_no_lora_broadcast_uses_mesh_delivery_text);
     RUN_TEST(test_dm_explicit_ack_text);
     RUN_TEST(test_dm_relayed_ack_text);
     RUN_TEST(test_failed_delivery_text);
@@ -366,6 +423,7 @@ void setup()
     RUN_TEST(test_no_channel_text);
     RUN_TEST(test_pki_failure_text);
     RUN_TEST(test_canonical_routing_error_text);
+    RUN_TEST(test_failure_status_classifier_covers_status_errors);
     RUN_TEST(test_banner_text_uses_canonical_status_wording);
     RUN_TEST(test_routing_results_map_to_ack_status);
     RUN_TEST(test_message_store_updates_matching_packet_id);
@@ -373,6 +431,7 @@ void setup()
     RUN_TEST(test_phone_originated_dm_without_want_ack_is_stored_untrackable_from_packet);
     RUN_TEST(test_phone_originated_dm_with_want_ack_is_tracked_from_packet);
     RUN_TEST(test_phone_originated_channel_is_stored_untrackable_from_packet);
+    RUN_TEST(test_phone_originated_no_lora_broadcast_is_stored_untrackable_from_packet);
     RUN_TEST(test_phone_originated_dm_updates_from_routing_status);
 #endif
 
