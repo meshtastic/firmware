@@ -1263,7 +1263,6 @@ void Screen::setFrames(FrameFocus focus)
 
     const FramesetInfo previousFramesetInfo = framesetInfo;
     uint8_t originalPosition = ui->getUiState()->currentFrame;
-    uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
     graphics::UIRenderer::rebuildFavoritedNodes();
