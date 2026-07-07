@@ -111,7 +111,7 @@ int32_t QMC6309Sensor::runOnce()
         //}
         // LOG_WARN("QMC6309 accel age %ums, ga=(%.3f, %.3f, %.3f), ma=(%.3f, %.3f, %.3f)", accelAgeMs, ga.axis.x, ga.axis.y,
         //          ga.axis.z, ma.axis.x, ma.axis.y, ma.axis.z);
-        heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
+        heading = FusionCompass(ga, ma, FusionConventionNed);
         if (ga.axis.z > 0.0f)
             heading = 360.0f - heading;
 
