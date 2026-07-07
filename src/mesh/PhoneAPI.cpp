@@ -178,9 +178,8 @@ static bool hasChunkedApiSupport_LH(PhoneAPI *api)
 
 static ChunkedToRadioSlot *findChunkedToRadioSlot_LH(PhoneAPI *api)
 {
-    const uint32_t now = millis();
     for (auto &slot : g_chunkedToRadioSlots) {
-        if (slot.who != nullptr && now - slot.updatedMillis > CHUNKED_TORADIO_TIMEOUT_MS) {
+        if (slot.who != nullptr && !Throttle::isWithinTimespanMs(slot.updatedMillis, CHUNKED_TORADIO_TIMEOUT_MS)) {
             clearChunkedToRadioSlot_LH(slot);
         }
     }
