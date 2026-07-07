@@ -59,6 +59,11 @@ def collect_sizes(manifest_dir):
             entry["ram_bytes"] = ram_bytes
         if entry:
             sizes[board] = entry
+        else:
+            print(
+                f"WARNING: no size-bearing firmware artifact found for '{board}' ({fname})",
+                file=sys.stderr,
+            )
     return sizes
 
 

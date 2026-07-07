@@ -157,6 +157,57 @@ def test_collect_sizes_skips_ota_littlefs():
         assert sizes == {}
 
 
+def test_collect_sizes_flash_bytes_fallback():
+    """collect_sizes falls back to the manifest's flash_bytes (ELF text+data, emitted by
+    bin/platformio-custom.py) when a target packages no raw .bin at all (nRF52/RP2040)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        outfile = os.path.join(tmpdir, "sizes.json")
+        # nRF52-style manifest: no .bin at all, only elf/hex/uf2/ota.zip - falls back to flash_bytes.
+        data = {
+            "platformioTarget": "rak4631",
+            "files": [
+                {"name": "firmware-rak4631-2.8.0.elf", "bytes": 1459128},
+                {"name": "firmware-rak4631-2.8.0.hex", "bytes": 2213037},
+                {"name": "firmware-rak4631-2.8.0.uf2", "bytes": 1573888},
+                {"name": "firmware-rak4631-2.8.0-ota.zip", "bytes": 787791},
+            ],
+            "flash_bytes": 765192,
+        }
+        path = os.path.join(tmpdir, "firmware-rak4631.mt.json")
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        assert rc == 0, f"collect_sizes failed: {stderr}"
+        with open(outfile) as f:
+            sizes = json.load(f)
+        assert sizes == {"rak4631": {"flash_bytes": 765192}}
+
+
+def test_collect_sizes_prefers_bin_over_flash_bytes_fallback():
+    """When both a firmware .bin (app image) and a manifest flash_bytes fallback exist, the
+    .bin wins - flash_bytes only kicks in when no .bin is packaged at all."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        outfile = os.path.join(tmpdir, "sizes.json")
+        data = {
+            "platformioTarget": "heltec-v3",
+            "files": [
+                {"name": "firmware-heltec-v3-2.8.0.bin", "bytes": 2202368},
+                {"name": "firmware-heltec-v3-2.8.0.factory.bin", "bytes": 3000000},
+            ],
+            "flash_bytes": 9999999,
+        }
+        path = os.path.join(tmpdir, "firmware-heltec-v3.mt.json")
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        assert rc == 0, f"collect_sizes failed: {stderr}"
+        with open(outfile) as f:
+            sizes = json.load(f)
+        assert sizes == {"heltec-v3": {"flash_bytes": 2202368}}
+
+
 def test_collect_sizes_ignores_non_mt_json():
     """collect_sizes skips non .mt.json files."""
     with tempfile.TemporaryDirectory() as tmpdir:

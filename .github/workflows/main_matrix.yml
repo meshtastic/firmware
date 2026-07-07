@@ -305,20 +305,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RUN_ID=$(gh run list -R "${{ github.repository }}" \
-            --workflow CI --branch develop --status success \
-            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-          if [ -n "$RUN_ID" ]; then
-            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+          # Pick the newest COMPLETED develop CI run that still has a firmware-sizes artifact.
+          # We deliberately do NOT require conclusion=success: the firmware-sizes artifact is uploaded
+          # independently of the rest of CI, so demanding an all-green run pins the baseline to the last
+          # fully-green build. Whenever develop is red for a while that baseline goes stale and the "vs
+          # develop" deltas stop measuring the PR and instead measure all of develop's drift since.
+          BASE_SHA=""; BASE_DATE=""
+          RUNS=$(gh run list -R "${{ github.repository }}" \
+            --workflow CI --branch develop --status completed \
+            --limit 20 --json databaseId,headSha,createdAt \
+            --jq '.[] | "\(.databaseId) \(.headSha) \(.createdAt)"')
+          while read -r RID SHA CREATED; do
+            [ -z "$RID" ] && continue
+            NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RID}/artifacts" \
               --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
-            if [ -n "$ARTIFACT_NAME" ]; then
-              gh run download "$RUN_ID" -R "${{ github.repository }}" \
-                --name "$ARTIFACT_NAME" --dir ./baseline-develop/
+            [ -z "$NAME" ] && continue
+            if gh run download "$RID" -R "${{ github.repository }}" --name "$NAME" --dir ./baseline-develop/; then
               cp "./baseline-develop/current-sizes.json" ./develop-sizes.json
-              echo "found=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "found=false" >> "$GITHUB_OUTPUT"
+              BASE_SHA="$SHA"; BASE_DATE="$CREATED"
+              break
             fi
+          done <<< "$RUNS"
+          if [ -n "$BASE_SHA" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "date=$BASE_DATE" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -330,20 +341,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RUN_ID=$(gh run list -R "${{ github.repository }}" \
-            --workflow CI --branch master --status success \
-            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-          if [ -n "$RUN_ID" ]; then
-            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+          # Same approach as the develop baseline above: newest completed master run that still has a
+          # firmware-sizes artifact, without requiring an all-green run (avoids a silently stale baseline).
+          BASE_SHA=""; BASE_DATE=""
+          RUNS=$(gh run list -R "${{ github.repository }}" \
+            --workflow CI --branch master --status completed \
+            --limit 20 --json databaseId,headSha,createdAt \
+            --jq '.[] | "\(.databaseId) \(.headSha) \(.createdAt)"')
+          while read -r RID SHA CREATED; do
+            [ -z "$RID" ] && continue
+            NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RID}/artifacts" \
               --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
-            if [ -n "$ARTIFACT_NAME" ]; then
-              gh run download "$RUN_ID" -R "${{ github.repository }}" \
-                --name "$ARTIFACT_NAME" --dir ./baseline-master/
+            [ -z "$NAME" ] && continue
+            if gh run download "$RID" -R "${{ github.repository }}" --name "$NAME" --dir ./baseline-master/; then
               cp "./baseline-master/current-sizes.json" ./master-sizes.json
-              echo "found=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "found=false" >> "$GITHUB_OUTPUT"
+              BASE_SHA="$SHA"; BASE_DATE="$CREATED"
+              break
             fi
+          done <<< "$RUNS"
+          if [ -n "$BASE_SHA" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "date=$BASE_DATE" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -370,6 +389,12 @@ jobs:
               echo ''
               echo "$REPORT"
               echo ''
+              if [ -n "${{ steps.baseline-develop.outputs.sha }}" ]; then
+                echo "_Baseline \`develop\` = ${{ steps.baseline-develop.outputs.sha }} (${{ steps.baseline-develop.outputs.date }})_  "
+              fi
+              if [ -n "${{ steps.baseline-master.outputs.sha }}" ]; then
+                echo "_Baseline \`master\` = ${{ steps.baseline-master.outputs.sha }} (${{ steps.baseline-master.outputs.date }})_  "
+              fi
               echo '---'
               echo "*Updated for ${{ github.sha }}*"
             } > ./size-report.md
