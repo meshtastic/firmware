@@ -49,6 +49,8 @@ bool HUB75Display::connect()
     bool ok = matrix->begin();
     if (!ok) {
         LOG_ERROR("HUB75 matrix->begin() failed (DMA buffer alloc?)");
+        delete matrix;
+        matrix = nullptr;
         return false;
     }
     matrix->setBrightness8(brightness);
