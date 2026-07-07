@@ -252,7 +252,17 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
 
     // pb_encode_to_bytes writes into decoded.payload, which aliases `encrypted` in the union, so all
     // reads of p->encrypted above must be complete before this point.
-    p->decoded = meshtastic_Data_init_zero;
+    if (carryEncrypted) {
+        // On the encrypted path, `decoded` aliases the ciphertext we just copied into c.data;
+        // the remaining `Data` fields hold ciphertext bytes that would serialize as spurious
+        // wire fields. Clear the whole struct before reusing `decoded.payload.bytes` for the
+        // Compressed wrapper.
+        p->decoded = meshtastic_Data_init_zero;
+    }
+    // On the decoded path, `p->decoded` is already a valid Data from perhapsDecode(); only
+    // `payload` and `portnum` need replacing. The remaining fields (want_response, request_id,
+    // reply_id, bitfield, ...) must be preserved — they travel on the outer MeshPacket through
+    // the sim loopback and are NOT restored by unpackAndReceive() on the far end.
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);
