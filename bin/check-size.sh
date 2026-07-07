@@ -126,10 +126,42 @@ resolve_local_ref() {
 		fi
 	done
 	if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then
+		echo "WARNING: none of meshtastic-upstream/upstream/origin have a '$branch' branch;" >&2
+		echo "  falling back to your local branch '$branch', which has no remote to verify" >&2
+		echo "  freshness against - it may be stale, or something you renamed/repurposed." >&2
 		echo "$branch"
 		return 0
 	fi
 	return 1
+}
+
+# Print which actual GitHub repo $1 (a resolved ref like "meshtastic-upstream/develop", or a
+# bare local branch name with no "/") points at, and warn loudly if it's not the canonical
+# meshtastic/firmware - e.g. a fork's own stale/renamed copy of "develop" would otherwise look
+# just as legitimate as the real thing.
+CANONICAL_REPO="meshtastic/firmware"
+warn_if_not_canonical() {
+	ref=$1
+	case "$ref" in
+	*/*)
+		remote="${ref%%/*}"
+		url=$(git remote get-url "$remote" 2>/dev/null)
+		repo=$(echo "$url" | sed -E 's#.*github\.com[:/]([^/]+/[^/.]+)(\.git)?$#\1#')
+		if [ "$repo" = "$CANONICAL_REPO" ]; then
+			echo "Using $ref -> $repo (canonical)" >&2
+		else
+			echo "WARNING: using $ref -> ${repo:-<unknown, could not parse remote URL>}," >&2
+			echo "  which is NOT $CANONICAL_REPO. This is comparing against that repo's own" >&2
+			echo "  copy of the branch, not the canonical upstream - it can differ (stale fork," >&2
+			echo "  divergent history, etc). Add a remote pointing at $CANONICAL_REPO" >&2
+			echo "  (e.g. 'git remote add meshtastic-upstream https://github.com/$CANONICAL_REPO')" >&2
+			echo "  if that's not intended - it's checked before '$remote'." >&2
+		fi
+		;;
+	*)
+		# Bare local branch (no remote) - resolve_local_ref already warned loudly about this.
+		;;
+	esac
 }
 
 # Resolve $1 (optionally its merge-base with HEAD) to a commit, build $ENV_NAME there in a
@@ -144,6 +176,7 @@ build_baseline_locally() {
 		echo "Fetch it first, e.g.: git fetch meshtastic-upstream $branch" >&2
 		exit 1
 	}
+	warn_if_not_canonical "$ref"
 	case "$ref" in
 	meshtastic-upstream/* | upstream/* | origin/*)
 		git fetch --quiet "${ref%%/*}" "$branch" 2>/dev/null || true
@@ -217,6 +250,7 @@ fetch_baseline() {
 			echo "Fetch it first, e.g.: git fetch meshtastic-upstream $branch" >&2
 			exit 1
 		}
+		warn_if_not_canonical "$ref"
 		case "$ref" in
 		meshtastic-upstream/* | upstream/* | origin/*)
 			git fetch --quiet "${ref%%/*}" "$branch" 2>/dev/null || true
