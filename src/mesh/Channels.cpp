@@ -156,7 +156,9 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
     strncpy(channelSettings.name, "", sizeof(channelSettings.name));
-    channelSettings.module_settings.position_precision = 13; // default to sending location on the primary channel
+    // Position sharing is OPT-IN: precision 0 means "do not broadcast location". A user (or the phone app)
+    // must explicitly raise precision to start sharing. See the one-time opt-in migration in NodeDB.cpp.
+    channelSettings.module_settings.position_precision = 0;
     channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
@@ -436,9 +438,11 @@ bool cryptoKeyIsPublic(const CryptoKey &key)
     return false;
 }
 
-bool Channels::usesPublicKey(ChannelIndex chIndex)
+bool channelFileUsesPublicKey(const meshtastic_ChannelFile &cf, ChannelIndex chIndex)
 {
-    const meshtastic_Channel &ch = getByIndex(chIndex);
+    if (chIndex >= cf.channels_count)
+        return false;
+    const meshtastic_Channel &ch = cf.channels[chIndex];
     if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED)
         return false;
 
@@ -446,10 +450,14 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     if (psk.size == 0) {
         // Secondary channels inherit the primary key when unset; primary size==0 means encryption disabled.
         if (ch.role == meshtastic_Channel_Role_SECONDARY) {
-            // Guard against malformed configs with no PRIMARY channel (primaryIndex could point back to us).
-            if (primaryIndex == chIndex)
-                return true; // fail closed: treat as public
-            return usesPublicKey(primaryIndex);
+            // Resolve against the PRIMARY channel's key. The singleton's primaryIndex isn't available in
+            // the raw-struct path (this runs during boot migration before initDefaults), so scan by role.
+            // Fail closed to "public" if no distinct PRIMARY is found (malformed config).
+            for (pb_size_t p = 0; p < cf.channels_count; p++) {
+                if (cf.channels[p].role == meshtastic_Channel_Role_PRIMARY)
+                    return (p == chIndex) ? true : channelFileUsesPublicKey(cf, (ChannelIndex)p);
+            }
+            return true;
         }
         return true;
     }
@@ -460,6 +468,13 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     }
 
     return (psk.size == sizeof(defaultpsk) && memcmp(psk.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0);
+}
+
+bool Channels::usesPublicKey(ChannelIndex chIndex)
+{
+    // Delegates to the pure, on-disk-struct variant so the two can't drift. getByIndex() reads the same
+    // global channelFile, so this is behavior-preserving for the position-precision clamp callers.
+    return channelFileUsesPublicKey(channelFile, chIndex);
 }
 
 bool Channels::isWellKnownChannel(ChannelIndex chIndex)

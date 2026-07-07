@@ -1188,6 +1188,36 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
 #endif
 }
 
+// --- 2.8 position/telemetry opt-in migration helpers -------------------------------------------------
+// Pure field mutators (no I/O), so the native test suite can exercise them directly. The version gate
+// and saveToDisk live in loadFromDisk() below.
+
+void optInDisablePositionSharing(meshtastic_ChannelFile &cf)
+{
+    for (pb_size_t i = 0; i < cf.channels_count; i++) {
+        // Only flip PUBLIC / default-PSK channels. A channel with a real private key is a deliberate
+        // trusted-group setup where the "leak location to strangers" concern doesn't apply, so its
+        // configured precision (including full precision) is preserved.
+        if (!channelFileUsesPublicKey(cf, (ChannelIndex)i))
+            continue;
+        cf.channels[i].settings.has_module_settings = true;
+        cf.channels[i].settings.module_settings.position_precision = 0;
+    }
+}
+
+void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc)
+{
+    // Every mesh-broadcast telemetry enable flag (each gates its module's sendTelemetry() to the mesh).
+    mc.telemetry.device_telemetry_enabled = false;
+    mc.telemetry.environment_measurement_enabled = false;
+    mc.telemetry.air_quality_enabled = false;
+    mc.telemetry.power_measurement_enabled = false;
+    mc.telemetry.health_measurement_enabled = false;
+    // Position leak via the public MQTT map. Leave map_reporting_enabled alone (anonymous presence is
+    // still allowed) and strip only the location component.
+    mc.mqtt.map_report_settings.should_report_location = false;
+}
+
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
@@ -2553,6 +2583,24 @@ void NodeDB::loadFromDisk()
         if (moduleConfig.paxcounter.paxcounter_update_interval == 900)
             moduleConfig.paxcounter.paxcounter_update_interval = 0;
 
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
+
+    // 2.8 - privacy: one-time flip of position sharing and device telemetry to OPT-IN for nodes upgrading
+    // from a build that shipped them on-by-default. Gated on a dedicated watermark (POSITION_TELEMETRY_OPTIN_VER)
+    // so it runs exactly once and does NOT re-clobber a user who later re-enables sharing (ordinary saves never
+    // re-stamp .version, so a re-enabled node stays at the watermark and skips this block on the next boot).
+    // Position is disabled only on public/default-PSK channels; private-PSK channels are preserved.
+    if (channelFile.version < POSITION_TELEMETRY_OPTIN_VER) {
+        LOG_INFO("Opt-in migration: disabling position broadcast on public channels");
+        optInDisablePositionSharing(channelFile);
+        channelFile.version = POSITION_TELEMETRY_OPTIN_VER;
+        saveToDisk(SEGMENT_CHANNELS);
+    }
+    if (moduleConfig.version < POSITION_TELEMETRY_OPTIN_VER) {
+        LOG_INFO("Opt-in migration: forcing device telemetry broadcast to opt-in");
+        optInDisableTelemetryBroadcast(moduleConfig);
+        moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
         saveToDisk(SEGMENT_MODULECONFIG);
     }
 #if ARCH_PORTDUINO
