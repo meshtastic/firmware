@@ -178,12 +178,12 @@ bool WaypointStore::addFromPacket(const meshtastic_MeshPacket &packet, StoredWay
         }
 
         const bool removed = removeWaypointById(entry.waypoint.id);
+        if (removed) {
 #if ENABLE_WAYPOINT_PERSISTENCE
-        if (removed)
             markWaypointStoreUnsaved();
 #endif
-        if (removed)
             notifyChanged();
+        }
         return true;
     }
 
@@ -206,12 +206,12 @@ void WaypointStore::addWaypoint(const meshtastic_Waypoint &wp, uint32_t received
 
     if (isExpired(entry)) {
         const bool removed = removeWaypointById(entry.waypoint.id);
+        if (removed) {
 #if ENABLE_WAYPOINT_PERSISTENCE
-        if (removed)
             markWaypointStoreUnsaved();
 #endif
-        if (removed)
             notifyChanged();
+        }
         return;
     }
 
@@ -244,12 +244,12 @@ bool WaypointStore::purgeExpired(uint32_t now)
         changed = true;
     }
 
+    if (changed) {
 #if ENABLE_WAYPOINT_PERSISTENCE
-    if (changed)
         markWaypointStoreUnsaved();
 #endif
-    if (changed)
         notifyChanged();
+    }
 
     return changed;
 }
