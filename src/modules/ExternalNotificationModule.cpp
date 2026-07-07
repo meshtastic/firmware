@@ -511,8 +511,7 @@ void ExternalNotificationModule::startNotification()
 
     const bool generic = moduleConfig.external_notification.alert_message;
     const bool vibra = moduleConfig.external_notification.alert_message_vibra;
-    const bool buzzer =
-        canBuzz() && moduleConfig.external_notification.alert_message_buzzer && !buzzerModeIsDirectOnly;
+    const bool buzzer = canBuzz() && moduleConfig.external_notification.alert_message_buzzer && !buzzerModeIsDirectOnly;
     if (canBuzz() && moduleConfig.external_notification.alert_message_buzzer && buzzerModeIsDirectOnly)
         LOG_INFO("Geofence buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
     if (!generic && !vibra && !buzzer)
