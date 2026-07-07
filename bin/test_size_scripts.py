@@ -178,6 +178,28 @@ def test_collect_sizes_recurses_manifest_subdirectories():
         assert sizes == {"rak4631": {"flash_bytes": 524288, "ram_bytes": 104500}}
 
 
+def test_collect_sizes_warns_on_duplicate_board_manifests():
+    """Duplicate platformioTarget entries should not be overwritten silently."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        outfile = os.path.join(tmpdir, "sizes.json")
+        first = os.path.join(tmpdir, "a")
+        second = os.path.join(tmpdir, "b")
+        os.mkdir(first)
+        os.mkdir(second)
+        write_manifests(first, {"rak4631": make_manifest("rak4631", 524288)})
+        write_manifests(second, {"rak4631": make_manifest("rak4631", 765192)})
+
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        assert rc == 0, f"collect_sizes failed: {stderr}"
+        assert "duplicate manifest for board 'rak4631'" in stderr
+        assert "a/firmware-rak4631.mt.json" in stderr
+        assert "b/firmware-rak4631.mt.json" in stderr
+
+        with open(outfile) as f:
+            sizes = json.load(f)
+        assert sizes == {"rak4631": {"flash_bytes": 765192}}
+
+
 def test_collect_sizes_skips_ota_littlefs():
     """collect_sizes ignores ota/littlefs/bleota .bin files in fallback."""
     with tempfile.TemporaryDirectory() as tmpdir:

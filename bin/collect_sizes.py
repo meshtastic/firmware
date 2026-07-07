@@ -20,6 +20,7 @@ import sys
 def collect_sizes(manifest_dir):
     """Scan manifest_dir for .mt.json files and return {board: sizes_dict}."""
     sizes = {}
+    size_paths = {}
     manifest_paths = []
     for root, _, files in os.walk(manifest_dir):
         for fname in files:
@@ -61,7 +62,14 @@ def collect_sizes(manifest_dir):
             ram_bytes = data.get("ram_bytes")
             if isinstance(ram_bytes, int) and not isinstance(ram_bytes, bool):
                 entry["ram_bytes"] = ram_bytes
+            if board in sizes:
+                print(
+                    f"warning: duplicate manifest for board '{board}', "
+                    f"overwriting {size_paths[board]} with {path}",
+                    file=sys.stderr,
+                )
             sizes[board] = entry
+            size_paths[board] = path
     return sizes
 
 
