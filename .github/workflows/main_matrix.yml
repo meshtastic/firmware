@@ -378,7 +378,7 @@ jobs:
           if [ -f ./master-sizes.json ]; then
             ARGS="$ARGS --baseline master:./master-sizes.json"
           fi
-          REPORT=$(python3 bin/size_report.py $ARGS)
+          REPORT=$(python3 bin/size_report.py $ARGS --status-out ./size-status.txt)
           if [ -z "$REPORT" ]; then
             echo "has_report=false" >> "$GITHUB_OUTPUT"
           else
@@ -397,6 +397,8 @@ jobs:
               fi
               echo '---'
               echo "*Updated for ${{ github.sha }}*"
+              echo ''
+              echo "_This comment may be deprecated in favor of the \`firmware-size\` commit status check, if that proves sufficient on its own._"
             } > ./size-report.md
             cat ./size-report.md >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -412,6 +414,7 @@ jobs:
           name: size-report
           path: |
             ./size-report.md
+            ./size-status.txt
             ./pr-number.txt
           retention-days: 5
 

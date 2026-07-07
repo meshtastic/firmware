@@ -200,6 +200,37 @@ def generate_markdown(new_sizes, baselines, top_n=5):
     return "\n".join(sections)
 
 
+def generate_status_line(new_sizes, baselines, limit=140):
+    """One-line, plain-text summary against the first baseline, for a GitHub commit status
+    (badge in the PR's checks list) rather than a full PR comment. GitHub truncates status
+    descriptions past ~140 chars, so this is deliberately terse - the full table still goes
+    into the run's job summary/artifact for anyone who clicks through.
+    """
+    if not baselines:
+        return f"{len(new_sizes)} targets built, no baseline available yet"
+
+    label, old_sizes = baselines[0]
+    flash_deltas = []
+    ram_deltas = []
+    for board, entry in new_sizes.items():
+        old = old_sizes.get(board, {})
+        if entry.get("flash_bytes") is not None and old.get("flash_bytes") is not None:
+            flash_deltas.append(entry["flash_bytes"] - old["flash_bytes"])
+        if entry.get("ram_bytes") is not None and old.get("ram_bytes") is not None:
+            ram_deltas.append(entry["ram_bytes"] - old["ram_bytes"])
+
+    parts = [f"{len(new_sizes)} targets vs {label}"]
+    if flash_deltas:
+        parts.append(f"flash {format_delta(sum(flash_deltas))}")
+    if ram_deltas:
+        parts.append(f"RAM {format_delta(sum(ram_deltas))}")
+    if len(parts) == 1:
+        parts.append("no comparable data")
+
+    line = ", ".join(parts)
+    return line if len(line) <= limit else line[: limit - 1] + "…"
+
+
 def format_bar(used, maximum, width=10):
     """Render a PlatformIO-style '[====      ]  40.1% (used X bytes from Y bytes)' bar.
 
@@ -409,6 +440,11 @@ def main():
         default="markdown",
         help="markdown (default, for PR comments) or text (PlatformIO-style bars, for a terminal)",
     )
+    parser.add_argument(
+        "--status-out",
+        metavar="PATH",
+        help="Also write a one-line summary (for a GitHub commit status/badge) to PATH",
+    )
     args = parser.parse_args()
 
     if args.enforce_budgets and not args.budgets:
@@ -436,6 +472,10 @@ def main():
             sys.exit(1)
         label, path = b.split(":", 1)
         baselines.append((label, load_sizes(path)))
+
+    if args.status_out:
+        with open(args.status_out, "w") as f:
+            f.write(generate_status_line(new_sizes, baselines))
 
     if args.format == "text":
         report = generate_text(new_sizes, baselines, top_n=args.top)
