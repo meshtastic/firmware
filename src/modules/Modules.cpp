@@ -19,6 +19,9 @@
 #if !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
 #include "modules/CannedMessageModule.h"
 #endif
+#if HAS_SCREEN && BASEUI_HAS_GAMES
+#include "modules/SnakeModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_DETECTIONSENSOR
 #include "modules/DetectionSensorModule.h"
 #endif
@@ -204,6 +207,11 @@ void setupModules()
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         cannedMessageModule = new CannedMessageModule();
+    }
+#endif
+#if HAS_SCREEN && BASEUI_HAS_GAMES
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        snakeModule = new SnakeModule();
     }
 #endif
 #if ARCH_PORTDUINO

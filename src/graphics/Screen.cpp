@@ -67,6 +67,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
+#if BASEUI_HAS_GAMES
+#include "modules/SnakeModule.h"
+#endif
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -99,7 +102,11 @@ namespace graphics
 #define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
+#if BASEUI_HAS_GAMES
+#define NUM_EXTRA_FRAMES 4 // text message, debug frame, and the always-present games frame
+#else
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
+#endif
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
 #define ASCII_BELL '\x07'
@@ -366,6 +373,43 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     updateUiFrame(ui);
 }
 
+// Called to trigger an arcade-style initials picker (see showNumberPicker for the sibling flow).
+void Screen::showAlphanumericPicker(const char *message, const char *initialText, uint32_t durationMs, uint8_t length,
+                                    std::function<void(const std::string &)> bannerCallback)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    if (length >= sizeof(NotificationRenderer::alphanumericValue))
+        length = sizeof(NotificationRenderer::alphanumericValue) - 1;
+
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::textInputCallback = bannerCallback;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::alphanumeric_picker;
+    NotificationRenderer::numDigits = length;
+
+    // Seed each position from initialText (uppercased & filtered to A-Z/0-9), defaulting to 'A'.
+    const size_t seedLen = initialText ? strnlen(initialText, length) : 0;
+    for (uint8_t i = 0; i < length; i++) {
+        char c = (i < seedLen) ? initialText[i] : 'A';
+        if (c >= 'a' && c <= 'z')
+            c = static_cast<char>(c - 'a' + 'A');
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')))
+            c = 'A';
+        NotificationRenderer::alphanumericValue[i] = c;
+    }
+    NotificationRenderer::alphanumericValue[length] = '\0';
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, 2);
+    ui->setTargetFPS(60);
+    updateUiFrame(ui);
+}
+
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                            std::function<void(const std::string &)> textCallback)
 {
@@ -408,6 +452,17 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
+
+#if BASEUI_HAS_GAMES
+// The games frame is a dedicated, always-present frame (unlike generic module frames it is placed
+// at a fixed position right after home), so it draws through its own trampoline rather than the
+// moduleFrames lockstep used by drawModuleFrame.
+static void drawSnakeFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    if (snakeModule)
+        snakeModule->drawFrame(display, state, x, y);
+}
+#endif
 
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
@@ -1301,6 +1356,15 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_home);
     }
 
+#if BASEUI_HAS_GAMES
+    // Games frame: always present (even with no game running), positioned directly after home.
+    if (snakeModule) {
+        fsi.positions.games = numframes;
+        normalFrames[numframes++] = drawSnakeFrame;
+        indicatorIcons.push_back(joystick_small);
+    }
+#endif
+
     fsi.positions.textMessage = numframes;
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
@@ -2073,6 +2137,12 @@ int Screen::handleInputEvent(const InputEvent *event)
             if (module && module->interceptingKeyboardInput())
                 inputIntercepted = true;
         }
+#if BASEUI_HAS_GAMES
+        // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
+        // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
+        if (snakeModule && snakeModule->interceptingKeyboardInput())
+            inputIntercepted = true;
+#endif
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
@@ -2147,6 +2217,11 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
+#if BASEUI_HAS_GAMES
+                } else if (snakeModule && framesetInfo.positions.games != 255 &&
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.games) {
+                    snakeModule->launchGame(); // only one game, so launch it directly (no menu)
+#endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.system) {
                     menuHandler::systemBaseMenu();
 #if HAS_GPS

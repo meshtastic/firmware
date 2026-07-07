@@ -26,6 +26,9 @@ enum notificationTypeEnum {
     // LOCKED frame. Without this, a first-pair on a locked device cannot
     // complete because the PIN never renders.
     pairing_pin,
+    // Arcade-style initials entry: like number_picker/hex_picker, but each position cycles
+    // through A-Z and 0-9. The assembled string is returned via a text (std::string) callback.
+    alphanumeric_picker,
 };
 
 struct BannerOverlayOptions {
@@ -345,6 +348,11 @@ class Screen : public concurrency::OSThread
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
     void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
+    // Arcade-style initials entry. `length` positions each cycle A-Z/0-9 (UP/DOWN), LEFT/RIGHT
+    // moves the cursor, SELECT advances; the assembled string is delivered to `bannerCallback`.
+    // `initialText` pre-seeds the positions (uppercased & filtered), defaulting to 'A'.
+    void showAlphanumericPicker(const char *message, const char *initialText, uint32_t durationMs, uint8_t length,
+                                std::function<void(const std::string &)> bannerCallback);
     void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                        std::function<void(const std::string &)> textCallback);
 
@@ -734,6 +742,7 @@ class Screen : public concurrency::OSThread
             uint8_t system = 255;
             uint8_t gps = 255;
             uint8_t home = 255;
+            uint8_t games = 255;
             uint8_t textMessage = 255;
             uint8_t nodelist_nodes = 255;
             uint8_t nodelist_location = 255;
