@@ -52,7 +52,10 @@ static bool showsFailureMark(AckStatus status)
 {
     return status == AckStatus::NACKED || status == AckStatus::TIMEOUT || status == AckStatus::TOO_LARGE ||
            status == AckStatus::NO_CHANNEL || status == AckStatus::PKI_FAILED || status == AckStatus::PKI_UNKNOWN_PUBKEY ||
-           status == AckStatus::PKI_SEND_FAIL_PUBLIC_KEY;
+           status == AckStatus::PKI_SEND_FAIL_PUBLIC_KEY || status == AckStatus::NO_INTERFACE ||
+           status == AckStatus::DUTY_CYCLE_LIMIT || status == AckStatus::RATE_LIMIT_EXCEEDED ||
+           status == AckStatus::NO_RESPONSE || status == AckStatus::BAD_REQUEST || status == AckStatus::NOT_AUTHORIZED ||
+           status == AckStatus::ADMIN_BAD_SESSION_KEY || status == AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED;
 }
 
 void scrollUp()

@@ -1,6 +1,6 @@
 #pragma once
 
-#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) || defined(MESHTASTIC_INCLUDE_BASE_UI_MESSAGE_STATUS)
 
 // Disable debug logging entirely on release builds of HELTEC_MESH_SOLAR for space constraints
 #if defined(HELTEC_MESH_SOLAR)
@@ -64,7 +64,15 @@ enum class AckStatus : uint8_t {
     NO_CHANNEL = 6,
     PKI_FAILED = 7,
     PKI_UNKNOWN_PUBKEY = 8,
-    PKI_SEND_FAIL_PUBLIC_KEY = 9
+    PKI_SEND_FAIL_PUBLIC_KEY = 9,
+    NO_INTERFACE = 10,
+    DUTY_CYCLE_LIMIT = 11,
+    RATE_LIMIT_EXCEEDED = 12,
+    NO_RESPONSE = 13,
+    BAD_REQUEST = 14,
+    NOT_AUTHORIZED = 15,
+    ADMIN_BAD_SESSION_KEY = 16,
+    ADMIN_PUBLIC_KEY_UNAUTHORIZED = 17
 };
 
 struct StoredMessage {

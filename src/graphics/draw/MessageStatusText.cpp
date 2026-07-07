@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) || defined(MESHTASTIC_INCLUDE_BASE_UI_MESSAGE_STATUS)
 #include "MeshTypes.h"
 #include "MessageStatusText.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
@@ -23,6 +23,22 @@ const char *inlineTextFor(const StoredMessage &message)
         return "Message is too large to send";
     case AckStatus::NO_CHANNEL:
         return "Channel/key mismatch";
+    case AckStatus::NO_INTERFACE:
+        return "No radio interface";
+    case AckStatus::DUTY_CYCLE_LIMIT:
+        return "Duty cycle limit";
+    case AckStatus::RATE_LIMIT_EXCEEDED:
+        return "Rate limited";
+    case AckStatus::NO_RESPONSE:
+        return "No app response";
+    case AckStatus::BAD_REQUEST:
+        return "Invalid request";
+    case AckStatus::NOT_AUTHORIZED:
+        return "Not authorized";
+    case AckStatus::ADMIN_BAD_SESSION_KEY:
+        return "Admin session expired";
+    case AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED:
+        return "Admin key not authorized";
     case AckStatus::PKI_FAILED:
         return "Could not send encrypted message";
     case AckStatus::PKI_UNKNOWN_PUBKEY:

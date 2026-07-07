@@ -6,7 +6,7 @@
 #include <cstring>
 #include <unity.h>
 
-#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) || defined(MESHTASTIC_INCLUDE_BASE_UI_MESSAGE_STATUS)
 
 static StoredMessage makeMessage(AckStatus status, uint32_t dest, bool ackTrackable = true)
 {
@@ -34,13 +34,14 @@ static void ensureLocalNodeNum(NodeNum localNode)
     myNodeInfo.my_node_num = localNode;
 }
 
-static meshtastic_MeshPacket makePhoneText(PacketId packetId, NodeNum dest)
+static meshtastic_MeshPacket makePhoneText(PacketId packetId, NodeNum dest, bool wantAck = false)
 {
     meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_default;
     packet.from = 0;
     packet.to = dest;
     packet.id = packetId;
     packet.channel = 0;
+    packet.want_ack = wantAck;
     packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     packet.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     const char *text = "phone dm";
@@ -110,6 +111,26 @@ static void test_pki_failure_text()
     TEST_ASSERT_EQUAL_STRING("Recipient needs your key", graphics::MessageStatusText::inlineTextFor(recipientMissingSenderKey));
 }
 
+static void test_canonical_routing_error_text()
+{
+    TEST_ASSERT_EQUAL_STRING("No radio interface",
+                             graphics::MessageStatusText::inlineTextFor(makeMessage(AckStatus::NO_INTERFACE, 0x12345678)));
+    TEST_ASSERT_EQUAL_STRING("Duty cycle limit",
+                             graphics::MessageStatusText::inlineTextFor(makeMessage(AckStatus::DUTY_CYCLE_LIMIT, 0x12345678)));
+    TEST_ASSERT_EQUAL_STRING("Rate limited",
+                             graphics::MessageStatusText::inlineTextFor(makeMessage(AckStatus::RATE_LIMIT_EXCEEDED, 0x12345678)));
+    TEST_ASSERT_EQUAL_STRING("No app response",
+                             graphics::MessageStatusText::inlineTextFor(makeMessage(AckStatus::NO_RESPONSE, 0x12345678)));
+    TEST_ASSERT_EQUAL_STRING("Invalid request",
+                             graphics::MessageStatusText::inlineTextFor(makeMessage(AckStatus::BAD_REQUEST, 0x12345678)));
+    TEST_ASSERT_EQUAL_STRING("Not authorized",
+                             graphics::MessageStatusText::inlineTextFor(makeMessage(AckStatus::NOT_AUTHORIZED, 0x12345678)));
+    TEST_ASSERT_EQUAL_STRING("Admin session expired", graphics::MessageStatusText::inlineTextFor(
+                                                          makeMessage(AckStatus::ADMIN_BAD_SESSION_KEY, 0x12345678)));
+    TEST_ASSERT_EQUAL_STRING("Admin key not authorized", graphics::MessageStatusText::inlineTextFor(
+                                                             makeMessage(AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED, 0x12345678)));
+}
+
 static void test_banner_text_uses_canonical_status_wording()
 {
     StoredMessage deliveredMesh = makeMessage(AckStatus::ACKED, NODENUM_BROADCAST);
@@ -138,12 +159,28 @@ static void test_routing_results_map_to_ack_status()
     assertAckStatus(AckStatus::TOO_LARGE, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_TOO_LARGE));
     assertAckStatus(AckStatus::TIMEOUT, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_MAX_RETRANSMIT));
     assertAckStatus(AckStatus::NO_CHANNEL, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_NO_CHANNEL));
+    assertAckStatus(AckStatus::NO_INTERFACE,
+                    ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_NO_INTERFACE));
+    assertAckStatus(AckStatus::DUTY_CYCLE_LIMIT,
+                    ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_DUTY_CYCLE_LIMIT));
+    assertAckStatus(AckStatus::RATE_LIMIT_EXCEEDED,
+                    ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED));
+    assertAckStatus(AckStatus::NO_RESPONSE, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_NO_RESPONSE));
+    assertAckStatus(AckStatus::BAD_REQUEST, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_BAD_REQUEST));
+    assertAckStatus(AckStatus::NOT_AUTHORIZED,
+                    ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_NOT_AUTHORIZED));
     assertAckStatus(AckStatus::PKI_SEND_FAIL_PUBLIC_KEY,
                     ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY));
     assertAckStatus(AckStatus::PKI_UNKNOWN_PUBKEY,
                     ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY));
     assertAckStatus(AckStatus::PKI_FAILED, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_PKI_FAILED));
+    assertAckStatus(AckStatus::ADMIN_BAD_SESSION_KEY,
+                    ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY));
+    assertAckStatus(AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED,
+                    ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED));
+    assertAckStatus(AckStatus::NACKED, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_NO_ROUTE));
     assertAckStatus(AckStatus::NACKED, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_GOT_NAK));
+    assertAckStatus(AckStatus::NACKED, ackStatusForRoutingResult(false, false, false, meshtastic_Routing_Error_TIMEOUT));
 }
 
 static void test_message_store_updates_matching_packet_id()
@@ -197,7 +234,26 @@ static void test_message_store_does_not_update_untracked_pending_message()
     assertAckStatus(AckStatus::NONE, messages.front().ackStatus);
 }
 
-static void test_phone_originated_dm_is_tracked_from_packet()
+static void test_phone_originated_dm_without_want_ack_is_stored_untrackable_from_packet()
+{
+    constexpr NodeNum localNode = 0x11111111;
+    constexpr NodeNum destNode = 0x22222222;
+    constexpr PacketId packetId = 0xaaaa0001;
+
+    ensureLocalNodeNum(localNode);
+    MessageStore store("phone_dm_untracked");
+
+    const StoredMessage &stored = store.addFromPacket(makePhoneText(packetId, destNode));
+
+    TEST_ASSERT_EQUAL_UINT32(localNode, stored.sender);
+    TEST_ASSERT_EQUAL_UINT32(destNode, stored.dest);
+    TEST_ASSERT_EQUAL_UINT32(packetId, stored.packetId);
+    TEST_ASSERT_FALSE(stored.ackTrackable);
+    assertAckStatus(AckStatus::NONE, stored.ackStatus);
+    assertInlineText("", stored);
+}
+
+static void test_phone_originated_dm_with_want_ack_is_tracked_from_packet()
 {
     constexpr NodeNum localNode = 0x11111111;
     constexpr NodeNum destNode = 0x22222222;
@@ -206,7 +262,7 @@ static void test_phone_originated_dm_is_tracked_from_packet()
     ensureLocalNodeNum(localNode);
     MessageStore store("phone_dm_tracking");
 
-    const StoredMessage &stored = store.addFromPacket(makePhoneText(packetId, destNode));
+    const StoredMessage &stored = store.addFromPacket(makePhoneText(packetId, destNode, true));
 
     TEST_ASSERT_EQUAL_UINT32(localNode, stored.sender);
     TEST_ASSERT_EQUAL_UINT32(destNode, stored.dest);
@@ -256,12 +312,12 @@ static void test_phone_originated_dm_updates_from_routing_status()
 
     ensureLocalNodeNum(localNode);
     MessageStore store("phone_dm_status");
-    store.addFromPacket(makePhoneText(deliveredPacket, destNode));
-    store.addFromPacket(makePhoneText(relayedPacket, destNode));
-    store.addFromPacket(makePhoneText(failedPacket, destNode));
-    store.addFromPacket(makePhoneText(pkiMissingRecipientKeyPacket, destNode));
-    store.addFromPacket(makePhoneText(pkiRecipientMissingSenderKeyPacket, destNode));
-    store.addFromPacket(makePhoneText(tooLargePacket, destNode));
+    store.addFromPacket(makePhoneText(deliveredPacket, destNode, true));
+    store.addFromPacket(makePhoneText(relayedPacket, destNode, true));
+    store.addFromPacket(makePhoneText(failedPacket, destNode, true));
+    store.addFromPacket(makePhoneText(pkiMissingRecipientKeyPacket, destNode, true));
+    store.addFromPacket(makePhoneText(pkiRecipientMissingSenderKeyPacket, destNode, true));
+    store.addFromPacket(makePhoneText(tooLargePacket, destNode, true));
 
     TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, deliveredPacket, destNode, meshtastic_Routing_Error_NONE));
     TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, relayedPacket, relayNode, meshtastic_Routing_Error_NONE));
@@ -299,7 +355,7 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
 
-#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) || defined(MESHTASTIC_INCLUDE_BASE_UI_MESSAGE_STATUS)
     RUN_TEST(test_sending_text);
     RUN_TEST(test_untracked_pending_status_has_no_inline_text);
     RUN_TEST(test_channel_implicit_ack_text);
@@ -309,11 +365,13 @@ void setup()
     RUN_TEST(test_message_too_large_text);
     RUN_TEST(test_no_channel_text);
     RUN_TEST(test_pki_failure_text);
+    RUN_TEST(test_canonical_routing_error_text);
     RUN_TEST(test_banner_text_uses_canonical_status_wording);
     RUN_TEST(test_routing_results_map_to_ack_status);
     RUN_TEST(test_message_store_updates_matching_packet_id);
     RUN_TEST(test_message_store_does_not_update_untracked_pending_message);
-    RUN_TEST(test_phone_originated_dm_is_tracked_from_packet);
+    RUN_TEST(test_phone_originated_dm_without_want_ack_is_stored_untrackable_from_packet);
+    RUN_TEST(test_phone_originated_dm_with_want_ack_is_tracked_from_packet);
     RUN_TEST(test_phone_originated_channel_is_stored_untrackable_from_packet);
     RUN_TEST(test_phone_originated_dm_updates_from_routing_status);
 #endif
