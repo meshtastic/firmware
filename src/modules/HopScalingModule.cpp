@@ -57,7 +57,7 @@ HopScalingModule::HopScalingModule() : concurrency::OSThread("HopScaling")
 void HopScalingModule::clear()
 {
     memset(entries, 0, sizeof(entries));
-    count = 0;
+    this->count = 0;
     samplingDenominator = DENOM_MIN;
     filteringDenominator = DENOM_MIN;
     filteringDenomHoldRollsRemaining = 0;
@@ -179,7 +179,7 @@ void HopScalingModule::samplePacketForHistogram(uint32_t nodeId, uint8_t hopCoun
         entries[count].nodeHash = hash;
         entries[count].hops_away = hopCount;
         entries[count].seenHoursAgo = 1u; // mark current hour
-        count++;
+        this->count++;
     } else {
         LOG_WARN("[HOPSCALE] Histogram full at samp=1/%u (DENOM_MAX=%u); dropping node hash=0x%04x; hop recommendation may be "
                  "skewed!!!",
@@ -420,7 +420,7 @@ void HopScalingModule::trimIfNeeded()
                 newCount++;
             }
         }
-        count = newCount;
+        this->count = newCount;
     }
 }
 
