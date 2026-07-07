@@ -34,6 +34,10 @@
 #define LORA_DIO1_SOFTWARE_POLL 1
 #endif
 
+// LORA_DIO1 is an expander pin, not an ESP32 GPIO, so it can't be used as a sleep/GPIO wakeup source
+// (shared capability; see its use in sleep.cpp).
+#define LORA_DIO1_EXTENDED_IO
+
 // Expander pin map (pg2 "I/O Extensions"; EXIO0..7 = GPA0..7 / P00..P07, EXIO8..15 = GPB0..7 / P10..P17)
 // Not wired up here: EXIO0 CAM_PWDN, EXIO2 TP_INT, EXIO5 AXP_IRQ, EXIO6 SYS_OUT,
 //                    EXIO11 GPS RESET_N (driver FET Q3 unpopulated), EXIO13 TP_RST
@@ -155,6 +159,8 @@
 #define DAC_I2S_WS 4   // pg3: ES8311 LRCK
 #define DAC_I2S_DOUT 5 // pg3: playback data (ESP32 -> ES8311)
 #define DAC_I2S_DIN 3  // pg3: record data (ES8311 -> ESP32)
+// AudioThread powers the NS4150 amp on/off around playback via this (opt-in) hook.
+#define AUDIO_AMP_ENABLE(on) mcpIoExpander.digitalWrite(EXIO_PA_CTRL, (on) ? HIGH : LOW)
 
 // ─── On-board peripherals not wired up yet ────────────────────────────────────
 // SHT41 temp/humidity (0x44) and QMI8658 IMU (0x6B): auto-detected on the I2C scan
