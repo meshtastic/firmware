@@ -331,4 +331,7 @@ with open(sys.argv[3], "w") as f:
 done
 
 "$PYTHON" bin/collect_sizes.py "$BUILDDIR" "$TMPDIR/current-sizes.json"
-"$PYTHON" bin/size_report.py "$TMPDIR/current-sizes.json" "${BASELINE_ARGS[@]}" "${FINAL_ARGS[@]}"
+# Default to the terminal-friendly bar format (like PlatformIO's own post-build RAM:/Flash:
+# summary) rather than the markdown this shares with the CI PR-comment path; a later
+# --format in FINAL_ARGS (passed after --) still wins, since argparse takes the last value.
+"$PYTHON" bin/size_report.py "$TMPDIR/current-sizes.json" --format text "${BASELINE_ARGS[@]}" "${FINAL_ARGS[@]}"

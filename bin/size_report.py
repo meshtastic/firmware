@@ -52,7 +52,7 @@ def load_sizes(path):
 
 
 def normalize_sizes(raw):
-    """Normalize a sizes dict to {board: {"flash_bytes": int, "ram_bytes": int}}.
+    """Normalize a sizes dict to {board: {"flash_bytes": int, "ram_bytes": int, ...}}.
 
     Accepts both the current schema (dict values) and the legacy schema where
     each value was the flash size as a plain int. Unknown/malformed entries are
@@ -66,9 +66,11 @@ def normalize_sizes(raw):
             sizes[board] = {"flash_bytes": val}
         elif isinstance(val, dict):
             entry = {}
-            for key in ("flash_bytes", "ram_bytes"):
+            for key in ("flash_bytes", "ram_bytes", "max_flash_bytes", "max_ram_bytes"):
                 if isinstance(val.get(key), int) and not isinstance(val[key], bool):
                     entry[key] = val[key]
+            if isinstance(val.get("flash_kind"), str):
+                entry["flash_kind"] = val["flash_kind"]
             if entry:
                 sizes[board] = entry
     return sizes
@@ -198,6 +200,70 @@ def generate_markdown(new_sizes, baselines, top_n=5):
     return "\n".join(sections)
 
 
+def format_bar(used, maximum, width=10):
+    """Render a PlatformIO-style '[====      ]  40.1% (used X bytes from Y bytes)' bar.
+
+    Returns None when there's no known capacity to bar against (matches PlatformIO's own
+    RAM:/Flash: summary, which needs the board's declared max size to draw anything).
+    """
+    if not isinstance(maximum, int) or maximum <= 0:
+        return None
+    pct = 100.0 * used / maximum
+    filled = max(0, min(width, int(round(width * min(pct, 100.0) / 100.0))))
+    bar = "=" * filled + " " * (width - filled)
+    over = "  (over capacity!)" if pct > 100 else ""
+    return f"[{bar}] {pct:5.1f}% (used {used:,} bytes from {maximum:,} bytes){over}"
+
+
+def generate_text(new_sizes, baselines, top_n=5):
+    """Render one board per section with PlatformIO-style RAM:/Flash: bars, for a terminal.
+
+    Unlike generate_markdown this isn't meant for a PR comment - it's what bin/check-size.sh
+    uses so a local run reads like the bar PlatformIO itself prints after a normal build,
+    instead of raw markdown table/bold syntax dumped to a terminal.
+    """
+    lines = []
+    for board in sorted(new_sizes):
+        entry = new_sizes[board]
+        lines.append(board)
+
+        ram = entry.get("ram_bytes")
+        max_ram = entry.get("max_ram_bytes")
+        if ram is None:
+            lines.append("  RAM:   n/a (manifest predates ram_bytes)")
+        else:
+            bar = format_bar(ram, max_ram)
+            lines.append(f"  RAM:   {bar}" if bar else f"  RAM:   used {ram:,} bytes")
+
+        flash = entry.get("flash_bytes")
+        flash_kind = entry.get("flash_kind", "bin")
+        if flash is None:
+            lines.append("  Flash: n/a")
+        elif flash_kind != "bin":
+            lines.append(
+                f"  Flash: used {flash:,} bytes ({flash_kind} image, not directly "
+                "comparable to flash capacity)"
+            )
+        else:
+            max_flash = entry.get("max_flash_bytes")
+            bar = format_bar(flash, max_flash)
+            lines.append(f"  Flash: {bar}" if bar else f"  Flash: used {flash:,} bytes")
+
+        for label, old_sizes in baselines:
+            for key, unit_label in (("flash_bytes", "Flash"), ("ram_bytes", "RAM")):
+                current = entry.get(key)
+                old = old_sizes.get(board, {}).get(key)
+                if current is None or old is None:
+                    continue
+                delta = current - old
+                marker = "no change" if delta == 0 else format_delta(delta)
+                lines.append(f"    {unit_label} vs `{label}`: {marker}")
+        lines.append("")
+    if not lines:
+        lines.append("(no targets built)")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 def load_budgets(path):
     """Load bin/ram_budgets.json, skipping "_comment"-style keys.
 
@@ -296,6 +362,21 @@ def budget_markdown(rows):
     return "\n".join(lines)
 
 
+def budget_text(rows):
+    """Render budget usage as plain lines, for --format text (see budget_markdown)."""
+    if not rows:
+        return ""
+    lines = ["Size budgets:"]
+    for env, label, value, budget, over in rows:
+        if value is None:
+            lines.append(f"  {env} {label}: n/a (budget {budget:,} bytes)")
+            continue
+        pct = 100.0 * value / budget if budget > 0 else float("inf")
+        status = f"{pct:.1f}%" + (" OVER BUDGET" if over else "")
+        lines.append(f"  {env} {label}: {value:,} / {budget:,} bytes ({status})")
+    return "\n".join(lines) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compare firmware size reports")
     parser.add_argument("new_sizes", help="Path to new sizes JSON")
@@ -321,6 +402,12 @@ def main():
         "--enforce-budgets",
         action="store_true",
         help="Exit 1 when any env exceeds its budget (requires --budgets)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["markdown", "text"],
+        default="markdown",
+        help="markdown (default, for PR comments) or text (PlatformIO-style bars, for a terminal)",
     )
     args = parser.parse_args()
 
@@ -350,7 +437,10 @@ def main():
         label, path = b.split(":", 1)
         baselines.append((label, load_sizes(path)))
 
-    md = generate_markdown(new_sizes, baselines, top_n=args.top)
+    if args.format == "text":
+        report = generate_text(new_sizes, baselines, top_n=args.top)
+    else:
+        report = generate_markdown(new_sizes, baselines, top_n=args.top)
 
     violations = []
     if args.budgets:
@@ -358,11 +448,13 @@ def main():
         violations, rows = check_budgets(
             new_sizes, budgets, fail_on_missing=args.enforce_budgets
         )
-        budget_md = budget_markdown(rows)
-        if budget_md:
-            md += "\n" + budget_md
+        budget_section = (
+            budget_text(rows) if args.format == "text" else budget_markdown(rows)
+        )
+        if budget_section:
+            report += "\n" + budget_section
 
-    print(md)
+    print(report)
 
     if violations and args.enforce_budgets:
         print("\nRAM/flash budget check FAILED:", file=sys.stderr)

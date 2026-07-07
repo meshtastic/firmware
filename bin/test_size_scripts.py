@@ -181,7 +181,7 @@ def test_collect_sizes_flash_bytes_fallback():
         assert rc == 0, f"collect_sizes failed: {stderr}"
         with open(outfile) as f:
             sizes = json.load(f)
-        assert sizes == {"rak4631": {"flash_bytes": 765192}}
+        assert sizes == {"rak4631": {"flash_bytes": 765192, "flash_kind": "elf"}}
 
 
 def test_collect_sizes_prefers_bin_over_flash_bytes_fallback():

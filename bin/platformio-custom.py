@@ -224,6 +224,20 @@ def manifest_write(files, env, ram_bytes=None, flash_bytes=None):
     # whose packaged artifacts include no raw .bin (e.g. nRF52).
     if flash_bytes is not None:
         manifest["flash_bytes"] = flash_bytes
+    # Board's declared capacity, the same numbers PlatformIO's own post-build RAM:/Flash:
+    # bars use - lets bin/size_report.py draw an equivalent bar for the terminal (--format text).
+    try:
+        board_cfg = env.BoardConfig()
+    except Exception:
+        board_cfg = None
+    max_ram_bytes = (
+        board_cfg.get("upload.maximum_ram_size", None) if board_cfg else None
+    )
+    max_flash_bytes = board_cfg.get("upload.maximum_size", None) if board_cfg else None
+    if isinstance(max_ram_bytes, int) and not isinstance(max_ram_bytes, bool):
+        manifest["max_ram_bytes"] = max_ram_bytes
+    if isinstance(max_flash_bytes, int) and not isinstance(max_flash_bytes, bool):
+        manifest["max_flash_bytes"] = max_flash_bytes
     # Get partition table (generated in esp32_pre.py) if it exists
     if env.get("custom_mtjson_part"):
         # custom_mtjson_part is a JSON string, convert it back to a dict
