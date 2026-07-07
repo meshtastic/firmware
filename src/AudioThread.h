@@ -17,6 +17,10 @@
 extern ExtensionIOXL9555 io;
 #endif
 
+#ifdef MESHNOLOGY_W10
+#include "platform/esp32/ExtensionIOMCP23017.h" // NS4150 amp enable on the MCP23017 (EXIO_PA_CTRL)
+#endif
+
 #define AUDIO_THREAD_INTERVAL_MS 100
 
 class AudioThread : public concurrency::OSThread
@@ -28,6 +32,9 @@ class AudioThread : public concurrency::OSThread
     {
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#endif
+#ifdef MESHNOLOGY_W10
+        mcpIoExpander.digitalWrite(EXIO_PA_CTRL, HIGH);
 #endif
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
@@ -57,6 +64,9 @@ class AudioThread : public concurrency::OSThread
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, LOW);
 #endif
+#ifdef MESHNOLOGY_W10
+        mcpIoExpander.digitalWrite(EXIO_PA_CTRL, LOW);
+#endif
     }
 
     void readAloud(const char *text)
@@ -69,11 +79,17 @@ class AudioThread : public concurrency::OSThread
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, HIGH);
 #endif
+#ifdef MESHNOLOGY_W10
+        mcpIoExpander.digitalWrite(EXIO_PA_CTRL, HIGH);
+#endif
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
 #ifdef T_LORA_PAGER
         io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#endif
+#ifdef MESHNOLOGY_W10
+        mcpIoExpander.digitalWrite(EXIO_PA_CTRL, LOW);
 #endif
     }
 

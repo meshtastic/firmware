@@ -40,7 +40,7 @@
 #define EXIO_LCD_RST 1    // GPA1: LCD reset
 #define EXIO_LORA_NRST 3  // GPA3: E22 NRST
 #define EXIO_RTC_INT 4    // GPA4: PCF85063 INT (unused)
-#define EXIO_PA_CTRL 7    // GPA7: NS4150 speaker amp enable (audio not enabled yet)
+#define EXIO_PA_CTRL 7    // GPA7: NS4150 speaker amp enable (driven by AudioThread during playback)
 #define EXIO_IMU_INT1 8   // GPB0: QMI8658 INT1 (input only, no MCU interrupt)
 #define EXIO_LORA_DIO1 9  // GPB1: E22 DIO1
 #define EXIO_LORA_BUSY 10 // GPB2: E22 BUSY
@@ -143,9 +143,21 @@
 // #define NEOPIXEL_DATA 48
 // #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
 
+// ─── Audio ────────────────────────────────────────────────────────────────────
+// ES8311 codec (I2C 0x18) -> NS4150 amp -> speaker, initialized in the variant's lateInitVariant().
+// Used for notification tones / ringtones over the I2S "buzzer" path (turn on the
+// use_i2s_as_buzzer external-notification option). Codec2 voice is SX1280-only, so it does not
+// apply to this sub-GHz board. The NS4150 amp enable is on the MCP23017 (EXIO_PA_CTRL / GPA7) and
+// is toggled by AudioThread around playback. pg3 I2S wiring below.
+#define HAS_I2S
+#define DAC_I2S_MCLK 1 // pg3: ES8311 MCLK
+#define DAC_I2S_BCK 2  // pg3: ES8311 BCLK/SCLK
+#define DAC_I2S_WS 4   // pg3: ES8311 LRCK
+#define DAC_I2S_DOUT 5 // pg3: playback data (ESP32 -> ES8311)
+#define DAC_I2S_DIN 3  // pg3: record data (ES8311 -> ESP32)
+
 // ─── On-board peripherals not wired up yet ────────────────────────────────────
 // SHT41 temp/humidity (0x44) and QMI8658 IMU (0x6B): auto-detected on the I2C scan
-// ES8311 audio codec + NS4150 amp: I2S on GPIO1-5 (pg3), amp enable EXIO7 - not enabled
 // microSD: CS on GPIO9, shares the LCD/LoRa SPI bus - not enabled
 // Camera interface: GPIO38-42/45-48 (pg1) - not enabled
 
