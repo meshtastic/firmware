@@ -499,15 +499,22 @@ void ExternalNotificationModule::triggerBuzzerOutput()
 void ExternalNotificationModule::startNotification()
 {
     // Trigger the configured *message-style* outputs for a non-message event (e.g. a geofence
-    // crossing). Respects the module's enabled/mute state and the alert_message_* output
-    // selection, but carries no bell semantics. PWM/I2S ringtone playback is driven by runOnce()
-    // while isNagging is set.
+    // crossing). Respects the module's enabled/mute state, the alert_message_* output selection,
+    // and buzzer_mode (DIRECT_MSG_ONLY suppresses the buzzer, same as for messages), but carries
+    // no bell semantics. PWM/I2S ringtone playback is driven by runOnce() while isNagging is set.
     if (!moduleConfig.external_notification.enabled || isSilenced)
         return;
 
+    // A geofence crossing is neither a DM to us nor a bell character, so DIRECT_MSG_ONLY
+    // suppresses its buzzer output entirely - same rule handleReceived() applies to messages.
+    const bool buzzerModeIsDirectOnly = (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
+
     const bool generic = moduleConfig.external_notification.alert_message;
     const bool vibra = moduleConfig.external_notification.alert_message_vibra;
-    const bool buzzer = canBuzz() && moduleConfig.external_notification.alert_message_buzzer;
+    const bool buzzer =
+        canBuzz() && moduleConfig.external_notification.alert_message_buzzer && !buzzerModeIsDirectOnly;
+    if (canBuzz() && moduleConfig.external_notification.alert_message_buzzer && buzzerModeIsDirectOnly)
+        LOG_INFO("Geofence buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
     if (!generic && !vibra && !buzzer)
         return;
 
