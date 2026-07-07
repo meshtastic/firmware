@@ -21,6 +21,7 @@
 #include "power/PowerHAL.h"
 
 #include "FSCommon.h"
+#include "Power.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -28,7 +29,6 @@
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
-#include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
@@ -38,9 +38,13 @@
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+#include "memGet.h"
+#endif
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -167,6 +171,10 @@ AudioThread *audioThread = nullptr;
 #ifdef USE_XL9555
 #include "ExtensionIOXL9555.hpp"
 ExtensionIOXL9555 io;
+#endif
+
+#ifdef USE_MCP23017
+#include "platform/esp32/ExtensionIOMCP23017.h"
 #endif
 
 #if HAS_TFT
@@ -601,6 +609,12 @@ void setup()
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+
+#ifdef USE_MCP23017
+    // Bring up the I2C IO expander (LoRa reset, LCD reset, GPS wake) now that the PMU rails are up,
+    // before the I2C scan and radio/display init
+    mcp23017EarlyInit();
+#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
@@ -1151,8 +1165,26 @@ void setup()
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
 
+    // Log the per-subsystem heap breakdown now that the big allocations are done
+    memaudit::logBreakdown("boot");
+
     // We manually run this to update the NodeStatus
     nodeDB->notifyObservers(true);
+
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+    // Opt-in CI guardrail: on nRF52840 static RAM growth eats the heap arena 1:1,
+    // so flag loudly when less than 20% of the heap is free at the end of setup().
+    {
+        uint32_t heapTotal = memGet.getHeapSize();
+        // Platforms without heap accounting report UINT32_MAX (or 0); skip those
+        if (heapTotal != 0 && heapTotal != UINT32_MAX) {
+            uint32_t heapFree = memGet.getFreeHeap();
+            if (heapFree < heapTotal / 5) {
+                LOG_ERROR("Boot heap watermark: only %u of %u bytes free (<20%%)", heapFree, heapTotal);
+            }
+        }
+    }
+#endif
 }
 
 #endif

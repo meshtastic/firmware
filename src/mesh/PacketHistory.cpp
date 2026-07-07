@@ -1,5 +1,6 @@
 #include "PacketHistory.h"
 #include "configuration.h"
+#include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 
@@ -7,10 +8,6 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #include "Throttle.h"
-
-#define PACKETHISTORY_MAX                                                                                                        \
-    max((uint32_t)(MAX_NUM_NODES * 2.0),                                                                                         \
-        (uint32_t)100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
 
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
@@ -44,6 +41,7 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initia
 
     // Initialize the recent packets array to zero
     memset(recentPackets.get(), 0, sizeof(PacketRecord) * recentPacketsCapacity);
+    memaudit::set("pkthist", sizeof(PacketRecord) * recentPacketsCapacity);
 
 #if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
     // Allocate hash index with load factor <= 0.5 for short probe chains
@@ -57,6 +55,7 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initia
         return;
     }
     memset(hashIndex.get(), 0xFF, sizeof(uint16_t) * hashCapacity); // Fill with HASH_EMPTY (0xFFFF)
+    memaudit::set("pkthist", sizeof(PacketRecord) * recentPacketsCapacity + sizeof(uint16_t) * hashCapacity);
 #endif
 }
 
