@@ -2330,7 +2330,7 @@ void menuHandler::removeWaypointMenu()
             return;
         }
         pickedWaypointId = waypointIds[selected];
-        LOG_INFO("Removing waypoint 0x%x", menuHandler::pickedWaypointId);
+        LOG_INFO("Removing waypoint 0x%08x", menuHandler::pickedWaypointId);
         if (waypointModule)
             waypointModule->broadcastDelete(menuHandler::pickedWaypointId);
         else

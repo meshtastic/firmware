@@ -172,7 +172,7 @@ void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp, NodeNum c
     }
     if (!slot) {
         if (geofences.size() >= GEOFENCE_MAX_WAYPOINTS) {
-            LOG_WARN("Geofence store full (%u); ignoring waypoint 0x%x", (unsigned)geofences.size(), wp.id);
+            LOG_WARN("Geofence store full (%u); ignoring waypoint 0x%08x", (unsigned)geofences.size(), wp.id);
             return;
         }
         geofences.push_back(Geofence{});
@@ -193,7 +193,7 @@ void GeofenceModule::onWaypointReceived(const meshtastic_Waypoint &wp, NodeNum c
     strncpy(slot->name, wp.name, sizeof(slot->name) - 1);
     slot->name[sizeof(slot->name) - 1] = '\0';
 
-    LOG_INFO("Geofence: tracking waypoint 0x%x '%s' creator=0x%08x radius=%um box=%d enter=%d exit=%d favOnly=%d", wp.id,
+    LOG_INFO("Geofence: tracking waypoint 0x%08x '%s' creator=0x%08x radius=%um box=%d enter=%d exit=%d favOnly=%d", wp.id,
              slot->name, (unsigned)creatorNodeNum, wp.geofence_radius, wp.has_bounding_box, wp.notify_on_enter, wp.notify_on_exit,
              wp.notify_favorites_only);
 }
