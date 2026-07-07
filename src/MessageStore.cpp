@@ -209,8 +209,9 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     bool isDM = (sm.dest != 0 && sm.dest != NODENUM_BROADCAST);
 
     sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
-    sm.ackStatus = (packet.from == 0) ? AckStatus::NONE : AckStatus::ACKED;
-    sm.ackTrackable = false;
+    bool isLocalOutgoing = packet.from == 0;
+    sm.ackStatus = isLocalOutgoing ? AckStatus::NONE : AckStatus::ACKED;
+    sm.ackTrackable = isLocalOutgoing && isDM && sm.packetId != 0;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     sm.xeddsaSigned = packet.xeddsa_signed;
@@ -260,6 +261,32 @@ bool MessageStore::updateAckStatus(NodeNum sender, PacketId packetId, AckStatus 
 
     for (auto it = liveMessages.rbegin(); it != liveMessages.rend(); ++it) {
         if (it->sender == sender && it->packetId == packetId && it->ackTrackable) {
+            if (it->ackStatus != status) {
+                it->ackStatus = status;
+#if ENABLE_MESSAGE_PERSISTENCE
+                markMessageStoreUnsaved();
+#endif
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool MessageStore::updateAckStatusFromRouting(NodeNum sender, PacketId packetId, NodeNum ackFrom,
+                                              meshtastic_Routing_Error errorReason)
+{
+    if (packetId == 0)
+        return false;
+
+    for (auto it = liveMessages.rbegin(); it != liveMessages.rend(); ++it) {
+        if (it->sender == sender && it->packetId == packetId && it->ackTrackable) {
+            bool wasBroadcast = (it->dest == NODENUM_BROADCAST);
+            bool isFromDest = (ackFrom == it->dest);
+            bool isAck = (errorReason == meshtastic_Routing_Error_NONE);
+            AckStatus status = ackStatusForRoutingResult(wasBroadcast, isFromDest, isAck, errorReason);
+
             if (it->ackStatus != status) {
                 it->ackStatus = status;
 #if ENABLE_MESSAGE_PERSISTENCE

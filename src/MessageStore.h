@@ -127,6 +127,7 @@ class MessageStore
     const std::deque<StoredMessage> &getMessages() const { return liveMessages; }
 
     bool updateAckStatus(NodeNum sender, PacketId packetId, AckStatus status);
+    bool updateAckStatusFromRouting(NodeNum sender, PacketId packetId, NodeNum ackFrom, meshtastic_Routing_Error errorReason);
 
     // Helper filters for future use
     std::deque<StoredMessage> getChannelMessages(uint8_t channel) const; // Only broadcast messages on a channel

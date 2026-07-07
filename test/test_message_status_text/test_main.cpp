@@ -1,7 +1,9 @@
 #include "MeshTypes.h"
 #include "MessageStore.h"
+#include "NodeDB.h"
 #include "TestUtil.h"
 #include "graphics/draw/MessageStatusText.h"
+#include <cstring>
 #include <unity.h>
 
 #if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
@@ -18,6 +20,33 @@ static StoredMessage makeMessage(AckStatus status, uint32_t dest, bool ackTracka
 static void assertAckStatus(AckStatus expected, AckStatus actual)
 {
     TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(expected), static_cast<uint8_t>(actual));
+}
+
+static void assertInlineText(const char *expected, const StoredMessage &message)
+{
+    TEST_ASSERT_EQUAL_STRING(expected, graphics::MessageStatusText::inlineTextFor(message));
+}
+
+static void ensureLocalNodeNum(NodeNum localNode)
+{
+    if (!nodeDB)
+        nodeDB = new NodeDB();
+    myNodeInfo.my_node_num = localNode;
+}
+
+static meshtastic_MeshPacket makePhoneDm(PacketId packetId, NodeNum dest)
+{
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_default;
+    packet.from = 0;
+    packet.to = dest;
+    packet.id = packetId;
+    packet.channel = 0;
+    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    const char *text = "phone dm";
+    packet.decoded.payload.size = strlen(text);
+    memcpy(packet.decoded.payload.bytes, text, packet.decoded.payload.size);
+    return packet;
 }
 
 static void test_sending_text()
@@ -168,6 +197,72 @@ static void test_message_store_does_not_update_untracked_pending_message()
     assertAckStatus(AckStatus::NONE, messages.front().ackStatus);
 }
 
+static void test_phone_originated_dm_is_tracked_from_packet()
+{
+    constexpr NodeNum localNode = 0x11111111;
+    constexpr NodeNum destNode = 0x22222222;
+    constexpr PacketId packetId = 0xaaaa0001;
+
+    ensureLocalNodeNum(localNode);
+    MessageStore store("phone_dm_tracking");
+
+    const StoredMessage &stored = store.addFromPacket(makePhoneDm(packetId, destNode));
+
+    TEST_ASSERT_EQUAL_UINT32(localNode, stored.sender);
+    TEST_ASSERT_EQUAL_UINT32(destNode, stored.dest);
+    TEST_ASSERT_EQUAL_UINT32(packetId, stored.packetId);
+    TEST_ASSERT_TRUE(stored.ackTrackable);
+    assertAckStatus(AckStatus::NONE, stored.ackStatus);
+    assertInlineText("Sending...", stored);
+}
+
+static void test_phone_originated_dm_updates_from_routing_status()
+{
+    constexpr NodeNum localNode = 0x11111111;
+    constexpr NodeNum destNode = 0x22222222;
+    constexpr NodeNum relayNode = 0x33333333;
+    constexpr PacketId deliveredPacket = 0xaaaa0001;
+    constexpr PacketId relayedPacket = 0xbbbb0002;
+    constexpr PacketId failedPacket = 0xcccc0003;
+    constexpr PacketId pkiMissingRecipientKeyPacket = 0xdddd0004;
+    constexpr PacketId pkiRecipientMissingSenderKeyPacket = 0xeeee0005;
+    constexpr PacketId tooLargePacket = 0xffff0006;
+
+    ensureLocalNodeNum(localNode);
+    MessageStore store("phone_dm_status");
+    store.addFromPacket(makePhoneDm(deliveredPacket, destNode));
+    store.addFromPacket(makePhoneDm(relayedPacket, destNode));
+    store.addFromPacket(makePhoneDm(failedPacket, destNode));
+    store.addFromPacket(makePhoneDm(pkiMissingRecipientKeyPacket, destNode));
+    store.addFromPacket(makePhoneDm(pkiRecipientMissingSenderKeyPacket, destNode));
+    store.addFromPacket(makePhoneDm(tooLargePacket, destNode));
+
+    TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, deliveredPacket, destNode, meshtastic_Routing_Error_NONE));
+    TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, relayedPacket, relayNode, meshtastic_Routing_Error_NONE));
+    TEST_ASSERT_TRUE(
+        store.updateAckStatusFromRouting(localNode, failedPacket, relayNode, meshtastic_Routing_Error_MAX_RETRANSMIT));
+    TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, pkiMissingRecipientKeyPacket, relayNode,
+                                                      meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY));
+    TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, pkiRecipientMissingSenderKeyPacket, destNode,
+                                                      meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY));
+    TEST_ASSERT_TRUE(store.updateAckStatusFromRouting(localNode, tooLargePacket, relayNode, meshtastic_Routing_Error_TOO_LARGE));
+
+    const auto &messages = store.getMessages();
+    TEST_ASSERT_EQUAL_UINT32(6U, messages.size());
+    assertAckStatus(AckStatus::ACKED, messages[0].ackStatus);
+    assertInlineText("Delivered to recipient", messages[0]);
+    assertAckStatus(AckStatus::RELAYED, messages[1].ackStatus);
+    assertInlineText("Relayed, not confirmed by recipient", messages[1]);
+    assertAckStatus(AckStatus::TIMEOUT, messages[2].ackStatus);
+    assertInlineText("Failed to deliver to mesh", messages[2]);
+    assertAckStatus(AckStatus::PKI_SEND_FAIL_PUBLIC_KEY, messages[3].ackStatus);
+    assertInlineText("Recipient key unavailable", messages[3]);
+    assertAckStatus(AckStatus::PKI_UNKNOWN_PUBKEY, messages[4].ackStatus);
+    assertInlineText("Recipient needs your key", messages[4]);
+    assertAckStatus(AckStatus::TOO_LARGE, messages[5].ackStatus);
+    assertInlineText("Message is too large to send", messages[5]);
+}
+
 #endif
 
 void setUp(void) {}
@@ -192,6 +287,8 @@ void setup()
     RUN_TEST(test_routing_results_map_to_ack_status);
     RUN_TEST(test_message_store_updates_matching_packet_id);
     RUN_TEST(test_message_store_does_not_update_untracked_pending_message);
+    RUN_TEST(test_phone_originated_dm_is_tracked_from_packet);
+    RUN_TEST(test_phone_originated_dm_updates_from_routing_status);
 #endif
 
     exit(UNITY_END());
