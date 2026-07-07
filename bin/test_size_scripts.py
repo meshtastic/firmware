@@ -133,6 +133,51 @@ def test_collect_sizes_fallback_bin():
         assert sizes == {"custom-board": {"flash_bytes": 500000}}
 
 
+def test_collect_sizes_uses_ota_zip_when_no_bin():
+    """nRF52 manifests only publish an OTA zip; use it for flash budget checks."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        outfile = os.path.join(tmpdir, "sizes.json")
+        data = {
+            "platformioTarget": "rak4631",
+            "files": [
+                {"name": "firmware-rak4631-2.8.0.abcdef0.elf", "bytes": 1308988},
+                {"name": "firmware-rak4631-2.8.0.abcdef0.hex", "bytes": 2156758},
+                {"name": "firmware-rak4631-2.8.0.abcdef0.uf2", "bytes": 1533952},
+                {"name": "firmware-rak4631-2.8.0.abcdef0-ota.zip", "bytes": 767687},
+            ],
+            "ram_bytes": 104500,
+        }
+        path = os.path.join(tmpdir, "firmware-rak4631.mt.json")
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        assert rc == 0, f"collect_sizes failed: {stderr}"
+        assert "1 targets" in stdout
+
+        with open(outfile) as f:
+            sizes = json.load(f)
+        assert sizes == {"rak4631": {"flash_bytes": 767687, "ram_bytes": 104500}}
+
+
+def test_collect_sizes_recurses_manifest_subdirectories():
+    """download-artifact may place each artifact under its own directory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        outfile = os.path.join(tmpdir, "sizes.json")
+        nested = os.path.join(tmpdir, "manifest-nrf52840-rak4631")
+        os.mkdir(nested)
+        manifests = {"rak4631": make_manifest("rak4631", 524288, ram_bytes=104500)}
+        write_manifests(nested, manifests)
+
+        rc, stdout, stderr = run_script("collect_sizes.py", [tmpdir, outfile])
+        assert rc == 0, f"collect_sizes failed: {stderr}"
+        assert "1 targets" in stdout
+
+        with open(outfile) as f:
+            sizes = json.load(f)
+        assert sizes == {"rak4631": {"flash_bytes": 524288, "ram_bytes": 104500}}
+
+
 def test_collect_sizes_skips_ota_littlefs():
     """collect_sizes ignores ota/littlefs/bleota .bin files in fallback."""
     with tempfile.TemporaryDirectory() as tmpdir:

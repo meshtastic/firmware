@@ -5,10 +5,11 @@
 Output schema (consumed by bin/size_report.py):
     {"<env>": {"flash_bytes": <int>, "ram_bytes": <int>}}
 
-flash_bytes is the size of the main firmware image (.bin). ram_bytes is the
-static RAM footprint (.data + .bss) emitted into the manifest by
-bin/platformio-custom.py; it is omitted for manifests that predate it, and
-size_report.py renders those as "n/a".
+flash_bytes is the size of the main firmware image (.bin), falling back to the
+OTA package size for targets that only publish firmware-*-ota.zip in their
+manifest. ram_bytes is the static RAM footprint (.data + .bss) emitted into the
+manifest by bin/platformio-custom.py; it is omitted for manifests that predate
+it, and size_report.py renders those as "n/a".
 """
 
 import json
@@ -19,10 +20,14 @@ import sys
 def collect_sizes(manifest_dir):
     """Scan manifest_dir for .mt.json files and return {board: sizes_dict}."""
     sizes = {}
-    for fname in sorted(os.listdir(manifest_dir)):
-        if not fname.endswith(".mt.json"):
-            continue
-        path = os.path.join(manifest_dir, fname)
+    manifest_paths = []
+    for root, _, files in os.walk(manifest_dir):
+        for fname in files:
+            if fname.endswith(".mt.json"):
+                manifest_paths.append(os.path.join(root, fname))
+
+    for path in sorted(manifest_paths):
+        fname = os.path.basename(path)
         with open(path) as f:
             data = json.load(f)
         board = data.get("platformioTarget", fname.replace(".mt.json", ""))
@@ -40,6 +45,15 @@ def collect_sizes(manifest_dir):
                 if name.endswith(".bin") and not any(
                     x in name for x in ["littlefs", "bleota", "ota"]
                 ):
+                    bin_size = entry["bytes"]
+                    break
+        # nRF52 release manifests publish an OTA package instead of a raw .bin
+        # entry. It contains the app binary and is the only flash-sized value
+        # available to the manifest-only size gate.
+        if bin_size is None:
+            for entry in data.get("files", []):
+                name = entry.get("name", "")
+                if name.startswith("firmware-") and name.endswith("-ota.zip"):
                     bin_size = entry["bytes"]
                     break
         if bin_size is not None:
