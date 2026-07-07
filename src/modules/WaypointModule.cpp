@@ -258,6 +258,15 @@ bool WaypointModule::broadcastDelete(uint32_t waypointId)
     if (!found)
         return false;
 
+    // Respect the waypoint's lock: we may remove a locked waypoint from our own device, but
+    // we're not the owner, so we have no authority to delete it mesh-wide.
+    const NodeNum localNodeNum = nodeDB ? nodeDB->getNodeNum() : 0;
+    if (wp.locked_to != 0 && wp.locked_to != localNodeNum) {
+        LOG_INFO("Waypoint 0x%x is locked to 0x%08x; removing locally only", waypointId, wp.locked_to);
+        waypointStore.removeWaypoint(waypointId);
+        return true;
+    }
+
     // Already-expired = the mesh convention for "delete this waypoint".
     wp.expire = 1;
 
