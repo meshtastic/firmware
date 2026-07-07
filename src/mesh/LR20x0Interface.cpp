@@ -5,6 +5,12 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
+#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
+// The DCDC sensitivity workaround pokes RadioLib-internal DCDC registers that are NOT exposed via the
+// public LR2021.h, so pull in the internal register map explicitly. Opt-in only (see LR2021_DCDC_WORKAROUND).
+#include <modules/LR2021/LR2021_registers.h>
+#endif
+
 // Keep LR20x0 naming while RadioLib exposes LR2021 symbols.
 #ifndef LR20x0
 #define LR20x0 LR2021
@@ -40,6 +46,12 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 #endif
 #ifndef LR2021_MAX_POWER_HF
 #define LR2021_MAX_POWER_HF 12
+#endif
+
+// Unlike SX126x/LR11x0 (on/off bool), the LR2021 RX gain boost is a 0-7 level (0 = disabled, 7 = max boost).
+// Map the historical on/off sx126x_rx_boosted_gain flag to max boost when enabled.
+#ifndef LR2021_RX_GAIN_BOOST_LEVEL
+#define LR2021_RX_GAIN_BOOST_LEVEL 7
 #endif
 
 template <typename T>
@@ -140,19 +152,22 @@ template <typename T> bool LR20x0Interface<T>::init()
         // Currently requires radiolib godmode
 
 #if RADIOLIB_GODMODE
-    uint8_t fwMajor = 0;
-    uint8_t fwMinor = 0;
-    int versionRes = lora.getVersion(&fwMajor, &fwMinor);
-    if (versionRes == RADIOLIB_ERR_NONE)
-        LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
+    if (res == RADIOLIB_ERR_NONE) {
+        uint8_t fwMajor = 0;
+        uint8_t fwMinor = 0;
+        int versionRes = lora.getVersion(&fwMajor, &fwMinor);
+        if (versionRes == RADIOLIB_ERR_NONE)
+            LOG_DEBUG("LR20x0 FW %d.%d", fwMajor, fwMinor);
+    }
 #endif
 
-        // Semtech DCDC sensitivity workaround for sub-GHz operations (engineering sample date code 2513).
-        // lr20xx_workarounds_dcdc_reset must follow setPacketType; lr20xx_workarounds_dcdc_configure
-        // must follow setModulationParams — both are satisfied after lora.begin() returns.
-        // Only applies to sub-GHz; 2.4 GHz (LORA_24) is excluded.
+    // Semtech DCDC sensitivity workaround for sub-GHz operations (engineering sample date code 2513).
+    // lr20xx_workarounds_dcdc_reset must follow setPacketType; lr20xx_workarounds_dcdc_configure
+    // must follow setModulationParams - both are satisfied after lora.begin() returns.
+    // Only applies to sub-GHz; 2.4 GHz (LORA_24) is excluded.
+    // Opt-in only: requires -DLR2021_DCDC_WORKAROUND (and RADIOLIB_GODMODE for the internal register access).
 
-#if RADIOLIB_GODMODE
+#if defined(LR2021_DCDC_WORKAROUND) && RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
         // Helper: set DCDC LF frequency register and re-apply the current RF frequency.
         auto dcdcSetFreq = [&](uint32_t freqHz) -> int16_t {
@@ -215,9 +230,10 @@ template <typename T> bool LR20x0Interface<T>::init()
 #if RADIOLIB_GODMODE
     if (res == RADIOLIB_ERR_NONE) {
         uint8_t rampTimes[4] = {15, 15, 15, 15}; // Standard case for all conditions
-        res = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
-        if (res != RADIOLIB_ERR_NONE)
-            LOG_WARN("LR2021 setRegMode failed: %d", res);
+        // godmode-only DCDC ramp tuning: log failures but don't fail init (radio is already up)
+        int16_t rmRes = lora.setRegMode(RADIOLIB_LR2021_REG_MODE_SIMO_NORMAL, rampTimes);
+        if (rmRes != RADIOLIB_ERR_NONE)
+            LOG_WARN("LR2021 setRegMode failed: %d", rmRes);
     }
 #endif
 
@@ -236,10 +252,10 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
-            res = lora.setRxBoostedGainMode(true);
-            LOG_INFO("Set RX gain to boosted mode; result: %d", res);
+            res = lora.setRxBoostedGainMode(LR2021_RX_GAIN_BOOST_LEVEL);
+            LOG_INFO("Set RX gain to boosted mode (level %d); result: %d", LR2021_RX_GAIN_BOOST_LEVEL, res);
         } else {
-            res = lora.setRxBoostedGainMode(false);
+            res = lora.setRxBoostedGainMode(0);
             LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", res);
         }
     }
@@ -290,7 +306,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     assert(err == RADIOLIB_ERR_NONE);
 
     // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
-    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
 
@@ -426,7 +442,7 @@ template <typename T> void LR20x0Interface<T>::resetAGC()
     lora.calibrateImageRejection(getFreq() - 4.0f, getFreq() + 4.0f);
 
     // 5. Re-apply RX boosted gain mode
-    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain ? LR2021_RX_GAIN_BOOST_LEVEL : 0);
 
     // 6. Resume receiving
     startReceive();
