@@ -208,6 +208,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
 #elif defined(M5STACK_CARDPUTER_ADV)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
+#elif defined(MESHNOLOGY_W10)
+// master's protobufs predate the MESHNOLOGY_W10 HardwareModel enum (added on develop); report
+// PRIVATE_HW until that enum lands here via a protobuf bump.
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
