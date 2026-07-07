@@ -1261,6 +1261,7 @@ void Screen::setFrames(FrameFocus focus)
         return;
     }
 
+    const FramesetInfo previousFramesetInfo = framesetInfo;
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
@@ -1477,16 +1478,58 @@ void Screen::setFrames(FrameFocus focus)
         ui->switchToFrame(fsi.positions.system);
         break;
 
-    case FOCUS_PRESERVE:
-        //  No more adjustment - force stay on same index
-        if (previousFrameCount > fsi.frameCount) {
-            ui->switchToFrame(originalPosition - 1);
-        } else if (previousFrameCount < fsi.frameCount) {
-            ui->switchToFrame(originalPosition + 1);
-        } else {
-            ui->switchToFrame(originalPosition);
+    case FOCUS_PRESERVE: {
+        const auto &oldPos = previousFramesetInfo.positions;
+        const auto &newPos = fsi.positions;
+        uint8_t target = 0;
+
+        // Preserve the same logical frame across a frameset rebuild instead of guessing from
+        // total frame-count changes, which can shift unrelated screens.
+        if (fsi.frameCount > 0) {
+            target = (originalPosition < fsi.frameCount) ? originalPosition : (fsi.frameCount - 1);
         }
-        break;
+
+        if (originalPosition == oldPos.fault && newPos.fault != 255)
+            target = newPos.fault;
+        else if ((originalPosition == oldPos.home || originalPosition == oldPos.deviceFocused) && newPos.home != 255)
+            target = newPos.home;
+        else if (originalPosition == oldPos.textMessage && newPos.textMessage != 255)
+            target = newPos.textMessage;
+        else if (originalPosition == oldPos.nodelist_nodes && newPos.nodelist_nodes != 255)
+            target = newPos.nodelist_nodes;
+        else if (originalPosition == oldPos.nodelist_location && newPos.nodelist_location != 255)
+            target = newPos.nodelist_location;
+        else if (originalPosition == oldPos.nodelist_lastheard && newPos.nodelist_lastheard != 255)
+            target = newPos.nodelist_lastheard;
+        else if (originalPosition == oldPos.nodelist_hopsignal && newPos.nodelist_hopsignal != 255)
+            target = newPos.nodelist_hopsignal;
+        else if (originalPosition == oldPos.nodelist_distance && newPos.nodelist_distance != 255)
+            target = newPos.nodelist_distance;
+        else if (originalPosition == oldPos.nodelist_bearings && newPos.nodelist_bearings != 255)
+            target = newPos.nodelist_bearings;
+        else if (originalPosition == oldPos.gps && newPos.gps != 255)
+            target = newPos.gps;
+        else if (originalPosition == oldPos.lora && newPos.lora != 255)
+            target = newPos.lora;
+        else if (originalPosition == oldPos.system && newPos.system != 255)
+            target = newPos.system;
+        else if (originalPosition == oldPos.clock && newPos.clock != 255)
+            target = newPos.clock;
+        else if (originalPosition == oldPos.chirpy && newPos.chirpy != 255)
+            target = newPos.chirpy;
+        else if (originalPosition == oldPos.wifi && newPos.wifi != 255)
+            target = newPos.wifi;
+        else if (originalPosition == oldPos.waypoint && newPos.waypoint != 255)
+            target = newPos.waypoint;
+        else if (oldPos.firstFavorite != 255 && oldPos.lastFavorite != 255 && originalPosition >= oldPos.firstFavorite &&
+                 originalPosition <= oldPos.lastFavorite && newPos.firstFavorite != 255 && newPos.lastFavorite != 255) {
+            const uint8_t favoriteOffset = originalPosition - oldPos.firstFavorite;
+            const uint8_t favoriteTarget = newPos.firstFavorite + favoriteOffset;
+            target = (favoriteTarget <= newPos.lastFavorite) ? favoriteTarget : newPos.lastFavorite;
+        }
+
+        ui->switchToFrame(target);
+    } break;
     }
 
     // Store the info about this frameset, for future setFrames calls

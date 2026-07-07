@@ -11,6 +11,7 @@
 #include <string>
 
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "ExternalNotificationModule.h"
 #include "GeofenceModule.h"
 #include "WaypointStore.h"
 #endif
@@ -183,6 +184,23 @@ void drawDottedHorizontalDivider(OLEDDisplay *display, int16_t xStart, int16_t x
     }
 }
 
+void notifyWaypointReceived(const StoredWaypoint &stored)
+{
+    if (screen) {
+        const std::string waypointName = trimmedWaypointText(stored.waypoint.name);
+        if (!waypointName.empty()) {
+            char banner[96];
+            snprintf(banner, sizeof(banner), "New Waypoint\n%s", waypointName.c_str());
+            screen->showSimpleBanner(banner, 3000);
+        } else {
+            screen->showSimpleBanner("New Waypoint", 3000);
+        }
+    }
+
+    if (externalNotificationModule)
+        externalNotificationModule->startNotification();
+}
+
 } // namespace
 #endif
 
@@ -206,18 +224,13 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 
 #if HAS_SCREEN
+    if (!isFromUs(&mp) && !WaypointStore::isExpired(stored))
+        notifyWaypointReceived(stored);
 
     UIFrameEvent e;
-
-    // New or updated waypoint: focus on this frame next time Screen::setFrames runs
-    if (shouldDraw()) {
-        requestFocus();
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-    }
-
-    // Deleting an old waypoint: remove the frame quietly, don't change frame position if possible
-    else
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
+    // Refresh the waypoint frame list quietly; new waypoints alert via banner/sound but do not
+    // steal focus from the screen the user is already on.
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
 
     notifyObservers(&e);
 
@@ -334,10 +347,9 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             }
         }
 
-        const int16_t compactRadius = std::max<int16_t>(7, (FONT_HEIGHT_SMALL / 2));
-        const int16_t compactCenterX = display->getWidth() - compactRadius - 3;
-        const int16_t compactCenterY = (hasDescription ? row2Y : row1Y) + FONT_HEIGHT_SMALL;
-        const int16_t compactContentRight = compactCenterX - compactRadius - 4;
+        const int16_t compactArrowCenterX = display->getWidth() - ((FONT_HEIGHT_SMALL > 10) ? 9 : 7);
+        const int16_t compactArrowCenterY = (hasDescription ? row2Y : row1Y) + (FONT_HEIGHT_SMALL / 2);
+        const int16_t compactContentRight = compactArrowCenterX - 8;
         const char *distanceLabel = distStr[0] ? distStr : "--";
         const char *expireLabel = expireStr[0] ? expireStr : "--";
         const uint16_t metaWidth =
@@ -360,13 +372,9 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         if (hasDescription)
             graphics::UIRenderer::drawStringWithEmotes(display, nameX, row2Y, shownDescription, FONT_HEIGHT_SMALL, 1, false);
 
-        if (showCompass) {
-            display->drawCircle(compactCenterX, compactCenterY, compactRadius);
-            graphics::CompassRenderer::drawNodeHeading(display, compactCenterX, compactCenterY, compactRadius * 2,
-                                                       bearingToOther);
-        } else {
-            display->drawCircle(compactCenterX, compactCenterY, compactRadius);
-        }
+        if (showCompass)
+            graphics::NodeListRenderer::drawRelativeCompassArrow(display, compactArrowCenterX, compactArrowCenterY,
+                                                                 graphics::CompassRenderer::radiansToDegrees360(bearingToOther));
 
         display->drawStringMaxWidth(nameX, rowMetaY, nameWidth, coordStr);
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
