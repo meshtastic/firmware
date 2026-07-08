@@ -68,10 +68,6 @@ class OSThread : public Thread
      */
     virtual int32_t runOnce() = 0;
     bool sleepOnNextExecution = false;
-    // While sleepOnNextExecution is pending, counts how often runOnce() postponed the deep
-    // sleep because doPreflightSleep() vetoed it (e.g. radio still transmitting). Reset this
-    // to 0 whenever sleepOnNextExecution is armed.
-    uint32_t preflightSleepDeferrals = 0;
 
     // Do not override this
     virtual void run();

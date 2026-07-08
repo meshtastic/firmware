@@ -39,14 +39,8 @@ static constexpr uint16_t TX_HISTORY_KEY_HEALTH_TELEMETRY = 0x8003;
 int32_t HealthTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
-        // The telemetry packet queued by sendTelemetry() goes out asynchronously; sleeping while
-        // it is still queued or on air truncates the transmission and it is never received.
-        // Defer (bounded) until the radio reports it is idle.
-        if (!doPreflightSleep(true) && preflightSleepDeferrals < MAX_PREFLIGHT_SLEEP_DEFERRALS) {
-            preflightSleepDeferrals++;
-            LOG_DEBUG("Radio busy, defer deep sleep");
+        if (shouldDeferDeepSleep())
             return PREFLIGHT_SLEEP_RETRY_MS;
-        }
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.health_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
@@ -277,7 +271,7 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     // Arm the pre-sleep sequence even when no valid reading was available this cycle: a
     // power-saving SENSOR node must still return to deep sleep, otherwise it stays awake
     // until the next telemetry interval and drains its battery
-    if (!phoneOnly && config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+    if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)
             LOG_WARN("Health telemetry unavailable this cycle, sleep without sending");
         sleepOnNextExecution = true;
