@@ -177,58 +177,85 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
 
 #ifdef HELTEC_RC32
 
-uint32_t readNv3001bBits(uint8_t bits, uint8_t dummy, uint8_t sck, uint8_t mosi)
+constexpr uint8_t NV3001B_RDDID = 0x04;
+constexpr uint8_t NV3001B_RDID1 = 0xDA;
+constexpr uint8_t NV3001B_RDID2 = 0xDB;
+constexpr uint8_t NV3001B_RDID3 = 0xDC;
+constexpr uint32_t NV3001B_EXPECTED_ID = 0x300101;
+constexpr uint32_t NV3001B_FLOATING_ID = 0xFFFFFF;
+constexpr uint32_t NV3001B_HELD_LOW_ID = 0x000000;
+
+void nv3001bSpiDelay()
 {
-    uint32_t ret = 0;
-    pinMode(mosi, INPUT_PULLUP);
-    for (uint8_t i = 0; i < dummy; i++) {
-        digitalWrite(sck, HIGH);
-        delayMicroseconds(1);
-        digitalWrite(sck, LOW);
-        delayMicroseconds(1);
-    }
-    for (uint8_t i = 0; i < bits; i++) {
-        ret <<= 1;
-        digitalWrite(sck, HIGH);
-        delayMicroseconds(1);
-        if (digitalRead(mosi))
-            ret |= 1;
-        digitalWrite(sck, LOW);
-        delayMicroseconds(1);
-    }
-    return ret;
+    delayMicroseconds(1);
 }
 
-void writeNv3001bCommand(uint8_t val, uint8_t sck, uint8_t mosi, uint8_t dc)
+void writeNv3001bCommandForRead(uint8_t command, uint8_t sck, uint8_t mosi, uint8_t dc)
 {
     pinMode(mosi, OUTPUT);
     digitalWrite(dc, LOW);
     for (uint8_t mask = 0x80; mask; mask >>= 1) {
         digitalWrite(sck, LOW);
-        digitalWrite(mosi, (val & mask) ? HIGH : LOW);
-        delayMicroseconds(1);
+        digitalWrite(mosi, (command & mask) ? HIGH : LOW);
+        nv3001bSpiDelay();
         digitalWrite(sck, HIGH);
-        delayMicroseconds(1);
+        nv3001bSpiDelay();
+
+        if (mask == 0x01) {
+            digitalWrite(dc, HIGH);
+            pinMode(mosi, INPUT);
+            nv3001bSpiDelay();
+        }
     }
+
+    digitalWrite(sck, LOW);
+    nv3001bSpiDelay();
 }
 
-uint32_t readNv3001bRegister(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc)
+uint8_t readNv3001bBit(uint8_t sck, uint8_t mosi)
+{
+    digitalWrite(sck, HIGH);
+    nv3001bSpiDelay();
+    uint8_t bit = digitalRead(mosi) ? 1 : 0;
+    digitalWrite(sck, LOW);
+    nv3001bSpiDelay();
+    return bit;
+}
+
+uint8_t readNv3001bByte(uint8_t sck, uint8_t mosi)
+{
+    uint8_t data = 0;
+    for (uint8_t bit = 0; bit < 8; bit++)
+        data = (data << 1) | readNv3001bBit(sck, mosi);
+    return data;
+}
+
+void readNv3001bRegister(uint8_t command, uint8_t *data, uint8_t len, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc)
 {
     digitalWrite(cs, LOW);
-    writeNv3001bCommand(cmd, sck, mosi, dc);
-    digitalWrite(dc, HIGH);
-    uint32_t ret = readNv3001bBits(bits, dummy, sck, mosi);
+
+    writeNv3001bCommandForRead(command, sck, mosi, dc);
+
+    if (command == NV3001B_RDDID)
+        (void)readNv3001bBit(sck, mosi);
+
+    for (uint8_t i = 0; i < len; i++)
+        data[i] = readNv3001bByte(sck, mosi);
+
     pinMode(mosi, OUTPUT);
     digitalWrite(mosi, HIGH);
     digitalWrite(cs, HIGH);
+    digitalWrite(dc, HIGH);
     digitalWrite(sck, LOW);
-    return ret;
+}
+
+uint32_t packNv3001bId(const uint8_t *id)
+{
+    return (static_cast<uint32_t>(id[0]) << 16) | (static_cast<uint32_t>(id[1]) << 8) | id[2];
 }
 
 uint32_t get_nv3001b_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst, uint8_t en, uint8_t bl)
 {
-    constexpr uint32_t EXPECTED_ID = 0x300101;
-
     pinMode(en, OUTPUT);
     digitalWrite(en, TFT_EN_ON);
     delay(100);
@@ -252,14 +279,21 @@ uint32_t get_nv3001b_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8
     digitalWrite(rst, HIGH);
     delay(120);
 
-    uint32_t rddid = readNv3001bRegister(0x04, 24, 1, cs, sck, mosi, dc);
-    uint32_t rdid = (readNv3001bRegister(0xDA, 8, 0, cs, sck, mosi, dc) << 16) |
-                    (readNv3001bRegister(0xDB, 8, 0, cs, sck, mosi, dc) << 8) |
-                    readNv3001bRegister(0xDC, 8, 0, cs, sck, mosi, dc);
-    uint32_t id = rddid == EXPECTED_ID ? rddid : rdid;
+    uint8_t rddidBytes[3] = {};
+    uint8_t rdidBytes[3] = {};
+    readNv3001bRegister(NV3001B_RDDID, rddidBytes, sizeof(rddidBytes), cs, sck, mosi, dc);
+    readNv3001bRegister(NV3001B_RDID1, &rdidBytes[0], 1, cs, sck, mosi, dc);
+    readNv3001bRegister(NV3001B_RDID2, &rdidBytes[1], 1, cs, sck, mosi, dc);
+    readNv3001bRegister(NV3001B_RDID3, &rdidBytes[2], 1, cs, sck, mosi, dc);
+
+    uint32_t rddid = packNv3001bId(rddidBytes);
+    uint32_t rdid = packNv3001bId(rdidBytes);
+    uint32_t id = rddid == NV3001B_EXPECTED_ID ? rddid : rdid;
+    bool noResponse = (rddid == NV3001B_FLOATING_ID && rdid == NV3001B_FLOATING_ID) ||
+                      (rddid == NV3001B_HELD_LOW_ID && rdid == NV3001B_HELD_LOW_ID);
 
     LOG_INFO("Heltec RC32 NV3001B RDDID=%06x RDID=%06x", rddid, rdid);
-    if (id != EXPECTED_ID) {
+    if (id != NV3001B_EXPECTED_ID || noResponse) {
         LOG_INFO("Heltec RC32 NV3001B display not detected");
         digitalWrite(bl, TFT_BACKLIGHT_OFF);
         digitalWrite(en, TFT_EN_OFF);
