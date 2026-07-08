@@ -46,6 +46,7 @@ def infer_architecture(board_cfg):
         return "stm32"
     return None
 
+
 def run_size_tool(env, flag, purpose):
     """Run the toolchain size tool against the built ELF and return its output.
 
@@ -66,6 +67,7 @@ def run_size_tool(env, flag, purpose):
     except Exception as exc:
         print(f"mtjson: skipping {purpose} ({size_tool} failed: {exc})")
         return None
+
 
 def compute_ram_bytes(env):
     """Static RAM usage (.data + .bss) of the ELF, via the toolchain size tool.
@@ -102,7 +104,10 @@ def compute_ram_bytes(env):
                 found = True
             except ValueError:
                 continue
+    if not found:
+        print("mtjson: skipping ram_bytes (no RAM sections matched `size -A` output)")
     return ram if found else None
+
 
 def compute_flash_bytes(env):
     """Flash footprint (text + data) of the ELF via the toolchain size tool.
@@ -117,10 +122,19 @@ def compute_flash_bytes(env):
     if output is None:
         return None
     for line in output.splitlines():
-        parts = line.split()
+        # Strip thousands separators some `size` builds/locales emit (e.g. "123,456")
+        # so the numeric check below doesn't reject an otherwise-valid data line.
+        parts = [p.replace(",", "") for p in line.split()]
         if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
             return int(parts[0]) + int(parts[1])
+    # Unlike a tool-invocation failure (caught, and logged, in run_size_tool), this is a
+    # successful run whose output just didn't match the expected `size -B` shape - flag it
+    # instead of silently omitting flash_bytes, since that's indistinguishable downstream
+    # from "this target has no fallback needed" (see the CI failure this comment documents:
+    # every nRF52840 board's flash_bytes silently went missing with no diagnostic at all).
+    print(f"mtjson: skipping flash_bytes (unrecognized `size -B` output): {output!r}")
     return None
+
 
 def manifest_gather(source, target, env):
     global manifest_ran
@@ -180,6 +194,7 @@ def manifest_gather(source, target, env):
             out.append(d)
             print(d)
     manifest_write(out, env, compute_ram_bytes(env), compute_flash_bytes(env))
+
 
 def manifest_write(files, env, ram_bytes=None, flash_bytes=None):
     # Defensive: also skip manifest writing if we cannot determine architecture
