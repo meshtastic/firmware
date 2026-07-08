@@ -318,10 +318,13 @@ void SnakeModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->drawString(cx, y, "S N A K E");
-        // Joystick glyph as a "use the D-pad" controls hint, centred below the title.
-        display->drawXbm(x + (w - joystick_width) / 2, y + 15, joystick_width, joystick_height, joystick);
-        char hi[24];
-        snprintf(hi, sizeof(hi), "High: %lu", static_cast<unsigned long>(highScores[0].score));
+        // Snake glyph, centred below the title.
+        display->drawXbm(x + (w - snake_width) / 2, y + 15, snake_width, snake_height, snake);
+        char hi[32];
+        if (highScores[0].score > 0 && highScores[0].shortName[0] != '\0')
+            snprintf(hi, sizeof(hi), "High: %s %lu", highScores[0].shortName, static_cast<unsigned long>(highScores[0].score));
+        else
+            snprintf(hi, sizeof(hi), "High: %lu", static_cast<unsigned long>(highScores[0].score));
         display->drawString(cx, y + 34, hi);
         display->drawString(cx, y + 48, "SELECT to play");
         break;
