@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>org.meshtastic.meshtasticd</id>
 
-  <name>Meshtastic</name>
+  <name>MeshtasticD</name>
   <summary>Decentralized mesh communication</summary>
 
   <metadata_license>CC-BY-4.0</metadata_license>
@@ -13,6 +13,9 @@
   </developer>
 
   <description>
+    <p>
+      MeshtasticD is an app that allows you to use your Linux computer as a Meshtastic node (using a CH341 USB LoRa radio).
+    </p>
     <p>
       Meshtastic is an open source project for creating off-grid, affordable, and resilient communication with LoRa mesh networks.
     </p>
