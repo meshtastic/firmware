@@ -45,6 +45,27 @@ def infer_architecture(board_cfg):
         return "stm32"
     return None
 
+def run_size_tool(env, flag, purpose):
+    """Run the toolchain size tool against the built ELF and return its output.
+
+    Shared plumbing for compute_ram_bytes / compute_flash_bytes. Returns None
+    when the ELF is missing or the tool fails; the manifest then simply omits
+    the metric and downstream size reports show "n/a".
+    """
+    elf = env.File(env.subst("$BUILD_DIR/${PROGNAME}.elf"))
+    if not elf.exists():
+        return None
+    size_tool = env.subst("$SIZETOOL") or "size"
+    try:
+        return subprocess.check_output(
+            [size_tool, flag, elf.get_abspath()],
+            env=env["ENV"],
+            universal_newlines=True,
+        )
+    except Exception as exc:
+        print(f"mtjson: skipping {purpose} ({size_tool} failed: {exc})")
+        return None
+
 def compute_ram_bytes(env):
     """Static RAM usage (.data + .bss) of the ELF, via the toolchain size tool.
 
@@ -54,18 +75,8 @@ def compute_ram_bytes(env):
     Returns None when the value cannot be determined; the manifest then simply
     omits ram_bytes and downstream size reports show "n/a".
     """
-    elf = env.File(env.subst("$BUILD_DIR/${PROGNAME}.elf"))
-    if not elf.exists():
-        return None
-    size_tool = env.subst("$SIZETOOL") or "size"
-    try:
-        output = subprocess.check_output(
-            [size_tool, "-A", elf.get_abspath()],
-            env=env["ENV"],
-            universal_newlines=True,
-        )
-    except Exception as exc:
-        print(f"mtjson: skipping ram_bytes ({size_tool} failed: {exc})")
+    output = run_size_tool(env, "-A", "ram_bytes")
+    if output is None:
         return None
     ram = 0
     found = False
@@ -97,18 +108,8 @@ def compute_flash_bytes(env):
     and the bin/ram_budgets.json budget gate. Returns None when the value
     cannot be determined; the manifest then simply omits flash_bytes.
     """
-    elf = env.File(env.subst("$BUILD_DIR/${PROGNAME}.elf"))
-    if not elf.exists():
-        return None
-    size_tool = env.subst("$SIZETOOL") or "size"
-    try:
-        output = subprocess.check_output(
-            [size_tool, "-B", elf.get_abspath()],
-            env=env["ENV"],
-            universal_newlines=True,
-        )
-    except Exception as exc:
-        print(f"mtjson: skipping flash_bytes ({size_tool} failed: {exc})")
+    output = run_size_tool(env, "-B", "flash_bytes")
+    if output is None:
         return None
     for line in output.splitlines():
         parts = line.split()
