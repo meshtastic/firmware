@@ -8,7 +8,7 @@ Supports two UI builds that share this file:
 
 The panel itself (DEPG0290BNS800, SSD1680, 128x296) is defined once in
   graphics/eink/Panels/DEPG0290BNS800.h
-The variant only overrides what is specific to this board — here, that's the HSPI pin bring-up.
+The variant only overrides what is specific to this board - here, that's the HSPI pin bring-up.
 
 */
 
