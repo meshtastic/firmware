@@ -141,7 +141,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
 
         /*
             auto &p = mp.decoded;
-            LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
+            LOG_DEBUG("Received text msg self=0x%08x, from=0x%08x, to=0x%08x, id=%d, msg=%.*s",
                   LOG_INFO.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
         */
 

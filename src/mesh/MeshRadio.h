@@ -15,7 +15,7 @@ static const meshtastic_Config_LoRaConfig_ModemPreset MODEM_PRESET_END =
 
 #define PRESET(name) meshtastic_Config_LoRaConfig_ModemPreset_##name
 
-// Override slot magic numbers for RegionProfile.overrideSlot
+// Override slot magic numbers for RegionInfo.overrideSlot
 #define OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH 0 // Use hash of primary channel name
 #define OVERRIDE_SLOT_PRESET_HASH -1         // Use hash of preset name instead
 // Positive values (1-32767) are explicit slot numbers
@@ -30,8 +30,6 @@ struct RegionProfile {
     int8_t textThrottle;      // throttle for text - future expansion
     int8_t positionThrottle;  // throttle for location data - future expansion
     int8_t telemetryThrottle; // throttle for telemetry - future expansion
-    int16_t overrideSlot;     // a per-region override slot for if we need to fix it in place
-                              // Magic values: 0 = use channel name hash, -1 = use preset name hash, >0 = explicit slot
 };
 
 /**
@@ -46,7 +44,8 @@ extern const RegionProfile PROFILE_EU868;
 extern const RegionProfile PROFILE_UNDEF;
 extern const RegionProfile PROFILE_LITE;
 extern const RegionProfile PROFILE_NARROW;
-// extern const RegionProfile  PROFILE_HAM;
+extern const RegionProfile PROFILE_HAM_20KHZ;
+extern const RegionProfile PROFILE_HAM_100KHZ;
 
 // Map from old region names to new region enums
 struct RegionInfo {
@@ -59,11 +58,21 @@ struct RegionInfo {
     bool wideLora;
     const RegionProfile *profile;
     meshtastic_Config_LoRaConfig_ModemPreset defaultPreset;
-    const char *name; // EU433 etc
+    int16_t overrideSlot; // per-region override slot for frequency selection
+                          // Magic values: 0 = use channel name hash, -1 = use preset name hash, >0 = explicit slot
+    const char *name;     // EU433 etc
 
     // Preset accessors (delegate through profile)
     meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
     const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
+    bool supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset preset) const
+    {
+        for (size_t i = 0; profile->presets[i] != MODEM_PRESET_END; i++) {
+            if (profile->presets[i] == preset)
+                return true;
+        }
+        return false;
+    }
     size_t getNumPresets() const
     {
         size_t n = 0;
@@ -77,6 +86,12 @@ extern const RegionInfo regions[];
 extern const RegionInfo *myRegion;
 
 extern void initRegion();
+extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
+
+// Fill `map` with the region->valid-preset table, grouped so regions sharing a
+// preset list reference the same group. Sent to clients during want_config so
+// their UI can block illegal region+preset combinations.
+extern void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map);
 
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 5;
@@ -123,8 +138,18 @@ static inline float clampBandwidthKHz(float bwKHz)
 
 static inline float bwCodeToKHz(uint16_t bwCode)
 {
+    if (bwCode == 8)
+        return 7.8f;
+    if (bwCode == 10)
+        return 10.4f;
+    if (bwCode == 16)
+        return 15.6f;
+    if (bwCode == 21)
+        return 20.8f;
     if (bwCode == 31)
         return 31.25f;
+    if (bwCode == 42)
+        return 41.7f;
     if (bwCode == 62)
         return 62.5f;
     if (bwCode == 200)
@@ -140,8 +165,18 @@ static inline float bwCodeToKHz(uint16_t bwCode)
 
 static inline uint16_t bwKHzToCode(float bwKHz)
 {
+    if (bwKHz > 7.7f && bwKHz < 7.9f)
+        return 8;
+    if (bwKHz > 10.3f && bwKHz < 10.5f)
+        return 10;
+    if (bwKHz > 15.5f && bwKHz < 15.7f)
+        return 16;
+    if (bwKHz > 20.7f && bwKHz < 20.9f)
+        return 21;
     if (bwKHz > 31.24f && bwKHz < 31.26f)
         return 31;
+    if (bwKHz > 41.6f && bwKHz < 41.8f)
+        return 42;
     if (bwKHz > 62.49f && bwKHz < 62.51f)
         return 62;
     if (bwKHz > 203.12f && bwKHz < 203.13f)
@@ -216,6 +251,16 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
         break;
     case PRESET(NARROW_SLOW):
         bwKHz = 62.5f;
+        cr = 6;
+        sf = 8;
+        break;
+    case PRESET(TINY_FAST):
+        bwKHz = 15.6f;
+        cr = 5;
+        sf = 7;
+        break;
+    case PRESET(TINY_SLOW):
+        bwKHz = 15.6f;
         cr = 6;
         sf = 8;
         break;

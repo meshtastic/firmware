@@ -11,6 +11,7 @@
 // #define USE_SSD1306
 
 // Default SPI1 will be mapped to the display
+#define HAS_SPI_TFT 1
 #define ST7789_SDA 42
 #define ST7789_SCK 41
 #define ST7789_CS 38

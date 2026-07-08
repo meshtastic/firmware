@@ -1,10 +1,10 @@
 #include "Default.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerFSM.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
-#include "power.h"
 
 namespace concurrency
 {
