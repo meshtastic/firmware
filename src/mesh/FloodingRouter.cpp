@@ -140,8 +140,10 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
         // RepeatScalingModule owns the "how many duplicates should we tolerate before giving up"
-        // decision (and its bookkeeping/logging) - see RepeatScalingModule::shouldCancelDupe.
-        if (repeatScalingModule && repeatScalingModule->shouldCancelDupe(p)) {
+        // decision (and its bookkeeping/logging) - see RepeatScalingModule::shouldCancelDupe. When
+        // the module is compiled out (MESHTASTIC_EXCLUDE_REPEATSCALING), fall back to the historical
+        // behavior of cancelling on the first duplicate rather than never cancelling at all.
+        if (!repeatScalingModule || repeatScalingModule->shouldCancelDupe(p)) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router!
             // But only LoRa packets should be able to trigger this.
             if (Router::cancelSending(p->from, p->id))
