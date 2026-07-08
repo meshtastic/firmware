@@ -1,0 +1,23 @@
+# https://github.com/wehooper4/Meshtastic-Hardware/tree/main/NebraHat/Duo
+# Use for E22P on Duo Hat
+# Use for 1 watt hat - Radio 1
+Meta:
+  name: ZebraHatDuo Radio 0 1W
+  support: community
+  compatible:
+    - raspberry-pi
+
+Lora:
+  Module: sx1262  # 
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  SX126X_MAX_POWER: 18
+  spidev: spidev0.1
+#  CS: 8 # Depending on how overlay is setup 
+  IRQ: 22
+  Busy: 27
+  Reset: 17
+
+# Uncomment below to enable temp/humid sensors
+#I2C:
+#  I2CDevice: /dev/i2c-1
