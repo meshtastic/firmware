@@ -254,6 +254,27 @@ You will need to add these lines to any variants which will use your applet.
 
 If you need to create several similar applets, it might make sense to create a reusable base class. Several of these already exist in `src/graphics/niche/Applets/Bases`, but use these with caution, as they may be modified in future.
 
+#### Map Applet Base
+
+`MapApplet` (`src/graphics/niche/Applets/Bases/Map/MapApplet.h`) is a base class for applets that plot node positions on a map. It handles tile rendering, zoom control, scale bars, and GPS tracking. `PositionsApplet` and `FavoritesMapApplet` both inherit from it.
+
+##### Map Tiles
+
+Map tiles are stored in `MapTile.h` (`src/graphics/niche/Applets/Bases/Map/MapTile.h`). The file committed to the repository contains no tile data by default - the map applets work without tiles, falling back to the original marker-only display.
+
+Tiles are 256×256 pixels, 1-bit (column-major bit packing), compressed per tile with LZ4 to keep flash usage low.
+
+##### Zoom Controls
+
+When the menu is opened from a map applet, zoom controls appear automatically. Zoom In and Zoom Out step through the available tile zoom levels. Reset Zoom returns to the default auto-fit behavior, where the map scales to show all visible nodes.
+
+##### Position Menu
+
+InkHUD's `Node Config -> Position` page now exposes the common position controls directly in the menu applet, using the same compact selector pattern as other InkHUD config pages.
+
+- Device GPS controls: GPS enable/disable, GPS polling interval
+- Position packet controls: broadcast interval, smart position toggle, smart minimum interval, smart minimum distance
+
 #### System Applets
 
 So far, we have been talking about "user applets". We also recognize a separate category of "system applets". These handle things like the menu, and the boot screen. These often need special handling, and need to be implemented manually.
@@ -475,8 +496,8 @@ We keep this separate latest-message cache for this purpose, because:
 
 Broadcasts and DMs take different paths into `messageStore`:
 
-- **Broadcasts** — `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
-- **DMs** — `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
+- **Broadcasts** - `ThreadedMessageApplet::handleReceived()` calls `messageStore.addFromPacket()`. `Events::onReceiveTextMessage()` then updates `latestMessage.broadcast` separately for fast access by `AllMessageApplet` and `NotificationApplet`.
+- **DMs** - `ThreadedMessageApplet` skips DMs entirely. `Events::onReceiveTextMessage()` calls `messageStore.addFromPacket()` directly and stores the result in `latestMessage.dm`.
 
 #### Saving / Loading
 

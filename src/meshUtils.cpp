@@ -138,7 +138,7 @@ bool sanitizeUtf8(char *buf, size_t bufSize)
         size_t seqLen;
         uint32_t minCodepoint;
         if (b <= 0x7F) {
-            // ASCII — valid single byte
+            // ASCII - valid single byte
             i++;
             continue;
         } else if ((b & 0xE0) == 0xC0) {
@@ -160,7 +160,7 @@ bool sanitizeUtf8(char *buf, size_t bufSize)
 
         // Check that we have enough bytes remaining
         if (i + seqLen > len) {
-            // Truncated sequence at end of string — replace remaining bytes
+            // Truncated sequence at end of string - replace remaining bytes
             for (size_t j = i; j < len; j++) {
                 buf[j] = '?';
             }
@@ -206,4 +206,10 @@ bool sanitizeUtf8(char *buf, size_t bufSize)
     }
 
     return replaced;
+}
+
+void clampLongName(char *longName)
+{
+    longName[MAX_LONG_NAME_BYTES] = '\0';
+    sanitizeUtf8(longName, MAX_LONG_NAME_BYTES + 1);
 }

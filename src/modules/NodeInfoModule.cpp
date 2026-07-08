@@ -49,6 +49,14 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
         return true;
     }
+    NodeNum sourceNum = getFrom(&mp);
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
+    // Broadcasts only: senders never sign unicast NodeInfo, so dropping it would break exchanges
+    // with signer nodes. Backstops ingress that skips Router's downgrade drop (e.g. decoded MQTT).
+    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
+        LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
+        return true;
+    }
 
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
@@ -158,8 +166,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         ignoreRequest = true;
         return NULL;
     } else {
-        ignoreRequest = false; // Don't ignore requests anymore
-        meshtastic_User &u = owner;
+        ignoreRequest = false;     // Don't ignore requests anymore
+        meshtastic_User u = owner; // deliberate copy: the licensed strip below must not clobber the global owner state
 
         // Strip the public key if the user is licensed
         if (u.is_licensed && u.public_key.size > 0) {

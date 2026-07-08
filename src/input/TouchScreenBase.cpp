@@ -66,8 +66,14 @@ void TouchScreenBase::init(bool hasTouch)
 
 int32_t TouchScreenBase::runOnce()
 {
+    uint32_t nowMs = millis();
+    if (nowMs - _lastRun < 20) { // suppress too fast consecutive runOnce() executions
+        return 20;
+    }
+    _lastRun = nowMs;
     TouchEvent e;
     e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
+    this->setInterval(TOUCH_POLL_INTERVAL_IDLE);
     const bool fastTapMode = fastTapModeEnabled();
     const bool allowLongPress = longPressEnabled();
 

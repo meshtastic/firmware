@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "RTC.h"
 #include "draw/NodeListRenderer.h"
 #include "graphics/ScreenFonts.h"
@@ -12,7 +13,6 @@
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include <OLEDDisplay.h>
 #include <cctype>
 #include <graphics/images.h>
@@ -578,7 +578,11 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 #endif
 
     display->setColor(BLACK);
+#if GRAPHICS_TFT_COLORING_ENABLED
     display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+#else
+    display->fillRect(0, footerY, connection_icon_width + 1, footerH);
+#endif
     display->setColor(WHITE);
     if (currentResolution == ScreenResolution::High) {
         const int bytesPerRow = (connection_icon_width + 7) / 8;

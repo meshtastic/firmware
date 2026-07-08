@@ -20,14 +20,14 @@ variants/
 
 Each variant needs at minimum:
 
-- `variant.h` — Pin definitions and hardware capabilities
-- `platformio.ini` — Build configuration
+- `variant.h` - Pin definitions and hardware capabilities
+- `platformio.ini` - Build configuration
 
 Optional files:
 
-- `pins_arduino.h` — Arduino pin mapping overrides
-- `rfswitch.h` — RF switch control for multi-band radios
-- `nicheGraphics.h` — InkHUD e-ink configuration
+- `pins_arduino.h` - Arduino pin mapping overrides
+- `rfswitch.h` - RF switch control for multi-band radios
+- `nicheGraphics.h` - InkHUD e-ink configuration
 
 ## variant.h Template
 
@@ -101,25 +101,25 @@ upload_speed = 921600
 
 ### Common Base Configs
 
-- `esp32_base` / `esp32-common.ini` — ESP32
-- `esp32s3_base` — ESP32-S3
-- `esp32c3_base` — ESP32-C3
-- `esp32c6_base` — ESP32-C6
-- `nrf52840_base` / `nrf52.ini` — nRF52840
-- `rp2040_base` — RP2040/RP2350
+- `esp32_base` / `esp32-common.ini` - ESP32
+- `esp32s3_base` - ESP32-S3
+- `esp32c3_base` - ESP32-C3
+- `esp32c6_base` - ESP32-C6
+- `nrf52840_base` / `nrf52.ini` - nRF52840
+- `rp2040_base` - RP2040/RP2350
 
 ### Support Levels
 
-- `custom_meshtastic_support_level = 1` — Built on every PR (actively supported)
-- `custom_meshtastic_support_level = 2` — Built only on merge to main branches
-- `board_level = extra` — Only built on full releases
+- `custom_meshtastic_support_level = 1` - Built on every PR (actively supported)
+- `custom_meshtastic_support_level = 2` - Built only on merge to main branches
+- `board_level = extra` - Only built on full releases
 
 ## Build Manifest Metadata
 
 `bin/platformio-custom.py` emits UI capability flags in the build manifest:
 
-- `custom_meshtastic_has_mui = true/false` — Override MUI detection
-- `custom_meshtastic_has_ink_hud = true/false` — Override InkHUD detection
+- `custom_meshtastic_has_mui = true/false` - Override MUI detection
+- `custom_meshtastic_has_ink_hud = true/false` - Override InkHUD detection
 - Architecture names are normalized (e.g., `esp32s3` → `esp32-s3`)
 
 ## InkHUD E-Ink Variants
@@ -127,7 +127,7 @@ upload_speed = 921600
 For e-ink display variants using the InkHUD framework, add `nicheGraphics.h`:
 
 ```cpp
-// nicheGraphics.h — InkHUD configuration for this variant
+// nicheGraphics.h - InkHUD configuration for this variant
 #define INKHUD                     // Enable InkHUD
 // Configure display, applets, and refresh behavior per device
 ```

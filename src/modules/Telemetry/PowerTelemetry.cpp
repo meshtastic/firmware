@@ -6,6 +6,7 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerFSM.h"
 #include "PowerTelemetry.h"
 #include "RTC.h"
@@ -13,7 +14,6 @@
 #include "TransmitHistory.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
-#include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
 

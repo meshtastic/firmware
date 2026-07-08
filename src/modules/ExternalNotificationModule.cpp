@@ -127,7 +127,10 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
 
 #ifdef HAS_DRV2605
-            hapticDriver.go();
+            // Only trigger DRV2605 if vibration alerts are enabled
+            if (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra) {
+                hapticDriver.go();
+            }
 #endif
         }
 
@@ -144,7 +147,7 @@ int32_t ExternalNotificationModule::runOnce()
         }
 #endif
         // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz()) {
+        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -225,9 +228,18 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #endif
 
 #ifdef HAS_DRV2605
+    // Only trigger DRV2605 when setting vibration motor
+    bool shouldTriggerDRV = false;
     if (on) {
+        if (index == 1 &&
+            (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra)) {
+            shouldTriggerDRV = true;
+        }
+    }
+
+    if (shouldTriggerDRV) {
         hapticDriver.go();
-    } else {
+    } else if (!on && index == 1) {
         hapticDriver.stop();
     }
 #endif
@@ -266,6 +278,7 @@ void ExternalNotificationModule::stopNow()
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
     isNagging = false;
+    buzzerShouldAlert = false;
     nagCycleCutoff = UINT32_MAX;
 
 #ifdef HAS_I2S
@@ -404,8 +417,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             // Alert GPIO Buzzer when receiving a bell = alertBellBuzzer: true
             // Alert GPIO Buzzer when receiving a message = alertMessageBuzzer: true
-            const bool buzzerShouldAlert = canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
-                                                         (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
+            // If you are already buzzing, keep going
+            buzzerShouldAlert =
+                buzzerShouldAlert || (canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
+                                                    (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
@@ -422,6 +437,18 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             if (vibraShouldAlert) {
                 LOG_INFO("externalNotificationModule - Vibra alert");
+#ifdef HAS_DRV2605
+                // Set DRV2605 waveform when vibration alert is triggered
+                hapticDriver.setWaveform(0, 16); // Long buzzer 100%
+                hapticDriver.setWaveform(1, 0);  // Pause
+                hapticDriver.setWaveform(2, 16);
+                hapticDriver.setWaveform(3, 0);
+                hapticDriver.setWaveform(4, 16);
+                hapticDriver.setWaveform(5, 0);
+                hapticDriver.setWaveform(6, 16);
+                hapticDriver.setWaveform(7, 0);
+                hapticDriver.go();
+#endif
                 setExternalState(1, true);
             }
 
@@ -431,18 +458,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
-#ifdef HAS_DRV2605
-                    hapticDriver.setWaveform(0, 16); // Long buzzer 100%
-                    hapticDriver.setWaveform(1, 0);  // Pause
-                    hapticDriver.setWaveform(2, 16);
-                    hapticDriver.setWaveform(3, 0);
-                    hapticDriver.setWaveform(4, 16);
-                    hapticDriver.setWaveform(5, 0);
-                    hapticDriver.setWaveform(6, 16);
-                    hapticDriver.setWaveform(7, 0);
-                    hapticDriver.go();
-#endif
-
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
 #ifdef HAS_I2S
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));

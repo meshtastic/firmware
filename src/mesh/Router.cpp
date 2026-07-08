@@ -12,6 +12,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#include <pb_encode.h>
 #if HAS_TRAFFIC_MANAGEMENT
 #include "modules/TrafficManagementModule.h"
 #endif
@@ -40,7 +41,8 @@
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
+// Live in-flight packet bytes are tracked under "pktpool(live)" in the MemAudit breakdown
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool("pktpool(live)");
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
 // On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
@@ -49,7 +51,8 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryDynamic<meshtastic_MeshPacket> dynamicPool;
+// Live in-flight packet bytes are tracked under "pktpool(live)" in the MemAudit breakdown
+static MemoryDynamic<meshtastic_MeshPacket> dynamicPool("pktpool(live)");
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
@@ -57,7 +60,8 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
-static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool;
+// Static pool RAM is BSS, not heap; "pktpool(live)" still shows in-flight packet bytes
+static MemoryPool<meshtastic_MeshPacket, MAX_PACKETS_STATIC> staticPool("pktpool(live)");
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 #endif
 
@@ -100,51 +104,31 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         return true;
     }
 
-#if HAS_TRAFFIC_MANAGEMENT
-    // When router_preserve_hops is enabled, preserve hops for decoded packets that are not
-    // position or telemetry (those have their own exhaust_hop controls).
-    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled &&
-        moduleConfig.traffic_management.router_preserve_hops && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum != meshtastic_PortNum_POSITION_APP && p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP) {
-        LOG_DEBUG("Router hop preserved: port=%d from=0x%08x (traffic_management)", p->decoded.portnum, getFrom(p));
-        if (trafficManagementModule) {
-            trafficManagementModule->recordRouterHopPreserved();
-        }
-        return false;
-    }
-#endif
+    // router_preserve_hops: not suitable right now - removed from config until
+    // the right heuristics for when to preserve vs. exhaust hops are established.
+    // #if HAS_TRAFFIC_MANAGEMENT
+    //     if (moduleConfig.has_traffic_management &&
+    //         moduleConfig.traffic_management.router_preserve_hops && ...) { ... }
+    // #endif
 
-    // For subsequent hops, check if previous relay is a favorite router
-    // Optimized search for favorite routers with matching last byte
-    // Check ordering optimized for IoT devices (cheapest checks first)
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node)
-            continue;
-
-        // Check 1: is_favorite (cheapest - single bit test)
-        if (!nodeInfoLiteIsFavorite(node))
-            continue;
-
-        // Check 2: has_user (cheap - single bit test)
-        if (!nodeInfoLiteHasUser(node))
-            continue;
-
-        // Check 3: role check (moderate cost - multiple comparisons)
-        if (!IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
-                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-            continue;
-        }
-
-        // Check 4: last byte extraction and comparison (most expensive)
-        if (nodeDB->getLastByteOfNodeNum(node->num) == p->relay_node) {
-            // Found a favorite router match
-            LOG_DEBUG("Identified favorite relay router 0x%x from last byte 0x%x", node->num, p->relay_node);
+    // For subsequent hops, preserve hop_limit only when the previous relay is UNAMBIGUOUSLY a favorite
+    // router. The relay_node byte is just the last byte of a 32-bit node number, so on a dense mesh it
+    // collides; the old "first matching node wins" scan could preserve hops for the wrong node
+    // (non-deterministic, depends on NodeDB order). resolveLastByte() reports a collision instead, and
+    // we re-check the favorite/router predicate on the single resolved node. On ambiguity/none we
+    // decrement (the safe default).
+    NodeNum resolved = 0;
+    if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false, &resolved)) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(resolved);
+        if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
+            IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+                      meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
+            LOG_DEBUG("Identified unique favorite relay router 0x%08x from last byte 0x%x", resolved, p->relay_node);
             return false; // Don't decrement hop_limit
         }
     }
 
-    // No favorite router match found, decrement hop_limit
+    // No unambiguous favorite router match found, decrement hop_limit
     return true;
 }
 
@@ -464,13 +448,65 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
     // FIXME, update nodedb here for any packet that passes through us
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize)
+{
+    // Only a signature we verify below may mark this packet signed; never trust an inbound flag.
+    p->xeddsa_signed = false;
+    if (p->decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+        if (node && node->public_key.size == 32) {
+            p->xeddsa_signed =
+                crypto->xeddsa_verify(node->public_key.bytes, p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes,
+                                      p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
+            if (p->xeddsa_signed) {
+                // Learn this node as a signer, so a later unsigned signable broadcast from it is dropped
+                nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
+                LOG_DEBUG("Verified XEdDSA signature from 0x%08x", p->from);
+            } else {
+                LOG_WARN("XEdDSA signature verification failed from 0x%08x, dropping", p->from);
+                return false;
+            }
+        } else {
+            LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
+        }
+    } else if (p->decoded.xeddsa_signature.size != 0) {
+        // A signature field that is neither empty nor a full 64 bytes is malformed - honest
+        // senders emit only those two sizes (perhapsEncode sets 0 or XEDDSA_SIGNATURE_SIZE). Drop
+        // it: a crafted partial signature would otherwise land in the unsigned branch below while
+        // its bytes inflated the size estimate, letting a forged broadcast dodge the downgrade drop.
+        LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, dropping", (unsigned)p->decoded.xeddsa_signature.size,
+                 p->from);
+        return false;
+    } else {
+        // Truly unsigned (signature size 0) - only reject the class a signing node always signs: a
+        // non-PKI broadcast whose signed encoding would still fit the LoRa frame. encodedDataSize is
+        // the size of the encoded Data exactly as the sender built it (or 0 to size p->decoded
+        // canonically); with no signature field present it is the unsigned base, and adding
+        // XEDDSA_SIGNATURE_FIELD_BYTES mirrors the sender-side signedDataFits() gate per packet,
+        // whatever fields the Data carried. Unicast/PKI packets and broadcasts too big to carry a
+        // signature are never signed, so they must not be hard-failed here even for a known signer.
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+        if (node && nodeInfoLiteHasXeddsaSigned(node) && !p->pki_encrypted && isBroadcast(p->to)) {
+            if (encodedDataSize == 0 && !pb_get_encoded_size(&encodedDataSize, &meshtastic_Data_msg, &p->decoded))
+                return true; // can't size it; never drop on a sizing failure
+            if (encodedDataSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
+                LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+#endif
+
 DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
-        LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
+        LOG_DEBUG("Node 0x%08x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
 
@@ -485,14 +521,16 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->public_key.size > 0 && nodeDB->getMeshNode(p->to) != nullptr &&
-        nodeDB->getMeshNode(p->to)->public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
+    // Attempt PKI decryption first. The sender's key may come from the hot
+    // store or the warm tier (nodes evicted from the hot store keep their key
+    // there), so DMs from long-tail nodes still decrypt.
+    meshtastic_NodeInfoLite_public_key_t fromKey = {0, {0}};
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->copyPublicKey(p->from, fromKey) &&
+        nodeDB->getMeshNode(p->to) != nullptr && nodeDB->getMeshNode(p->to)->public_key.size > 0 &&
+        rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->public_key, p->id, rawSize, p->encrypted.bytes,
-                                      bytes)) {
+        if (crypto->decryptCurve25519(p->from, fromKey, p->id, rawSize, p->encrypted.bytes, bytes)) {
             LOG_INFO("PKI Decryption worked!");
 
             meshtastic_Data decodedtmp;
@@ -503,7 +541,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->public_key.bytes, 32);
+                memcpy(p->public_key.bytes, fromKey.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
@@ -558,6 +596,14 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         p->channel = chIndex; // change to store the index instead of the hash
         if (p->decoded.has_bitfield)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
+
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        // rawSize is the size of the encoded Data exactly as the sender built it (the PKI branch's
+        // MESHTASTIC_PKC_OVERHEAD subtraction preserves that, and PKI packets are unicast so the
+        // downgrade predicate ignores them anyway).
+        if (!checkXeddsaReceivePolicy(p, rawSize))
+            return DecodeState::DECODE_FAILURE;
+#endif
 
         /* Not actually ever used.
         // Decompress if needed. jm
@@ -615,6 +661,20 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     }
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+/** Exact sender-side sign gate: would this Data still fit the LoRa frame with a 64-byte
+ * signature attached? Sized with the real encoder so it tracks whatever fields are present. */
+static bool signedDataFits(meshtastic_Data *d)
+{
+    const pb_size_t prevSize = d->xeddsa_signature.size;
+    d->xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    size_t encodedSize;
+    const bool sized = pb_get_encoded_size(&encodedSize, &meshtastic_Data_msg, d);
+    d->xeddsa_signature.size = prevSize;
+    return sized && encodedSize + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
+}
+#endif
+
 /** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
@@ -629,6 +689,25 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
+            // We own signing for packets we originate; discard any signature a client preset.
+            // Outside the XEdDSA guard: the field exists in the protobuf on every build, and a
+            // stale/garbage signature transmitted by a non-signing build would hard-fail
+            // verification at every XEdDSA-enabled receiver that knows our key.
+            p->decoded.xeddsa_signature.size = 0;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+            // Sign broadcast packets when the Data still fits a LoRa frame with the signature
+            // attached. This must be the exact encoded-size criterion, not a payload-size
+            // heuristic: a heuristic band where we sign-then-fail-TOO_LARGE breaks packets that
+            // were deliverable unsigned, and perhapsDecode() applies the mirror-image rule when
+            // deciding whether an unsigned broadcast from a known signer is a downgrade.
+            if (!p->pki_encrypted && isBroadcast(p->to) && signedDataFits(&p->decoded)) {
+                if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
+                                        p->decoded.xeddsa_signature.bytes)) {
+                    p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+                    LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
+                }
+            }
+#endif
         }
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
@@ -676,7 +755,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        // Destination key from the hot store or the warm tier (evicted
+        // long-tail nodes keep their key there)
+        meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+        bool haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
@@ -699,18 +781,17 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a known public key for the destination
-            if (node == nullptr || node->public_key.size != 32) {
+            if (!haveDestKey) {
                 LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
                          p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
-            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
-                memcmp(p->public_key.bytes, node->public_key.bytes, 32) != 0) {
+            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) && memcmp(p->public_key.bytes, destKey.bytes, 32) != 0) {
                 LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x", *p->public_key.bytes,
-                         *node->public_key.bytes);
+                         *destKey.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+            crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
@@ -804,6 +885,19 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             skipHandle = true;
         }
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // Beacon listening is disabled: drop beacon packets so they are neither surfaced to the
+        // phone nor handled on-device (same pattern as the disabled neighbor-info case above).
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP &&
+            (!moduleConfig.has_mesh_beacon ||
+             !(moduleConfig.mesh_beacon.flags & meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED))) {
+            LOG_DEBUG("Beacon listening is disabled, ignore beacon packet");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
+
         bool shouldIgnoreNonstandardPorts =
             config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
 #if USERPREFS_EVENT_MODE
@@ -884,14 +978,14 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #endif
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
-        LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);
+        LOG_DEBUG("Ignore msg, 0x%08x is in our ignore list", p->from);
         packetPool.release(p);
         return;
     }
 
     meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->from);
     if (nodeInfoLiteIsIgnored(node)) {
-        LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
+        LOG_DEBUG("Ignore msg, 0x%08x is ignored", p->from);
         packetPool.release(p);
         return;
     }
@@ -903,7 +997,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (config.lora.ignore_mqtt && p->via_mqtt) {
-        LOG_DEBUG("Msg came in via MQTT from 0x%x", p->from);
+        LOG_DEBUG("Msg came in via MQTT from 0x%08x", p->from);
         packetPool.release(p);
         return;
     }
@@ -915,7 +1009,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 
     if (shouldFilterReceived(p)) {
-        LOG_DEBUG("Incoming msg was filtered from 0x%x", p->from);
+        LOG_DEBUG("Incoming msg was filtered from 0x%08x", p->from);
         packetPool.release(p);
         return;
     }
