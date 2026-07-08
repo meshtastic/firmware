@@ -430,6 +430,7 @@ void SnakeModule::loadHighScores()
 void SnakeModule::saveHighScores()
 {
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
     HighScoreFile file;
     memset(&file, 0, sizeof(file));
@@ -441,6 +442,8 @@ void SnakeModule::saveHighScores()
 
     auto sf = SafeFile(SNAKE_HS_FILE, true);
     const size_t written = sf.write(reinterpret_cast<uint8_t *>(&file), sizeof(file));
+    // unlock here because SafeFile.close() takes the lock internally
+    spiLock->unlock();
     if (!sf.close() || written != sizeof(file))
         LOG_WARN("Snake: failed to save high scores");
 #endif
