@@ -432,6 +432,8 @@ void SnakeModule::saveHighScores()
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
+
     HighScoreFile file;
     memset(&file, 0, sizeof(file));
     file.magic = HS_MAGIC;
@@ -441,6 +443,7 @@ void SnakeModule::saveHighScores()
     file.crc = crc32Buffer(&file, offsetof(HighScoreFile, crc));
 
     auto sf = SafeFile(SNAKE_HS_FILE, true);
+    spiLock->lock();
     const size_t written = sf.write(reinterpret_cast<uint8_t *>(&file), sizeof(file));
     // unlock here because SafeFile.close() takes the lock internally
     spiLock->unlock();
