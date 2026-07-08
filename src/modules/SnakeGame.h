@@ -78,12 +78,12 @@ class SnakeGame
   private:
     static constexpr uint16_t CAP = CELL_COUNT; // ring capacity == board size (len is tracked explicitly)
 
-    Cell body[CAP];
+    Cell body[CAP] = {0};
     uint16_t headIdx = 0; // ring index of the head (front) cell
     uint16_t tailIdx = 0; // ring index of the tail (oldest) cell
     uint16_t len = 0;     // number of live body cells
 
-    uint8_t occ[(CELL_COUNT + 7) / 8]; // occupancy bitmap, indexed by cellIndex()
+    uint8_t occ[(CELL_COUNT + 7) / 8] = {0}; // occupancy bitmap, indexed by cellIndex()
 
     Cell foodCell = {0, 0};
     Direction dir = DIR_RIGHT;
