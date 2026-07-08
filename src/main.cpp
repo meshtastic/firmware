@@ -21,6 +21,7 @@
 #include "power/PowerHAL.h"
 
 #include "FSCommon.h"
+#include "Power.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -28,7 +29,6 @@
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
-#include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
@@ -171,6 +171,10 @@ AudioThread *audioThread = nullptr;
 #ifdef USE_XL9555
 #include "ExtensionIOXL9555.hpp"
 ExtensionIOXL9555 io;
+#endif
+
+#ifdef USE_MCP23017
+#include "platform/esp32/ExtensionIOMCP23017.h"
 #endif
 
 #if HAS_TFT
@@ -605,6 +609,12 @@ void setup()
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+
+#ifdef USE_MCP23017
+    // Bring up the I2C IO expander (LoRa reset, LCD reset, GPS wake) now that the PMU rails are up,
+    // before the I2C scan and radio/display init
+    mcp23017EarlyInit();
+#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
