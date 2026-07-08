@@ -323,7 +323,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum)
+    virtual void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
@@ -350,7 +350,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {
@@ -412,9 +412,9 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
 #ifdef NIMBLE_TWO
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
 #else
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic)
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic) override
 
 #endif
     {
@@ -464,9 +464,9 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
 #ifdef NIMBLE_TWO
-    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
 #else
-    virtual void onRead(NimBLECharacteristic *pCharacteristic)
+    virtual void onRead(NimBLECharacteristic *pCharacteristic) override
 #endif
     {
         // CAUTION: This callback runs in the NimBLE task!!! Don't do anything except communicate with the main task's runOnce.
@@ -582,62 +582,41 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
   private:
     NimbleBluetooth *ble;
 
-    virtual uint32_t onPassKeyDisplay()
+    virtual uint32_t onPassKeyDisplay() override
 #else
-    virtual uint32_t onPassKeyRequest()
+    virtual uint32_t onPassKeyRequest() override
 #endif
     {
-        uint32_t passkey = config.bluetooth.fixed_pin;
+        uint32_t configuredPasskey = config.bluetooth.fixed_pin;
 
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
-            passkey = random(100000, 999999);
+            configuredPasskey = random(100000, 999999);
         }
-        LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
+        LOG_INFO("*** Enter passkey %d on the peer side ***", configuredPasskey);
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-        meshtastic::BluetoothStatus newStatus(std::to_string(passkey));
+        std::string passkey = std::to_string(configuredPasskey);
+        meshtastic::BluetoothStatus newStatus(passkey);
         bluetoothStatus->updateStatus(&newStatus);
 
 #if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (screen) {
-            screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-                char btPIN[16] = "888888";
-                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
-                int x_offset = display->width() / 2;
-                int y_offset = display->height() <= 80 ? 0 : 12;
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->setFont(FONT_MEDIUM);
-                display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-#if !defined(M5STACK_UNITC6L)
-                display->setFont(FONT_SMALL);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-                display->drawString(x_offset + x, y_offset + y, "Enter this code");
-#endif
-                display->setFont(FONT_LARGE);
-                char pin[8];
-                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-                display->drawString(x_offset + x, y_offset + y, pin);
 
-                display->setFont(FONT_SMALL);
-                char deviceName[64];
-                snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
-                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-                display->drawString(x_offset + x, y_offset + y, deviceName);
-            });
+            std::string ble_message = "Bluetooth\nPIN\n[M]" + passkey.substr(0, 3) + " " + passkey.substr(3, 6);
+            screen->showSimpleBanner(ble_message.c_str(), 30000);
         }
 #endif
         passkeyShowing = true;
 
-        return passkey;
+        return configuredPasskey;
     }
 
 #ifdef NIMBLE_TWO
-    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)
+    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo) override
 #else
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
+    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc) override
 #endif
     {
         LOG_INFO("BLE authentication complete");
@@ -655,7 +634,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     }
 
 #ifdef NIMBLE_TWO
-    virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
+    virtual void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
     {
         LOG_INFO("BLE incoming connection %s", connInfo.getAddress().toString().c_str());
 
@@ -683,11 +662,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
 
 #ifdef NIMBLE_TWO
-    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
+    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
     {
         LOG_INFO("BLE disconnect reason: %d", reason);
 #else
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) override
     {
         LOG_INFO("BLE disconnect");
 #endif
@@ -989,11 +968,4 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 #endif
 }
 
-void clearNVS()
-{
-    NimBLEDevice::deleteAllBonds();
-#ifdef ARCH_ESP32
-    ESP.restart();
-#endif
-}
 #endif

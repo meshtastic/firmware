@@ -3,11 +3,16 @@
 #include "CompassRenderer.h"
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
+#if !MESHTASTIC_EXCLUDE_STATUS
+#include "modules/StatusMessageModule.h"
+#endif
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h" // for getTime() function
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -92,8 +97,35 @@ std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
 
     // 1) Choose target candidate (long vs short) only if present
     const char *raw = nullptr;
-    if (node && node->has_user) {
-        raw = config.display.use_long_node_name ? node->user.long_name : node->user.short_name;
+
+#if !MESHTASTIC_EXCLUDE_STATUS && !MESHTASTIC_EXCLUDE_STATUSDB
+    // If long-name mode is enabled, and we have a recent status for this node,
+    // prefer "(short_name) statusText" as the raw candidate. Pull straight out
+    // of NodeDB's per-NodeNum cache instead of scanning a FIFO.
+    std::string composedFromStatus;
+    if (config.display.use_long_node_name && nodeInfoLiteHasUser(node) && nodeDB) {
+        meshtastic_StatusMessage cachedStatus;
+        if (nodeDB->copyNodeStatus(node->num, cachedStatus) && cachedStatus.status[0]) {
+            const char *shortName = node->short_name;
+            const size_t statusLen = std::strlen(cachedStatus.status);
+            composedFromStatus.reserve(4 + (shortName ? std::strlen(shortName) : 0) + 1 + statusLen);
+            composedFromStatus += "(";
+            if (shortName && *shortName) {
+                composedFromStatus += shortName;
+            }
+            composedFromStatus += ") ";
+            composedFromStatus += cachedStatus.status;
+
+            raw = composedFromStatus.c_str(); // safe for now; we'll sanitize immediately into std::string
+        }
+    }
+#endif
+
+    // If we didn't compose from status, use normal long/short selection
+    if (!raw) {
+        if (nodeInfoLiteHasUser(node)) {
+            raw = config.display.use_long_node_name ? node->long_name : node->short_name;
+        }
     }
 
     // 2) Preserve UTF-8 names so emotes can be detected and rendered.
@@ -177,6 +209,33 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
     }
 }
 
+static inline void applyFavoriteNodeNameColor(OLEDDisplay *display, const meshtastic_NodeInfoLite *node, const char *nodeName,
+                                              int16_t nameX, int16_t y, int nameMaxWidth)
+{
+    if (!display || !node || !nodeInfoLiteIsFavorite(node) || !isTFTColoringEnabled() || !nodeName) {
+        return;
+    }
+
+    const int textWidth = UIRenderer::measureStringWithEmotes(display, nodeName);
+    const int regionWidth = min(textWidth, max(0, nameMaxWidth));
+    if (regionWidth <= 0) {
+        return;
+    }
+
+    // Node list rows can begin a couple of pixels inside header space.
+    // Clamp favorite-name color region below the header to avoid black overlap there.
+    const int16_t minContentY = static_cast<int16_t>(FONT_HEIGHT_SMALL + 1);
+    const int16_t regionY = max(y, minContentY);
+    const int16_t yClip = regionY - y;
+    const int16_t regionHeight = static_cast<int16_t>(FONT_HEIGHT_SMALL - yClip);
+    if (regionHeight <= 0) {
+        return;
+    }
+
+    setAndRegisterTFTColorRole(TFTColorRole::FavoriteNode, TFTPalette::Yellow, TFTPalette::Black, nameX, regionY, regionWidth,
+                               regionHeight);
+}
+
 // =============================
 // Entry Renderers
 // =============================
@@ -191,7 +250,10 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
+    bool isMuted = nodeInfoLiteIsMuted(node);
 
     char timeStr[10];
     uint32_t seconds = sinceLastSeen(node);
@@ -211,14 +273,14 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
-    if (node->is_ignored || isMuted) {
+    if (nodeInfoLiteIsIgnored(node) || isMuted) {
         if (currentResolution == ScreenResolution::High) {
             display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
@@ -239,28 +301,34 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     int nameMaxWidth = getNodeNameMaxWidth(columnWidth, columnWidth - 25);
     int barsOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 20 : 24) : (isLeftCol ? 15 : 19);
-    int hopOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 21 : 29) : (isLeftCol ? 13 : 17);
+    constexpr int kBarCount = 4;
+    constexpr int kBarWidth = 2;
+    constexpr int kBarGap = 1;
 
     int barsXOffset = columnWidth - barsOffset;
+    int barsRightEdge = x + barsXOffset + ((kBarCount - 1) * (kBarWidth + kBarGap)) + kBarWidth;
 
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
+    bool isMuted = nodeInfoLiteIsMuted(node);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
     UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
-    if (node->is_ignored || isMuted) {
+    if (nodeInfoLiteIsIgnored(node) || isMuted) {
         if (currentResolution == ScreenResolution::High) {
             display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
@@ -268,28 +336,48 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         }
     }
 
-    // Draw signal strength bars
-    int bars = (node->snr > 5) ? 4 : (node->snr > 0) ? 3 : (node->snr > -5) ? 2 : (node->snr > -10) ? 1 : 0;
-    int barWidth = 2;
-    int barStartX = x + barsXOffset;
-    int barStartY = y + 1 + (FONT_HEIGHT_SMALL / 2) + 2;
+    const bool isZeroHop = node->has_hops_away && node->hops_away == 0;
 
-    for (int b = 0; b < 4; b++) {
-        if (b < bars) {
-            int height = (b * 2);
-            display->fillRect(barStartX + (b * (barWidth + 1)), barStartY - height, barWidth, height);
+    // Show signal only for direct neighbors (0 hops)
+    if (isZeroHop) {
+        int bars = (node->snr > 5) ? 4 : (node->snr > 0) ? 3 : (node->snr > -5) ? 2 : (node->snr > -10) ? 1 : 0;
+        int barStartX = x + barsXOffset;
+        int barStartY = y + 1 + (FONT_HEIGHT_SMALL / 2) + 2;
+
+        if (bars > 0) {
+            uint16_t signalBarsColor = TFTPalette::Bad;
+            if (bars >= 3) {
+                signalBarsColor = TFTPalette::Good;
+            } else if (bars == 2) {
+                signalBarsColor = TFTPalette::Medium;
+            }
+
+            // Highest bar reaches 6 px in this renderer.
+            setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, barStartX, barStartY - 6,
+                                       (kBarCount * kBarWidth) + ((kBarCount - 1) * kBarGap), 6);
+        }
+
+        for (int b = 0; b < kBarCount; b++) {
+            if (b < bars) {
+                int height = (b * 2);
+                display->fillRect(barStartX + (b * (kBarWidth + kBarGap)), barStartY - height, kBarWidth, height);
+            }
         }
     }
 
-    // Draw hop count
-    char hopStr[6] = "";
-    if (node->has_hops_away && node->hops_away > 0)
-        snprintf(hopStr, sizeof(hopStr), "[%d]", node->hops_away);
+    // Draw hop count + hop icon
+    if (node->has_hops_away && node->hops_away > 0) {
+        char hopCount[6];
+        snprintf(hopCount, sizeof(hopCount), "%d", node->hops_away);
 
-    if (hopStr[0] != '\0') {
-        int rightEdge = x + columnWidth - hopOffset;
-        int textWidth = display->getStringWidth(hopStr);
-        display->drawString(rightEdge - textWidth, y, hopStr);
+        const int hopCountWidth = display->getStringWidth(hopCount);
+        const int gap = 1;
+        const int totalWidth = hopCountWidth + gap + hop_width;
+        const int hopX = barsRightEdge - totalWidth;
+        const int iconY = y + (FONT_HEIGHT_SMALL - hop_height) / 2;
+
+        display->drawString(hopX, y, hopCount);
+        display->drawXbm(hopX + hopCountWidth + gap, iconY, hop_width, hop_height, hop);
     }
 }
 
@@ -304,15 +392,22 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
+    bool isMuted = nodeInfoLiteIsMuted(node);
     char distStr[10] = "";
 
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
-        double lat1 = ourNode->position.latitude_i * 1e-7;
-        double lon1 = ourNode->position.longitude_i * 1e-7;
-        double lat2 = node->position.latitude_i * 1e-7;
-        double lon2 = node->position.longitude_i * 1e-7;
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_PositionLite ourPos;
+    meshtastic_PositionLite theirPos;
+    const bool haveOurPos = ourNode && nodeDB->copyNodePosition(ourNode->num, ourPos);
+    const bool haveTheirPos = nodeDB->copyNodePosition(node->num, theirPos);
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node) && haveOurPos && haveTheirPos) {
+        double lat1 = ourPos.latitude_i * 1e-7;
+        double lon1 = ourPos.longitude_i * 1e-7;
+        double lat2 = theirPos.latitude_i * 1e-7;
+        double lon2 = theirPos.longitude_i * 1e-7;
 
         double earthRadiusKm = 6371.0;
         double dLat = (lat2 - lat1) * DEG_TO_RAD;
@@ -358,14 +453,14 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
-    if (node->is_ignored || isMuted) {
+    if (nodeInfoLiteIsIgnored(node) || isMuted) {
         if (currentResolution == ScreenResolution::High) {
             display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
@@ -373,14 +468,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         }
     }
 
-    if (strlen(distStr) > 0) {
-        int offset = (currentResolution == ScreenResolution::High)
-                         ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
-                         : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
-        int rightEdge = x + columnWidth - offset;
-        int textWidth = display->getStringWidth(distStr);
-        display->drawString(rightEdge - textWidth, y, distStr);
-    }
+    const char *distanceLabel = (strlen(distStr) > 0) ? distStr : "?";
+    int offset = (currentResolution == ScreenResolution::High)
+                     ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
+                     : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
+    int rightEdge = x + columnWidth - offset;
+    int textWidth = display->getStringWidth(distanceLabel);
+    display->drawString(rightEdge - textWidth, y, distanceLabel);
 }
 
 void drawEntryDynamic_Nodes(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
@@ -410,19 +504,22 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
                                          nameMaxWidth);
-    bool isMuted = (node->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0;
+#if GRAPHICS_TFT_COLORING_ENABLED
+    applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
+#endif
+    bool isMuted = nodeInfoLiteIsMuted(node);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     UIRenderer::drawStringWithEmotes(display, nameX, y, nodeName, FONT_HEIGHT_SMALL, 1, false);
-    if (node->is_favorite) {
+    if (nodeInfoLiteIsFavorite(node)) {
         if (currentResolution == ScreenResolution::High) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
         } else {
             display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
         }
     }
-    if (node->is_ignored || isMuted) {
+    if (nodeInfoLiteIsIgnored(node) || isMuted) {
         if (currentResolution == ScreenResolution::High) {
             display->drawLine(x + 8, y + 8, (isLeftCol ? 0 : x - 4) + nameMaxWidth - 17, y + 8);
         } else {
@@ -431,8 +528,8 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
-                      double userLat, double userLon)
+void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth,
+                      float myHeadingRadian, double userLat, double userLon)
 {
     if (!nodeDB->hasValidPosition(node))
         return;
@@ -443,14 +540,17 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     int centerX = x + columnWidth - arrowXOffset;
     int centerY = y + FONT_HEIGHT_SMALL / 2;
 
-    double nodeLat = node->position.latitude_i * 1e-7;
-    double nodeLon = node->position.longitude_i * 1e-7;
+    meshtastic_PositionLite nodePos;
+    if (!nodeDB->copyNodePosition(node->num, nodePos))
+        return;
+    double nodeLat = nodePos.latitude_i * 1e-7;
+    double nodeLon = nodePos.longitude_i * 1e-7;
     float bearing = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
-    float bearingToNode = RAD_TO_DEG * bearing;
-    float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
+    float relativeBearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeadingRadian);
+    float relativeBearingDeg = CompassRenderer::radiansToDegrees360(relativeBearing);
     // Shrink size by 2px
     int size = FONT_HEIGHT_SMALL - 5;
-    CompassRenderer::drawArrowToNode(display, centerX, centerY, size, relativeBearing);
+    CompassRenderer::drawArrowToNode(display, centerX, centerY, size, relativeBearingDeg);
     /*
     float angle = relativeBearing * DEG_TO_RAD;
     float halfSize = size / 2.0;
@@ -480,12 +580,27 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     */
 }
 
+void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float, double,
+                        double)
+{
+    if (!nodeDB->hasValidPosition(node))
+        return;
+
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int arrowXOffset = (currentResolution == ScreenResolution::High) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+    int centerX = x + columnWidth - arrowXOffset;
+
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, y, "?");
+}
+
 // =============================
 // Main Screen Functions
 // =============================
 
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
-                        EntryRenderer renderer, NodeExtrasRenderer extras, float heading, double lat, double lon)
+                        EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
@@ -538,7 +653,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
             continue;
         if (n->num == nodeDB->getNodeNum())
             continue;
-        if (locationScreen && !n->has_position)
+        if (locationScreen && !nodeDB->hasNodePosition(n->num))
             continue;
 
         drawList.push_back(n->num);
@@ -570,7 +685,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         renderer(display, node, xPos, yPos, columnWidth);
 
         if (extras)
-            extras(display, node, xPos, yPos, columnWidth, heading, lat, lon);
+            extras(display, node, xPos, yPos, columnWidth, headingRadian, lat, lon);
 
         lastNodeY = max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
@@ -650,6 +765,9 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
         display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
         display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        registerTFTActionMenuRegions(boxLeft, boxTop, boxWidth, boxHeight);
+#endif
 
         // Text
         display->drawString(boxLeft + padding, boxTop + padding, buf);
@@ -765,11 +883,16 @@ void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 #endif
 void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    float heading = 0;
-    bool validHeading = false;
-    auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    double lat = DegD(ourNode->position.latitude_i);
-    double lon = DegD(ourNode->position.longitude_i);
+    float headingRadian = 0.0f;
+    const auto *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    meshtastic_PositionLite ourSelfPos;
+    if (!ourNode || !nodeDB->hasValidPosition(ourNode) || !nodeDB->copyNodePosition(ourNode->num, ourSelfPos)) {
+        drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, 0.0, 0.0);
+        return;
+    }
+
+    double lat = DegD(ourSelfPos.latitude_i);
+    double lon = DegD(ourSelfPos.longitude_i);
 
 #if defined(M5STACK_UNITC6L)
     display->clear();
@@ -779,21 +902,12 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
         lastSwitchTime = now;
     }
 #endif
-    if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
-#if HAS_GPS
-        if (screen->hasHeading()) {
-            heading = screen->getHeading(); // degrees
-            validHeading = true;
-        } else {
-            heading = screen->estimatedHeading(lat, lon);
-            validHeading = !isnan(heading);
-        }
-#endif
-
-        if (!validHeading)
-            return;
+    if (!CompassRenderer::getHeadingRadians(lat, lon, headingRadian)) {
+        drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassUnknown, headingRadian, lat, lon);
+        return;
     }
-    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
+
+    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, headingRadian, lat, lon);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed

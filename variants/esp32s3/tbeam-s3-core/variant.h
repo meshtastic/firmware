@@ -9,8 +9,6 @@
 #define BUTTON_PIN 0 // The middle button GPIO on the T-Beam S3
 //  #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
-#define LED_STATE_ON 0 // State when LED is lit
-
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
 #define USE_SX1262
@@ -48,9 +46,9 @@
 #define LR11X0_DIO_AS_RF_SWITCH
 #endif
 
-// Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
-// and waking from light sleep
-// #define PMU_IRQ 40
+// Voiding warrenties, we're gonna try the IRQ
+#define PMU_IRQ 40
+#define PMU_POWER_BUTTON_IS_CANCEL // maps a short click of the power button to a cancel action (turning off the screen)
 #define HAS_AXP2101
 
 // PCF8563 RTC Module
