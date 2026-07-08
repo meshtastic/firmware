@@ -1,13 +1,44 @@
 #include "FloodingRouter.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/HopScalingModule.h"
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
+
+namespace
+{
+// Above any of these, the mesh is busy/dense enough that extra-repeat tolerance (see
+// getDupeCancelThreshold) would just be adding airtime to an already-congested channel for
+// little extra delivery benefit - so we fall back to the historical "cancel on first duplicate"
+// behavior regardless of what the portnum table says.
+constexpr float BUSY_CHANNEL_UTIL_PERCENT = 10.0f;
+constexpr float BUSY_AIR_UTIL_TX_PERCENT = 4.0f;
+constexpr uint16_t BUSY_DIRECT_ACTIVE_NODES = 10;
+
+// True if channel/air utilization or estimated direct-neighbor density indicates the mesh is
+// too busy to spend extra airtime on repeat-tolerant rebroadcasts.
+bool meshTooBusyForExtraRepeats()
+{
+    if (airTime && airTime->channelUtilizationPercent() > BUSY_CHANNEL_UTIL_PERCENT)
+        return true;
+    if (airTime && airTime->utilizationTXPercent() > BUSY_AIR_UTIL_TX_PERCENT)
+        return true;
+#if HAS_VARIABLE_HOPS
+    // getLastPerHopCounts().perHop[0] is HopScalingModule's estimate of active (heard within its
+    // rolling window) direct (hop_away == 0) neighbors - the same "active and direct" notion used
+    // for its own hop-limit recommendation.
+    if (hopScalingModule && hopScalingModule->getLastPerHopCounts().perHop[0] > BUSY_DIRECT_ACTIVE_NODES)
+        return true;
+#endif
+    return false;
+}
+} // namespace
 
 // Compile-time, per-portnum threshold for how many duplicate rebroadcasts of a packet we must hear
 // before giving up on our own scheduled rebroadcast of it. The default of 1 (used for any portnum
@@ -26,6 +57,9 @@
 // This is a compile-time table (not a runtime/protobuf config) because the desired threshold is
 // expected to vary per packet type rather than being a single device-wide knob; edit it to tune
 // for a given deployment.
+//
+// Regardless of the table below, meshTooBusyForExtraRepeats() (channel/air utilization or direct-
+// neighbor density too high) always forces the threshold back down to 1 - see its definition above.
 uint8_t FloodingRouter::getDupeCancelThreshold(const meshtastic_MeshPacket *p)
 {
     // Portnum is only visible once a packet is decoded (i.e. we hold the channel key); packets we
@@ -33,16 +67,27 @@ uint8_t FloodingRouter::getDupeCancelThreshold(const meshtastic_MeshPacket *p)
     if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
         return 1;
 
+    uint8_t threshold;
     switch (p->decoded.portnum) {
     case meshtastic_PortNum_TEXT_MESSAGE_APP:
     case meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP:
         // User-visible chat, broadcast or DM: no ACK/retry safety net for broadcasts, and no other
         // portnum-specific reason to prefer airtime savings over delivery odds. Tolerate one repeat
         // heard from another node before giving up on our own rebroadcast.
-        return 2;
+        threshold = 2;
+        break;
     default:
-        return 1;
+        threshold = 1;
+        break;
     }
+
+    // A busy/dense mesh overrides any portnum-specific extra tolerance: not worth spending more
+    // airtime on repeats when the channel is already congested or there are many direct neighbors
+    // to reach anyway.
+    if (threshold > 1 && meshTooBusyForExtraRepeats())
+        return 1;
+
+    return threshold;
 }
 
 uint8_t FloodingRouter::registerDupeHeard(NodeNum sender, PacketId id)
