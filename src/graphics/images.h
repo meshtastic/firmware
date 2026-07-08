@@ -291,6 +291,10 @@ const uint8_t digital_icon_clock[] PROGMEM = {0b00111100, 0b01000010, 0b10000101
 const uint8_t analog_icon_clock[] PROGMEM = {0b11111111, 0b01000010, 0b00100100, 0b00011000,
                                              0b00100100, 0b01000010, 0b01000010, 0b11111111};
 
+#define xeddsa_shield_width 8
+#define xeddsa_shield_height 8
+const uint8_t xeddsa_shield[] PROGMEM = {0x7E, 0x8F, 0x8F, 0x8F, 0xF1, 0xF1, 0x72, 0x3C};
+
 #define chirpy_width 38
 #define chirpy_height 50
 const uint8_t chirpy[] = {

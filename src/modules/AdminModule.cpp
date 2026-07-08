@@ -418,22 +418,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate factory config reset");
+        // Keep BLE active while reset cleanup performs nRF flash operations.
         nodeDB->factoryReset();
         LOG_INFO("Factory config reset finished, rebooting soon");
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate full factory reset");
         nodeDB->factoryReset(true);
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate node-db reset");
         //  CLIENT_BASE, ROUTER and ROUTER_LATE are able to preserve the remaining hop count when relaying a packet via a
         //  favorited node, so ensure that their favorites are kept on reset
@@ -441,6 +441,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             isOneOf(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE,
                     meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
         nodeDB->resetNodes(rolePreference ? rolePreference : r->nodedb_reset);
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -1487,6 +1488,13 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        case meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG:
+            configName = "MeshBeacon";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+            res.get_module_config_response.payload_variant.mesh_beacon = moduleConfig.mesh_beacon;
+            break;
+#endif
         }
         LOG_INFO("Get module config: %s", configName);
 

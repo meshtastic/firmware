@@ -52,17 +52,17 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
+    MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
+
+  protected:
     /// Used as our notification from the ISR
-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK };
 
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
     static void isrTxLevel0(), isrLevel0Common(PendingISR code);
 
-    MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
-
-  protected:
     ModemType_t modemType = RADIOLIB_MODEM_LORA;
     DataRate_t getDataRate() const { return {.lora = {.spreadingFactor = sf, .bandwidth = bw, .codingRate = cr}}; }
     PacketConfig_t getPacketConfig() const
@@ -350,4 +350,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     void checkRxDoneIrqFlag();
     void checkTxDoneIrqFlag();
+
+    /** Software-poll substitute for a hardware DIO interrupt, for radios whose IRQ line sits behind
+     * an I2C IO expander with no INT routed to the MCU (e.g. Meshnology W10, LORA_DIO1_SOFTWARE_POLL).
+     * The chip-specific subclass polls the radio's IRQ status register from the radio thread and
+     * synthesizes ISR_TX/ISR_RX events equivalent to the hardware DIO1 interrupt. */
+    void deliverPendingIrqFromPoll(PendingISR cause);
+    void scheduleIrqPollTick();
+    static bool isIsrTxCallback(void (*callback)());
+    virtual void handleSoftwareLoraIrqPoll() {}
 };

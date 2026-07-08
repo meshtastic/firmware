@@ -2,12 +2,12 @@
 
 > **TL;DR**
 >
-> |                |                                                                                              |
-> | -------------- | -------------------------------------------------------------------------------------------- |
-> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                           |
-> | Hardware tests | `./mcp-server/run-tests.sh`                                                                  |
-> | Format         | `trunk fmt`                                                                                  |
-> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code) |
+> |                |                                                                                                                        |
+> | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+> | Local tests    | `./bin/run-tests.sh` (exit 0 GREEN · 1 RED · 2 AMBER · 3 FILTERED)                                                     |
+> | Hardware tests | [meshtastic/meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) (`MESHTASTIC_FIRMWARE_ROOT` → this checkout) |
+> | Format         | `trunk fmt`                                                                                                            |
+> | Mirror docs    | `AGENTS.md` (short pointer for agents that don't read this file) · `CLAUDE.md` (Claude Code)                           |
 >
 > **Need this? It's here.**
 >
@@ -737,15 +737,15 @@ Simulation testing: `bin/test-simulator.sh`
 
 Quick entry point for new test modules: `test/README.md` (native unit-test authoring guide, skeleton, pitfalls, and setup checklist).
 
-### Hardware-in-the-loop tests (`mcp-server/tests/`)
+### Hardware-in-the-loop tests ([meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp))
 
-Separate pytest suite that exercises real USB-connected Meshtastic devices. See the **MCP Server & Hardware Test Harness** section below for invocation, tier layout, and agent usage rules.
+Separate pytest suite that exercises real USB-connected Meshtastic devices. It now lives in the standalone [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) repo, run against a firmware checkout via `MESHTASTIC_FIRMWARE_ROOT`. See the **MCP Server & Hardware Test Harness** section below for invocation, tier layout, and agent usage rules.
 
 ## MCP Server & Hardware Test Harness
 
-The `mcp-server/` directory houses a firmware-aware [MCP](https://modelcontextprotocol.io/) server plus a pytest-based integration suite. AI agents that speak MCP get a well-defined tool surface for flashing, configuring, and inspecting physical Meshtastic devices - use it instead of hand-rolling `pio` or `meshtastic --port` calls where possible. `mcp-server/README.md` is the operator-facing setup doc; this section is the agent-facing usage contract.
+The firmware-aware [MCP](https://modelcontextprotocol.io/) server plus its pytest-based integration suite now live in the standalone [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) repo. AI agents that speak MCP get a well-defined tool surface for flashing, configuring, and inspecting physical Meshtastic devices - use it instead of hand-rolling `pio` or `meshtastic --port` calls where possible. The meshtastic-mcp repo's README is the operator-facing setup doc; this section is the agent-facing usage contract.
 
-The repo registers the server via `.mcp.json` at the repo root - Claude Code picks it up automatically once `mcp-server/.venv/` is built (`cd mcp-server && python3 -m venv .venv && .venv/bin/pip install -e '.[test]'`).
+The repo registers the server via `.mcp.json` at the repo root - Claude Code / Copilot pick it up automatically and run it through `uvx --from git+https://github.com/meshtastic/meshtastic-mcp meshtastic-mcp`, so the MCP tools work with no local build. To run the pytest hardware harness instead, clone [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) and point `MESHTASTIC_FIRMWARE_ROOT` at this firmware checkout.
 
 ### When to use which surface
 
@@ -757,7 +757,7 @@ The repo registers the server via `.mcp.json` at the repo root - Claude Code pic
 | Flash firmware to a variant                       | `pio_flash` (any arch) or `erase_and_flash` (ESP32 factory install)                                              |
 | Stream serial logs while debugging                | `serial_open` → `serial_read` loop → `serial_close`                                                              |
 | Administer `userPrefs.jsonc` build-time constants | `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`                                        |
-| Run the regression suite                          | `./mcp-server/run-tests.sh` (or `/test` slash command)                                                           |
+| Run the regression suite                          | `./run-tests.sh` from a meshtastic-mcp checkout (or `/test` slash command)                                       |
 | Diagnose a specific device                        | `/diagnose [role]` slash command (read-only)                                                                     |
 | Triage a flaky test                               | `/repro <node-id> [count]` slash command                                                                         |
 
@@ -765,7 +765,7 @@ The repo registers the server via `.mcp.json` at the repo root - Claude Code pic
 
 ### MCP tool surface (43 tools)
 
-Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-value signatures are called out here.
+Grouped by purpose. Full argument shapes in the meshtastic-mcp repo's README; a few high-value signatures are called out here.
 
 - **Discovery & metadata**: `list_devices`, `list_boards`, `get_board`
 - **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 only), `update_flash` (ESP32 OTA), `touch_1200bps`
@@ -775,13 +775,13 @@ Grouped by purpose. Full argument shapes in `mcp-server/README.md`; a few high-v
 - **userPrefs admin** (build-time constants, not runtime config): `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_chip_info`, `esptool_erase_flash`, `esptool_raw`, `nrfutil_dfu`, `nrfutil_raw`, `picotool_info`, `picotool_load`, `picotool_raw`
 - **USB power control** (via `uhubctl`, per-port PPPS toggle): `uhubctl_list` (read-only), `uhubctl_power(action='on'|'off', confirm=True)`, `uhubctl_cycle(delay_s, confirm=True)`. Target by raw `(location, port)` or by `role` (`"nrf52"`, `"esp32s3"`); role lookup checks `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` + `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
-- **Observability** (UI tier + operator ad-hoc): `capture_screen(role, ocr=True)` - grabs a USB-webcam frame of the device OLED and optionally OCRs it. Requires `mcp-server[ui]` extras (`opencv-python-headless`, `easyocr`) and `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` env var; falls through to a 1×1 black PNG `NullBackend` when unconfigured.
+- **Observability** (UI tier + operator ad-hoc): `capture_screen(role, ocr=True)` - grabs a USB-webcam frame of the device OLED and optionally OCRs it. Requires `meshtastic-mcp[ui]` extras (`opencv-python-headless`, `easyocr`) and `MESHTASTIC_UI_CAMERA_DEVICE_<ROLE>` env var; falls through to a 1×1 black PNG `NullBackend` when unconfigured.
 
 `confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve - it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset`, `erase_and_flash`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
 
-**TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `list_devices` surface a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`, `serial_open`, `esptool_*`, `nrfutil_*`, `picotool_*`) raise a clear `ConnectionError` when handed a `tcp://` port; `pio_flash` against a `native*` env raises a `FlashError` (no upload step - use `build` and run the binary directly). The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See `mcp-server/README.md` § "TCP / native-host nodes".
+**TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `list_devices` surface a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`, `serial_open`, `esptool_*`, `nrfutil_*`, `picotool_*`) raise a clear `ConnectionError` when handed a `tcp://` port; `pio_flash` against a `native*` env raises a `FlashError` (no upload step - use `build` and run the binary directly). The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See the meshtastic-mcp repo's README § "TCP / native-host nodes".
 
-### Hardware test suite (`mcp-server/run-tests.sh`)
+### Hardware test suite (`run-tests.sh`, from a meshtastic-mcp checkout)
 
 The wrapper auto-detects connected devices (VID → role map: `0x239A` → `nrf52`, `0x303A`/`0x10C4` → `esp32s3`), maps each role to a PlatformIO env (`nrf52` → `rak4631`, `esp32s3` → `heltec-v3`, overridable via `MESHTASTIC_MCP_ENV_<ROLE>`), then invokes pytest. Zero pre-flight config needed from the operator.
 
@@ -801,22 +801,23 @@ Suite tiers (collected + run in this order via `pytest_collection_modifyitems`):
 Invocation patterns:
 
 ```bash
-./mcp-server/run-tests.sh                                        # full suite (auto-bake-if-needed)
-./mcp-server/run-tests.sh --force-bake                           # reflash before testing
-./mcp-server/run-tests.sh --assume-baked                         # skip bake (caller vouches for device state)
-./mcp-server/run-tests.sh tests/mesh                             # one tier
-./mcp-server/run-tests.sh tests/mesh/test_direct_with_ack.py     # one file
-./mcp-server/run-tests.sh -k telemetry                           # name filter
+# run from a meshtastic-mcp checkout, with MESHTASTIC_FIRMWARE_ROOT=/path/to/firmware
+./run-tests.sh                                        # full suite (auto-bake-if-needed)
+./run-tests.sh --force-bake                           # reflash before testing
+./run-tests.sh --assume-baked                         # skip bake (caller vouches for device state)
+./run-tests.sh tests/mesh                             # one tier
+./run-tests.sh tests/mesh/test_direct_with_ack.py     # one file
+./run-tests.sh -k telemetry                           # name filter
 ```
 
 **No hardware detected?** The wrapper auto-narrows to `tests/unit/` only and prints `detected hub : (none)` in the pre-flight header. Agents interpreting the output should call this out explicitly - a 52-test green run without hardware is qualitatively different from a 12-unit-test green run.
 
 **Artifacts every run produces:**
 
-- `mcp-server/tests/report.html` - self-contained pytest-html. Each test gets a `Meshtastic debug` section with the tail of firmware log + device state dump. **Open this first** on failures; it's the canonical evidence source.
-- `mcp-server/tests/junit.xml` - CI-parseable.
-- `mcp-server/tests/reportlog.jsonl` - pytest-reportlog stream (`$report_type` keyed JSONL). Consumed by the live TUI.
-- `mcp-server/tests/fwlog.jsonl` - firmware log mirror from the `meshtastic.log.line` pubsub topic. Populated by the `_firmware_log_stream` autouse session fixture.
+- `tests/report.html` - self-contained pytest-html. Each test gets a `Meshtastic debug` section with the tail of firmware log + device state dump. **Open this first** on failures; it's the canonical evidence source.
+- `tests/junit.xml` - CI-parseable.
+- `tests/reportlog.jsonl` - pytest-reportlog stream (`$report_type` keyed JSONL). Consumed by the live TUI.
+- `tests/fwlog.jsonl` - firmware log mirror from the `meshtastic.log.line` pubsub topic. Populated by the `_firmware_log_stream` autouse session fixture.
 
 ### Live TUI (`meshtastic-mcp-test-tui`)
 
@@ -836,7 +837,7 @@ A Textual-based live view that wraps `run-tests.sh`. Tails reportlog for per-tes
 Launch:
 
 ```bash
-cd mcp-server
+# from a meshtastic-mcp checkout (MESHTASTIC_FIRMWARE_ROOT set)
 .venv/bin/meshtastic-mcp-test-tui                 # full suite
 .venv/bin/meshtastic-mcp-test-tui tests/mesh      # args pass through to pytest
 ```
@@ -861,7 +862,7 @@ House rules for agents running these prompts:
 
 ### Key fixtures (test authors + agents debugging)
 
-`mcp-server/tests/conftest.py` provides:
+`tests/conftest.py` (in the meshtastic-mcp checkout) provides:
 
 - **`_session_userprefs`** (autouse session) - snapshots `userPrefs.jsonc` at session start, merges the session test profile via `userprefs.merge_active(test_profile)`, restores at teardown. Four layers of safety: pytest teardown + `atexit` + sidecar file (`userPrefs.jsonc.mcp-session-bak`) + startup self-heal in `run-tests.sh`. **Do not edit `userPrefs.jsonc` from inside a test.**
 - **`_firmware_log_stream`** (autouse session) - subscribes to `meshtastic.log.line` pubsub on every connected `SerialInterface` and mirrors lines to `tests/fwlog.jsonl`. Drives the TUI firmware-log pane.
@@ -877,13 +878,13 @@ Two firmware changes exist specifically so the test harness works reliably. **Ke
 - **`src/mesh/StreamAPI.cpp` + `StreamAPI.h`** - `emitLogRecord` uses a dedicated `fromRadioScratchLog` + `txBufLog` pair and a `concurrency::Lock streamLock`. Before this fix, `debug_log_api_enabled=true` would tear `FromRadio` protobufs on the serial transport because `emitTxBuffer` and `emitLogRecord` shared a single scratch buffer. The conftest enables the log stream session-wide; without this fix the device would corrupt its own FromRadio replies mid-session.
 - **`src/mesh/PhoneAPI.cpp`** - `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion.
 
-If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` flow, run `./mcp-server/run-tests.sh` at minimum before asking for review.
+If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` flow, run `./run-tests.sh` (from a meshtastic-mcp checkout, with `MESHTASTIC_FIRMWARE_ROOT` pointed here) at minimum before asking for review.
 
 ### Recovery playbooks
 
 | Symptom                                                                           | First check                                                   | Fix                                                                                                                                                                                                                              |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `userPrefs.jsonc` dirty after test run                                            | `git status --porcelain userPrefs.jsonc`                      | If non-empty, re-run `./mcp-server/run-tests.sh` once - the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                                                                          |
+| `userPrefs.jsonc` dirty after test run                                            | `git status --porcelain userPrefs.jsonc`                      | If non-empty, re-run `./run-tests.sh` (from a meshtastic-mcp checkout) once - the pre-flight self-heal restores from sidecar. If still dirty, `git checkout userPrefs.jsonc`.                                                    |
 | Port busy / wedged CP2102 on macOS                                                | `lsof /dev/cu.usbserial-0001`                                 | Kill the holder. USB replug if the kernel still reports busy. Often a stale `pio device monitor` or zombie `meshtastic_mcp` process.                                                                                             |
 | nRF52 appears unresponsive                                                        | `list_devices` shows VID `0x239A` but `device_info` times out | `touch_1200bps(port=...)` drops it into the DFU bootloader → `pio_flash` re-installs.                                                                                                                                            |
 | Device fully wedged (Guru Meditation, frozen CDC, no DFU)                         | `list_devices` shows the VID but every admin call times out   | `uhubctl_cycle(role="nrf52", confirm=True)` hard-power-cycles the port via USB hub PPPS. `baked_single`'s auto-recovery hook does this once automatically if uhubctl is installed. Falls back to physical replug if no PPPS hub. |

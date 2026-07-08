@@ -6,13 +6,13 @@
 #include "GPS.h"
 #endif
 #include "MeshService.h"
+#include "Power.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
 #include "input/InputBroker.h"
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"

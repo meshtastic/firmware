@@ -7,6 +7,7 @@
 #include "EnvironmentTelemetry.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
@@ -17,7 +18,6 @@
 #include "graphics/images.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
@@ -373,6 +373,22 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &telemetry)) {
         display->drawString(x, currentY, "No Telemetry");
         return;
+    }
+
+    // Bound the float metrics before String(float) renders them (see UnitConversions::displaySafeFloat);
+    // the stored packet is always the environment variant.
+    {
+        auto &e = telemetry.variant.environment_metrics;
+        e.temperature = UnitConversions::displaySafeFloat(e.temperature);
+        e.relative_humidity = UnitConversions::displaySafeFloat(e.relative_humidity);
+        e.barometric_pressure = UnitConversions::displaySafeFloat(e.barometric_pressure);
+        e.voltage = UnitConversions::displaySafeFloat(e.voltage);
+        e.current = UnitConversions::displaySafeFloat(e.current);
+        e.lux = UnitConversions::displaySafeFloat(e.lux);
+        e.white_lux = UnitConversions::displaySafeFloat(e.white_lux);
+        e.weight = UnitConversions::displaySafeFloat(e.weight);
+        e.distance = UnitConversions::displaySafeFloat(e.distance);
+        e.radiation = UnitConversions::displaySafeFloat(e.radiation);
     }
 
     const auto &m = telemetry.variant.environment_metrics;

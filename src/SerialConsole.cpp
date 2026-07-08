@@ -69,8 +69,6 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     // Native USB disconnects during reset; do not block boot while the host re-enumerates the CDC port.
     Port.setTxTimeoutMs(0);
 #endif
-#if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040) ||   \
-    defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     time_t timeout = millis();
     while (!Port) {
         if (Throttle::isWithinTimespanMs(timeout, FIVE_SECONDS_MS)) {
@@ -79,7 +77,6 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
             break;
         }
     }
-#endif
 #if !ARCH_PORTDUINO
     emitRebooted();
 #endif
