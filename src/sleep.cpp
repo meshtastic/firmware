@@ -266,18 +266,24 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     digitalWrite(SDCARD_CS, LOW);
 #endif
 
-#ifdef TRACKER_T1000_E
+#if defined(TRACKER_T1000_E) || defined(MESH_TRACKER_X1)
 #ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
     digitalWrite(GPS_SLEEP_INT, LOW);
     digitalWrite(GPS_RTC_INT, LOW);
+#ifdef GPS_RESETB_OUT
     pinMode(GPS_RESETB_OUT, OUTPUT);
     digitalWrite(GPS_RESETB_OUT, LOW);
+#endif
 #endif
 
 #ifdef BUZZER_EN_PIN
     digitalWrite(BUZZER_EN_PIN, LOW);
+#endif
+
+#ifdef PIN_DRV_EN
+    digitalWrite(PIN_DRV_EN, LOW);
 #endif
 
 #ifdef PIN_3V3_EN
@@ -398,9 +404,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 {
     // LOG_DEBUG("Enter light sleep");
 
-    // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not entering
-    // LightSleep.
-#if defined(SENSECAP_INDICATOR)
+    // LORA_DIO1 is an extended IO pin (on an I/O expander). Setting it as a wake-up pin will cause problems,
+    // such as the device not entering light sleep. Boards opt in with LORA_DIO1_EXTENDED_IO in their variant.
+#if defined(LORA_DIO1_EXTENDED_IO)
     return ESP_SLEEP_WAKEUP_TIMER;
 #endif
 
@@ -580,7 +586,9 @@ bool shouldLoraWake(uint32_t msecToWake)
 
 void enableLoraInterrupt()
 {
-#if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+#if defined(LORA_DIO1_EXTENDED_IO)
+    // DIO1 is a virtual pin on an I/O expander - it cannot be a GPIO wakeup source
+#elif SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     esp_err_t res;
     res = gpio_pulldown_en((gpio_num_t)LORA_DIO1);
     if (res != ESP_OK) {

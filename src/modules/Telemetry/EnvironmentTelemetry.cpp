@@ -7,6 +7,7 @@
 #include "EnvironmentTelemetry.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
@@ -17,7 +18,6 @@
 #include "graphics/images.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
@@ -119,6 +119,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/T1000xSensor.h"
 #endif
 
+#if __has_include(<Adafruit_SPA06_003.h>)
+#include "Sensor/SPA06Sensor.h"
+#endif
+
 #ifdef SENSECAP_INDICATOR
 #include "Sensor/IndicatorSensor.h"
 #endif
@@ -167,12 +171,15 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // Not a real I2C device, uses UART
     addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #endif
-    addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);
-    addSensor<CGRadSensSensor>(i2cScanner, ScanI2C::DeviceType::CGRADSENS);
+#if HAS_SPA06 && __has_include(<Adafruit_SPA06_003.h>)
+    addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
+#endif
 #endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
+    addSensor<RCWL9620Sensor>(i2cScanner, ScanI2C::DeviceType::RCWL9620);
+    addSensor<CGRadSensSensor>(i2cScanner, ScanI2C::DeviceType::CGRADSENS);
 #if __has_include(<DFRobot_LarkWeatherStation.h>)
     addSensor<DFRobotLarkSensor>(i2cScanner, ScanI2C::DeviceType::DFROBOT_LARK);
 #endif
@@ -368,6 +375,22 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         return;
     }
 
+    // Bound the float metrics before String(float) renders them (see UnitConversions::displaySafeFloat);
+    // the stored packet is always the environment variant.
+    {
+        auto &e = telemetry.variant.environment_metrics;
+        e.temperature = UnitConversions::displaySafeFloat(e.temperature);
+        e.relative_humidity = UnitConversions::displaySafeFloat(e.relative_humidity);
+        e.barometric_pressure = UnitConversions::displaySafeFloat(e.barometric_pressure);
+        e.voltage = UnitConversions::displaySafeFloat(e.voltage);
+        e.current = UnitConversions::displaySafeFloat(e.current);
+        e.lux = UnitConversions::displaySafeFloat(e.lux);
+        e.white_lux = UnitConversions::displaySafeFloat(e.white_lux);
+        e.weight = UnitConversions::displaySafeFloat(e.weight);
+        e.distance = UnitConversions::displaySafeFloat(e.distance);
+        e.radiation = UnitConversions::displaySafeFloat(e.radiation);
+    }
+
     const auto &m = telemetry.variant.environment_metrics;
 
     // Check if any telemetry field has valid data
@@ -436,7 +459,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         bool isCooldownOver = (now - lastAlertTime > 60000);
 
         if (isOwnTelemetry && bannerMsg && isCooldownOver) {
-            LOG_INFO("drawFrame: IAQ %d (own) — showing banner: %s", m.iaq, bannerMsg);
+            LOG_INFO("drawFrame: IAQ %d (own) - showing banner: %s", m.iaq, bannerMsg);
             screen->showSimpleBanner(bannerMsg, 3000);
 
             // Only buzz if IAQ is over 200

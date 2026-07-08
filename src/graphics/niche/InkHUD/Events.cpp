@@ -2,6 +2,7 @@
 
 #include "./Events.h"
 
+#include "MessageStore.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "buzz.h"
@@ -514,6 +515,7 @@ int InkHUD::Events::beforeReboot(void *unused)
         inkhud->persistence->saveLatestMessage();
     } else {
         NicheGraphics::clearFlashData();
+        messageStore.clearAllMessages(); // also wipe the shared message store
     }
 
     // Note: no forceUpdate call here
@@ -532,32 +534,27 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     if (getFrom(packet) == nodeDB->getNodeNum())
         return 0;
 
-    // Determine whether the message is broadcast or a DM
-    // Store this info to prevent confusion after a reboot
-    // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set
-    inkhud->persistence->latestMessage.wasBroadcast = isBroadcast(packet->to);
+    bool isBroadcastMsg = isBroadcast(packet->to);
+    inkhud->persistence->latestMessage.wasBroadcast = isBroadcastMsg;
 
-    // Pick the appropriate variable to store the message in
-    MessageStore::Message *storedMessage = inkhud->persistence->latestMessage.wasBroadcast
-                                               ? &inkhud->persistence->latestMessage.broadcast
-                                               : &inkhud->persistence->latestMessage.dm;
-
-    // Store nodenum of the sender
-    // Applets can use this to fetch user data from nodedb, if they want
-    storedMessage->sender = packet->from;
-
-    // Store the time (epoch seconds) when message received
-    storedMessage->timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
-
-    // Store the channel
-    // - (potentially) used to determine whether notification shows
-    // - (potentially) used to determine which applet to focus
-    storedMessage->channelIndex = packet->channel;
-
-    // Store the text
-    // Need to specify manually how many bytes, because source not null-terminated
-    storedMessage->text =
-        std::string(&packet->decoded.payload.bytes[0], &packet->decoded.payload.bytes[packet->decoded.payload.size]);
+    if (!isBroadcastMsg) {
+        // DMs never pass through ThreadedMessageApplet, so add them to the global store here
+        // so they survive reboots. Derive the latestMessage cache entry from the stored result.
+        inkhud->persistence->latestMessage.dm = messageStore.addFromPacket(*packet);
+    } else {
+        // Broadcasts are added to the global store by ThreadedMessageApplet::handleReceived().
+        // Here we only update the latestMessage cache used by AllMessageApplet / NotificationApplet.
+        StoredMessage &sm = inkhud->persistence->latestMessage.broadcast;
+        sm.sender = packet->from;
+        sm.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);
+        sm.channelIndex = packet->channel;
+        const char *payload = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+        size_t storedLen = packet->decoded.payload.size;
+        if (storedLen >= MAX_MESSAGE_SIZE)
+            storedLen = MAX_MESSAGE_SIZE - 1;
+        sm.textOffset = MessageStore::storeText(payload, storedLen);
+        sm.textLength = static_cast<uint16_t>(storedLen);
+    }
 
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
 }

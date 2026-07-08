@@ -6,6 +6,6 @@ AtakPluginModule::AtakPluginModule() : SinglePortModule("atak", meshtastic_PortN
 
 ProcessMessage AtakPluginModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    (void)mp; // Passthrough — no processing needed, apps handle compression/decompression
+    (void)mp; // Passthrough - no processing needed, apps handle compression/decompression
     return ProcessMessage::CONTINUE;
 }

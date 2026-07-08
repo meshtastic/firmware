@@ -1,11 +1,12 @@
 #include "configuration.h"
-#if HAS_SCREEN
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 #include "FSCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "gps/RTC.h"
+#include "memory/MemAudit.h"
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
@@ -28,8 +29,10 @@ static inline void resetMessagePool()
         g_messagePool = static_cast<char *>(malloc(MESSAGE_TEXT_POOL_SIZE));
         if (!g_messagePool) {
             LOG_ERROR("MessageStore: Failed to allocate %d bytes for message pool", MESSAGE_TEXT_POOL_SIZE);
+            memaudit::set("msgstore", 0);
             return;
         }
+        memaudit::set("msgstore", MESSAGE_TEXT_POOL_SIZE);
     }
     g_poolWritePos = 0;
     memset(g_messagePool, 0, MESSAGE_TEXT_POOL_SIZE);
@@ -183,6 +186,10 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
     sm.ackStatus = (packet.from == 0) ? AckStatus::NONE : AckStatus::ACKED;
 
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    sm.xeddsaSigned = packet.xeddsa_signed;
+#endif
+
     addLiveMessage(sm);
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -230,6 +237,7 @@ struct __attribute__((packed)) StoredMessageRecord {
     uint8_t isBootRelative;
     uint8_t ackStatus;           // static_cast<uint8_t>(AckStatus)
     uint8_t type;                // static_cast<uint8_t>(MessageType)
+    uint8_t xeddsaSigned;        // 1 if packet carried a verified XEdDSA signature
     uint16_t textLength;         // message length
     char text[MAX_MESSAGE_SIZE]; // store actual text here
 };
@@ -245,6 +253,7 @@ static inline void writeMessageRecord(SafeFile &f, const StoredMessage &m)
     rec.isBootRelative = m.isBootRelative;
     rec.ackStatus = static_cast<uint8_t>(m.ackStatus);
     rec.type = static_cast<uint8_t>(m.type);
+    rec.xeddsaSigned = m.xeddsaSigned ? 1 : 0;
     rec.textLength = m.textLength;
 
     // Copy the actual text into the record from RAM pool
@@ -269,6 +278,7 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
     m.isBootRelative = rec.isBootRelative;
     m.ackStatus = static_cast<AckStatus>(rec.ackStatus);
     m.type = static_cast<MessageType>(rec.type);
+    m.xeddsaSigned = rec.xeddsaSigned != 0;
     m.textLength = rec.textLength;
 
     // 💡 Re-store text into pool and update offset
@@ -356,7 +366,14 @@ void MessageStore::clearAllMessages()
 #ifdef FSCom
     SafeFile f(filename.c_str(), false);
     uint8_t count = 0;
-    f.write(&count, 1); // write "0 messages"
+
+    // SafeFile already does its own spiLock in its constructor and close().
+    // Avoid nesting spiLocks, as this will hang until watchdog reset!
+    {
+        concurrency::LockGuard guard(spiLock);
+        f.write(&count, 1); // write "0 messages"
+    }
+
     f.close();
 #endif
 
