@@ -46,8 +46,8 @@ template <typename T> bool SX126xInterface<T>::init()
 // means this workaround is not necessary.
 #ifdef SX126X_ANT_SW // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
                      // used and not part of the 'default' set of pin definitions.
-    digitalWrite(SX126X_ANT_SW, HIGH);
     pinMode(SX126X_ANT_SW, OUTPUT);
+    digitalWrite(SX126X_ANT_SW, HIGH);
 #endif
 
 #ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
