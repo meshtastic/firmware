@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "TypeConversions.h"
@@ -19,7 +20,6 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
-#include "power.h"
 #include <assert.h>
 #include <string>
 
