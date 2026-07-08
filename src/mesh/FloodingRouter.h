@@ -70,35 +70,11 @@ class FloodingRouter : public Router
     // the same packet
     bool roleAllowsCancelingDupe(const meshtastic_MeshPacket *p);
 
-    /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue */
+    /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue.
+     * The "how many duplicates should we tolerate before giving up" decision (and its bookkeeping/
+     * logging) is delegated to RepeatScalingModule - see perhapsCancelDupe's implementation. */
     void perhapsCancelDupe(const meshtastic_MeshPacket *p);
 
     // Return true if we are a rebroadcaster
     bool isRebroadcaster();
-
-    // How many duplicate rebroadcasts of a packet we require to hear (see the per-portnum switch in
-    // FloodingRouter.cpp) before giving up on our own scheduled rebroadcast of it. Virtual solely so
-    // tests can override it to inject a threshold without needing a real portnum case (see
-    // test/test_flooding_router).
-    virtual uint8_t getDupeCancelThreshold(const meshtastic_MeshPacket *p);
-
-    // Tracks how many duplicates we've heard so far, per (sender, id), for packets we currently
-    // have one queued to rebroadcast ourselves. Bounded, ephemeral ring buffer - not a persistent
-    // record like PacketHistory: entries are only meaningful while our own rebroadcast is still
-    // pending, and naturally get evicted/reused as the ring wraps.
-    uint8_t registerDupeHeard(NodeNum sender, PacketId id);
-
-    // Clears tracking state for a (sender, id) once we've acted on it (cancelled our rebroadcast),
-    // so a reused ring slot can't cause a stale hit against an unrelated future packet.
-    void clearDupeCount(NodeNum sender, PacketId id);
-
-  private:
-    static constexpr uint8_t DUPE_COUNT_TRACKER_SIZE = 8;
-    struct DupeCountEntry {
-        NodeNum sender = 0;
-        PacketId id = 0;
-        uint8_t count = 0;
-    };
-    DupeCountEntry dupeCounts[DUPE_COUNT_TRACKER_SIZE];
-    uint8_t dupeCountsNextSlot = 0;
 };

@@ -55,6 +55,9 @@
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_REPEATSCALING
+#include "modules/RepeatScalingModule.h"
+#endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -147,6 +150,10 @@ void setupModules()
 
 #if HAS_VARIABLE_HOPS
     hopScalingModule = new HopScalingModule();
+#endif
+
+#if !MESHTASTIC_EXCLUDE_REPEATSCALING
+    repeatScalingModule = new RepeatScalingModule();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN
