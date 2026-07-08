@@ -9,6 +9,72 @@
 #include "modules/TraceRouteModule.h"
 #endif
 
+// Compile-time, per-portnum threshold for how many duplicate rebroadcasts of a packet we must hear
+// before giving up on our own scheduled rebroadcast of it. The default of 1 (used for any portnum
+// not given a case below, and for packets we can't decode - see below) preserves the historical
+// behavior: cancel our own rebroadcast as soon as we hear the first duplicate. Raising a portnum's
+// threshold makes this node more persistent for that traffic type, continuing to retransmit even
+// after hearing some other nodes already repeat it - at the cost of extra airtime for packets
+// that are, on balance, probably going to reach their destination anyway.
+//
+// This same switch applies uniformly to broadcasts and DMs: NextHopRouter::shouldFilterReceived
+// calls this same (inherited, non-overridden) getDupeCancelThreshold() when it hears a duplicate
+// it wasn't explicitly asked to relay - both in the fallback-to-flooding case and the general
+// "duplicate heard, we're not the assigned next hop" case - so a DM of a listed portnum gets the
+// same extra tolerance as a broadcast of that portnum, with no separate to/from-based gating needed.
+//
+// This is a compile-time table (not a runtime/protobuf config) because the desired threshold is
+// expected to vary per packet type rather than being a single device-wide knob; edit it to tune
+// for a given deployment.
+uint8_t FloodingRouter::getDupeCancelThreshold(const meshtastic_MeshPacket *p)
+{
+    // Portnum is only visible once a packet is decoded (i.e. we hold the channel key); packets we
+    // can't decrypt always get the default of 1, since we have no per-portnum signal to act on.
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return 1;
+
+    switch (p->decoded.portnum) {
+    case meshtastic_PortNum_TEXT_MESSAGE_APP:
+    case meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP:
+        // User-visible chat, broadcast or DM: no ACK/retry safety net for broadcasts, and no other
+        // portnum-specific reason to prefer airtime savings over delivery odds. Tolerate one repeat
+        // heard from another node before giving up on our own rebroadcast.
+        return 2;
+    default:
+        return 1;
+    }
+}
+
+uint8_t FloodingRouter::registerDupeHeard(NodeNum sender, PacketId id)
+{
+    for (auto &entry : dupeCounts) {
+        if (entry.id == id && entry.sender == sender) {
+            if (entry.count < UINT8_MAX)
+                entry.count++;
+            return entry.count;
+        }
+    }
+    // Not tracked yet: claim the next ring slot, evicting whatever packet (if any) was there.
+    DupeCountEntry &slot = dupeCounts[dupeCountsNextSlot];
+    dupeCountsNextSlot = (dupeCountsNextSlot + 1) % DUPE_COUNT_TRACKER_SIZE;
+    slot.sender = sender;
+    slot.id = id;
+    slot.count = 1;
+    return slot.count;
+}
+
+void FloodingRouter::clearDupeCount(NodeNum sender, PacketId id)
+{
+    for (auto &entry : dupeCounts) {
+        if (entry.id == id && entry.sender == sender) {
+            entry.sender = 0;
+            entry.id = 0;
+            entry.count = 0;
+            return;
+        }
+    }
+}
+
 FloodingRouter::FloodingRouter() {}
 
 /**
@@ -138,10 +204,16 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
     if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router!
-        // But only LoRa packets should be able to trigger this.
-        if (Router::cancelSending(p->from, p->id))
-            txRelayCanceled++;
+        // Wait for the configured number of duplicate rebroadcasts (see dupeCancelThresholds) before
+        // giving up on our own rebroadcast; below that, note the duplicate and keep waiting.
+        uint8_t dupesHeard = registerDupeHeard(p->from, p->id);
+        if (dupesHeard >= getDupeCancelThreshold(p)) {
+            // cancel rebroadcast of this message *if* there was already one, unless we're a router!
+            // But only LoRa packets should be able to trigger this.
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
+            clearDupeCount(p->from, p->id);
+        }
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
