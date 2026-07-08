@@ -208,6 +208,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V2
 #elif defined(M5STACK_CARDPUTER_ADV)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
+#elif defined(MESHNOLOGY_W10)
+#define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
 #elif defined(HELTEC_RC32)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_RC32
 #else
