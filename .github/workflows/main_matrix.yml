@@ -305,28 +305,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Pick the newest COMPLETED develop CI run that still has a firmware-sizes artifact.
-          # We deliberately do NOT require conclusion=success: the firmware-sizes artifact is uploaded
-          # independently of the rest of CI, so demanding an all-green run pins the baseline to the last
-          # fully-green build. Whenever develop is red for a while that baseline goes stale and the "vs
-          # develop" deltas stop measuring the PR and instead measure all of develop's drift since.
-          BASE_SHA=""; BASE_DATE=""
-          RUNS=$(gh run list -R "${{ github.repository }}" \
-            --workflow CI --branch develop --status completed \
-            --limit 20 --json databaseId,headSha,createdAt \
-            --jq '.[] | "\(.databaseId) \(.headSha) \(.createdAt)"')
-          while read -r RID SHA CREATED; do
-            [ -z "$RID" ] && continue
-            NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RID}/artifacts" \
-              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
-            [ -z "$NAME" ] && continue
-            if gh run download "$RID" -R "${{ github.repository }}" --name "$NAME" --dir ./baseline-develop/; then
-              cp "./baseline-develop/current-sizes.json" ./develop-sizes.json
-              BASE_SHA="$SHA"; BASE_DATE="$CREATED"
-              break
-            fi
-          done <<< "$RUNS"
-          if [ -n "$BASE_SHA" ]; then
+          # See bin/fetch-ci-baseline.sh for why this doesn't require conclusion=success.
+          if RESULT=$(bin/fetch-ci-baseline.sh "${{ github.repository }}" develop ./develop-sizes.json ./baseline-develop/); then
+            read -r BASE_SHA BASE_DATE <<< "$RESULT"
             echo "found=true" >> "$GITHUB_OUTPUT"
             echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
             echo "date=$BASE_DATE" >> "$GITHUB_OUTPUT"
@@ -341,25 +322,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Same approach as the develop baseline above: newest completed master run that still has a
-          # firmware-sizes artifact, without requiring an all-green run (avoids a silently stale baseline).
-          BASE_SHA=""; BASE_DATE=""
-          RUNS=$(gh run list -R "${{ github.repository }}" \
-            --workflow CI --branch master --status completed \
-            --limit 20 --json databaseId,headSha,createdAt \
-            --jq '.[] | "\(.databaseId) \(.headSha) \(.createdAt)"')
-          while read -r RID SHA CREATED; do
-            [ -z "$RID" ] && continue
-            NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RID}/artifacts" \
-              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
-            [ -z "$NAME" ] && continue
-            if gh run download "$RID" -R "${{ github.repository }}" --name "$NAME" --dir ./baseline-master/; then
-              cp "./baseline-master/current-sizes.json" ./master-sizes.json
-              BASE_SHA="$SHA"; BASE_DATE="$CREATED"
-              break
-            fi
-          done <<< "$RUNS"
-          if [ -n "$BASE_SHA" ]; then
+          # Same approach as the develop baseline above - see bin/fetch-ci-baseline.sh.
+          if RESULT=$(bin/fetch-ci-baseline.sh "${{ github.repository }}" master ./master-sizes.json ./baseline-master/); then
+            read -r BASE_SHA BASE_DATE <<< "$RESULT"
             echo "found=true" >> "$GITHUB_OUTPUT"
             echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
             echo "date=$BASE_DATE" >> "$GITHUB_OUTPUT"

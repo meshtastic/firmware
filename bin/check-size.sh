@@ -106,7 +106,7 @@ detect_repo() {
 	for remote in meshtastic-upstream upstream origin; do
 		url=$(git remote get-url "$remote" 2>/dev/null) || continue
 		repo=$(echo "$url" | sed -E 's#.*github\.com[:/]([^/]+/[^/.]+)(\.git)?$#\1#')
-		if [ -n "$repo" ]; then
+		if [ -n "$repo" ] && [ "$repo" != "$url" ]; then
 			echo "$repo"
 			return 0
 		fi
@@ -292,23 +292,12 @@ fetch_baseline() {
 		return
 	fi
 
-	runs=$(gh run list -R "$repo" --workflow CI --branch "$branch" --status completed \
-		--limit 20 --json databaseId,headSha,createdAt \
-		--jq '.[] | "\(.databaseId) \(.headSha) \(.createdAt)"')
-
 	found=0
-	while read -r rid sha created; do
-		[ -z "$rid" ] && continue
-		name=$(gh api "repos/$repo/actions/runs/$rid/artifacts" \
-			--jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
-		[ -z "$name" ] && continue
-		if gh run download "$rid" -R "$repo" --name "$name" --dir "$TMPDIR/baseline-$branch" >/dev/null; then
-			cp "$TMPDIR/baseline-$branch/current-sizes.json" "$outfile"
-			echo "Baseline '$branch' = $sha ($created) from $repo" >&2
-			found=1
-			break
-		fi
-	done <<<"$runs"
+	if result=$(bin/fetch-ci-baseline.sh "$repo" "$branch" "$outfile" "$TMPDIR/baseline-$branch"); then
+		read -r sha created <<<"$result"
+		echo "Baseline '$branch' = $sha ($created) from $repo" >&2
+		found=1
+	fi
 
 	if [ "$found" -ne 1 ]; then
 		# Nothing to download isn't necessarily a bug in this script: it means the size-report

@@ -160,6 +160,8 @@ def manifest_gather(source, target, env):
         lfsbin,
         f"mt-{board_mcu}-ota.bin",
         "bleota-c3.bin",
+        "bleota-s3.bin",
+        "bleota.bin",
     ]
     for p in check_paths:
         f = env.File(env.subst(f"$BUILD_DIR/{p}"))
@@ -319,7 +321,7 @@ try:
         .split("/")
     )
     repo_owner = r_owner[-2] + "/" + r_owner[-1].replace(".git", "")
-except subprocess.CalledProcessError:
+except (subprocess.CalledProcessError, FileNotFoundError, IndexError, OSError):
     repo_owner = "unknown"
 
 jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
