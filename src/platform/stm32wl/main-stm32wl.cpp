@@ -1,5 +1,5 @@
-#include "RTC.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include <Throttle.h>
 #include <stdarg.h>
 #include <stm32wle5xx.h>

@@ -1,7 +1,7 @@
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #include "MeshService.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
 #include "meshUtils.h"

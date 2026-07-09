@@ -4,8 +4,8 @@
 
 #include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "RTC.h"
 #include "TelemetrySensor.h"
+#include "gps/RTC.h"
 
 #define PMSA003I_I2C_CLOCK_SPEED 100000
 #define PMSA003I_FRAME_LENGTH 32
