@@ -36,7 +36,7 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
 {
     updateState();
     if (request->which_payload_variant == meshtastic_AdminMessage_key_verification_tag && mp.from == 0) {
-        LOG_WARN("Handling Key Verification Admin Message type %u", request->key_verification.message_type);
+        LOG_DEBUG("Handling Key Verification Admin Message type %u", request->key_verification.message_type);
 
         if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_INITIATE_VERIFICATION &&
             currentState == KEY_VERIFICATION_IDLE) {
@@ -113,7 +113,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                       options.notificationType = graphics::notificationTypeEnum::selection_picker;
                       options.bannerCallback =
                           [=](int selected) {
-                              LOG_WARN("User selected %d for key verification", selected);
+                              LOG_DEBUG("User selected %d for key verification", selected);
                               if (selected == 1) {
                                   keyVerificationModule->commitVerifiedRemoteNode();
                               }
@@ -245,7 +245,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     // out channel-encrypted so the requester (who lacks our key) can decode it and read hash1.
     responsePacket->pki_encrypted = senderKeyInNodeDB;
     IF_SCREEN(snprintf(message, 25, "Security Number \n%03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
-              screen->showSimpleBanner(message, 30000); LOG_WARN("%s", message);)
+              screen->showSimpleBanner(message, 30000); LOG_DEBUG("%s", message);)
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     if (cn) {
         cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -259,7 +259,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
         cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
         service->sendClientNotification(cn);
     }
-    LOG_WARN("Security Number %04u, nonce %llu", currentSecurityNumber, currentNonce);
+    LOG_DEBUG("Security Number %04u, nonce %llu", currentSecurityNumber, currentNonce);
     return responsePacket;
 }
 
@@ -268,7 +268,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     uint8_t scratch_hash[32] = {0};
-    LOG_WARN("received security number: %u", incomingNumber);
+    LOG_DEBUG("received security number: %u", incomingNumber);
     meshtastic_NodeInfoLite *remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
     // Resolve the remote public key: NodeDB if known, otherwise the pending key learned during this
     // handshake (bootstrap case).
@@ -280,7 +280,6 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
         resetToIdle();
         return;
     }
-    LOG_WARN("hashing ");
     // calculate hash1
     hash.reset();
     hash.update(&incomingNumber, sizeof(incomingNumber));
@@ -374,7 +373,7 @@ void KeyVerificationModule::commitVerifiedRemoteNode()
     if (node->public_key.size != 32 && crypto->getPendingPublicKey(currentRemoteNode, pending))
         node->public_key = pending;
     node->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
-    LOG_WARN("Node %u manually verified with security number %u", currentRemoteNode, currentSecurityNumber);
+    LOG_INFO("Node 0x%08x manually verified with security number %u", currentRemoteNode, currentSecurityNumber);
     if (nodeInfoModule)
         nodeInfoModule->sendOurNodeInfo(currentRemoteNode, false, node->channel, true);
     // todo: initiate save

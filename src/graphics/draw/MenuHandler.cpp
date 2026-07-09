@@ -2324,7 +2324,7 @@ void menuHandler::testMenu()
 void menuHandler::numberTest()
 {
     screen->showNumberPicker("Verify Nodenum:\n ", 30000, 8, true, [](int number_picked) -> void {
-        LOG_WARN("Nodenum: 0x%08x", number_picked);
+        LOG_DEBUG("Nodenum: 0x%08x", number_picked);
         keyVerificationModule->sendInitialRequest(number_picked);
     });
 }
