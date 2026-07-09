@@ -396,7 +396,8 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                     lastRxID = mp.id;
                     // LOG_DEBUG("* * Message came this device");
                     // serialPrint->println("* * Message came this device");
-                    serialPrint->printf("%s", p.payload.bytes);
+                    // payload.bytes is not NUL-terminated; bound the print to payload.size.
+                    serialPrint->printf("%.*s", (int)p.payload.size, p.payload.bytes);
                 }
             }
         } else {
@@ -408,7 +409,8 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
                 const char *sender = nodeInfoLiteHasUser(node) ? node->short_name : "???";
                 serialPrint->println();
-                serialPrint->printf("%s: %s", sender, p.payload.bytes);
+                // payload.bytes is not NUL-terminated; bound the print to payload.size.
+                serialPrint->printf("%s: %.*s", sender, (int)p.payload.size, p.payload.bytes);
                 serialPrint->println();
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
                         moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) &&
@@ -421,8 +423,10 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                     if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Position_msg, &scratch)) {
                         decoded = &scratch;
                     }
-                    // send position packet as WPL to the serial port
-                    {
+                    // send position packet as WPL to the serial port.
+                    // A malformed Position payload fails to decode and leaves `decoded` NULL; guard
+                    // against it so we never dereference *decoded (would crash the node).
+                    if (decoded) {
                         meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
                         const char *senderName = senderNode ? senderNode->long_name : "";
                         printWPL(outbuf, sizeof(outbuf), *decoded, senderName,

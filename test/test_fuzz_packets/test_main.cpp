@@ -372,6 +372,66 @@ void test_E4_phone_forward_gate(void)
     }
 }
 
+// E4b - named adversarial UTF-8 vectors, locking the PB_VALIDATE_UTF8 guarantee that guards the
+// phone-forward path. Each malformed sequence is wrapped as Waypoint.name (field 6, tag 0x32) and
+// User.long_name (field 2, tag 0x12) and must be WITHHELD (a strict phone protobuf decoder would
+// otherwise reject/crash on it); valid multibyte counterparts must pass. If PB_VALIDATE_UTF8 ever
+// regressed, these would flip and fail loudly.
+struct Utf8Vector {
+    const char *label;
+    const uint8_t *bytes;
+    size_t len;
+    bool valid;
+};
+
+static bool gateForName(meshtastic_PortNum port, uint8_t tag, const uint8_t *content, size_t clen)
+{
+    uint8_t buf[64];
+    TEST_ASSERT_TRUE_MESSAGE(clen + 2 <= sizeof(buf), "utf8 vector too large for name field");
+    buf[0] = tag;
+    buf[1] = (uint8_t)clen; // single-byte length prefix (content < 128 bytes)
+    for (size_t i = 0; i < clen; i++)
+        buf[2 + i] = content[i];
+    meshtastic_Data d = makeData(port, buf, clen + 2);
+    return MeshService::phonePayloadIsDecodable(d);
+}
+
+void test_E4b_utf8_adversarial_vectors(void)
+{
+    static const uint8_t overlong2[] = {0xC0, 0x80};                  // overlong encoding of U+0000
+    static const uint8_t overlong2b[] = {0xC0, 0xAF};                 // overlong encoding of '/'
+    static const uint8_t overlong3[] = {0xE0, 0x80, 0x80};            // overlong 3-byte form
+    static const uint8_t surrogate[] = {0xED, 0xA0, 0x80};            // U+D800 surrogate half
+    static const uint8_t truncated4[] = {0xF0, 0x9F, 0x98};           // 4-byte lead, final byte missing
+    static const uint8_t strayCont[] = {0x80};                        // stray continuation byte
+    static const uint8_t loneLead[] = {0xC3};                         // 2-byte lead, no continuation
+    static const uint8_t fiveByte[] = {0xF8, 0x88, 0x80, 0x80, 0x80}; // illegal 5-byte form
+    static const uint8_t valid2[] = {0xC3, 0xA9};                     // U+00E9 e-acute
+    static const uint8_t valid3[] = {0xE2, 0x82, 0xAC};               // U+20AC euro sign
+    static const uint8_t valid4[] = {0xF0, 0x9F, 0x98, 0x80};         // U+1F600 grinning face
+
+    const Utf8Vector vecs[] = {
+        {"overlong-2", overlong2, sizeof(overlong2), false},    {"overlong-2b", overlong2b, sizeof(overlong2b), false},
+        {"overlong-3", overlong3, sizeof(overlong3), false},    {"surrogate", surrogate, sizeof(surrogate), false},
+        {"truncated-4", truncated4, sizeof(truncated4), false}, {"stray-continuation", strayCont, sizeof(strayCont), false},
+        {"lone-lead", loneLead, sizeof(loneLead), false},       {"five-byte", fiveByte, sizeof(fiveByte), false},
+        {"valid-2byte", valid2, sizeof(valid2), true},          {"valid-3byte", valid3, sizeof(valid3), true},
+        {"valid-4byte", valid4, sizeof(valid4), true},
+    };
+
+    for (size_t i = 0; i < sizeof(vecs) / sizeof(vecs[0]); i++) {
+        bool wp = gateForName(meshtastic_PortNum_WAYPOINT_APP, 0x32, vecs[i].bytes, vecs[i].len);
+        bool ui = gateForName(meshtastic_PortNum_NODEINFO_APP, 0x12, vecs[i].bytes, vecs[i].len);
+        if (vecs[i].valid) {
+            TEST_ASSERT_TRUE_MESSAGE(wp, vecs[i].label);
+            TEST_ASSERT_TRUE_MESSAGE(ui, vecs[i].label);
+        } else {
+            TEST_ASSERT_FALSE_MESSAGE(wp, vecs[i].label);
+            TEST_ASSERT_FALSE_MESSAGE(ui, vecs[i].label);
+        }
+    }
+}
+
 // ===========================================================================
 // Group E5 - AdminModule dispatch over adversarial AdminMessage
 // (AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.)
@@ -794,6 +854,7 @@ void setup()
 
     printf("\n=== Group E4: phone-forward gate ===\n");
     RUN_TEST(test_E4_phone_forward_gate);
+    RUN_TEST(test_E4b_utf8_adversarial_vectors);
 
     printf("\n=== Group E5: Admin dispatch fuzz ===\n");
     RUN_TEST(test_E5_admin_dispatch_fuzz);

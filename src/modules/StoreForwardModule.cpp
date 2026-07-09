@@ -398,7 +398,8 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
 
         if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
             auto &p = mp.decoded;
-            if (isToUs(&mp) && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 0x00)) {
+            if (isToUs(&mp) && p.payload.size >= 3 && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
+                (p.payload.bytes[2] == 0x00)) {
                 LOG_DEBUG("Legacy Request to send");
 
                 // Send the last 60 minutes of messages.

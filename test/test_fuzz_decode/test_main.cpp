@@ -32,6 +32,7 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "meshUtils.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <pb_decode.h>
 
@@ -335,6 +336,31 @@ void test_D2f_pb_string_length(void)
 }
 
 // ---------------------------------------------------------------------------
+// Group D3 - bounded "%.*s" format guard
+// ---------------------------------------------------------------------------
+//
+// Several module sinks print a protobuf `bytes` payload - which is NOT NUL-terminated - as a string.
+// The safe idiom is printf("%.*s", (int)payload.size, payload.bytes); a regression to a plain "%s"
+// reads past the payload's declared size. The real sinks (SerialModule NMEA/echo/TEXTMSG, RangeTest
+// CSV) are arch-gated out of the native build, so this pins the *contract* of that fix on a tight heap
+// allocation where ASan's redzone turns any over-read into a hard fault.
+void test_D3a_bounded_bytes_format(void)
+{
+    rngSeed(BASE_SEED ^ 0x3333);
+    for (unsigned k = 0; k < 20000; k++) {
+        size_t n = 1 + rngRange(233); // 1..233 (meshtastic_Data payload capacity)
+        uint8_t *h = (uint8_t *)malloc(n);
+        for (size_t i = 0; i < n; i++)
+            h[i] = (uint8_t)(1 + rngRange(255)); // all non-NUL: no interior terminator to stop %s early
+        char out[300];
+        int r = snprintf(out, sizeof(out), "%.*s", (int)n, (const char *)h);
+        TEST_ASSERT_EQUAL_INT_MESSAGE((int)n, r, "%.*s wrote a different length than payload.size");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, memcmp(out, h, n), "%.*s corrupted the payload bytes");
+        free(h);
+    }
+}
+
+// ---------------------------------------------------------------------------
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -354,6 +380,9 @@ void setup()
     RUN_TEST(test_D2d_utf8_random);
     RUN_TEST(test_D2e_clamp_long_name);
     RUN_TEST(test_D2f_pb_string_length);
+
+    printf("\n=== Group D3: bounded %%.*s format guard ===\n");
+    RUN_TEST(test_D3a_bounded_bytes_format);
 
     exit(UNITY_END());
 }

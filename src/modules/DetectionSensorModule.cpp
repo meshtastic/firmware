@@ -89,8 +89,13 @@ int32_t DetectionSensorModule::runOnce()
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
         bool isDetected = hasDetectionEvent();
-        DetectionSensorTriggerVerdict verdict =
-            handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
+        // Clamp the configured trigger type: an out-of-range value would index handlers[] out of
+        // bounds and call a wild function pointer.
+        meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType triggerType =
+            moduleConfig.detection_sensor.detection_trigger_type;
+        if (triggerType > _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MAX)
+            triggerType = meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_LOW;
+        DetectionSensorTriggerVerdict verdict = handlers[triggerType](wasDetected, isDetected);
         wasDetected = isDetected;
         switch (verdict) {
         case DetectionSensorVerdictDetected:

@@ -27,6 +27,8 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_PositionLite &pos, c
                             (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
                             geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
                             geoCoord.getDMSLonCP(), name);
+    if (len >= bufsz)    // snprintf returns the would-be length; clamp on truncation so the checksum
+        len = bufsz - 1; // loop and the trailing snprintf below stay in-bounds (no size_t underflow)
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
@@ -43,6 +45,8 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const
                             (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
                             geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
                             geoCoord.getDMSLonCP(), name);
+    if (len >= bufsz)    // snprintf returns the would-be length; clamp on truncation so the checksum
+        len = bufsz - 1; // loop and the trailing snprintf below stay in-bounds (no size_t underflow)
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
@@ -91,6 +95,8 @@ uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
         (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6, geoCoord.getDMSLonCP(), pos.fix_quality,
         pos.sats_in_view, pos.HDOP, geoCoord.getAltitude(), 'M', pos.altitude_geoidal_separation, 'M', 0, 0);
 
+    if (len >= bufsz)    // snprintf returns the would-be length; clamp on truncation so the checksum
+        len = bufsz - 1; // loop and the trailing snprintf below stay in-bounds (no size_t underflow)
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
