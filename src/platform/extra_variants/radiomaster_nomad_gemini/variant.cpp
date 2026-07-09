@@ -17,7 +17,7 @@
  * The calibration below is derived from the ExpressLRS hardware target
  * "TX/Radiomaster Nomad.json" (power_values = APC2 DAC codes, power_values2 = chip
  * output dBm). These values reproduce ELRS behaviour but have NOT been validated on
- * a bench against a power meter for Meshtastic — verify before trusting at 1 W, both
+ * a bench against a power meter for Meshtastic - verify before trusting at 1 W, both
  * for PA safety and for regulatory compliance.
  *
  * TODO: dual-band (Gemini) operation uses ELRS power_values_dual and a second radio;
