@@ -102,6 +102,7 @@ class ScanI2C
         IIS2MDCTR,
         ISM330DHCX,
         SPA06,
+        AS3935,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

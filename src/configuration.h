@@ -287,6 +287,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
 #define SCD30_ADDR 0x61
+#define AS3935_ADDR 0x03 // both address pins tied high, the common breakout-board default
+#define AS3935_ADDR_ALT 0x01
+#define AS3935_ADDR_ALT2 0x02
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
