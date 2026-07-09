@@ -801,13 +801,32 @@ void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
     LOG_INFO("Disable bluetooth until reboot");
+
+    // BLEDevice::deinit() deletes the BLEServer before nimble_port_stop(); doing that with a live
+    // connection dispatches synthesized unsubscribe events into the freed server (LoadProhibited),
+    // so disconnect cleanly first. deinit() runs on the main task; the waits below are bounded.
+    if (bluetoothPhoneAPI)
+        bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false; // release any in-flight onRead
+
+    // isDeInit must stay false here, else onDisconnect early-returns without clearing the handle.
+    uint16_t connHandle = nimbleBluetoothConnHandle.load();
+    if (connHandle != BLE_HS_CONN_HANDLE_NONE && bleServer) {
+        bleServer->disconnect(connHandle);
+        uint32_t start = millis();
+        while (nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE && millis() - start < 2000)
+            delay(10);
+        delay(50);
+    }
+
     isDeInit = true;
+    pendingStartAdvertising = false; // stack is going away; don't let runOnce retry the adv restart
 
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
     BLEDevice::deinit(true);
+    bleServer = nullptr;             // deleted by deinit(); clear the dangling copy
     BatteryCharacteristic = nullptr; // freed by deinit; clear so updateBatteryLevel() won't touch it
     lastBatteryLevel = -1;
 #endif
