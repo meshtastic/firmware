@@ -11,6 +11,9 @@
 #endif
 #if BASEUI_HAS_GAMES
 #include "modules/SnakeModule.h"
+#if BASEUI_HAS_GAMES
+#include "modules/TetrisModule.h"
+#endif
 #endif
 #include "UIRenderer.h"
 #include "airtime.h"
@@ -1820,9 +1823,10 @@ constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
 #if BASEUI_HAS_GAMES
-    // Hide the navigation bar while a game owns the screen -- it sits at the bottom and would
-    // otherwise overlap the (bottom-aligned) playfield.
+    // Hide the navigation bar while a game owns the screen.
     if (snakeModule && snakeModule->interceptingKeyboardInput())
+        return;
+    if (tetrisModule && tetrisModule->interceptingKeyboardInput() && !tetrisModule->isTitleScreen())
         return;
 #endif
 

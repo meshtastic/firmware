@@ -75,6 +75,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/ExternalNotificationModule.h"
 #if BASEUI_HAS_GAMES
 #include "modules/SnakeModule.h"
+#include "modules/TetrisModule.h"
 #endif
 #include "modules/WaypointModule.h"
 #include "sleep.h"
@@ -465,7 +466,9 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 // moduleFrames lockstep used by drawModuleFrame.
 static void drawSnakeFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    if (snakeModule)
+    if (tetrisModule && tetrisModule->isActive())
+        tetrisModule->drawFrame(display, state, x, y);
+    else if (snakeModule)
         snakeModule->drawFrame(display, state, x, y);
 }
 #endif
@@ -2159,6 +2162,8 @@ int Screen::handleInputEvent(const InputEvent *event)
         // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
         // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
         if (snakeModule && snakeModule->interceptingKeyboardInput())
+            inputIntercepted = true;
+        if (tetrisModule && tetrisModule->interceptingKeyboardInput())
             inputIntercepted = true;
 #endif
 

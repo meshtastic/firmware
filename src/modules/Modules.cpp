@@ -21,6 +21,7 @@
 #endif
 #if HAS_SCREEN && BASEUI_HAS_GAMES
 #include "modules/SnakeModule.h"
+#include "modules/TetrisModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_DETECTIONSENSOR
 #include "modules/DetectionSensorModule.h"
@@ -212,6 +213,7 @@ void setupModules()
 #if HAS_SCREEN && BASEUI_HAS_GAMES
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         snakeModule = new SnakeModule();
+        tetrisModule = new TetrisModule();
     }
 #endif
 #if ARCH_PORTDUINO
