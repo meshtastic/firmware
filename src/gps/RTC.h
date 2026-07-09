@@ -9,6 +9,7 @@
 #endif
 
 #if HAS_LSE
+// True once the STM32WL LSE crystal has locked and the hardware RTC is running (see stm32wlSetup()).
 bool stm32wlRtcAvailable();
 #endif
 

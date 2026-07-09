@@ -89,6 +89,7 @@ void getMacAddr(uint8_t *dmac)
 }
 
 #if HAS_LSE
+// Starts the LSE crystal with a bounded timeout and, if it locks, brings up the STM32 hardware RTC on it.
 void stm32wlSetup()
 {
     HAL_PWR_EnableBkUpAccess();
@@ -119,6 +120,7 @@ void stm32wlSetup()
     }
 }
 
+// True once stm32wlSetup() has confirmed the LSE crystal is locked and the hardware RTC is running.
 bool stm32wlRtcAvailable()
 {
     return stm32wlRtcValid;
