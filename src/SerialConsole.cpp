@@ -65,6 +65,8 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.setRX(SERIAL2_RX);
 #endif
     Port.begin(SERIAL_BAUD);
+    // Boot with console TX in non-blocking mode: no host is provably listening yet.
+    setHostDraining(false);
     time_t timeout = millis();
     while (!Port) {
         if (Throttle::isWithinTimespanMs(timeout, FIVE_SECONDS_MS)) {
@@ -121,6 +123,31 @@ bool SerialConsole::checkIsConnected()
     return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
+void SerialConsole::setHostDraining(bool draining)
+{
+#ifdef IS_USB_SERIAL
+    // With timeout 0, HWCDC writes never block: they drop (oldest-first ring
+    // policy) when the host isn't draining the CDC buffer. With a host attached
+    // and draining, ring space is normally available so log output still flows.
+    // A normal (blocking, 100 ms bounded) timeout is restored while an API
+    // client is connected so protobuf frames are never truncated/corrupted.
+    Port.setTxTimeoutMs(draining ? 100 : 0);
+#else
+    (void)draining;
+#endif
+}
+
+void SerialConsole::onConnectionChanged(bool connected)
+{
+    // Order matters on disconnect: make console TX non-blocking *before* the
+    // PowerFSM/close handling below emits more log lines to a dead port.
+    if (!connected)
+        setHostDraining(false);
+    StreamAPI::onConnectionChanged(connected);
+    if (connected)
+        setHostDraining(true);
+}
+
 /**
  * we override this to notice when we've received a protobuf over the serial
  * stream.  Then we shut off debug serial output.
@@ -129,6 +156,10 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // only talk to the API once the configuration has been loaded and we're sure the serial port is not disabled.
     if (config.has_lora && config.security.serial_enabled) {
+        // The host just sent us bytes, so it is alive and draining the port:
+        // restore normal bounded-blocking TX before any API response is written.
+        setHostDraining(true);
+
         // Switch to protobufs for log messages
         usingProtobufs = true;
         canWrite = true;
