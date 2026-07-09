@@ -1019,6 +1019,104 @@ static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
     TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
 }
 
+// clampBandwidthCode: an unset (0) bandwidth code maps to the default; any other code is left as-is.
+static void test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged()
+{
+    TEST_ASSERT_NOT_EQUAL_UINT16(0, clampBandwidthCode(0)); // the point of the fix: 0 must not stay 0
+    TEST_ASSERT_EQUAL_UINT16(bwKHzToCode(LORA_BW_DEFAULT_KHZ), clampBandwidthCode(0));
+    TEST_ASSERT_EQUAL_UINT16(250, clampBandwidthCode(250));
+    TEST_ASSERT_EQUAL_UINT16(125, clampBandwidthCode(125));
+    TEST_ASSERT_EQUAL_UINT16(31, clampBandwidthCode(31));
+}
+
+// A custom (non-preset) config that leaves bandwidth at its proto zero-value must not persist as 0.
+// Pre-fix it slipped past validateConfigLora() and the radio silently ran at the default while
+// get_config still reported bandwidth 0. It is now coerced to the default code on ingest.
+static void test_handleSetConfig_fromLocal_customBandwidthZeroClampedToDefault()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, false, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.spread_factor = 11;
+    c.payload_variant.lora.coding_rate = 5;
+    c.payload_variant.lora.bandwidth = 0; // the footgun: unset custom bandwidth
+
+    testAdmin->handleSetConfig(c, false); // fromOthers = false (local client)
+
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_NOT_EQUAL_UINT16(0, config.lora.bandwidth); // must not persist as 0
+    TEST_ASSERT_EQUAL_UINT16(bwKHzToCode(LORA_BW_DEFAULT_KHZ), config.lora.bandwidth);
+}
+
+// Remote admin (fromOthers) is subject to the same ingest clamp: a custom bandwidth 0 from another
+// node is normalized to the default rather than persisted as 0 (it does not weaken the wholesale
+// rejection of configs that actually fail validation - a 0 bandwidth already passed validation).
+static void test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, false, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.spread_factor = 11;
+    c.payload_variant.lora.coding_rate = 5;
+    c.payload_variant.lora.bandwidth = 0;
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(bwKHzToCode(LORA_BW_DEFAULT_KHZ), config.lora.bandwidth);
+}
+
+// In preset mode bandwidth 0 is the norm (the preset supplies it); the ingest clamp must leave it
+// untouched so preset configs still read back bandwidth 0.
+static void test_handleSetConfig_fromLocal_presetBandwidthZeroLeftUntouched()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.bandwidth = 0;
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_TRUE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(0, config.lora.bandwidth);
+}
+
+// A custom (non-preset) config with an already-valid bandwidth must be preserved verbatim.
+static void test_handleSetConfig_fromLocal_customBandwidthNonZeroPreserved()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, false, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.spread_factor = 11;
+    c.payload_variant.lora.coding_rate = 5;
+    c.payload_variant.lora.bandwidth = 125;
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(125, config.lora.bandwidth);
+}
+
 // A security-config SET that omits the private key (partial/legacy client editing some other security field)
 // must NOT regenerate our keypair: our NodeNum is crc32(public_key), so a new keypair would silently change
 // our identity. The existing keypair has to be preserved.
@@ -1246,6 +1344,11 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
     RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged);
+    RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthZeroClampedToDefault);
+    RUN_TEST(test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault);
+    RUN_TEST(test_handleSetConfig_fromLocal_presetBandwidthZeroLeftUntouched);
+    RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthNonZeroPreserved);
     RUN_TEST(test_handleSetConfig_security_preservesKeypairWhenPrivateOmitted);
     RUN_TEST(test_handleSetConfig_security_acceptsSuppliedKeypair);
     RUN_TEST(test_regionInfo_supportsPreset);
