@@ -137,6 +137,7 @@ class NextHopRouter : public FloodingRouter
      * @return true to abandon the packet
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
+    bool relayOpaquePacket(const meshtastic_MeshPacket *p) override;
 
     /**
      * Look for packets we need to relay

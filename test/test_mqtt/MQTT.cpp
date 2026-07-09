@@ -334,6 +334,7 @@ const meshtastic_MeshPacket encrypted = {
 // Initialize mocks and configuration before running each test.
 void setUp(void)
 {
+    config = meshtastic_LocalConfig_init_zero;
     moduleConfig.mqtt =
         meshtastic_ModuleConfig_MQTTConfig{.enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true};
     moduleConfig.mqtt.map_report_settings = meshtastic_ModuleConfig_MapReportSettings{
@@ -596,6 +597,8 @@ void test_receiveWithoutChannelDownlink(void)
 // Test receiving an encrypted MeshPacket on the PKI topic.
 void test_receiveEncryptedPKITopicToUs(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
     meshtastic_MeshPacket e = encrypted;
     e.to = myNodeInfo.my_node_num;
 
@@ -687,6 +690,8 @@ static meshtastic_MeshPacket makeDecodedBroadcast()
 // signing node (audit F3).
 void test_receiveDropsUnsignedBroadcastFromSigner(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
@@ -698,6 +703,8 @@ void test_receiveDropsUnsignedBroadcastFromSigner(void)
 // The same unsigned broadcast from a node never seen signing is accepted.
 void test_receiveAcceptsUnsignedBroadcastFromNonSigner(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
     unitTest->publish(&p);
 
@@ -729,6 +736,8 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
 // A decoded downlink carrying a signature that fails verification is dropped.
 void test_receiveDropsBadSignatureOnDecodedDownlink(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
     uint8_t pub[32], priv[32];
     crypto->generateKeyPair(pub, priv);
     mockNodeDB->emptyNode.public_key.size = 32;
@@ -740,6 +749,53 @@ void test_receiveDropsBadSignatureOnDecodedDownlink(void)
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
 
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+void test_receiveCompatibleAcceptsUnsignedBroadcastFromSigner(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+}
+
+void test_receiveStrictDropsUnsignedPortnumsAndUnicast(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_NODEINFO_APP,     meshtastic_PortNum_WAYPOINT_APP,
+    };
+    for (const auto port : ports) {
+        meshtastic_MeshPacket p = makeDecodedBroadcast();
+        p.decoded.portnum = port;
+        unitTest->publish(&p);
+    }
+
+    meshtastic_MeshPacket unicast = makeDecodedBroadcast();
+    unicast.to = myNodeInfo.my_node_num;
+    unicast.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    unitTest->publish(&unicast);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A plaintext broker assertion is not evidence that AES-CCM authentication succeeded locally.
+void test_receiveStrictDoesNotTrustDecodedPkiFlag(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    p.to = myNodeInfo.my_node_num;
+    p.pki_encrypted = true;
     unitTest->publish(&p);
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
@@ -1063,6 +1119,9 @@ void setup()
     RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
     RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
     RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
+    RUN_TEST(test_receiveCompatibleAcceptsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveStrictDropsUnsignedPortnumsAndUnicast);
+    RUN_TEST(test_receiveStrictDoesNotTrustDecodedPkiFlag);
 #endif
     RUN_TEST(test_receiveIgnoresUnexpectedFields);
     RUN_TEST(test_receiveIgnoresInvalidHopLimit);

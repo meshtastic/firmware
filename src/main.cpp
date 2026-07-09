@@ -1206,7 +1206,7 @@ bool runASAP;
 // TODO find better home than main.cpp
 extern meshtastic_DeviceMetadata getDeviceMetadata()
 {
-    meshtastic_DeviceMetadata deviceMetadata;
+    meshtastic_DeviceMetadata deviceMetadata = meshtastic_DeviceMetadata_init_zero;
     strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
@@ -1262,6 +1262,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    deviceMetadata.has_xeddsa = true;
 #endif
     return deviceMetadata;
 }

@@ -357,6 +357,10 @@ class NodeDB
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
+    /// Whether this node has produced a verified XEdDSA signature, including while its
+    /// identity is resident only in the warm tier.
+    bool hasSeenXeddsaSigner(NodeNum n);
+
     /// Resolve a node's device role - hot store (with user) first, then the role
     /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
     /// nodes that have aged out of the hot store.

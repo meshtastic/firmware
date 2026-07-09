@@ -113,6 +113,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
 
+    /** Relay an opaque packet without admitting it to local routing/history state. */
+    virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
+
     /**
      * Determine if hop_limit should be decremented for a relay operation.
      * Returns false (preserve hop_limit) only if all conditions are met:
@@ -162,7 +165,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
-enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
+enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_OPAQUE, DECODE_FATAL, DECODE_POLICY_REJECT };
+enum class RoutingAuthVerdict { ACCEPT, OPAQUE_RELAY_ONLY, REJECT };
 
 /** FIXME - move this into a mesh packet class
  * Remove any encryption and decode the protobufs inside this packet (if necessary).
@@ -171,17 +175,26 @@ enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
  */
 DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
+/** Apply the receive authentication policy before routing state is mutated.
+ * Decryptable packets must pass their configured authenticity policy. Packets for unknown channels
+ * remain eligible for opaque relay, while fatal and policy-rejected packets are filtered.
+ */
+RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p);
+#ifdef PIO_UNIT_TESTING
+uint32_t routingAuthEvaluationCount();
+void resetRoutingAuthEvaluationCount();
+#endif
+
 /** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-/** XEdDSA receive-side signature policy. When the packet carries a 64-byte signature *and* the
- * sender's public key is known, verify it: on success learn the sender's signer bit, on failure
- * drop. If the key is unknown the signature is left unverified and the packet passes. A signature
- * of any other non-zero length is treated as malformed and dropped. For unsigned packets, enforce
- * downgrade protection: drop a non-PKI broadcast from a known signer whose signed encoding would
- * still fit a LoRa frame (unicast, PKI, and oversized broadcasts always pass).
+/** XEdDSA receive-side signature policy. Valid signatures are verified against a cached key or an
+ * identity-bound key in first-contact NodeInfo. Invalid and malformed signatures always fail.
+ * Compatible accepts unsigned traffic, Balanced rejects signable unsigned broadcasts from known
+ * signers, and Strict requires a verified existing signature or successful PKI authentication
+ * for all decoded traffic.
  *
  * encodedDataSize is the wire size of the encoded Data as the sender built it; pass 0 to size
  * p->decoded canonically instead (for already-decoded ingress such as plaintext-MQTT downlink,
