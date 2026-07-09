@@ -5,12 +5,7 @@
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
-
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
+#include "support/MockMeshService.h"
 
 static MockMeshService *mockMeshService;
 
@@ -201,7 +196,7 @@ static void test_applyModemConfig_customCodingRateLowerThanPreset()
 }
 
 // -----------------------------------------------------------------------
-// getRegionPresetMap() — region->valid-preset map sent to clients during want_config
+// getRegionPresetMap() - region->valid-preset map sent to clients during want_config
 // -----------------------------------------------------------------------
 
 static size_t countKnownRegions()

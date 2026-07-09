@@ -21,15 +21,11 @@
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
+#include "support/AdminModuleTestShim.h"
+#include "support/MockMeshService.h"
 
 // hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
 extern uint32_t hash(const char *str);
-
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
 
 static MockMeshService *mockMeshService;
 
@@ -235,7 +231,7 @@ static const RegionInfo testRegions[] = {
     {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
      meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO"},
 
-    // Sentinel — must be last
+    // Sentinel - must be last
     {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
      meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET"},
 };
@@ -929,15 +925,7 @@ static void test_channelSpacingCalculation_placeholder()
 // handleSetConfig fromOthers dispatch tests
 // -----------------------------------------------------------------------
 
-class AdminModuleTestShim : public AdminModule
-{
-  public:
-    using AdminModule::handleSetConfig;
-    // Defer persistence so handleSetConfig() exercises the in-RAM config logic without saveToDisk() touching
-    // the (uninitialized) node database in this lightweight harness.
-    void deferSaves() { hasOpenEditTransaction = true; }
-};
-
+// AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
 
 static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
