@@ -143,7 +143,7 @@ void RepeatScalingModule::noteScheduled(NodeNum sender, PacketId id, int32_t por
 
 int32_t RepeatScalingModule::lookupNotedPortnum(NodeNum sender, PacketId id) const
 {
-    for (auto &entry : dupeCounts) {
+    for (const auto &entry : dupeCounts) {
         if (entry.id == id && entry.sender == sender)
             return entry.portnum;
     }
@@ -158,7 +158,7 @@ int32_t RepeatScalingModule::resolvePortnum(const meshtastic_MeshPacket *p) cons
 
 uint8_t RepeatScalingModule::getToleratedDupeCount(NodeNum sender, PacketId id) const
 {
-    for (auto &entry : dupeCounts) {
+    for (const auto &entry : dupeCounts) {
         if (entry.id == id && entry.sender == sender)
             return entry.count;
     }
