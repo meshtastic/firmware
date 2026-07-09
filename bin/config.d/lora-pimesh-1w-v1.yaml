@@ -1,5 +1,11 @@
 # PiMesh-1W (V1) E22-900M30S
 # https://meshsmith.net/products/pimesh-1w
+Meta:
+  name: PiMesh-1W (V1) E22-900M30S
+  support: community
+  compatible:
+    - raspberry-pi
+    
 Lora:
   Module: sx1262
   CS: 21
