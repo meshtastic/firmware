@@ -881,6 +881,12 @@ void NimbleBluetooth::setup()
 
     LOG_INFO("Init the NimBLE bluetooth module");
 
+    // deinit() latches these teardown guards; clear them so a re-init on the same boot (e.g. an
+    // admin disable-bluetooth followed by re-enable) doesn't leave onRead stuck draining or
+    // onDisconnect early-returning without clearing the connection handle.
+    bleDraining = false;
+    isDeInit = false;
+
 #ifdef ARCH_ESP32
     // Runs before BLEDevice::init() reads the bond store, but logs after the "Init" line above so
     // any bond-cleanup output doesn't appear to precede the module init.
