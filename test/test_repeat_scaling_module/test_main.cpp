@@ -1,13 +1,5 @@
-// Unit tests for RepeatScalingModule, which decides how many duplicate rebroadcasts of a packet
-// we have queued to rebroadcast ourselves we should tolerate before giving up:
-//   - registerDupeHeard/clearDupeCount: the small ring buffer counting how many times we've
-//     heard a duplicate of a packet we have queued to rebroadcast ourselves.
-//   - getDupeCancelThreshold: the compile-time, per-portnum threshold (see
-//     RepeatScalingModule.cpp) controlling how many duplicates we tolerate before giving up.
-//   - meshTooBusyForExtraRepeats gate: channel/air utilization or direct-neighbor density
-//     overriding any portnum-specific extra tolerance.
-//   - shouldCancelDupe: the integration of all of the above - only actually gives up (and clears
-//     its tracking state) once the configured threshold has been reached.
+// Unit tests for RepeatScalingModule: its ring-buffer dupe tracking, per-portnum threshold,
+// busy-mesh gate, and the shouldCancelDupe integration of all three.
 
 #include "MeshTypes.h" // before TestUtil.h: provides NodeNum etc.
 #include "TestUtil.h"
@@ -23,18 +15,14 @@ static constexpr NodeNum kSender2 = 0x000006CD;
 static constexpr PacketId kId1 = 0x1001;
 static constexpr PacketId kId2 = 0x2002;
 
-// ---------------------------------------------------------------------------
-// Test shim - re-exposes the protected dupe-tracking helpers, and allows overriding
-// getDupeCancelThreshold so tests don't depend on any real portnum having a non-default case.
-// ---------------------------------------------------------------------------
+// Re-exposes the protected helpers and overrides getDupeCancelThreshold so threshold-gating can be
+// tested without depending on a real portnum case.
 class RepeatScalingModuleTestShim : public RepeatScalingModule
 {
   public:
     using RepeatScalingModule::clearDupeCount;
     using RepeatScalingModule::registerDupeHeard;
 
-    // Test-only override: bypasses the compile-time portnum switch so tests can exercise
-    // shouldCancelDupe's threshold-gating without needing a real portnum case.
     uint8_t testThreshold = 1;
     uint8_t getDupeCancelThreshold(const meshtastic_MeshPacket *p) override { return testThreshold; }
 };
@@ -52,12 +40,8 @@ class RepeatScalingModulePlainShim : public RepeatScalingModule
 static RepeatScalingModuleTestShim *shim = nullptr;
 static RepeatScalingModulePlainShim *plainShim = nullptr;
 
-// ---------------------------------------------------------------------------
-// Scoped helpers to simulate a busy mesh for meshTooBusyForExtraRepeats() (see
-// RepeatScalingModule.cpp). Install a global airTime/hopScalingModule reporting the given
-// condition for the enclosing scope, restoring the previous pointer on destruction. Mirrors
-// test_traffic_management's ScopedBusyAirTime.
-// ---------------------------------------------------------------------------
+// Scoped helpers that install a global airTime/hopScalingModule reporting a busy condition for the
+// enclosing scope, restoring the previous pointer on destruction (mirrors ScopedBusyAirTime).
 class ScopedChannelUtil
 {
   public:
@@ -239,16 +223,12 @@ void test_text_message_threshold_applies_regardless_of_addressing(void)
 }
 
 // ===========================================================================
-// Group 2b - next_hop gate for packets whose portnum can't be determined at all (most commonly a
-// relayed PKI DM not addressed to us, which we can never decode - see Router::perhapsDecode's PKI
-// branch, gated on isToUs(p)). next_hop is a plaintext MeshPacket header field, so it's visible
-// even here, unlike portnum.
+// Group 2b - next_hop gate for undecodable packets (e.g. a relayed PKI DM not addressed to us).
+// next_hop is a plaintext header field, so it's visible even when portnum isn't.
 // ===========================================================================
 
-// A DM (addressed to a specific node, not NODENUM_BROADCAST) with no directed route known yet -
-// the realistic shape of a relayed PKI DM we can never decrypt (see the module-level comment on
-// Group 2b above). NO_NEXT_HOP_PREFERENCE is what a route-less DM actually carries in this state
-// (see NextHopRouter::getNextHop/send), same as any broadcast.
+// A route-less DM (specific node, NO_NEXT_HOP_PREFERENCE) - the shape of a relayed PKI DM we can't
+// decrypt, carrying the same next_hop as any broadcast.
 static meshtastic_MeshPacket makeUndecodableFloodedDm(NodeNum from, PacketId id)
 {
     meshtastic_MeshPacket p = makeDupePacket(from, id);
@@ -433,16 +413,9 @@ void test_shouldCancelDupe_waits_for_configured_repeats(void)
 }
 
 // ===========================================================================
-// Group 5 - noteScheduled + encrypted duplicates (as heard for real over the air)
-//
-// In production, a duplicate rebroadcast heard from another node is still encrypted to us: only
-// the one copy that made it through Router::handleReceived ever gets decoded (see
-// NextHopRouter::perhapsRebroadcast, which calls noteScheduled() with that copy's portnum once it
-// schedules our own rebroadcast). Group 2's tests construct an already-decoded packet directly,
-// which proves the portnum switch itself is correct but - as the "portnum=-1" bug demonstrated -
-// does not prove the real, always-encrypted duplicate gets the right threshold. These tests start
-// from an encrypted packet, exactly as shouldCancelDupe receives it from FloodingRouter, and rely
-// solely on noteScheduled() (the same call NextHopRouter makes) for portnum visibility.
+// Group 5 - noteScheduled + encrypted duplicates (as heard for real over the air).
+// Unlike Group 2 (which builds already-decoded packets), these start from an encrypted packet and
+// rely solely on noteScheduled() for portnum visibility - the real production path.
 // ===========================================================================
 
 void test_encrypted_dupe_uses_portnum_noted_when_we_scheduled_our_own_rebroadcast(void)
