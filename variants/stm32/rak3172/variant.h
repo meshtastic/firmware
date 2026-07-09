@@ -28,11 +28,8 @@ Do not expect a working Meshtastic device with this target.
 #define STM32WL_LSE_DRIVE RCC_LSEDRIVE_LOW
 
 // LoRa
-/*
- * RAK3172   (-20-85°C) -> No TCXO
- * RAK3172-T (-40-85°C) -> 3.0V TCXO
- * https://github.com/RAKWireless/RAK-STM32-RUI/blob/e5a28be8fab1a492bd9223dd425ca33a8a297d90/variants/WisDuo_RAK3172-T_Board/radio_conf.h#L91
- */
+// RAK3172: no TCXO, RAK3172-T: 3.0V TCXO -
+// https://github.com/RAKWireless/RAK-STM32-RUI/blob/e5a28be8fab1a492bd9223dd425ca33a8a297d90/variants/WisDuo_RAK3172-T_Board/radio_conf.h#L91
 #define TCXO_OPTIONAL
 #define SX126X_DIO3_TCXO_VOLTAGE 3.0
 
