@@ -28,6 +28,9 @@
 #if !MESHTASTIC_EXCLUDE_NODEINFO
 #include "modules/NodeInfoModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
@@ -132,8 +135,7 @@ void setupModules()
 #endif
 
 #if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
-    // Instantiate only when enabled to avoid extra memory use and background work.
-    if (moduleConfig.has_traffic_management && moduleConfig.traffic_management.enabled) {
+    if (moduleConfig.has_traffic_management) {
         trafficManagementModule = new TrafficManagementModule();
     }
 #endif
@@ -147,6 +149,10 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_NODEINFO
     nodeInfoModule = new NodeInfoModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+    meshBeaconBroadcastModule = new MeshBeaconBroadcastModule();
+    meshBeaconListenerModule = new MeshBeaconListenerModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
     positionModule = new PositionModule();

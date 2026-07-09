@@ -119,7 +119,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* MMC5983MA 3-Axis Digital Magnetic Sensor */
     meshtastic_TelemetrySensorType_MMC5983MA = 52,
     /* ICM-42607-P 6‑Axis IMU */
-    meshtastic_TelemetrySensorType_ICM42607P = 53
+    meshtastic_TelemetrySensorType_ICM42607P = 53,
+    /* SPA06 pressure and temperature */
+    meshtastic_TelemetrySensorType_SPA06 = 54
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -500,8 +502,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_ICM42607P
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_ICM42607P+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SPA06
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SPA06+1))
 
 
 

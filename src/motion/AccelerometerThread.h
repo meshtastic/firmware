@@ -15,8 +15,8 @@
 #endif
 #include "BMM150Sensor.h"
 #include "BMX160Sensor.h"
-#include "ICM42607PSensor.h"
 #include "ICM20948Sensor.h"
+#include "ICM42607PSensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
@@ -92,32 +92,44 @@ class AccelerometerThread : public concurrency::OSThread
             sensor = new BMA423Sensor(device);
             break;
 #endif
+#if __has_include(<Adafruit_MPU6050.h>)
         case ScanI2C::DeviceType::MPU6050:
             sensor = new MPU6050Sensor(device);
             break;
+#endif
         case ScanI2C::DeviceType::BMX160:
             sensor = new BMX160Sensor(device);
             break;
+#if __has_include(<Adafruit_LIS3DH.h>)
         case ScanI2C::DeviceType::LIS3DH:
             sensor = new LIS3DHSensor(device);
             break;
+#endif
+#if __has_include(<Adafruit_LSM6DS3TRC.h>)
         case ScanI2C::DeviceType::LSM6DS3:
             sensor = new LSM6DS3Sensor(device);
             break;
+#endif
 #ifdef HAS_STK8XXX
         case ScanI2C::DeviceType::STK8BAXX:
             sensor = new STK8XXXSensor(device);
             break;
 #endif
+#if __has_include(<ICM_20948.h>)
         case ScanI2C::DeviceType::ICM20948:
             sensor = new ICM20948Sensor(device);
             break;
+#endif
+#if __has_include(<ICM42670P.h>)
         case ScanI2C::DeviceType::ICM42607P:
             sensor = new ICM42607PSensor(device);
             break;
+#endif
+#if __has_include(<DFRobot_BMM150.h>)
         case ScanI2C::DeviceType::BMM150:
             sensor = new BMM150Sensor(device);
             break;
+#endif
 #ifdef HAS_BMI270
         case ScanI2C::DeviceType::BMI270:
             sensor = new BMI270Sensor(device);

@@ -100,6 +100,11 @@ class MeshService
                p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
                p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
+
+    /// Returns false when a decoded NodeInfo/Waypoint payload fails nested protobuf decode (invalid
+    /// UTF-8 under PB_VALIDATE_UTF8, etc.); other portnums pass through. Callers gate on the variant.
+    static bool phonePayloadIsDecodable(const meshtastic_Data &decoded);
+
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
 
@@ -140,6 +145,12 @@ class MeshService
 
     /// Release the next ClientNotification packet to pool.
     void releaseClientNotificationToPool(meshtastic_ClientNotification *p) { clientNotificationPool.release(p); }
+
+    /// Bump fromNum to signal connected clients to poll for new FromRadio data.
+    /// Used by code paths (e.g. lockdown status queueing) that surface a new
+    /// FromRadio variant without going through one of the existing pool-backed
+    /// senders.
+    void nudgeFromNum() { fromNum++; }
 
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
