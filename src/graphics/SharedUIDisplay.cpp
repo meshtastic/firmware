@@ -2,6 +2,7 @@
 #if HAS_SCREEN
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "RTC.h"
 #include "draw/NodeListRenderer.h"
 #include "graphics/ScreenFonts.h"
@@ -12,7 +13,6 @@
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include <OLEDDisplay.h>
 #include <cctype>
 #include <graphics/images.h>

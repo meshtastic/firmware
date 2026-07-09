@@ -333,6 +333,98 @@ extern const unsigned char eyes[] PROGMEM;
 #define eye_width 16
 #define eye_height 16
 extern const unsigned char eye[] PROGMEM;
+
+#define dashing_away_width 16
+#define dashing_away_height 16
+extern const unsigned char dashing_away[] PROGMEM;
+
+#define christmas_tree_width 16
+#define christmas_tree_height 16
+extern const unsigned char christmas_tree[] PROGMEM;
+
+#define wrapped_gift_width 16
+#define wrapped_gift_height 16
+extern const unsigned char wrapped_gift[] PROGMEM;
+
+#define menorah_width 16
+#define menorah_height 16
+extern const unsigned char menorah[] PROGMEM;
+
+#define latin_cross_width 16
+#define latin_cross_height 16
+extern const unsigned char latin_cross[] PROGMEM;
+
+#define star_of_david_width 16
+#define star_of_david_height 16
+extern const unsigned char star_of_david[] PROGMEM;
+
+#define snow_man_width 16
+#define snow_man_height 16
+extern const unsigned char snow_man[] PROGMEM;
+
+#define hot_beverage_width 16
+#define hot_beverage_height 16
+extern const unsigned char hot_beverage[] PROGMEM;
+
+#define raising_hands_width 16
+#define raising_hands_height 16
+extern const unsigned char raising_hands[] PROGMEM;
+
+#define sunrise_width 16
+#define sunrise_height 16
+extern const unsigned char sunrise[] PROGMEM;
+
+#define sunset_width 16
+#define sunset_height 16
+extern const unsigned char sunset[] PROGMEM;
+
+#define one_hundred_width 16
+#define one_hundred_height 16
+extern const unsigned char one_hundred[] PROGMEM;
+
+#define ogre_width 16
+#define ogre_height 16
+extern const unsigned char ogre[] PROGMEM;
+
+#define potato_width 16
+#define potato_height 16
+extern const unsigned char potato[] PROGMEM;
+
+#define cold_face_width 16
+#define cold_face_height 16
+extern const unsigned char cold_face[] PROGMEM;
+
+#define antenna_bars_width 16
+#define antenna_bars_height 16
+extern const unsigned char antenna_bars[] PROGMEM;
+
+#define tower_width 16
+#define tower_height 16
+extern const unsigned char tower[] PROGMEM;
+
+#define sleeping_face_width 16
+#define sleeping_face_height 16
+extern const unsigned char sleeping_face[] PROGMEM;
+
+#define weary_face_width 16
+#define weary_face_height 16
+extern const unsigned char weary_face[] PROGMEM;
+
+#define open_mouth_width 16
+#define open_mouth_height 16
+extern const unsigned char open_mouth[] PROGMEM;
+
+#define grinning_big_eyes_width 16
+#define grinning_big_eyes_height 16
+extern const unsigned char grinning_big_eyes[] PROGMEM;
+
+#define wood_width 16
+#define wood_height 16
+extern const unsigned char wood[] PROGMEM;
+
+#define beer_width 16
+#define beer_height 16
+extern const unsigned char beer[] PROGMEM;
 #endif // EXCLUDE_EMOJI
 
 } // namespace graphics

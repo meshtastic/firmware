@@ -312,12 +312,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
 
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->has_reply_id = true;
-            cn->reply_id = p->id;
-            cn->level = meshtastic_LogRecord_Level_WARNING;
-            cn->time = getValidTime(RTCQualityFromNet);
-            snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
-            service->sendClientNotification(cn);
+            if (cn) {
+                cn->has_reply_id = true;
+                cn->reply_id = p->id;
+                cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->time = getValidTime(RTCQualityFromNet);
+                snprintf(cn->message, sizeof(cn->message), "Duty cycle limit exceeded. You can send again in %d mins",
+                         silentMinutes);
+                service->sendClientNotification(cn);
+            }
 
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
             if (isFromUs(p)) { // only send NAK to API, not to the mesh
@@ -405,7 +408,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
+        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt && p_decoded) {
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
 #endif

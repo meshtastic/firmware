@@ -156,6 +156,12 @@ static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0
 /// True if a getKey()-resolved key offers no privacy: length 0 (off) or the public defaultpsk family. Pure; for tests.
 bool cryptoKeyIsPublic(const CryptoKey &key);
 
+/// True if channel `chIndex` in a raw ChannelFile is publicly decryptable (open / single-byte well-known
+/// index / defaultpsk family). Pure equivalent of Channels::usesPublicKey that operates on the on-disk
+/// struct directly, so it is callable before the `channels` singleton is initialized (e.g. during the
+/// NodeDB boot migration). Resolves a PSK-less SECONDARY against the PRIMARY channel's key. For tests.
+bool channelFileUsesPublicKey(const meshtastic_ChannelFile &cf, ChannelIndex chIndex);
+
 static const uint8_t eventpsk[] = {0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36,
                                    0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74,
                                    0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1};

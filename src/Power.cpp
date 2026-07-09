@@ -13,7 +13,7 @@
  * This file is part of the Meshtastic project.
  * For more information, see: https://meshtastic.org/
  */
-#include "power.h"
+#include "Power.h"
 #include "BluetoothCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"

@@ -333,6 +333,12 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2 = 139,
     /* Meshnology W10 */
     meshtastic_HardwareModel_MESHNOLOGY_W10 = 140,
+    /* Heltec ESP32S3 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RC32 = 141,
+    /* Heltec NRF52840 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RC52 = 142,
+    /* Heltec ESP32C6 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RCC6 = 143,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

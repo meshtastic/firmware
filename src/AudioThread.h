@@ -12,9 +12,16 @@
 #include <AudioOutputI2S.h>
 #include <ESP8266SAM.h>
 
+// A board with an I2S amplifier opts in by defining AUDIO_AMP_ENABLE(on) in its variant.h to power the
+// amp on/off around playback (e.g. an enable pin on an I/O expander). The includes below expose the
+// expander instances (io / mcpIoExpander) those macros typically reference.
 #ifdef USE_XL9555
 #include "ExtensionIOXL9555.hpp"
 extern ExtensionIOXL9555 io;
+#endif
+
+#ifdef USE_MCP23017
+#include "platform/esp32/ExtensionIOMCP23017.h"
 #endif
 
 #define AUDIO_THREAD_INTERVAL_MS 100
@@ -26,8 +33,8 @@ class AudioThread : public concurrency::OSThread
 
     void beginRttl(const void *data, uint32_t len)
     {
-#ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(true);
 #endif
         setCPUFast(true);
         rtttlFile = std::unique_ptr<AudioFileSourcePROGMEM>(new AudioFileSourcePROGMEM(data, len));
@@ -54,8 +61,8 @@ class AudioThread : public concurrency::OSThread
         rtttlFile = nullptr;
 
         setCPUFast(false);
-#ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(false);
 #endif
     }
 
@@ -66,14 +73,14 @@ class AudioThread : public concurrency::OSThread
             i2sRtttl = nullptr;
         }
 
-#ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(true);
 #endif
         auto sam = std::unique_ptr<ESP8266SAM>(new ESP8266SAM);
         sam->Say(audioOut.get(), text);
         setCPUFast(false);
-#ifdef T_LORA_PAGER
-        io.digitalWrite(EXPANDS_AMP_EN, LOW);
+#ifdef AUDIO_AMP_ENABLE
+        AUDIO_AMP_ENABLE(false);
 #endif
     }
 

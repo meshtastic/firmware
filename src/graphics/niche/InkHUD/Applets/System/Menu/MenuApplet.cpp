@@ -7,6 +7,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
+#include "Power.h"
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
@@ -14,7 +15,6 @@
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
-#include "power.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
 #if defined(ARCH_ESP32) && HAS_WIFI

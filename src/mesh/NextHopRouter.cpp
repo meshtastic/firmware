@@ -31,8 +31,10 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
-    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack))
-        startRetransmission(packetPool.allocCopy(*p)); // start retransmission for relayed packet
+    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack)) {
+        if (auto *copy = packetPool.allocCopy(*p))
+            startRetransmission(copy); // start retransmission for relayed packet
+    }
 
     return Router::send(p);
 }
@@ -168,6 +170,8 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                 // ambiguous next_hop byte is ever learned (sniffReceived) or originated (getNextHop).
                 if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+                    if (!tosend)
+                        return true;
                     LOG_INFO("Rebroadcast received message coming from %x", p->relay_node);
 
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
@@ -397,7 +401,8 @@ int32_t NextHopRouter::doRetransmissions()
                             trafficManagementModule->clearNextHop(p.packet->to);
                         }
 #endif
-                        FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                        if (auto *copy = packetPool.allocCopy(*p.packet))
+                            FloodingRouter::send(copy);
                     } else {
 #if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
                         // M4 (gated): if the route isn't proven healthy, don't spend a second directed
@@ -411,18 +416,22 @@ int32_t NextHopRouter::doRetransmissions()
                             meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                             if (sentTo)
                                 sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
-                            FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                            if (auto *copy = packetPool.allocCopy(*p.packet))
+                                FloodingRouter::send(copy);
                         } else {
-                            NextHopRouter::send(packetPool.allocCopy(*p.packet));
+                            if (auto *copy = packetPool.allocCopy(*p.packet))
+                                NextHopRouter::send(copy);
                         }
 #else
-                        NextHopRouter::send(packetPool.allocCopy(*p.packet));
+                        if (auto *copy = packetPool.allocCopy(*p.packet))
+                            NextHopRouter::send(copy);
 #endif
                     }
                 } else {
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
-                    FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                    if (auto *copy = packetPool.allocCopy(*p.packet))
+                        FloodingRouter::send(copy);
                 }
 
                 // Queue again
