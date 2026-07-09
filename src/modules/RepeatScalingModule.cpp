@@ -62,8 +62,7 @@ bool meshTooBusyForExtraRepeats()
 // not addressed to us can never be decoded by us, so it falls to the next_hop-gated fallback below.
 //
 // This is a compile-time table (not a runtime/protobuf config) because the desired threshold is
-// expected to vary per packet type rather than being a single device-wide knob; edit it to tune
-// for a given deployment.
+// not yet worked out.
 //
 // When the portnum can't be determined at all (packet still encrypted and no noteScheduled() cache
 // hit - see below), the portnum switch is skipped and the threshold instead falls back to a
@@ -191,6 +190,15 @@ int32_t RepeatScalingModule::lookupNotedPortnum(NodeNum sender, PacketId id) con
     return -1;
 }
 
+uint8_t RepeatScalingModule::getToleratedDupeCount(NodeNum sender, PacketId id) const
+{
+    for (auto &entry : dupeCounts) {
+        if (entry.id == id && entry.sender == sender)
+            return entry.count;
+    }
+    return 0;
+}
+
 bool RepeatScalingModule::shouldCancelDupe(const meshtastic_MeshPacket *p)
 {
     const uint8_t threshold = getDupeCancelThreshold(p);
@@ -205,7 +213,8 @@ bool RepeatScalingModule::shouldCancelDupe(const meshtastic_MeshPacket *p)
         return true;
     }
 
-    LOG_DEBUG("[REPEATSCALE] Tolerating duplicate %u/%u of 0x%08x from=0x%08x portnum=%d: keeping own rebroadcast queued",
+    LOG_DEBUG("[REPEATSCALE] Tolerated duplicate %u/%u of 0x%08x from=0x%08x portnum=%d: will still transmit our own "
+              "rebroadcast",
               dupesHeard, threshold, p->id, p->from, portnum);
     return false;
 }
