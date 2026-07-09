@@ -80,7 +80,10 @@
 #define ES7210_MCLK 48
 
 // dac / amp
+// I2S audio is broken on the t-deck-tft build, so only enable it for the base (MUI) t-deck.
+#ifndef HAS_TFT
 #define HAS_I2S
+#endif
 #define DAC_I2S_BCK 7
 #define DAC_I2S_WS 5
 #define DAC_I2S_DOUT 6
