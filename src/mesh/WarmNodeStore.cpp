@@ -592,21 +592,12 @@ bool WarmNodeStore::save()
     h.entrySize = sizeof(WarmNodeEntry);
     h.crc = crc32Buffer(packed.data(), h.count * sizeof(WarmNodeEntry));
 
-    // SafeFile already does its own spiLock in its constructor and close().
-    // Avoid nesting spiLocks, as this will hang until watchdog reset!
-
-    {
-        concurrency::LockGuard g(spiLock);
-        FSCom.mkdir("/prefs");
-    }
-
+    // SafeFile takes spiLock itself in its constructor, write() and close();
+    // we must not hold it across those or the non-recursive lock deadlocks (watchdog reset).
     auto f = SafeFile(warmFileName, false);
 
-    {
-        concurrency::LockGuard g(spiLock);
-        f.write((const uint8_t *)&h, sizeof(h));
-        f.write((const uint8_t *)packed.data(), h.count * sizeof(WarmNodeEntry));
-    }
+    f.write((const uint8_t *)&h, sizeof(h));
+    f.write((const uint8_t *)packed.data(), h.count * sizeof(WarmNodeEntry));
 
     bool ok = f.close();
     if (!ok)

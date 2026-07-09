@@ -5,14 +5,22 @@
 // Only way to work on both esp32 and nrf52
 static File openFile(const char *filename, bool fullAtomic)
 {
+    std::string filenameTmp = filename;
+    filenameTmp += ".tmp";
+
     concurrency::LockGuard g(spiLock);
+
+    // Create the containing directory if it doesn't already exist
+    size_t slashIndex = filenameTmp.find_last_of('/');
+    if (slashIndex != std::string::npos && slashIndex > 0) {
+        std::string dir = filenameTmp.substr(0, slashIndex);
+        FSCom.mkdir(dir.c_str());
+    }
+
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
     if (!fullAtomic) {
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
     }
-
-    String filenameTmp = filename;
-    filenameTmp += ".tmp";
 
     // FIXME: If we are doing a full atomic write, we may need to remove the old tmp file now
     // if (fullAtomic) {
@@ -33,6 +41,7 @@ size_t SafeFile::write(uint8_t ch)
     if (!f)
         return 0;
 
+    concurrency::LockGuard g(spiLock);
     hash ^= ch;
     return f.write(ch);
 }
@@ -42,6 +51,7 @@ size_t SafeFile::write(const uint8_t *buffer, size_t size)
     if (!f)
         return 0;
 
+    concurrency::LockGuard g(spiLock);
     for (size_t i = 0; i < size; i++) {
         hash ^= buffer[i];
     }

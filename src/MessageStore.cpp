@@ -291,23 +291,16 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
 void MessageStore::saveToFlash()
 {
 #ifdef FSCom
-    // Ensure root exists
-    spiLock->lock();
-    FSCom.mkdir("/");
-    spiLock->unlock();
-
     SafeFile f(filename.c_str(), false);
 
-    spiLock->lock();
     uint8_t count = static_cast<uint8_t>(liveMessages.size());
     if (count > MAX_MESSAGES_SAVED)
         count = MAX_MESSAGES_SAVED;
-    f.write(&count, 1);
+    f.write(&count, 1); // SafeFile::write takes spiLock internally
 
     for (uint8_t i = 0; i < count; ++i) {
         writeMessageRecord(f, liveMessages[i]);
     }
-    spiLock->unlock();
 
     f.close();
 #endif
@@ -367,12 +360,7 @@ void MessageStore::clearAllMessages()
     SafeFile f(filename.c_str(), false);
     uint8_t count = 0;
 
-    // SafeFile already does its own spiLock in its constructor and close().
-    // Avoid nesting spiLocks, as this will hang until watchdog reset!
-    {
-        concurrency::LockGuard guard(spiLock);
-        f.write(&count, 1); // write "0 messages"
-    }
+    f.write(&count, 1); // write "0 messages"; SafeFile::write takes spiLock internally
 
     f.close();
 #endif

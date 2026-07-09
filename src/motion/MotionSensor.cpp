@@ -79,7 +79,7 @@ bool MotionSensor::saveMagnetometerCalibration(const char *filePath, float highe
         return false;
     }
 
-    FSCom.mkdir("/prefs");
+    // "/prefs" is created by SafeFile (openFile) below.
     CompassCalibrationRecord record = {
         COMPASS_CALIBRATION_MAGIC, COMPASS_CALIBRATION_VERSION, 0, highestX, lowestX, highestY, lowestY, highestZ, lowestZ};
 
