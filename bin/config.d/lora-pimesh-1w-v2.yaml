@@ -1,5 +1,11 @@
 # PiMesh-1W (V2) E22P-915M30S / E22P-868M30S
 # https://meshsmith.net/products/pimesh-1w
+Meta:
+  name: PiMesh-1W (V2) E22P-915M30S / E22P-868M30S
+  support: community
+  compatible:
+    - raspberry-pi
+
 Lora:
   Module: sx1262
   IRQ: 6
