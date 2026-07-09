@@ -533,7 +533,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // configured admin key, so an authorized admin can reach a node that has not yet learned their
         // key. decryptCurve25519 is AES-CCM AEAD, so a wrong key fails authentication and we try the next.
         bool viaAdminKey = false;
-        if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
+        if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
         }
         for (int i = 0; i < 3 && !decrypted; i++) {
