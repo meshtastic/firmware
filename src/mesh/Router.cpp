@@ -521,45 +521,63 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier -
-    // nodes evicted from the hot store keep their key there, so DMs from long-tail nodes still
-    // decrypt), otherwise fall back to a not-yet-verified key held during an in-progress
-    // key-verification handshake. The latter lets us DH-decode the follow-on PKI packet before the
-    // peer's key has been committed to NodeDB.
+    // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier), else
+    // fall back to a not-yet-committed key held during an in-progress key-verification handshake.
     meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-    bool haveRemoteKey = false;
-    if (nodeDB->copyPublicKey(p->from, remotePublic)) {
-        haveRemoteKey = true;
-    } else if (crypto->getPendingPublicKey(p->from, remotePublic)) {
-        haveRemoteKey = true;
-    }
-    // Attempt PKI decryption first
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && haveRemoteKey &&
-        nodeDB->getMeshNode(p->to) != nullptr && nodeDB->getMeshNode(p->to)->public_key.size > 0 &&
-        rawSize > MESHTASTIC_PKC_OVERHEAD) {
-        LOG_DEBUG("Attempt PKI decryption");
+    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic) || crypto->getPendingPublicKey(p->from, remotePublic);
 
+    meshtastic_NodeInfoLite *ourNode = nullptr;
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
+        (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
+        // If we know the sender's key, make a single attempt with it. Otherwise fall back to trying each
+        // configured admin key, so an authorized admin can reach a node that has not yet learned their
+        // key. decryptCurve25519 is AES-CCM AEAD, so a wrong key fails authentication and we try the next.
+        bool viaAdminKey = false;
         if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
-            LOG_INFO("PKI Decryption worked!");
+            decrypted = true;
+        }
+        for (int i = 0; i < 3 && !decrypted; i++) {
+            if (config.security.admin_key[i].size != 32)
+                continue;
+            remotePublic.size = 32;
+            memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
 
+            if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                decrypted = true;
+                viaAdminKey = true;
+                break; // stop after first successful decryption
+            }
+        }
+        if (decrypted) {
+            LOG_INFO("PKI Decryption worked!");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
-            rawSize -= MESHTASTIC_PKC_OVERHEAD;
-            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+            size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
+            if (pb_decode_from_bytes(bytes, payloadSize, &meshtastic_Data_msg, &decodedtmp) &&
                 decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
+                rawSize = payloadSize; // commit the overhead subtraction only on full success
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
                 memcpy(p->public_key.bytes, remotePublic.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+                if (viaAdminKey) {
+                    // We decrypted this using a configured admin key, so we had no pubkey from the sender.
+                    // Persist the key so future packets take the fast path and we can PKI-reply. The from
+                    // nodenum is bound into the AEAD nonce, so this NodeNum->key binding is authenticated
+                    // by the (trusted) admin that produced the packet.
+                    meshtastic_NodeInfoLite *fromNode = nodeDB->getOrCreateMeshNode(p->from);
+                    if (fromNode != nullptr)
+                        fromNode->public_key = remotePublic;
+                }
             } else {
+                // AEAD already authenticated this ciphertext, so no other candidate could decode it -
+                // the payload is simply malformed.
                 LOG_ERROR("PKC Decrypted, but pb_decode failed!");
                 return DecodeState::DECODE_FAILURE;
             }
-        } else {
-            LOG_WARN("PKC decrypt attempted but failed!");
         }
     }
 #endif
