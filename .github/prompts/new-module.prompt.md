@@ -6,9 +6,9 @@ Guide for developing a new Meshtastic firmware module.
 
 Choose the appropriate base class:
 
-1. **`MeshModule`** — Raw base class. Override `wantPacket()` and `handleReceived()`. Returns `ProcessMessage::STOP` or `ProcessMessage::CONTINUE`.
-2. **`SinglePortModule`** — Handles a single `meshtastic_PortNum`. Constructor takes `(name, portNum)`. Simplified `wantPacket()` checking `decoded.portnum`. Use `allocDataPacket()` to create outgoing packets.
-3. **`ProtobufModule<T>`** — Template for protobuf-encoded modules. Constructor takes `(name, portNum, fields)`. Override `handleReceivedProtobuf()`. Use `allocDataProtobuf(payload)` to create outgoing packets.
+1. **`MeshModule`** - Raw base class. Override `wantPacket()` and `handleReceived()`. Returns `ProcessMessage::STOP` or `ProcessMessage::CONTINUE`.
+2. **`SinglePortModule`** - Handles a single `meshtastic_PortNum`. Constructor takes `(name, portNum)`. Simplified `wantPacket()` checking `decoded.portnum`. Use `allocDataPacket()` to create outgoing packets.
+3. **`ProtobufModule<T>`** - Template for protobuf-encoded modules. Constructor takes `(name, portNum, fields)`. Override `handleReceivedProtobuf()`. Use `allocDataProtobuf(payload)` to create outgoing packets.
 
 Most modules also mix in `concurrency::OSThread` for periodic background tasks.
 
@@ -32,7 +32,7 @@ class MyModule : public ProtobufModule<meshtastic_MyMessage>, private concurrenc
     // Generate response packet (optional)
     virtual meshtastic_MeshPacket *allocReply() override;
 
-    // Periodic task — return next run interval in ms, or disable()
+    // Periodic task - return next run interval in ms, or disable()
     virtual int32_t runOnce() override;
 
     // Modify packet in-flight before delivery (optional)

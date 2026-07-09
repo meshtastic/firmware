@@ -65,6 +65,14 @@ struct RegionInfo {
     // Preset accessors (delegate through profile)
     meshtastic_Config_LoRaConfig_ModemPreset getDefaultPreset() const { return defaultPreset; }
     const meshtastic_Config_LoRaConfig_ModemPreset *getAvailablePresets() const { return profile->presets; }
+    bool supportsPreset(meshtastic_Config_LoRaConfig_ModemPreset preset) const
+    {
+        for (size_t i = 0; profile->presets[i] != MODEM_PRESET_END; i++) {
+            if (profile->presets[i] == preset)
+                return true;
+        }
+        return false;
+    }
     size_t getNumPresets() const
     {
         size_t n = 0;
@@ -79,6 +87,11 @@ extern const RegionInfo *myRegion;
 
 extern void initRegion();
 extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
+
+// Fill `map` with the region->valid-preset table, grouped so regions sharing a
+// preset list reference the same group. Sent to clients during want_config so
+// their UI can block illegal region+preset combinations.
+extern void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map);
 
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 5;

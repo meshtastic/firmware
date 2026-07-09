@@ -42,7 +42,8 @@ typedef enum {
     GNSS_MODEL_AG3335,
     GNSS_MODEL_AG3352,
     GNSS_MODEL_LS20031,
-    GNSS_MODEL_CM121
+    GNSS_MODEL_CM121,
+    GNSS_MODEL_GENERIC_NMEA // generic NMEA source (e.g. gpsd); skips chip-specific probe and init
 } GnssModel_t;
 
 typedef enum {
@@ -97,6 +98,9 @@ class GPS : private concurrency::OSThread
 
     // Disable the thread
     int32_t disable() override;
+
+    // Returns if the thread is enabled
+    bool isEnabled();
 
     // toggle between enabled/disabled
     void toggleGpsMode();
@@ -174,6 +178,7 @@ class GPS : private concurrency::OSThread
     uint32_t lastChecksumFailCount = 0;
     uint8_t currentStep = 0;
     int32_t currentDelay = 2000;
+    bool gotTime = false;
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
@@ -193,8 +198,6 @@ class GPS : private concurrency::OSThread
     bool hasProbeCache = false;
     // Ensures cached probe is attempted once per boot.
     bool triedProbeCache = false;
-    // Latched when cached presence check fails
-    bool cachedProbeFailedThisBoot = false;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete

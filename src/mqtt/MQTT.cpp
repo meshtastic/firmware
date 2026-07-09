@@ -6,6 +6,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
+#include "mesh/CryptoEngine.h"
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
@@ -22,6 +23,9 @@
 #if HAS_ETHERNET && defined(ARCH_ESP32)
 #include <ETH.h>
 #endif // HAS_ETHERNET
+#if HAS_ETHERNET && defined(USE_CH390D)
+#include "ESP32_CH390.h"
+#endif // USE_CH390D
 #include "Default.h"
 #include <Throttle.h>
 #include <assert.h>
@@ -128,6 +132,21 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
             return;
         }
         p->channel = ch.index;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        // Already-decoded downlink skips perhapsDecode's crypto path entirely, so enforce the
+        // signature policy here: verify a carried signature and apply unsigned-downgrade
+        // protection for known signers. Without this, a peer on a plaintext broker could
+        // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
+        // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
+        // CryptoEngine cache state, and MQTT ingress can run on a different task.
+        {
+            concurrency::LockGuard g(cryptLock);
+            if (!checkXeddsaReceivePolicy(p.get())) {
+                LOG_INFO("Ignore decoded message failing XEdDSA policy");
+                return;
+            }
+        }
+#endif
     }
 
     // PKI messages get accepted even if we can't decrypt
@@ -250,7 +269,7 @@ inline bool isConnectedToNetwork()
     if (ETH.connected())
         return true;
 #elif defined(USE_CH390D)
-    if (ETH.isConnected())
+    if (CH390.isConnected())
         return true;
 #endif
 
@@ -451,8 +470,16 @@ void MQTT::reconnect()
             reconnectCount++;
             LOG_ERROR("Failed to contact MQTT server directly (%d/%d)", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
+#if defined(USE_WS5500) || defined(USE_CH390D)
+                LOG_WARN("MQTT connect failed repeatedly; waiting for Ethernet reconnect");
+#else
                 needReconnect = true;
-                wifiReconnect->setIntervalFromNow(0);
+                if (wifiReconnect) {
+                    wifiReconnect->setIntervalFromNow(0);
+                } else {
+                    LOG_WARN("MQTT connect failed repeatedly, but WiFi reconnect is unavailable");
+                }
+#endif
                 reconnectCount = 0;
             }
 #endif
@@ -542,7 +569,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         }
         // Perform a lightweight TCP connectivity check without using connectPubSub(),
         // which mutates the module's isConnected state. This only checks if the server
-        // is reachable — it does not establish an MQTT session.
+        // is reachable - it does not establish an MQTT session.
         // Settings are always saved regardless of the result.
         if (isConnectedToNetwork()) {
             MQTTClient testClient;
@@ -726,7 +753,9 @@ void MQTT::perhapsReportToMap()
 
     // Fill MapReport message
     meshtastic_MapReport mapReport = meshtastic_MapReport_init_default;
-    memcpy(mapReport.long_name, owner.long_name, sizeof(owner.long_name));
+    // owner.long_name (40) is wider than mapReport.long_name (25); bound by the destination
+    strncpy(mapReport.long_name, owner.long_name, sizeof(mapReport.long_name));
+    mapReport.long_name[sizeof(mapReport.long_name) - 1] = '\0';
     memcpy(mapReport.short_name, owner.short_name, sizeof(owner.short_name));
     mapReport.role = config.device.role;
     mapReport.hw_model = owner.hw_model;

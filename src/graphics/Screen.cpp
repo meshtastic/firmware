@@ -2,9 +2,9 @@
 BaseUI
 
 Developed and Maintained By:
-- Ronald Garcia (HarukiToreda) – Lead development and implementation.
-- JasonP (Xaositek)  – Screen layout and icon design, UI improvements and testing.
-- TonyG (Tropho) – Project management, structural planning, and testing
+- Ronald Garcia (HarukiToreda) - Lead development and implementation.
+- JasonP (Xaositek)  - Screen layout and icon design, UI improvements and testing.
+- TonyG (Tropho) - Project management, structural planning, and testing
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/UIRenderer.h"
 #include "graphics/TFTColorRegions.h"
 #include "modules/CannedMessageModule.h"
+#include "security/LockdownDisplay.h"
 
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -119,8 +120,76 @@ static inline void prepareFrameColorRegions()
 }
 #endif
 
+#ifdef MESHTASTIC_LOCKDOWN
+// Static lock screen drawn in place of normal frames when
+// meshtastic_security::shouldRedactDisplay() returns true. Renders centered
+// "LOCKED" plus battery so the operator can see the device is alive and
+// charged without leaking any node/channel/message/position content.
+// Draw the LOCKED frame into the host-side framebuffer. Does NOT commit
+// to the panel - the caller is responsible for calling display->display()
+// once it has composited any overlays on top. Committing here would cause
+// visible flicker between "just LOCKED" and "LOCKED + banner overlay" when
+// the pairing-PIN special-case in updateUiFrame paints the overlay after
+// this returns.
+static void drawLockdownLockScreenIntoBuffer(OLEDDisplay *display)
+{
+    display->clear();
+
+    const int w = display->getWidth();
+    const int h = display->getHeight();
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_LARGE);
+    display->drawString(w / 2, h / 2 - FONT_HEIGHT_LARGE, "LOCKED");
+
+    display->setFont(FONT_SMALL);
+    char status[32] = "Connect to unlock";
+    if (powerStatus && powerStatus->getHasBattery()) {
+        int pct = powerStatus->getBatteryChargePercent();
+        snprintf(status, sizeof(status), "Battery %d%%", pct);
+    }
+    display->drawString(w / 2, h / 2 + 2, status);
+}
+
+// Convenience wrapper for callers that want the LOCKED frame committed
+// to the panel immediately and have no overlay to compose on top.
+static void drawLockdownLockScreen(OLEDDisplay *display)
+{
+    drawLockdownLockScreenIntoBuffer(display);
+    display->display();
+}
+#endif
+
 static inline void updateUiFrame(OLEDDisplayUi *ui)
 {
+#ifdef MESHTASTIC_LOCKDOWN
+    if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
+        OLEDDisplay *display = screen->getDisplayDevice();
+        // Paint LOCKED into the framebuffer WITHOUT committing. We commit
+        // exactly once at the bottom - after any overlay has been composed
+        // on top - so the panel never visibly transitions from "just LOCKED"
+        // to "LOCKED + overlay" mid-frame. Committing twice per cycle was
+        // the source of the H13 flicker.
+        drawLockdownLockScreenIntoBuffer(display);
+        // Special-case the BLE pairing PIN banner. The PIN is needed to
+        // complete first-pair against a locked device, but the lockdown
+        // short-circuit would otherwise hide the PIN entirely. The PIN is
+        // a per-attempt ephemeral pair-handshake artifact, not operator
+        // content, so compositing it over the LOCKED frame is safe.
+        //
+        // Calling ui->update() here would be wrong: it redraws the current
+        // carousel frame (the dashboard) into the framebuffer before the
+        // overlay paints, leaving operator content visible underneath the
+        // banner. Instead we invoke the banner overlay callback directly,
+        // which paints only the banner box on top of the LOCKED pixels we
+        // already have in the framebuffer.
+        if (NotificationRenderer::current_notification_type == notificationTypeEnum::pairing_pin) {
+            NotificationRenderer::drawBannercallback(display, ui->getUiState());
+        }
+        display->display();
+        return;
+    }
+#endif
 #if GRAPHICS_TFT_COLORING_ENABLED
     prepareFrameColorRegions();
 #endif
@@ -164,6 +233,16 @@ static inline float wrapHeading360(float heading)
     return heading;
 }
 
+static inline float wrapDelta180(float delta)
+{
+    if (delta > 180.0f) {
+        delta -= 360.0f;
+    } else if (delta < -180.0f) {
+        delta += 360.0f;
+    }
+    return delta;
+}
+
 void Screen::setHeading(float heading)
 {
     const float wrappedHeading = wrapHeading360(heading);
@@ -175,37 +254,30 @@ void Screen::setHeading(float heading)
     }
 
     // Interpolate using shortest-path angular delta to avoid jumps around 0/360.
-    float delta = wrappedHeading - compassHeading;
-    if (delta > 180.0f) {
-        delta -= 360.0f;
-    } else if (delta < -180.0f) {
-        delta += 360.0f;
-    }
+    float delta = wrapDelta180(wrappedHeading - compassHeading);
 
     // Adaptive filtering:
     // - Strong damping for tiny deltas (jitter)
     // - Faster response for larger turns
     const float absDelta = (delta >= 0.0f) ? delta : -delta;
-    if (absDelta < 1.0f) {
-        return;
-    }
+    if (absDelta >= 1.0f) {
+        float alpha = 0.35f;
+        if (absDelta > 25.0f) {
+            alpha = 0.85f;
+        } else if (absDelta > 10.0f) {
+            alpha = 0.65f;
+        }
 
-    float alpha = 0.35f;
-    if (absDelta > 25.0f) {
-        alpha = 0.85f;
-    } else if (absDelta > 10.0f) {
-        alpha = 0.65f;
-    }
+        float step = delta * alpha;
+        const float maxStep = 12.0f;
+        if (step > maxStep) {
+            step = maxStep;
+        } else if (step < -maxStep) {
+            step = -maxStep;
+        }
 
-    float step = delta * alpha;
-    const float maxStep = 12.0f;
-    if (step > maxStep) {
-        step = maxStep;
-    } else if (step < -maxStep) {
-        step = -maxStep;
+        compassHeading = wrapHeading360(compassHeading + step);
     }
-
-    compassHeading = wrapHeading360(compassHeading + step);
 }
 
 // ==============================
@@ -412,6 +484,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isI2cScreen = true;
 #elif defined(USE_ST7789)
 #ifdef ESP_PLATFORM
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
@@ -429,6 +502,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isI2cScreen = true;
 #if defined(OLED_Y_OFFSET_PAGES)
     // Panels whose active window does not start at GDDRAM row 0 (e.g. 72x40
     // modules on pages 3..7) need a fixed vertical page shift on every write.
@@ -442,8 +516,21 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         static_cast<SSD1306Spi *>(dispdev)->setHorizontalOffset(32);
         LOG_INFO("SSD1306 init success");
     }
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||    \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
+#elif ARCH_PORTDUINO
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        if (portduino_config.displayPanel != no_screen) {
+            LOG_DEBUG("Make TFTDisplay!");
+            dispdev = new TFTDisplay(address.address, -1, -1, geometry,
+                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+        } else {
+            dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
+                                       (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+            isAUTOOled = true;
+            isI2cScreen = true;
+        }
+    }
+#elif USE_TFTDISPLAY
+    LOG_DEBUG("Make TFTDisplay!");
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
@@ -457,22 +544,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        if (portduino_config.displayPanel != no_screen) {
-            LOG_DEBUG("Make TFTDisplay!");
-            dispdev = new TFTDisplay(address.address, -1, -1, geometry,
-                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-        } else {
-            dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
-                                       (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-            isAUTOOled = true;
-        }
-    }
+    isI2cScreen = true;
 #else
     dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
                                (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     isAUTOOled = true;
+    isI2cScreen = true;
 #endif
 
 #if defined(USE_ST7789)
@@ -584,6 +661,21 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef USE_EINK
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
+#endif
+
+#ifdef MESHTASTIC_LOCKDOWN
+            // M19: before turning the panel off, paint a safe frame into the
+            // OLED's GDDRAM. The panel retains whatever was last written even
+            // while powered down, so when displayOn() is called later the
+            // screen would otherwise flash the previous frame's content for
+            // 16-50 ms before the next ui->update() lands. Painting the
+            // LOCKED frame now ensures the only thing the operator (or
+            // someone over their shoulder) can see on wake is the redacted
+            // view. Gated on lockdown - non-lockdown builds keep the
+            // previous frame as a UX cue that the display is just dimmed.
+            // dispdev is dereferenced unguarded throughout this file (incl.
+            // displayOff() just below), so no null check here.
+            drawLockdownLockScreen(dispdev);
 #endif
 
 #ifdef PIN_EINK_EN
@@ -705,6 +797,27 @@ void Screen::setup()
 #endif
     LOG_INFO("Applied screen brightness: %d", brightness);
 
+#if defined(MESHTASTIC_LOCKDOWN) && defined(USE_EINK)
+    // M20: e-ink panels physically retain the last-rendered image without
+    // power, so a power-cycled lockdown handheld would keep showing
+    // operator-identifying content (position, messages, node info) until
+    // the firmware's first natural refresh - which on e-ink can be seconds
+    // into boot. Force a full refresh to the LOCKED frame here, immediately
+    // after the display is initialised and before any other rendering, so
+    // the persistent pixels are wiped to the redacted view before an
+    // observer can see them.
+    if (meshtastic_security::shouldRedactDisplay()) {
+        drawLockdownLockScreen(dispdev);
+#if defined(USE_EINK_PARALLELDISPLAY)
+        // Parallel-display variants drive refresh through a different path;
+        // a bare drawLockdownLockScreen above lands the frame into the
+        // panel buffer and the next ui->update() commits it as normal.
+#else
+        static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#endif
+    }
+#endif
+
     // Set custom overlay callbacks
     static OverlayCallback overlays[] = {
         graphics::UIRenderer::drawNavigationBar // Custom indicator icons for each frame
@@ -742,8 +855,7 @@ void Screen::setup()
     dispdev->mirrorScreen();
 #else
     if (!config.display.flip_screen) {
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(HACKADAY_COMMUNICATOR)
+#if USE_TFTDISPLAY && !ARCH_PORTDUINO
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
@@ -781,7 +893,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !HAS_CST226SE
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !VARIANT_TOUCHSCREEN
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
@@ -812,10 +924,16 @@ void Screen::setOn(bool on, FrameCallback einkScreensaver)
     if (cardKbI2cImpl)
         cardKbI2cImpl->toggleBacklight(on);
 #endif
-    if (!on)
+    if (!on) {
+#ifdef MESHTASTIC_LOCKDOWN
+        // Screen powering off (idle timeout, shutdown, deep sleep) latches
+        // the screen-lock. Next time the display wakes it shows the LOCKED
+        // frame until a client authenticates with the passphrase.
+        meshtastic_security::lockScreen();
+#endif
         // We handle off commands immediately, because they might be called because the CPU is shutting down
         handleSetOn(false, einkScreensaver);
-    else
+    } else
         enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
 }
 
@@ -922,7 +1040,17 @@ int32_t Screen::runOnce()
 #endif
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+    bool suppressRegionOnboard = false;
+#ifdef MESHTASTIC_LOCKDOWN
+    // While lockdown is active and storage is still locked, config.lora.region
+    // is a deliberate UNSET placeholder - the real region lives in encrypted
+    // storage and is restored on unlock (see NodeDB's locked-boot path). Don't
+    // pop the region picker over the lock screen: it would trap input, and the
+    // operator can't set a region until they unlock anyway.
+    suppressRegionOnboard = meshtastic_security::shouldRedactDisplay();
+#endif
+    if (!suppressRegionOnboard && !NotificationRenderer::isOverlayBannerShowing() &&
+        config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if defined(OLED_TINY)
         menuHandler::LoraRegionPicker();
 #else
@@ -1353,7 +1481,7 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        //  No more adjustment — force stay on same index
+        //  No more adjustment - force stay on same index
         if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
@@ -1638,6 +1766,15 @@ void Screen::handleStartFirmwareUpdateScreen()
 
 void Screen::blink()
 {
+#ifdef MESHTASTIC_LOCKDOWN
+    // L4: defensive guard. blink() paints arbitrary geometry, not node
+    // data, so it doesn't actually leak today. But it bypasses the normal
+    // ui->update() path that the lockdown short-circuit gates, so any
+    // future change that puts content into blink would silently leak past
+    // redaction. Refuse to draw when the redaction latch is set.
+    if (meshtastic_security::shouldRedactDisplay())
+        return;
+#endif
     setFastFramerate();
     uint8_t count = 10;
     dispdev->setBrightness(254);
@@ -1699,7 +1836,7 @@ void Screen::handleOnPress()
 void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
 {
     // Reverse-map an index to a stable name string keyed off FramePositions
-    // field names — so the pytest harness can assert `name=nodelist_nodes`
+    // field names - so the pytest harness can assert `name=nodelist_nodes`
     // without caring about how the positions were ordered this boot.
     const auto &p = framesetInfo.positions;
     const char *name = "unknown";

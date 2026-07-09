@@ -25,6 +25,7 @@
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
+#include "GpsdSerial.h"
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -47,7 +48,7 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 
 #if defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
-#elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
 HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_RP2040)
 SerialUART *GPS::_serial_gps = &GPS_SERIAL_PORT;
@@ -80,6 +81,12 @@ namespace
 constexpr uint32_t GPS_PROBE_CACHE_MAGIC = 0x47504348UL; // "GPCH"
 constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
+constexpr int MIN_PLAUSIBLE_GPS_YEAR = 2020;
+constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
+#ifdef TRACKER_T1000_E
+constexpr uint32_t T1000_E_AIROHA_WAKE_MS = 1000;
+constexpr uint32_t T1000_E_AIROHA_WAKE_INTERVAL_MS = 40;
+#endif
 
 struct GPSProbeCacheRecord {
     uint32_t magic;
@@ -91,14 +98,54 @@ struct GPSProbeCacheRecord {
 
 bool isValidGnssModel(uint8_t model)
 {
-    // Keep persisted values bounded to known enum range.
-    return model <= static_cast<uint8_t>(GNSS_MODEL_CM121);
+    // Only real chip identifiers belong in the probe cache.
+    // GNSS_MODEL_UNKNOWN and GNSS_MODEL_GENERIC_NMEA are runtime-only values.
+    return model != static_cast<uint8_t>(GNSS_MODEL_UNKNOWN) && model < static_cast<uint8_t>(GNSS_MODEL_GENERIC_NMEA);
 }
 
 bool isValidProbeBaud(uint32_t baud)
 {
     // Conservative sanity range for UART baud values.
     return baud >= 1200 && baud <= 921600;
+}
+
+template <typename T> void wakeAirohaForActiveProbe(T *serialGps)
+{
+#ifdef TRACKER_T1000_E
+    digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
+    digitalWrite(GPS_RTC_INT, HIGH);
+    delay(3);
+    digitalWrite(GPS_RTC_INT, LOW);
+    delay(50);
+
+    const uint32_t start = millis();
+    do {
+        serialGps->write("$PAIR382,1*2E\r\n");
+        delay(T1000_E_AIROHA_WAKE_INTERVAL_MS);
+    } while (Throttle::isWithinTimespanMs(start, T1000_E_AIROHA_WAKE_MS));
+#elif defined(GNSS_AIROHA)
+    serialGps->write("$PAIR382,1*2E\r\n");
+    delay(20);
+#else
+    (void)serialGps;
+#endif
+}
+
+bool isPlausibleNmeaTime(const struct tm &t)
+{
+    const int year = t.tm_year + 1900;
+    if (year < MIN_PLAUSIBLE_GPS_YEAR || year > MAX_PLAUSIBLE_GPS_YEAR) {
+        return false;
+    }
+
+#ifdef BUILD_EPOCH
+    const int64_t candidate = static_cast<int64_t>(gm_mktime(&t));
+    const int64_t minEpoch = static_cast<int64_t>(BUILD_EPOCH);
+    const int64_t maxEpoch = minEpoch + static_cast<int64_t>(FORTY_YEARS);
+    return candidate >= minEpoch && candidate <= maxEpoch;
+#else
+    return true;
+#endif
 }
 
 template <typename T> bool sawNmeaSentenceAtBaud(T *serialGps, uint32_t timeoutMs)
@@ -642,7 +689,7 @@ bool GPS::verifyCachedProbePresence()
         return false;
     }
 
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
     _serial_gps->end();
     _serial_gps->begin(cachedProbeBaud);
 #elif defined(ARCH_RP2040)
@@ -689,6 +736,7 @@ bool GPS::verifyCachedProbePresence()
     case GNSS_MODEL_AG3352:
         if (cachedProbeModel == GNSS_MODEL_AG3352)
             cachedProbeModelName = "AG3352";
+        wakeAirohaForActiveProbe(_serial_gps);
         _serial_gps->write("$PAIR021*39\r\n");
         present = (getACK("$PAIR021,", 900) == GNSS_RESPONSE_OK);
         break;
@@ -741,7 +789,6 @@ bool GPS::verifyCachedProbePresence()
     if (!present) {
         LOG_WARN("Cached GPS probe is stale (%s @ %d), clearing cache", cachedProbeModelName, cachedProbeBaud);
         clearProbeCache();
-        cachedProbeFailedThisBoot = true;
         return false;
     }
 
@@ -762,13 +809,6 @@ bool GPS::setup()
 {
     if (!didSerialInit) {
         int msglen = 0;
-        if (cachedProbeFailedThisBoot) {
-            // If cached verification failed, suppress further probing until
-            // reboot.
-            didSerialInit = true;
-            return true;
-        }
-
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             if (!hasProbeCache && !triedProbeCache) {
                 (void)loadProbeCache();
@@ -777,12 +817,13 @@ bool GPS::setup()
             if (hasProbeCache && !triedProbeCache) {
                 triedProbeCache = true;
                 if (!verifyCachedProbePresence()) {
-                    // Cache was stale and got wiped; skip scanning this boot
-                    // and let next boot do a full probe.
-                    didSerialInit = true;
-                    return true;
+                    currentStep = 0;
+                    speedSelect = 0;
+                    probeTries = 0;
                 }
-            } else if (probeTries < GPS_PROBETRIES) {
+            }
+
+            if (gnssModel == GNSS_MODEL_UNKNOWN && probeTries < GPS_PROBETRIES) {
                 // No usable cache: walk common baud rates first.
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
@@ -794,7 +835,7 @@ bool GPS::setup()
             }
             // Rare Serial Speeds
 #ifndef CONFIG_IDF_TARGET_ESP32C6
-            else if (probeTries == GPS_PROBETRIES) {
+            else if (gnssModel == GNSS_MODEL_UNKNOWN && probeTries == GPS_PROBETRIES) {
                 // Then try less common baud rates before giving up.
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
@@ -1121,10 +1162,22 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
-        if (oldState == GPS_ACTIVE || oldState == GPS_IDLE) // If hardware already awake, no changes needed
+        if (oldState == GPS_ACTIVE)
+            break;
+        gotTime = false;
+        if (oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
             clearBuffer();
+#ifdef TRACKER_T1000_E
+        pinMode(GPS_VRTC_EN, OUTPUT);
+        digitalWrite(GPS_VRTC_EN, HIGH);
+        pinMode(GPS_SLEEP_INT, OUTPUT);
+        digitalWrite(GPS_SLEEP_INT, HIGH);
+        pinMode(GPS_RTC_INT, OUTPUT);
+        digitalWrite(GPS_RTC_INT, LOW);
+        pinMode(GPS_RESETB_OUT, INPUT_PULLUP);
+#endif
         powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                         // Power (EN pin): on
         setPowerPMU(true);                                        // Power (PMU): on
@@ -1383,9 +1436,8 @@ int32_t GPS::runOnce()
         if (!setup())
             return currentDelay; // Setup failed, re-run in two seconds
 
-        if (cachedProbeFailedThisBoot || gnssModel == GNSS_MODEL_UNKNOWN) {
-            LOG_WARN("GPS not detected at cached settings; marked not present "
-                     "for this boot");
+        if (gnssModel == GNSS_MODEL_UNKNOWN) {
+            LOG_WARN("GPS not detected; marked not present for this boot");
             return disable();
         }
 
@@ -1437,8 +1489,7 @@ int32_t GPS::runOnce()
         // if gps_update_interval is <=10s, GPS never goes off, so we treat that differently
         uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
-        // 1. Got a time for the first time
-        bool gotTime = (getRTCQuality() >= RTCQualityGPS);
+        // 1. Got a time for the first time this cycle
         if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
             gotTime = true;
         }
@@ -1564,7 +1615,7 @@ GnssModel_t GPS::probe(int serialSpeed)
 
     switch (currentStep) {
     case 0: {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
         _serial_gps->end();
         _serial_gps->begin(serialSpeed);
 #elif defined(ARCH_RP2040)
@@ -1585,6 +1636,9 @@ GnssModel_t GPS::probe(int serialSpeed)
         digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
         delay(10);
         digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+#ifdef TRACKER_T1000_E
+        delay(100);
+#endif
 
         // attempt to detect the chip based on boot messages
         std::vector<ChipInfo> passive_detect = {
@@ -1637,6 +1691,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
     case 3: {
         /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
+        wakeAirohaForActiveProbe(_serial_gps);
         _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
         _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
         _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
@@ -1848,6 +1903,10 @@ std::unique_ptr<GPS> GPS::createGps()
         // They are not used for any hardware access.
         _rx_gpio = 1;
         _tx_gpio = 1;
+        if (!portduino_config.gpsd_host.empty()) {
+            gpsdSerial.setAddress(portduino_config.gpsd_host, portduino_config.gpsd_port);
+            _serial_gps = &gpsdSerial;
+        }
     } else
         return nullptr;
 #endif
@@ -1857,6 +1916,11 @@ std::unique_ptr<GPS> GPS::createGps()
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
+#ifdef ARCH_PORTDUINO
+    // Skip chip-specific probing for gpsd - it's a generic NMEA stream.
+    if (!portduino_config.gpsd_host.empty())
+        new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
+#endif
 
     GpioVirtPin *virtPin = new GpioVirtPin();
     new_gps->enablePin = virtPin; // Always at least populate a virtual pin
@@ -1921,7 +1985,7 @@ std::unique_ptr<GPS> GPS::createGps()
 #elif defined(ARCH_NRF52)
         _serial_gps->setPins(new_gps->rx_gpio, new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);
-#elif defined(ARCH_STM32WL)
+#elif defined(ARCH_STM32)
         _serial_gps->setTx(new_gps->tx_gpio);
         _serial_gps->setRx(new_gps->rx_gpio);
         _serial_gps->begin(GPS_BAUDRATE);
@@ -1968,6 +2032,9 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         if (t.tm_mon > -1) {
+            if (!isPlausibleNmeaTime(t)) {
+                return false;
+            }
             if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
                 LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
                           t.tm_min, t.tm_sec, ti.age());
@@ -2199,6 +2266,11 @@ int32_t GPS::disable()
     setPowerState(GPS_OFF);
 
     return INT32_MAX;
+}
+
+bool GPS::isEnabled()
+{
+    return enabled;
 }
 
 void GPS::toggleGpsMode()
