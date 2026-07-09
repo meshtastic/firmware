@@ -13,7 +13,7 @@
  * This file is part of the Meshtastic project.
  * For more information, see: https://meshtastic.org/
  */
-#include "power.h"
+#include "Power.h"
 #include "BluetoothCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
@@ -551,7 +551,16 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return sgm41562->isInputPowerGood();
 #endif
 #ifdef EXT_PWR_DETECT
-        return digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE;
+        if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
+            return true;
+#ifdef EXT_CHRG_DETECT
+        // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
+        // pin that only asserts once the battery is full) - CHRG being active implies
+        // power is present regardless.
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
+#else
+        return false;
+#endif
 
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
@@ -577,7 +586,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 #if defined(ELECROW_ThinkNode_M6)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
-#elif EXT_CHRG_DETECT
+#elif defined(EXT_CHRG_DETECT)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 #elif defined(BATTERY_CHARGING_INV)
         return !digitalRead(BATTERY_CHARGING_INV);
@@ -778,7 +787,7 @@ bool Power::setup()
 {
 #ifdef HAS_SGM41562
     // Initialize the charger early so AnalogBatteryLevel can read charging
-    // state from it. The charger does not provide battery voltage / percent —
+    // state from it. The charger does not provide battery voltage / percent -
     // those still come from the platform ADC via analogInit() below.
     initSGM41562(SGM41562_WIRE);
 #endif
@@ -838,6 +847,14 @@ void Power::reboot()
     NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
+#elif defined(ARCH_PORTDUINO_WASM)
+    // Browser/headless WASM node: no in-process restart. notifyReboot above
+    // already let modules persist; hand off to the host (reboot() ->
+    // location.reload() in a tab, or Module.onReboot() headless). Deliberately
+    // skip the ARCH_PORTDUINO SPI/Wire/Serial teardown below - it would kill the
+    // radio with no actual restart to follow, leaving a wedged node. Must come
+    // before the ARCH_PORTDUINO arm: the wasm build defines both macros.
+    ::reboot();
 #elif defined(ARCH_PORTDUINO)
     deInitApiServer();
 #ifdef __linux__

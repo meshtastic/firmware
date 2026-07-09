@@ -22,6 +22,7 @@
 #include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
@@ -480,8 +481,10 @@ NodeDB::NodeDB()
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Generate crypto keys if needed using consolidated function
     // Set my node num uint32 value to bytes from the public key (if we have one)
-    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist
-    generateCryptoKeyPair(nullptr);
+    // Generate identity and crypto keys if needed; this will create a new identity if one does not exist.
+    // Skip on a degraded boot: the keypair isn't in RAM, so minting one would change our NodeNum.
+    if (!configDecodeFailed)
+        generateCryptoKeyPair(nullptr);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
@@ -625,7 +628,9 @@ NodeDB::NodeDB()
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
         saveWhat |= SEGMENT_NODEDATABASE;
-    if (configCRC != crc32Buffer(&config, sizeof(config)))
+    // Don't persist on a degraded boot: it would overwrite the unreadable-but-maybe-transient config file
+    // with no-key UNSET defaults. Runtime reconfiguration (admin set) still persists normally.
+    if (!configDecodeFailed && configCRC != crc32Buffer(&config, sizeof(config)))
         saveWhat |= SEGMENT_CONFIG;
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
@@ -719,7 +724,7 @@ template <typename Map> std::vector<NodeNum> snapshotSatelliteNodeNums(const Map
 }
 
 // Drop the stalest entry of `map` (staleness proxied via the owner's
-// last_heard; 0 = owner evicted, i.e. an orphan — first out). Never evicts our
+// last_heard; 0 = owner evicted, i.e. an orphan - first out). Never evicts our
 // own node's entry. Caller holds satelliteMutex. Returns false if nothing
 // could be evicted.
 template <typename Map> bool evictStalestSatellite(NodeDB &db, Map &map)
@@ -910,6 +915,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
 
+#ifdef USERPREFS_LORACONFIG_TX_POWER
+    config.lora.tx_power = USERPREFS_LORACONFIG_TX_POWER;
+#endif
+
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
@@ -1020,7 +1029,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT)) &&                                           \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2)) &&            \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1031,9 +1040,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
     config.bluetooth.fixed_pin = defaultBLEPin;
 
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) || defined(USE_SPISSD1306) ||         \
-    defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
+#if defined(USE_EINK) || defined(HAS_SPI_TFT) || defined(USE_SPISSD1306)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -1177,6 +1184,36 @@ static void installTrafficManagementDefaults(meshtastic_LocalModuleConfig &mc)
 #endif
 }
 
+// --- 2.8 position/telemetry opt-in migration helpers -------------------------------------------------
+// Pure field mutators (no I/O), so the native test suite can exercise them directly. The version gate
+// and saveToDisk live in loadFromDisk() below.
+
+void optInDisablePositionSharing(meshtastic_ChannelFile &cf)
+{
+    for (pb_size_t i = 0; i < cf.channels_count; i++) {
+        // Only flip PUBLIC / default-PSK channels. A channel with a real private key is a deliberate
+        // trusted-group setup where the "leak location to strangers" concern doesn't apply, so its
+        // configured precision (including full precision) is preserved.
+        if (!channelFileUsesPublicKey(cf, (ChannelIndex)i))
+            continue;
+        cf.channels[i].settings.has_module_settings = true;
+        cf.channels[i].settings.module_settings.position_precision = 0;
+    }
+}
+
+void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc)
+{
+    // Every mesh-broadcast telemetry enable flag (each gates its module's sendTelemetry() to the mesh).
+    mc.telemetry.device_telemetry_enabled = false;
+    mc.telemetry.environment_measurement_enabled = false;
+    mc.telemetry.air_quality_enabled = false;
+    mc.telemetry.power_measurement_enabled = false;
+    mc.telemetry.health_measurement_enabled = false;
+    // Position leak via the public MQTT map. Leave map_reporting_enabled alone (anonymous presence is
+    // still allowed) and strip only the location component.
+    mc.mqtt.map_report_settings.should_report_location = false;
+}
+
 void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Install default ModuleConfig");
@@ -1307,6 +1344,152 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+    moduleConfig.has_mesh_beacon = true;
+    // Default flags: listen on, broadcast off, legacy split on.
+    moduleConfig.mesh_beacon.flags = meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED |
+                                     meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT;
+// Set or clear a single beacon flag bit from a USERPREFS boolean.
+#define BEACON_APPLY_FLAG(enabled, flag)                                                                                         \
+    do {                                                                                                                         \
+        if (enabled)                                                                                                             \
+            moduleConfig.mesh_beacon.flags |= (uint32_t)(flag);                                                                  \
+        else                                                                                                                     \
+            moduleConfig.mesh_beacon.flags &= ~(uint32_t)(flag);                                                                 \
+    } while (0)
+#ifdef USERPREFS_MESH_BEACON_LISTEN_ENABLED
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LISTEN_ENABLED, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED);
+#endif
+#ifdef USERPREFS_MESH_BEACON_BROADCAST_ENABLED
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_BROADCAST_ENABLED,
+                      meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_BROADCAST_ENABLED);
+#endif
+#ifdef USERPREFS_MESH_BEACON_MESSAGE
+    strncpy(moduleConfig.mesh_beacon.broadcast_message, USERPREFS_MESH_BEACON_MESSAGE,
+            sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1);
+    moduleConfig.mesh_beacon.broadcast_message[sizeof(moduleConfig.mesh_beacon.broadcast_message) - 1] = '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_INTERVAL_SECS
+    moduleConfig.mesh_beacon.broadcast_interval_secs =
+        (USERPREFS_MESH_BEACON_INTERVAL_SECS != 0 &&
+         USERPREFS_MESH_BEACON_INTERVAL_SECS < default_mesh_beacon_min_broadcast_interval_secs)
+            ? default_mesh_beacon_min_broadcast_interval_secs
+            : USERPREFS_MESH_BEACON_INTERVAL_SECS;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_offer_preset = true;
+    moduleConfig.mesh_beacon.broadcast_offer_preset = USERPREFS_MESH_BEACON_OFFER_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_REGION
+    moduleConfig.mesh_beacon.broadcast_offer_region = USERPREFS_MESH_BEACON_OFFER_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_offer_channel.name, USERPREFS_MESH_BEACON_OFFER_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_offer_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.name) - 1] =
+        '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_offer_channel = true;
+    static const uint8_t beaconOfferPsk[] = USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK;
+    static_assert(sizeof(beaconOfferPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes),
+                  "USERPREFS_MESH_BEACON_OFFER_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+    memcpy(moduleConfig.mesh_beacon.broadcast_offer_channel.psk.bytes, beaconOfferPsk, sizeof(beaconOfferPsk));
+    moduleConfig.mesh_beacon.broadcast_offer_channel.psk.size = sizeof(beaconOfferPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_PRESET
+    moduleConfig.mesh_beacon.has_broadcast_on_preset = true;
+    moduleConfig.mesh_beacon.broadcast_on_preset = USERPREFS_MESH_BEACON_ON_PRESET;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_REGION
+    moduleConfig.mesh_beacon.broadcast_on_region = USERPREFS_MESH_BEACON_ON_REGION;
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NAME
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    strncpy(moduleConfig.mesh_beacon.broadcast_on_channel.name, USERPREFS_MESH_BEACON_ON_CHANNEL_NAME,
+            sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1);
+    moduleConfig.mesh_beacon.broadcast_on_channel.name[sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.name) - 1] = '\0';
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_PSK
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    static const uint8_t beaconOnPsk[] = USERPREFS_MESH_BEACON_ON_CHANNEL_PSK;
+    static_assert(sizeof(beaconOnPsk) <= sizeof(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes),
+                  "USERPREFS_MESH_BEACON_ON_CHANNEL_PSK exceeds the 32-byte channel PSK buffer");
+    memcpy(moduleConfig.mesh_beacon.broadcast_on_channel.psk.bytes, beaconOnPsk, sizeof(beaconOnPsk));
+    moduleConfig.mesh_beacon.broadcast_on_channel.psk.size = sizeof(beaconOnPsk);
+#endif
+#ifdef USERPREFS_MESH_BEACON_ON_CHANNEL_NUM
+    moduleConfig.mesh_beacon.has_broadcast_on_channel = true;
+    moduleConfig.mesh_beacon.broadcast_on_channel.channel_num = USERPREFS_MESH_BEACON_ON_CHANNEL_NUM;
+#endif
+#ifdef USERPREFS_MESH_BEACON_LEGACY_SPLIT
+    BEACON_APPLY_FLAG(USERPREFS_MESH_BEACON_LEGACY_SPLIT, meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LEGACY_SPLIT);
+#endif
+#undef BEACON_APPLY_FLAG
+// Per-preset broadcast targets (up to 4). Each TARGET_<N>_* key bumps broadcast_targets_count as needed.
+#define BEACON_TARGET_PRESET(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_preset = true;                                                       \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].preset = (VAL);                                                          \
+    } while (0)
+#define BEACON_TARGET_REGION(N, VAL)                                                                                             \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].region = (VAL);                                                          \
+    } while (0)
+// Target channel is referenced by index into the device's channel table (0..MAX_NUM_CHANNELS-1).
+#define BEACON_TARGET_CH_INDEX(N, VAL)                                                                                           \
+    do {                                                                                                                         \
+        if (moduleConfig.mesh_beacon.broadcast_targets_count < (N) + 1)                                                          \
+            moduleConfig.mesh_beacon.broadcast_targets_count = (N) + 1;                                                          \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].has_channel_index = true;                                                \
+        moduleConfig.mesh_beacon.broadcast_targets[(N)].channel_index = (VAL);                                                   \
+    } while (0)
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_PRESET
+    BEACON_TARGET_PRESET(0, USERPREFS_MESH_BEACON_TARGET_0_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_REGION
+    BEACON_TARGET_REGION(0, USERPREFS_MESH_BEACON_TARGET_0_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(0, USERPREFS_MESH_BEACON_TARGET_0_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_PRESET
+    BEACON_TARGET_PRESET(1, USERPREFS_MESH_BEACON_TARGET_1_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_REGION
+    BEACON_TARGET_REGION(1, USERPREFS_MESH_BEACON_TARGET_1_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(1, USERPREFS_MESH_BEACON_TARGET_1_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_PRESET
+    BEACON_TARGET_PRESET(2, USERPREFS_MESH_BEACON_TARGET_2_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_REGION
+    BEACON_TARGET_REGION(2, USERPREFS_MESH_BEACON_TARGET_2_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(2, USERPREFS_MESH_BEACON_TARGET_2_CHANNEL_INDEX);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_PRESET
+    BEACON_TARGET_PRESET(3, USERPREFS_MESH_BEACON_TARGET_3_PRESET);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_REGION
+    BEACON_TARGET_REGION(3, USERPREFS_MESH_BEACON_TARGET_3_REGION);
+#endif
+#ifdef USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX
+    BEACON_TARGET_CH_INDEX(3, USERPREFS_MESH_BEACON_TARGET_3_CHANNEL_INDEX);
+#endif
+#undef BEACON_TARGET_PRESET
+#undef BEACON_TARGET_REGION
+#undef BEACON_TARGET_CH_INDEX
+#endif // !MESHTASTIC_EXCLUDE_BEACON
 
     initModuleConfigIntervals();
 }
@@ -1644,12 +1827,31 @@ bool NodeDB::enforceSatelliteCaps()
 #endif
 
     (void)trim; // all four maps may be compiled out
+
+    // Approximate satellite heap usage: each std::map entry is one rb-tree node,
+    // value_type plus ~44 B of node overhead (parent/left/right pointers, color,
+    // allocator rounding on 32-bit targets - an estimate, not exact bookkeeping).
+    size_t satBytes = 0;
+#if !MESHTASTIC_EXCLUDE_POSITIONDB
+    satBytes += nodePositions.size() * (sizeof(decltype(nodePositions)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_TELEMETRYDB
+    satBytes += nodeTelemetry.size() * (sizeof(decltype(nodeTelemetry)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
+    satBytes += nodeEnvironment.size() * (sizeof(decltype(nodeEnvironment)::value_type) + 44);
+#endif
+#if !MESHTASTIC_EXCLUDE_STATUSDB
+    satBytes += nodeStatus.size() * (sizeof(decltype(nodeStatus)::value_type) + 44);
+#endif
+    memaudit::set("satmaps", satBytes);
+
     return trimmedAny;
 }
 
 #if WARM_NODE_COUNT > 0
 // Classify an evicted node's hop-protected category for the warm tier. Favorite/ignored/
-// verified are local flags (rarely reach warm — they're eviction-protected — but classify
+// verified are local flags (rarely reach warm - they're eviction-protected - but classify
 // them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
 static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
 {
@@ -1774,10 +1976,10 @@ void NodeDB::pickNewNodeNum()
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
-            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, picking 0x%x", nodeNum, candidate);
+            LOG_WARN("NOTE! Our desired nodenum 0x%08x is invalid or in use, picking 0x%08x", nodeNum, candidate);
         nodeNum = candidate;
     }
-    LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
+    LOG_DEBUG("Use nodenum 0x%08x ", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }
@@ -1792,7 +1994,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     // check if the file is encrypted and decrypt before protobuf decode
     if (EncryptedStorage::isEncrypted(filename)) {
         // ZeroizingArrayPtr wipes the decrypted plaintext (which contains config
-        // secrets — channel PSKs, security private_key, etc.) before delete[],
+        // secrets - channel PSKs, security private_key, etc.) before delete[],
         // so it isn't recoverable from the heap after this function returns.
         auto decBuf = meshtastic_security::make_zeroizing_array(protoSize);
         if (!decBuf) {
@@ -1880,7 +2082,7 @@ void NodeDB::demoteOldestHotNodesToWarm()
         warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
                          warmProtectedCategory(n));
         // Demotion drops the node from the header table, so drop its satellites
-        // too (the eviction chokepoint) — they'd otherwise orphan until the next
+        // too (the eviction chokepoint) - they'd otherwise orphan until the next
         // enforceSatelliteCaps pass.
         eraseNodeSatellites(n.num);
         demoted++;
@@ -1928,10 +2130,11 @@ void NodeDB::nodeDBSelfCare()
     // Normalise the backing store to the hot cap so getOrCreateMeshNode always
     // has spare slots to append into (it indexes meshNodes->at(numMeshNodes++)).
     meshNodes->resize(MAX_NUM_NODES);
+    memaudit::set("nodedb", MAX_NUM_NODES * sizeof(meshtastic_NodeInfoLite));
 
     const bool satsTrimmed = enforceSatelliteCaps();
 
-    // Ensure self exists, sits at index 0, and carries current owner info — after
+    // Ensure self exists, sits at index 0, and carries current owner info - after
     // any demotion has freed a slot. Covers the foreign/fixture case where the
     // loaded file did not contain us at all.
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(self);
@@ -1942,7 +2145,7 @@ void NodeDB::nodeDBSelfCare()
     }
 
     // One-shot rewrite: only when we healed something, and never while storage
-    // is locked — a locked boot loads placeholder defaults that must not be written
+    // is locked - a locked boot loads placeholder defaults that must not be written
     // over the encrypted store; reloadFromDisk() re-runs self-care once unlocked.
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     const bool storageLocked = EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked();
@@ -1974,6 +2177,7 @@ void NodeDB::loadFromDisk()
 #endif
 
     migrationSavePending = false;
+    configDecodeFailed = false;
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2022,7 +2226,7 @@ void NodeDB::loadFromDisk()
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
     // Only take the locked-boot defaults path when lockdown is ACTIVE (the
     // device is provisioned) AND storage is still locked. A lockdown-capable
-    // build that has never been provisioned — or that was disabled — falls
+    // build that has never been provisioned - or that was disabled - falls
     // through to the normal plaintext load below and behaves like stock.
     if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
         // Encrypted storage is locked. Install defaults and wait for the
@@ -2039,7 +2243,7 @@ void NodeDB::loadFromDisk()
         // would otherwise honour USERPREFS_CONFIG_LORA_REGION (the common shape
         // for managed deployments) and the LongFast default channel synthesised
         // by installDefaultChannels, so the device would beacon nodeinfo /
-        // telemetry on the public default PSK before any unlock — and process
+        // telemetry on the public default PSK before any unlock - and process
         // incoming default-channel packets the same way. Forcing region=UNSET
         // gates both TX and RX in RadioLibInterface (see the region==UNSET
         // checks in startSend and readData); tx_enabled=false is belt-and-
@@ -2113,7 +2317,7 @@ void NodeDB::loadFromDisk()
 
     // Left UNTRIMMED on purpose: trim/demote/satellite-cap/self-pin/rewrite all
     // run in nodeDBSelfCare() once getNodeNum() is valid (still 0 here on a cold
-    // boot, so we could only assume index 0 == self — the very bug being fixed).
+    // boot, so we could only assume index 0 == self - the very bug being fixed).
 #if WARM_NODE_COUNT > 0
     // Load the warm tier so its on-disk snapshot is available before the node DB
     // is exercised (and before nodeDBSelfCare() demotes any overflow into it).
@@ -2163,15 +2367,26 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
-    if (state != LoadFileResult::LOAD_SUCCESS) {
-        installDefaultConfig(); // Our in RAM copy might now be corrupt
+    if (state == LoadFileResult::DECODE_FAILED) {
+        // Config file present but undecodable this boot (corruption / torn write / transient decrypt fail).
+        // loadProto() already zeroed `config`, so the keypair is gone from RAM; minting a new one would change
+        // our NodeNum (== crc32(public_key)) and orphan us on the mesh. configDecodeFailed freezes identity and
+        // skips persisting (see ctor), so a transient failure self-heals on the next clean boot. A genuinely
+        // absent config returns OTHER_FAILURE, so this never fires on first boot. Boot degraded + radio-silent.
+        LOG_ERROR("Config decode failed - freezing identity, booting degraded (radio silent until restored)");
+        configDecodeFailed = true;
+        installDefaultConfig(true);
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.tx_enabled = false;
+    } else if (state != LoadFileResult::LOAD_SUCCESS) {
+        // No decodable config to work with: the file is absent (first boot) or could not be opened (OTHER_FAILURE
+        // / NO_FILESYSTEM). Unlike DECODE_FAILED there are no usable contents to protect, so install defaults.
+        installDefaultConfig();
+    } else if (config.version < DEVICESTATE_MIN_VER) {
+        LOG_WARN("config %d is old, discard", config.version);
+        installDefaultConfig(true);
     } else {
-        if (config.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("config %d is old, discard", config.version);
-            installDefaultConfig(true);
-        } else {
-            LOG_INFO("Loaded saved config version %d", config.version);
-        }
+        LOG_INFO("Loaded saved config version %d", config.version);
     }
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
@@ -2188,7 +2403,9 @@ void NodeDB::loadFromDisk()
     // take effect even when NVS already has a valid config (e.g. region-locked
     // dev boards with no BLE/serial to set the region at runtime).
 #ifdef USERPREFS_CONFIG_LORA_REGION
-    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
+    // Skip on a degraded boot to keep the radio silent (identity is already protected by the keygen gate).
+    if (!configDecodeFailed)
+        config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #endif
 
 #ifdef USERPREFS_LORACONFIG_USE_PRESET
@@ -2283,7 +2500,7 @@ void NodeDB::loadFromDisk()
     }
 
     // Always-on traffic management: a device that has NEVER configured TMM
-    // (has_traffic_management false — AdminModule always sets the has_ flag on
+    // (has_traffic_management false - AdminModule always sets the has_ flag on
     // write, even when disabling) gets the fork defaults. Explicitly configured
     // devices keep their exact settings.
     if (!moduleConfig.has_traffic_management) {
@@ -2317,7 +2534,7 @@ void NodeDB::loadFromDisk()
     // without saving to disk, so we force a save here to ensure encrypted files exist.
     //
     // Only when lockdown is ACTIVE. A capable-but-off device must leave its
-    // files as plaintext — encryptAndWrite would fail anyway (no DEK), but
+    // files as plaintext - encryptAndWrite would fail anyway (no DEK), but
     // skipping the whole block avoids the wasted attempts and error logs.
     if (EncryptedStorage::isLockdownActive()) {
         const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
@@ -2364,6 +2581,24 @@ void NodeDB::loadFromDisk()
 
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+
+    // 2.8 - privacy: one-time flip of position sharing and device telemetry to OPT-IN for nodes upgrading
+    // from a build that shipped them on-by-default. Gated on a dedicated watermark (POSITION_TELEMETRY_OPTIN_VER)
+    // so it runs exactly once and does NOT re-clobber a user who later re-enables sharing (ordinary saves never
+    // re-stamp .version, so a re-enabled node stays at the watermark and skips this block on the next boot).
+    // Position is disabled only on public/default-PSK channels; private-PSK channels are preserved.
+    if (channelFile.version < POSITION_TELEMETRY_OPTIN_VER) {
+        LOG_INFO("Opt-in migration: disabling position broadcast on public channels");
+        optInDisablePositionSharing(channelFile);
+        channelFile.version = POSITION_TELEMETRY_OPTIN_VER;
+        saveToDisk(SEGMENT_CHANNELS);
+    }
+    if (moduleConfig.version < POSITION_TELEMETRY_OPTIN_VER) {
+        LOG_INFO("Opt-in migration: forcing device telemetry broadcast to opt-in");
+        optInDisableTelemetryBroadcast(moduleConfig);
+        moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
 #if ARCH_PORTDUINO
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
@@ -2386,7 +2621,7 @@ void NodeDB::loadFromDisk()
 // Serializes reloadFromDisk against itself. Other readers of config /
 // channelFile / nodeDatabase don't take this lock today, so this only
 // prevents reload-vs-reload races (e.g. fast successive unlocks). It is
-// not a full data-race fix for those structs — that would require
+// not a full data-race fix for those structs - that would require
 // thread-shared locking discipline across the whole codebase, beyond
 // the audit's M7 scope. The radio standby+reconfigure below keeps the
 // radio out of the window where SX12xx registers are mid-swap.
@@ -2399,7 +2634,7 @@ static concurrency::Lock g_reloadFromDiskMutex;
  * reconfigure() to push the now-real settings to the chip.
  *
  * Returns true iff every encrypted file decrypted and decoded cleanly.
- * On false the caller MUST treat storage as corrupt — see header.
+ * On false the caller MUST treat storage as corrupt - see header.
  */
 bool NodeDB::reloadFromDisk()
 {
@@ -2418,7 +2653,7 @@ bool NodeDB::reloadFromDisk()
     loadFromDisk();
 
     if (storageCorruptThisLoad) {
-        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload — surfacing as corrupt");
+        LOG_ERROR("NodeDB: storage decrypt/decode failed during reload - surfacing as corrupt");
         // Leave the radio sleeping. Caller will lock storage and emit
         // a LOCKED(storage_corrupt) status; we must not reconfigure
         // the chip with the locked-default placeholder values still
@@ -2467,7 +2702,7 @@ bool NodeDB::disableLockdownToPlaintext()
         }
     }
 
-    // All files are plaintext now — remove the lockdown artifacts. Deleting
+    // All files are plaintext now - remove the lockdown artifacts. Deleting
     // /prefs/.dek is the atomic commit: after it, isLockdownActive() is false.
     EncryptedStorage::removeLockdownArtifacts();
     return true;
@@ -2490,11 +2725,11 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     // Encrypt all files except uiconfig (no secrets) and the DEK file (self-encrypted).
     // Only when lockdown is ACTIVE (provisioned). A lockdown-capable but DISABLED
     // device has no DEK, so encryptAndWrite would fail and config would never
-    // persist — it must save plaintext exactly like stock firmware. Once enabled,
+    // persist - it must save plaintext exactly like stock firmware. Once enabled,
     // the reloadFromDisk migrate pass re-saves these plaintext files encrypted.
     if (EncryptedStorage::isLockdownActive() && strcmp(filename, uiconfigFileName) != 0) {
         // ZeroizingArrayPtr wipes the unencrypted protobuf encoding (which contains
-        // config secrets — channel PSKs, security private_key, etc.) before delete[],
+        // config secrets - channel PSKs, security private_key, etc.) before delete[],
         // so plaintext copies aren't left in heap memory after encryption completes.
         auto pbBuf = meshtastic_security::make_zeroizing_array(protoSize);
         if (!pbBuf) {
@@ -2691,7 +2926,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     // reset the 8s HW watchdog so the second write gets a full budget (issue #10746).
     watchdog_update();
 #endif
-    // Same cadence as the node DB; failure is logged but must not propagate —
+    // Same cadence as the node DB; failure is logged but must not propagate -
     // a false return from here would trigger saveToDisk()'s fsFormat() path.
     warmStore.saveIfDirty();
 #endif
@@ -2712,14 +2947,14 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     // When lockdown is ACTIVE but storage is still locked, encryptAndWrite()
     // returns false for every file. That would cause saveToDisk()'s nRF52 retry
     // path to call FSCom.format(), wiping all encrypted proto files from flash.
-    // Return true here — "nothing to save, not an error."
+    // Return true here - "nothing to save, not an error."
     //
     // Gate on isLockdownActive(): a lockdown-capable but DISABLED device (never
     // provisioned) also has isUnlocked()==false, but it must persist plaintext
-    // normally — skipping here would silently drop every config write (e.g. the
+    // normally - skipping here would silently drop every config write (e.g. the
     // LoRa region) until the device is provisioned.
     if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
-        LOG_WARN("NodeDB: saveToDisk skipped — encrypted storage locked");
+        LOG_WARN("NodeDB: saveToDisk skipped - encrypted storage locked");
         return true;
     }
 #endif
@@ -2758,6 +2993,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        moduleConfig.has_mesh_beacon = true;
+#endif
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
@@ -2844,7 +3082,7 @@ HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
         return HopStartStatus::INVALID;
 
     if (p.hop_start == 0) {
-        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition —
+        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition -
         // the packet was never meant to travel any hops, so no hop_start ambiguity applies.
         if (p.hop_limit == 0)
             return HopStartStatus::VALID;
@@ -2909,7 +3147,7 @@ void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
     const bool decoded = (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag);
     const bool hasBitfield = decoded && p.decoded.has_bitfield;
     LOG_DEBUG(
-        "Drop packet (%s): hop_start invalid/missing (from=0x%x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
+        "Drop packet (%s): hop_start invalid/missing (from=0x%08x id=%u hop_start=%u hop_limit=%u decoded=%d has_bitfield=%d)",
         context ? context : "unknown", p.from, p.id, p.hop_start, p.hop_limit, decoded, hasBitfield);
 }
 
@@ -2957,7 +3195,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
             // recorded based on the packet rxTime
             //
             // FIXME perhaps handle RX_SRC_USER separately?
-            LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
+            LOG_INFO("updatePosition REMOTE node=0x%08x time=%u lat=%d lon=%d", nodeId, p.time, p.latitude_i, p.longitude_i);
 
             // First, back up fields that we want to protect from overwrite
             uint32_t tmp_time = slot.time;
@@ -2990,7 +3228,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         if (src == RX_SRC_LOCAL) {
             LOG_DEBUG("updateTelemetry LOCAL device");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE device node=0x%x", nodeId);
+            LOG_DEBUG("updateTelemetry REMOTE device node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3002,7 +3240,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
         if (src == RX_SRC_LOCAL) {
             LOG_DEBUG("updateTelemetry LOCAL env");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE env node=0x%x", nodeId);
+            LOG_DEBUG("updateTelemetry REMOTE env node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3039,7 +3277,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
     if (contact.should_ignore) {
         // Block the contact and drop its rich satellite data, but keep the
-        // public key copied above — an ignored peer keeps a usable identity
+        // public key copied above - an ignored peer keeps a usable identity
         // (a verifiable target) rather than a bare node number.
         if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_IGNORED_MASK, true))
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
@@ -3099,14 +3337,20 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
             if (!duplicateWarned) {
                 duplicateWarned = true;
+                // Sanitize before embedding long_name in the phone-facing ClientNotification string
+                // (defense-in-depth vs PB_VALIDATE_UTF8).
+                char safeName[sizeof(p.long_name)];
+                strncpy(safeName, p.long_name, sizeof(safeName));
+                safeName[sizeof(safeName) - 1] = '\0';
+                sanitizeUtf8(safeName, sizeof(safeName));
                 char warning[] =
                     "Remote device %s has advertised your public key. This may indicate a compromised key. You may need "
                     "to regenerate your public keys.";
-                LOG_WARN(warning, p.long_name);
+                LOG_WARN(warning, safeName);
                 meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
                 cn->level = meshtastic_LogRecord_Level_WARNING;
                 cn->time = getValidTime(RTCQualityFromNet);
-                snprintf(cn->message, sizeof(cn->message), warning, p.long_name);
+                snprintf(cn->message, sizeof(cn->message), warning, safeName);
                 service->sendClientNotification(cn);
             }
             return false;
@@ -3171,7 +3415,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         return;
     }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
+        LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
         if (!info) {
@@ -3190,7 +3434,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 #if HAS_VARIABLE_HOPS
         // Only sample genuine RF-origin packets. The transport check excludes packets received
         // directly from the broker (TRANSPORT_MQTT), but an MQTT-origin packet rebroadcast onto
-        // LoRa by a gateway arrives as TRANSPORT_LORA with via_mqtt set — count those would
+        // LoRa by a gateway arrives as TRANSPORT_LORA with via_mqtt set - count those would
         // inflate the local mesh-size estimate with non-RF nodes (and they usually carry
         // hop_start==0, landing in the hop-0 bucket that pulls the recommendation lowest), so
         // exclude via_mqtt too.
@@ -3541,7 +3785,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // Don't append past the end of the vector. The protected-node cap
         // (numProtectedNodes() <= MAX_NUM_NODES-2) means the eviction above frees
         // a slot in normal operation; this guards the legacy case of a pre-cap
-        // database that is full of protected nodes — refuse rather than overrun.
+        // database that is full of protected nodes - refuse rather than overrun.
         if (numMeshNodes >= MAX_NUM_NODES)
             return NULL;
         // Pre-size before append when run before nodeDBSelfCare() (boot keygen); else at() aborts on nRF52.
@@ -3565,7 +3809,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
-            LOG_MIGRATION("Rehydrated node 0x%x from warm tier (key=%d)", n, lite->public_key.size == 32);
+            LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
         }
 #endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
@@ -3693,18 +3937,17 @@ bool NodeDB::createNewIdentity()
     if (newNodeNum == oldNodeNum)
         return false;
 
-    // Retire the old node entry
-    meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
-    if (node != NULL) {
-        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, newNodeNum);
-        nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
-        node->public_key.size = 0;
-        memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
+    // Remove the old node entry entirely rather than retiring it in place. Flagging the old identity as
+    // ignored (the previous behavior) left a keyless ghost of ourselves that survived cleanup/eviction, was
+    // still streamed to clients, and made any DM/admin aimed at it fail forever with PKI_SEND_FAIL_PUBLIC_KEY.
+    // removeNodeByNum() drops the lite entry, its satellite stores, and the warm-tier copy.
+    if (getMeshNode(oldNodeNum) != NULL) {
+        LOG_DEBUG("Old node num %u is now %u, removing stale identity", oldNodeNum, newNodeNum);
+        removeNodeByNum(oldNodeNum);
+    } else {
+        // Lite entry already absent: drop any orphaned satellite-store entries directly.
+        eraseNodeSatellites(oldNodeNum);
     }
-
-    // Drop satellite-store entries (position/telemetry/environment/status) keyed by the retired
-    // node number so stale data isn't left attached to the old identity.
-    eraseNodeSatellites(oldNodeNum);
 
     myNodeInfo.my_node_num = newNodeNum;
 

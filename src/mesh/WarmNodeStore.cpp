@@ -6,19 +6,20 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "configuration.h"
+#include "memory/MemAudit.h"
 #include "power/PowerHAL.h"
 #include <ErriezCRC32.h>
 #include <vector>
 
 #if defined(NRF52840_XXAA)
 #include "flash/flash_nrf5x.h"
-#define WARM_RING_MAGIC 0x324E5257u    // "WRN2" — v2: last_heard low bits carry role + protected category
-#define WARM_RING_MAGIC_V1 0x474E5257u // "WRNG" — v1: last_heard was a plain timestamp.
+#define WARM_RING_MAGIC 0x324E5257u    // "WRN2" - v2: last_heard low bits carry role + protected category
+#define WARM_RING_MAGIC_V1 0x474E5257u // "WRNG" - v1: last_heard was a plain timestamp.
 // v1 pages are still read on upgrade: we keep each record's identity + public key but
 // DISCARD its last_heard (the old timestamp would be misread as role/protected bits).
 // Records re-rank and re-learn their role on the next contact. Legacy pages convert to
 // v2 naturally as the ring rotates.
-// A tombstone is an entry record whose last_heard is all-ones — getTime()
+// A tombstone is an entry record whose last_heard is all-ones - getTime()
 // (unix seconds) cannot reach 0xFFFFFFFF until 2106, and erased flash is
 // detected via num == 0xFFFFFFFF before last_heard is ever inspected.
 #define WARM_RING_TOMBSTONE 0xFFFFFFFFu
@@ -33,9 +34,9 @@ struct WarmStoreHeader {
 };
 static_assert(sizeof(WarmStoreHeader) == 16, "header layout is part of the persistence format");
 
-#define WARM_STORE_MAGIC 0x324D5257u // "WRM2" — v2: last_heard low bits carry role + protected category
+#define WARM_STORE_MAGIC 0x324D5257u // "WRM2" - v2: last_heard low bits carry role + protected category
 #define WARM_STORE_MAGIC_V1                                                                                                      \
-    0x314D5257u // "WRM1" — v1: last_heard was a plain timestamp. On upgrade we keep
+    0x314D5257u // "WRM1" - v1: last_heard was a plain timestamp. On upgrade we keep
                 // identity + key but discard last_heard, then rewrite as v2.
 
 #ifdef FSCom
@@ -62,6 +63,7 @@ WarmNodeStore::WarmNodeStore()
 #else
     entries = static_cast<WarmNodeEntry *>(calloc(WARM_NODE_COUNT, sizeof(WarmNodeEntry)));
 #endif
+    memaudit::set("warm", entries ? WARM_NODE_COUNT * sizeof(WarmNodeEntry) : 0);
 #if defined(NRF52840_XXAA)
     memset(pageOf, kNoPage, sizeof(pageOf));
 #endif
@@ -71,6 +73,7 @@ WarmNodeStore::~WarmNodeStore()
 {
     free(entries); // always malloc-family (calloc / ps_calloc)
     entries = nullptr;
+    memaudit::set("warm", 0);
 }
 
 WarmNodeEntry *WarmNodeStore::find(NodeNum num) const
@@ -104,7 +107,7 @@ WarmNodeEntry *WarmNodeStore::place(NodeNum num, uint32_t lastHeard, const uint8
                 slot = &e;
                 break;
             }
-            // Compare on the time bits only — the low metadata bits (role/protected) must
+            // Compare on the time bits only - the low metadata bits (role/protected) must
             // not perturb LRU victim selection.
             if (keyIsSet(e.public_key)) {
                 if (!oldestKeyed || warmTimeOf(e) < warmTimeOf(*oldestKeyed))
@@ -252,7 +255,7 @@ bool WarmNodeStore::saveIfDirty()
 // 3 × 4 KB pages below LittleFS. Mutations append 40 B records (entry snapshot,
 // or tombstone with last_heard == 0xFFFFFFFF) via the shared flash_nrf5x page
 // cache; saveIfDirty() is the durability point. A full page reclaims the oldest
-// (stranded live entries re-appended, then erased). Flash access holds spiLock —
+// (stranded live entries re-appended, then erased). Flash access holds spiLock -
 // the page cache is shared with InternalFS/LittleFS.
 
 bool WarmNodeStore::ringReadHeader(uint8_t page, WarmPageHeader &h, bool *legacy) const
@@ -289,7 +292,7 @@ void WarmNodeStore::ringOpenPage(uint8_t page)
 }
 
 // Caller holds spiLock. May recurse once via ringAppend if the stranded set
-// fills the fresh page exactly — bounded by WARM_NODE_COUNT <= 2*kRecordsPerPage.
+// fills the fresh page exactly - bounded by WARM_NODE_COUNT <= 2*kRecordsPerPage.
 void WarmNodeStore::ringRotate()
 {
     uint8_t target = 0;
@@ -441,7 +444,7 @@ void WarmNodeStore::load()
                     memset(e, 0, sizeof(*e));
                 }
             } else {
-                // v1 (legacy) record: keep identity + key, but discard the old timestamp —
+                // v1 (legacy) record: keep identity + key, but discard the old timestamp -
                 // its low bits would otherwise be misread as role/protected metadata.
                 uint32_t lh = rec.last_heard;
                 if (legacy) {
@@ -459,7 +462,7 @@ void WarmNodeStore::load()
             nextSeq = seqs[k] + 1;
             // If the head is a v1 page, force the next append to rotate into a fresh v2 page,
             // so new (v2) records never land in a page whose header says v1 (which would make
-            // a later load discard their last_heard — including the role/protected we just set).
+            // a later load discard their last_heard - including the role/protected we just set).
             if (legacy)
                 writeSlot = kRecordsPerPage;
         }
@@ -521,7 +524,7 @@ void WarmNodeStore::load()
 {
     if (!entries)
         return;
-    // Clear first — all failure paths below then correctly represent "empty",
+    // Clear first - all failure paths below then correctly represent "empty",
     // even if load() is called on an already-used instance.
     memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
     concurrency::LockGuard g(spiLock);
@@ -589,12 +592,22 @@ bool WarmNodeStore::save()
     h.entrySize = sizeof(WarmNodeEntry);
     h.crc = crc32Buffer(packed.data(), h.count * sizeof(WarmNodeEntry));
 
-    concurrency::LockGuard g(spiLock);
-    FSCom.mkdir("/prefs");
+    // SafeFile already does its own spiLock in its constructor and close().
+    // Avoid nesting spiLocks, as this will hang until watchdog reset!
+
+    {
+        concurrency::LockGuard g(spiLock);
+        FSCom.mkdir("/prefs");
+    }
 
     auto f = SafeFile(warmFileName, false);
-    f.write((const uint8_t *)&h, sizeof(h));
-    f.write((const uint8_t *)packed.data(), h.count * sizeof(WarmNodeEntry));
+
+    {
+        concurrency::LockGuard g(spiLock);
+        f.write((const uint8_t *)&h, sizeof(h));
+        f.write((const uint8_t *)packed.data(), h.count * sizeof(WarmNodeEntry));
+    }
+
     bool ok = f.close();
     if (!ok)
         LOG_ERROR("WarmStore: can't write %s", warmFileName);

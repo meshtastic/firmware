@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #if USE_TFTDISPLAY
 
 #if ARCH_PORTDUINO
@@ -536,7 +537,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.memory_width = 240;
             cfg.memory_height = 320;
             cfg.offset_x = 0;
-            cfg.offset_y = 0;                             // No vertical shift needed — panel is top-aligned
+            cfg.offset_y = 0;                             // No vertical shift needed - panel is top-aligned
             cfg.offset_rotation = 2;                      // Rotate 180° to correct upside-down layout
 #else
             cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
@@ -1142,8 +1143,17 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#endif
+#elif defined(VARIANT_DISPLAY_DRIVER)
+// Board-specific framebuffer backends (class LGFX) can livee in the
+// variant files - variant_display.h (declaration) and
+// variant_display.cpp (bodies) - so this shared
+// file isn't inflated for a single board. It exposes the same surface TFTDisplay
+// drives, so the generic `tft = new LGFX;` in connect() works.
+#include "variant_display.h"
 
+static LGFX *tft = nullptr;
+
+#endif
 #include "SPILock.h"
 #include "TFTColorRegions.h"
 #include "TFTDisplay.h"
@@ -1219,6 +1229,7 @@ TFTDisplay::~TFTDisplay()
         free(repaintChunkBuffer);
         repaintChunkBuffer = nullptr;
     }
+    memaudit::set("display", 0);
 }
 
 // Write the buffer to the display memory
@@ -1270,13 +1281,30 @@ void TFTDisplay::display(bool fromBlank)
                 y_byteMask = (1 << (y & 7));
 
                 uint16_t *chunkRow = repaintChunkBuffer + (row * displayWidth);
+
+                // Step 1: fill the whole row with the default colors. No per-pixel
+                // region scan, so background pixels (the bulk of the screen) are O(1).
                 for (x = 0; x < displayWidth; x++) {
                     isset = (buffer[x + y_byteIndex] & y_byteMask) != 0;
-                    if (hasColorRegions) {
-                        chunkRow[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                     colorTftWhite, colorTftBlack);
-                    } else {
-                        chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                    chunkRow[x] = isset ? colorTftWhite : colorTftBlack;
+                }
+
+                // Step 2: overprint each region overlapping this row, applied in
+                // ascending index order so the highest-index region wins (matches
+                // resolveTFTColorPixel precedence). Only region-covered pixels are
+                // re-touched, so total cost is ~screen + sum of region spans.
+                if (hasColorRegions) {
+                    graphics::beginTFTColorRow(static_cast<int16_t>(y));
+                    for (uint8_t k = 0; k < graphics::tftColorRowCount; k++) {
+                        const graphics::TFTColorRegion &r = graphics::colorRegions[graphics::tftColorRowRegions[k]];
+                        int32_t xs = r.x > 0 ? r.x : 0;
+                        int32_t xe = r.x + r.width;
+                        if (xe > (int32_t)displayWidth)
+                            xe = (int32_t)displayWidth;
+                        for (int32_t xx = xs; xx < xe; xx++) {
+                            isset = (buffer[xx + y_byteIndex] & y_byteMask) != 0;
+                            chunkRow[xx] = isset ? r.onColorBe : r.offColorBe;
+                        }
                     }
                 }
             }
@@ -1363,12 +1391,16 @@ void TFTDisplay::display(bool fromBlank)
             }
 
             // Step 3: Copy only the changed span into the pixel line buffer.
+#if GRAPHICS_TFT_COLORING_ENABLED
+            if (hasColorRegions)
+                graphics::beginTFTColorRow(static_cast<int16_t>(y));
+#endif
             for (x = x_FirstPixelUpdate; x <= x_LastPixelUpdate; x++) {
                 isset = buffer[x + y_byteIndex] & y_byteMask;
 #if GRAPHICS_TFT_COLORING_ENABLED
                 if (hasColorRegions) {
-                    linePixelBuffer[x] = graphics::resolveTFTColorPixel(static_cast<int16_t>(x), static_cast<int16_t>(y), isset,
-                                                                        colorTftWhite, colorTftBlack);
+                    linePixelBuffer[x] =
+                        graphics::resolveTFTColorPixelRow(static_cast<int16_t>(x), isset, colorTftWhite, colorTftBlack);
                 } else {
                     linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
                 }
@@ -1624,6 +1656,7 @@ bool TFTDisplay::connect()
             LOG_ERROR("Not enough memory to create TFT line buffer\n");
             return false;
         }
+        memaudit::add("display", sizeof(uint16_t) * displayWidth);
     }
     if (this->repaintChunkBuffer == NULL) {
         this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
@@ -1632,6 +1665,7 @@ bool TFTDisplay::connect()
             LOG_ERROR("Not enough memory to create TFT repaint chunk buffer\n");
             return false;
         }
+        memaudit::add("display", sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
     }
     return true;
 }

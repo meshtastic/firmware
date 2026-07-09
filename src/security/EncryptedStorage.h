@@ -15,10 +15,10 @@
  *     (the DEK file itself is HMAC'd with KEK; only proto files use HMAC(DEK))
  *
  *   Ephemeral KEK (FICR-only, no passphrase) -> wraps DEK in the unlock token only.
- *   Unlock token (/prefs/.unlock_token) — valid for N boots and/or M hours after provisioning.
+ *   Unlock token (/prefs/.unlock_token) - valid for N boots and/or M hours after provisioning.
  *
  * Boot flow:
- *   1. initLocked()  — derive ephemeral KEK, try unlock token
+ *   1. initLocked()  - derive ephemeral KEK, try unlock token
  *   2a. Token valid → UNLOCKED (DEK in RAM, all encrypted files accessible)
  *   2b. No token, no DEK file → NOT PROVISIONED (operator must call provisionPassphrase)
  *   2c. No token, DEK file exists → LOCKED (operator must call unlockWithPassphrase)
@@ -52,7 +52,7 @@
  *   [1B]  boots_remaining
  *   [4B]  valid_until_epoch (LE uint32, 0 = no time limit)
  *   [4B]  session_max_seconds (LE uint32, 0 = no session limit)
- *   [4B]  monotonic_counter (LE uint32) — see /prefs/.tokmono
+ *   [4B]  monotonic_counter (LE uint32) - see /prefs/.tokmono
  *   [32B] HMAC-SHA256(ephemeralKEK, all above fields)
  *   Total: 78 bytes.
  *
@@ -80,7 +80,7 @@ namespace EncryptedStorage
 // File format constants
 // ---------------------------------------------------------------------------
 
-static constexpr uint32_t MAGIC = 0x4D454E43; // "MENC" — encrypted proto files
+static constexpr uint32_t MAGIC = 0x4D454E43; // "MENC" - encrypted proto files
 static constexpr size_t NONCE_SIZE = 13;
 static constexpr size_t HMAC_SIZE = 32;
 static constexpr size_t HEADER_SIZE = 4 + NONCE_SIZE + 4;   // magic+nonce+plaintext_len
@@ -116,7 +116,7 @@ void initLocked();
  * save it wrapped with the passphrase-mixed KEK, and create an unlock token.
  *
  * @param passphrase        Raw passphrase bytes (need not be NUL-terminated)
- * @param passphraseLen     Length in bytes (1–32; matches the proto private_key field size)
+ * @param passphraseLen     Length in bytes (1-32; matches the proto private_key field size)
  * @param bootsRemaining    Token valid for this many boots (default TOKEN_DEFAULT_BOOTS)
  * @param validUntilEpoch   Absolute Unix timestamp after which token expires (0 = no time limit)
  * @param sessionMaxSeconds Per-boot uptime cap on the unlocked session (0 = no cap).
@@ -131,7 +131,7 @@ bool provisionPassphrase(const uint8_t *passphrase, size_t passphraseLen, uint8_
  * unwrap the stored DEK, and create a fresh unlock token.
  *
  * @param passphrase        Raw passphrase bytes
- * @param passphraseLen     Length in bytes (1–32; matches the proto private_key field size)
+ * @param passphraseLen     Length in bytes (1-32; matches the proto private_key field size)
  * @param bootsRemaining    New token valid for this many boots
  * @param validUntilEpoch   Absolute Unix timestamp after which token expires (0 = no time limit)
  * @param sessionMaxSeconds Per-boot uptime cap on the unlocked session (0 = no cap).
@@ -188,7 +188,7 @@ bool migrateFileToPlaintext(const char *filename);
  * Final step of disabling lockdown: remove the DEK, unlock token,
  * monotonic-counter, and backoff files, then wipe the in-RAM keys.
  * Call this ONLY after every encrypted file has been reverted to plaintext
- * via migrateFileToPlaintext() — deleting the DEK first would make any
+ * via migrateFileToPlaintext() - deleting the DEK first would make any
  * remaining encrypted file permanently unreadable. After this returns,
  * isProvisioned()/isLockdownActive() are false. APPROTECT is NOT touched
  * (its lockout is permanent on silicon where it engaged).
@@ -198,15 +198,15 @@ void removeLockdownArtifacts();
 /**
  * Returns a short string describing why the device is locked (set during initLocked()).
  * Useful for client-side diagnostics. Examples:
- *   "token_missing"      — no unlock token file found
- *   "token_wrong_size"   — token file exists but is corrupt
- *   "token_bad_magic"    — wrong magic bytes
- *   "token_hmac_fail"    — HMAC mismatch (tampered or wrong device)
- *   "token_boots_zero"   — boot count exhausted
- *   "token_expired"      — TTL expired
- *   "token_dek_fail"     — DEK decrypt failed
- *   "not_provisioned"    — no DEK file; needs first provisioning
- *   "ok"                 — unlocked successfully via token
+ *   "token_missing"      - no unlock token file found
+ *   "token_wrong_size"   - token file exists but is corrupt
+ *   "token_bad_magic"    - wrong magic bytes
+ *   "token_hmac_fail"    - HMAC mismatch (tampered or wrong device)
+ *   "token_boots_zero"   - boot count exhausted
+ *   "token_expired"      - TTL expired
+ *   "token_dek_fail"     - DEK decrypt failed
+ *   "not_provisioned"    - no DEK file; needs first provisioning
+ *   "ok"                 - unlocked successfully via token
  */
 const char *getLockReason();
 
@@ -230,7 +230,7 @@ uint32_t getBackoffSecondsRemaining();
 // Combined hard cap: bootsRemaining * sessionMaxSeconds total exposure.
 //
 // Uptime (not wall-clock) by design: an attacker pulling the RTC backup
-// battery and spoofing GPS to roll the clock back cannot defeat this —
+// battery and spoofing GPS to roll the clock back cannot defeat this -
 // we never read getValidTime() for session enforcement. The check only
 // engages when sessionMaxSeconds is non-zero, so 0 = unlimited (the
 // existing token-only behavior, suitable for tower/infra nodes).
@@ -239,7 +239,7 @@ uint32_t getBackoffSecondsRemaining();
 /// maxSeconds = 0 disables the timer for this session.
 void setSession(uint32_t maxSeconds);
 
-/// True if a session timer is set and has elapsed. Idempotent — call
+/// True if a session timer is set and has elapsed. Idempotent - call
 /// from the main loop on a low-frequency tick.
 bool isSessionExpired();
 
@@ -248,7 +248,7 @@ bool isSessionExpired();
 uint32_t getSessionRemainingSeconds();
 
 /// Consume one boot from the on-flash token (the rollback ledger) and
-/// re-arm the session timer in place — no reboot. Called from the main
+/// re-arm the session timer in place - no reboot. Called from the main
 /// loop when a session expires AND there is still budget. Decrements
 /// bootsRemaining on flash (delete-and-rewrite of the token file, or
 /// outright deletion if the new count is 0). Returns the new boot
