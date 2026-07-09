@@ -11,6 +11,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #include "NodeDB.h"
+#include "modules/RepeatScalingModule.h"
 
 #if USERPREFS_EVENT_MODE
 static void capEventRelayHops(meshtastic_MeshPacket *packet)
@@ -233,6 +234,15 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     if (!tosend)
                         return true;
                     LOG_INFO("Rebroadcast msg from %x", p->relay_node);
+
+                    // Cache this packet's portnum against (p->from, p->id) so that when a duplicate of
+                    // it arrives from the air later - still encrypted to us, since only this decoded
+                    // copy ever gets decoded - RepeatScalingModule::getDupeCancelThreshold has a
+                    // per-portnum signal to act on instead of always seeing an undecodable packet.
+                    if (repeatScalingModule)
+                        repeatScalingModule->noteScheduled(
+                            p->from, p->id,
+                            p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? p->decoded.portnum : -1);
 
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
                     if (exhaustHops) {
