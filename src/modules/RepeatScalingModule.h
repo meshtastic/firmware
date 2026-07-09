@@ -30,6 +30,14 @@ class RepeatScalingModule
     // test/test_repeat_scaling_module).
     virtual bool shouldCancelDupe(const meshtastic_MeshPacket *p);
 
+    // Call when we schedule our own rebroadcast of a packet (i.e. we successfully decoded it and
+    // queued it to send). Caches its portnum against (sender, id) so that later, when a duplicate
+    // of this same packet arrives from the air - still encrypted to us, since only the copy we
+    // process through Router::handleReceived ever gets decoded - getDupeCancelThreshold() has a
+    // per-portnum signal to act on instead of always falling back to the undecodable-packet
+    // default. portnum should be -1 if the packet we're scheduling could not be decoded either.
+    void noteScheduled(NodeNum sender, PacketId id, int32_t portnum);
+
   protected:
     // How many duplicate rebroadcasts of a packet we require to hear (see the per-portnum switch
     // in RepeatScalingModule.cpp) before giving up on our own scheduled rebroadcast of it. Virtual
@@ -47,12 +55,17 @@ class RepeatScalingModule
     // so a reused ring slot can't cause a stale hit against an unrelated future packet.
     void clearDupeCount(NodeNum sender, PacketId id);
 
+    // Returns the portnum cached by noteScheduled() for (sender, id), or -1 if we never scheduled
+    // a rebroadcast of it (or its ring slot has since been evicted/cleared).
+    int32_t lookupNotedPortnum(NodeNum sender, PacketId id) const;
+
   private:
     static constexpr uint8_t DUPE_COUNT_TRACKER_SIZE = 8;
     struct DupeCountEntry {
         NodeNum sender = 0;
         PacketId id = 0;
         uint8_t count = 0;
+        int32_t portnum = -1;
     };
     DupeCountEntry dupeCounts[DUPE_COUNT_TRACKER_SIZE];
     uint8_t dupeCountsNextSlot = 0;

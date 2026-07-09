@@ -68,13 +68,24 @@ bool meshTooBusyForExtraRepeats()
 // neighbor density too high) always forces the threshold back down to 1 - see its definition above.
 uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket *p)
 {
-    // Portnum is only visible once a packet is decoded (i.e. we hold the channel key); packets we
-    // can't decrypt always get the default of 1, since we have no per-portnum signal to act on.
-    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
-        return 1;
+    int32_t portnum;
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        portnum = p->decoded.portnum;
+    } else {
+        // Portnum is only visible once a packet is decoded (i.e. we hold the channel key). A
+        // duplicate heard over the air is, in the overwhelmingly common case, still encrypted to
+        // us here - only the one copy that made it through Router::handleReceived ever gets
+        // decoded. Fall back to the portnum we cached for this same (sender, id) when we
+        // ourselves scheduled a rebroadcast of it (see noteScheduled()); if we never scheduled
+        // one (or its ring slot was since evicted/cleared), we have no per-portnum signal to act
+        // on, so use the default of 1.
+        portnum = lookupNotedPortnum(p->from, p->id);
+        if (portnum < 0)
+            return 1;
+    }
 
     uint8_t threshold;
-    switch (p->decoded.portnum) {
+    switch (portnum) {
     case meshtastic_PortNum_TEXT_MESSAGE_APP:
     case meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP:
         // User-visible chat, broadcast or DM: no ACK/retry safety net for broadcasts, and no other
@@ -91,8 +102,7 @@ uint8_t RepeatScalingModule::getDupeCancelThreshold(const meshtastic_MeshPacket 
     // airtime on repeats when the channel is already congested or there are many direct neighbors
     // to reach anyway.
     if (threshold > 1 && meshTooBusyForExtraRepeats()) {
-        LOG_DEBUG("[REPEATSCALE] portnum=%d wanted threshold=%u but mesh is busy; falling back to 1", p->decoded.portnum,
-                  threshold);
+        LOG_DEBUG("[REPEATSCALE] portnum=%d wanted threshold=%u but mesh is busy; falling back to 1", portnum, threshold);
         return 1;
     }
 
@@ -114,6 +124,7 @@ uint8_t RepeatScalingModule::registerDupeHeard(NodeNum sender, PacketId id)
     slot.sender = sender;
     slot.id = id;
     slot.count = 1;
+    slot.portnum = -1; // no noteScheduled() call preceded this - no portnum signal available
     return slot.count;
 }
 
@@ -124,16 +135,46 @@ void RepeatScalingModule::clearDupeCount(NodeNum sender, PacketId id)
             entry.sender = 0;
             entry.id = 0;
             entry.count = 0;
+            entry.portnum = -1;
             return;
         }
     }
+}
+
+void RepeatScalingModule::noteScheduled(NodeNum sender, PacketId id, int32_t portnum)
+{
+    for (auto &entry : dupeCounts) {
+        if (entry.id == id && entry.sender == sender) {
+            entry.portnum = portnum;
+            return;
+        }
+    }
+    // Not tracked yet: claim the next ring slot, evicting whatever packet (if any) was there.
+    // count starts at 0 (as opposed to registerDupeHeard's 1) because scheduling our own
+    // rebroadcast is not itself a heard duplicate.
+    DupeCountEntry &slot = dupeCounts[dupeCountsNextSlot];
+    dupeCountsNextSlot = (dupeCountsNextSlot + 1) % DUPE_COUNT_TRACKER_SIZE;
+    slot.sender = sender;
+    slot.id = id;
+    slot.count = 0;
+    slot.portnum = portnum;
+}
+
+int32_t RepeatScalingModule::lookupNotedPortnum(NodeNum sender, PacketId id) const
+{
+    for (auto &entry : dupeCounts) {
+        if (entry.id == id && entry.sender == sender)
+            return entry.portnum;
+    }
+    return -1;
 }
 
 bool RepeatScalingModule::shouldCancelDupe(const meshtastic_MeshPacket *p)
 {
     const uint8_t threshold = getDupeCancelThreshold(p);
     const uint8_t dupesHeard = registerDupeHeard(p->from, p->id);
-    const int32_t portnum = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) ? p->decoded.portnum : -1;
+    const int32_t portnum =
+        (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) ? p->decoded.portnum : lookupNotedPortnum(p->from, p->id);
 
     if (dupesHeard >= threshold) {
         LOG_INFO("[REPEATSCALE] Giving up own rebroadcast of 0x%08x from=0x%08x portnum=%d: heard %u/%u duplicate(s)", p->id,
