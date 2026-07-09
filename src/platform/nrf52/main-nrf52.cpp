@@ -62,7 +62,10 @@ void variant_nrf52LoopHook(void) {}
 // noinline: weak default and call site are in this file; without it GCC may inline the
 // weak body and never link the strong override from variant.cpp.
 __attribute__((noinline)) bool variant_enableBatteryLpcompWake() __attribute__((weak));
-__attribute__((noinline)) bool variant_enableBatteryLpcompWake() { return true; }
+__attribute__((noinline)) bool variant_enableBatteryLpcompWake()
+{
+    return true;
+}
 
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
