@@ -19,8 +19,8 @@ bool STM32WLE5JCInterface::init()
     RadioLibInterface::init();
 
 // https://github.com/Seeed-Studio/LoRaWan-E5-Node/blob/main/Middlewares/Third_Party/SubGHz_Phy/stm32_radio_driver/radio_driver.c
-#if (!defined(_VARIANT_RAK3172_))
-    setTCXOVoltage(1.7);
+#if defined(SX126X_DIO3_TCXO_VOLTAGE)
+    setTCXOVoltage(SX126X_DIO3_TCXO_VOLTAGE);
 #endif
 
     lora.setRfSwitchTable(rfswitch_pins, rfswitch_table);
@@ -28,6 +28,17 @@ bool STM32WLE5JCInterface::init()
     limitPower(STM32WLx_MAX_POWER);
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+
+#if defined(TCXO_OPTIONAL)
+    // If a TCXO was requested but isn't actually populated (e.g. non-T RAK3172), retry on XTAL
+    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        LOG_WARN("STM32WLx init failed with TCXO Vref %fV (err %d), retrying without TCXO", tcxoVoltage, res);
+        setTCXOVoltage(0);
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        if (res == RADIOLIB_ERR_NONE)
+            LOG_INFO("STM32WLx init success without TCXO (XTAL mode)");
+    }
+#endif
 
     LOG_INFO("STM32WLx init result %d", res);
 
