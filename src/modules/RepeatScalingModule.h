@@ -20,52 +20,32 @@ class RepeatScalingModule
     RepeatScalingModule() = default;
     virtual ~RepeatScalingModule() = default;
 
-    // Call each time we hear a duplicate rebroadcast of a packet we ourselves have queued to
-    // rebroadcast. Tracks the running count for (p->from, p->id) and logs the decision. Returns
-    // true once the configured per-portnum threshold has been reached, in which case the caller
-    // should cancel its own queued rebroadcast; tracking for the packet is cleared as soon as
-    // this returns true, so a reused ring slot can't leak into an unrelated future packet.
-    // Virtual solely so tests of FloodingRouter's role-gating can substitute a test double instead
-    // of driving the real threshold/ring-buffer logic (which is tested directly in
-    // test/test_repeat_scaling_module).
+    // Note a heard duplicate for (p->from, p->id); returns true (and clears tracking) once the
+    // per-portnum threshold is reached, meaning the caller should cancel its own rebroadcast.
+    // Virtual so FloodingRouter role-gating tests can substitute a double.
     virtual bool shouldCancelDupe(const meshtastic_MeshPacket *p);
 
-    // Call when we schedule our own rebroadcast of a packet (i.e. we successfully decoded it and
-    // queued it to send). Caches its portnum against (sender, id) so that later, when a duplicate
-    // of this same packet arrives from the air - still encrypted to us, since only the copy we
-    // process through Router::handleReceived ever gets decoded - getDupeCancelThreshold() has a
-    // per-portnum signal to act on instead of always falling back to the undecodable-packet
-    // default. portnum should be -1 if the packet we're scheduling could not be decoded either.
+    // Cache the portnum of a rebroadcast we've scheduled, so later encrypted duplicates of it can
+    // still be classified by getDupeCancelThreshold(). Pass -1 if it couldn't be decoded.
     void noteScheduled(NodeNum sender, PacketId id, int32_t portnum);
 
-    // Returns how many duplicates have been heard (and tolerated) so far for (sender, id), or 0 if
-    // none have (including if we never scheduled/heard anything for it at all). Meant for logging
-    // at the point of actual transmission (see RadioLibInterface::startSend) - if a packet reaches
-    // that point at all, any duplicates counted here were tolerated, not cancelled on.
+    // Duplicates heard (and tolerated) so far for (sender, id), or 0. For logging at TX time.
     uint8_t getToleratedDupeCount(NodeNum sender, PacketId id) const;
 
   protected:
-    // How many duplicate rebroadcasts of a packet we require to hear (see the per-portnum switch
-    // in RepeatScalingModule.cpp) before giving up on our own scheduled rebroadcast of it. Virtual
-    // solely so tests can override it to inject a threshold without needing a real portnum case
-    // (see test/test_repeat_scaling_module).
+    // Duplicates to tolerate before cancelling our own rebroadcast. Virtual so tests can inject a
+    // threshold without relying on a real portnum case.
     virtual uint8_t getDupeCancelThreshold(const meshtastic_MeshPacket *p);
 
-    // Tracks how many duplicates we've heard so far, per (sender, id), for packets we currently
-    // have one queued to rebroadcast ourselves. Bounded, ephemeral ring buffer - not a persistent
-    // record like PacketHistory: entries are only meaningful while our own rebroadcast is still
-    // pending, and naturally get evicted/reused as the ring wraps.
+    // Ephemeral ring buffer of per-(sender, id) heard-duplicate counts (not persistent state).
     uint8_t registerDupeHeard(NodeNum sender, PacketId id);
-
-    // Clears tracking state for a (sender, id) once we've acted on it (cancelled our rebroadcast),
-    // so a reused ring slot can't cause a stale hit against an unrelated future packet.
     void clearDupeCount(NodeNum sender, PacketId id);
-
-    // Returns the portnum cached by noteScheduled() for (sender, id), or -1 if we never scheduled
-    // a rebroadcast of it (or its ring slot has since been evicted/cleared).
     int32_t lookupNotedPortnum(NodeNum sender, PacketId id) const;
 
   private:
+    // Decoded portnum if available, else the one cached by noteScheduled() (or -1).
+    int32_t resolvePortnum(const meshtastic_MeshPacket *p) const;
+
     static constexpr uint8_t DUPE_COUNT_TRACKER_SIZE = 8;
     struct DupeCountEntry {
         NodeNum sender = 0;
