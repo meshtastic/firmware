@@ -364,8 +364,9 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             }
         }
 #elif HAS_LSE
-        if (stm32wlRtcAvailable())
+        if (stm32wlRtcAvailable()) {
             STM32RTC::getInstance().setEpoch(tv->tv_sec);
+        }
 #elif defined(ARCH_ESP32) || defined(ARCH_RP2040)
         settimeofday(tv, NULL);
 #endif

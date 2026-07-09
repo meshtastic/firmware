@@ -38,7 +38,7 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Throttle.h"
-#include <gps/RTC.h>
+#include "gps/RTC.h"
 
 namespace
 {
