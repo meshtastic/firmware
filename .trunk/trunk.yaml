@@ -11,7 +11,7 @@ lint:
     - ascii-dash@SYSTEM
     - too-many-defined@SYSTEM
     - checkov@3.3.7
-    - renovate@43.255.2
+    - renovate@43.256.0
     - prettier@3.9.4
     - trufflehog@3.95.8
     - yamllint@1.38.0
