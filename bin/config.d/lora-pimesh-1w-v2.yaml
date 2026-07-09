@@ -1,4 +1,5 @@
-# PiMesh-1W (V2)
+# PiMesh-1W (V2) E22P-915M30S / E22P-868M30S
+# https://meshsmith.net/products/pimesh-1w
 Lora:
   Module: sx1262
   IRQ: 6
