@@ -38,6 +38,12 @@ class RepeatScalingModule
     // default. portnum should be -1 if the packet we're scheduling could not be decoded either.
     void noteScheduled(NodeNum sender, PacketId id, int32_t portnum);
 
+    // Returns how many duplicates have been heard (and tolerated) so far for (sender, id), or 0 if
+    // none have (including if we never scheduled/heard anything for it at all). Meant for logging
+    // at the point of actual transmission (see RadioLibInterface::startSend) - if a packet reaches
+    // that point at all, any duplicates counted here were tolerated, not cancelled on.
+    uint8_t getToleratedDupeCount(NodeNum sender, PacketId id) const;
+
   protected:
     // How many duplicate rebroadcasts of a packet we require to hear (see the per-portnum switch
     // in RepeatScalingModule.cpp) before giving up on our own scheduled rebroadcast of it. Virtual
