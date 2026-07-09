@@ -64,6 +64,10 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.setTX(SERIAL2_TX);
     Port.setRX(SERIAL2_RX);
 #endif
+#ifdef IS_USB_SERIAL
+    // Don't let log writes block when no USB host is reading (native CDC default: ~2s/write).
+    Port.setTxTimeoutMs(0);
+#endif
     Port.begin(SERIAL_BAUD);
     time_t timeout = millis();
     while (!Port) {
