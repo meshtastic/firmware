@@ -1,4 +1,5 @@
-# PiMesh-1W (V1)
+# PiMesh-1W (V1) E22-900M30S
+# https://meshsmith.net/products/pimesh-1w
 Lora:
   Module: sx1262
   CS: 21
