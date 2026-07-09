@@ -48,9 +48,8 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     virtual void log_to_serial(const char *logLevel, const char *format, va_list arg);
 
   private:
-    /// On USB CDC targets, bound console TX so a host that stopped draining the
-    /// port can never block the main loop (which starves the app task watchdog
-    /// and reboots the device with ESP_RST_TASK_WDT ~97s after every disconnect).
+    /// On USB CDC targets, keep console TX non-blocking unless a host is draining the
+    /// port, so a dead host can't stall the main loop and trip the task watchdog.
     void setHostDraining(bool draining);
 };
 

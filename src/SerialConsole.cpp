@@ -126,11 +126,8 @@ bool SerialConsole::checkIsConnected()
 void SerialConsole::setHostDraining(bool draining)
 {
 #ifdef IS_USB_SERIAL
-    // With timeout 0, HWCDC writes never block: they drop (oldest-first ring
-    // policy) when the host isn't draining the CDC buffer. With a host attached
-    // and draining, ring space is normally available so log output still flows.
-    // A normal (blocking, 100 ms bounded) timeout is restored while an API
-    // client is connected so protobuf frames are never truncated/corrupted.
+    // Timeout 0 makes HWCDC writes drop instead of block when the host stops draining;
+    // bounded blocking is restored while an API client is connected so frames aren't truncated.
     Port.setTxTimeoutMs(draining ? 100 : 0);
 #else
     (void)draining;
