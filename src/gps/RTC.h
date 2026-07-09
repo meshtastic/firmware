@@ -8,6 +8,10 @@
 #include <ArtronShop_RX8130CE.h>
 #endif
 
+#if HAS_LSE
+bool stm32wlRtcAvailable();
+#endif
+
 enum RTCQuality {
 
     /// We haven't had our RTC set yet
