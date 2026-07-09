@@ -521,7 +521,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier —
+    // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier -
     // nodes evicted from the hot store keep their key there, so DMs from long-tail nodes still
     // decrypt), otherwise fall back to a not-yet-verified key held during an in-progress
     // key-verification handshake. The latter lets us DH-decode the follow-on PKI packet before the
@@ -764,7 +764,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-        // Resolve the destination's public key: prefer NodeDB (hot store or warm tier — evicted
+        // Resolve the destination's public key: prefer NodeDB (hot store or warm tier - evicted
         // long-tail nodes keep their key there), otherwise (for a key-verification follow-on packet
         // that explicitly requested PKI) fall back to the not-yet-verified key held during an
         // in-progress handshake. This lets us DH-encode the follow-on packet before the peer's key
