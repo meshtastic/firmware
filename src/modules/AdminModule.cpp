@@ -146,6 +146,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
     const bool licensedRemote = owner.is_licensed && mp.from != 0;
     bool authorizedLicensedSigner = false;
+    // Could tighten responses further by tracking the last public key queried.
     if (licensedRemote) {
         const bool directedAdmin = mp.to == nodeDB->getNodeNum() && !isBroadcast(mp.to) &&
                                    mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP && !mp.pki_encrypted;
@@ -165,7 +166,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
             return handled;
         }
-        LOG_INFO("Signed licensed admin payload with authorized Router-verified sender");
+        LOG_INFO("Signed licensed admin payload with Router-verified sender");
     }
     if (messageIsResponse(r)) {
         // Only accept a response from a remote we sent the matching request to. from == 0 is a

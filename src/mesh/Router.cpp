@@ -688,7 +688,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 }
 #endif
 
-RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
+RoutingAuthVerdict passesRoutingAuthGate(const meshtastic_MeshPacket *p)
 {
     // Routing still needs the original encrypted representation for byte-for-byte relay and for
     // MQTT uplink. Authenticate a copy here; handleReceived() performs the normal in-place decode
