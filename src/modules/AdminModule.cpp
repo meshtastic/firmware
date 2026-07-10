@@ -1041,6 +1041,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     if (identityWillMigrate)
                         sendWarning(licensedIdentityMigrationMessage);
                     nodeDB->generateCryptoKeyPair();
+                    changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
                     if (identityWillMigrate)
                         nodeDB->licensedIdentityMigrationPending = false;
                 }
@@ -1053,7 +1054,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             } else {
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
