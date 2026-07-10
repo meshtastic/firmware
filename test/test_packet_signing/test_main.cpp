@@ -51,6 +51,8 @@ static constexpr size_t OVERSIZED_PAYLOAD = 180;
 class MockNodeDB : public NodeDB
 {
   public:
+    void installDefaultsPreservingIdentity() { installDefaultConfig(true); }
+
     void clearTestNodes()
     {
         testNodes.clear();
@@ -566,6 +568,31 @@ void test_B11_licensed_receiver_does_not_decrypt_pki(void)
     TEST_ASSERT_EQUAL(DECODE_FAILURE, perhapsDecode(&p));
 }
 
+void test_B12_licensed_port_and_destination_signing_matrix(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_ROUTING_APP,      meshtastic_PortNum_NODEINFO_APP,
+    };
+    const NodeNum destinations[] = {NODENUM_BROADCAST, REMOTE_NODE};
+    for (const auto port : ports) {
+        for (const auto destination : destinations) {
+            meshtastic_MeshPacket packet = makeDecoded(LOCAL_NODE, destination, port, SMALL_PAYLOAD);
+            TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&packet));
+            TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, packet.decoded.xeddsa_signature.size);
+            TEST_ASSERT_TRUE(packet.xeddsa_signed);
+            TEST_ASSERT_FALSE(packet.pki_encrypted);
+        }
+    }
+}
+
 // ===========================================================================
 // Group C - NodeInfoModule downgrade drop (broadcast-only backstop for ingress paths that skip
 // Router's check; unicast NodeInfo is never signed by senders, so it is exempt - see C4)
@@ -617,6 +644,48 @@ void test_C00_licensed_identity_key_is_generated_and_preserved(void)
     TEST_ASSERT_EQUAL_UINT8_ARRAY(privateKey, config.security.private_key.bytes, sizeof(privateKey));
     TEST_ASSERT_EQUAL_UINT8_ARRAY(publicKey, config.security.public_key.bytes, sizeof(publicKey));
     TEST_ASSERT_EQUAL_UINT8_ARRAY(publicKey, owner.public_key.bytes, sizeof(publicKey));
+}
+
+void test_C01_factory_config_reset_preserves_valid_identity_private_key(void)
+{
+    uint8_t publicKey[32], privateKey[32];
+    crypto->generateKeyPair(publicKey, privateKey);
+    config.has_security = true;
+    config.security.private_key.size = 32;
+    memcpy(config.security.private_key.bytes, privateKey, sizeof(privateKey));
+
+    mockNodeDB->installDefaultsPreservingIdentity();
+    TEST_ASSERT_EQUAL(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(privateKey, config.security.private_key.bytes, sizeof(privateKey));
+    TEST_ASSERT_EQUAL(0, config.security.public_key.size);
+
+    owner.is_licensed = true;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    TEST_ASSERT_TRUE(mockNodeDB->generateCryptoKeyPair());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(privateKey, config.security.private_key.bytes, sizeof(privateKey));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(publicKey, config.security.public_key.bytes, sizeof(publicKey));
+}
+
+void test_C02_licensed_low_entropy_identity_is_regenerated(void)
+{
+    static const uint8_t compromisedPublicKey[32] = {
+        0xac, 0xaf, 0x8c, 0x1c, 0x3c, 0x1c, 0x37, 0xac, 0x4f, 0x03, 0xa1, 0xe9, 0xfc, 0x37, 0x23, 0x29,
+        0xc8, 0xa3, 0x5d, 0x7f, 0x05, 0x26, 0xeb, 0x00, 0xbd, 0x26, 0xb8, 0x2e, 0xb1, 0x94, 0x7d, 0x24,
+    };
+    owner.is_licensed = true;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0xA5, 32);
+    config.security.public_key.size = 32;
+    memcpy(config.security.public_key.bytes, compromisedPublicKey, sizeof(compromisedPublicKey));
+    TEST_ASSERT_TRUE(mockNodeDB->checkLowEntropyPublicKey(config.security.public_key));
+
+    uint8_t oldPrivateKey[32];
+    memcpy(oldPrivateKey, config.security.private_key.bytes, sizeof(oldPrivateKey));
+    TEST_ASSERT_TRUE(mockNodeDB->generateCryptoKeyPair());
+    TEST_ASSERT_TRUE(mockNodeDB->keyIsLowEntropy);
+    TEST_ASSERT_FALSE(mockNodeDB->checkLowEntropyPublicKey(config.security.public_key));
+    TEST_ASSERT_FALSE(memcmp(oldPrivateKey, config.security.private_key.bytes, sizeof(oldPrivateKey)) == 0);
 }
 
 static meshtastic_MeshPacket makeNodeInfoPacket(bool signed_)
@@ -872,10 +941,13 @@ void setup()
     RUN_TEST(test_B9_licensed_oversized_unicast_remains_unsigned);
     RUN_TEST(test_B10_normal_unicast_still_uses_pki);
     RUN_TEST(test_B11_licensed_receiver_does_not_decrypt_pki);
+    RUN_TEST(test_B12_licensed_port_and_destination_signing_matrix);
 
     printf("\n=== Group C: NodeInfoModule downgrade drop ===\n");
     RUN_TEST(test_C0_licensed_nodeinfo_publishes_public_key);
     RUN_TEST(test_C00_licensed_identity_key_is_generated_and_preserved);
+    RUN_TEST(test_C01_factory_config_reset_preserves_valid_identity_private_key);
+    RUN_TEST(test_C02_licensed_low_entropy_identity_is_regenerated);
     RUN_TEST(test_C1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_C2_signed_nodeinfo_from_signer_not_dropped);
     RUN_TEST(test_C3_unsigned_nodeinfo_from_nonsigner_not_dropped);

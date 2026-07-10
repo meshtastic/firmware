@@ -10,9 +10,11 @@ class AdminModuleTestShim : public AdminModule
     using AdminModule::handleReceivedProtobuf;
     using AdminModule::handleSetConfig;
     using AdminModule::handleSetModuleConfig;
+    using AdminModule::handleSetOwner;
 
     // With an "open edit transaction" saveChanges() is a pure no-op: no reloadConfig/saveToDisk/reboot.
     void deferSaves() { hasOpenEditTransaction = true; }
+    int savedSegments() const { return lastSaveWhatForTest; }
 
     // Setters may allocate an error reply from packetPool; drain it each iteration or the pool leaks.
     void drainReply()

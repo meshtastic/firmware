@@ -8,6 +8,7 @@
 #include "SPILock.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
+#include <ErriezCRC32.h>
 #include <FSCommon.h>
 #include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
@@ -61,6 +62,17 @@
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+static bool licensedIdentityWillMigrate()
+{
+    if (config.security.private_key.size != 32 || config.security.public_key.size != 32)
+        return true;
+    if (nodeDB->checkLowEntropyPublicKey(config.security.public_key))
+        return true;
+    return crc32Buffer(config.security.public_key.bytes, config.security.public_key.size) != nodeDB->getNodeNum();
+}
+#endif
 
 /// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
 /// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want
@@ -731,7 +743,8 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
 void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
-    bool identityGenerated = false;
+    bool identityUpdated = false;
+    bool channelsSanitized = false;
 
     if (*o.long_name) {
         // Apps built against the older 39-byte limit may send longer names; clamp
@@ -750,21 +763,25 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         owner.short_name[sizeof(owner.short_name) - 1] = '\0';
         sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
     }
-    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
-
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        const bool identityWillMigrate =
+            o.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && licensedIdentityWillMigrate();
+        if (identityWillMigrate)
+            sendWarning(licensedIdentityMigrationMessage);
+#endif
         owner.is_licensed = o.is_licensed;
         if (channels.ensureLicensedOperation()) {
             sendWarning(licensedModeMessage);
+            channelsSanitized = true;
         }
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-        if ((config.security.private_key.size != 32 || config.security.public_key.size != 32) &&
-            config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            identityGenerated = nodeDB->generateCryptoKeyPair();
-        }
+        if (owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+            identityUpdated = nodeDB->generateCryptoKeyPair();
 #endif
     }
+    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
     if (owner.has_is_unmessagable != o.has_is_unmessagable ||
         (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
         changed = 1;
@@ -774,7 +791,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityGenerated ? SEGMENT_CONFIG : 0));
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
+                    (channelsSanitized ? SEGMENT_CHANNELS : 0));
     }
 }
 
@@ -956,6 +974,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 config.lora.region = validatedLora.region;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
                 if (owner.is_licensed && isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+                    if (licensedIdentityWillMigrate())
+                        sendWarning(licensedIdentityMigrationMessage);
                     nodeDB->generateCryptoKeyPair();
                 }
 #endif
@@ -1694,6 +1714,9 @@ void AdminModule::reboot(int32_t seconds)
 
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
+#ifdef PIO_UNIT_TESTING
+    lastSaveWhatForTest = saveWhat;
+#endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
@@ -1746,6 +1769,14 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     // Remove PSK of primary channel for plaintext amateur usage
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        if (licensedIdentityWillMigrate())
+            sendWarning(licensedIdentityMigrationMessage);
+        nodeDB->generateCryptoKeyPair();
+    }
+#endif
 
     if (channels.ensureLicensedOperation()) {
         sendWarning(licensedModeMessage);
