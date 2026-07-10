@@ -528,9 +528,9 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     // store or the warm tier (nodes evicted from the hot store keep their key
     // there), so DMs from long-tail nodes still decrypt.
     meshtastic_NodeInfoLite_public_key_t fromKey = {0, {0}};
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->copyPublicKey(p->from, fromKey) &&
-        nodeDB->getMeshNode(p->to) != nullptr && nodeDB->getMeshNode(p->to)->public_key.size > 0 &&
-        rawSize > MESHTASTIC_PKC_OVERHEAD) {
+    if (!owner.is_licensed && p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) &&
+        nodeDB->copyPublicKey(p->from, fromKey) && nodeDB->getMeshNode(p->to) != nullptr &&
+        nodeDB->getMeshNode(p->to)->public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
         if (crypto->decryptCurve25519(p->from, fromKey, p->id, rawSize, p->encrypted.bytes, bytes)) {
@@ -698,12 +698,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // verification at every XEdDSA-enabled receiver that knows our key.
             p->decoded.xeddsa_signature.size = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-            // Sign broadcast packets when the Data still fits a LoRa frame with the signature
-            // attached. This must be the exact encoded-size criterion, not a payload-size
-            // heuristic: a heuristic band where we sign-then-fail-TOO_LARGE breaks packets that
+            // Licensed packets stay plaintext, so sign both broadcasts and unicasts. Normal mode
+            // continues to sign broadcasts only. Use the exact encoded size: a payload-size heuristic
+            // where we sign-then-fail-TOO_LARGE breaks packets that
             // were deliverable unsigned, and perhapsDecode() applies the mirror-image rule when
             // deciding whether an unsigned broadcast from a known signer is a downgrade.
-            if (!p->pki_encrypted && isBroadcast(p->to) && signedDataFits(&p->decoded)) {
+            if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;

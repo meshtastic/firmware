@@ -731,6 +731,7 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
 void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
+    bool identityGenerated = false;
 
     if (*o.long_name) {
         // Apps built against the older 39-byte limit may send longer names; clamp
@@ -757,6 +758,12 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         if (channels.ensureLicensedOperation()) {
             sendWarning(licensedModeMessage);
         }
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if ((config.security.private_key.size != 32 || config.security.public_key.size != 32) &&
+            config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            identityGenerated = nodeDB->generateCryptoKeyPair();
+        }
+#endif
     }
     if (owner.has_is_unmessagable != o.has_is_unmessagable ||
         (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
@@ -767,7 +774,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE);
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityGenerated ? SEGMENT_CONFIG : 0));
     }
 }
 
@@ -934,7 +941,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                    if (crypto) {
+                    if (crypto && !owner.is_licensed) {
                         crypto->ensurePkiKeys(config.security, owner);
                     }
 #endif
@@ -947,6 +954,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 }
                 // Ensure initRegion() uses the newly validated region
                 config.lora.region = validatedLora.region;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+                if (owner.is_licensed && isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+                    nodeDB->generateCryptoKeyPair();
+                }
+#endif
                 initRegion();
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit

@@ -3863,15 +3863,14 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    // Only generate keys for non-licensed users and if the LoRa region is set. The native simulator
-    // boots region-UNSET but still needs a keypair so PKI-encrypted DMs work between sim nodes, so
-    // allow keygen there regardless of region.
+    // Generate identity keys once a LoRa region is set. Licensed operation still needs the identity
+    // key for plaintext signatures, even though the key is never used for PKI encryption.
     bool regionBlocksKeygen = config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #if ARCH_PORTDUINO
     if (portduino_config.lora_module == use_simradio)
         regionBlocksKeygen = false;
 #endif
-    if (owner.is_licensed || regionBlocksKeygen) {
+    if (regionBlocksKeygen) {
         return false;
     }
 
