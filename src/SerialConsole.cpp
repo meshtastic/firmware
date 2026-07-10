@@ -3,7 +3,9 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
+#include "concurrency/LockGuard.h"
 #include "configuration.h"
+#include "main.h"
 #include "time.h"
 
 #if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
@@ -105,6 +107,17 @@ void SerialConsole::flush()
     Port.flush();
 }
 
+size_t SerialConsole::write(uint8_t c)
+{
+    // Once a protobuf client is active, unframed bytes would corrupt its stream.
+    if (usingProtobufs)
+        return 1;
+
+    if (c == '\n')
+        RedirectablePrint::write('\r');
+    return RedirectablePrint::write(c);
+}
+
 // trigger tx of serial data
 void SerialConsole::onNowHasData(uint32_t fromRadioNum)
 {
@@ -145,6 +158,102 @@ void SerialConsole::onConnectionChanged(bool connected)
         setHostDraining(true);
 }
 
+bool SerialConsole::finishPendingFrame()
+{
+#ifdef IS_USB_SERIAL
+    concurrency::LockGuard guard(&streamLock);
+    return finishPendingFrameLocked();
+#else
+    return true;
+#endif
+}
+
+bool SerialConsole::canEncodeLogRecord()
+{
+#ifdef IS_USB_SERIAL
+    concurrency::LockGuard guard(&streamLock);
+    return pendingFrame == nullptr && deferredFrame == nullptr;
+#else
+    return true;
+#endif
+}
+
+bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
+{
+#ifdef IS_USB_SERIAL
+    if (len == 0 || !canWrite)
+        return false;
+
+    constexpr size_t headerLen = 4;
+    buf[0] = 0x94;
+    buf[1] = 0xc3;
+    buf[2] = (len >> 8) & 0xff;
+    buf[3] = len & 0xff;
+    const size_t totalLen = len + headerLen;
+
+    concurrency::LockGuard guard(&streamLock);
+    if (!finishPendingFrameLocked()) {
+        // A synchronous log can become pending while getFromRadio() is
+        // encoding this main packet. Preserve the persistent txBuf until the
+        // log tail completes instead of losing already-dequeued PhoneAPI data.
+        if (!bestEffort && !deferredFrame) {
+            deferredFrame = buf;
+            deferredFrameLen = totalLen;
+        }
+        return false;
+    }
+
+    // Logs are best-effort: never start one unless its complete frame fits.
+    if (bestEffort && Port.availableForWrite() < (int)totalLen)
+        return false;
+
+    size_t written = Port.write(buf, totalLen);
+    if (written == totalLen)
+        return true;
+
+    // Keep the persistent txBuf/txBufLog tail intact for the next thread pass.
+    pendingFrame = buf;
+    pendingFrameLen = totalLen;
+    pendingFrameOffset = written;
+    return false;
+#else
+    return StreamAPI::writeFrame(buf, len, bestEffort);
+#endif
+}
+
+#ifdef IS_USB_SERIAL
+bool SerialConsole::finishPendingFrameLocked()
+{
+    if (!pendingFrame)
+        return true;
+
+    size_t remaining = pendingFrameLen - pendingFrameOffset;
+    size_t written = Port.write(pendingFrame + pendingFrameOffset, remaining);
+    if (written > remaining)
+        written = remaining;
+    pendingFrameOffset += written;
+
+    if (pendingFrameOffset < pendingFrameLen)
+        return false;
+
+    pendingFrame = nullptr;
+    pendingFrameLen = 0;
+    pendingFrameOffset = 0;
+
+    // Promote a main frame that was encoded while a synchronous log tail was
+    // pending. Defer its first write to the next loop pass to stay bounded.
+    if (deferredFrame) {
+        pendingFrame = deferredFrame;
+        pendingFrameLen = deferredFrameLen;
+        deferredFrame = nullptr;
+        deferredFrameLen = 0;
+        return false;
+    }
+
+    return true;
+}
+#endif
+
 /**
  * we override this to notice when we've received a protobuf over the serial
  * stream.  Then we shut off debug serial output.
@@ -169,10 +278,14 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
-    if (usingProtobufs && config.security.debug_log_api_enabled) {
-        meshtastic_LogRecord_Level ll = RedirectablePrint::getLogLevel(logLevel);
-        auto thread = concurrency::OSThread::currentThread;
-        emitLogRecord(ll, thread ? thread->ThreadName.c_str() : "", format, arg);
-    } else
-        RedirectablePrint::log_to_serial(logLevel, format, arg);
+    if (usingProtobufs) {
+        if (config.security.debug_log_api_enabled && !pauseBluetoothLogging) {
+            meshtastic_LogRecord_Level ll = RedirectablePrint::getLogLevel(logLevel);
+            auto thread = concurrency::OSThread::currentThread;
+            emitLogRecord(ll, thread ? thread->ThreadName.c_str() : "", format, arg);
+        }
+        return;
+    }
+
+    RedirectablePrint::log_to_serial(logLevel, format, arg);
 }

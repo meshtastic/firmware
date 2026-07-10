@@ -48,6 +48,11 @@ int32_t StreamAPI::readStream(const char *buf, uint16_t bufLen)
 void StreamAPI::writeStream()
 {
     if (canWrite) {
+        // A transport that retained a short frame must complete it before
+        // getFromRadio() advances the PhoneAPI state to the next packet.
+        if (!finishPendingFrame())
+            return;
+
         uint32_t len;
         do {
             // Send every packet we can
@@ -170,8 +175,9 @@ int32_t StreamAPI::readStream()
 /**
  * Send the current txBuffer over our stream
  */
-bool StreamAPI::writeFrame(uint8_t *buf, size_t len)
+bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 {
+    (void)bestEffort;
     if (len == 0 || !canWrite)
         return false;
 
@@ -199,7 +205,7 @@ bool StreamAPI::writeFrame(uint8_t *buf, size_t len)
 
 bool StreamAPI::emitTxBuffer(size_t len)
 {
-    return writeFrame(txBuf, len);
+    return writeFrame(txBuf, len, false);
 }
 
 void StreamAPI::emitRebooted()
@@ -215,6 +221,10 @@ void StreamAPI::emitRebooted()
 
 void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
 {
+    // A retained short log frame still points into txBufLog, so do not overwrite it.
+    if (!canEncodeLogRecord())
+        return;
+
     // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here - those
     // belong to the main packet-emission path and a LOG_ firing during
     // `writeStream()` would corrupt an in-flight encode. We keep a
@@ -237,7 +247,7 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
 
     size_t len =
         pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
-    writeFrame(txBufLog, len);
+    writeFrame(txBufLog, len, true);
 }
 
 /// Hookable to find out when connection changes

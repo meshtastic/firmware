@@ -94,9 +94,14 @@ class StreamAPI : public PhoneAPI
     virtual bool canWriteFrame(size_t frameLen) { return true; }
     virtual void onFrameWriteFailed(size_t frameLen, size_t writtenLen) {}
 
-  private:
-    bool writeFrame(uint8_t *buf, size_t len);
+    /// Transport hooks for completing a short frame and dropping best-effort logs before encoding.
+    virtual bool finishPendingFrame() { return true; }
+    virtual bool canEncodeLogRecord() { return true; }
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort);
 
+    concurrency::Lock streamLock;
+
+  private:
     /// Dedicated scratch + tx buffer for LogRecord emission.
     ///
     /// The main packet emission path (`writeStream` -> `getFromRadio` ->
@@ -117,5 +122,4 @@ class StreamAPI : public PhoneAPI
     /// interleave on the wire.
     meshtastic_FromRadio fromRadioScratchLog = {};
     uint8_t txBufLog[MAX_STREAM_BUF_SIZE] = {0};
-    concurrency::Lock streamLock;
 };
