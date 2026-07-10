@@ -68,9 +68,7 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
-        // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
-        // This is intentionally redundant with ReliableRouter's ingress gate: it keeps this helper
-        // safe if another caller is introduced later.
+        // Re-authenticate before replacing the queued lower-hop copy so future callers remain safe.
         if (passesRoutingAuthGate(p) != RoutingAuthVerdict::ACCEPT)
             return true;
 
