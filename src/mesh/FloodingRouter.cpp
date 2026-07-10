@@ -71,7 +71,7 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
         // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
         // This is intentionally redundant with ReliableRouter's ingress gate: it keeps this helper
         // safe if another caller is introduced later.
-        if (passesRoutingAuthGate(const_cast<meshtastic_MeshPacket *>(p)) != RoutingAuthVerdict::ACCEPT)
+        if (passesRoutingAuthGate(p) != RoutingAuthVerdict::ACCEPT)
             return true;
 
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
