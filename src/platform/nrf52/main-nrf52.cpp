@@ -387,7 +387,11 @@ void nrf52Setup()
     pinMode(ADC_V, INPUT);
 #endif
 
-    uint32_t why = NRF_POWER->RESETREAS;
+    // The Adafruit core's init() (cores/nRF5/wiring.c) caches RESETREAS into a static and then
+    // W1C-clears the hardware register before setup() ever runs, so a raw NRF_POWER->RESETREAS
+    // read here is ALWAYS 0. Use the core's cached copy so this log line is actually meaningful
+    // (0x1 pin reset, 0x2 watchdog, 0x4 soft reset/SREQ, 0x8 CPU lockup, 0x10000 System OFF wake).
+    uint32_t why = readResetReason();
     // per
     // https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
     LOG_DEBUG("Reset reason: 0x%x", why);

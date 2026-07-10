@@ -392,6 +392,8 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg)
+            return false;
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0';
@@ -413,6 +415,8 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg)
+            return false;
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0'; // Ensure null termination
@@ -595,11 +599,13 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        strncpy(cn->message, warning, sizeof(cn->message) - 1);
-        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            strncpy(cn->message, warning, sizeof(cn->message) - 1);
+            cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
 #endif
@@ -611,11 +617,13 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        strncpy(cn->message, warning, sizeof(cn->message) - 1);
-        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            strncpy(cn->message, warning, sizeof(cn->message) - 1);
+            cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
     }
@@ -746,6 +754,8 @@ void MQTT::perhapsReportToMap()
 
     // Allocate MeshPacket and fill it
     meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+    if (!mp)
+        return;
     mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     mp->from = nodeDB->getNodeNum();
     mp->to = NODENUM_BROADCAST;

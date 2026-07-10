@@ -916,6 +916,17 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             validatedLora.spread_factor = LORA_SF_DEFAULT;
         }
 
+        // A custom (non-preset) config that leaves bandwidth at its proto zero-value otherwise slips
+        // through validateConfigLora() and persists as 0, while the radio silently falls back to the
+        // default (config.lora.bandwidth then reads back 0 even though the radio runs at 250kHz).
+        // Coerce it here like coding_rate/spread_factor so the stored config matches the radio. In
+        // preset mode bandwidth 0 is expected (the preset supplies it), so leave it untouched.
+        const uint16_t clampedBandwidth = clampBandwidthCode(validatedLora.bandwidth);
+        if (!validatedLora.use_preset && validatedLora.bandwidth != clampedBandwidth) {
+            LOG_WARN("Invalid bandwidth %d, setting to %d", validatedLora.bandwidth, clampedBandwidth);
+            validatedLora.bandwidth = clampedBandwidth;
+        }
+
         // If we're setting a new region, check the region is valid and then init the region or discard the change
         if (validatedLora.region != myRegion->code) {
             //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid
