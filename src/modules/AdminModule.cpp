@@ -801,8 +801,11 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
             channelsSanitized = true;
         }
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-        if (owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        if (owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             identityUpdated = nodeDB->generateCryptoKeyPair();
+            if (identityWillMigrate)
+                nodeDB->licensedIdentityMigrationPending = false;
+        }
 #endif
     }
     snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
@@ -1034,9 +1037,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 config.lora.region = validatedLora.region;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
                 if (owner.is_licensed && isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-                    if (licensedIdentityWillMigrate())
+                    const bool identityWillMigrate = licensedIdentityWillMigrate();
+                    if (identityWillMigrate)
                         sendWarning(licensedIdentityMigrationMessage);
                     nodeDB->generateCryptoKeyPair();
+                    if (identityWillMigrate)
+                        nodeDB->licensedIdentityMigrationPending = false;
                 }
 #endif
                 initRegion();
@@ -1908,9 +1914,12 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        if (licensedIdentityWillMigrate())
+        const bool identityWillMigrate = licensedIdentityWillMigrate();
+        if (identityWillMigrate)
             sendWarning(licensedIdentityMigrationMessage);
         nodeDB->generateCryptoKeyPair();
+        if (identityWillMigrate)
+            nodeDB->licensedIdentityMigrationPending = false;
     }
 #endif
 
