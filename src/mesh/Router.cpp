@@ -704,6 +704,7 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         // decryptor. Never trust serialized local authentication metadata on that boundary.
         authCandidate.pki_encrypted = false;
         authCandidate.public_key.size = 0;
+        authCandidate.xeddsa_signed = false;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         concurrency::LockGuard g(cryptLock);
         if (!checkXeddsaReceivePolicy(&authCandidate)) {
@@ -711,7 +712,6 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
             return RoutingAuthVerdict::REJECT;
         }
 #endif
-        p->xeddsa_signed = authCandidate.xeddsa_signed;
         wire = *p;
         storeRoutingAuthCache(wire, authCandidate);
         return RoutingAuthVerdict::ACCEPT;
@@ -801,6 +801,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     // Authentication metadata is local-only. Re-establish it below only after successful PKI decryption.
     p->pki_encrypted = false;
     p->public_key.size = 0;
+    p->xeddsa_signed = false;
 
     size_t rawSize = p->encrypted.size;
     if (rawSize > sizeof(bytes)) {

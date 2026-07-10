@@ -144,6 +144,29 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 #endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
+    const bool licensedRemote = owner.is_licensed && mp.from != 0;
+    bool authorizedLicensedSigner = false;
+    if (licensedRemote) {
+        const bool directedAdmin = mp.to == nodeDB->getNodeNum() && !isBroadcast(mp.to) &&
+                                   mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP && !mp.pki_encrypted;
+        if (!directedAdmin || !mp.xeddsa_signed || mp.public_key.size != 32) {
+            LOG_INFO("Ignore licensed admin payload without a directed Router-verified signature");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+            return handled;
+        }
+        for (const auto &adminKey : config.security.admin_key) {
+            if (adminKey.size == 32 && memcmp(mp.public_key.bytes, adminKey.bytes, 32) == 0) {
+                authorizedLicensedSigner = true;
+                break;
+            }
+        }
+        if (!messageIsResponse(r) && !authorizedLicensedSigner) {
+            LOG_INFO("Received signed licensed admin payload from a non-allowlisted key");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+            return handled;
+        }
+        LOG_INFO("Signed licensed admin payload with authorized Router-verified sender");
+    }
     if (messageIsResponse(r)) {
         // Only accept a response from a remote we sent the matching request to. from == 0 is a
         // local client, which PhoneAPI has already gated.
