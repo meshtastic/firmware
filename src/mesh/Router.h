@@ -175,10 +175,7 @@ enum class RoutingAuthVerdict { ACCEPT, OPAQUE_RELAY_ONLY, REJECT };
  */
 DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
-/** Apply the receive authentication policy before routing state is mutated.
- * Decryptable packets must pass their configured authenticity policy. Packets for unknown channels
- * remain eligible for opaque relay, while fatal and policy-rejected packets are filtered.
- */
+/** Apply receive authentication before routing state mutation; unknown-channel packets may remain opaque relay-only. */
 RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p);
 #ifdef PIO_UNIT_TESTING
 uint32_t routingAuthEvaluationCount();
@@ -190,21 +187,8 @@ void resetRoutingAuthEvaluationCount();
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-/** XEdDSA receive-side signature policy. Valid signatures are verified against a cached key or an
- * identity-bound key in first-contact NodeInfo. Invalid and malformed signatures always fail.
- * Compatible accepts unsigned traffic, Balanced rejects signable unsigned broadcasts from known
- * signers, and Strict requires a verified existing signature or successful PKI authentication
- * for all decoded traffic.
- *
- * encodedDataSize is the wire size of the encoded Data as the sender built it; pass 0 to size
- * p->decoded canonically instead (for already-decoded ingress such as plaintext-MQTT downlink,
- * which bypasses perhapsDecode's crypto path).
- *
- * The caller MUST hold cryptLock: verification runs through the shared CryptoEngine key cache.
- * (perhapsDecode already holds it; other call sites must take it themselves.)
- *
- * @return false if the packet must be dropped.
- */
+/** Enforce the configured XEdDSA receive policy; zero encodedDataSize derives it canonically.
+ * The caller must hold cryptLock. Returns false when the packet must be dropped. */
 bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize = 0);
 #endif
 
