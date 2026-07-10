@@ -162,7 +162,7 @@ bool SerialConsole::finishPendingFrame()
 {
 #ifdef IS_USB_SERIAL
     concurrency::LockGuard guard(&streamLock);
-    return finishPendingFrameLocked();
+    return frameWriter.finishPendingFrame(Port);
 #else
     return true;
 #endif
@@ -172,7 +172,7 @@ bool SerialConsole::canEncodeLogRecord()
 {
 #ifdef IS_USB_SERIAL
     concurrency::LockGuard guard(&streamLock);
-    return pendingFrame == nullptr && deferredFrame == nullptr;
+    return frameWriter.isIdle();
 #else
     return true;
 #endif
@@ -192,67 +192,11 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
     const size_t totalLen = len + headerLen;
 
     concurrency::LockGuard guard(&streamLock);
-    if (!finishPendingFrameLocked()) {
-        // A synchronous log can become pending while getFromRadio() is
-        // encoding this main packet. Preserve the persistent txBuf until the
-        // log tail completes instead of losing already-dequeued PhoneAPI data.
-        if (!bestEffort && !deferredFrame) {
-            deferredFrame = buf;
-            deferredFrameLen = totalLen;
-        }
-        return false;
-    }
-
-    // Logs are best-effort: never start one unless its complete frame fits.
-    if (bestEffort && Port.availableForWrite() < (int)totalLen)
-        return false;
-
-    size_t written = Port.write(buf, totalLen);
-    if (written == totalLen)
-        return true;
-
-    // Keep the persistent txBuf/txBufLog tail intact for the next thread pass.
-    pendingFrame = buf;
-    pendingFrameLen = totalLen;
-    pendingFrameOffset = written;
-    return false;
+    return frameWriter.writeFrame(Port, buf, totalLen, bestEffort);
 #else
     return StreamAPI::writeFrame(buf, len, bestEffort);
 #endif
 }
-
-#ifdef IS_USB_SERIAL
-bool SerialConsole::finishPendingFrameLocked()
-{
-    if (!pendingFrame)
-        return true;
-
-    size_t remaining = pendingFrameLen - pendingFrameOffset;
-    size_t written = Port.write(pendingFrame + pendingFrameOffset, remaining);
-    if (written > remaining)
-        written = remaining;
-    pendingFrameOffset += written;
-
-    if (pendingFrameOffset < pendingFrameLen)
-        return false;
-
-    pendingFrame = nullptr;
-    pendingFrameLen = 0;
-    pendingFrameOffset = 0;
-
-    // Promote a main frame that was encoded while a synchronous log tail was
-    // pending. Defer its first write to the next loop pass to stay bounded.
-    if (deferredFrame) {
-        pendingFrame = deferredFrame;
-        pendingFrameLen = deferredFrameLen;
-        deferredFrame = nullptr;
-        deferredFrameLen = 0;
-        return false;
-    }
-
-    return true;
-}
-#endif
 
 /**
  * we override this to notice when we've received a protobuf over the serial

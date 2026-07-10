@@ -2,6 +2,7 @@
 
 #include "RedirectablePrint.h"
 #include "StreamAPI.h"
+#include "mesh/StreamFrameWriter.h"
 /**
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
  * (and starts dropping debug printing - FIXME, eventually those prints should be encapsulated in protobufs).
@@ -52,12 +53,7 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     void setHostDraining(bool draining);
 
 #if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
-    bool finishPendingFrameLocked();
-    uint8_t *pendingFrame = nullptr;
-    size_t pendingFrameLen = 0;
-    size_t pendingFrameOffset = 0;
-    uint8_t *deferredFrame = nullptr;
-    size_t deferredFrameLen = 0;
+    StreamFrameWriter frameWriter;
 #endif
 };
 
