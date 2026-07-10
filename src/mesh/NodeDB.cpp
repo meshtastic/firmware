@@ -831,7 +831,7 @@ void NodeDB::installDefaultNodeDatabase()
 void NodeDB::installDefaultConfig(bool preserveKey = false)
 {
     uint8_t private_key_temp[32];
-    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size > 0;
+    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size == 32;
     if (shouldPreserveKey) {
         memcpy(private_key_temp, config.security.private_key.bytes, config.security.private_key.size);
     }
@@ -2613,6 +2613,11 @@ void NodeDB::loadFromDisk()
         optInDisableTelemetryBroadcast(moduleConfig);
         moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
         saveToDisk(SEGMENT_MODULECONFIG);
+    }
+
+    if (channels.ensureLicensedOperation()) {
+        LOG_WARN("Licensed operation removed persisted channel encryption/admin access");
+        saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
     // set any config overrides

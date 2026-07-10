@@ -128,11 +128,13 @@ bool Channels::ensureLicensedOperation()
         }
         auto &channelSettings = channel.settings;
         if (strcasecmp(channelSettings.name, Channels::adminChannel) == 0) {
-            channel.role = meshtastic_Channel_Role_DISABLED;
-            channelSettings.psk.bytes[0] = 0;
-            channelSettings.psk.size = 0;
-            hasEncryptionOrAdmin = true;
-            channels.setChannel(channel);
+            if (channel.role != meshtastic_Channel_Role_DISABLED || channelSettings.psk.size > 0) {
+                channel.role = meshtastic_Channel_Role_DISABLED;
+                channelSettings.psk.bytes[0] = 0;
+                channelSettings.psk.size = 0;
+                hasEncryptionOrAdmin = true;
+                channels.setChannel(channel);
+            }
 
         } else if (channelSettings.psk.size > 0) {
             channelSettings.psk.bytes[0] = 0;

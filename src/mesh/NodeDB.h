@@ -580,6 +580,7 @@ class NodeDB
     // Grant the unit-test shim access to the private maintenance paths below
     // (migration / cleanup / eviction) without relaxing production access.
     friend class NodeDBTestShim;
+    friend class MockNodeDB;
 #endif
 
     /// purge db entries without user info
