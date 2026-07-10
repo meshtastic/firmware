@@ -59,8 +59,14 @@ void LinuxJoystick::init()
 
 void LinuxJoystick::deInit()
 {
+    // reboot() on native does execv() in-place, which only closes O_CLOEXEC fds.
+    // Close both descriptors here so we don't leak one per restart.
     if (fd >= 0)
         close(fd);
+    if (epollfd >= 0)
+        close(epollfd);
+    fd = -1;
+    epollfd = -1;
 }
 
 // Bucket a raw axis value into a direction zone: -1 (min edge), 0 (center), +1 (max edge).
@@ -78,13 +84,13 @@ int32_t LinuxJoystick::runOnce()
     if (firstTime) {
         if (portduino_config.joystickDevice == "")
             return disable();
-        fd = open(portduino_config.joystickDevice.c_str(), O_RDWR);
+        fd = open(portduino_config.joystickDevice.c_str(), O_RDWR | O_CLOEXEC);
         if (fd < 0)
             return disable();
         if (ioctl(fd, EVIOCGRAB, (void *)1) != 0)
             return disable();
 
-        epollfd = epoll_create1(0);
+        epollfd = epoll_create1(EPOLL_CLOEXEC);
         assert(epollfd >= 0);
 
         ev.events = EPOLLIN;
