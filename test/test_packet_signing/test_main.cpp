@@ -92,6 +92,18 @@ class MockNodeDB : public NodeDB
 
 static MockNodeDB *mockNodeDB = nullptr;
 
+#ifdef ARCH_PORTDUINO
+class ScopedPkiRoutingForTest
+{
+  public:
+    ScopedPkiRoutingForTest() : savedForceSimRadio(portduino_config.force_simradio) { portduino_config.force_simradio = false; }
+    ~ScopedPkiRoutingForTest() { portduino_config.force_simradio = savedForceSimRadio; }
+
+  private:
+    bool savedForceSimRadio;
+};
+#endif
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -522,6 +534,9 @@ void test_B9_licensed_oversized_unicast_remains_unsigned(void)
 // B10: normal-mode direct messages retain their existing PKI encryption behavior.
 void test_B10_normal_unicast_still_uses_pki(void)
 {
+#ifdef ARCH_PORTDUINO
+    ScopedPkiRoutingForTest pkiRouting;
+#endif
     uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
     crypto->generateKeyPair(localPub, localPriv);
     crypto->generateKeyPair(remotePub, remotePriv);
@@ -547,6 +562,9 @@ void test_B10_normal_unicast_still_uses_pki(void)
 // B11: publishing a licensed node's key must not make inbound PKI decryption reachable.
 void test_B11_licensed_receiver_does_not_decrypt_pki(void)
 {
+#ifdef ARCH_PORTDUINO
+    ScopedPkiRoutingForTest pkiRouting;
+#endif
     uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
     crypto->generateKeyPair(localPub, localPriv);
     crypto->generateKeyPair(remotePub, remotePriv);
@@ -594,10 +612,8 @@ void test_B12_licensed_port_and_destination_signing_matrix(void)
     }
 }
 
-// ===========================================================================
-// Group C - NodeInfoModule downgrade drop (broadcast-only backstop for ingress paths that skip
-// Router's check; unicast NodeInfo is never signed by senders, so it is exempt - see C4)
-// ===========================================================================
+// Group C - NodeInfoModule downgrade drops for broadcast ingress paths;
+// unicast NodeInfo is exempt because senders never sign it.
 class NodeInfoTestShim : public NodeInfoModule
 {
   public:
@@ -923,6 +939,8 @@ void test_E9_decoded_partial_signature_from_nonsigner_dropped(void)
 void setup()
 {
     initializeTestEnvironment();
+    AirTime *savedAirTime = airTime;
+    meshtastic::NodeStatus *savedNodeStatus = nodeStatus;
     AirTime testAirTime;
     meshtastic::NodeStatus testNodeStatus;
     airTime = &testAirTime;
@@ -979,8 +997,8 @@ void setup()
     RUN_TEST(test_E9_decoded_partial_signature_from_nonsigner_dropped);
 
     const int result = UNITY_END();
-    airTime = nullptr;
-    nodeStatus = nullptr;
+    airTime = savedAirTime;
+    nodeStatus = savedNodeStatus;
     exit(result);
 }
 

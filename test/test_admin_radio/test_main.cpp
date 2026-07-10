@@ -933,6 +933,36 @@ static void test_channelSpacingCalculation_placeholder()
 // AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
 
+class ScopedAdminRadioGlobals
+{
+  public:
+    ScopedAdminRadioGlobals()
+        : savedNodeDB(nodeDB), savedNodeInfoModule(nodeInfoModule), savedDeviceState(devicestate), savedConfig(config),
+          savedChannelFile(channelFile), testNodeDB(new NodeDB())
+    {
+        nodeDB = testNodeDB;
+    }
+
+    ~ScopedAdminRadioGlobals()
+    {
+        nodeInfoModule = savedNodeInfoModule;
+        nodeDB = savedNodeDB;
+        delete testNodeDB;
+        devicestate = savedDeviceState;
+        config = savedConfig;
+        channelFile = savedChannelFile;
+        initRegion();
+    }
+
+  private:
+    NodeDB *savedNodeDB;
+    NodeInfoModule *savedNodeInfoModule;
+    meshtastic_DeviceState savedDeviceState;
+    meshtastic_LocalConfig savedConfig;
+    meshtastic_ChannelFile savedChannelFile;
+    NodeDB *testNodeDB;
+};
+
 static void installEncryptedAndAdminChannels()
 {
     channels.initDefaults();
@@ -965,8 +995,7 @@ static void assertLicensedChannelsSanitized()
 
 static void test_handleSetOwner_persistsLicensedChannelSanitation()
 {
-    NodeDB *savedNodeDB = nodeDB;
-    nodeDB = new NodeDB();
+    ScopedAdminRadioGlobals globals;
     owner = meshtastic_User_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     installEncryptedAndAdminChannels();
@@ -974,10 +1003,8 @@ static void test_handleSetOwner_persistsLicensedChannelSanitation()
     meshtastic_User licensed = meshtastic_User_init_zero;
     licensed.is_licensed = true;
     testAdmin->deferSaves();
-    NodeInfoModule *savedNodeInfoModule = nodeInfoModule;
     nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1); // reloadOwner(false) only checks presence
     testAdmin->handleSetOwner(licensed);
-    nodeInfoModule = savedNodeInfoModule;
 
     TEST_ASSERT_TRUE(testAdmin->savedSegments() & SEGMENT_CHANNELS);
     assertLicensedChannelsSanitized();
@@ -990,9 +1017,6 @@ static void test_handleSetOwner_persistsLicensedChannelSanitation()
     channelFile = reloaded;
     assertLicensedChannelsSanitized();
     TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "sanitized reload must not trigger another persistence write");
-
-    delete nodeDB;
-    nodeDB = savedNodeDB;
 }
 
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
@@ -1043,6 +1067,27 @@ static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCo
     c.payload_variant.lora.use_preset = usePreset;
     c.payload_variant.lora.modem_preset = preset;
     return c;
+}
+
+static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
+{
+    ScopedAdminRadioGlobals globals;
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+
+    testAdmin->deferSaves();
+    const meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    testAdmin->handleSetConfig(c, false);
+
+    const int expectedSegments = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+    TEST_ASSERT_EQUAL_INT(expectedSegments, testAdmin->savedSegments());
+    TEST_ASSERT_EQUAL(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL(32, owner.public_key.size);
 }
 
 static void test_handleSetConfig_fromOthers_invalidPresetRejected()
@@ -1376,6 +1421,7 @@ void setup()
 
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
+    RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
     RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);
