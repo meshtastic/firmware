@@ -3925,13 +3925,28 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         LOG_DEBUG("Set DH private key for crypto operations");
         crypto->setDHPrivateKey(config.security.private_key.bytes);
 
-        // Conditionally create new identity based on parameter
-        createNewIdentity();
+        if (createNewIdentity() && owner.is_licensed)
+            licensedIdentityMigrationPending = true;
     }
     return keygenSuccess;
 #else
     return false;
 #endif
+}
+
+bool NodeDB::notifyPendingLicensedIdentityMigration()
+{
+    if (!licensedIdentityMigrationPending || !service)
+        return false;
+    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+    if (!notification)
+        return false;
+    notification->level = meshtastic_LogRecord_Level_WARNING;
+    notification->time = getValidTime(RTCQualityFromNet);
+    snprintf(notification->message, sizeof(notification->message), "%s", LICENSED_IDENTITY_MIGRATION_WARNING);
+    service->sendClientNotification(notification);
+    licensedIdentityMigrationPending = false;
+    return true;
 }
 
 bool NodeDB::createNewIdentity()
@@ -4036,6 +4051,13 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                 channelFile = backup.channels;
                 LOG_DEBUG("Restored channels");
             }
+
+            if (owner.is_licensed && channels.ensureLicensedOperation()) {
+                restoreWhat |= SEGMENT_CHANNELS;
+                LOG_WARN("Licensed operation sanitized restored channel encryption/admin access");
+            }
+            if (restoreWhat & SEGMENT_CHANNELS)
+                channels.onConfigChanged();
 
             success = saveToDisk(restoreWhat);
             if (success) {

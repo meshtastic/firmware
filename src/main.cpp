@@ -1062,6 +1062,7 @@ void setup()
         nodeDB->hasWarned = true;
     }
 #endif
+    nodeDB->notifyPendingLicensedIdentityMigration();
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputBroker->Init();

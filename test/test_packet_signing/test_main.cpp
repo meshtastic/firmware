@@ -15,6 +15,7 @@
 #include "NodeStatus.h"
 #include "TestUtil.h"
 #include "airtime.h"
+#include "support/MockMeshService.h"
 #include <unity.h>
 
 // The whole suite exercises XEdDSA sign/verify and checkXeddsaReceivePolicy, all of which are
@@ -636,6 +637,16 @@ void test_C00_licensed_identity_key_is_generated_and_preserved(void)
     memcpy(publicKey, config.security.public_key.bytes, sizeof(publicKey));
     const NodeNum migratedNodeNum = myNodeInfo.my_node_num;
     TEST_ASSERT_NOT_EQUAL(LOCAL_NODE, migratedNodeNum);
+    TEST_ASSERT_TRUE(mockNodeDB->licensedIdentityMigrationPending);
+
+    MockMeshService mockService;
+    service = &mockService;
+    TEST_ASSERT_TRUE(mockNodeDB->notifyPendingLicensedIdentityMigration());
+    TEST_ASSERT_EQUAL(1, mockService.notificationCount);
+    TEST_ASSERT_FALSE(mockNodeDB->licensedIdentityMigrationPending);
+    TEST_ASSERT_FALSE(mockNodeDB->notifyPendingLicensedIdentityMigration());
+    TEST_ASSERT_EQUAL(1, mockService.notificationCount);
+    service = nullptr;
 
     config.security.public_key.size = 0;
     owner.public_key.size = 0;

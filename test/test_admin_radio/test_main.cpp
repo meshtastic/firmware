@@ -13,6 +13,7 @@
 
 #include "Channels.h"
 #include "DisplayFormatters.h"
+#include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -943,6 +944,15 @@ static void installEncryptedAndAdminChannels()
     admin.settings.psk.size = 16;
     memset(admin.settings.psk.bytes, 0xA5, admin.settings.psk.size);
     channels.setChannel(admin);
+
+    meshtastic_Channel secondary = meshtastic_Channel_init_zero;
+    secondary.index = 2;
+    secondary.role = meshtastic_Channel_Role_SECONDARY;
+    secondary.has_settings = true;
+    strncpy(secondary.settings.name, "private", sizeof(secondary.settings.name));
+    secondary.settings.psk.size = 32;
+    memset(secondary.settings.psk.bytes, 0x5A, secondary.settings.psk.size);
+    channels.setChannel(secondary);
 }
 
 static void assertLicensedChannelsSanitized()
@@ -950,6 +960,7 @@ static void assertLicensedChannelsSanitized()
     TEST_ASSERT_EQUAL(0, channels.getByIndex(0).settings.psk.size);
     TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
     TEST_ASSERT_EQUAL(0, channels.getByIndex(1).settings.psk.size);
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(2).settings.psk.size);
 }
 
 static void test_handleSetOwner_persistsLicensedChannelSanitation()
@@ -993,6 +1004,34 @@ static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
     TEST_ASSERT_TRUE(channels.ensureLicensedOperation());
     assertLicensedChannelsSanitized();
     TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "boot sanitation must be idempotent");
+}
+
+static void test_restorePreferences_sanitizesLicensedBackupBeforeReturn()
+{
+    NodeDB *savedNodeDB = nodeDB;
+    nodeDB = new NodeDB();
+    const meshtastic_DeviceState savedDeviceState = devicestate;
+    const meshtastic_ChannelFile savedChannelFile = channelFile;
+
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    installEncryptedAndAdminChannels();
+    TEST_ASSERT_TRUE(nodeDB->backupPreferences(meshtastic_AdminMessage_BackupLocation_FLASH));
+
+    owner.is_licensed = false;
+    channels.initDefaults();
+    TEST_ASSERT_TRUE(
+        nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_DEVICESTATE | SEGMENT_CHANNELS));
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "restored licensed channels must remain sanitized");
+
+    devicestate = savedDeviceState;
+    channelFile = savedChannelFile;
+    nodeDB->saveToDisk(SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    FSCom.remove(backupFileName);
+    delete nodeDB;
+    nodeDB = savedNodeDB;
 }
 
 static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
@@ -1338,6 +1377,7 @@ void setup()
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
+    RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);
     RUN_TEST(test_getRegion_returnsCorrectRegion_EU868);
     RUN_TEST(test_getRegion_returnsCorrectRegion_LORA24);
