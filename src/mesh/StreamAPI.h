@@ -94,6 +94,9 @@ class StreamAPI : public PhoneAPI
     virtual bool canWriteFrame(size_t frameLen) { return true; }
     virtual void onFrameWriteFailed(size_t frameLen, size_t writtenLen) {}
 
+    /// Fill in the 4-byte 0x94C3 length header; returns the total frame length.
+    static size_t buildFrameHeader(uint8_t *buf, size_t payloadLen);
+
     /// Transport hooks for completing a short frame and dropping best-effort logs before encoding.
     virtual bool finishPendingFrame() { return true; }
     virtual bool canEncodeLogRecord() { return true; }

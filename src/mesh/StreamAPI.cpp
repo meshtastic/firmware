@@ -172,6 +172,15 @@ int32_t StreamAPI::readStream()
     }
 }
 
+size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen)
+{
+    buf[0] = START1;
+    buf[1] = START2;
+    buf[2] = (payloadLen >> 8) & 0xff;
+    buf[3] = payloadLen & 0xff;
+    return payloadLen + HEADER_LEN;
+}
+
 /**
  * Send the current txBuffer over our stream
  */
@@ -181,12 +190,7 @@ bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
     if (len == 0 || !canWrite)
         return false;
 
-    buf[0] = START1;
-    buf[1] = START2;
-    buf[2] = (len >> 8) & 0xff;
-    buf[3] = len & 0xff;
-
-    auto totalLen = len + HEADER_LEN;
+    const size_t totalLen = buildFrameHeader(buf, len);
     // Serialize write-readiness checks, writes and write-failure handling
     // against concurrent stream writes/close.
     concurrency::LockGuard guard(&streamLock);

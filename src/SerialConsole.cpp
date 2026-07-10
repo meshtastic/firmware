@@ -104,6 +104,11 @@ int32_t SerialConsole::runOnce()
 
 void SerialConsole::flush()
 {
+    // HWCDC::flush()'s no-progress path discards queued TX bytes, which would tear a
+    // framed protobuf stream; framed output is drained by the TX interrupt instead.
+    if (usingProtobufs)
+        return;
+
     Port.flush();
 }
 
@@ -184,12 +189,7 @@ bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
     if (len == 0 || !canWrite)
         return false;
 
-    constexpr size_t headerLen = 4;
-    buf[0] = 0x94;
-    buf[1] = 0xc3;
-    buf[2] = (len >> 8) & 0xff;
-    buf[3] = len & 0xff;
-    const size_t totalLen = len + headerLen;
+    const size_t totalLen = buildFrameHeader(buf, len);
 
     concurrency::LockGuard guard(&streamLock);
     return frameWriter.writeFrame(Port, buf, totalLen, bestEffort);

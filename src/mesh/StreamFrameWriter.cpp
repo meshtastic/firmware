@@ -1,8 +1,14 @@
 #include "StreamFrameWriter.h"
 
+#include <cassert>
+
 bool StreamFrameWriter::writeFrame(Stream &stream, uint8_t *frame, size_t frameLen, bool bestEffort)
 {
     if (!finishPendingFrame(stream)) {
+        // Single required-frame producer invariant: writeStream() is gated on
+        // finishPendingFrame(), so a second required frame can never arrive here.
+        assert(bestEffort || !deferredFrame);
+
         // Preserve required output that was encoded while another frame tail
         // was pending. Best-effort output is dropped instead.
         if (!bestEffort && !deferredFrame) {
