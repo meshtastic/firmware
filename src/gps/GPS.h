@@ -132,6 +132,9 @@ class GPS : private concurrency::OSThread
     // Let the GPS hardware save power between updates
     void down();
 
+    // Clear on-disk probe cache file (static for AdminModule hook when position config changes).
+    static void clearProbeCacheFile();
+
   private:
     GPS() : concurrency::OSThread("GPS") {}
 
@@ -165,6 +168,8 @@ class GPS : private concurrency::OSThread
     void clearProbeCache();
     // Persist the currently detected GPS model+baud.
     bool saveProbeCache() const;
+    // Persist a negative probe verdict (GPS not found after exhaustive scan).
+    bool saveNegativeProbeCache() const;
     // Verify the cached model+baud still maps to a live GPS device.
     bool verifyCachedProbePresence();
 
@@ -198,6 +203,8 @@ class GPS : private concurrency::OSThread
     bool hasProbeCache = false;
     // Ensures cached probe is attempted once per boot.
     bool triedProbeCache = false;
+    // Negative probe verdict cached (GPS not found).
+    bool hasNegativeProbeCache = false;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete

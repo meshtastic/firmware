@@ -79,7 +79,7 @@ namespace
 {
 // Versioned on-disk record for persisted GPS probe results.
 constexpr uint32_t GPS_PROBE_CACHE_MAGIC = 0x47504348UL; // "GPCH"
-constexpr uint16_t GPS_PROBE_CACHE_VERSION = 1;
+constexpr uint16_t GPS_PROBE_CACHE_VERSION = 2;
 constexpr const char *GPS_PROBE_CACHE_FILE = "/prefs/gps_probe_cache.dat";
 constexpr int MIN_PLAUSIBLE_GPS_YEAR = 2020;
 constexpr int MAX_PLAUSIBLE_GPS_YEAR = 2100;
@@ -91,7 +91,8 @@ constexpr uint32_t T1000_E_AIROHA_WAKE_INTERVAL_MS = 40;
 struct GPSProbeCacheRecord {
     uint32_t magic;
     uint16_t version;
-    uint16_t reserved;
+    uint8_t reserved;
+    uint8_t negative_verdict;
     uint32_t baud;
     uint8_t model;
 };
@@ -607,7 +608,7 @@ bool GPS::loadProbeCache()
 {
 #ifdef FSCom
     // Load the last known-good GPS model/baud pair so we can avoid a full probe
-    // sweep on every boot.
+    // sweep on every boot. Also handles cached negative verdicts (GPS not detected).
     triedProbeCache = true; // Latch this boot's load attempt, even if no cache.
     GPSProbeCacheRecord record = {};
     size_t bytesRead = 0;
@@ -623,10 +624,24 @@ bool GPS::loadProbeCache()
     spiLock->unlock();
 
     const bool headerValid = (bytesRead == sizeof(record)) && (record.magic == GPS_PROBE_CACHE_MAGIC) &&
-                             (record.version == GPS_PROBE_CACHE_VERSION) && (record.reserved == 0U);
-    if (!headerValid || !isValidGnssModel(record.model) || !isValidProbeBaud(record.baud)) {
-        clearProbeCache(); // Drop corrupt/invalid cache so next boot can
-                           // recover.
+                             (record.version == GPS_PROBE_CACHE_VERSION);
+    if (!headerValid) {
+        clearProbeCache(); // Drop corrupt/invalid cache so next boot can recover.
+        return false;
+    }
+
+    // Handle negative verdict: GPS exhaustively probed but not found.
+    if (record.negative_verdict == 1) {
+        // Honor cached negative verdict to skip exhaustive baud scan.
+        // Users can re-probe by changing position config (clears cache) or manually deleting /prefs/gps_probe_cache.dat.
+        hasNegativeProbeCache = true;
+        LOG_INFO("GPS probe skipped: cached negative verdict");
+        return true; // Skip probe; GPS remains GNSS_MODEL_UNKNOWN.
+    }
+
+    // Positive verdict: cached GPS model found.
+    if (!isValidGnssModel(record.model) || !isValidProbeBaud(record.baud)) {
+        clearProbeCache(); // Drop corrupt/invalid cache so next boot can recover.
         return false;
     }
 
@@ -670,7 +685,7 @@ bool GPS::saveProbeCache() const
     FSCom.mkdir("/prefs");
     spiLock->unlock();
     GPSProbeCacheRecord record = {
-        GPS_PROBE_CACHE_MAGIC, GPS_PROBE_CACHE_VERSION, 0, static_cast<uint32_t>(detectedBaud), static_cast<uint8_t>(gnssModel),
+        GPS_PROBE_CACHE_MAGIC, GPS_PROBE_CACHE_VERSION, 0, 0, static_cast<uint32_t>(detectedBaud), static_cast<uint8_t>(gnssModel),
     };
 
     auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
@@ -680,6 +695,42 @@ bool GPS::saveProbeCache() const
     return (written == sizeof(record)) && file.close();
 #else
     return false;
+#endif
+}
+
+bool GPS::saveNegativeProbeCache() const
+{
+#ifdef FSCom
+    // Cache a negative probe verdict: GPS not detected after exhaustive baud scan.
+    // This saves ~76 seconds on every boot for GPS-less boards with HAS_GPS defined.
+    spiLock->lock();
+    FSCom.mkdir("/prefs");
+    spiLock->unlock();
+    GPSProbeCacheRecord record = {
+        GPS_PROBE_CACHE_MAGIC, GPS_PROBE_CACHE_VERSION, 0, 1, 0, static_cast<uint8_t>(GNSS_MODEL_UNKNOWN),
+    };
+
+    auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
+    spiLock->lock();
+    const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
+    spiLock->unlock();
+    LOG_INFO("GPS probe negative verdict cached — will skip probe next boot");
+    return (written == sizeof(record)) && file.close();
+#else
+    return false;
+#endif
+}
+
+void GPS::clearProbeCacheFile()
+{
+// Called by AdminModule when position config is written; invalidates cached
+// probe result so next boot will re-probe GPS.
+#ifdef FSCom
+    spiLock->lock();
+    if (FSCom.exists(GPS_PROBE_CACHE_FILE)) {
+        FSCom.remove(GPS_PROBE_CACHE_FILE);
+    }
+    spiLock->unlock();
 #endif
 }
 
@@ -810,8 +861,15 @@ bool GPS::setup()
     if (!didSerialInit) {
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-            if (!hasProbeCache && !triedProbeCache) {
+            if (!hasProbeCache && !triedProbeCache && !hasNegativeProbeCache) {
                 (void)loadProbeCache();
+            }
+
+            // Handle negative probe verdict: skip probe entirely on this boot.
+            // (didSerialInit=true prevents re-entry on subsequent calls to setup())
+            if (hasNegativeProbeCache) {
+                didSerialInit = true; // Skip rest of GPS init; gnssModel remains UNKNOWN.
+                return true;           // Probe skipped; update() will see UNKNOWN and call disable().
             }
 
             if (hasProbeCache && !triedProbeCache) {
@@ -852,6 +910,7 @@ bool GPS::setup()
             setConnected();
             (void)saveProbeCache();
         } else {
+            (void)saveNegativeProbeCache(); // Cache that no GPS module was found.
             return false;
         }
 

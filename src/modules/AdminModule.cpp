@@ -846,6 +846,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
         }
         config.position = c.payload_variant.position;
+        // User touched position config — invalidate GPS probe cache so next boot re-probes.
+#if !MESHTASTIC_EXCLUDE_GPS
+        GPS::clearProbeCacheFile();
+#endif
 
         // Save nodedb as well in case we got a fixed position packet
         break;
