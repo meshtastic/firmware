@@ -932,36 +932,43 @@ static void test_channelSpacingCalculation_placeholder()
 
 // AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
+static bool adminRadioGlobalsActive;
+static NodeDB *savedNodeDB;
+static NodeDB *replacementNodeDB;
+static NodeInfoModule *savedNodeInfoModule;
+static meshtastic_DeviceState savedDeviceState;
+static meshtastic_User savedOwner;
+static meshtastic_LocalConfig savedConfig;
+static meshtastic_ChannelFile savedChannelFile;
 
-class ScopedAdminRadioGlobals
+static void replaceAdminRadioGlobals()
 {
-  public:
-    ScopedAdminRadioGlobals()
-        : savedNodeDB(nodeDB), savedNodeInfoModule(nodeInfoModule), savedDeviceState(devicestate), savedConfig(config),
-          savedChannelFile(channelFile), testNodeDB(new NodeDB())
-    {
-        nodeDB = testNodeDB;
-    }
+    savedNodeDB = nodeDB;
+    savedNodeInfoModule = nodeInfoModule;
+    savedDeviceState = devicestate;
+    savedOwner = owner;
+    savedConfig = config;
+    savedChannelFile = channelFile;
+    replacementNodeDB = new NodeDB();
+    nodeDB = replacementNodeDB;
+    adminRadioGlobalsActive = true;
+}
 
-    ~ScopedAdminRadioGlobals()
-    {
-        nodeInfoModule = savedNodeInfoModule;
-        nodeDB = savedNodeDB;
-        delete testNodeDB;
-        devicestate = savedDeviceState;
-        config = savedConfig;
-        channelFile = savedChannelFile;
-        initRegion();
-    }
-
-  private:
-    NodeDB *savedNodeDB;
-    NodeInfoModule *savedNodeInfoModule;
-    meshtastic_DeviceState savedDeviceState;
-    meshtastic_LocalConfig savedConfig;
-    meshtastic_ChannelFile savedChannelFile;
-    NodeDB *testNodeDB;
-};
+static void restoreAdminRadioGlobals()
+{
+    if (!adminRadioGlobalsActive)
+        return;
+    nodeInfoModule = savedNodeInfoModule;
+    nodeDB = savedNodeDB;
+    delete replacementNodeDB;
+    replacementNodeDB = nullptr;
+    devicestate = savedDeviceState;
+    owner = savedOwner;
+    config = savedConfig;
+    channelFile = savedChannelFile;
+    initRegion();
+    adminRadioGlobalsActive = false;
+}
 
 static void installEncryptedAndAdminChannels()
 {
@@ -995,7 +1002,7 @@ static void assertLicensedChannelsSanitized()
 
 static void test_handleSetOwner_persistsLicensedChannelSanitation()
 {
-    ScopedAdminRadioGlobals globals;
+    replaceAdminRadioGlobals();
     owner = meshtastic_User_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     installEncryptedAndAdminChannels();
@@ -1071,7 +1078,7 @@ static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCo
 
 static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
 {
-    ScopedAdminRadioGlobals globals;
+    replaceAdminRadioGlobals();
     owner = meshtastic_User_init_zero;
     owner.is_licensed = true;
     config.security = meshtastic_Config_SecurityConfig_init_zero;
@@ -1403,6 +1410,7 @@ void setUp(void)
 }
 void tearDown(void)
 {
+    restoreAdminRadioGlobals();
     service = nullptr;
     delete mockMeshService;
     mockMeshService = nullptr;

@@ -93,15 +93,7 @@ class MockNodeDB : public NodeDB
 static MockNodeDB *mockNodeDB = nullptr;
 
 #ifdef ARCH_PORTDUINO
-class ScopedPkiRoutingForTest
-{
-  public:
-    ScopedPkiRoutingForTest() : savedForceSimRadio(portduino_config.force_simradio) { portduino_config.force_simradio = false; }
-    ~ScopedPkiRoutingForTest() { portduino_config.force_simradio = savedForceSimRadio; }
-
-  private:
-    bool savedForceSimRadio;
-};
+static bool savedForceSimRadio;
 #endif
 
 // ---------------------------------------------------------------------------
@@ -171,6 +163,10 @@ static bool signedEncodingFits(const meshtastic_Data *d)
 // ---------------------------------------------------------------------------
 void setUp(void)
 {
+#ifdef ARCH_PORTDUINO
+    savedForceSimRadio = portduino_config.force_simradio;
+    portduino_config.force_simradio = false;
+#endif
     // Construct the mock FIRST: the NodeDB constructor can reload persisted state from the
     // host filesystem (portduino VFS) and repopulate the globals - a saved private key
     // re-enables the PKI encrypt path and fails the unicast tests on hosts with leftover prefs.
@@ -194,6 +190,9 @@ void tearDown(void)
     delete mockNodeDB;
     mockNodeDB = nullptr;
     nodeDB = nullptr;
+#ifdef ARCH_PORTDUINO
+    portduino_config.force_simradio = savedForceSimRadio;
+#endif
 }
 
 // ===========================================================================
@@ -534,9 +533,6 @@ void test_B9_licensed_oversized_unicast_remains_unsigned(void)
 // B10: normal-mode direct messages retain their existing PKI encryption behavior.
 void test_B10_normal_unicast_still_uses_pki(void)
 {
-#ifdef ARCH_PORTDUINO
-    ScopedPkiRoutingForTest pkiRouting;
-#endif
     uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
     crypto->generateKeyPair(localPub, localPriv);
     crypto->generateKeyPair(remotePub, remotePriv);
@@ -562,9 +558,6 @@ void test_B10_normal_unicast_still_uses_pki(void)
 // B11: publishing a licensed node's key must not make inbound PKI decryption reachable.
 void test_B11_licensed_receiver_does_not_decrypt_pki(void)
 {
-#ifdef ARCH_PORTDUINO
-    ScopedPkiRoutingForTest pkiRouting;
-#endif
     uint8_t localPub[32], localPriv[32], remotePub[32], remotePriv[32];
     crypto->generateKeyPair(localPub, localPriv);
     crypto->generateKeyPair(remotePub, remotePriv);
