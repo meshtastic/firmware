@@ -9,6 +9,7 @@
 #define START2 0xc3
 #define HEADER_LEN 4
 
+/// Poll the underlying stream, drain output, and update connection state.
 int32_t StreamAPI::runOncePart()
 {
     auto result = readStream();
@@ -17,6 +18,7 @@ int32_t StreamAPI::runOncePart()
     return result;
 }
 
+/// Consume supplied input bytes, drain output, and update connection state.
 int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 {
     auto result = readStream(buf, bufLen);
@@ -63,6 +65,7 @@ void StreamAPI::writeStream()
     }
 }
 
+/// Parse supplied bytes through the framed ToRadio receive state machine.
 int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
@@ -172,6 +175,7 @@ int32_t StreamAPI::readStream()
     }
 }
 
+/// Encode the stream marker and big-endian payload length.
 size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen)
 {
     buf[0] = START1;
@@ -184,6 +188,7 @@ size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen)
 /**
  * Send the current txBuffer over our stream
  */
+/// Write one framed payload using the transport's failure semantics.
 bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 {
     (void)bestEffort;
@@ -207,11 +212,13 @@ bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
     return false;
 }
 
+/// Emit the prepared main PhoneAPI payload as required output.
 bool StreamAPI::emitTxBuffer(size_t len)
 {
     return writeFrame(txBuf, len, false);
 }
 
+/// Emit the initial reboot notification as a framed FromRadio payload.
 void StreamAPI::emitRebooted()
 {
     // In case we send a FromRadio packet
@@ -223,6 +230,7 @@ void StreamAPI::emitRebooted()
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 
+/// Encode and emit one protobuf LogRecord using the dedicated log buffers.
 void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
 {
     // A retained short log frame still points into txBufLog, so do not overwrite it.

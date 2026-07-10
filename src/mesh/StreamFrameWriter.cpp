@@ -2,6 +2,7 @@
 
 #include <cassert>
 
+/// Start a frame or retain required output behind an incomplete frame.
 bool StreamFrameWriter::writeFrame(Stream &stream, uint8_t *frame, size_t frameLen, bool bestEffort)
 {
     if (!finishPendingFrame(stream)) {
@@ -32,6 +33,7 @@ bool StreamFrameWriter::writeFrame(Stream &stream, uint8_t *frame, size_t frameL
     return false;
 }
 
+/// Continue the pending tail with at most one Stream::write() call.
 bool StreamFrameWriter::finishPendingFrame(Stream &stream)
 {
     if (!pendingFrame)

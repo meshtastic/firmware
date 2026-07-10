@@ -30,6 +30,7 @@
 
 SerialConsole *console;
 
+/// Create the shared serial console once and register receive wakeups.
 void consoleInit()
 {
     if (console) {
@@ -46,6 +47,7 @@ void consoleInit()
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
 }
 
+/// Print and flush an unclassified formatted console message.
 void consolePrintf(const char *format, ...)
 {
     va_list arg;
@@ -55,6 +57,7 @@ void consolePrintf(const char *format, ...)
     console->flush();
 }
 
+/// Initialize console, protobuf transport, serial port, and worker thread state.
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), concurrency::OSThread("SerialConsole")
 {
     api_type = TYPE_SERIAL;
@@ -82,6 +85,7 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 #endif
 }
 
+/// Service one serial API iteration and select the next polling interval.
 int32_t SerialConsole::runOnce()
 {
 #ifdef HELTEC_MESH_SOLAR
@@ -102,6 +106,7 @@ int32_t SerialConsole::runOnce()
 #endif
 }
 
+/// Flush raw output while preserving queued protobuf frames.
 void SerialConsole::flush()
 {
     // HWCDC::flush()'s no-progress path discards queued TX bytes, which would tear a
@@ -112,6 +117,7 @@ void SerialConsole::flush()
     Port.flush();
 }
 
+/// Write raw console data only before protobuf framing becomes active.
 size_t SerialConsole::write(uint8_t c)
 {
     // Once a protobuf client is active, unframed bytes would corrupt its stream.
@@ -123,24 +129,25 @@ size_t SerialConsole::write(uint8_t c)
     return RedirectablePrint::write(c);
 }
 
-// trigger tx of serial data
+/// Wake the serial worker when PhoneAPI queues output.
 void SerialConsole::onNowHasData(uint32_t fromRadioNum)
 {
     setIntervalFromNow(0);
 }
 
-// trigger rx of serial data
+/// Wake the serial worker when receive activity is signaled.
 void SerialConsole::rxInt()
 {
     setIntervalFromNow(0);
 }
 
-// For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
+/// Infer serial client connectivity from recent API contact.
 bool SerialConsole::checkIsConnected()
 {
     return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
+/// Select bounded or non-blocking HWCDC writes based on host liveness.
 void SerialConsole::setHostDraining(bool draining)
 {
 #ifdef IS_USB_SERIAL
@@ -152,17 +159,22 @@ void SerialConsole::setHostDraining(bool draining)
 #endif
 }
 
+/// Update HWCDC timeout mode around generic connection handling.
 void SerialConsole::onConnectionChanged(bool connected)
 {
     // Order matters on disconnect: make console TX non-blocking *before* the
     // PowerFSM/close handling below emits more log lines to a dead port.
-    if (!connected)
+    if (!connected) {
         setHostDraining(false);
+        // Keep any retained tail: HWCDC may still hold its prefix, and dropping metadata
+        // would let the next frame header land inside that frame's declared payload.
+    }
     StreamAPI::onConnectionChanged(connected);
     if (connected)
         setHostDraining(true);
 }
 
+/// Continue retained USB CDC output under the shared stream lock.
 bool SerialConsole::finishPendingFrame()
 {
 #ifdef IS_USB_SERIAL
@@ -173,6 +185,7 @@ bool SerialConsole::finishPendingFrame()
 #endif
 }
 
+/// Protect the retained log buffer from being overwritten.
 bool SerialConsole::canEncodeLogRecord()
 {
 #ifdef IS_USB_SERIAL
@@ -183,6 +196,7 @@ bool SerialConsole::canEncodeLogRecord()
 #endif
 }
 
+/// Frame USB CDC output and retain any unwritten tail.
 bool SerialConsole::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 {
 #ifdef IS_USB_SERIAL
@@ -220,6 +234,7 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
     }
 }
 
+/// Route logs without allowing raw bytes into an active protobuf stream.
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
     if (usingProtobufs) {

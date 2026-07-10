@@ -4,13 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-/**
- * Continues framed writes across bounded Stream::write() calls.
- *
- * Frame storage is owned by the caller and must remain valid and unchanged
- * until isIdle() returns true. Locking and frame construction are also the
- * caller's responsibility.
- */
+/** Caller-owned frame storage must remain valid and unchanged until isIdle(). */
 class StreamFrameWriter
 {
   public:
@@ -20,6 +14,7 @@ class StreamFrameWriter
     /// Make one bounded attempt to finish pending output.
     bool finishPendingFrame(Stream &stream);
 
+    /// Return true when no frame buffer is retained.
     bool isIdle() const { return pendingFrame == nullptr && deferredFrame == nullptr; }
 
   private:
