@@ -173,6 +173,29 @@ void test_frame_writer_continues_only_unwritten_tail()
     TEST_ASSERT_EQUAL_UINT(0, stream.flushCount);
 }
 
+void test_frame_writer_completes_retained_tail_before_new_session_frame()
+{
+    ScriptedStream stream;
+    StreamFrameWriter writer;
+    std::vector<uint8_t> oldFrame = {0x94, 0xc3, 0x00, 0x03, 0xa1, 0xa2, 0xa3};
+    std::vector<uint8_t> newFrame = {0x94, 0xc3, 0x00, 0x02, 0xb1, 0xb2};
+    stream.queueWrite(3);
+    stream.queueWrite(oldFrame.size());
+    stream.queueWrite(newFrame.size());
+
+    TEST_ASSERT_FALSE(writer.writeFrame(stream, oldFrame.data(), oldFrame.size(), false));
+    TEST_ASSERT_FALSE(writer.isIdle());
+
+    // A replacement client starts without discarding the accepted old prefix.
+    TEST_ASSERT_TRUE(writer.writeFrame(stream, newFrame.data(), newFrame.size(), false));
+    TEST_ASSERT_TRUE(writer.isIdle());
+
+    std::vector<uint8_t> expected = oldFrame;
+    expected.insert(expected.end(), newFrame.begin(), newFrame.end());
+    assertBytesEqual(expected, stream.output);
+}
+
+
 void test_frame_writer_defers_main_behind_partial_log()
 {
     ScriptedStream stream;
@@ -355,6 +378,7 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
     RUN_TEST(test_frame_writer_continues_only_unwritten_tail);
+    RUN_TEST(test_frame_writer_completes_retained_tail_before_new_session_frame);
     RUN_TEST(test_frame_writer_defers_main_behind_partial_log);
     RUN_TEST(test_frame_writer_rejects_best_effort_without_full_capacity);
     RUN_TEST(test_frame_writer_zero_progress_is_one_bounded_attempt);
