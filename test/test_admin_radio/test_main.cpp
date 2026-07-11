@@ -484,7 +484,7 @@ static void test_validateConfigLora_allStdPresetsValidForUS()
         meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO,
     };
 
     for (size_t i = 0; i < sizeof(stdPresets) / sizeof(stdPresets[0]); i++) {
@@ -498,7 +498,8 @@ static void test_validateConfigLora_allStdPresetsValidForUS()
 
 static void test_validateConfigLora_turboPresetsInvalidForEU868()
 {
-    // EU_868 has PRESETS_EU_868 which excludes SHORT_TURBO and LONG_TURBO
+    // EU_868 has PRESETS_EU_868 which excludes the 500 kHz turbo presets
+    // (SHORT_TURBO, LONG_TURBO, MEDIUM_TURBO)
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     cfg.use_preset = true;
@@ -508,6 +509,9 @@ static void test_validateConfigLora_turboPresetsInvalidForEU868()
 
     cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
     TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "LONG_TURBO should be invalid for EU_868");
+
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "MEDIUM_TURBO should be invalid for EU_868");
 }
 
 static void test_validateConfigLora_validPresetsForEU868()
@@ -598,13 +602,13 @@ static void test_validateConfigLora_unsetRegionOnlyAcceptsLongFast()
 
 static void test_validateConfigLora_allPresetsValidForLORA24()
 {
-    // LORA_24 uses PROFILE_STD (9 presets) with wideLora=true
+    // LORA_24 uses PROFILE_STD (10 presets) with wideLora=true
     meshtastic_Config_LoRaConfig_ModemPreset stdPresets[] = {
         meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
         meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO,
     };
 
     for (size_t i = 0; i < sizeof(stdPresets) / sizeof(stdPresets[0]); i++) {
@@ -792,11 +796,11 @@ static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
 // RegionInfo preset list integrity tests
 // -----------------------------------------------------------------------
 
-static void test_presetsStd_hasNineEntries()
+static void test_presetsStd_hasTenEntries()
 {
-    // PROFILE_STD should have exactly 9 presets
+    // PROFILE_STD should have exactly 10 presets (adds MEDIUM_TURBO to the turbo cluster)
     const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    TEST_ASSERT_EQUAL(9, us->getNumPresets());
+    TEST_ASSERT_EQUAL(10, us->getNumPresets());
     TEST_ASSERT_EQUAL_PTR(PROFILE_STD.presets, us->getAvailablePresets());
 }
 
@@ -1320,7 +1324,7 @@ void setup()
     RUN_TEST(test_validateConfigLora_siblingLockedPresetStillFailsValidation);
 
     // RegionInfo preset list integrity
-    RUN_TEST(test_presetsStd_hasNineEntries);
+    RUN_TEST(test_presetsStd_hasTenEntries);
     RUN_TEST(test_presetsEU868_hasSevenEntries);
     RUN_TEST(test_presetsUndef_hasOneEntry);
     RUN_TEST(test_defaultPresetIsInAvailablePresets);
