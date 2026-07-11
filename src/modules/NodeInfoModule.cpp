@@ -51,8 +51,10 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
     NodeNum sourceNum = getFrom(&mp);
     const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
-    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed) {
-        LOG_WARN("Dropping unsigned NodeInfo from node 0x%08x that previously signed", sourceNum);
+    // Broadcasts only: senders never sign unicast NodeInfo, so dropping it would break exchanges
+    // with signer nodes. Backstops ingress that skips Router's downgrade drop (e.g. decoded MQTT).
+    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
+        LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
         return true;
     }
 
@@ -67,12 +69,13 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // if user has changed while packet was not for us, inform phone
     if (hasChanged && !wasBroadcast && !isToUs(&mp)) {
         auto packetCopy = packetPool.allocCopy(mp); // Keep a copy of the packet for later analysis
+        if (packetCopy) {
+            // Re-encode the user protobuf, as we have stripped out the user.id
+            packetCopy->decoded.payload.size = pb_encode_to_bytes(
+                packetCopy->decoded.payload.bytes, sizeof(packetCopy->decoded.payload.bytes), &meshtastic_User_msg, &p);
 
-        // Re-encode the user protobuf, as we have stripped out the user.id
-        packetCopy->decoded.payload.size = pb_encode_to_bytes(
-            packetCopy->decoded.payload.bytes, sizeof(packetCopy->decoded.payload.bytes), &meshtastic_User_msg, &p);
-
-        service->sendToPhone(packetCopy);
+            service->sendToPhone(packetCopy);
+        }
     }
 
     pruneLastNodeInfoCache();

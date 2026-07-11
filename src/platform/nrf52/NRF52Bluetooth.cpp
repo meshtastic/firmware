@@ -4,6 +4,7 @@
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -275,7 +276,16 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-    Bluefruit.begin();
+    if (!Bluefruit.begin()) {
+        // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
+        // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
+        // current Bluefruit config. Without this check the node would silently run without BLE.
+        // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
+        // raise the ORIGIN accordingly.
+        LOG_ERROR("Bluefruit.begin failed - SoftDevice RAM reservation too small for this config");
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
+        return;
+    }
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
@@ -413,7 +423,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
             "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
         // Use the pairing_pin notification type so the lockdown UI short-
         // circuit (Screen.cpp updateUiFrame) allows the overlay through
-        // even on a locked device — see H13 audit fix. The banner content
+        // even on a locked device - see H13 audit fix. The banner content
         // is the per-attempt ephemeral pair PIN, not operator content.
         graphics::BannerOverlayOptions opts;
         opts.message = ble_message.c_str();

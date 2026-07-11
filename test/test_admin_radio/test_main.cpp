@@ -21,15 +21,11 @@
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
+#include "support/AdminModuleTestShim.h"
+#include "support/MockMeshService.h"
 
 // hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
 extern uint32_t hash(const char *str);
-
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
 
 static MockMeshService *mockMeshService;
 
@@ -235,7 +231,7 @@ static const RegionInfo testRegions[] = {
     {meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, &TEST_PROFILE_TURBO,
      meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, 0, "TEST_LORA24_TURBO"},
 
-    // Sentinel — must be last
+    // Sentinel - must be last
     {meshtastic_Config_LoRaConfig_RegionCode_UNSET, 902.0f, 928.0f, 100, 30, false, false, &TEST_PROFILE_SPACED,
      meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, 0, "TEST_UNSET"},
 };
@@ -488,7 +484,7 @@ static void test_validateConfigLora_allStdPresetsValidForUS()
         meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO,
     };
 
     for (size_t i = 0; i < sizeof(stdPresets) / sizeof(stdPresets[0]); i++) {
@@ -502,7 +498,8 @@ static void test_validateConfigLora_allStdPresetsValidForUS()
 
 static void test_validateConfigLora_turboPresetsInvalidForEU868()
 {
-    // EU_868 has PRESETS_EU_868 which excludes SHORT_TURBO and LONG_TURBO
+    // EU_868 has PRESETS_EU_868 which excludes the 500 kHz turbo presets
+    // (SHORT_TURBO, LONG_TURBO, MEDIUM_TURBO)
     meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
     cfg.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     cfg.use_preset = true;
@@ -512,6 +509,9 @@ static void test_validateConfigLora_turboPresetsInvalidForEU868()
 
     cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO;
     TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "LONG_TURBO should be invalid for EU_868");
+
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+    TEST_ASSERT_FALSE_MESSAGE(RadioInterface::validateConfigLora(cfg), "MEDIUM_TURBO should be invalid for EU_868");
 }
 
 static void test_validateConfigLora_validPresetsForEU868()
@@ -602,13 +602,13 @@ static void test_validateConfigLora_unsetRegionOnlyAcceptsLongFast()
 
 static void test_validateConfigLora_allPresetsValidForLORA24()
 {
-    // LORA_24 uses PROFILE_STD (9 presets) with wideLora=true
+    // LORA_24 uses PROFILE_STD (10 presets) with wideLora=true
     meshtastic_Config_LoRaConfig_ModemPreset stdPresets[] = {
         meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST,     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW,
         meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW,   meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW,    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
         meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,
+        meshtastic_Config_LoRaConfig_ModemPreset_LONG_TURBO,    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO,
     };
 
     for (size_t i = 0; i < sizeof(stdPresets) / sizeof(stdPresets[0]); i++) {
@@ -796,11 +796,11 @@ static void test_validateConfigLora_siblingLockedPresetStillFailsValidation()
 // RegionInfo preset list integrity tests
 // -----------------------------------------------------------------------
 
-static void test_presetsStd_hasNineEntries()
+static void test_presetsStd_hasTenEntries()
 {
-    // PROFILE_STD should have exactly 9 presets
+    // PROFILE_STD should have exactly 10 presets (adds MEDIUM_TURBO to the turbo cluster)
     const RegionInfo *us = getRegion(meshtastic_Config_LoRaConfig_RegionCode_US);
-    TEST_ASSERT_EQUAL(9, us->getNumPresets());
+    TEST_ASSERT_EQUAL(10, us->getNumPresets());
     TEST_ASSERT_EQUAL_PTR(PROFILE_STD.presets, us->getAvailablePresets());
 }
 
@@ -929,12 +929,7 @@ static void test_channelSpacingCalculation_placeholder()
 // handleSetConfig fromOthers dispatch tests
 // -----------------------------------------------------------------------
 
-class AdminModuleTestShim : public AdminModule
-{
-  public:
-    using AdminModule::handleSetConfig;
-};
-
+// AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
 
 static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
@@ -1026,6 +1021,162 @@ static void test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
     TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+}
+
+// clampBandwidthCode: an unset (0) bandwidth code maps to the default; any other code is left as-is.
+static void test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged()
+{
+    TEST_ASSERT_NOT_EQUAL_UINT16(0, clampBandwidthCode(0)); // the point of the fix: 0 must not stay 0
+    TEST_ASSERT_EQUAL_UINT16(bwKHzToCode(LORA_BW_DEFAULT_KHZ), clampBandwidthCode(0));
+    TEST_ASSERT_EQUAL_UINT16(250, clampBandwidthCode(250));
+    TEST_ASSERT_EQUAL_UINT16(125, clampBandwidthCode(125));
+    TEST_ASSERT_EQUAL_UINT16(31, clampBandwidthCode(31));
+}
+
+// A custom (non-preset) config that leaves bandwidth at its proto zero-value must not persist as 0.
+// Pre-fix it slipped past validateConfigLora() and the radio silently ran at the default while
+// get_config still reported bandwidth 0. It is now coerced to the default code on ingest.
+static void test_handleSetConfig_fromLocal_customBandwidthZeroClampedToDefault()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, false, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.spread_factor = 11;
+    c.payload_variant.lora.coding_rate = 5;
+    c.payload_variant.lora.bandwidth = 0; // the footgun: unset custom bandwidth
+
+    testAdmin->handleSetConfig(c, false); // fromOthers = false (local client)
+
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_NOT_EQUAL_UINT16(0, config.lora.bandwidth); // must not persist as 0
+    TEST_ASSERT_EQUAL_UINT16(bwKHzToCode(LORA_BW_DEFAULT_KHZ), config.lora.bandwidth);
+}
+
+// Remote admin (fromOthers) is subject to the same ingest clamp: a custom bandwidth 0 from another
+// node is normalized to the default rather than persisted as 0 (it does not weaken the wholesale
+// rejection of configs that actually fail validation - a 0 bandwidth already passed validation).
+static void test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, false, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.spread_factor = 11;
+    c.payload_variant.lora.coding_rate = 5;
+    c.payload_variant.lora.bandwidth = 0;
+
+    testAdmin->handleSetConfig(c, true); // fromOthers = true
+
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(bwKHzToCode(LORA_BW_DEFAULT_KHZ), config.lora.bandwidth);
+}
+
+// In preset mode bandwidth 0 is the norm (the preset supplies it); the ingest clamp must leave it
+// untouched so preset configs still read back bandwidth 0.
+static void test_handleSetConfig_fromLocal_presetBandwidthZeroLeftUntouched()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.bandwidth = 0;
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_TRUE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(0, config.lora.bandwidth);
+}
+
+// A custom (non-preset) config with an already-valid bandwidth must be preserved verbatim.
+static void test_handleSetConfig_fromLocal_customBandwidthNonZeroPreserved()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+
+    meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, false, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.spread_factor = 11;
+    c.payload_variant.lora.coding_rate = 5;
+    c.payload_variant.lora.bandwidth = 125;
+
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(125, config.lora.bandwidth);
+}
+
+// A security-config SET that omits the private key (partial/legacy client editing some other security field)
+// must NOT regenerate our keypair: our NodeNum is crc32(public_key), so a new keypair would silently change
+// our identity. The existing keypair has to be preserved.
+static void test_handleSetConfig_security_preservesKeypairWhenPrivateOmitted()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, 0x22, 32);
+
+    // Incoming SET carries no private/public key, just another security field.
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.serial_enabled = true;
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    uint8_t expectedPriv[32];
+    memset(expectedPriv, 0x11, 32);
+    uint8_t expectedPub[32];
+    memset(expectedPub, 0x22, 32);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_MEMORY(expectedPriv, config.security.private_key.bytes, 32);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_EQUAL_MEMORY(expectedPub, config.security.public_key.bytes, 32);
+    // The non-key field still applies.
+    TEST_ASSERT_TRUE(config.security.serial_enabled);
+}
+
+// A SET that DOES supply a full 32-byte keypair (legitimate key import) must apply it, not preserve the old one.
+static void test_handleSetConfig_security_acceptsSuppliedKeypair()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, 0x22, 32);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x33, 32);
+    c.payload_variant.security.public_key.size = 32;
+    memset(c.payload_variant.security.public_key.bytes, 0x44, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    uint8_t expectedPriv[32];
+    memset(expectedPriv, 0x33, 32);
+    uint8_t expectedPub[32];
+    memset(expectedPub, 0x44, 32);
+    TEST_ASSERT_EQUAL_MEMORY(expectedPriv, config.security.private_key.bytes, 32);
+    TEST_ASSERT_EQUAL_MEMORY(expectedPub, config.security.public_key.bytes, 32);
 }
 
 static void test_regionInfo_supportsPreset()
@@ -1173,7 +1324,7 @@ void setup()
     RUN_TEST(test_validateConfigLora_siblingLockedPresetStillFailsValidation);
 
     // RegionInfo preset list integrity
-    RUN_TEST(test_presetsStd_hasNineEntries);
+    RUN_TEST(test_presetsStd_hasTenEntries);
     RUN_TEST(test_presetsEU868_hasSevenEntries);
     RUN_TEST(test_presetsUndef_hasOneEntry);
     RUN_TEST(test_defaultPresetIsInAvailablePresets);
@@ -1197,6 +1348,13 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromLocal_invalidPresetClamped);
     RUN_TEST(test_handleSetConfig_fromOthers_validPresetAccepted);
     RUN_TEST(test_handleSetConfig_fromOthers_invalidChannelNumFullyRejected);
+    RUN_TEST(test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged);
+    RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthZeroClampedToDefault);
+    RUN_TEST(test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault);
+    RUN_TEST(test_handleSetConfig_fromLocal_presetBandwidthZeroLeftUntouched);
+    RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthNonZeroPreserved);
+    RUN_TEST(test_handleSetConfig_security_preservesKeypairWhenPrivateOmitted);
+    RUN_TEST(test_handleSetConfig_security_acceptsSuppliedKeypair);
     RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);

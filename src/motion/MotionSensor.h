@@ -9,11 +9,11 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
+#include "../Power.h"
 #include "../PowerFSM.h"
 #include "../detect/ScanI2C.h"
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
-#include "../power.h"
 #include "Wire.h"
 
 // Base class for motion processing

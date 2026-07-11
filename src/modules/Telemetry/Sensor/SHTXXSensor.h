@@ -10,8 +10,6 @@ class SHTXXSensor : public TelemetrySensor
 {
   private:
     SHTSensor sht;
-    TwoWire *_bus{};
-    uint8_t _address{};
     SHTSensor::SHTAccuracy accuracy{};
     bool setAccuracy(SHTSensor::SHTAccuracy newAccuracy);
 
