@@ -90,6 +90,15 @@ DeviceState versions used to be defined in the .proto file but really only this 
 // at boot via the parallel deviceonly_legacy descriptor and re-saved as v25.
 #define DEVICESTATE_MIN_VER 24
 
+// One-time behavioral migration marker for the 2.8 position/telemetry opt-in flip.
+// Deliberately kept separate from DEVICESTATE_CUR_VER: that constant also drives the
+// NodeDatabase slim-schema legacy gate (NodeDB.cpp, `nodeDatabase.version < CUR_VER`),
+// so bumping it would wrongly re-run the v24 legacy decoder on already-migrated v25
+// node DBs. This watermark is stamped only onto channelFile.version / moduleConfig.version
+// once the opt-in migration has run. RESERVES 26 - the next real on-disk schema change
+// should raise DEVICESTATE_CUR_VER to 27, not 26.
+#define POSITION_TELEMETRY_OPTIN_VER 26
+
 extern meshtastic_DeviceState devicestate;
 extern meshtastic_NodeDatabase nodeDatabase;
 extern meshtastic_ChannelFile channelFile;
@@ -147,12 +156,22 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
     if (isFromUs(&p)) {
         return false; // local-originated packets should never be dropped by pre-hop drop policy
     }
-    return classifyHopStart(p) != HopStartStatus::VALID;
+    // Pre-decode: the channel-encrypted bitfield isn't readable yet, so a missing/unknown hop_start can't be
+    // distinguished from a modern packet. Only drop the provably-corrupt case here; the bitfield-dependent
+    // verdict is re-checked post-decode in Router::handleReceived.
+    return classifyHopStart(p) == HopStartStatus::INVALID;
 #endif
 }
 
 /// Rate-limited debug log when hop_start is invalid/missing and packet is dropped.
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
+
+/// 2.8 position/telemetry opt-in migration (pure field mutators; exposed for native tests).
+/// Disable position broadcast on every PUBLIC/default-PSK channel (precision -> 0); private-PSK
+/// channels (deliberate trusted groups) are left untouched.
+void optInDisablePositionSharing(meshtastic_ChannelFile &cf);
+/// Force all mesh-broadcast device telemetry (and the MQTT map-report location) back to opt-in/off.
+void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc);
 
 enum LoadFileResult {
     // Successfully opened the file

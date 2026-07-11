@@ -119,6 +119,8 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 int32_t AirQualityTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
+        if (shouldDeferDeepSleep())
+            return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
                                                                    default_telemetry_broadcast_interval_secs);
@@ -222,6 +224,12 @@ int32_t AirQualityTelemetryModule::runOnce()
                 }
             }
         }
+    }
+    if (sleepOnNextExecution) {
+        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
+        // this return value, which would otherwise override setIntervalFromNow() and delay or
+        // mistime the pending deep sleep
+        return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, result);
 }
@@ -422,7 +430,8 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
 
-    if (getAirQualityTelemetry(&m)) {
+    bool validTelemetry = getAirQualityTelemetry(&m);
+    if (validTelemetry) {
 
         bool hasAnyPM =
             m.variant.air_quality_metrics.has_pm10_standard || m.variant.air_quality_metrics.has_pm25_standard ||
@@ -474,23 +483,33 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Sending packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+            if (isPowerSavingSensor()) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                notification->level = meshtastic_LogRecord_Level_INFO;
-                notification->time = getValidTime(RTCQualityFromNet);
-                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
-                                                          default_telemetry_broadcast_interval_secs) /
-                            1000U);
-                service->sendClientNotification(notification);
-                sleepOnNextExecution = true;
-                LOG_DEBUG("Start next execution in 5s, then sleep");
-                setIntervalFromNow(FIVE_SECONDS_MS);
+                if (notification) {
+                    notification->level = meshtastic_LogRecord_Level_INFO;
+                    notification->time = getValidTime(RTCQualityFromNet);
+                    sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                            Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
+                                                              default_telemetry_broadcast_interval_secs) /
+                                1000U);
+                    service->sendClientNotification(notification);
+                }
             }
         }
-        return true;
     }
-    return false;
+
+    // Arm the pre-sleep sequence even when no valid reading was available this cycle: a
+    // power-saving SENSOR node must still return to deep sleep, otherwise it stays awake
+    // until the next telemetry interval and drains its battery
+    if (!phoneOnly && isPowerSavingSensor()) {
+        if (!validTelemetry)
+            LOG_WARN("Air quality telemetry unavailable this cycle, sleep without sending");
+        sleepOnNextExecution = true;
+        preflightSleepDeferrals = 0;
+        LOG_DEBUG("Start next execution in 5s, then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
+    }
+    return validTelemetry;
 }
 
 AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,

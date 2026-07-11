@@ -2118,6 +2118,7 @@ static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
         return -6.0f;
     case PRESET(MEDIUM_SLOW):
     case PRESET(MEDIUM_FAST):
+    case PRESET(MEDIUM_TURBO):
         return -5.5f;
     case PRESET(SHORT_SLOW):
     case PRESET(SHORT_FAST):
