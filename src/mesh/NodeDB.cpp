@@ -408,7 +408,7 @@ static uint8_t ourMacAddr[6];
 static void deriveDeviceIdFromMacAddr()
 {
     getMacAddr(ourMacAddr);
-    uint8_t zero_mac[sizeof(ourMacAddr)] = {0};
+    const uint8_t zero_mac[sizeof(ourMacAddr)] = {0};
     if (memcmp(ourMacAddr, zero_mac, sizeof(ourMacAddr)) == 0) {
         LOG_WARN("MAC is all zeros, leaving device_id unset");
         return;
