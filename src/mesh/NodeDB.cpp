@@ -69,6 +69,11 @@
 
 #ifdef ARCH_RP2040
 #include <hardware/watchdog.h>
+#include <pico/unique_id.h>
+#endif
+
+#ifdef ARCH_STM32WL
+#include <stm32wlxx_hal.h>
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
@@ -398,6 +403,21 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
+// Derive device_id from the factory MAC when no better silicon source exists:
+// MAC in bytes 0-5, bytes 6-15 zero. Deterministic, survives reboots and flash erases.
+static void deriveDeviceIdFromMacAddr()
+{
+    getMacAddr(ourMacAddr);
+    uint8_t zero_mac[sizeof(ourMacAddr)] = {0};
+    if (memcmp(ourMacAddr, zero_mac, sizeof(ourMacAddr)) == 0) {
+        LOG_WARN("MAC is all zeros, leaving device_id unset");
+        return;
+    }
+    memset(myNodeInfo.device_id.bytes, 0, sizeof(myNodeInfo.device_id.bytes));
+    memcpy(myNodeInfo.device_id.bytes, ourMacAddr, sizeof(ourMacAddr));
+    myNodeInfo.device_id.size = 16;
+}
+
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
@@ -411,7 +431,8 @@ NodeDB::NodeDB()
 
     int saveWhat = 0;
     // Get device unique id
-#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) ||            \
+    defined(CONFIG_IDF_TARGET_ESP32C6)
     uint32_t unique_id[4];
     // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
     // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
@@ -439,13 +460,30 @@ NodeDB::NodeDB()
     memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
     myNodeInfo.device_id.size = 16;
     // Uncomment below to print the device id
+#elif defined(ARCH_RP2040)
+    // RP2040/RP2350: 64-bit unique board id (flash serial / OTP) in bytes 0-7, bytes 8-15 zero
+    pico_unique_board_id_t board_id;
+    pico_get_unique_board_id(&board_id);
+    memcpy(myNodeInfo.device_id.bytes, board_id.id, sizeof(board_id.id));
+    memset(myNodeInfo.device_id.bytes + sizeof(board_id.id), 0, sizeof(myNodeInfo.device_id.bytes) - sizeof(board_id.id));
+    myNodeInfo.device_id.size = 16;
+#elif defined(ARCH_STM32WL)
+    // STM32WL: 96-bit factory-programmed silicon UID (words w0..w2 little-endian) in bytes 0-11, bytes 12-15 zero
+    uint32_t uid[3] = {HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2()};
+    memcpy(myNodeInfo.device_id.bytes, uid, sizeof(uid));
+    memset(myNodeInfo.device_id.bytes + sizeof(uid), 0, sizeof(myNodeInfo.device_id.bytes) - sizeof(uid));
+    myNodeInfo.device_id.size = 16;
 #elif ARCH_PORTDUINO
     if (portduino_config.has_device_id) {
         memcpy(myNodeInfo.device_id.bytes, portduino_config.device_id, 16);
         myNodeInfo.device_id.size = 16;
+    } else {
+        // Config-supplied id stays preferred: host NIC/BT MACs can be unstable (docker, multi-NIC)
+        deriveDeviceIdFromMacAddr();
     }
 #else
-    // FIXME - implement for other platforms
+    // No factory unique-id silicon source on this platform (classic ESP32 in particular)
+    deriveDeviceIdFromMacAddr();
 #endif
 
     // if (myNodeInfo.device_id.size == 16) {
