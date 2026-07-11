@@ -7,6 +7,7 @@
 #include <stm32wlxx_hal.h>
 
 #if HAS_LSE
+#include <STM32LowPower.h>
 #include <STM32RTC.h>
 
 // LSEDRV is a 2-bit RCC_BDCR field where every combination is a legal drive level, so this covers all 4 values.
@@ -120,6 +121,7 @@ void stm32wlSetup()
         rtc.setClockSource(STM32RTC::LSE_CLOCK);
         rtc.begin();
         stm32wlRtcValid = true;
+        LowPower.begin();
         LOG_INFO("STM32WL: LSE locked, hardware RTC available");
     } else {
         // Don't leave a failed oscillator burning current.
@@ -138,7 +140,24 @@ bool stm32wlRtcAvailable()
 void stm32wlSetup() {}
 #endif
 
-void cpuDeepSleep(uint32_t msecToWake) {}
+void cpuDeepSleep(uint32_t msecToWake)
+{
+#if HAS_LSE
+    if (!stm32wlRtcAvailable())
+        return;
+
+    if (Serial)
+        Serial.end();
+
+    if (msecToWake != portMAX_DELAY) {
+        LowPower.shutdown(msecToWake);
+    } else {
+        LowPower.shutdown();
+    }
+    // RTC wakes from shutdown into MCU reset, so this code should never be reached
+    HAL_NVIC_SystemReset();
+#endif
+}
 
 // Hacks to force more code and data out.
 
