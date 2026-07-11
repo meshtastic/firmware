@@ -65,8 +65,8 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.setRX(SERIAL2_RX);
 #endif
     Port.begin(SERIAL_BAUD);
-#if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040) ||   \
-    defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    // Boot with console TX in non-blocking mode: no host is provably listening yet.
+    setHostDraining(false);
     time_t timeout = millis();
     while (!Port) {
         if (Throttle::isWithinTimespanMs(timeout, FIVE_SECONDS_MS)) {
@@ -75,7 +75,6 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
             break;
         }
     }
-#endif
 #if !ARCH_PORTDUINO
     emitRebooted();
 #endif
@@ -124,6 +123,28 @@ bool SerialConsole::checkIsConnected()
     return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
+void SerialConsole::setHostDraining(bool draining)
+{
+#ifdef IS_USB_SERIAL
+    // Timeout 0 makes HWCDC writes drop instead of block when the host stops draining;
+    // bounded blocking is restored while an API client is connected so frames aren't truncated.
+    Port.setTxTimeoutMs(draining ? 100 : 0);
+#else
+    (void)draining;
+#endif
+}
+
+void SerialConsole::onConnectionChanged(bool connected)
+{
+    // Order matters on disconnect: make console TX non-blocking *before* the
+    // PowerFSM/close handling below emits more log lines to a dead port.
+    if (!connected)
+        setHostDraining(false);
+    StreamAPI::onConnectionChanged(connected);
+    if (connected)
+        setHostDraining(true);
+}
+
 /**
  * we override this to notice when we've received a protobuf over the serial
  * stream.  Then we shut off debug serial output.
@@ -132,6 +153,10 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // only talk to the API once the configuration has been loaded and we're sure the serial port is not disabled.
     if (config.has_lora && config.security.serial_enabled) {
+        // The host just sent us bytes, so it is alive and draining the port:
+        // restore normal bounded-blocking TX before any API response is written.
+        setHostDraining(true);
+
         // Switch to protobufs for log messages
         usingProtobufs = true;
         canWrite = true;

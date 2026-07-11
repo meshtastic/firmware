@@ -22,7 +22,7 @@ struct AdminModule_ObserverData {
  */
 class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
 {
-    friend class AdminModuleTestShim; // native unit tests reach handleSetConfig + hasOpenEditTransaction
+    friend class AdminModuleTestShim; // test/support/AdminModuleTestShim.h - native tests reach the private handlers/state
 
   public:
     /** Constructor

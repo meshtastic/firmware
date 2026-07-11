@@ -30,6 +30,10 @@
 #include "platform/portduino/USBHal.h"
 #endif
 
+#if defined(ARCH_ESP32) && defined(USE_MCP23017)
+#include "platform/esp32/MCP23017LockingArduinoHal.h"
+#endif
+
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
@@ -284,6 +288,33 @@ const RegionInfo regions[] = {
     RDEF(ITU2_125CM, 220.0f, 225.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
 
     /*
+        ITU Region 1 (Europe, Africa, Middle East, former USSR) amateur 70cm allocation: 430.000 - 440.000 MHz.
+        Power limit is the regulatory ceiling (1 W / 30 dBm) - individual hardware will cap below this
+        via its own PA curve; the field here is just the legal upper bound.
+
+        Default slot: 37 (433.650 MHz)
+    */
+    RDEF(ITU1_70CM, 430.0f, 440.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
+
+    /*
+        ITU Region 2 (Americas) amateur 70cm allocation: 420.000 - 450.000 MHz.
+        Typical admin rules (e.g. US FCC Part 97) allow well above 30 dBm for licensed operators.
+        Note: Some countries do not allocate 420-430 MHz or 440-450 MHz. Check local law!
+
+        Default slot: 137 (433.650 MHz)
+    */
+    RDEF(ITU2_70CM, 420.0f, 450.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 137),
+
+    /*
+        ITU Region 3 (Asia/Pacific) amateur 70cm allocation: 430.000 - 450.000 MHz.
+        Typical admin rules allow well above 30 dBm for licensed operators.
+        Note: Some countries do not allocate 440-450 MHz. Check local law!
+
+        Default slot: 37 (433.650 MHz)
+    */
+    RDEF(ITU3_70CM, 430.0f, 450.0f, 100, 30, false, false, PROFILE_HAM_100KHZ, PRESET(NARROW_SLOW), 37),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 10, false, true, PROFILE_STD, PRESET(LONG_FAST), 0),
@@ -306,7 +337,11 @@ LoRaRadioType radioType = NO_RADIO;
 
 extern RadioLibHal *RadioLibHAL;
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+#if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
+extern SPIClass &SPI1; // alias for SPI_HSPI; both on SPI2_HOST
+#else
 extern SPIClass SPI1;
+#endif
 #endif
 
 std::unique_ptr<RadioInterface> initLoRa()
@@ -373,6 +408,10 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI1, loraSpiSettings);
+    RadioLibHAL = loraHal;
+#elif defined(ARCH_ESP32) && defined(USE_MCP23017)
+    // Radio control lines (RESET/DIO1/BUSY) are virtual pins on an MCP23017 I2C expander
+    LockingArduinoHal *loraHal = new MCP23017LockingArduinoHal(SPI, loraSpiSettings, mcpIoExpander);
     RadioLibHAL = loraHal;
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);
@@ -1083,7 +1122,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             }
         }
     } else {
-        check_bw = bwCodeToKHz(loraConfig.bandwidth);
+        // Clamp at the source so numFreqSlots below can never be 0 (bandwidth 0 is reachable from a crafted set_config)
+        check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
     }
 
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
@@ -1115,8 +1155,9 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
-    uint32_t presetNameHashSlot = hash(presetNameDisplay) % numFreqSlots;
+    // numFreqSlots can still be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
+    uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
+    uint32_t presetNameHashSlot = numFreqSlots ? (hash(presetNameDisplay) % numFreqSlots) : 0;
 
     if (loraConfig.override_frequency == 0) {
 
@@ -1218,7 +1259,8 @@ void RadioInterface::applyModemConfig()
                      newRegion->name);
             clampConfigLora(loraConfig);
         }
-        bw = bwCodeToKHz(loraConfig.bandwidth);
+        // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
+        bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
     }
@@ -1249,9 +1291,13 @@ void RadioInterface::applyModemConfig()
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
     // (numFreqSlots - 1).
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
+    // Guard the modulo: numFreqSlots can be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
+    uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
     uint32_t presetNameHashSlot =
-        hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) % numFreqSlots;
+        numFreqSlots
+            ? (hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) %
+               numFreqSlots)
+            : 0;
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {

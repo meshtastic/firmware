@@ -7,6 +7,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
+#include "Power.h"
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
@@ -14,7 +15,6 @@
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
-#include "power.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
 #if defined(ARCH_ESP32) && HAS_WIFI
@@ -905,6 +905,18 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SET_REGION_ITU2_125CM:
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM);
+        break;
+
+    case SET_REGION_ITU1_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU1_70CM);
+        break;
+
+    case SET_REGION_ITU2_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM);
+        break;
+
+    case SET_REGION_ITU3_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM);
         break;
 
     // Roles

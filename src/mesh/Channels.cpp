@@ -87,6 +87,9 @@ void Channels::initDefaultLoraConfig()
     loraConfig.tx_power = 0; // default
     loraConfig.channel_num = 0;
 
+#ifdef USERPREFS_LORACONFIG_TX_POWER
+    loraConfig.tx_power = USERPREFS_LORACONFIG_TX_POWER;
+#endif
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #endif
@@ -153,7 +156,9 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
     strncpy(channelSettings.name, "", sizeof(channelSettings.name));
-    channelSettings.module_settings.position_precision = 13; // default to sending location on the primary channel
+    // Position sharing is OPT-IN: precision 0 means "do not broadcast location". A user (or the phone app)
+    // must explicitly raise precision to start sharing. See the one-time opt-in migration in NodeDB.cpp.
+    channelSettings.module_settings.position_precision = 0;
     channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
@@ -236,7 +241,9 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
         memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
-            if (ch.role == meshtastic_Channel_Role_SECONDARY) {
+            // A secondary with no PSK borrows the primary's key; the chIndex != primaryIndex check
+            // prevents infinite recursion if the primary slot itself is marked SECONDARY
+            if (ch.role == meshtastic_Channel_Role_SECONDARY && chIndex != primaryIndex) {
                 LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
                 k = getKey(primaryIndex);
             } else {
@@ -306,11 +313,28 @@ void Channels::initDefaults()
 void Channels::onConfigChanged()
 {
     // Make sure the phone hasn't mucked anything up
+    bool hasPrimary = false;
     for (int i = 0; i < channelFile.channels_count; i++) {
         const meshtastic_Channel &ch = fixupChannel(i);
 
-        if (ch.role == meshtastic_Channel_Role_PRIMARY)
+        if (ch.role == meshtastic_Channel_Role_PRIMARY) {
             primaryIndex = i;
+            hasPrimary = true;
+        }
+    }
+    // Enforce the invariant that primaryIndex references a PRIMARY channel: a malformed config can
+    // demote every slot, which would leave all getPrimaryIndex() readers on a stale non-primary slot
+    if (!hasPrimary) {
+        meshtastic_Channel &stale = getByIndex(primaryIndex);
+        if (stale.role == meshtastic_Channel_Role_SECONDARY) {
+            stale.role = meshtastic_Channel_Role_PRIMARY; // keep the slot's key material
+        } else {
+            // Promoting a DISABLED (zeroed) slot would make a plaintext primary; restore the default
+            primaryIndex = 0;
+            initDefaultChannel(0);
+        }
+        LOG_WARN("Config has no PRIMARY channel, restored one at slot %u", primaryIndex);
+        fixupChannel(primaryIndex);
     }
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
@@ -414,9 +438,11 @@ bool cryptoKeyIsPublic(const CryptoKey &key)
     return false;
 }
 
-bool Channels::usesPublicKey(ChannelIndex chIndex)
+bool channelFileUsesPublicKey(const meshtastic_ChannelFile &cf, ChannelIndex chIndex)
 {
-    const meshtastic_Channel &ch = getByIndex(chIndex);
+    if (chIndex >= cf.channels_count)
+        return false;
+    const meshtastic_Channel &ch = cf.channels[chIndex];
     if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED)
         return false;
 
@@ -424,10 +450,14 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     if (psk.size == 0) {
         // Secondary channels inherit the primary key when unset; primary size==0 means encryption disabled.
         if (ch.role == meshtastic_Channel_Role_SECONDARY) {
-            // Guard against malformed configs with no PRIMARY channel (primaryIndex could point back to us).
-            if (primaryIndex == chIndex)
-                return true; // fail closed: treat as public
-            return usesPublicKey(primaryIndex);
+            // Resolve against the PRIMARY channel's key. The singleton's primaryIndex isn't available in
+            // the raw-struct path (this runs during boot migration before initDefaults), so scan by role.
+            // Fail closed to "public" if no distinct PRIMARY is found (malformed config).
+            for (pb_size_t p = 0; p < cf.channels_count; p++) {
+                if (cf.channels[p].role == meshtastic_Channel_Role_PRIMARY)
+                    return (p == chIndex) ? true : channelFileUsesPublicKey(cf, (ChannelIndex)p);
+            }
+            return true;
         }
         return true;
     }
@@ -438,6 +468,13 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     }
 
     return (psk.size == sizeof(defaultpsk) && memcmp(psk.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0);
+}
+
+bool Channels::usesPublicKey(ChannelIndex chIndex)
+{
+    // Delegates to the pure, on-disk-struct variant so the two can't drift. getByIndex() reads the same
+    // global channelFile, so this is behavior-preserving for the position-precision clamp callers.
+    return channelFileUsesPublicKey(channelFile, chIndex);
 }
 
 bool Channels::isWellKnownChannel(ChannelIndex chIndex)

@@ -20,10 +20,7 @@ class SFA30Sensor : public TelemetrySensor
     uint32_t measureStarted = 0;
 
     SensirionI2cSfa3x sfa30;
-    TwoWire *_bus{};
-    uint8_t _address{};
 #ifdef SFA30_I2C_CLOCK_SPEED
-    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
     ReClockI2C reClockI2C;
 #endif
 

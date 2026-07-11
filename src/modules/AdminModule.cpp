@@ -418,22 +418,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate factory config reset");
+        // Keep BLE active while reset cleanup performs nRF flash operations.
         nodeDB->factoryReset();
         LOG_INFO("Factory config reset finished, rebooting soon");
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate full factory reset");
         nodeDB->factoryReset(true);
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate node-db reset");
         //  CLIENT_BASE, ROUTER and ROUTER_LATE are able to preserve the remaining hop count when relaying a packet via a
         //  favorited node, so ensure that their favorites are kept on reset
@@ -441,6 +441,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             isOneOf(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE,
                     meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
         nodeDB->resetNodes(rolePreference ? rolePreference : r->nodedb_reset);
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -913,6 +914,17 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         if (validatedLora.spread_factor != clampSpreadFactor(validatedLora.spread_factor)) {
             LOG_WARN("Invalid spread_factor %d, setting to %d", validatedLora.spread_factor, LORA_SF_DEFAULT);
             validatedLora.spread_factor = LORA_SF_DEFAULT;
+        }
+
+        // A custom (non-preset) config that leaves bandwidth at its proto zero-value otherwise slips
+        // through validateConfigLora() and persists as 0, while the radio silently falls back to the
+        // default (config.lora.bandwidth then reads back 0 even though the radio runs at 250kHz).
+        // Coerce it here like coding_rate/spread_factor so the stored config matches the radio. In
+        // preset mode bandwidth 0 is expected (the preset supplies it), so leave it untouched.
+        const uint16_t clampedBandwidth = clampBandwidthCode(validatedLora.bandwidth);
+        if (!validatedLora.use_preset && validatedLora.bandwidth != clampedBandwidth) {
+            LOG_WARN("Invalid bandwidth %d, setting to %d", validatedLora.bandwidth, clampedBandwidth);
+            validatedLora.bandwidth = clampedBandwidth;
         }
 
         // If we're setting a new region, check the region is valid and then init the region or discard the change
