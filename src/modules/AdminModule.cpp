@@ -1969,7 +1969,7 @@ void AdminModule::flushChannelWarnings()
  * are performed:
  *
  * - Blank PSK (size == 0) on a non-licensed device: the channel has no encryption.
- * - Blank name with a non-default key (not AQ== / 0x01): the name will auto-resolve to
+ * - Blank name with a non-default key (not the default key, 0x01): the name will auto-resolve to
  *   the current modem preset name, but the key mismatch means other preset nodes cannot
  *   decode traffic on this channel.
  * - Named channel whose name is a case/space variant of the current modem preset: the
@@ -2017,8 +2017,7 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
                                 cc.index, cc.settings.name, mistypePreset);
         else if (blankPsk)
             queueChannelWarning(cc.index, false, true,
-                                "Channel %d '%s' has a blank PSK (no encryption). "
-                                "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                                "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                                 cc.index, cc.settings.name);
         return;
     }
@@ -2033,8 +2032,7 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
         // Blank name resolves to the preset name - A and B are mutually exclusive (psk.size can't be both 0 and >0)
         if (blankPsk)
             queueChannelWarning(cc.index, false, true,
-                                "Channel %d '%s' has a blank PSK (no encryption). "
-                                "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                                "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                                 cc.index, cc.settings.name);
         else if (!isDefaultKey && cc.settings.psk.size > 0)
             queueChannelWarning(cc.index, false, true,
@@ -2047,8 +2045,7 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
     if (strcmp(normChan, normPreset) != 0) { // name unrelated to preset
         if (blankPsk)
             queueChannelWarning(cc.index, false, true,
-                                "Channel %d '%s' has a blank PSK (no encryption). "
-                                "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                                "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                                 cc.index, cc.settings.name);
         return;
     }
@@ -2071,8 +2068,7 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
 
     if (blankPsk)
         queueChannelWarning(cc.index, false, true,
-                            "Channel %d '%s' has a blank PSK (no encryption). "
-                            "If you intended the default key, set PSK to 'AQ=='.", // max 100 bytes
+                            "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
                             cc.index, cc.settings.name);
     if (variantName)
         queueChannelWarning(cc.index, true, false,
