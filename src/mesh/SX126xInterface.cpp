@@ -79,8 +79,8 @@ template <typename T> bool SX126xInterface<T>::init()
     else
         tcxoVoltage = 0;
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
         pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
     }
     // The knob here is the YAML key, not the variant define the other branch reports.
     if (tcxoVoltage == 0.0)
