@@ -8,6 +8,7 @@
 #include "concurrency/OSThread.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include "sleep.h"
 #include <BLE2904.h>
@@ -106,6 +107,10 @@ static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE};
 // triggers a MIC failure + NimBLE host reset; re-entering ble_gap_adv_* from the disconnect
 // callback while the host is mid-reset crashes (LoadProhibited), so the main task does it instead.
 static std::atomic<bool> pendingStartAdvertising{false};
+
+// Set by deinit() before it disconnects. Makes onRead bail immediately instead of arming the
+// up-to-20s wait, so a read arriving mid-teardown can't pin the NimBLE task and stall the disconnect.
+static std::atomic<bool> bleDraining{false};
 
 static void clearPairingDisplay()
 {
@@ -541,14 +546,18 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
             LOG_DEBUG("BLE onRead(%d): packet already waiting, no need to set onReadCallbackIsWaitingForData", currentReadCount);
 #endif
-        } else {
+        } else if (!bleDraining) {
+            // (If deinit() is tearing the stack down, skip the wait entirely and just return a 0-size
+            // response below - arming the wait here could pin this NimBLE task for ~20s and stall teardown.)
+
             // Tell the main task that we'd like a packet.
             bluetoothPhoneAPI->onReadCallbackIsWaitingForData = true;
 
             // Wait for the main task to produce a packet for us, up to about 20 seconds.
             // It normally takes just a few milliseconds, but at initial startup, etc, the main task can get blocked for longer
             // doing various setup tasks.
-            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 4000) {
+            // bleDraining lets deinit() release an in-flight wait immediately.
+            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && !bleDraining && tries < 4000) {
                 // Schedule the main task runOnce to run ASAP.
                 bluetoothPhoneAPI->setIntervalFromNow(0);
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
@@ -801,13 +810,35 @@ void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
     LOG_INFO("Disable bluetooth until reboot");
+
+    // BLEDevice::deinit() deletes the BLEServer before nimble_port_stop(); doing that with a live
+    // connection dispatches synthesized unsubscribe events into the freed server (LoadProhibited),
+    // so disconnect cleanly first. deinit() runs on the main task; the waits below are bounded.
+    // bleDraining must be set before we clear the flag / disconnect, so a read arriving now bails
+    // instead of re-arming the ~20s wait and re-pinning the NimBLE task through the whole teardown.
+    bleDraining = true;
+    if (bluetoothPhoneAPI)
+        bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false; // release any in-flight onRead
+
+    // isDeInit must stay false here, else onDisconnect early-returns without clearing the handle.
+    uint16_t connHandle = nimbleBluetoothConnHandle.load();
+    if (connHandle != BLE_HS_CONN_HANDLE_NONE && bleServer) {
+        bleServer->disconnect(connHandle);
+        uint32_t start = millis();
+        while (nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE && Throttle::isWithinTimespanMs(start, 2000))
+            delay(10);
+        delay(50);
+    }
+
     isDeInit = true;
+    pendingStartAdvertising = false; // stack is going away; don't let runOnce retry the adv restart
 
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
     BLEDevice::deinit(true);
+    bleServer = nullptr;             // deleted by deinit(); clear the dangling copy
     BatteryCharacteristic = nullptr; // freed by deinit; clear so updateBatteryLevel() won't touch it
     lastBatteryLevel = -1;
 #endif
@@ -849,6 +880,12 @@ void NimbleBluetooth::setup()
     // NimbleBluetooth::clearBonds();
 
     LOG_INFO("Init the NimBLE bluetooth module");
+
+    // deinit() latches these teardown guards; clear them so a re-init on the same boot (e.g. an
+    // admin disable-bluetooth followed by re-enable) doesn't leave onRead stuck draining or
+    // onDisconnect early-returning without clearing the connection handle.
+    bleDraining = false;
+    isDeInit = false;
 
 #ifdef ARCH_ESP32
     // Runs before BLEDevice::init() reads the bond store, but logs after the "Init" line above so

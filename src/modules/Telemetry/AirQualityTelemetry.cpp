@@ -485,13 +485,15 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
             if (isPowerSavingSensor()) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                notification->level = meshtastic_LogRecord_Level_INFO;
-                notification->time = getValidTime(RTCQualityFromNet);
-                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
-                                                          default_telemetry_broadcast_interval_secs) /
-                            1000U);
-                service->sendClientNotification(notification);
+                if (notification) {
+                    notification->level = meshtastic_LogRecord_Level_INFO;
+                    notification->time = getValidTime(RTCQualityFromNet);
+                    sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                            Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
+                                                              default_telemetry_broadcast_interval_secs) /
+                                1000U);
+                    service->sendClientNotification(notification);
+                }
             }
         }
     }

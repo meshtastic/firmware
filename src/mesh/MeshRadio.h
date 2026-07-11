@@ -190,6 +190,16 @@ static inline uint16_t bwKHzToCode(float bwKHz)
     return (uint16_t)(bwKHz + 0.5f);
 }
 
+/// Clamp a bandwidth *code* (the on-wire config.lora.bandwidth value) to a usable value.
+/// A code of 0 (proto default / unset) returns the default bandwidth's code; any other value
+/// is returned unchanged (RadioLib validates the exact discrete bandwidth downstream).
+static inline uint16_t clampBandwidthCode(uint16_t bwCode)
+{
+    if (bwCode == 0)
+        return bwKHzToCode(LORA_BW_DEFAULT_KHZ);
+    return bwCode;
+}
+
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
                                        uint8_t &cr)
 {

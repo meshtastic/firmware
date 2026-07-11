@@ -209,6 +209,8 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
     isReceiving = false;
     size_t numbytes = beginSending(txp);
     meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
+    if (!p)
+        return;
 
     // A packet we originate that's encrypted for someone else (a PKI DM, channel == 0) can't be
     // decrypted here. Attempting it only logs a spurious "no suitable channel" miss, and the
@@ -361,6 +363,8 @@ void SimRadio::handleReceiveInterrupt()
     meshtastic_MeshPacket *mp = packetPool.allocCopy(*receivingPacket); // keep a copy in packetPool
     packetPool.release(receivingPacket);                                // release the original
     receivingPacket = nullptr;
+    if (!mp)
+        return;
 
     printPacket("Lora RX", mp);
 

@@ -65,3 +65,9 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, s
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && defined(SDCARD_USE_SPI1)
+#include <SPI.h>
+// HSPI bus set up by setupSDCard(). Reuse this for other devices on the same bus.
+extern SPIClass SPI_HSPI;
+#endif
