@@ -47,8 +47,10 @@ class rtttl
  */
 class ExternalNotificationModule : public SinglePortModule, private concurrency::OSThread
 {
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
     CallbackObserver<ExternalNotificationModule, const InputEvent *> inputObserver =
         CallbackObserver<ExternalNotificationModule, const InputEvent *>(this, &ExternalNotificationModule::handleInputEvent);
+#endif
     uint32_t output = 0;
 
 #ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
@@ -58,7 +60,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
   public:
     ExternalNotificationModule();
 
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
     int handleInputEvent(const InputEvent *arg);
+#endif
 
     uint32_t nagCycleCutoff = 1;
 
