@@ -18,6 +18,7 @@
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/MessageRenderer.h"
+#include "graphics/draw/MessageStatusText.h"
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/draw/UIRenderer.h"
 #include "graphics/emotes.h"
@@ -152,6 +153,7 @@ bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
     return nodeInfoLiteHasUser(node) && node->public_key.size > 0;
 }
+
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
  *     starting points of the string this->messageStore
@@ -1045,7 +1047,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->channel = channel;
-    p->want_ack = true;
+    const bool expectsRoutingStatus = dest != 0 && !isBroadcast(dest);
+    p->want_ack = expectsRoutingStatus;
     p->decoded.dest = dest; // Mirror picker: NODENUM_BROADCAST or node->num
 
     this->lastSentNode = dest;
@@ -1080,7 +1083,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
     }
 
-    this->waitingForAck = true;
+    this->waitingForAck = expectsRoutingStatus && this->lastRequestId != 0;
 
     // Send to mesh (PKI-encrypted if conditions above matched)
     service->sendToMesh(p, RX_SRC_LOCAL, true);
@@ -1108,8 +1111,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     sm.textLength = len;
 
     // Classify broadcast vs DM
-    if (dest == NODENUM_BROADCAST) {
-        sm.dest = NODENUM_BROADCAST;
+    if (isBroadcast(dest)) {
+        sm.dest = dest;
         sm.type = MessageType::BROADCAST;
     } else {
         sm.dest = dest;
@@ -1125,6 +1128,10 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         }
     }
     sm.ackStatus = AckStatus::NONE;
+    sm.packetId = this->lastRequestId;
+    // Broadcast want_ack is stripped before transmit, so only directed sends have
+    // a production routing response that can update this stored message.
+    sm.ackTrackable = expectsRoutingStatus && sm.packetId != 0;
 
     messageStore.addLiveMessage(std::move(sm));
 
@@ -2165,6 +2172,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             bool isAck = (decoded.error_reason == meshtastic_Routing_Error_NONE);
             bool isFromDest = (mp.from == this->lastSentNode);
             bool wasBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
+            AckStatus ackStatus = ackStatusForRoutingResult(wasBroadcast, isFromDest, isAck, decoded.error_reason);
 
             // Identify the responding node
             if (wasBroadcast && mp.from != nodeDB->getNodeNum()) {
@@ -2192,20 +2200,8 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 waitingForAck = false;
             }
 
-            // Update last sent StoredMessage with ACK/NACK/RELAYED result
-            if (!messageStore.getMessages().empty()) {
-                StoredMessage &last = const_cast<StoredMessage &>(messageStore.getMessages().back());
-                if (last.sender == nodeDB->getNodeNum()) { // only update our own messages
-                    if (wasBroadcast && isAck) {
-                        last.ackStatus = AckStatus::ACKED;
-                    } else if (isFromDest && isAck) {
-                        last.ackStatus = AckStatus::ACKED;
-                    } else if (!isFromDest && isAck) {
-                        last.ackStatus = AckStatus::RELAYED;
-                    } else {
-                        last.ackStatus = AckStatus::NACKED;
-                    }
-                }
+            if (!messageStore.updateAckStatus(nodeDB->getNodeNum(), mp.decoded.request_id, ackStatus)) {
+                LOG_DEBUG("No tracked message found for ACK id=0x%08x", mp.decoded.request_id);
             }
 
             // Capture radio metrics
@@ -2241,26 +2237,22 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 float snrLimit = getSnrLimit(config.lora.modem_preset);
                 int bars = 0;
                 const char *qualityLabel = getSignalGrade(this->lastRxSnr, this->lastRxRssi, snrLimit, bars);
+                StoredMessage statusMessage;
+                statusMessage.ackStatus = ackStatus;
+                statusMessage.dest = this->lastSentNode;
+                const char *statusText = graphics::MessageStatusText::bannerTextFor(statusMessage);
+                char target[56];
 
-                if (this->ack) {
-                    if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSignal: %s",
-                                 (channelName && channelName[0]) ? channelName : "unknown", qualityLabel);
-                    } else {
-                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s",
-                                 (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
-                    }
-                } else if (isAck && !isFromDest) {
-                    // Relay ACK banner
-                    snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s",
-                             (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                if (this->lastSentNode == NODENUM_BROADCAST) {
+                    snprintf(target, sizeof(target), "#%s", (channelName && channelName[0]) ? channelName : "unknown");
                 } else {
-                    if (this->lastSentNode == NODENUM_BROADCAST) {
-                        snprintf(buf, sizeof(buf), "Message failed to\n#%s",
-                                 (channelName && channelName[0]) ? channelName : "unknown");
-                    } else {
-                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", (nodeName && nodeName[0]) ? nodeName : "unknown");
-                    }
+                    snprintf(target, sizeof(target), "@%s", nodeName[0] ? nodeName : "unknown");
+                }
+
+                if (this->ack || (isAck && !isFromDest)) {
+                    snprintf(buf, sizeof(buf), "%s\n%s\n\nSignal: %s", statusText, target, qualityLabel);
+                } else {
+                    snprintf(buf, sizeof(buf), "%s\n%s", statusText, target);
                 }
 
                 opts.message = buf;

@@ -5,6 +5,9 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) || defined(MESHTASTIC_INCLUDE_BASE_UI_MESSAGE_STATUS)
+#include "MessageStore.h"
+#endif
 
 RoutingModule *routingModule;
 
@@ -29,6 +32,15 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
 
     printPacket("Routing sniffing", &mp);
     router->sniffReceived(&mp, r);
+
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) || defined(MESHTASTIC_INCLUDE_BASE_UI_MESSAGE_STATUS)
+    if (r && r->which_variant == meshtastic_Routing_error_reason_tag && mp.to == nodeDB->getNodeNum() &&
+        mp.decoded.request_id != 0) {
+        if (!messageStore.updateAckStatusFromRouting(nodeDB->getNodeNum(), mp.decoded.request_id, mp.from, r->error_reason)) {
+            LOG_DEBUG("No tracked message found for routing status id=0x%08x", mp.decoded.request_id);
+        }
+    }
+#endif
 
     // FIXME - move this to a non promsicious PhoneAPI module?
     // Note: we are careful not to send back packets that started with the phone back to the phone

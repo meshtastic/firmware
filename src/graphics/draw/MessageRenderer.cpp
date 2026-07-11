@@ -3,6 +3,7 @@
 #include "MessageRenderer.h"
 
 // Core includes
+#include "MessageStatusText.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
@@ -413,7 +414,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 include = true;
             break;
         case ThreadMode::DIRECT:
-            if (m.dest != NODENUM_BROADCAST && (m.sender == currentPeer || m.dest == currentPeer))
+            if (!isBroadcast(m.dest) && (m.sender == currentPeer || m.dest == currentPeer))
                 include = true;
             break;
         }
@@ -493,6 +494,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<std::string> allLines;
     std::vector<bool> isMine;   // track alignment
     std::vector<bool> isHeader; // track header lines
+    std::vector<bool> isStatus; // outgoing delivery status lines
     std::vector<AckStatus> ackForLine;
     // Hard limit on total cached lines to prevent unbounded growth from a single long message.
     // Reserve to the actual cache cap up front, because a single message can expand to many more
@@ -504,6 +506,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     allLines.reserve(MAX_CACHED_LINES);
     isMine.reserve(MAX_CACHED_LINES);
     isHeader.reserve(MAX_CACHED_LINES);
+    isStatus.reserve(MAX_CACHED_LINES);
     ackForLine.reserve(MAX_CACHED_LINES);
 
     for (auto it = filtered.rbegin(); it != filtered.rend(); ++it) {
@@ -512,7 +515,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Channel / destination labeling
         char chanType[32] = "";
         if (currentMode == ThreadMode::ALL) {
-            if (m.dest == NODENUM_BROADCAST) {
+            if (isBroadcast(m.dest)) {
                 const char *name = channels.getName(m.channelIndex);
                 if (currentResolution == ScreenResolution::Low || currentResolution == ScreenResolution::UltraLow) {
                     if (strcmp(name, "ShortTurbo") == 0)
@@ -652,6 +655,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         allLines.push_back(headerStr);
         isMine.push_back(mine);
         isHeader.push_back(true);
+        isStatus.push_back(false);
         ackForLine.push_back(m.ackStatus);
 
         const char *msgText = MessageStore::getText(m);
@@ -668,8 +672,26 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             allLines.emplace_back(std::move(ln));
             isMine.push_back(mine);
             isHeader.push_back(false);
+            isStatus.push_back(false);
             ackForLine.push_back(AckStatus::NONE);
             ++wrappedCount;
+        }
+
+        if (mine && allLines.size() < MAX_CACHED_LINES) {
+            const char *statusText = MessageStatusText::inlineTextFor(m);
+            std::vector<std::string> statusLines = generateLines(display, "", statusText, wrapWidth);
+            constexpr size_t MAX_STATUS_LINES_PER_MSG = 3U;
+            size_t statusCount = 0;
+            for (auto &ln : statusLines) {
+                if (allLines.size() >= MAX_CACHED_LINES || statusCount >= MAX_STATUS_LINES_PER_MSG)
+                    break;
+                allLines.emplace_back(std::move(ln));
+                isMine.push_back(mine);
+                isHeader.push_back(false);
+                isStatus.push_back(true);
+                ackForLine.push_back(m.ackStatus);
+                ++statusCount;
+            }
         }
     }
 
@@ -806,6 +828,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     w = graphics::UIRenderer::measureStringWithEmotes(display, cachedLines[i].c_str());
                     if (b.mine)
                         w += 12; // room for ACK/NACK/relay mark
+                } else if (isStatus[i]) {
+                    w = graphics::UIRenderer::measureStringWithEmotes(display, cachedLines[i].c_str());
                 } else {
                     w = getRenderedLineWidth(display, cachedLines[i], emotes, numEmotes);
                 }
@@ -925,8 +949,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     if (ackForLine[i] == AckStatus::ACKED) {
                         // Destination ACK
                         drawCheckMark(display, markX, markY, 8);
-                    } else if (ackForLine[i] == AckStatus::NACKED || ackForLine[i] == AckStatus::TIMEOUT) {
-                        // Failure or timeout
+                    } else if (MessageStatusText::isFailureStatus(ackForLine[i])) {
+                        // Failure
                         drawXMark(display, markX, markY, 8);
                     } else if (ackForLine[i] == AckStatus::RELAYED) {
                         // Relay ACK
@@ -935,6 +959,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     // AckStatus::NONE → show nothing
                 }
 
+            } else if (isStatus[i]) {
+                int renderedWidth = graphics::UIRenderer::measureStringWithEmotes(display, cachedLines[i].c_str());
+                int rightX = (SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN) - renderedWidth - (showBubbles ? textIndent : 0);
+                if (rightX < LEFT_MARGIN)
+                    rightX = LEFT_MARGIN;
+                graphics::UIRenderer::drawStringWithEmotes(display, rightX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
+                                                           true);
             } else {
                 // Render message line
                 if (isMine[i]) {
@@ -1180,7 +1211,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 
 void setThreadFor(const StoredMessage &sm, const meshtastic_MeshPacket &packet)
 {
-    if (packet.to == 0 || packet.to == NODENUM_BROADCAST) {
+    if (packet.to == 0 || isBroadcast(packet.to)) {
         setThreadMode(ThreadMode::CHANNEL, sm.channelIndex);
     } else {
         uint32_t localNode = nodeDB->getNodeNum();

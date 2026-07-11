@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) || defined(MESHTASTIC_INCLUDE_BASE_UI_MESSAGE_STATUS)
 #include "FSCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
@@ -93,6 +93,46 @@ template <typename T> static inline void pushWithLimit(std::deque<T> &queue, T &
     queue.emplace_back(std::move(msg));
 }
 
+AckStatus ackStatusForRoutingResult(bool wasBroadcast, bool isFromDest, bool isAck, meshtastic_Routing_Error errorReason)
+{
+    if (isAck) {
+        return (wasBroadcast || isFromDest) ? AckStatus::ACKED : AckStatus::RELAYED;
+    }
+
+    switch (errorReason) {
+    case meshtastic_Routing_Error_TOO_LARGE:
+        return AckStatus::TOO_LARGE;
+    case meshtastic_Routing_Error_MAX_RETRANSMIT:
+        return AckStatus::TIMEOUT;
+    case meshtastic_Routing_Error_NO_CHANNEL:
+        return AckStatus::NO_CHANNEL;
+    case meshtastic_Routing_Error_NO_INTERFACE:
+        return AckStatus::NO_INTERFACE;
+    case meshtastic_Routing_Error_DUTY_CYCLE_LIMIT:
+        return AckStatus::DUTY_CYCLE_LIMIT;
+    case meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED:
+        return AckStatus::RATE_LIMIT_EXCEEDED;
+    case meshtastic_Routing_Error_NO_RESPONSE:
+        return AckStatus::NO_RESPONSE;
+    case meshtastic_Routing_Error_BAD_REQUEST:
+        return AckStatus::BAD_REQUEST;
+    case meshtastic_Routing_Error_NOT_AUTHORIZED:
+        return AckStatus::NOT_AUTHORIZED;
+    case meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY:
+        return AckStatus::PKI_SEND_FAIL_PUBLIC_KEY;
+    case meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY:
+        return AckStatus::PKI_UNKNOWN_PUBKEY;
+    case meshtastic_Routing_Error_PKI_FAILED:
+        return AckStatus::PKI_FAILED;
+    case meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY:
+        return AckStatus::ADMIN_BAD_SESSION_KEY;
+    case meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED:
+        return AckStatus::ADMIN_PUBLIC_KEY_UNAUTHORIZED;
+    default:
+        return AckStatus::NACKED;
+    }
+}
+
 MessageStore::MessageStore(const std::string &label)
 {
     filename = "/Messages_" + label + ".msgs";
@@ -180,11 +220,16 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     sm.sender = (packet.from == 0) ? localNode : packet.from;
 
     sm.dest = packet.to;
+    sm.packetId = packet.id;
 
-    bool isDM = (sm.dest != 0 && sm.dest != NODENUM_BROADCAST);
+    bool isDM = (sm.dest != 0 && !isBroadcast(sm.dest));
 
     sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
-    sm.ackStatus = (packet.from == 0) ? AckStatus::NONE : AckStatus::ACKED;
+    bool isLocalOutgoing = packet.from == 0;
+    sm.ackStatus = isLocalOutgoing ? AckStatus::NONE : AckStatus::ACKED;
+    // Only directed local sends have a routing response the Base UI can match.
+    // Channel sends are stored untrackable so AckStatus::NONE renders no inline pending text.
+    sm.ackTrackable = isLocalOutgoing && isDM && packet.want_ack && sm.packetId != 0;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     sm.xeddsaSigned = packet.xeddsa_signed;
@@ -218,12 +263,59 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
 
     // Outgoing messages always start with unknown ack status
     sm.ackStatus = AckStatus::NONE;
+    sm.ackTrackable = false;
 
     addLiveMessage(sm);
 
 #if ENABLE_MESSAGE_PERSISTENCE
     markMessageStoreUnsaved();
 #endif
+}
+
+bool MessageStore::updateAckStatus(NodeNum sender, PacketId packetId, AckStatus status)
+{
+    if (packetId == 0)
+        return false;
+
+    for (auto it = liveMessages.rbegin(); it != liveMessages.rend(); ++it) {
+        if (it->sender == sender && it->packetId == packetId && it->ackTrackable) {
+            if (it->ackStatus != status) {
+                it->ackStatus = status;
+#if ENABLE_MESSAGE_PERSISTENCE
+                markMessageStoreUnsaved();
+#endif
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool MessageStore::updateAckStatusFromRouting(NodeNum sender, PacketId packetId, NodeNum ackFrom,
+                                              meshtastic_Routing_Error errorReason)
+{
+    if (packetId == 0)
+        return false;
+
+    for (auto it = liveMessages.rbegin(); it != liveMessages.rend(); ++it) {
+        if (it->sender == sender && it->packetId == packetId && it->ackTrackable) {
+            bool wasBroadcast = isBroadcast(it->dest);
+            bool isFromDest = (ackFrom == it->dest);
+            bool isAck = (errorReason == meshtastic_Routing_Error_NONE);
+            AckStatus status = ackStatusForRoutingResult(wasBroadcast, isFromDest, isAck, errorReason);
+
+            if (it->ackStatus != status) {
+                it->ackStatus = status;
+#if ENABLE_MESSAGE_PERSISTENCE
+                markMessageStoreUnsaved();
+#endif
+            }
+            return true;
+        }
+    }
+
+    return false;
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
