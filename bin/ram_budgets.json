@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Per-environment static-size budgets, enforced by the size-budget-gate CI job",
+    "via: bin/size_report.py <sizes.json> --budgets bin/ram_budgets.json --enforce-budgets",
+    "Only environments listed here are gated, and only for the metrics they list.",
+    "",
+    "ram_bytes = static RAM (.data + .bss from the ELF, emitted into the .mt.json",
+    "manifest by bin/platformio-custom.py). On nRF52840 the heap arena is the linker",
+    "gap after .bss, so every byte of static RAM growth shrinks the usable heap 1:1;",
+    "that is how the 2.8.0 heap regression shipped without CI noticing.",
+    "",
+    "flash_bytes = size of the main firmware image (.bin). The rak4631 app region is",
+    "0x27000..0xEA000 = 798,720 bytes, and the image must also stay clear of the",
+    "warm-store record-ring guard (extra_scripts/nrf52_warm_region.py).",
+    "",
+    "Budgets are raised DELIBERATELY, never automatically: if your change needs more",
+    "headroom, bump the limit here in the same PR and justify the increase in the PR",
+    "description."
+  ],
+  "rak4631": {
+    "ram_bytes": 113000,
+    "flash_bytes": 786000
+  }
+}

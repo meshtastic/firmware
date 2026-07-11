@@ -24,6 +24,8 @@
 #include "airtime.h"
 #include "modules/AdminModule.h"
 #include "modules/MeshBeaconModule.h"
+#include "support/AdminModuleTestShim.h"
+#include "support/MockMeshService.h"
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -50,16 +52,8 @@ namespace
 constexpr NodeNum kLocalNode = 0xAAAA0001;
 constexpr NodeNum kRemoteNode = 0xBBBB0002;
 
-// ---------------------------------------------------------------------------
-// Minimal MockMeshService - stubs out side-effecting virtuals.
-// handleToRadio is non-virtual so it runs the real implementation; we guard
-// against the router->sendLocal path by setting a MockRouter below.
-// ---------------------------------------------------------------------------
-class MockMeshService : public MeshService
-{
-  public:
-    void sendClientNotification(meshtastic_ClientNotification *n) override { releaseClientNotificationToPool(n); }
-};
+// MockMeshService (test/support) stubs the side-effecting virtuals; handleToRadio is non-virtual so
+// it runs the real implementation - the router->sendLocal path is guarded by MockRouter below.
 
 // ---------------------------------------------------------------------------
 // MockRouter: captures every packet handed to send() instead of transmitting.
@@ -93,14 +87,7 @@ class MockRouter : public Router
     std::vector<meshtastic_ChannelSettings> primaryAtSend;
 };
 
-// ---------------------------------------------------------------------------
-// AdminModuleTestShim - exposes protected handleSetModuleConfig.
-// ---------------------------------------------------------------------------
-class AdminModuleTestShim : public AdminModule
-{
-  public:
-    using AdminModule::handleSetModuleConfig;
-};
+// AdminModuleTestShim (test/support) exposes protected handleSetModuleConfig.
 
 // ---------------------------------------------------------------------------
 // MeshBeaconBroadcastModuleTestShim - exposes private internals for testing.
@@ -262,6 +249,44 @@ static void test_adminValidation_turboPresetOnUS_isAccepted(void)
 
     TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
+}
+
+/**
+ * Verify MEDIUM_TURBO is also cleared for EU_868. Like SHORT_TURBO/LONG_TURBO it is a 500 kHz preset
+ * that does not fit EU_868's 250 kHz band, so it must not survive admin validation there.
+ */
+static void test_adminValidation_mediumTurboPresetOnEU868_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
+    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.has_mesh_beacon);
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
+}
+
+/**
+ * Verify MEDIUM_TURBO passes validation for US (PROFILE_STD allows the full turbo family).
+ * The same 500 kHz preset that is illegal in EU_868 must be preserved in permissive regions.
+ */
+static void test_adminValidation_mediumTurboPresetOnUS_isAccepted(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
+    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
 }
 
 /**
@@ -1373,6 +1398,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_turboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
+    RUN_TEST(test_adminValidation_mediumTurboPresetOnEU868_isCleared);
+    RUN_TEST(test_adminValidation_mediumTurboPresetOnUS_isAccepted);
     RUN_TEST(test_adminValidation_unknownOfferRegion_isCleared);
     RUN_TEST(test_adminValidation_validOfferRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetUnknownRegion_isCleared);
