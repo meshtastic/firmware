@@ -143,11 +143,21 @@ void stm32wlSetup() {}
 void cpuDeepSleep(uint32_t msecToWake)
 {
 #if HAS_LSE
-    if (!stm32wlRtcAvailable())
-        return;
+    if (!stm32wlRtcAvailable()) {
+        // Hardware can't shutdown, but firmware has already prepared itself for shutdown
+        // Do not leave the device unresponsive, reset instead
+        LOG_WARN("STM32WL: hardware RTC failed, cannot deep sleep/shutdown");
+        if (Serial) {
+            Serial.flush();
+            Serial.end();
+        }
+        HAL_NVIC_SystemReset();
+    }
 
-    if (Serial)
+    if (Serial) {
+        Serial.flush();
         Serial.end();
+    }
 
     if (msecToWake != portMAX_DELAY) {
         LowPower.shutdown(msecToWake);
