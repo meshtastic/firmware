@@ -265,6 +265,7 @@ static void test_adminValidation_mediumTurboPresetOnEU868_isCleared(void)
 
     testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
 
+    TEST_ASSERT_TRUE(moduleConfig.has_mesh_beacon);
     TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
 }
 
