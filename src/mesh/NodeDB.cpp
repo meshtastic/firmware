@@ -430,7 +430,10 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    // Get device unique id
+    // Get device unique id. Re-derived from silicon on every boot: clear any value loaded
+    // from disk first so a failed read below leaves it unset rather than stale.
+    myNodeInfo.device_id.size = 0;
+    memset(myNodeInfo.device_id.bytes, 0, sizeof(myNodeInfo.device_id.bytes));
 #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) ||            \
     defined(CONFIG_IDF_TARGET_ESP32C6)
     uint32_t unique_id[4];
@@ -475,8 +478,8 @@ NodeDB::NodeDB()
     myNodeInfo.device_id.size = 16;
 #elif ARCH_PORTDUINO
     if (portduino_config.has_device_id) {
-        memcpy(myNodeInfo.device_id.bytes, portduino_config.device_id, 16);
-        myNodeInfo.device_id.size = 16;
+        memcpy(myNodeInfo.device_id.bytes, portduino_config.device_id, sizeof(portduino_config.device_id));
+        myNodeInfo.device_id.size = sizeof(portduino_config.device_id);
     } else {
         // Config-supplied id stays preferred: host NIC/BT MACs can be unstable (docker, multi-NIC)
         deriveDeviceIdFromMacAddr();
