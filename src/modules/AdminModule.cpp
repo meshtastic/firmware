@@ -228,7 +228,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             // that pointer is unrelated, so the path was unsafe.)
 
             // Automatically favorite the node that is using the admin key
-            auto remoteNode = nodeDB->getMeshNode(mp.from);
+            auto remoteNode = nodeDB ? nodeDB->getMeshNode(mp.from) : nullptr;
             if (remoteNode && !nodeInfoLiteIsFavorite(remoteNode)) {
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
                     // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
