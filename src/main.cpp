@@ -196,7 +196,15 @@ void setupNicheGraphics();
 #endif
 
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+#if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
+// Reuse FSCommon's SPI_HSPI instance to avoid double-initializing SPI2_HOST in arduino-esp32 3.x.
+// Two SPIClass(HSPI) objects on the same bus cause the second spi_bus_initialize() to return
+// ESP_ERR_INVALID_STATE, leaving the LoRa device handle invalid and blocking SPI transfers.
+extern SPIClass SPI_HSPI;
+SPIClass &SPI1 = SPI_HSPI;
+#else
 SPIClass SPI1(HSPI);
+#endif
 #endif
 
 using namespace concurrency;

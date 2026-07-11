@@ -25,8 +25,14 @@ LinuxInput::LinuxInput(const char *name) : concurrency::OSThread(name)
 
 void LinuxInput::deInit()
 {
+    // reboot() on native does execv() in-place, which only closes O_CLOEXEC fds.
+    // Close both descriptors here so we don't leak one per restart.
     if (fd >= 0)
         close(fd);
+    if (epollfd >= 0)
+        close(epollfd);
+    fd = -1;
+    epollfd = -1;
 }
 
 int32_t LinuxInput::runOnce()
@@ -35,14 +41,14 @@ int32_t LinuxInput::runOnce()
     if (firstTime) {
         if (portduino_config.keyboardDevice == "")
             return disable();
-        fd = open(portduino_config.keyboardDevice.c_str(), O_RDWR);
+        fd = open(portduino_config.keyboardDevice.c_str(), O_RDWR | O_CLOEXEC);
         if (fd < 0)
             return disable();
         ret = ioctl(fd, EVIOCGRAB, (void *)1);
         if (ret != 0)
             return disable();
 
-        epollfd = epoll_create1(0);
+        epollfd = epoll_create1(EPOLL_CLOEXEC);
         assert(epollfd >= 0);
 
         ev.events = EPOLLIN;

@@ -1038,6 +1038,25 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Input"]) {
             portduino_config.keyboardDevice = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
+            portduino_config.joystickDevice = (yamlConfig["Input"]["JoystickDevice"]).as<std::string>("");
+            if (yamlConfig["Input"]["JoystickButtons"]) {
+                // action name -> evdev button code (hex like 0x122 or decimal); stored inverted
+                // as code -> lowercase action name for the driver to look up per keypress.
+                for (const auto &button : yamlConfig["Input"]["JoystickButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    int code = 0;
+                    try {
+                        // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
+                        code = std::stoi(button.second.as<std::string>(""), nullptr, 0);
+                    } catch (const std::exception &) {
+                        code = 0;
+                    }
+                    if (code != 0 && action != "")
+                        portduino_config.joystickButtons[code] = action;
+                }
+            }
 
             readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.userButtonPin);
             readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.tbUpPin);
