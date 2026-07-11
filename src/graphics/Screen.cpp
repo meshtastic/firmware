@@ -30,7 +30,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
 #if defined(USE_HUB75)
-#include "graphics/HUB75Display.h"
+#include "graphics/HUB75Display.h" // ESP32 HUB75 (I2S-DMA)
+#endif
+#if defined(HAS_HUB75_NATIVE)
+#include "HUB75Native.h" // native/Portduino HUB75 (rpi-rgb-led-matrix), from variants/native/portduino
 #endif
 
 #include "DisplayFormatters.h"
@@ -574,7 +577,17 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         LOG_INFO("SSD1306 init success");
     }
 #elif ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+
+    // HUB75 RGB matrix (hzeller/rpi-rgb-led-matrix) is a BaseUI framebuffer panel, selected at
+    // runtime via config.yaml Display: Panel: HUB75.
+    if (portduino_config.displayPanel == hub75) {
+#if defined(HAS_HUB75_NATIVE)
+        LOG_DEBUG("Make HUB75Native!");
+        dispdev = new HUB75Native(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
+#else
+        LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in!");
+#endif
+    } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         if (portduino_config.displayPanel != no_screen) {
             LOG_DEBUG("Make TFTDisplay!");
             dispdev = new TFTDisplay(address.address, -1, -1, geometry,
