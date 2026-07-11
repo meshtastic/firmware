@@ -522,6 +522,12 @@ NodeDB::NodeDB()
     LOG_DEBUG("Number of Device Reboots: %d", myNodeInfo.reboot_count);
 #endif
 
+    // UA_868 is obsolete; migrate to EU_868 before resetRadioConfig() below validates the region.
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UA_868) {
+        LOG_INFO("UA_868 region is obsolete, migrating saved config to EU_868");
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    }
+
     resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
