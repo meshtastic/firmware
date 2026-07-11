@@ -23,10 +23,10 @@ extern AmbientLightingThread *ambientLightingThread;
 #endif
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !MESHTASTIC_EXCLUDE_RTTTL
 #include <NonBlockingRtttl.h>
 #else
-// Noop class for portduino.
+// Noop class for portduino/STM32WL/ESP32C6 - none can drive PWM RTTTL playback.
 class rtttl
 {
   public:
@@ -73,8 +73,10 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     void stopNow();
 
+#if !MESHTASTIC_EXCLUDE_RTTTL
     void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetRingtone(const char *from_msg);
+#endif
 
   protected:
     /** Called to handle a particular incoming message

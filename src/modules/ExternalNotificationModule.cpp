@@ -57,15 +57,16 @@ bool ascending = true;
 
 #define ASCII_BELL 0x07
 
+#if !MESHTASTIC_EXCLUDE_RTTTL
 meshtastic_RTTTLConfig rtttlConfig;
+static const char *rtttlConfigFile = "/prefs/ringtone.proto";
+#endif
 
 ExternalNotificationModule *externalNotificationModule;
 
 bool externalCurrentState[3] = {};
 
 uint32_t externalTurnedOn[3] = {};
-
-static const char *rtttlConfigFile = "/prefs/ringtone.proto";
 
 int32_t ExternalNotificationModule::runOnce()
 {
@@ -135,7 +136,7 @@ int32_t ExternalNotificationModule::runOnce()
         }
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
-#ifdef HAS_I2S
+#if defined(HAS_I2S) && !MESHTASTIC_EXCLUDE_RTTTL
         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
@@ -146,6 +147,7 @@ int32_t ExternalNotificationModule::runOnce()
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
+#if !MESHTASTIC_EXCLUDE_RTTTL
         // now let the PWM buzzer play
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
@@ -157,6 +159,7 @@ int32_t ExternalNotificationModule::runOnce()
             // we need fast updates to play the RTTTL
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
+#endif
 
         return delay;
     }
@@ -324,12 +327,14 @@ ExternalNotificationModule::ExternalNotificationModule()
         if (inputBroker) // put our callback in the inputObserver list
             inputObserver.observe(inputBroker);
 #endif
+#if !MESHTASTIC_EXCLUDE_RTTTL
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
             // The default ringtone is always loaded from userPrefs.jsonc
             strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL, sizeof(rtttlConfig.ringtone));
         }
+#endif
 
         LOG_INFO("Init External Notification Module");
 
@@ -459,11 +464,13 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-#ifdef HAS_I2S
+#if defined(HAS_I2S) && !MESHTASTIC_EXCLUDE_RTTTL
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
 #endif
                     } else if (moduleConfig.external_notification.use_pwm) {
+#if !MESHTASTIC_EXCLUDE_RTTTL
                         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+#endif
                     } else {
                         setExternalState(2, true);
                     }
@@ -495,6 +502,7 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
     AdminMessageHandleResult result;
 
     switch (request->which_payload_variant) {
+#if !MESHTASTIC_EXCLUDE_RTTTL
     case meshtastic_AdminMessage_get_ringtone_request_tag:
         LOG_INFO("Client getting ringtone");
         this->handleGetRingtone(mp, response);
@@ -506,6 +514,7 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
         this->handleSetRingtone(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
+#endif
 
     default:
         result = AdminMessageHandleResult::NOT_HANDLED;
@@ -514,6 +523,7 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
     return result;
 }
 
+#if !MESHTASTIC_EXCLUDE_RTTTL
 void ExternalNotificationModule::handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response)
 {
     LOG_INFO("*** handleGetRingtone");
@@ -537,6 +547,7 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
 }
+#endif
 
 int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 {
