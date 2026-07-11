@@ -252,6 +252,43 @@ static void test_adminValidation_turboPresetOnUS_isAccepted(void)
 }
 
 /**
+ * Verify MEDIUM_TURBO is also cleared for EU_868. Like SHORT_TURBO/LONG_TURBO it is a 500 kHz preset
+ * that does not fit EU_868's 250 kHz band, so it must not survive admin validation there.
+ */
+static void test_adminValidation_mediumTurboPresetOnEU868_isCleared(void)
+{
+    resetConfig();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
+    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_FALSE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
+}
+
+/**
+ * Verify MEDIUM_TURBO passes validation for US (PROFILE_STD allows the full turbo family).
+ * The same 500 kHz preset that is illegal in EU_868 must be preserved in permissive regions.
+ */
+static void test_adminValidation_mediumTurboPresetOnUS_isAccepted(void)
+{
+    resetConfig();
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+
+    meshtastic_ModuleConfig_MeshBeaconConfig bcfg = meshtastic_ModuleConfig_MeshBeaconConfig_init_zero;
+    bcfg.has_broadcast_on_preset = true;
+    bcfg.broadcast_on_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO;
+
+    testAdmin->handleSetModuleConfig(makeBeaconModuleConfig(bcfg));
+
+    TEST_ASSERT_TRUE(moduleConfig.mesh_beacon.has_broadcast_on_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO, moduleConfig.mesh_beacon.broadcast_on_preset);
+}
+
+/**
  * Verify an out-of-range region code (255) is sanitised to UNSET rather than stored verbatim.
  * Important to prevent invalid proto enum values from reaching the broadcaster and being broadcast
  * over the air.
@@ -1360,6 +1397,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_adminValidation_turboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_longTurboPresetOnEU868_isCleared);
     RUN_TEST(test_adminValidation_turboPresetOnUS_isAccepted);
+    RUN_TEST(test_adminValidation_mediumTurboPresetOnEU868_isCleared);
+    RUN_TEST(test_adminValidation_mediumTurboPresetOnUS_isAccepted);
     RUN_TEST(test_adminValidation_unknownOfferRegion_isCleared);
     RUN_TEST(test_adminValidation_validOfferRegion_isPreserved);
     RUN_TEST(test_adminValidation_targetUnknownRegion_isCleared);
