@@ -113,13 +113,19 @@ void TetrisModule::enterGameOver()
     lastRank = -1;
     lastWasNewTop = false;
     uiState = TETRIS_GAMEOVER;
+
+    // Arcade-style: if the score placed, prompt for initials, then record it in the picker's
+    // callback. Otherwise just show the game-over screen.
     if (qualifiesForHighScore(lastScore))
-        recordHighScore();
-#if TETRIS_ANNOUNCE_HIGH_SCORE
-    if (lastRank >= 0 && lastScore > 0)
-        announceHighScore(lastScore);
-#endif
+        promptForInitials();
+
     requestRedraw();
+}
+
+void TetrisModule::promptForInitials()
+{
+    screen->showAlphanumericPicker("New High Score!\nEnter initials", "AAA", 60000, INITIALS_LEN,
+                                   [this](const std::string &initials) { this->recordHighScore(initials.c_str()); });
 }
 
 void TetrisModule::exitToIdle()
@@ -533,13 +539,17 @@ int TetrisModule::insertHighScore(uint32_t score, const char *name, uint32_t nod
     return pos;
 }
 
-void TetrisModule::recordHighScore()
+void TetrisModule::recordHighScore(const char *initials)
 {
     bool isNewTop = false;
-    lastRank = insertHighScore(lastScore, owner.short_name, nodeDB ? nodeDB->getNodeNum() : 0, isNewTop);
+    lastRank = insertHighScore(lastScore, initials, nodeDB ? nodeDB->getNodeNum() : 0, isNewTop);
     lastWasNewTop = isNewTop;
     if (lastRank >= 0)
         saveHighScores();
+#if TETRIS_ANNOUNCE_HIGH_SCORE
+    if (isNewTop && lastScore > 0)
+        announceHighScore(initials, lastScore);
+#endif
     requestRedraw();
 }
 
@@ -643,14 +653,14 @@ void TetrisModule::broadcastAllScores()
     LOG_INFO("Tetris: broadcast table (%u entries)", tbl.count);
 }
 
-void TetrisModule::announceHighScore(uint32_t score)
+void TetrisModule::announceHighScore(const char *initials, uint32_t score)
 {
     if (!service)
         return;
     TetrisScoreWire wire;
     wire.game_id = TETRIS_WIRE_GAME_ID;
     wire.version = TETRIS_WIRE_VERSION;
-    strncpy(wire.shortName, owner.short_name, sizeof(wire.shortName) - 1);
+    strncpy(wire.shortName, (initials && initials[0]) ? initials : owner.short_name, sizeof(wire.shortName) - 1);
     wire.shortName[sizeof(wire.shortName) - 1] = '\0';
     wire.score = score;
     static_assert(sizeof(wire) <= sizeof(meshtastic_MeshPacket().decoded.payload.bytes), "TetrisScoreWire too large");

@@ -102,6 +102,7 @@ class TetrisModule : public SinglePortModule, public Observable<const UIFrameEve
     static constexpr uint8_t HS_COUNT = 5;
     static constexpr uint32_t HS_MAGIC = 0x54455452u; // 'TETR'
     static constexpr uint8_t HS_VERSION = 1;
+    static constexpr uint8_t INITIALS_LEN = 3; // arcade-style initials captured per high score
 
     struct HighScoreFile {
         uint32_t magic;
@@ -115,9 +116,12 @@ class TetrisModule : public SinglePortModule, public Observable<const UIFrameEve
     void saveHighScores();
     bool qualifiesForHighScore(uint32_t score) const;
     int insertHighScore(uint32_t score, const char *name, uint32_t nodeNum, bool &isNewTop);
-    void recordHighScore();
+    // Arcade-style flow: open the initials picker (or fall back to the node short name when
+    // headless), then record + persist the score in the picker's callback.
+    void promptForInitials();
+    void recordHighScore(const char *initials);
 #if TETRIS_ANNOUNCE_HIGH_SCORE
-    void announceHighScore(uint32_t score);
+    void announceHighScore(const char *initials, uint32_t score);
     void broadcastAllScores();
     int32_t nextBroadcastIntervalMs() const;
 #endif

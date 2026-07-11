@@ -167,8 +167,6 @@ bool SnakeModule::applyDirection(input_broker_event ev)
 
 int SnakeModule::handleInputEvent(const InputEvent *event)
 {
-    if (uiState == SNAKE_IDLE)
-        return 0; // not our turn -- let other modules handle it
     if (screen && screen->isOverlayBannerShowing())
         return 0; // a menu banner is up; don't steal its input
     // While Tetris owns the screen, all input belongs to it.
