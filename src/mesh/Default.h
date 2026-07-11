@@ -1,5 +1,8 @@
 #pragma once
+#include <MeshRadio.h>
 #include <NodeDB.h>
+#include <RadioInterface.h>
+#include <cmath>
 #include <cstdint>
 #include <meshUtils.h>
 #define ONE_DAY 24 * 60 * 60
@@ -10,12 +13,15 @@
 #define TEN_SECONDS_MS 10 * 1000
 #define MAX_INTERVAL INT32_MAX // FIXME: INT32_MAX to avoid overflow issues with Apple clients but should be UINT32_MAX
 
-#define min_default_telemetry_interval_secs 30 * 60
+#define min_default_telemetry_interval_secs IF_ROUTER(ONE_DAY / 2, 30 * 60)
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_smart_minimum_interval_secs 5 * 60
-#define min_default_broadcast_interval_secs 60 * 60
+// Floor for our own position broadcasts when stationary (unchanged beyond the broadcast
+// precision) or fixed_position: identical positions get deduped by traffic management anyway.
+#define default_position_stationary_broadcast_secs (12 * 60 * 60)
+#define min_default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define min_default_broadcast_smart_minimum_interval_secs 5 * 60
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
@@ -24,9 +30,29 @@
 #define default_screen_on_secs IF_ROUTER(1, 60 * 10)
 #define default_node_info_broadcast_secs 3 * 60 * 60
 #define default_neighbor_info_broadcast_secs 6 * 60 * 60
+#define default_mesh_beacon_min_broadcast_interval_secs 3600
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
 #define default_map_publish_interval_secs 60 * 60
+
+enum class TrafficType { POSITION, TELEMETRY };
+
+// Traffic management defaults
+#define default_traffic_mgmt_position_precision_bits 19                // ~90m grid cells (±45m)
+#define default_traffic_mgmt_position_min_interval_secs (11 * 60 * 60) // 11 hours between identical positions
+// Role cap: tracker-role origins may refresh a duplicate position this often (vs the 11h default).
+#define default_traffic_mgmt_tracker_position_min_interval_secs (60 * 60) // 1 hour
+// Role cap: lost-and-found origins may refresh a duplicate position this often, so a lost
+// device updates frequently without flooding. (Quantised to the dedup tick: ~2 ticks.)
+// Unlike before, lost-and-found is NOT exempt from the relayed precision clamp.
+#define default_traffic_mgmt_lost_and_found_position_min_interval_secs (15 * 60) // 15 minutes
+
+// Hop scaling defaults
+#define default_hop_scaling_min_target_nodes 40          // walk threshold: first hop reaching this cumulative count
+#define default_hop_scaling_max_target_nodes 80          // generous extension ceiling (2 × min)
+#define default_hop_scaling_min_target_nodes_floor 5     // minimum allowed min_target_nodes
+#define default_hop_scaling_max_target_nodes_ceiling 512 // maximum allowed max_target_nodes
+
 #ifdef USERPREFS_RINGTONE_NAG_SECS
 #define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
 #else
@@ -42,7 +68,10 @@
 #define default_mqtt_tls_enabled false
 
 #define IF_ROUTER(routerVal, normalVal)                                                                                          \
-    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
+    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||                                                        \
+      config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)                                                     \
+         ? (routerVal)                                                                                                           \
+         : (normalVal))
 
 class Default
 {
@@ -53,6 +82,8 @@ class Default
     // Note: numOnlineNodes uses uint32_t to match the public API and allow flexibility,
     // even though internal node counts use uint16_t (max 65535 nodes)
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
+    static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes,
+                                                   TrafficType type);
     static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
     static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
 
@@ -63,25 +94,39 @@ class Default
         if (numOnlineNodes <= 40) {
             return 1.0;
         } else {
-            float throttlingFactor = 0.075;
-            if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW)
-                throttlingFactor = 0.04;
-            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
-                throttlingFactor = 0.02;
-            else if (config.lora.use_preset &&
-                     IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW))
-                throttlingFactor = 0.01;
+            // Resolve SF and BW from preset or manual config
+            // When use_preset is true, config.lora.spread_factor and bandwidth may be 0
+            // because applyModemConfig() sets them on RadioInterface, not on config.lora
+            float bwKHz;
+            uint8_t sf;
+            uint8_t cr;
+            if (config.lora.use_preset) {
+                modemPresetToParams(config.lora.modem_preset, false, bwKHz, sf, cr);
+            } else {
+                sf = config.lora.spread_factor;
+                bwKHz = bwCodeToKHz(config.lora.bandwidth);
+            }
+
+            // Guard against invalid values
+            sf = clampSpreadFactor(sf);
+            bwKHz = clampBandwidthKHz(bwKHz);
+
+            // throttlingFactor = 2^SF / (BW_in_kHz * scaling_divisor)
+            // With scaling_divisor=100:
+            // In SF11 and BW=250khz (longfast), this gives 0.08192 rather than the original 0.075
+            // In SF10 and BW=250khz (mediumslow), this gives 0.04096 rather than the original 0.04
+            // In SF9 and BW=250khz (mediumfast), this gives 0.02048 rather than the original 0.02
+            // In SF7 and BW=250khz (shortfast), this gives 0.00512 rather than the original 0.01
+            float throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 100.0f);
 
 #if USERPREFS_EVENT_MODE
-            // If we are in event mode, scale down the throttling factor
-            throttlingFactor = 0.04;
+            // If we are in event mode, scale down the throttling factor by 4
+            throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 25.0f);
 #endif
 
             // Scaling up traffic based on number of nodes over 40
             int nodesOverForty = (numOnlineNodes - 40);
-            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)
+            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by throttle factor
         }
     }
 };

@@ -3,6 +3,8 @@
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
 #pragma once
+#include "BaseTelemetryModule.h"
+#include <map>
 
 #ifndef AIR_QUALITY_TELEMETRY_MODULE_ENABLE
 #define AIR_QUALITY_TELEMETRY_MODULE_ENABLE 0
@@ -11,12 +13,14 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#include "detect/ScanI2C.h"
 #include "detect/ScanI2CConsumer.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
 class AirQualityTelemetryModule : private concurrency::OSThread,
                                   public ScanI2CConsumer,
+                                  public BaseTelemetryModule,
                                   public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
@@ -64,8 +68,11 @@ class AirQualityTelemetryModule : private concurrency::OSThread,
     bool firstTime = true;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
-    uint32_t lastSentToMesh = 0;
+    // uint32_t sendToPhoneIntervalMs = 1000; // Send to phone every minute
     uint32_t lastSentToPhone = 0;
+
+    // Map for supported sensors to re-scan
+    std::map<uint8_t, ScanI2C::DeviceType> supportedSensors;
 };
 
 #endif

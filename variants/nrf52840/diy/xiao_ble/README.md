@@ -116,7 +116,7 @@ _(none)_
 1. Double press the XIAO nrf52840's `reset` button to put it in bootloader mode, and a USB volume named `XIAO SENSE` will appear
 2. Copy the `firmware.uf2` file to the `XIAO SENSE` volume (refer to the last step of [Build Meshtastic](#2-build-meshtastic))
 3. The XIAO nrf52840's red LED will flash for several seconds as the firmware is copied
-4. Once Meshtastic firmware succesfully boots, the:
+4. Once Meshtastic firmware successfully boots, the:
    1. Green LED will turn on
    2. Red LED will flash several times to indicate flash memory writes during initial settings file creation
    3. Green LED will blink every second once the firmware is running normally
@@ -135,7 +135,7 @@ _(none)_
   - If you don't see any specific error message, but the boot process is stuck or not proceeding as expected, this might also mean there is a conflict in `variant.h`. If you have made any changes to the pin mapping, ensure they do not result in a conflict. If all else fails, try reverting your changes and using the known-good configuration included here.
   - The above might also mean something is wired incorrectly. Try reverting to one of the known-good example wirings in section 4.
 - If the E22 gets hot to the touch:
-  - The power amplifier is likely running continually. Disconnect it and the XIAO from power immediately, and double check wiring and pin mapping. In my experimentation this occurred in cases where TXEN was inadvertenly high (usually due to a pin mapping conflict).
+  - The power amplifier is likely running continually. Disconnect it and the XIAO from power immediately, and double check wiring and pin mapping. In my experimentation this occurred in cases where TXEN was inadvertently high (usually due to a pin mapping conflict).
 
 ## 5. Notes
 
@@ -144,7 +144,7 @@ _(none)_
   - Meshtastic firmware is aware of the gain of the E22-900M30S module, so the Meshtastic clients' Tx power setting reflects the actual output power, i.e. setting 30 dBm in the Meshtastic app programs the E22 module to correctly output 30 dBm, setting 24 dBm will output 24 dBm, etc.
 - **Adequate 5V Power Supply to the E22 Module**
   - Have a bypass capacitor from its 5V supply to ground; 100 µF works well
-  - Voltage must be between 5V–5.5V, lower supply voltage results in less output power; for example, with a fully charged LiPo at 4.2V, Tx power appears to max out around 26-27 dBm
+  - Voltage must be between 5V-5.5V, lower supply voltage results in less output power; for example, with a fully charged LiPo at 4.2V, Tx power appears to max out around 26-27 dBm
 
 ### Additional Reading
 

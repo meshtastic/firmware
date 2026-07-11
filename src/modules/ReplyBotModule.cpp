@@ -9,8 +9,8 @@
  * received the bot responds with a short status message that includes the hop count
  * (minimum number of relays), RSSI and SNR of the received packet.  To avoid spamming
  * the network it enforces a per‑sender cooldown between responses.  By default the
- * module is enabled; define MESHTASTIC_EXCLUDE_REPLYBOT at build time to exclude it
- * entirely.  See the official firmware documentation for guidance on adding modules.
+ * module is disabled. See the official firmware documentation for guidance on adding modules.
+ * To enable this module, set `#undef MESHTASTIC_EXCLUDE_REPLYBOT` in your variant.h file.
  */
 
 #include "Channels.h"
@@ -59,14 +59,14 @@ static bool replybotRateLimited(uint32_t from, uint32_t cooldownMs)
             return false;
         }
     }
-    // No entry found – insert new sender into the ring
+    // No entry found - insert new sender into the ring
     replybotCooldown[replybotCooldownIdx].from = from;
     replybotCooldown[replybotCooldownIdx].lastMs = now;
     replybotCooldownIdx = (replybotCooldownIdx + 1) % REPLYBOT_COOLDOWN_SLOTS;
     return false;
 }
 
-// Constructor – registers a single text port and marks the module promiscuous
+// Constructor - registers a single text port and marks the module promiscuous
 // so that broadcast messages on the primary channel are visible.
 ReplyBotModule::ReplyBotModule() : SinglePortModule("replybot", meshtastic_PortNum_TEXT_MESSAGE_APP)
 {
@@ -122,7 +122,7 @@ ProcessMessage ReplyBotModule::handleReceived(const meshtastic_MeshPacket &mp)
         return ProcessMessage::CONTINUE;
     }
 
-    // Compute hop count indicator – if the relay_node is non‑zero we know
+    // Compute hop count indicator - if the relay_node is non‑zero we know
     // there was at least one relay.  Some firmware builds support a hop_start
     // field which could be used for more accurate counts, but here we use
     // the available relay_node flag only.

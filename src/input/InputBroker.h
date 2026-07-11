@@ -25,6 +25,7 @@ enum input_broker_event {
     INPUT_BROKER_USER_PRESS,
     INPUT_BROKER_ALT_PRESS,
     INPUT_BROKER_ALT_LONG,
+    INPUT_BROKER_FACTORY_RST = 0x9a,
     INPUT_BROKER_SHUTDOWN = 0x9b,
     INPUT_BROKER_GPS_TOGGLE = 0x9e,
     INPUT_BROKER_SEND_PING = 0xaf,
@@ -70,6 +71,7 @@ class InputBroker : public Observable<const InputEvent *>
 
   public:
     InputBroker();
+    bool menuMode = true;
     void registerSource(Observable<const InputEvent *> *source);
     void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
 #if defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)

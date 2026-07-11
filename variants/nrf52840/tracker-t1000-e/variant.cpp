@@ -38,17 +38,20 @@ void initVariant()
     pinMode(PIN_3V3_ACC_EN, OUTPUT);
     digitalWrite(PIN_3V3_ACC_EN, HIGH);
 
+    pinMode(T1000X_SENSOR_EN_PIN, OUTPUT);
+    digitalWrite(T1000X_SENSOR_EN_PIN, HIGH);
+
     pinMode(BUZZER_EN_PIN, OUTPUT);
     digitalWrite(BUZZER_EN_PIN, HIGH);
 
     pinMode(PIN_GPS_EN, OUTPUT);
-    digitalWrite(PIN_GPS_EN, LOW);
+    digitalWrite(PIN_GPS_EN, GPS_EN_ACTIVE);
 
     pinMode(GPS_VRTC_EN, OUTPUT);
     digitalWrite(GPS_VRTC_EN, HIGH);
 
     pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, LOW);
+    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 
     pinMode(GPS_SLEEP_INT, OUTPUT);
     digitalWrite(GPS_SLEEP_INT, HIGH);
@@ -56,5 +59,5 @@ void initVariant()
     pinMode(GPS_RTC_INT, OUTPUT);
     digitalWrite(GPS_RTC_INT, LOW);
 
-    pinMode(GPS_RESETB_OUT, INPUT);
+    pinMode(GPS_RESETB_OUT, INPUT_PULLUP);
 }

@@ -4,11 +4,16 @@
 #include "concurrency/Lock.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
+#include <atomic>
+#include <cstdint>
 #include <deque>
 #include <iterator>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+// NodeNum stored as raw uint32_t below; including MeshTypes.h here breaks the
+// LOG_WARN include order via Arduino.h/MemoryPool.h.
 
 // Make sure that we never let our packets grow too large for one BLE packet
 #define MAX_TO_FROM_RADIO_SIZE 512
@@ -41,13 +46,27 @@ class PhoneAPI
         STATE_SEND_MY_INFO, // send our my info record
         STATE_SEND_OWN_NODEINFO,
         STATE_SEND_METADATA,
+        STATE_SEND_REGION_PRESETS,  // Send the region->valid-preset map (one message)
         STATE_SEND_CHANNELS,        // Send all channels
         STATE_SEND_CONFIG,          // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG,    // Send Module specific config
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
         STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // send packets or debug strings
+        STATE_SEND_PACKETS // live mesh packets + any cached satellite-DB replay that trails sync completion
+    };
+
+    // Satellite-DB replay (positions / telemetry / environment / status) used to live
+    // as four top-level states between STATE_SEND_OTHER_NODEINFOS and STATE_SEND_FILEMANIFEST.
+    // It now drains *after* config_complete_id has been emitted: the phone considers the
+    // initial sync done as soon as headers + manifest are delivered, and the cached
+    // position/telemetry/etc. trickle in alongside live mesh traffic inside STATE_SEND_PACKETS.
+    enum ReplayPhase : uint8_t {
+        REPLAY_PHASE_IDLE = 0, // not replaying (legacy clients, no-op DBs, or replay finished)
+        REPLAY_PHASE_POSITIONS,
+        REPLAY_PHASE_TELEMETRY,
+        REPLAY_PHASE_ENVIRONMENT,
+        REPLAY_PHASE_STATUS,
     };
 
     State state = STATE_SEND_NOTHING;
@@ -87,6 +106,21 @@ class PhoneAPI
     static constexpr size_t kNodePrefetchDepth = 4;
     // Protect nodeInfoForPhone + nodeInfoQueue because NimBLE callbacks run in a separate FreeRTOS task.
     concurrency::Lock nodeInfoMutex;
+
+    // Synthetic-packet replay queue (paced via prefetch).
+    std::deque<meshtastic_MeshPacket> replayQueue;
+    static constexpr size_t kReplayPrefetchDepth = 4;
+    // NodeNum snapshots taken at each replay phase start so concurrent
+    // satellite-map mutations don't invalidate iteration.
+    std::vector<uint32_t> replayPositionOrder;
+    std::vector<uint32_t> replayTelemetryOrder;
+    std::vector<uint32_t> replayEnvironmentOrder;
+    std::vector<uint32_t> replayStatusOrder;
+    size_t replayPositionIndex = 0;
+    size_t replayTelemetryIndex = 0;
+    size_t replayEnvironmentIndex = 0;
+    size_t replayStatusIndex = 0;
+    ReplayPhase replayPhase = REPLAY_PHASE_IDLE; // armed by sendConfigComplete() for full/default sync
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
@@ -138,6 +172,49 @@ class PhoneAPI
     bool isConnected() { return state != STATE_SEND_NOTHING; }
     bool isSendingPackets() { return state == STATE_SEND_PACKETS; }
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    /// Per-connection auth: tracked in a small file-scope slot table keyed
+    /// by PhoneAPI*. Adding state members directly to PhoneAPI broke
+    /// USB-CDC enumeration on current nRF52 framework - even one extra
+    /// per-instance uint32_t was enough. Keeping all state out-of-line
+    /// avoids the issue.
+    void setAdminAuthorized(bool authorized);
+    bool getAdminAuthorized() const;
+
+    /// Lock Now: O(1) invalidation of every connection's auth by advancing
+    /// the global epoch. Subsequent gate checks see slot.myEpoch != epoch
+    /// and treat the connection as unauthenticated.
+    static void revokeAllAuth();
+
+    /// Called from the main loop after NodeDB::reloadFromDisk() finishes.
+    /// On reloadOk=true: any connection marked pending-unlock-after-reload
+    /// is promoted to authorized and receives an UNLOCKED status; the
+    /// screen-lock latch clears. On reloadOk=false: those connections
+    /// receive a LOCKED(storage_corrupt) status and remain unauthorized
+    /// so they cannot drive set_config against the corrupt baseline.
+    static void completePendingUnlocks(bool reloadOk);
+
+    /// Queue a LockdownStatus FromRadio for THIS connection only. Each
+    /// PhoneAPI owns its own pending-status slot in a file-scope table
+    /// (file-scope because adding fields directly to PhoneAPI broke
+    /// USB-CDC enumeration on nRF52); a status produced here will not
+    /// be delivered to any other connection. `lock_reason` may be
+    /// nullptr / empty for non-LOCKED states.
+    void queueLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                             uint32_t valid_until_epoch, uint32_t backoff_seconds);
+
+    /// Queue the same LockdownStatus on every active connection's slot.
+    /// Use for events with no specific originating connection (session
+    /// expiry tick in main.cpp, broadcast revocations, etc.). Per-
+    /// connection callers should prefer the instance method above to
+    /// avoid leaking one client's auth state to another.
+    static void broadcastLockdownStatus(meshtastic_LockdownStatus_State state, const char *lock_reason, uint8_t boots_remaining,
+                                        uint32_t valid_until_epoch, uint32_t backoff_seconds);
+
+    /// True iff this connection has a pending lockdown_status drain.
+    bool hasPendingLockdownStatus() const;
+#endif
+
   protected:
     /// Our fromradio packet while it is being assembled
     meshtastic_FromRadio fromRadioScratch = {};
@@ -179,12 +256,44 @@ class PhoneAPI
 
     APIType api_type = TYPE_NONE;
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    // No per-instance auth members - see method-level note. All state lives
+    // in a file-scope slot table in PhoneAPI.cpp keyed by `this` pointer.
+
+    // Pending LockdownStatus storage is NOT a class member - having a
+    // meshtastic_LockdownStatus (~50 bytes with the char[33] lock_reason)
+    // as a PhoneAPI member broke USB-CDC enumeration on the nRF52 Adafruit
+    // framework. The exact mechanism wasn't pinned down, but moving the
+    // storage to a file-scope static in PhoneAPI.cpp side-steps it cleanly.
+    // Trade-off: all PhoneAPI instances share one pending slot. Acceptable
+    // because only one transport delivers a lockdown command at a time in
+    // any realistic scenario.
+#endif
+
   private:
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
 
     void prefetchNodeInfos();
+    void beginReplayPositions();
+    void prefetchReplayPositions();
+    void beginReplayTelemetry();
+    void prefetchReplayTelemetry();
+    void beginReplayEnvironment();
+    void prefetchReplayEnvironment();
+    void beginReplayStatus();
+    void prefetchReplayStatus();
+    meshtastic_MeshPacket makeReplayPositionPacket(uint32_t num, const meshtastic_PositionLite &pos);
+    meshtastic_MeshPacket makeReplayTelemetryPacket(uint32_t num, const meshtastic_DeviceMetrics &metrics);
+    meshtastic_MeshPacket makeReplayEnvironmentPacket(uint32_t num, const meshtastic_EnvironmentMetrics &env);
+    meshtastic_MeshPacket makeReplayStatusPacket(uint32_t num, const meshtastic_StatusMessage &status);
+
+    // Post-sync replay drain: pop one cached packet from the active phase, advancing
+    // through positions -> telemetry -> environment -> status until everything is drained.
+    bool popReplayPacket(meshtastic_MeshPacket &out);
+    void advanceReplayPhase();
+    bool replayPending() const { return replayPhase != REPLAY_PHASE_IDLE; }
 
     void releaseMqttClientProxyPhonePacket();
 
@@ -197,6 +306,16 @@ class PhoneAPI
      * @return true true if a packet was queued for sending
      */
     bool handleToRadioPacket(meshtastic_MeshPacket &p);
+
+#if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
+    /// Synchronously handle a lockdown_auth AdminMessage from the local
+    /// client. Runs inside handleToRadioPacket so the originating
+    /// connection is reachable via `this` - avoids the async context
+    /// loss that broke the previous AdminModule path. Always consumes the
+    /// packet (returns true): lockdown_auth is local-only and must not be
+    /// forwarded to the mesh router.
+    bool handleLockdownAuthInline(const meshtastic_LockdownAuth &la);
+#endif
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;

@@ -43,8 +43,8 @@ static const uint8_t TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 };
 
 TCA8418Keyboard::TCA8418Keyboard()
-    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), state(Init), last_key(-1), last_tap(0L), char_idx(0), tap_interval(0),
-      should_backspace(false)
+    : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), state(Init), last_key(UINT8_MAX), last_tap(0L), char_idx(0),
+      tap_interval(0), should_backspace(false)
 {
 }
 
@@ -73,7 +73,7 @@ void TCA8418Keyboard::pressed(uint8_t key)
     }
 
     // Compute key index based on dynamic row/column
-    next_key = row * _TCA8418_COLS + col;
+    next_key = (uint8_t)(row * _TCA8418_COLS + col);
 
     // LOG_DEBUG("TCA8418: Key %u -> Next Key %u", key, next_key);
 
@@ -90,7 +90,7 @@ void TCA8418Keyboard::pressed(uint8_t key)
     // Check if the key is the same as the last one or if the time interval has passed
     if (next_key != last_key || tap_interval > _TCA8418_MULTI_TAP_THRESHOLD) {
         char_idx = 0;             // Reset char index if new key or long press
-        should_backspace = false; // dont backspace on new key
+        should_backspace = false; // don't backspace on new key
     } else {
         char_idx += 1;           // Cycle through characters if same key pressed
         should_backspace = true; // allow backspace on same key
@@ -114,8 +114,8 @@ void TCA8418Keyboard::released(uint8_t key)
 
     state = Idle;
 
-    if (last_key < 0 || last_key > _TCA8418_NUM_KEYS) { // reset to idle if last_key out of bounds
-        last_key = -1;
+    if (last_key >= _TCA8418_NUM_KEYS) { // reset to idle if last_key out of bounds
+        last_key = UINT8_MAX;
         return;
     }
     uint32_t now = millis();

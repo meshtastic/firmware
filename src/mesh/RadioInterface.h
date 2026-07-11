@@ -6,6 +6,11 @@
 #include "PointerQueue.h"
 #include "airtime.h"
 #include "error.h"
+#include <memory>
+
+#if HAS_LORA_FEM
+#include "LoRaFEMInterface.h"
+#endif
 
 // Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
 typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
@@ -87,15 +92,20 @@ class RadioInterface
     uint8_t sf = 9;
     uint8_t cr = 5;
 
-    const uint8_t NUM_SYM_CAD = 2;       // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
-    const uint8_t NUM_SYM_CAD_24GHZ = 4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
+    static constexpr uint8_t NUM_SYM_CAD =
+        2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
+    static constexpr uint8_t NUM_SYM_CAD_24GHZ =
+        4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
     uint32_t slotTimeMsec = computeSlotTimeMsec();
-    uint16_t preambleLength = 16;    // 8 is default, but we use longer to increase the amount of sleep time when receiving
-    uint32_t preambleTimeMsec = 165; // calculated on startup, this is the default for LongFast
-    const uint32_t PROCESSING_TIME_MSEC =
-        4500;                // time to construct, process and construct a packet again (empirically determined)
-    const uint8_t CWmin = 3; // minimum CWsize
-    const uint8_t CWmax = 8; // maximum CWsize
+    uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    static constexpr uint16_t preambleLengthDefault =
+        16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    static constexpr uint16_t wideLoraPreambleLengthDefault = 12; // 12 is default for wide Lora
+    uint32_t preambleTimeMsec = 165;                              // calculated on startup, this is the default for LongFast
+    static constexpr uint32_t PROCESSING_TIME_MSEC =
+        4500;                           // time to construct, process and construct a packet again (empirically determined)
+    static constexpr uint8_t CWmin = 3; // minimum CWsize
+    static constexpr uint8_t CWmax = 8; // maximum CWsize
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
@@ -118,20 +128,31 @@ class RadioInterface
 
     virtual ~RadioInterface() {}
 
+    /// Fires once per valid received LoRa packet (arg = sender NodeNum). Used e.g. to flash LED_LORA.
+    static Observable<uint32_t> loraRxPacketObservable;
+
     /**
      * Coerce LoRa config fields (bandwidth/spread_factor) derived from presets.
      * This is used during early bootstrapping so UIs that display these fields directly remain consistent.
      */
-    static void bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig);
+    // static void bootstrapLoRaConfigFromPreset(meshtastic_Config_LoRaConfig &loraConfig); // maybe superseded?
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
      * This method must be used before putting the CPU into deep or light sleep.
+     *
+     * @param deepSleep true when the radio itself is about to be powered down (deep sleep or
+     * shutdown) - an in-flight transmission then vetoes sleep, since it would be truncated on
+     * air. false for a light sleep where the radio stays powered and finishes the TX on its own.
      */
-    virtual bool canSleep() { return true; }
+    virtual bool canSleep(bool deepSleep = false) { return true; }
 
     virtual bool wideLora() { return false; }
+
+    /// Whether the radio can tune sub-GHz bands. False for 2.4 GHz-only chips (SX128x);
+    /// multiband chips like the LR1121 keep the default.
+    virtual bool supportsSubGhz() { return true; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }
@@ -151,7 +172,7 @@ class RadioInterface
     virtual ErrorCode send(meshtastic_MeshPacket *p) = 0;
 
     /** Return TX queue status */
-    virtual meshtastic_QueueStatus getQueueStatus()
+    [[nodiscard]] virtual meshtastic_QueueStatus getQueueStatus()
     {
         meshtastic_QueueStatus qs;
         qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
@@ -177,22 +198,22 @@ class RadioInterface
     virtual bool reconfigure();
 
     /** The delay to use for retransmitting dropped packets */
-    uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
+    [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
 
     /** The delay to use when we want to send something */
-    uint32_t getTxDelayMsec();
+    [[nodiscard]] uint32_t getTxDelayMsec();
 
     /** The CW to use when calculating SNR_based delays */
-    uint8_t getCWsize(float snr);
+    [[nodiscard]] uint8_t getCWsize(float snr);
 
     /** The worst-case SNR_based packet delay */
-    uint32_t getTxDelayMsecWeightedWorst(float snr);
+    [[nodiscard]] uint32_t getTxDelayMsecWeightedWorst(float snr);
 
     /** Returns true if we should rebroadcast early like a ROUTER */
-    bool shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p);
+    [[nodiscard]] bool shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p);
 
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
-    uint32_t getTxDelayMsecWeighted(meshtastic_MeshPacket *p);
+    [[nodiscard]] uint32_t getTxDelayMsecWeighted(meshtastic_MeshPacket *p);
 
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
@@ -210,24 +231,48 @@ class RadioInterface
      *
      * @return num msecs for the packet
      */
-    uint32_t getPacketTime(const meshtastic_MeshPacket *p, bool received = false);
-    virtual uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) = 0;
+    [[nodiscard]] uint32_t getPacketTime(const meshtastic_MeshPacket *p, bool received = false);
+    [[nodiscard]] virtual uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) = 0;
 
     /**
      * Get the channel we saved.
      */
-    uint32_t getChannelNum();
+    [[nodiscard]] uint32_t getChannelNum();
 
     /**
      * Get the frequency we saved.
      */
-    virtual float getFreq();
+    [[nodiscard]] virtual float getFreq();
 
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
 
     // Whether we use the default frequency slot given our LoRa config (region and modem preset)
     static bool uses_default_frequency_slot;
+
+    // Whether we have a custom channel name
+    static bool uses_custom_channel_name;
+
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+
+    // Check if a candidate region is compatible and valid, with no side effects (safe for
+    // speculative UI checks). errBuf, if given, receives the failure reason.
+    static bool checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf = nullptr, size_t errLen = 0);
+
+    // Check if a candidate region is compatible and valid. On failure, logs at ERROR,
+    // records a critical error, and sends a client notification.
+    static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
+
+    // Check if a candidate radio configuration is valid.
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
+
+    // Make a candidate radio configuration valid, even if it isn't.
+    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+
+    // If preset is locked to a sibling of currentRegion among the swappable EU regions
+    // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
+    static const RegionInfo *regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
+                                                 meshtastic_Config_LoRaConfig_ModemPreset preset);
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()
@@ -241,7 +286,7 @@ class RadioInterface
      *
      * Used as the first step of
      */
-    size_t beginSending(meshtastic_MeshPacket *p);
+    [[nodiscard]] size_t beginSending(meshtastic_MeshPacket *p);
 
     /**
      * Some regulatory regions limit xmit power.
@@ -259,6 +304,12 @@ class RadioInterface
      */
     virtual void saveChannelNum(uint32_t savedChannelNum);
 
+    /**
+     * Get current RSSI reading from the radio.
+     * Returns 0 if not available.
+     */
+    virtual int16_t getCurrentRSSI() { return 0; }
+
   private:
     /**
      * Convert our modemConfig enum into wf, sf, etc...
@@ -267,8 +318,9 @@ class RadioInterface
      */
     void applyModemConfig();
 
-    /// Return 0 if sleep is okay
-    int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
+    /// Return 0 if sleep is okay. A non-NULL argument means the radio is about to be powered
+    /// down (deep sleep / shutdown), see doPreflightSleep()
+    int preflightSleepCb(void *deepSleep = NULL) { return canSleep(deepSleep != NULL) ? 0 : 1; }
 
     int notifyDeepSleepCb(void *unused = NULL);
 
@@ -279,7 +331,7 @@ class RadioInterface
     }
 };
 
-bool initLoRa();
+std::unique_ptr<RadioInterface> initLoRa();
 
 /// Debug printing for packets
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p);

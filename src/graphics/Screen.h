@@ -12,7 +12,21 @@
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 namespace graphics
 {
-enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, text_input };
+enum notificationTypeEnum {
+    none,
+    text_banner,
+    selection_picker,
+    node_picker,
+    number_picker,
+    hex_picker,
+    text_input,
+    // BLE pairing PIN banner. Treated specially by the lockdown short-circuit
+    // in Screen.cpp: the PIN is ephemeral (regenerated per pair attempt) and
+    // not a real secret, so we allow ui->update() to composite it over the
+    // LOCKED frame. Without this, a first-pair on a locked device cannot
+    // complete because the PIN never renders.
+    pairing_pin,
+};
 
 struct BannerOverlayOptions {
     const char *message;
@@ -29,7 +43,7 @@ struct BannerOverlayOptions {
 bool shouldWakeOnReceivedMessage();
 
 #if !HAS_SCREEN
-#include "power.h"
+#include "Power.h"
 namespace graphics
 {
 // Noop class for boards without screen.
@@ -59,6 +73,9 @@ class Screen
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
+    bool getIsI2cScreen() const { return false; }
+    uint32_t getI2cFrequency() const { return 0; }
+    ScanI2C::I2CPort getI2CPort() const { return ScanI2C::I2CPort::NO_I2C; }
 };
 } // namespace graphics
 #else
@@ -90,6 +107,7 @@ class Screen
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
 #include "PointStruct.h"
+#include "Power.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"
@@ -99,7 +117,6 @@ class Screen
 #include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
 #include "modules/AdminModule.h"
-#include "power.h"
 #include <string>
 #include <vector>
 
@@ -246,6 +263,22 @@ class Screen : public concurrency::OSThread
     Screen &operator=(const Screen &) = delete;
 
     ScanI2C::DeviceAddress address_found;
+    bool getIsI2cScreen() const { return isI2cScreen; }
+    // Return I2C Speed, or 0 if none
+    uint32_t getI2cFrequency() const
+    {
+        if (getIsI2cScreen())
+            return dispdev->getI2cFrequency();
+        else
+            return 0;
+    }
+    ScanI2C::I2CPort getI2CPort() const
+    {
+        if (getIsI2cScreen())
+            return address_found.port;
+        else
+            return ScanI2C::I2CPort::NO_I2C;
+    }
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
@@ -330,15 +363,11 @@ class Screen : public concurrency::OSThread
 
     // Function to allow the AccelerometerThread to set the heading if a sensor provides it
     // Mutex needed?
-    void setHeading(long _heading)
-    {
-        hasCompass = true;
-        compassHeading = fmod(_heading, 360);
-    }
+    void setHeading(float heading);
 
     bool hasHeading() { return hasCompass; }
 
-    long getHeading() { return compassHeading; }
+    float getHeading() { return compassHeading; }
 
     void setEndCalibration(uint32_t _endCalibrationAt) { endCalibrationAt = _endCalibrationAt; }
     uint32_t getEndCalibration() { return endCalibrationAt; }
@@ -613,7 +642,6 @@ class Screen : public concurrency::OSThread
 
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
-    int handleTextMessage(const meshtastic_MeshPacket *packet);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
     int handleAdminMessage(AdminModule_ObserverData *arg);
@@ -628,6 +656,11 @@ class Screen : public concurrency::OSThread
     void toggleFrameVisibility(const std::string &frameName);
     bool isFrameHidden(const std::string &frameName) const;
 
+    // Persist / restore which frames are hidden, across reboots.
+    // Stored as a single uint32 bitmask in /prefs (see Screen.cpp for the format).
+    void loadFrameVisibility();
+    void saveFrameVisibility();
+
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off
     void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
@@ -640,6 +673,7 @@ class Screen : public concurrency::OSThread
     int32_t runOnce() final;
 
     bool isAUTOOled = false;
+    bool isI2cScreen = false;
 
     // Screen dimensions (for convenience)
     // Defined during Screen::setup
@@ -672,6 +706,17 @@ class Screen : public concurrency::OSThread
     void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
     void handleStartFirmwareUpdateScreen();
+
+#ifdef USERPREFS_UI_TEST_LOG
+    // Test-only: emits one LOG_INFO line on every frame transition so the
+    // pytest harness can assert which frame is shown. Gated behind a macro
+    // so the chatty log doesn't ship in release builds. Enabled via
+    // build_testing_profile(enable_ui_log=True) in the meshtastic-mcp harness
+    // (https://github.com/meshtastic/meshtastic-mcp).
+    // Member function (not free) because FramesetInfo is a private nested
+    // type - only methods of Screen can reach it.
+    void logFrameChange(const char *reason, uint8_t targetIdx);
+#endif
 
     // Info collected by setFrames method.
     // Index location of specific frames.
@@ -733,6 +778,11 @@ class Screen : public concurrency::OSThread
         bool chirpy = true;
     } hiddenFrames;
 
+    // Convert hiddenFrames to a uint32 bitmask. Bit positions are fixed per
+    // frame name (see Screen.cpp).
+    uint32_t packHiddenFrames() const;
+    void applyHiddenFramesMask(uint32_t mask);
+
     /// Try to start drawing ASAP
     void setFastFramerate();
 
@@ -765,7 +815,11 @@ class Screen : public concurrency::OSThread
     DebugInfo debugInfo;
 
     /// Display device
+#ifdef USE_ST7789
+    ST7789Spi *dispdev;
+#else
     OLEDDisplay *dispdev;
+#endif
 
     /// UI helper for rendering to frames and switching between them
     OLEDDisplayUi *ui;

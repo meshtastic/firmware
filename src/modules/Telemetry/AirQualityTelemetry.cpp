@@ -1,3 +1,4 @@
+#include "DebugConfiguration.h"
 #include "configuration.h"
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
@@ -10,8 +11,9 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "Sensor/AddI2CSensorTemplate.h"
+#include "TransmitHistory.h"
 #include "UnitConversions.h"
+#include "detect/ScanI2CTwoWire.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
@@ -19,20 +21,34 @@
 #include "sleep.h"
 #include <Throttle.h>
 
+static constexpr uint16_t TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY = 0x8004;
+
 // Sensors
+#include "Sensor/AddI2CSensorTemplate.h"
 #include "Sensor/PMSA003ISensor.h"
+#include "Sensor/SEN5XSensor.h"
+#if __has_include(<SensirionI2cScd4x.h>)
+#include "Sensor/SCD4XSensor.h"
+#endif
+#if __has_include(<SensirionI2cSfa3x.h>)
+#include "Sensor/SFA30Sensor.h"
+#endif
+#if __has_include(<SensirionI2cScd30.h>)
+#include "Sensor/SCD30Sensor.h"
+#endif
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
     if (!moduleConfig.telemetry.air_quality_enabled && !AIR_QUALITY_TELEMETRY_MODULE_ENABLE) {
         return;
     }
+
     LOG_INFO("Air Quality Telemetry adding I2C devices...");
 
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
-        Note: this was previously on runOnce, which didnt take effect
+        Note: this was previously on runOnce, which didn't take effect
         as other modules already had already been initialized (screen)
     */
 
@@ -40,13 +56,71 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // moduleConfig.telemetry.air_quality_screen_enabled = 1;
     // moduleConfig.telemetry.air_quality_interval = 15;
 
+    // Add here supported sensors in the Air Quality module
+    // These sensors will be scanned twice, once in the first scan,
+    // and secondly in the first run of the module
+    if (!supportedSensors.count(PMSA003I_ADDR))
+        supportedSensors[PMSA003I_ADDR] = ScanI2C::DeviceType::PMSA003I;
+    if (!supportedSensors.count(SEN5X_ADDR))
+        supportedSensors[SEN5X_ADDR] = ScanI2C::DeviceType::SEN5X;
+#if __has_include(<SensirionI2cScd4x.h>)
+    if (!supportedSensors.count(SCD4X_ADDR))
+        supportedSensors[SCD4X_ADDR] = ScanI2C::DeviceType::SCD4X;
+#endif
+#if __has_include(<SensirionI2cSfa3x.h>)
+    if (!supportedSensors.count(SFA30_ADDR))
+        supportedSensors[SFA30_ADDR] = ScanI2C::DeviceType::SFA30;
+#endif
+#if __has_include(<SensirionI2cScd30.h>)
+    if (!supportedSensors.count(SCD30_ADDR))
+        supportedSensors[SCD30_ADDR] = ScanI2C::DeviceType::SCD30;
+#endif
+
+    if (!firstTime) {
+        // Re-scan for late comming sensors
+        LOG_INFO("Re-scanning supported sensors...");
+
+        for (const auto &[address, type] : supportedSensors) {
+
+            if (!i2cScanner->exists(type)) {
+                LOG_INFO("Re-scanning on address 0x%x", address);
+                uint8_t array_address[1] = {address};
+#if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, array_address, sizeof(array_address));
+#endif
+
+#if defined(I2C_SDA)
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, array_address, sizeof(array_address));
+#elif defined(ARCH_PORTDUINO)
+                if (portduino_config.i2cdev != "") {
+                    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, array_address, sizeof(array_address));
+                }
+#elif HAS_WIRE
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, array_address, sizeof(array_address));
+#endif
+            }
+        }
+    }
+
     // order by priority of metrics/values (low top, high bottom)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
+    addSensor<SEN5XSensor>(i2cScanner, ScanI2C::DeviceType::SEN5X);
+#if __has_include(<SensirionI2cScd4x.h>)
+    addSensor<SCD4XSensor>(i2cScanner, ScanI2C::DeviceType::SCD4X);
+#endif
+#if __has_include(<SensirionI2cSfa3x.h>)
+    addSensor<SFA30Sensor>(i2cScanner, ScanI2C::DeviceType::SFA30);
+#endif
+#if __has_include(<SensirionI2cScd30.h>)
+    addSensor<SCD30Sensor>(i2cScanner, ScanI2C::DeviceType::SCD30);
+#endif
 }
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
+        if (shouldDeferDeepSleep())
+            return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
                                                                    default_telemetry_broadcast_interval_secs);
@@ -63,11 +137,18 @@ int32_t AirQualityTelemetryModule::runOnce()
     }
 
     if (firstTime) {
-        // This is the first time the OSThread library has called this function, so do some setup
+        // This is the first time the OSThread library has called this function, so
+        // do some setup
         firstTime = false;
 
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: init");
+
+#if !MESHTASTIC_EXCLUDE_I2C
+            // Re-scan I2C bus
+            auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
+            i2cScanFinished(i2cScanner.get());
+#endif
 
             // check if we have at least one sensor
             if (!sensors.empty()) {
@@ -85,21 +166,41 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Wake up the sensors that need it
-        LOG_INFO("Waking up sensors");
+        uint32_t lastTelemetry =
+            transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY) : 0;
         for (TelemetrySensor *sensor : sensors) {
-            if (!sensor->isActive()) {
-                return sensor->wakeUp();
+            LOG_DEBUG("Checking if %s needs to wake up", sensor->sensorName);
+            if (!sensor->canSleep()) {
+                LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
+            } else if (((lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry - sensor->wakeUpTimeMs(),
+                                                                              Default::getConfiguredOrDefaultMsScaled(
+                                                                                  moduleConfig.telemetry.air_quality_interval,
+                                                                                  default_telemetry_broadcast_interval_secs,
+                                                                                  numOnlineNodes, TrafficType::TELEMETRY))) &&
+                       airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                       airTime->isTxAllowedAirUtil()) {
+                if (!sensor->isActive()) {
+                    LOG_DEBUG("Waking up: %s", sensor->sensorName);
+                    return sensor->wakeUp();
+                } else {
+                    int32_t pendingForReadyMs = sensor->pendingForReadyMs();
+                    LOG_DEBUG("%s. Pending for ready %ums", sensor->sensorName, pendingForReadyMs);
+                    if (pendingForReadyMs) {
+                        return pendingForReadyMs;
+                    }
+                }
             }
         }
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.air_quality_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        if (((lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                                                      moduleConfig.telemetry.air_quality_interval,
+                                                                                      default_telemetry_broadcast_interval_secs,
+                                                                                      numOnlineNodes, TrafficType::TELEMETRY))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = millis();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
@@ -109,10 +210,26 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Send to sleep sensors that consume power
-        LOG_INFO("Sending sensors to sleep");
         for (TelemetrySensor *sensor : sensors) {
-            sensor->sleep();
+            LOG_DEBUG("Checking if %s can be sent to sleep", sensor->sensorName);
+            if (sensor->isActive() && sensor->canSleep()) {
+                if (sensor->wakeUpTimeMs() <
+                    (int32_t)Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
+                                                                     default_telemetry_broadcast_interval_secs, numOnlineNodes,
+                                                                     TrafficType::TELEMETRY)) {
+                    LOG_DEBUG("Disabling %s until next period", sensor->sensorName);
+                    sensor->sleep();
+                } else {
+                    LOG_DEBUG("Sensor stays enabled due to warm up period");
+                }
+            }
         }
+    }
+    if (sleepOnNextExecution) {
+        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
+        // this return value, which would otherwise override setIntervalFromNow() and delay or
+        // mistime the pending deep sleep
+        return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, result);
 }
@@ -155,11 +272,15 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
         return;
     }
 
+    // Same String(float) stack-overflow guard as EnvironmentTelemetry: form_formaldehyde is the only
+    // float rendered here, and its raw bytes are unvalidated on decode.
+    telemetry.variant.air_quality_metrics.form_formaldehyde =
+        UnitConversions::displaySafeFloat(telemetry.variant.air_quality_metrics.form_formaldehyde);
+
     const auto &m = telemetry.variant.air_quality_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard || m.has_pm10_environmental ||
-                  m.has_pm25_environmental || m.has_pm100_environmental;
+    bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard || m.has_co2;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -186,6 +307,10 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
         entries.push_back("PM2.5: " + String(m.pm25_standard) + "ug/m3");
     if (m.has_pm100_standard)
         entries.push_back("PM10: " + String(m.pm100_standard) + "ug/m3");
+    if (m.has_co2)
+        entries.push_back("CO2: " + String(m.co2) + "ppm");
+    if (m.has_form_formaldehyde)
+        entries.push_back("HCHO: " + String(m.form_formaldehyde) + "ppb");
 
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {
@@ -221,13 +346,19 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i", sender,
-                 t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
-                 t->variant.air_quality_metrics.pm100_standard);
+        if (t->variant.air_quality_metrics.has_pm10_standard)
+            LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, "
+                     "pm100_standard=%i",
+                     sender, t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
+                     t->variant.air_quality_metrics.pm100_standard);
 
-        LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
-                 t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
-                 t->variant.air_quality_metrics.pm100_environmental);
+        if (t->variant.air_quality_metrics.has_co2)
+            LOG_INFO("CO2=%i, CO2_T=%.2f, CO2_H=%.2f", t->variant.air_quality_metrics.co2,
+                     t->variant.air_quality_metrics.co2_temperature, t->variant.air_quality_metrics.co2_humidity);
+
+        if (t->variant.air_quality_metrics.has_form_formaldehyde)
+            LOG_INFO("HCHO=%.2f, HCHO_T=%.2f, HCHO_H=%.2f", t->variant.air_quality_metrics.form_formaldehyde,
+                     t->variant.air_quality_metrics.form_temperature, t->variant.air_quality_metrics.form_humidity);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -241,17 +372,20 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = true;
+    // Note: this is different to the case in EnvironmentTelemetryModule
+    // There, if any sensor fails to read - valid = false.
+    bool valid = false;
     bool hasSensor = false;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m->variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
 
-    // TODO - Should we check for sensor state here?
-    // If a sensor is sleeping, we should know and check to wake it up
+    bool sensor_get = false;
     for (TelemetrySensor *sensor : sensors) {
-        LOG_INFO("Reading AQ sensors");
-        valid = valid && sensor->getMetrics(m);
+        LOG_DEBUG("Reading %s", sensor->sensorName);
+        // Note - this function doesn't get properly called if within a conditional
+        sensor_get = sensor->getMetrics(m);
+        valid = valid || sensor_get;
         hasSensor = true;
     }
 
@@ -261,6 +395,10 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
 {
     if (currentRequest) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
         auto req = *currentRequest;
         const auto &p = req.decoded;
         meshtastic_Telemetry scratch;
@@ -291,12 +429,39 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
-    if (getAirQualityTelemetry(&m)) {
-        LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, \
-                    pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
-                 m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard,
-                 m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental,
-                 m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
+
+    bool validTelemetry = getAirQualityTelemetry(&m);
+    if (validTelemetry) {
+
+        bool hasAnyPM =
+            m.variant.air_quality_metrics.has_pm10_standard || m.variant.air_quality_metrics.has_pm25_standard ||
+            m.variant.air_quality_metrics.has_pm100_standard || m.variant.air_quality_metrics.has_pm10_environmental ||
+            m.variant.air_quality_metrics.has_pm25_environmental || m.variant.air_quality_metrics.has_pm100_environmental;
+
+        if (hasAnyPM) {
+            LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u", m.variant.air_quality_metrics.pm10_standard,
+                     m.variant.air_quality_metrics.pm25_standard, m.variant.air_quality_metrics.pm100_standard);
+            if (m.variant.air_quality_metrics.has_pm10_environmental)
+                LOG_INFO("pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u",
+                         m.variant.air_quality_metrics.pm10_environmental, m.variant.air_quality_metrics.pm25_environmental,
+                         m.variant.air_quality_metrics.pm100_environmental);
+        }
+
+        bool hasAnyCO2 = m.variant.air_quality_metrics.has_co2 || m.variant.air_quality_metrics.has_co2_temperature ||
+                         m.variant.air_quality_metrics.has_co2_humidity;
+
+        if (hasAnyCO2) {
+            LOG_INFO("Send: co2=%i, co2_t=%.2f, co2_rh=%.2f", m.variant.air_quality_metrics.co2,
+                     m.variant.air_quality_metrics.co2_temperature, m.variant.air_quality_metrics.co2_humidity);
+        }
+
+        bool hasAnyHCHO = m.variant.air_quality_metrics.has_form_formaldehyde ||
+                          m.variant.air_quality_metrics.has_form_temperature || m.variant.air_quality_metrics.has_form_humidity;
+
+        if (hasAnyHCHO) {
+            LOG_INFO("Send: hcho=%.2f, hcho_t=%.2f, hcho_rh=%.2f", m.variant.air_quality_metrics.form_formaldehyde,
+                     m.variant.air_quality_metrics.form_temperature, m.variant.air_quality_metrics.form_humidity);
+        }
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
@@ -318,23 +483,33 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_INFO("Sending packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
+            if (isPowerSavingSensor()) {
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                notification->level = meshtastic_LogRecord_Level_INFO;
-                notification->time = getValidTime(RTCQualityFromNet);
-                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
-                                                          default_telemetry_broadcast_interval_secs) /
-                            1000U);
-                service->sendClientNotification(notification);
-                sleepOnNextExecution = true;
-                LOG_DEBUG("Start next execution in 5s, then sleep");
-                setIntervalFromNow(FIVE_SECONDS_MS);
+                if (notification) {
+                    notification->level = meshtastic_LogRecord_Level_INFO;
+                    notification->time = getValidTime(RTCQualityFromNet);
+                    sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                            Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
+                                                              default_telemetry_broadcast_interval_secs) /
+                                1000U);
+                    service->sendClientNotification(notification);
+                }
             }
         }
-        return true;
     }
-    return false;
+
+    // Arm the pre-sleep sequence even when no valid reading was available this cycle: a
+    // power-saving SENSOR node must still return to deep sleep, otherwise it stays awake
+    // until the next telemetry interval and drains its battery
+    if (!phoneOnly && isPowerSavingSensor()) {
+        if (!validTelemetry)
+            LOG_WARN("Air quality telemetry unavailable this cycle, sleep without sending");
+        sleepOnNextExecution = true;
+        preflightSleepDeferrals = 0;
+        LOG_DEBUG("Start next execution in 5s, then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
+    }
+    return validTelemetry;
 }
 
 AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,

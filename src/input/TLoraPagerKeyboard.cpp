@@ -70,7 +70,7 @@ TLoraPagerKeyboard::TLoraPagerKeyboard()
     : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), pressedKeysCount(0), onlyOneModifierPressed(false),
       persistedPreviousModifier(false)
 {
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
     ledcAttach(KB_BL_PIN, LEDC_BACKLIGHT_FREQ, LEDC_BACKLIGHT_BIT_WIDTH);
 #else
     ledcSetup(LEDC_BACKLIGHT_CHANNEL, LEDC_BACKLIGHT_FREQ, LEDC_BACKLIGHT_BIT_WIDTH);
@@ -92,7 +92,7 @@ void TLoraPagerKeyboard::setBacklight(bool on)
     uint32_t _brightness = 0;
     if (on)
         _brightness = brightness;
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
     ledcWrite(KB_BL_PIN, _brightness);
 #else
     ledcWrite(LEDC_BACKLIGHT_CHANNEL, _brightness);

@@ -17,7 +17,7 @@ class TCA8418Keyboard : public TCA8418KeyboardBase
     void released(uint8_t key) override;
 
     KeyState state;
-    int8_t last_key;
+    uint8_t last_key;
     uint32_t last_tap;
     uint8_t char_idx;
     int32_t tap_interval;

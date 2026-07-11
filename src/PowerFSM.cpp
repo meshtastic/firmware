@@ -38,7 +38,10 @@ static bool isPowered()
     return true;
 #endif
 
-    bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
+    bool isRouter = ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                      config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
+                         ? 1
+                         : 0);
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
@@ -54,6 +57,52 @@ static bool isPowered()
     */
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
+
+static bool isBluetoothEnabledForPowerFSM()
+{
+#if HAS_BLUETOOTH && !MESHTASTIC_EXCLUDE_BLUETOOTH
+    return config.bluetooth.enabled;
+#else
+    return false;
+#endif
+}
+
+static uint32_t getBluetoothWaitMs()
+{
+    if (!isBluetoothEnabledForPowerFSM())
+        return 0;
+
+    return Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs);
+}
+
+#if defined(T5_S3_EPAPER_PRO)
+static void t5BacklightOffForSleep()
+{
+    t5BacklightSetForcedBySleep(true);
+}
+
+static void t5BacklightWakeFromSleep()
+{
+    t5BacklightSetForcedBySleep(false);
+}
+
+static void t5BacklightOffForTimeout()
+{
+    t5BacklightSetForcedByTimeout(true);
+    t5TouchSetForcedByTimeout(true);
+}
+
+static void t5BacklightOnFromUserInput()
+{
+    t5BacklightHandleUserInput();
+    t5TouchHandleUserInput();
+}
+#else
+static void t5BacklightOffForSleep() {}
+static void t5BacklightWakeFromSleep() {}
+static void t5BacklightOffForTimeout() {}
+static void t5BacklightOnFromUserInput() {}
+#endif
 
 static void sdsEnter()
 {
@@ -84,6 +133,7 @@ static void lsEnter()
     LOG_POWERFSM("lsEnter begin, ls_secs=%u", config.power.ls_secs);
     if (screen)
         screen->setOn(false);
+    t5BacklightOffForSleep();
     secsSlept = 0; // How long have we been sleeping this time
 
     // LOG_INFO("lsEnter end");
@@ -156,6 +206,8 @@ static void lsIdle()
 static void lsExit()
 {
     LOG_POWERFSM("State: lsExit");
+    // Lift the light-sleep force-off gate when leaving LS.
+    t5BacklightWakeFromSleep();
 }
 
 static void nbEnter()
@@ -177,12 +229,18 @@ static void darkEnter()
     setBluetoothEnable(true);
     if (screen)
         screen->setOn(false);
+    // Screen timeout enters DARK; ensure backlight also turns off.
+    t5BacklightOffForTimeout();
 }
 
 static void serialEnter()
 {
     LOG_POWERFSM("State: serialEnter");
+#ifndef ARCH_NRF52
+    // nRF52 runs BLE on SoftDevice independently of USB serial - no need to disable it.
+    // (Same rationale as nbEnter() which already guards this with #ifdef ARCH_ESP32)
     setBluetoothEnable(false);
+#endif
     if (screen) {
         screen->setOn(true);
     }
@@ -262,7 +320,10 @@ Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
+    bool isRouter = ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                      config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
+                         ? 1
+                         : 0);
     bool hasPower = isPowered();
 
     LOG_INFO("PowerFSM init, USB power=%d", hasPower ? 1 : 0);
@@ -283,12 +344,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateNB, &stateNB, EVENT_PACKET_FOR_PHONE, NULL, "Received packet, resetting win wake");
 
     // Handle press events - note: we ignore button presses when in API mode
-    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
-    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
-    powerFSM.add_transition(&stateDARK, isPowered() ? &statePOWER : &stateON, EVENT_PRESS, NULL, "Press");
-    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, NULL, "Press");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, NULL, "Press"); // reenter On to restart our timers
-    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, NULL,
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
+    powerFSM.add_transition(&stateDARK, isPowered() ? &statePOWER : &stateON, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, t5BacklightOnFromUserInput, "Press");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, t5BacklightOnFromUserInput,
+                            "Press"); // reenter On to restart our timers
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, t5BacklightOnFromUserInput,
                             "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
@@ -308,11 +370,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateSERIAL, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");
 
     // Inputbroker
-    powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, NULL, "Input Device");
-    powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, NULL, "Input Device");
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, NULL, "Input Device");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, NULL, "Input Device");       // restarts the sleep timer
-    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, NULL, "Input Device"); // restarts the sleep timer
+    powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput, "Input Device");
+    powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput, "Input Device");
+    powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput, "Input Device");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, t5BacklightOnFromUserInput,
+                            "Input Device"); // restarts the sleep timer
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, t5BacklightOnFromUserInput,
+                            "Input Device"); // restarts the sleep timer
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
@@ -382,10 +446,7 @@ void PowerFSM_setup()
 
         // If ESP32 and using power-saving, timer mover from DARK to light-sleep
         // Also serves purpose of the old DARK to DARK transition(?) See https://github.com/meshtastic/firmware/issues/3517
-        powerFSM.add_timed_transition(
-            &stateDARK, &stateLS,
-            Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
-            "Bluetooth timeout");
+        powerFSM.add_timed_transition(&stateDARK, &stateLS, getBluetoothWaitMs(), NULL, "Bluetooth timeout");
     } else {
         // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
         powerFSM.add_timed_transition(&stateDARK, &stateDARK,

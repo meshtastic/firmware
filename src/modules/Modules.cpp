@@ -28,6 +28,9 @@
 #if !MESHTASTIC_EXCLUDE_NODEINFO
 #include "modules/NodeInfoModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
@@ -38,6 +41,12 @@
 #include "modules/PowerStressModule.h"
 #endif
 #include "modules/RoutingModule.h"
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
+#if HAS_VARIABLE_HOPS
+#include "modules/HopScalingModule.h"
+#endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -56,9 +65,13 @@
 #endif
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "main.h"
-#include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #include "modules/Telemetry/HealthTelemetry.h"
+#include "modules/Telemetry/Sensor/TelemetrySensor.h"
+#endif
+#if HAS_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
+#include "main.h"
+#include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/Sensor/TelemetrySensor.h"
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
@@ -116,11 +129,26 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
 #endif
+
+#if HAS_TRAFFIC_MANAGEMENT && !MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT
+    if (moduleConfig.has_traffic_management) {
+        trafficManagementModule = new TrafficManagementModule();
+    }
+#endif
+
+#if HAS_VARIABLE_HOPS
+    hopScalingModule = new HopScalingModule();
+#endif
+
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminModule = new AdminModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_NODEINFO
     nodeInfoModule = new NodeInfoModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+    meshBeaconBroadcastModule = new MeshBeaconBroadcastModule();
+    meshBeaconListenerModule = new MeshBeaconListenerModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
     positionModule = new PositionModule();

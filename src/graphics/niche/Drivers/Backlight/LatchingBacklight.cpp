@@ -42,7 +42,7 @@ int LatchingBacklight::beforeDeepSleep(void *unused)
 {
     // Contingency only
     // - pin wasn't set
-    if (pin != (uint8_t)-1) {
+    if (pin != static_cast<uint8_t>(-1)) {
         off();
         pinMode(pin, INPUT); // High impedance - unnecessary?
     } else
@@ -55,7 +55,7 @@ int LatchingBacklight::beforeDeepSleep(void *unused)
 // The effect on the backlight is the same; peek and latch are separated to simplify short vs long press button handling
 void LatchingBacklight::peek()
 {
-    assert(pin != (uint8_t)-1);
+    assert(pin != static_cast<uint8_t>(-1));
     digitalWrite(pin, logicActive); // On
     on = true;
     latched = false;
@@ -67,7 +67,7 @@ void LatchingBacklight::peek()
 // The effect on the backlight is the same; peek and latch are separated to simplify short vs long press button handling
 void LatchingBacklight::latch()
 {
-    assert(pin != (uint8_t)-1);
+    assert(pin != static_cast<uint8_t>(-1));
 
     // Blink if moving from peek to latch
     // Indicates to user that the transition has taken place
@@ -89,7 +89,7 @@ void LatchingBacklight::latch()
 // Suitable for ending both peek and latch
 void LatchingBacklight::off()
 {
-    assert(pin != (uint8_t)-1);
+    assert(pin != static_cast<uint8_t>(-1));
     digitalWrite(pin, !logicActive); // Off
     on = false;
     latched = false;

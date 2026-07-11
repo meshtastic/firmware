@@ -15,11 +15,11 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
     static PacketAPI *create(PacketServer *_server);
     virtual ~PacketAPI(){};
     virtual int32_t runOnce();
-
-  protected:
-    PacketAPI(PacketServer *_server);
     // Check the current underlying physical queue to see if the client is fetching packets
     bool checkIsConnected() override;
+
+  protected:
+    explicit PacketAPI(PacketServer *_server);
 
     void onNowHasData(uint32_t fromRadioNum) override {}
     void onConnectionChanged(bool connected) override {}

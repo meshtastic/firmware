@@ -26,10 +26,7 @@ const uint8_t bluetoothConnectedIcon[36] PROGMEM = {0xfe, 0x01, 0xff, 0x03, 0x03
                                                     0xf3, 0x3f, 0x33, 0x30, 0x33, 0x33, 0x33, 0x33, 0x03, 0x33, 0xff, 0x33,
                                                     0xfe, 0x31, 0x00, 0x30, 0x30, 0x30, 0x30, 0x30, 0xf0, 0x3f, 0xe0, 0x1f};
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST7796_CS) ||             \
-     defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR) || ARCH_PORTDUINO) &&                                                 \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
+#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
 const uint8_t imgQuestionL1[] PROGMEM = {0xff, 0x01, 0x01, 0x32, 0x7b, 0x49, 0x49, 0x6f, 0x26, 0x01, 0x01, 0xff};
 const uint8_t imgQuestionL2[] PROGMEM = {0x0f, 0x08, 0x08, 0x08, 0x06, 0x0f, 0x0f, 0x06, 0x08, 0x08, 0x08, 0x0f};
 const uint8_t imgInfoL1[] PROGMEM = {0xff, 0x01, 0x01, 0x01, 0x1e, 0x7f, 0x1e, 0x01, 0x01, 0x01, 0x01, 0xff};
@@ -82,6 +79,12 @@ static const unsigned char mail[] PROGMEM = {
     0b10000001, 0b00, // Edges
     0b11111111, 0b00  // Bottom line
 };
+
+// Hop icon (9x10)
+#define hop_width 9
+#define hop_height 10
+const uint8_t hop[] PROGMEM = {0x05, 0x00, 0x07, 0x00, 0x05, 0x00, 0x38, 0x00, 0x28, 0x00,
+                               0x38, 0x00, 0xC0, 0x01, 0x40, 0x01, 0xC0, 0x01, 0x40, 0x00};
 
 // 📬 Mail / Message
 const uint8_t icon_mail[] PROGMEM = {
@@ -288,6 +291,10 @@ const uint8_t digital_icon_clock[] PROGMEM = {0b00111100, 0b01000010, 0b10000101
 const uint8_t analog_icon_clock[] PROGMEM = {0b11111111, 0b01000010, 0b00100100, 0b00011000,
                                              0b00100100, 0b01000010, 0b01000010, 0b11111111};
 
+#define xeddsa_shield_width 8
+#define xeddsa_shield_height 8
+const uint8_t xeddsa_shield[] PROGMEM = {0x7E, 0x8F, 0x8F, 0x8F, 0xF1, 0xF1, 0x72, 0x3C};
+
 #define chirpy_width 38
 #define chirpy_height 50
 const uint8_t chirpy[] = {
@@ -312,7 +319,7 @@ const uint8_t chirpy_small[] = {0x7f, 0x41, 0x55, 0x55, 0x55, 0x55, 0x41, 0x7f};
 #define connection_icon_height 5
 const uint8_t connection_icon[] = {0x36, 0x41, 0x5D, 0x41, 0x36};
 
-#ifdef M5STACK_UNITC6L
+#ifdef OLED_TINY
 #include "img/icon_small.xbm"
 #else
 #include "img/icon.xbm"

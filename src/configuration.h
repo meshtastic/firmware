@@ -31,6 +31,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #if __has_include("SensorRtcHelper.hpp")
 #include "SensorRtcHelper.hpp"
+// SensorLib defines isBitSet as a macro; undefine it here to avoid conflicts
+// with the SparkFun MMC5983MA library, which has a class method of the same name.
+#ifdef isBitSet
+#undef isBitSet
+#endif
 #endif
 
 /* Offer chance for variant-specific defines */
@@ -77,6 +82,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Configuration
 // -----------------------------------------------------------------------------
+
+// Pre-hop drop handling (compile-time flag).
+#ifndef MESHTASTIC_PREHOP_DROP
+#define MESHTASTIC_PREHOP_DROP 1
+#endif
 
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
@@ -149,6 +159,33 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
 #endif
 
+#ifdef USE_KCT8103L_PA
+// Power Amps are often non-linear, so we can use an array of values for the power curve
+#if defined(HELTEC_WIRELESS_TRACKER_V2)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 12, 11, 10, 9, 8, 7
+#elif defined(HELTEC_MESH_NODE_T096)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 13, 12, 11, 10, 9, 8, 7
+#elif defined(HELTEC_V4_R8)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7
+#else
+// If a board enables USE_KCT8103L_PA but does not match a known variant and has
+// not already provided a PA curve, fail at compile time to avoid unsafe defaults.
+#if !defined(NUM_PA_POINTS) || !defined(TX_GAIN_LORA)
+#error "USE_KCT8103L_PA is defined, but no PA gain curve (NUM_PA_POINTS / TX_GAIN_LORA) is configured for this board."
+#endif
+#endif
+#endif
+
+#ifdef USE_KCT8103L_PA_ONLY
+#if defined(HELTEC_MESH_TOWER_V2)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 8, 7
+#endif
+#endif
+
 #ifdef RAK13302
 #define NUM_PA_POINTS 22
 #define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
@@ -161,6 +198,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef TX_GAIN_LORA
 #define TX_GAIN_LORA 0
+#endif
+
+#ifndef HAS_LORA_FEM
+#define HAS_LORA_FEM 0
 #endif
 
 // -----------------------------------------------------------------------------
@@ -205,7 +246,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BME_ADDR 0x76
 #define BME_ADDR_ALTERNATE 0x77
 #define MCP9808_ADDR 0x18
-#define INA_ADDR 0x40
+#define INA_ADDR 0x40 // same as SHT2X
 #define INA_ADDR_ALTERNATE 0x41
 #define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
@@ -214,11 +255,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define QMI8658_ADDR 0x6B
 #define QMC5883L_ADDR 0x0D
 #define HMC5883L_ADDR 0x1E
+#define MMC5983MA_ADDR 0x30
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
-#define SHT31_4x_ADDR 0x44
-#define SHT31_4x_ADDR_ALT 0x45
+#define SFA30_ADDR 0x5D
+#define SHTXX_ADDR 0x44
+#define SHTXX_ADDR_ALT 0x45
 #define PMSA003I_ADDR 0x12
 #define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
@@ -233,6 +276,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
 #define SCD4X_ADDR 0x62
+#define CW2015_ADDR 0x62
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53
@@ -241,6 +285,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
+#define SEN5X_ADDR 0x69
+#define SCD30_ADDR 0x61
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -257,6 +303,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BHI260AP_ADDR 0x28
 #define BMM150_ADDR 0x13
 #define DA217_ADDR 0x26
+#define BMI270_ADDR 0x68
+#define BMI270_ADDR_ALT 0x69
+#define ICM42607P_ADDR 0x68
+#define ICM42607P_ADDR_ALT 0x69
 
 // -----------------------------------------------------------------------------
 // LED
@@ -467,6 +517,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_PKI 1
 #define MESHTASTIC_EXCLUDE_POWER_FSM 1
 #define MESHTASTIC_EXCLUDE_TZ 1
+#define MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH 1
 #endif
 
 // Turn off all optional modules
@@ -483,6 +534,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
 #define MESHTASTIC_EXCLUDE_STOREFORWARD 1
 #define MESHTASTIC_EXCLUDE_TEXTMESSAGE 1
+#define MESHTASTIC_EXCLUDE_TRAFFIC_MANAGEMENT 1
 #define MESHTASTIC_EXCLUDE_ATAK 1
 #define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
 #define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1
@@ -523,6 +575,99 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
+
+#ifndef USE_ETHERNET_DEFAULT
+#define USE_ETHERNET_DEFAULT 0
+#endif
+
+// -----------------------------------------------------------------------------
+// MESHTASTIC_LOCKDOWN - runtime, client-toggleable hardening (nRF52 only)
+//
+// Lockdown/protect support is opt-in at build time. Builds that need it pass
+// -DMESHTASTIC_ENABLE_LOCKDOWN=1. When enabled on nRF52 (CC310 hardware
+// crypto), whether it is ACTIVE is decided entirely at runtime by
+// EncryptedStorage::isLockdownActive()
+// (== a passphrase has been provisioned, i.e. /prefs/.dek exists). A device
+// that has never been provisioned - or that the operator disabled from the
+// client app - behaves exactly like stock firmware: plaintext storage, no
+// redaction, normal logging, normal display.
+//
+// The operator toggles lockdown from the client app:
+//   off -> on : provision a passphrase (AdminMessage.lockdown_auth). The
+//               firmware generates a DEK, encrypts the stored config, and
+//               authorizes the connection.
+//   on -> off : AdminMessage.lockdown_auth { disable=true } with the
+//               passphrase - decrypts storage back to plaintext and removes
+//               the DEK / token / monotonic-counter / backoff files, then
+//               reboots into normal mode. APPROTECT is the one thing that
+//               does NOT revert (see below).
+//
+// MESHTASTIC_LOCKDOWN here is an INTERNAL capability marker. It gates the UI
+// bits (lock screen, pairing-PIN handling). Flash-constrained nRF52 variants
+// that genuinely cannot afford the ~tens-of-KB of crypto + access-control code
+// may also opt out with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
+//
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL - per-connection auth + redaction,
+//                                        gated at runtime on isLockdownActive()
+//   MESHTASTIC_ENCRYPTED_STORAGE       - AES-128-CTR + HMAC-SHA256 at-rest
+//   MESHTASTIC_ENABLE_APPROTECT        - UICR APPROTECT capability. The actual
+//                                        one-way burn happens at runtime, only
+//                                        once provisioned, only on non-vulnerable
+//                                        silicon, and is STICKY: disabling
+//                                        lockdown does NOT (cannot) reverse it.
+//
+// DEBUG_MUTE is intentionally NOT coupled to lockdown - a capable-but-off
+// device must log normally. Define DEBUG_MUTE separately for a silent build.
+//
+// -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
+// even when provisioned - for development so dev boards never lose SWD.
+// -----------------------------------------------------------------------------
+#if defined(ARCH_NRF52)
+#ifndef MESHTASTIC_ENABLE_LOCKDOWN
+#define MESHTASTIC_ENABLE_LOCKDOWN 0
+#endif
+
+#if !MESHTASTIC_ENABLE_LOCKDOWN
+#undef MESHTASTIC_LOCKDOWN
+#undef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#undef MESHTASTIC_ENCRYPTED_STORAGE
+#undef MESHTASTIC_ENABLE_APPROTECT
+#ifndef MESHTASTIC_EXCLUDE_LOCKDOWN
+#define MESHTASTIC_EXCLUDE_LOCKDOWN 1
+#endif
+#endif
+
+#if MESHTASTIC_ENABLE_LOCKDOWN && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
+#define MESHTASTIC_LOCKDOWN 1
+#define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
+#define MESHTASTIC_ENCRYPTED_STORAGE 1
+#ifndef MESHTASTIC_LOCKDOWN_DEBUG
+#define MESHTASTIC_ENABLE_APPROTECT 1
+#endif
+#endif
+#endif
+
+#ifdef MESHTASTIC_LOCKDOWN
+
+// Per-boot uptime cap on unlocked sessions. 0 = unlimited (token-only
+// enforcement, the existing behavior). When non-zero, every passphrase
+// unlock (and every token-auto-unlock that inherits the value) arms a
+// timer; on expiry the device lockNow()s and reboots into locked state.
+// Bounds the total exposure window to bootsRemaining * this value if an
+// attacker has physical possession but not the passphrase.
+//
+// Override at build time. Suggested:
+//   carry device:        3600  (1h sessions, periodic re-auth from phone)
+//   tower / infra node:  0     (default - relies on token TTLs only)
+//
+// A future LockdownAuth.max_session_seconds proto field will let the
+// client set this per-token; until that lands the build-time value is
+// the only source.
+#ifndef MESHTASTIC_LOCKDOWN_SESSION_DEFAULT_SECONDS
+#define MESHTASTIC_LOCKDOWN_SESSION_DEFAULT_SECONDS 0
+#endif
+
+#endif // MESHTASTIC_LOCKDOWN
 
 #include "DebugConfiguration.h"
 #include "RF95Configuration.h"

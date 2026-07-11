@@ -8,6 +8,11 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH && __has_include(<esp_bt.h>)
+#include <esp_bt.h>
+#define CAN_RELEASE_BT_MEMORY 1
+#endif
+
 #include <MeshtasticOTA.h>
 
 #if HAS_WIFI
@@ -15,6 +20,7 @@
 #endif
 
 #include "esp_mac.h"
+#include "freertosinc.h"
 #include "meshUtils.h"
 #include "sleep.h"
 #include "soc/rtc.h"
@@ -24,10 +30,76 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
+// Weak empty variant shutdown prep function.
+// May be redefined by variant files.
+void variant_shutdown() __attribute__((weak));
+void variant_shutdown() {}
+
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+static bool bluetoothMemoryReleased;
+static bool bluetoothMemoryReleaseWarned;
+#endif
+
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+static bool isNetworkConfiguredToDisableBluetooth()
+{
+#if HAS_WIFI
+    return isWifiAvailable();
+#elif defined(USE_WS5500) || defined(USE_CH390D)
+    return config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
+static bool isPaxcounterActiveForBoot()
+{
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
+    return moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled && !config.bluetooth.enabled &&
+           !config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
+static bool shouldReleaseBluetoothMemory()
+{
+    // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
+    // ESP32 BLE controller memory for scanning.
+    if (isPaxcounterActiveForBoot()) {
+        LOG_DEBUG("Skipping Bluetooth memory release because Paxcounter is active");
+        return false;
+    }
+
+    // On ESP32 targets WiFi and BLE share radio resources. When WiFi is configured for this boot,
+    // BLE will not be started, so its reserved memory can be returned to the heap until reboot.
+    if (isNetworkConfiguredToDisableBluetooth()) {
+        return true;
+    }
+    return !config.bluetooth.enabled;
+}
+
+static const char *getBluetoothReleaseReason()
+{
+    if (isNetworkConfiguredToDisableBluetooth()) {
+        return "WiFi is enabled";
+    }
+    return "Bluetooth is disabled";
+}
+#endif
+
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-#ifdef USE_WS5500
+    if (enable && bluetoothMemoryReleased) {
+        if (!shouldReleaseBluetoothMemory() && !bluetoothMemoryReleaseWarned) {
+            bluetoothMemoryReleaseWarned = true;
+            LOG_WARN("Bluetooth memory has been released; reboot to re-enable Bluetooth");
+        }
+        return;
+    }
+
+#if defined(USE_WS5500) || defined(USE_CH390D)
     if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
 #elif HAS_WIFI
     if (!isWifiAvailable() && config.bluetooth.enabled == true)
@@ -51,6 +123,29 @@ void setBluetoothEnable(bool enable)
 void setBluetoothEnable(bool enable) {}
 void updateBatteryLevel(uint8_t level) {}
 #endif
+
+void esp32ReleaseBluetoothMemoryIfUnused()
+{
+#ifdef CAN_RELEASE_BT_MEMORY
+    if (bluetoothMemoryReleased || !shouldReleaseBluetoothMemory()) {
+        return;
+    }
+
+    const int32_t heapBefore = ESP.getHeapSize();
+    const int32_t freeBefore = ESP.getFreeHeap();
+
+    // ESP_BT_MODE_BTDM releases all BT/BLE controller and host memory for this boot.
+    // It is intentionally irreversible until reboot, matching the runtime config behavior.
+    esp_err_t err = esp_bt_mem_release(ESP_BT_MODE_BTDM);
+    if (err == ESP_OK) {
+        bluetoothMemoryReleased = true;
+        LOG_INFO("Released BTDM memory because %s: heap %+d, free %+d", getBluetoothReleaseReason(),
+                 (int32_t)ESP.getHeapSize() - heapBefore, (int32_t)ESP.getFreeHeap() - freeBefore);
+    } else {
+        LOG_WARN("BTDM memory release failed: %d", err);
+    }
+#endif
+}
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -160,17 +255,30 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
-#ifdef CONFIG_IDF_TARGET_ESP32C6
-    esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
-    wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
-    wdt_config->trigger_panic = true;
-    res = esp_task_wdt_init(wdt_config);
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+    const esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = APP_WATCHDOG_SECS * 1000,
+        .idle_core_mask = (1U << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1U,
+        .trigger_panic = true,
+    };
+    res = esp_task_wdt_init(&wdt_config);
+    if (res == ESP_ERR_INVALID_STATE) {
+        LOG_WARN("Task watchdog already initialized, reconfiguring existing instance");
+        res = esp_task_wdt_reconfigure(&wdt_config);
+    }
     assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
+    if (res == ESP_ERR_INVALID_STATE) {
+        LOG_WARN("Task watchdog already initialized, reusing existing instance");
+        res = ESP_OK;
+    }
     assert(res == ESP_OK);
 #endif
-    res = esp_task_wdt_add(NULL);
+    res = esp_task_wdt_status(NULL);
+    if (res == ESP_ERR_NOT_FOUND) {
+        res = esp_task_wdt_add(NULL);
+    }
     assert(res == ESP_OK);
 
 #if HAS_32768HZ
@@ -226,7 +334,9 @@ void cpuDeepSleep(uint32_t msecToWake)
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
     uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
 #endif
-
+#ifdef ALT_BUTTON_WAKE
+    gpioMask |= (1ULL << BUTTON_PIN_ALT);
+#endif
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
@@ -249,10 +359,15 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 #endif // #end ESP32S3_WAKE_TYPE
 #endif
+    variant_shutdown();
 
+#if SOC_PM_SUPPORT_RTC_PERIPH_PD
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+#endif
 
-    esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
-    esp_deep_sleep_start();                              // TBD mA sleep current (battery)
+    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer - align with nRF52 system_off semantics.
+    if (msecToWake != portMAX_DELAY)
+        esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
+    esp_deep_sleep_start();
 }

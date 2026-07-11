@@ -2,7 +2,6 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
-#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "PMSA003ISensor.h"
 #include "TelemetrySensor.h"
@@ -13,34 +12,40 @@ PMSA003ISensor::PMSA003ISensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_INFO("Init sensor: %s", sensorName);
+    LOG_INFO("%s: Init sensor", sensorName);
 #ifdef PMSA003I_ENABLE_PIN
     pinMode(PMSA003I_ENABLE_PIN, OUTPUT);
 #endif
 
+    // TODO PMS5003I sometimes get late to the party...
+
     _bus = bus;
     _address = dev->address.address;
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    _port = dev->address.port;
+    reClockI2C.setup(_bus, _port);
 
-#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus);
-    if (!currentClock) {
-        LOG_WARN("PMSA003I can't be used at this clock speed");
-        return false;
-    }
-#endif
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(PMSA003I_I2C_CLOCK_SPEED);
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     _bus->beginTransmission(_address);
     if (_bus->endTransmission() != 0) {
-        LOG_WARN("PMSA003I not found on I2C at 0x12");
+        LOG_WARN("%s not found on I2C at 0x12", sensorName);
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
         return false;
     }
 
-#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus);
-#endif
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     status = 1;
-    LOG_INFO("PMSA003I Enabled");
+    LOG_INFO("%s Enabled", sensorName);
 
     initI2CSensor();
     return true;
@@ -49,34 +54,40 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     if (!isActive()) {
-        LOG_WARN("PMSA003I is not active");
+        LOG_WARN("Can't get metrics. %s is not active", sensorName);
         return false;
     }
 
-#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    uint32_t currentClock = reClockI2C(PMSA003I_I2C_CLOCK_SPEED, _bus);
-#endif
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, PMSA003I_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(PMSA003I_I2C_CLOCK_SPEED);
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
 
-    _bus->requestFrom(_address, PMSA003I_FRAME_LENGTH);
+    _bus->requestFrom(_address, (uint8_t)PMSA003I_FRAME_LENGTH);
     if (_bus->available() < PMSA003I_FRAME_LENGTH) {
-        LOG_WARN("PMSA003I read failed: incomplete data (%d bytes)", _bus->available());
+        LOG_WARN("%s: read failed: incomplete data (%d bytes)", sensorName, _bus->available());
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+        LOG_DEBUG("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
         return false;
     }
-
-#if defined(PMSA003I_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus);
-#endif
 
     for (uint8_t i = 0; i < PMSA003I_FRAME_LENGTH; i++) {
         buffer[i] = _bus->read();
     }
 
+#ifdef PMSA003I_I2C_CLOCK_SPEED
+    LOG_DEBUG("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
+#endif /* PMSA003I_I2C_CLOCK_SPEED */
+
     if (buffer[0] != 0x42 || buffer[1] != 0x4D) {
-        LOG_WARN("PMSA003I frame header invalid: 0x%02X 0x%02X", buffer[0], buffer[1]);
+        LOG_WARN("%s: frame header invalid: 0x%02X 0x%02X", sensorName, buffer[0], buffer[1]);
         return false;
     }
 
-    auto read16 = [](uint8_t *data, uint8_t idx) -> uint16_t { return (data[idx] << 8) | data[idx + 1]; };
+    auto read16 = [](const uint8_t *data, uint8_t idx) -> uint16_t { return (data[idx] << 8) | data[idx + 1]; };
 
     computedChecksum = 0;
 
@@ -86,7 +97,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     receivedChecksum = read16(buffer, PMSA003I_FRAME_LENGTH - 2);
 
     if (computedChecksum != receivedChecksum) {
-        LOG_WARN("PMSA003I checksum failed: computed 0x%04X, received 0x%04X", computedChecksum, receivedChecksum);
+        LOG_WARN("%s checksum failed: computed 0x%04X, received 0x%04X", sensorName, computedChecksum, receivedChecksum);
         return false;
     }
 
@@ -128,6 +139,10 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.air_quality_metrics.has_particles_100um = true;
     measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
 
+    LOG_DEBUG("%s: Got readings: pM1p0_standard=%u, pM2p5_standard=%u, pM10p0_standard=%u", sensorName,
+              measurement->variant.air_quality_metrics.pm10_standard, measurement->variant.air_quality_metrics.pm25_standard,
+              measurement->variant.air_quality_metrics.pm100_standard);
+
     return true;
 }
 
@@ -136,20 +151,58 @@ bool PMSA003ISensor::isActive()
     return state == State::ACTIVE;
 }
 
+int32_t PMSA003ISensor::wakeUpTimeMs()
+{
+#ifdef PMSA003I_ENABLE_PIN
+    return PMSA003I_WARMUP_MS;
+#endif
+    return 0;
+}
+
+int32_t PMSA003ISensor::pendingForReadyMs()
+{
+#ifdef PMSA003I_ENABLE_PIN
+
+    uint32_t now;
+    now = getTime();
+    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted) * 1000;
+    LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
+
+    if (sincePmMeasureStarted < PMSA003I_WARMUP_MS) {
+        LOG_INFO("%s: not enough time passed since starting measurement", sensorName);
+        return PMSA003I_WARMUP_MS - sincePmMeasureStarted;
+    }
+    return 0;
+
+#endif
+    return 0;
+}
+
+bool PMSA003ISensor::canSleep()
+{
+#ifdef PMSA003I_ENABLE_PIN
+    return true;
+#endif
+    return false;
+}
+
 void PMSA003ISensor::sleep()
 {
 #ifdef PMSA003I_ENABLE_PIN
     digitalWrite(PMSA003I_ENABLE_PIN, LOW);
     state = State::IDLE;
+    pmMeasureStarted = 0;
 #endif
 }
 
 uint32_t PMSA003ISensor::wakeUp()
 {
 #ifdef PMSA003I_ENABLE_PIN
-    LOG_INFO("Waking up PMSA003I");
+    LOG_INFO("%s: Waking up", sensorName);
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
     state = State::ACTIVE;
+    pmMeasureStarted = getTime();
+
     return PMSA003I_WARMUP_MS;
 #endif
     // No need to wait for warmup if already active
