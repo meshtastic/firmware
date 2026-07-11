@@ -132,8 +132,9 @@ const RegionInfo regions[] = {
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
         Also used in Brazil.
+        Default is ShortFast on slot 16 (918.875 MHz), the New Zealand mesh standard.
      */
-    RDEF(ANZ, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(ANZ, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(SHORT_FAST), 16),
 
     /*
         433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
