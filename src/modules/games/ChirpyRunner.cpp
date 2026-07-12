@@ -19,6 +19,27 @@ int16_t ChirpyRunnerGame::pickGapSteps()
     return static_cast<int16_t>(GAP_STEPS_MIN + static_cast<int16_t>(nextRandom() % (GAP_STEPS_MAX - GAP_STEPS_MIN + 1)));
 }
 
+void ChirpyRunnerGame::resetClouds()
+{
+    // Spread the clouds across the sky at staggered x, at varied heights near the top.
+    for (uint8_t i = 0; i < CLOUD_COUNT; i++) {
+        cloud[i].xSub = static_cast<int32_t>(i * (BOARD_W / CLOUD_COUNT) + 6) * SUBPX;
+        cloud[i].y = static_cast<int16_t>(10 + nextRandom() % 10u); // 10..19 (below the score row)
+    }
+}
+
+void ChirpyRunnerGame::scrollClouds()
+{
+    // Slow parallax drift; wrap back to the right (at a fresh height) once off the left edge.
+    for (uint8_t i = 0; i < CLOUD_COUNT; i++) {
+        cloud[i].xSub -= CLOUD_SPEED_SUB;
+        if (cloud[i].xSub / SUBPX + CLOUD_W < 0) {
+            cloud[i].xSub = static_cast<int32_t>(BOARD_W + nextRandom() % 24u) * SUBPX;
+            cloud[i].y = static_cast<int16_t>(10 + nextRandom() % 10u);
+        }
+    }
+}
+
 void ChirpyRunnerGame::spawnObstacle()
 {
     for (uint8_t i = 0; i < MAX_OBSTACLES; i++) {
@@ -31,6 +52,8 @@ void ChirpyRunnerGame::spawnObstacle()
         // Three height tiers so timing varies (kept clearable with margin for a forgiving jump).
         const uint32_t tier = nextRandom() % 3u;
         obst[i].h = tier == 0 ? 8 : (tier == 1 ? 11 : 15);
+        obst[i].colorIdx = static_cast<uint8_t>((spawnCount / 10u) % OBST_COLOR_COUNT);
+        spawnCount++;
         return;
     }
 }
@@ -47,6 +70,8 @@ void ChirpyRunnerGame::reset(uint32_t seed)
         obst[i] = {};
     speedSub = SPEED_BASE;
     spawnTimer = 0; // first obstacle spawns on the first step
+    spawnCount = 0;
+    resetClouds();
 }
 
 void ChirpyRunnerGame::jump()
@@ -61,6 +86,8 @@ bool ChirpyRunnerGame::step()
 {
     if (!alive)
         return false;
+
+    scrollClouds(); // decorative background parallax
 
     // --- Chirpy vertical motion ---
     vy += GRAVITY;
@@ -171,10 +198,44 @@ void ChirpyRunner::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
     display->drawString(cx, y + 34, hi);
 }
 
+#if GRAPHICS_TFT_COLORING_ENABLED
+// Obstacle colour palette; the game logic advances the index every 10 spawns.
+static uint16_t obstacleColor(uint8_t idx)
+{
+    using namespace graphics;
+    switch (idx) {
+    case 0:
+        return TFTPalette::Red;
+    case 1:
+        return TFTPalette::Orange;
+    case 2:
+        return TFTPalette::Yellow;
+    case 3:
+        return TFTPalette::Magenta;
+    case 4:
+        return TFTPalette::Cyan;
+    default:
+        return TFTPalette::Blue;
+    }
+}
+#endif
+
 void ChirpyRunner::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
 {
     display->setColor(WHITE);
     display->setFont(FONT_SMALL);
+
+    // Clouds drifting in the background (drawn first so everything else sits in front).
+    for (uint8_t i = 0; i < ChirpyRunnerGame::cloudSlots(); i++) {
+        const int16_t cxp = x + game.cloudX(i);
+        const int16_t cyp = y + game.cloudY(i);
+        display->fillRect(cxp + 2, cyp, 4, 1);
+        display->fillRect(cxp + 1, cyp + 1, 6, 1);
+        display->fillRect(cxp, cyp + 2, 8, 1);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        graphics::registerTFTColorRegionDirect(cxp, cyp, 8, 3, graphics::TFTPalette::LightGray, graphics::getThemeBodyBg());
+#endif
+    }
 
     // Score (top-left).
     char buf[16];
@@ -185,12 +246,31 @@ void ChirpyRunner::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
     // Ground line.
     display->drawLine(x, y + ChirpyRunnerGame::GROUND_Y, x + display->getWidth() - 1, y + ChirpyRunnerGame::GROUND_Y);
 
-    // Obstacles (ground-based pillars).
+    // Obstacles drawn as little buildings: a solid tower with two columns of punched-out windows
+    // (dark holes). On colour displays the walls cycle colour every 10 spawns and the windows glow
+    // (they are the region's off-pixels, so they take the off-colour).
     for (uint8_t i = 0; i < ChirpyRunnerGame::obstacleSlots(); i++) {
         if (!game.obstacleActive(i))
             continue;
         const int16_t oh = game.obstacleH(i);
-        display->fillRect(x + game.obstacleX(i), y + ChirpyRunnerGame::GROUND_Y - oh, game.obstacleW(i), oh);
+        const int16_t ow = game.obstacleW(i);
+        const int16_t oxp = x + game.obstacleX(i);
+        const int16_t oyp = y + ChirpyRunnerGame::GROUND_Y - oh;
+
+        display->setColor(WHITE);
+        display->fillRect(oxp, oyp, ow, oh);
+        // Windows: 1px holes in the left and right columns, every other row, skipping the roof row
+        // and the ground-floor rows so the tower reads as a building.
+        display->setColor(BLACK);
+        for (int16_t wy = oyp + 2; wy <= oyp + oh - 3; wy += 2) {
+            display->fillRect(oxp + 1, wy, 1, 1);
+            display->fillRect(oxp + ow - 2, wy, 1, 1);
+        }
+        display->setColor(WHITE);
+#if GRAPHICS_TFT_COLORING_ENABLED
+        graphics::registerTFTColorRegionDirect(oxp, oyp, ow, oh, obstacleColor(game.obstacleColorIndex(i)),
+                                               graphics::TFTPalette::White); // lit windows
+#endif
     }
 
     // Chirpy.

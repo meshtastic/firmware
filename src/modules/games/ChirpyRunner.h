@@ -31,6 +31,8 @@ class ChirpyRunnerGame
 
     static constexpr uint8_t MAX_OBSTACLES = 4;
     static constexpr int16_t OBST_W = 6;
+    static constexpr uint8_t OBST_COLOR_COUNT = 6; // obstacle colour advances every 10 spawns
+    static constexpr uint8_t CLOUD_COUNT = 3;      // decorative background clouds
 
     /** (Re)start a run: Chirpy on the ground, no obstacles yet, score 0. `seed` drives the
      * xorshift32 RNG used for obstacle heights and spacing. */
@@ -54,6 +56,10 @@ class ChirpyRunnerGame
     int16_t obstacleX(uint8_t i) const { return static_cast<int16_t>(obst[i].xSub / SUBPX); }
     uint8_t obstacleW(uint8_t i) const { return obst[i].w; }
     uint8_t obstacleH(uint8_t i) const { return obst[i].h; }
+    uint8_t obstacleColorIndex(uint8_t i) const { return obst[i].colorIdx; }
+    static constexpr uint8_t cloudSlots() { return CLOUD_COUNT; }
+    int16_t cloudX(uint8_t i) const { return static_cast<int16_t>(cloud[i].xSub / SUBPX); }
+    int16_t cloudY(uint8_t i) const { return cloud[i].y; }
 
   private:
     static constexpr int32_t SUBPX = 16;          // fixed-point sub-pixels per pixel
@@ -69,26 +75,39 @@ class ChirpyRunnerGame
     static constexpr int16_t GAP_STEPS_MIN = 23; // min ticks between spawns (> jump duration)
     static constexpr int16_t GAP_STEPS_MAX = 40; // max ticks between spawns
 
+    static constexpr int32_t CLOUD_SPEED_SUB = 6; // background scroll speed (sub-px/step, slow parallax)
+    static constexpr int16_t CLOUD_W = 8;         // cloud puff width (for off-screen wrap)
+
     struct Obstacle {
         int32_t xSub; // left edge, sub-pixels
         uint8_t w;
         uint8_t h;
+        uint8_t colorIdx; // which colour batch (advances every 10 spawns)
         bool active;
         bool scored;
+    };
+
+    struct Cloud {
+        int32_t xSub; // left edge, sub-pixels
+        int16_t y;    // top, pixels
     };
 
     int32_t groundedTopSub() const { return static_cast<int32_t>(GROUND_Y - CHIRPY_H) * SUBPX; }
     uint32_t nextRandom();
     void spawnObstacle();
     int16_t pickGapSteps();
+    void resetClouds();
+    void scrollClouds();
 
     int32_t chirpyTop = 0; // sprite-top y, sub-pixels
     int32_t vy = 0;        // vertical velocity, sub-pixels/step
     bool grounded = true;
 
     Obstacle obst[MAX_OBSTACLES] = {};
+    Cloud cloud[CLOUD_COUNT] = {};
     int32_t speedSub = SPEED_BASE;
-    int16_t spawnTimer = 0; // ticks until the next obstacle spawns
+    int16_t spawnTimer = 0;  // ticks until the next obstacle spawns
+    uint32_t spawnCount = 0; // total obstacles spawned (drives the colour cycle)
 
     uint32_t points = 0;
     uint32_t rng = 1; // xorshift32 state (never 0)
