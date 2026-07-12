@@ -65,14 +65,16 @@ bool HUB75Native::connect()
         return false;
     }
     brightness = portduino_config.hub75_brightness; // library scale is 1..100
-    matrix->SetBrightness(brightness);
+    matrix->SetBrightness(brightness);              // applies to the matrix and all its FrameCanvases
     matrix->Clear();
+    // Offscreen buffer for double-buffered, tear-free presentation (see display()).
+    offscreen = matrix->CreateFrameCanvas();
     return true;
 }
 
 void HUB75Native::display()
 {
-    if (!matrix)
+    if (!matrix || !offscreen)
         return;
 
     const uint16_t onNative = graphics::TFTPalette::White;
@@ -85,8 +87,8 @@ void HUB75Native::display()
     const bool hasColorRegions = graphics::getTFTColorRegionCount() > 0;
 #endif
 
-    // Full-frame redraw every call: SetPixel into the library's continuously-scanned canvas is
-    // cheap at these resolutions, so there is no need for the ESP32 driver's dirty-diff.
+    // Full-frame redraw into the offscreen canvas every call (no dirty-diff needed at these
+    // resolutions), then SwapOnVSync() below presents it atomically for tear-free output.
     for (uint16_t y = 0; y < displayHeight; y++) {
         const uint32_t yByteIndex = (y / 8) * displayWidth;
         const uint8_t yByteMask = (uint8_t)(1 << (y & 7));
@@ -113,7 +115,7 @@ void HUB75Native::display()
             const uint8_t r = (uint8_t)(((c >> 11) & 0x1F) << 3);
             const uint8_t g = (uint8_t)(((c >> 5) & 0x3F) << 2);
             const uint8_t b = (uint8_t)((c & 0x1F) << 3);
-            matrix->SetPixel(x, y, r, g, b);
+            offscreen->SetPixel(x, y, r, g, b);
         }
     }
 
@@ -121,11 +123,15 @@ void HUB75Native::display()
     // Regions are re-registered every frame by the renderers; clear so they don't accumulate.
     graphics::clearTFTColorRegions();
 #endif
+
+    // Present the finished frame at the next vsync; the returned canvas (the previously shown one)
+    // becomes our next offscreen buffer.
+    offscreen = matrix->SwapOnVSync(offscreen);
 }
 
 void HUB75Native::sendCommand(uint8_t com)
 {
-    if (!matrix)
+    if (!matrix || !offscreen)
         return;
 
     switch (com) {
@@ -134,9 +140,12 @@ void HUB75Native::sendCommand(uint8_t com)
         break;
     case DISPLAYOFF:
         // rpi-rgb-led-matrix clamps brightness 0 up to 1 and its refresh thread keeps scanning the
-        // retained canvas, so SetBrightness(0) alone leaves the last frame faintly lit. Clear the
-        // canvas so the panel actually goes black while asleep; the next display() repaints it.
-        matrix->Clear();
+        // presented canvas, so SetBrightness(0) alone leaves the last frame faintly lit. Present a
+        // cleared frame so the panel actually goes black while asleep. (matrix->Clear() would only
+        // clear the RGBMatrix's own buffer, not the FrameCanvas we swap in.) Wake repaints via the
+        // next display().
+        offscreen->Clear();
+        offscreen = matrix->SwapOnVSync(offscreen);
         break;
     default:
         // Drop all other SSD1306 init/config commands - not meaningful for the matrix.

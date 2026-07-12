@@ -13,6 +13,7 @@
 namespace rgb_matrix
 {
 class RGBMatrix;
+class FrameCanvas;
 } // namespace rgb_matrix
 
 /**
@@ -46,6 +47,10 @@ class HUB75Native : public OLEDDisplay
 
   private:
     rgb_matrix::RGBMatrix *matrix = nullptr;
+    // Offscreen buffer for tear-free updates: display() draws here, then SwapOnVSync() atomically
+    // presents it. Without this, writing into the live canvas while the refresh thread scans it
+    // tears (worse when display() is contended during packet TX/RX).
+    rgb_matrix::FrameCanvas *offscreen = nullptr;
     uint8_t brightness = HUB75_BRIGHTNESS_DEFAULT; // 1..100
 };
 
