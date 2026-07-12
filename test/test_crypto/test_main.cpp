@@ -307,6 +307,22 @@ void test_XEdDSA_persisted_private_key_reload(void)
     TEST_ASSERT_TRUE(secondLoad.xeddsa_verify(curvePublic, 0x12345678, 0xABCDEF01, 1, payload, sizeof(payload), signature));
 }
 
+void test_XEdDSA_zero_private_key_reload_clears_signing_material(void)
+{
+    uint8_t curvePublic[32], privateKey[32], zeroKey[32] = {0};
+    uint8_t signature[XEDDSA_SIGNATURE_SIZE];
+    const uint8_t payload[] = "zero persisted identity";
+
+    crypto->generateKeyPair(curvePublic, privateKey);
+    crypto->setDHPrivateKey(privateKey);
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(0x1, 0x2, 1, payload, sizeof(payload), signature));
+
+    crypto->setDHPrivateKey(zeroKey);
+    TEST_ASSERT_EQUAL_MEMORY(zeroKey, crypto->xeddsa_private_key, sizeof(zeroKey));
+    TEST_ASSERT_EQUAL_MEMORY(zeroKey, crypto->xeddsa_public_key, sizeof(zeroKey));
+    TEST_ASSERT_FALSE(crypto->xeddsa_sign(0x1, 0x2, 1, payload, sizeof(payload), signature));
+}
+
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -354,6 +370,7 @@ void setup()
     RUN_TEST(test_XEdDSA_max_payload);
     RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
     RUN_TEST(test_XEdDSA_persisted_private_key_reload);
+    RUN_TEST(test_XEdDSA_zero_private_key_reload_clears_signing_material);
     exit(UNITY_END()); // stop unit testing
 }
 
