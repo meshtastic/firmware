@@ -7,7 +7,7 @@
  * Pure, self-contained Tetris game logic.
  *
  * No Arduino/display dependencies - designed to be unit-tested natively and
- * reused by TetrisModule without pulling in the display stack.
+ * reused by the Tetris game adapter without pulling in the display stack.
  *
  * Board coordinate system: col=0 is leftmost, row=0 is top (gravity goes toward higher rows).
  * board[row][col] holds 0 (empty) or 1..7 (locked piece colour index).

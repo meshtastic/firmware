@@ -8,7 +8,7 @@
  * Pure, self-contained Snake game logic.
  *
  * Deliberately free of Arduino / Screen / heap dependencies so it can be unit-tested natively
- * (see test/test_snake) and reused by SnakeModule without pulling in the display stack.
+ * (see test/test_snake) and reused by the Snake game adapter without pulling in the display stack.
  *
  * The board is a fixed GRID_W x GRID_H grid of cells. The snake body lives in a ring buffer
  * sized to the whole board, plus an occupancy bitmap for O(1) collision and food-placement
@@ -18,7 +18,7 @@ class SnakeGame
 {
   public:
     // Playfield dimensions in cells. Chosen so that at CELL_PX = 4 the board is 128x48, leaving
-    // a 16 px score bar at the top of a 128x64 OLED (see SnakeModule for the pixel layout).
+    // a 16 px score bar at the top of a 128x64 OLED (see Snake.cpp for the pixel layout).
     static constexpr uint8_t GRID_W = 32;
     static constexpr uint8_t GRID_H = 12;
     static constexpr uint16_t CELL_COUNT = static_cast<uint16_t>(GRID_W) * GRID_H; // 384

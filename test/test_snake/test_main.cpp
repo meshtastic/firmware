@@ -1,5 +1,5 @@
 #include "TestUtil.h"
-#include "modules/SnakeGame.h"
+#include "modules/games/SnakeGame.h"
 #include <unity.h>
 
 // Pure-logic tests for SnakeGame: ring-buffer advance, reversal rejection, wall/self collision,

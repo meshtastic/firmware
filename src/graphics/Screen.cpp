@@ -74,8 +74,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
 #if BASEUI_HAS_GAMES
-#include "modules/SnakeModule.h"
-#include "modules/TetrisModule.h"
+#include "modules/games/GamesModule.h"
 #endif
 #include "modules/WaypointModule.h"
 #include "sleep.h"
@@ -464,12 +463,10 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 // The games frame is a dedicated, always-present frame (unlike generic module frames it is placed
 // at a fixed position right after home), so it draws through its own trampoline rather than the
 // moduleFrames lockstep used by drawModuleFrame.
-static void drawSnakeFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    if (tetrisModule && tetrisModule->isActive())
-        tetrisModule->drawFrame(display, state, x, y);
-    else if (snakeModule)
-        snakeModule->drawFrame(display, state, x, y);
+    if (gamesModule)
+        gamesModule->drawFrame(display, state, x, y);
 }
 #endif
 
@@ -1379,9 +1376,9 @@ void Screen::setFrames(FrameFocus focus)
 
 #if BASEUI_HAS_GAMES
     // Games frame: always present (even with no game running), positioned directly after home.
-    if (snakeModule) {
+    if (gamesModule) {
         fsi.positions.games = numframes;
-        normalFrames[numframes++] = drawSnakeFrame;
+        normalFrames[numframes++] = drawGamesFrame;
         indicatorIcons.push_back(joystick_small);
     }
 #endif
@@ -2161,9 +2158,7 @@ int Screen::handleInputEvent(const InputEvent *event)
 #if BASEUI_HAS_GAMES
         // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
         // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
-        if (snakeModule && snakeModule->interceptingKeyboardInput())
-            inputIntercepted = true;
-        if (tetrisModule && tetrisModule->interceptingKeyboardInput())
+        if (gamesModule && gamesModule->interceptingKeyboardInput())
             inputIntercepted = true;
 #endif
 
@@ -2241,9 +2236,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
 #if BASEUI_HAS_GAMES
-                } else if (snakeModule && framesetInfo.positions.games != 255 &&
+                } else if (gamesModule && framesetInfo.positions.games != 255 &&
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.games) {
-                    snakeModule->launchGame(); // only one game, so launch it directly (no menu)
+                    gamesModule->launchGame(); // launch the game shown on the attract screen
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.system) {
                     menuHandler::systemBaseMenu();

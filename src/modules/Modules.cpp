@@ -20,8 +20,7 @@
 #include "modules/CannedMessageModule.h"
 #endif
 #if HAS_SCREEN && BASEUI_HAS_GAMES
-#include "modules/SnakeModule.h"
-#include "modules/TetrisModule.h"
+#include "modules/games/GamesModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_DETECTIONSENSOR
 #include "modules/DetectionSensorModule.h"
@@ -212,8 +211,7 @@ void setupModules()
 #endif
 #if HAS_SCREEN && BASEUI_HAS_GAMES
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        snakeModule = new SnakeModule();
-        tetrisModule = new TetrisModule();
+        gamesModule = new GamesModule();
     }
 #endif
 #if ARCH_PORTDUINO

@@ -1,0 +1,332 @@
+#include "Tetris.h"
+
+#if HAS_SCREEN && BASEUI_HAS_GAMES
+
+#include "NodeDB.h"
+#include "graphics/Screen.h"
+#include "graphics/ScreenFonts.h"
+#include "graphics/images.h"
+#include "main.h"
+#include <cstddef>
+#include <cstring>
+#if TETRIS_ANNOUNCE_HIGH_SCORE
+#include "GamesModule.h"
+#include "MeshService.h"
+#endif
+
+static constexpr uint8_t TETRIS_WIRE_VERSION = 1;
+static constexpr uint8_t TETRIS_WIRE_GAME_ID = 0x54u; // 'T'
+#if TETRIS_ANNOUNCE_HIGH_SCORE
+static constexpr uint32_t BROADCAST_INITIAL_MS = 60000UL;
+static constexpr uint32_t BROADCAST_INTERVAL_MS = 12UL * 60 * 60 * 1000;
+#endif
+
+// Wire structs - game_id byte makes sizes 11 / 68 (vs Snake's 10 / 67).
+struct TetrisScoreWire {
+    uint8_t game_id; // = TETRIS_WIRE_GAME_ID
+    uint8_t version;
+    char shortName[5];
+    uint32_t score;
+} __attribute__((packed)); // 11 bytes
+
+struct TetrisTableEntry {
+    uint32_t nodeNum;
+    char shortName[5];
+    uint32_t score;
+} __attribute__((packed)); // 13 bytes
+
+struct TetrisTableWire {
+    uint8_t game_id; // = TETRIS_WIRE_GAME_ID
+    uint8_t version;
+    uint8_t count;
+    TetrisTableEntry entries[5];
+} __attribute__((packed)); // 68 bytes
+
+// ---------------------------------------------------------------------------
+// Vertical pixel layout on a 128×64 OLED
+//
+//  Board occupies the left side of the screen:
+//    x = col × CELL_PX   (col 0 at left edge)
+//    y = row × CELL_PX   (row 0 at top edge)
+//    10 cols × 4 px = 40 px wide
+//    16 rows × 4 px = 64 px tall  (fills the full display height)
+//
+//  Score panel: x = SCORE_OX .. 127  (86 px wide)
+//    Labels (SCR / LVL / NXT) + values + next-piece preview.
+// ---------------------------------------------------------------------------
+static constexpr int16_t CELL_PX = 4;
+
+Tetris::Tetris()
+{
+    scores_.load();
+}
+
+int32_t Tetris::tickIntervalMs() const
+{
+    // Speed ramps with level: 600 ms base, 30 ms per level, floor 80 ms.
+    int32_t iv = 600 - static_cast<int32_t>(game.level()) * 30;
+    return iv < 80 ? 80 : iv;
+}
+
+void Tetris::handleInput(input_broker_event ev)
+{
+    switch (ev) {
+    case INPUT_BROKER_UP:
+        game.rotate();
+        break;
+    case INPUT_BROKER_LEFT:
+        game.moveLeft();
+        break;
+    case INPUT_BROKER_RIGHT:
+        game.moveRight();
+        break;
+    case INPUT_BROKER_DOWN:
+        game.softDrop();
+        break;
+    case INPUT_BROKER_SELECT:
+    case INPUT_BROKER_SELECT_LONG:
+        game.hardDrop();
+        break;
+    default:
+        break;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+void Tetris::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
+{
+    display->setColor(WHITE);
+    const int16_t w = display->getWidth();
+    const int16_t cx = x + w / 2;
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(cx, y, "T E T R I S");
+    display->drawXbm(x + (w - tetris_width) / 2, y + 15, tetris_width, tetris_height, tetris);
+    char hi[32];
+    if (scores_.scoreAt(0) > 0 && scores_.nameAt(0)[0] != '\0')
+        snprintf(hi, sizeof(hi), "High: %s %lu", scores_.nameAt(0), static_cast<unsigned long>(scores_.scoreAt(0)));
+    else
+        snprintf(hi, sizeof(hi), "High: %lu", static_cast<unsigned long>(scores_.scoreAt(0)));
+    display->drawString(cx, y + 34, hi);
+    display->drawString(cx, y + 48, "SEL=Play  Hold=Scores");
+}
+
+void Tetris::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
+{
+    // Centered vertical layout:
+    //   board: 10 cols × CELL_PX wide, fills display height (BOARD_ROWS × CELL_PX)
+    //   left panel  (NXT preview) : x = 0 .. ox-2
+    //   right panel (SCR / LVL)   : x = ox+boardW+1 .. display.width-1
+    const int16_t boardW = TetrisGame::BOARD_COLS * CELL_PX;   // 40
+    const int16_t ox = x + (display->getWidth() - boardW) / 2; // horizontal centre
+    const int16_t oy = y;
+
+    display->setColor(WHITE);
+
+    // Separator lines either side of the board, plus bottom wall.
+    display->drawLine(ox - 1, oy, ox - 1, oy + display->getHeight() - 1);
+    display->drawLine(ox + boardW, oy, ox + boardW, oy + display->getHeight() - 1);
+    display->drawLine(ox - 1, oy + display->getHeight() - 1, ox + boardW, oy + display->getHeight() - 1);
+
+    // Cell helper.
+    auto drawCell = [&](int8_t col, int8_t row) {
+        if (col < 0 || row < 0 || col >= TetrisGame::BOARD_COLS || row >= TetrisGame::BOARD_ROWS)
+            return;
+        display->fillRect(ox + static_cast<int16_t>(col) * CELL_PX, oy + static_cast<int16_t>(row) * CELL_PX, CELL_PX - 1,
+                          CELL_PX - 1);
+    };
+
+    // Locked cells.
+    for (uint8_t r = 0; r < TetrisGame::BOARD_ROWS; r++)
+        for (uint8_t c = 0; c < TetrisGame::BOARD_COLS; c++)
+            if (game.board[r][c])
+                drawCell(static_cast<int8_t>(c), static_cast<int8_t>(r));
+
+    // Ghost piece - hollow outline.
+    const TetrisGame::Piece &cur = game.current();
+    const int8_t ghostR = game.ghostRow();
+    if (ghostR != cur.row) {
+        for (uint8_t pr = 0; pr < 4; pr++) {
+            for (uint8_t pc = 0; pc < 4; pc++) {
+                if (!TetrisGame::pieceCell(cur.type, cur.rot, pr, pc))
+                    continue;
+                const int8_t gc = static_cast<int8_t>(cur.col + pc);
+                const int8_t gr = static_cast<int8_t>(ghostR + pr);
+                if (gc < 0 || gr < 0 || gc >= TetrisGame::BOARD_COLS || gr >= TetrisGame::BOARD_ROWS)
+                    continue;
+                display->setPixel(ox + static_cast<int16_t>(gc) * CELL_PX + 1, oy + static_cast<int16_t>(gr) * CELL_PX);
+            }
+        }
+    }
+
+    // Active piece - filled.
+    for (uint8_t pr = 0; pr < 4; pr++) {
+        for (uint8_t pc = 0; pc < 4; pc++) {
+            if (!TetrisGame::pieceCell(cur.type, cur.rot, pr, pc))
+                continue;
+            drawCell(static_cast<int8_t>(cur.col + pc), static_cast<int8_t>(cur.row + pr));
+        }
+    }
+
+    // --- Right panel: SCR and LVL ---
+    const int16_t rpx = ox + boardW + 2;
+    char buf[12];
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawString(rpx, y + 2, "SCR");
+    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(game.score()));
+    display->drawString(rpx, y + 2 + FONT_HEIGHT_SMALL, buf);
+    display->drawString(rpx, y + 2 + FONT_HEIGHT_SMALL * 2 + 2, "LVL");
+    snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(game.level()));
+    display->drawString(rpx, y + 2 + FONT_HEIGHT_SMALL * 3 + 2, buf);
+
+    // --- Left panel: NXT (next piece preview) centred in the panel ---
+    const int16_t lpanelW = ox - 2;       // pixels available left of board separator
+    static constexpr int16_t PREV_PX = 3; // px per preview cell
+    const int16_t previewW = 4 * PREV_PX; // 12 px
+    const int16_t lpx = x + (lpanelW - previewW) / 2;
+    const int16_t nxtLabelY = y + 2;
+    const int16_t nxtPreviewY = nxtLabelY + FONT_HEIGHT_SMALL + 2;
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(x + lpanelW / 2, nxtLabelY, "NXT");
+    const TetrisGame::Piece &nxt = game.next();
+    for (uint8_t pr = 0; pr < 4; pr++)
+        for (uint8_t pc = 0; pc < 4; pc++)
+            if (TetrisGame::pieceCell(nxt.type, nxt.rot, pr, pc))
+                display->fillRect(lpx + static_cast<int16_t>(pc) * PREV_PX, nxtPreviewY + static_cast<int16_t>(pr) * PREV_PX,
+                                  PREV_PX - 1, PREV_PX - 1);
+}
+
+// ---------------------------------------------------------------------------
+// Mesh receive - merge remote Tetris scores into local table (always compiled)
+// ---------------------------------------------------------------------------
+
+ProcessMessage Tetris::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    auto isIgnored = [](NodeNum num) -> bool {
+        if (!nodeDB || num == 0)
+            return false;
+        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(num);
+        return n && nodeInfoLiteIsIgnored(n);
+    };
+    if (isIgnored(mp.from))
+        return ProcessMessage::CONTINUE;
+
+    const size_t sz = mp.decoded.payload.size;
+
+    if (sz == sizeof(TetrisTableWire)) {
+        TetrisTableWire tbl;
+        memcpy(&tbl, mp.decoded.payload.bytes, sizeof(tbl));
+        if (tbl.game_id != TETRIS_WIRE_GAME_ID || tbl.version != TETRIS_WIRE_VERSION)
+            return ProcessMessage::CONTINUE;
+        const uint8_t count = tbl.count < HighScoreTableBase::HS_COUNT ? tbl.count : HighScoreTableBase::HS_COUNT;
+        bool changed = false;
+        for (uint8_t i = 0; i < count; i++) {
+            if (tbl.entries[i].score == 0)
+                continue;
+            tbl.entries[i].shortName[sizeof(tbl.entries[0].shortName) - 1] = '\0';
+            bool dummy = false;
+            const int rank = scores_.insert(tbl.entries[i].score, tbl.entries[i].shortName, tbl.entries[i].nodeNum, dummy);
+            if (rank >= 0)
+                changed = true;
+        }
+        if (changed)
+            scores_.save();
+        return ProcessMessage::CONTINUE;
+    }
+
+    if (sz == sizeof(TetrisScoreWire)) {
+        TetrisScoreWire wire;
+        memcpy(&wire, mp.decoded.payload.bytes, sizeof(wire));
+        if (wire.game_id != TETRIS_WIRE_GAME_ID || wire.version != TETRIS_WIRE_VERSION || wire.score == 0)
+            return ProcessMessage::CONTINUE;
+        wire.shortName[sizeof(wire.shortName) - 1] = '\0';
+        bool dummy = false;
+        const int rank = scores_.insert(wire.score, wire.shortName, mp.from, dummy);
+        if (rank >= 0) {
+            scores_.save();
+            LOG_INFO("Tetris: remote score %lu from 0x%08x placed at rank %d", static_cast<unsigned long>(wire.score), mp.from,
+                     rank + 1);
+        }
+        return ProcessMessage::CONTINUE;
+    }
+
+    return ProcessMessage::CONTINUE;
+}
+
+#if TETRIS_ANNOUNCE_HIGH_SCORE
+int32_t Tetris::nextBroadcastIntervalMs() const
+{
+    const uint32_t now = millis();
+    if (lastBroadcastMs == 0)
+        return (now >= BROADCAST_INITIAL_MS) ? 0 : static_cast<int32_t>(BROADCAST_INITIAL_MS - now);
+    const uint32_t elapsed = now - lastBroadcastMs;
+    return (elapsed >= BROADCAST_INTERVAL_MS) ? 0 : static_cast<int32_t>(BROADCAST_INTERVAL_MS - elapsed);
+}
+
+int32_t Tetris::meshTick(GamesModule &host)
+{
+    const int32_t due = nextBroadcastIntervalMs();
+    if (due == 0) {
+        broadcastAllScores(host);
+        lastBroadcastMs = millis();
+        return static_cast<int32_t>(BROADCAST_INTERVAL_MS);
+    }
+    return due;
+}
+
+void Tetris::broadcastAllScores(GamesModule &host)
+{
+    if (!service)
+        return;
+    TetrisTableWire tbl;
+    memset(&tbl, 0, sizeof(tbl));
+    tbl.game_id = TETRIS_WIRE_GAME_ID;
+    tbl.version = TETRIS_WIRE_VERSION;
+    tbl.count = 0;
+    for (uint8_t i = 0; i < HighScoreTableBase::HS_COUNT; i++) {
+        if (scores_.entryAt(i).score == 0)
+            break;
+        tbl.entries[tbl.count].nodeNum = scores_.entryAt(i).nodeNum;
+        strncpy(tbl.entries[tbl.count].shortName, scores_.entryAt(i).shortName, sizeof(tbl.entries[0].shortName) - 1);
+        tbl.entries[tbl.count].shortName[sizeof(tbl.entries[0].shortName) - 1] = '\0';
+        tbl.entries[tbl.count].score = scores_.entryAt(i).score;
+        tbl.count++;
+    }
+    if (tbl.count == 0)
+        return;
+    static_assert(sizeof(tbl) <= sizeof(meshtastic_MeshPacket().decoded.payload.bytes), "TetrisTableWire too large");
+    meshtastic_MeshPacket *p = host.gameAllocDataPacket();
+    p->to = NODENUM_BROADCAST;
+    p->channel = 0;
+    memcpy(p->decoded.payload.bytes, &tbl, sizeof(tbl));
+    p->decoded.payload.size = sizeof(tbl);
+    service->sendToMesh(p);
+    LOG_INFO("Tetris: broadcast table (%u entries)", tbl.count);
+}
+
+void Tetris::onNewHighScore(GamesModule &host, const char *initials, uint32_t score, bool isNewTop)
+{
+    if (!isNewTop || score == 0 || !service)
+        return;
+    TetrisScoreWire wire;
+    wire.game_id = TETRIS_WIRE_GAME_ID;
+    wire.version = TETRIS_WIRE_VERSION;
+    strncpy(wire.shortName, (initials && initials[0]) ? initials : owner.short_name, sizeof(wire.shortName) - 1);
+    wire.shortName[sizeof(wire.shortName) - 1] = '\0';
+    wire.score = score;
+    static_assert(sizeof(wire) <= sizeof(meshtastic_MeshPacket().decoded.payload.bytes), "TetrisScoreWire too large");
+    meshtastic_MeshPacket *p = host.gameAllocDataPacket();
+    p->to = NODENUM_BROADCAST;
+    p->channel = 0;
+    memcpy(p->decoded.payload.bytes, &wire, sizeof(wire));
+    p->decoded.payload.size = sizeof(wire);
+    service->sendToMesh(p);
+    LOG_INFO("Tetris: broadcast score %lu", static_cast<unsigned long>(score));
+}
+#endif // TETRIS_ANNOUNCE_HIGH_SCORE
+
+#endif // HAS_SCREEN && BASEUI_HAS_GAMES
