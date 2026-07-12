@@ -80,8 +80,8 @@ void InkHUD::HeardApplet::populateFromNodeDB()
         ordered.resize(maxCards());
 
     // Create card info for these (stale) node observations
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    for (meshtastic_NodeInfoLite *node : ordered) {
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    for (const meshtastic_NodeInfoLite *node : ordered) {
         CardInfo c;
         c.nodeNum = node->num;
 
@@ -89,14 +89,16 @@ void InkHUD::HeardApplet::populateFromNodeDB()
             c.hopsAway = node->hops_away;
 
         if (nodeDB->hasValidPosition(node) && nodeDB->hasValidPosition(ourNode)) {
-            // Get lat and long as float
-            // Meshtastic stores these as integers internally
-            float ourLat = ourNode->position.latitude_i * 1e-7;
-            float ourLong = ourNode->position.longitude_i * 1e-7;
-            float theirLat = node->position.latitude_i * 1e-7;
-            float theirLong = node->position.longitude_i * 1e-7;
+            meshtastic_PositionLite ourPos;
+            meshtastic_PositionLite theirPos;
+            if (nodeDB->copyNodePosition(ourNode->num, ourPos) && nodeDB->copyNodePosition(node->num, theirPos)) {
+                float ourLat = ourPos.latitude_i * 1e-7;
+                float ourLong = ourPos.longitude_i * 1e-7;
+                float theirLat = theirPos.latitude_i * 1e-7;
+                float theirLong = theirPos.longitude_i * 1e-7;
 
-            c.distanceMeters = (int32_t)GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
+                c.distanceMeters = (int32_t)GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
+            }
         }
 
         // Insert into the card collection (member of base class)

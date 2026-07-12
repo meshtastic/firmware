@@ -127,7 +127,10 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
 
 #ifdef HAS_DRV2605
-            drv.go();
+            // Only trigger DRV2605 if vibration alerts are enabled
+            if (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra) {
+                drv.go();
+            }
 #endif
         }
 
@@ -144,7 +147,7 @@ int32_t ExternalNotificationModule::runOnce()
         }
 #endif
         // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz()) {
+        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -207,6 +210,10 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         io.digitalWrite(PCA_LED_NOTIFICATION, on);
 
 #endif
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+        notificationPixel.setPixelColor(0, on ? NEOPIXEL_STATUS_NOTIFICATION_COLOR : 0);
+        notificationPixel.show();
+#endif
         break;
     }
 
@@ -221,9 +228,18 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 #endif
 
 #ifdef HAS_DRV2605
+    // Only trigger DRV2605 when setting vibration motor
+    bool shouldTriggerDRV = false;
     if (on) {
+        if (index == 1 &&
+            (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra)) {
+            shouldTriggerDRV = true;
+        }
+    }
+
+    if (shouldTriggerDRV) {
         drv.go();
-    } else {
+    } else if (!on && index == 1) {
         drv.stop();
     }
 #endif
@@ -262,6 +278,7 @@ void ExternalNotificationModule::stopNow()
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
     isNagging = false;
+    buzzerShouldAlert = false;
     nagCycleCutoff = UINT32_MAX;
 
 #ifdef HAS_I2S
@@ -324,6 +341,12 @@ ExternalNotificationModule::ExternalNotificationModule()
             LOG_INFO("Use Pin %i in digital mode", output);
             pinMode(output, OUTPUT);
         }
+#ifdef NEOPIXEL_STATUS_NOTIFICATION_PIN
+        LOG_INFO("Use WS2812 on GPIO %d as notification LED", NEOPIXEL_STATUS_NOTIFICATION_PIN);
+        notificationPixel.begin();
+        notificationPixel.clear();
+        notificationPixel.show();
+#endif
         setExternalState(0, false);
         externalTurnedOn[0] = 0;
         if (moduleConfig.external_notification.output_vibra) {
@@ -372,7 +395,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // If we receive a direct message and the receipent is us, apply DM mute setting
             // Else we just handle it as not muted.
             const bool isDmToUs = !isBroadcast(mp.to) && isToUs(&mp);
-            bool is_muted = isDmToUs ? (sender && ((sender->bitfield & NODEINFO_BITFIELD_IS_MUTED_MASK) != 0))
+            bool is_muted = isDmToUs ? nodeInfoLiteIsMuted(sender)
                                      : (ch.settings.has_module_settings && ch.settings.module_settings.is_muted);
 
             const bool buzzerModeIsDirectOnly =
@@ -394,8 +417,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             // Alert GPIO Buzzer when receiving a bell = alertBellBuzzer: true
             // Alert GPIO Buzzer when receiving a message = alertMessageBuzzer: true
-            const bool buzzerShouldAlert = canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
-                                                         (moduleConfig.external_notification.alert_message_buzzer && !is_muted));
+            // If you are already buzzing, keep going
+            buzzerShouldAlert =
+                buzzerShouldAlert || (canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
+                                                    (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
@@ -412,6 +437,18 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             if (vibraShouldAlert) {
                 LOG_INFO("externalNotificationModule - Vibra alert");
+#ifdef HAS_DRV2605
+                // Set DRV2605 waveform when vibration alert is triggered
+                drv.setWaveform(0, 16); // Long buzzer 100%
+                drv.setWaveform(1, 0);  // Pause
+                drv.setWaveform(2, 16);
+                drv.setWaveform(3, 0);
+                drv.setWaveform(4, 16);
+                drv.setWaveform(5, 0);
+                drv.setWaveform(6, 16);
+                drv.setWaveform(7, 0);
+                drv.go();
+#endif
                 setExternalState(1, true);
             }
 
@@ -421,18 +458,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
-#ifdef HAS_DRV2605
-                    drv.setWaveform(0, 16); // Long buzzer 100%
-                    drv.setWaveform(1, 0);  // Pause
-                    drv.setWaveform(2, 16);
-                    drv.setWaveform(3, 0);
-                    drv.setWaveform(4, 16);
-                    drv.setWaveform(5, 0);
-                    drv.setWaveform(6, 16);
-                    drv.setWaveform(7, 0);
-                    drv.go();
-#endif
-
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
 #ifdef HAS_I2S
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));

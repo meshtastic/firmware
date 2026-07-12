@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "meshtastic": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/meshtastic/meshtastic-mcp",
+        "meshtastic-mcp"
+      ],
+      "env": {
+        "MESHTASTIC_FIRMWARE_ROOT": "."
+      }
+    }
+  }
+}

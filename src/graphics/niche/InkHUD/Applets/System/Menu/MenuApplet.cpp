@@ -4,13 +4,17 @@
 
 #include "DisplayFormatters.h"
 #include "GPS.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
+#include "MessageStore.h"
+#include "Power.h"
 #include "RTC.h"
 #include "Router.h"
 #include "airtime.h"
+#include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
+#include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
-#include "power.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
 #if defined(ARCH_ESP32) && HAS_WIFI
@@ -27,6 +31,41 @@ static constexpr uint8_t MENU_TIMEOUT_SEC = 60; // How many seconds before menu 
 // These are offered to users as possible values for settings.recentlyActiveSeconds
 static constexpr uint8_t RECENTS_OPTIONS_MINUTES[] = {2, 5, 10, 30, 60, 120};
 
+struct DisplayTimeoutOption {
+    uint32_t seconds;
+    const char *label;
+};
+
+struct UInt32Option {
+    uint32_t value;
+    const char *label;
+};
+
+static constexpr DisplayTimeoutOption DISPLAY_TIMEOUT_OPTIONS[] = {
+    {0, "Forever"},      {30, "30 secs"},     {60, "1 min"},     {5 * 60, "5 min"},
+    {15 * 60, "15 min"}, {30 * 60, "30 min"}, {60 * 60, "1 hr"},
+};
+
+static constexpr UInt32Option POSITION_BROADCAST_OPTIONS[] = {
+    {60, "1 min"},           {90, "90 sec"},          {5 * 60, "5 min"},       {15 * 60, "15 min"},
+    {60 * 60, "1 hr"},       {2 * 60 * 60, "2 hr"},   {3 * 60 * 60, "3 hr"},   {4 * 60 * 60, "4 hr"},
+    {5 * 60 * 60, "5 hr"},   {6 * 60 * 60, "6 hr"},   {12 * 60 * 60, "12 hr"}, {18 * 60 * 60, "18 hr"},
+    {24 * 60 * 60, "24 hr"}, {36 * 60 * 60, "36 hr"}, {48 * 60 * 60, "48 hr"}, {72 * 60 * 60, "72 hr"},
+};
+
+static constexpr UInt32Option GPS_UPDATE_INTERVAL_OPTIONS[] = {
+    {8, "8 sec"},      {20, "20 sec"},        {40, "40 sec"},          {60, "1 min"},           {80, "80 sec"},
+    {2 * 60, "2 min"}, {5 * 60, "5 min"},     {10 * 60, "10 min"},     {15 * 60, "15 min"},     {30 * 60, "30 min"},
+    {60 * 60, "1 hr"}, {6 * 60 * 60, "6 hr"}, {12 * 60 * 60, "12 hr"}, {24 * 60 * 60, "24 hr"}, {2147483647UL, "At Boot"},
+};
+
+static constexpr UInt32Option SMART_INTERVAL_OPTIONS[] = {
+    {5 * 60, "5 min"},     {10 * 60, "10 min"},   {15 * 60, "15 min"},     {30 * 60, "30 min"},     {60 * 60, "1 hr"},
+    {2 * 60 * 60, "2 hr"}, {6 * 60 * 60, "6 hr"}, {12 * 60 * 60, "12 hr"}, {24 * 60 * 60, "24 hr"},
+};
+
+static constexpr uint32_t SMART_DISTANCE_OPTIONS[] = {20, 50, 100, 250, 500, 1000, 2000, 5000};
+
 struct PositionPrecisionOption {
     uint8_t value; // proto value
     const char *metric;
@@ -39,6 +78,101 @@ static constexpr PositionPrecisionOption POSITION_PRECISION_OPTIONS[] = {
     {12, "5.8 km", "3.6 mi"},   {11, "12 km", "7.3 mi"}, {10, "23 km", "15 mi"},
 };
 
+static const char *getDisplayTimeoutLabel(uint32_t timeoutSeconds)
+{
+    constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
+    for (uint8_t i = 0; i < optionCount; i++) {
+        if (DISPLAY_TIMEOUT_OPTIONS[i].seconds == timeoutSeconds) {
+            return DISPLAY_TIMEOUT_OPTIONS[i].label;
+        }
+    }
+
+    return "Custom";
+}
+
+static std::string getUInt32OptionLabel(const UInt32Option *options, uint8_t optionCount, uint32_t value,
+                                        const char *zeroLabel = nullptr)
+{
+    for (uint8_t i = 0; i < optionCount; i++) {
+        if (options[i].value == value) {
+            return options[i].label;
+        }
+    }
+
+    if (value == 0) {
+        return zeroLabel ? zeroLabel : "0 sec";
+    }
+    if (value == 2147483647UL) {
+        return "At Boot";
+    }
+    if (value % (60 * 60) == 0) {
+        return std::to_string(value / (60 * 60)) + " hr";
+    }
+    if (value % 60 == 0) {
+        return std::to_string(value / 60) + " min";
+    }
+    return std::to_string(value) + " sec";
+}
+
+static bool supportsFreeTextKeyboard(const InkHUD::InkHUD *inkhud, const InkHUD::Persistence::Settings *settings)
+{
+    return !inkhud->twoWayRocker && (settings->joystick.enabled || inkhud->hasTouchEnabledProvider());
+}
+
+static bool useTouchFriendlyMenuLayout(const InkHUD::InkHUD *inkhud)
+{
+    return inkhud != nullptr && inkhud->hasTouchEnabledProvider();
+}
+
+static uint16_t getMenuItemHeightPx(const InkHUD::InkHUD *inkhud)
+{
+    const bool touchFriendly = useTouchFriendlyMenuLayout(inkhud);
+    const uint16_t lineH = touchFriendly ? InkHUD::Applet::fontMedium.lineHeight() : InkHUD::Applet::fontSmall.lineHeight();
+    const float rowScale = touchFriendly ? 1.9f : 1.6f;
+    uint16_t itemH = (uint16_t)(lineH * rowScale);
+    if (itemH == 0) {
+        itemH = 1;
+    }
+    return itemH;
+}
+
+#if defined(T5_S3_EPAPER_PRO)
+namespace
+{
+static constexpr uint32_t T5_BACKLIGHT_PREFS_VERSION = 1;
+
+struct T5BacklightPrefs {
+    uint32_t version = T5_BACKLIGHT_PREFS_VERSION;
+    bool keepOn = true;
+};
+
+T5BacklightPrefs t5BacklightPrefs;
+bool t5BacklightPrefsLoaded = false;
+
+bool loadT5BacklightKeepOn()
+{
+    if (!t5BacklightPrefsLoaded) {
+        T5BacklightPrefs loaded;
+        const bool ok = FlashData<T5BacklightPrefs>::load(&loaded, "t5_backlight");
+        if (ok && loaded.version == T5_BACKLIGHT_PREFS_VERSION) {
+            t5BacklightPrefs = loaded;
+        }
+        t5BacklightPrefsLoaded = true;
+    }
+
+    return t5BacklightPrefs.keepOn;
+}
+
+void saveT5BacklightKeepOn(bool keepOn)
+{
+    loadT5BacklightKeepOn();
+    t5BacklightPrefs.version = T5_BACKLIGHT_PREFS_VERSION;
+    t5BacklightPrefs.keepOn = keepOn;
+    FlashData<T5BacklightPrefs>::save(&t5BacklightPrefs, "t5_backlight");
+}
+} // namespace
+#endif
+
 InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
@@ -47,7 +181,11 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     // Note: don't get instance if we're not actually using the backlight,
     // or else you will unintentionally instantiate it
     if (settings->optionalMenuItems.backlight) {
+#if defined(T5_S3_EPAPER_PRO)
+        t5BacklightSetUserEnabled(loadT5BacklightKeepOn());
+#else
         backlight = Drivers::LatchingBacklight::getInstance();
+#endif
     }
 
     // Initialize the Canned Message store
@@ -76,9 +214,11 @@ void InkHUD::MenuApplet::onForeground()
     // backlight on always when menu opens.
     // Courtesy to T-Echo users who removed the capacitive touch button
     if (settings->optionalMenuItems.backlight) {
+#if !defined(T5_S3_EPAPER_PRO)
         assert(backlight);
         if (!backlight->isOn())
             backlight->peek();
+#endif
     }
 
     // Prevent user applets requesting update while menu is open
@@ -106,9 +246,11 @@ void InkHUD::MenuApplet::onBackground()
     // Item in options submenu allows keeping backlight on after menu is closed
     // If this item is deselected we will turn backlight off again, now that menu is closing
     if (settings->optionalMenuItems.backlight) {
+#if !defined(T5_S3_EPAPER_PRO)
         assert(backlight);
         if (!backlight->isLatched())
             backlight->off();
+#endif
     }
 
     // Stop the auto-timeout
@@ -167,6 +309,11 @@ int32_t InkHUD::MenuApplet::runOnce()
     return OSThread::disable();
 }
 
+// Storage for the dynamically-built region preset list - populated in showPage(NODE_CONFIG_PRESET)
+static constexpr uint8_t MAX_REGION_PRESETS = 16;
+static meshtastic_Config_LoRaConfig_ModemPreset regionPresets[MAX_REGION_PRESETS];
+static uint8_t regionPresetCount = 0;
+
 static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
 {
     if (config.lora.region == region)
@@ -186,12 +333,12 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
 
     initRegion();
 
-    if (myRegion && myRegion->dutyCycle < 100) {
+    if (myRegion && getEffectiveDutyCycle() < 100) {
         config.lora.ignore_mqtt = true;
     }
 
     if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-        sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
     }
     // Notify UI that changes are being applied
@@ -233,6 +380,17 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+}
+
+static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
+{
+    nodeDB->saveToDisk(changes);
+    service->reloadConfig(changes);
+
+    if (reboot) {
+        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    }
 }
 
 static const char *getTimezoneLabelFromValue(const char *tzdef)
@@ -333,17 +491,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         handleFreeText = true;
         cm.freeTextItem.rawText.erase(); // clear the previous freetext message
         freeTextMode = true;             // render input field instead of normal menu
-        // Open the on-screen keyboard only for full joystick devices
-        if (settings->joystick.enabled && !inkhud->twoWayRocker)
+        if (supportsFreeTextKeyboard(inkhud, settings))
             inkhud->openKeyboard();
         break;
 
-    case STORE_CANNEDMESSAGE_SELECTION:
-        if (!settings->joystick.enabled || inkhud->twoWayRocker)
-            cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
-        else
-            cm.selectedMessageItem = &cm.messageItems.at(cursor - 2); // Minus two: offset for the "Send Ping" and free text entry
-        break;
+    case STORE_CANNEDMESSAGE_SELECTION: {
+        const uint8_t prefixItems = supportsFreeTextKeyboard(inkhud, settings) ? 2 : 1;
+        cm.selectedMessageItem = &cm.messageItems.at(cursor - prefixItems);
+    } break;
 
     case SEND_CANNEDMESSAGE:
         cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
@@ -422,14 +577,27 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_BACKLIGHT:
-        // Note: backlight is already on in this situation
-        // We're marking that it should *remain* on once menu closes
-        assert(backlight);
+        // Note: backlight is already on in this situation.
+        // This toggle controls whether it should remain on when menu closes.
+#if defined(T5_S3_EPAPER_PRO)
+    {
+        const bool keepOn = !t5BacklightIsUserEnabled();
+        t5BacklightSetUserEnabled(keepOn);
+        saveT5BacklightKeepOn(keepOn);
+        if (item.checkState)
+            *(item.checkState) = keepOn;
+    }
+#else
+        if (!backlight)
+            backlight = Drivers::LatchingBacklight::getInstance();
         if (backlight->isLatched())
             backlight->off();
         else
             backlight->latch();
-        break;
+        if (item.checkState)
+            *(item.checkState) = backlight->isLatched();
+#endif
+    break;
 
     case TOGGLE_12H_CLOCK:
         config.display.use_12h_clock = !config.display.use_12h_clock;
@@ -450,6 +618,51 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         service->reloadConfig(SEGMENT_CONFIG);
 #endif
         break;
+
+    case TOGGLE_SMART_POSITION:
+        config.position.position_broadcast_smart_enabled = !config.position.position_broadcast_smart_enabled;
+        applyConfigReload(SEGMENT_CONFIG, true);
+        break;
+
+    case SET_POSITION_BROADCAST_INTERVAL: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(POSITION_BROADCAST_OPTIONS) / sizeof(POSITION_BROADCAST_OPTIONS[0]);
+        if (index < optionCount && config.position.position_broadcast_secs != POSITION_BROADCAST_OPTIONS[index].value) {
+            config.position.position_broadcast_secs = POSITION_BROADCAST_OPTIONS[index].value;
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
+
+    case SET_SMART_BROADCAST_INTERVAL: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(SMART_INTERVAL_OPTIONS) / sizeof(SMART_INTERVAL_OPTIONS[0]);
+        if (index < optionCount && config.position.broadcast_smart_minimum_interval_secs != SMART_INTERVAL_OPTIONS[index].value) {
+            config.position.broadcast_smart_minimum_interval_secs = SMART_INTERVAL_OPTIONS[index].value;
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
+
+    case SET_SMART_BROADCAST_DISTANCE: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(SMART_DISTANCE_OPTIONS) / sizeof(SMART_DISTANCE_OPTIONS[0]);
+        if (index < optionCount && config.position.broadcast_smart_minimum_distance != SMART_DISTANCE_OPTIONS[index]) {
+            config.position.broadcast_smart_minimum_distance = SMART_DISTANCE_OPTIONS[index];
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
+
+    case SET_GPS_UPDATE_INTERVAL: {
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]);
+        if (index < optionCount && config.position.gps_update_interval != GPS_UPDATE_INTERVAL_OPTIONS[index].value) {
+            config.position.gps_update_interval = GPS_UPDATE_INTERVAL_OPTIONS[index].value;
+            applyConfigReload(SEGMENT_CONFIG, true);
+        }
+        break;
+    }
 
     case ENABLE_BLUETOOTH:
         // This helps users recover from a bad wifi config
@@ -527,6 +740,17 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     }
 
     // Display
+    case SET_DISPLAY_TIMEOUT: {
+        // cursor - 1 because index 0 is "Back"
+        const uint8_t index = cursor - 1;
+        constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
+        if (index < optionCount) {
+            config.display.screen_on_secs = DISPLAY_TIMEOUT_OPTIONS[index].seconds;
+            nodeDB->saveToDisk(SEGMENT_CONFIG);
+        }
+        break;
+    }
+
     case TOGGLE_DISPLAY_UNITS:
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
             config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_METRIC;
@@ -659,6 +883,42 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_BR_902);
         break;
 
+    case SET_REGION_EU_866:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_866);
+        break;
+
+    case SET_REGION_NARROW_868:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868);
+        break;
+
+    case SET_REGION_ITU1_2M:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M);
+        break;
+
+    case SET_REGION_ITU2_2M:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M);
+        break;
+
+    case SET_REGION_ITU3_2M:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M);
+        break;
+
+    case SET_REGION_ITU2_125CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM);
+        break;
+
+    case SET_REGION_ITU1_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU1_70CM);
+        break;
+
+    case SET_REGION_ITU2_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM);
+        break;
+
+    case SET_REGION_ITU3_70CM:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM);
+        break;
+
     // Roles
     case SET_ROLE_CLIENT:
         applyDeviceRole(meshtastic_Config_DeviceConfig_Role_CLIENT);
@@ -678,36 +938,61 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     // Presets
     case SET_PRESET_LONG_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+        applyLoRaPreset(PRESET(LONG_SLOW));
         break;
 
     case SET_PRESET_LONG_MODERATE:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE);
+        applyLoRaPreset(PRESET(LONG_MODERATE));
         break;
 
     case SET_PRESET_LONG_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+        applyLoRaPreset(PRESET(LONG_FAST));
         break;
 
     case SET_PRESET_MEDIUM_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW);
+        applyLoRaPreset(PRESET(MEDIUM_SLOW));
         break;
 
     case SET_PRESET_MEDIUM_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+        applyLoRaPreset(PRESET(MEDIUM_FAST));
         break;
 
     case SET_PRESET_SHORT_SLOW:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW);
+        applyLoRaPreset(PRESET(SHORT_SLOW));
         break;
 
     case SET_PRESET_SHORT_FAST:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST);
+        applyLoRaPreset(PRESET(SHORT_FAST));
         break;
 
     case SET_PRESET_SHORT_TURBO:
-        applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO);
+        applyLoRaPreset(PRESET(SHORT_TURBO));
         break;
+
+    case SET_PRESET_NARROW_SLOW:
+        applyLoRaPreset(PRESET(NARROW_SLOW));
+        break;
+
+    case SET_PRESET_NARROW_FAST:
+        applyLoRaPreset(PRESET(NARROW_FAST));
+        break;
+
+    case SET_PRESET_TINY_SLOW:
+        applyLoRaPreset(PRESET(TINY_SLOW));
+        break;
+
+    case SET_PRESET_TINY_FAST:
+        applyLoRaPreset(PRESET(TINY_FAST));
+        break;
+
+    case SET_PRESET_FROM_REGION: {
+        // cursor - 1 because index 0 is "Back"
+        const uint8_t index = cursor - 1;
+        if (index < regionPresetCount) {
+            applyLoRaPreset(regionPresets[index]);
+        }
+        break;
+    }
 
     // Timezones
     case SET_TZ_US_HAWAII:
@@ -847,6 +1132,34 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 
+    case WIPE_MESSAGES_ALL:
+        LOG_INFO("Wiping all messages from menu");
+        messageStore.clearAllMessages();
+        inkhud->persistence->loadLatestMessage();
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+        break;
+
+    case MAP_ZOOM_IN: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomIn();
+        break;
+    }
+
+    case MAP_ZOOM_OUT: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->zoomOut();
+        break;
+    }
+
+    case MAP_ZOOM_RESET: {
+        MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+        if (mapApplet)
+            mapApplet->resetZoom();
+        break;
+    }
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -872,6 +1185,20 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         items.push_back(MenuItem("Send", MenuPage::SEND));
+
+        // Map zoom controls - only when viewing a map applet
+        {
+            MapApplet *mapApplet = borrowedTileOwner ? borrowedTileOwner->asMapApplet() : nullptr;
+            if (mapApplet) {
+                if (mapApplet->canZoomIn())
+                    items.push_back(MenuItem("Zoom In", MenuAction::MAP_ZOOM_IN, MenuPage::EXIT));
+                if (mapApplet->canZoomOut())
+                    items.push_back(MenuItem("Zoom Out", MenuAction::MAP_ZOOM_OUT, MenuPage::EXIT));
+                if (mapApplet->isZoomLocked())
+                    items.push_back(MenuItem("Reset Zoom", MenuAction::MAP_ZOOM_RESET, MenuPage::EXIT));
+            }
+        }
+
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Node Config", MenuPage::NODE_CONFIG));
@@ -893,11 +1220,16 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         previousPage = MenuPage::ROOT;
         items.push_back(MenuItem("Back", previousPage));
         // Optional: backlight
-        if (settings->optionalMenuItems.backlight)
-            items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
-                                     MenuAction::TOGGLE_BACKLIGHT,                                   // Action
-                                     MenuPage::EXIT                                                  // Exit once complete
-                                     ));
+        if (settings->optionalMenuItems.backlight) {
+#if defined(T5_S3_EPAPER_PRO)
+            keepBacklightOn = t5BacklightIsUserEnabled();
+#else
+            if (!backlight)
+                backlight = Drivers::LatchingBacklight::getInstance();
+            keepBacklightOn = backlight->isLatched();
+#endif
+            items.push_back(MenuItem("Keep Backlight On", MenuAction::TOGGLE_BACKLIGHT, MenuPage::OPTIONS, &keepBacklightOn));
+        }
 
         // Options Toggles
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
@@ -959,6 +1291,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Administration Section
         items.push_back(MenuItem::Header("Administration"));
         items.push_back(MenuItem("Reset NodeDB", MenuPage::NODE_CONFIG_ADMIN_RESET));
+        items.push_back(MenuItem("Wipe Messages", MenuPage::NODE_CONFIG_ADMIN_MESSAGES));
 
         // Exit
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -983,6 +1316,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case NODE_CONFIG_POSITION: {
         previousPage = MenuPage::NODE_CONFIG;
         items.push_back(MenuItem("Back", previousPage));
+
+        items.push_back(MenuItem::Header("Device GPS"));
+
 #if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
         const auto mode = config.position.gps_mode;
         if (mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
@@ -990,11 +1326,92 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         } else {
             gpsEnabled = (mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED);
             items.push_back(MenuItem("GPS", MenuAction::TOGGLE_GPS, MenuPage::NODE_CONFIG_POSITION, &gpsEnabled));
+
+            nodeConfigLabels.emplace_back(
+                "GPS Poll: " + getUInt32OptionLabel(GPS_UPDATE_INTERVAL_OPTIONS,
+                                                    sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]),
+                                                    config.position.gps_update_interval, "Default"));
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION,
+                                     MenuPage::NODE_CONFIG_POSITION_GPS_UPDATE_INTERVAL));
         }
 #endif
+
+        items.push_back(MenuItem::Header("Position Packet"));
+
+        nodeConfigLabels.emplace_back(
+            "Broadcast: " + getUInt32OptionLabel(POSITION_BROADCAST_OPTIONS,
+                                                 sizeof(POSITION_BROADCAST_OPTIONS) / sizeof(POSITION_BROADCAST_OPTIONS[0]),
+                                                 config.position.position_broadcast_secs));
+        items.push_back(
+            MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_BROADCAST_INTERVAL));
+
+        items.push_back(MenuItem("Smart Pos", MenuAction::TOGGLE_SMART_POSITION, MenuPage::NODE_CONFIG_POSITION,
+                                 &config.position.position_broadcast_smart_enabled));
+
+        if (config.position.position_broadcast_smart_enabled) {
+            nodeConfigLabels.emplace_back("Smart Int: " +
+                                          getUInt32OptionLabel(SMART_INTERVAL_OPTIONS,
+                                                               sizeof(SMART_INTERVAL_OPTIONS) / sizeof(SMART_INTERVAL_OPTIONS[0]),
+                                                               config.position.broadcast_smart_minimum_interval_secs));
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_SMART_INTERVAL));
+
+            nodeConfigLabels.emplace_back("Smart Dist: " + localizeDistance(config.position.broadcast_smart_minimum_distance));
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_POSITION_SMART_DISTANCE));
+        }
+
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
+
+    case NODE_CONFIG_POSITION_BROADCAST_INTERVAL:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("Max time between sends"));
+        for (const auto &option : POSITION_BROADCAST_OPTIONS) {
+            nodeConfigLabels.emplace_back(option.label);
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_POSITION_BROADCAST_INTERVAL,
+                                     MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_POSITION_SMART_INTERVAL:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("Fastest smart resend"));
+        for (const auto &option : SMART_INTERVAL_OPTIONS) {
+            nodeConfigLabels.emplace_back(option.label);
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_SMART_BROADCAST_INTERVAL,
+                                     MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_POSITION_SMART_DISTANCE:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("Move this far to send"));
+        for (const auto &option : SMART_DISTANCE_OPTIONS) {
+            nodeConfigLabels.emplace_back(localizeDistance(option));
+            items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_SMART_BROADCAST_DISTANCE,
+                                     MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_POSITION_GPS_UPDATE_INTERVAL:
+        previousPage = MenuPage::NODE_CONFIG_POSITION;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("GPS poll cadence"));
+        for (const auto &option : GPS_UPDATE_INTERVAL_OPTIONS) {
+            nodeConfigLabels.emplace_back(option.label);
+            items.push_back(
+                MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_GPS_UPDATE_INTERVAL, MenuPage::NODE_CONFIG_POSITION));
+        }
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
 
     case NODE_CONFIG_POWER: {
         previousPage = MenuPage::NODE_CONFIG;
@@ -1109,6 +1526,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::NODE_CONFIG_DISPLAY,
                                  &config.display.use_12h_clock));
 
+        nodeConfigLabels.emplace_back("Screen Timeout: " + std::string(getDisplayTimeoutLabel(config.display.screen_on_secs)));
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::NO_ACTION, MenuPage::NODE_CONFIG_DISPLAY_TIMEOUT));
+
         const char *unitsLabel =
             (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "Units: Imperial" : "Units: Metric";
 
@@ -1117,6 +1537,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
+
+    case NODE_CONFIG_DISPLAY_TIMEOUT:
+        previousPage = MenuPage::NODE_CONFIG_DISPLAY;
+        items.push_back(MenuItem("Back", previousPage));
+        populateDisplayTimeoutPage();
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
 
     case NODE_CONFIG_BLUETOOTH: {
         previousPage = MenuPage::NODE_CONFIG;
@@ -1295,6 +1722,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("US", MenuAction::SET_REGION_US, MenuPage::EXIT));
         items.push_back(MenuItem("EU 868", MenuAction::SET_REGION_EU_868, MenuPage::EXIT));
         items.push_back(MenuItem("EU 433", MenuAction::SET_REGION_EU_433, MenuPage::EXIT));
+        items.push_back(MenuItem("EU 866", MenuAction::SET_REGION_EU_866, MenuPage::EXIT));
+        items.push_back(MenuItem("EU 868 Narrow", MenuAction::SET_REGION_NARROW_868, MenuPage::EXIT));
         items.push_back(MenuItem("CN", MenuAction::SET_REGION_CN, MenuPage::EXIT));
         items.push_back(MenuItem("JP", MenuAction::SET_REGION_JP, MenuPage::EXIT));
         items.push_back(MenuItem("ANZ", MenuAction::SET_REGION_ANZ, MenuPage::EXIT));
@@ -1318,19 +1747,27 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("KZ 863", MenuAction::SET_REGION_KZ_863, MenuPage::EXIT));
         items.push_back(MenuItem("NP 865", MenuAction::SET_REGION_NP_865, MenuPage::EXIT));
         items.push_back(MenuItem("BR 902", MenuAction::SET_REGION_BR_902, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU1_2M (144-146)", MenuAction::SET_REGION_ITU1_2M, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU2_2M (144-148)", MenuAction::SET_REGION_ITU2_2M, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU3_2M (144-148)", MenuAction::SET_REGION_ITU3_2M, MenuPage::EXIT));
+        items.push_back(MenuItem("ITU2_125CM (220-225)", MenuAction::SET_REGION_ITU2_125CM, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case NODE_CONFIG_PRESET: {
         previousPage = MenuPage::NODE_CONFIG_LORA;
         items.push_back(MenuItem("Back", previousPage));
-        items.push_back(MenuItem("Long Moderate", MenuAction::SET_PRESET_LONG_MODERATE, MenuPage::EXIT));
-        items.push_back(MenuItem("Long Fast", MenuAction::SET_PRESET_LONG_FAST, MenuPage::EXIT));
-        items.push_back(MenuItem("Medium Slow", MenuAction::SET_PRESET_MEDIUM_SLOW, MenuPage::EXIT));
-        items.push_back(MenuItem("Medium Fast", MenuAction::SET_PRESET_MEDIUM_FAST, MenuPage::EXIT));
-        items.push_back(MenuItem("Short Slow", MenuAction::SET_PRESET_SHORT_SLOW, MenuPage::EXIT));
-        items.push_back(MenuItem("Short Fast", MenuAction::SET_PRESET_SHORT_FAST, MenuPage::EXIT));
-        items.push_back(MenuItem("Short Turbo", MenuAction::SET_PRESET_SHORT_TURBO, MenuPage::EXIT));
+        regionPresetCount = 0;
+        if (myRegion && myRegion->profile) {
+            const meshtastic_Config_LoRaConfig_ModemPreset *presets = myRegion->getAvailablePresets();
+            size_t numPresets = myRegion->getNumPresets();
+            for (size_t i = 0; i < numPresets && regionPresetCount < MAX_REGION_PRESETS; ++i) {
+                regionPresets[regionPresetCount++] = presets[i];
+                const char *name = DisplayFormatters::getModemPresetDisplayName(presets[i], false, true);
+                nodeConfigLabels.emplace_back(name);
+                items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_PRESET_FROM_REGION, MenuPage::EXIT));
+            }
+        }
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
@@ -1340,6 +1777,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Back", previousPage));
         items.push_back(MenuItem("Reset All", MenuAction::RESET_NODEDB_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Keep Favorites Only", MenuAction::RESET_NODEDB_KEEP_FAVORITES, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case NODE_CONFIG_ADMIN_MESSAGES:
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem("Wipe All Messages", MenuAction::WIPE_MESSAGES_ALL, MenuPage::EXIT));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
@@ -1386,10 +1830,14 @@ void InkHUD::MenuApplet::onRender(bool full)
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
 
+    const bool touchFriendlyLayout = useTouchFriendlyMenuLayout(inkhud);
+    AppletFont menuItemFont = touchFriendlyLayout ? fontMedium : fontSmall;
+    setFont(menuItemFont);
+
     // Dimensions for the slots where we will draw menuItems
     const float padding = 0.05;
-    const uint16_t itemH = fontSmall.lineHeight() * 1.6;
-    const int16_t selectInsetY = 2;
+    const uint16_t itemH = getMenuItemHeightPx(inkhud);
+    const int16_t selectInsetY = touchFriendlyLayout ? 3 : 2;
     const int16_t itemW = width() - X(padding) - X(padding);
     const int16_t itemL = X(padding);
     const int16_t itemR = X(1 - padding);
@@ -1422,6 +1870,11 @@ void InkHUD::MenuApplet::onRender(bool full)
         itemT = max(siT + siH, 0);            // Offset the first menu entry, so menu starts below the system info panel
     }
 
+    // drawSystemInfoPanel() changes font state (clock/info text).
+    // Restore the active menu font so ROOT page item text matches other menu pages,
+    // including touch-friendly layouts.
+    setFont(menuItemFont);
+
     // Draw menu items
     // ===================
 
@@ -1449,8 +1902,6 @@ void InkHUD::MenuApplet::onRender(bool full)
 
         // Header (non-selectable section label)
         if (item.isHeader) {
-            setFont(fontSmall);
-
             // Header text (flush left)
             printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
 
@@ -1459,8 +1910,17 @@ void InkHUD::MenuApplet::onRender(bool full)
             drawLine(itemL + X(padding), underlineY, itemR - X(padding), underlineY, BLACK);
         } else {
             // Box, if currently selected
-            if (cursorShown && i == cursor)
-                drawRect(itemL, itemT + selectInsetY, itemW, itemH - (selectInsetY * 2), BLACK);
+            if (cursorShown && i == cursor && (!touchFriendlyLayout || !hideTouchSelectionHighlight)) {
+                const int16_t selTop = itemT + selectInsetY;
+                const int16_t selH = itemH - (selectInsetY * 2);
+                drawRect(itemL, selTop, itemW, selH, BLACK);
+                // Touch layouts need a stronger visual cue than a thin outline.
+                if (touchFriendlyLayout) {
+                    const int16_t markerInset = 3;
+                    const int16_t markerW = 4;
+                    fillRect(itemL + markerInset, selTop + markerInset, markerW, max(1, selH - (markerInset * 2)), BLACK);
+                }
+            }
 
             // Indented normal item text
             printAt(itemL + X(padding * 2), center, item.label, LEFT, MIDDLE);
@@ -1468,9 +1928,9 @@ void InkHUD::MenuApplet::onRender(bool full)
 
         // Checkbox, if relevant
         if (item.checkState) {
-            const uint16_t cbWH = fontSmall.lineHeight();  // Checkbox: width / height
-            const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left
-            const int16_t cbT = center - (cbWH / 2);       // Checkbox : top
+            const uint16_t cbWH = menuItemFont.lineHeight(); // Checkbox: width / height
+            const int16_t cbL = itemR - X(padding) - cbWH;   // Checkbox: left
+            const int16_t cbT = center - (cbWH / 2);         // Checkbox : top
             // Checkbox ticked
             if (*(item.checkState)) {
                 drawRect(cbL, cbT, cbWH, cbWH, BLACK);
@@ -1499,13 +1959,102 @@ void InkHUD::MenuApplet::onRender(bool full)
     }
 }
 
+bool InkHUD::MenuApplet::onTouchPoint(uint16_t x, uint16_t y, bool longPress)
+{
+    (void)longPress;
+
+    if (freeTextMode || !getTile()) {
+        return false;
+    }
+
+    const uint16_t tileL = getTile()->getLeft();
+    const uint16_t tileT = getTile()->getTop();
+    const uint16_t tileR = tileL + getTile()->getWidth();
+    const uint16_t tileB = tileT + getTile()->getHeight();
+    if (x < tileL || x >= tileR || y < tileT || y >= tileB) {
+        return false;
+    }
+
+    if (items.empty()) {
+        return true;
+    }
+
+    // Direct touch controls should act as activity and keep the menu open.
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    // If button-driven selection is active on touch-first layouts, clear it as soon as
+    // touch interaction resumes so touch behavior remains direct/tap-first.
+    if (useTouchFriendlyMenuLayout(inkhud)) {
+        cursorShown = false;
+        hideTouchSelectionHighlight = true;
+    }
+
+    const int16_t localY = (int16_t)y - (int16_t)tileT;
+
+    // Keep geometry in sync with onRender() so touch hit-testing matches what users see.
+    const uint16_t itemH = getMenuItemHeightPx(inkhud);
+    int16_t itemT = 0;
+    uint8_t slotCount = (height() - itemT) / itemH;
+    if (slotCount == 0) {
+        slotCount = 1;
+    }
+    const uint16_t &siH = systemInfoPanelHeight;
+    const uint8_t slotsObscured = ceilf(siH / (float)itemH);
+
+    if (currentPage == ROOT) {
+        int16_t siT = 0;
+        const int16_t scrollThreshold = (int16_t)slotCount - (int16_t)slotsObscured - 1;
+        if (scrollThreshold >= 0 && (int16_t)cursor >= scrollThreshold) {
+            siT = 0 - ((cursor - scrollThreshold) * itemH);
+        }
+        itemT = max((int16_t)(siT + siH), (int16_t)0);
+    }
+
+    const uint8_t firstItem = (cursor < slotCount) ? 0 : (cursor - (slotCount - 1));
+    uint16_t visibleEnd = (uint16_t)firstItem + (uint16_t)slotCount;
+    const uint8_t maxIndex = (uint8_t)items.size() - 1;
+    if (visibleEnd > maxIndex) {
+        visibleEnd = maxIndex;
+    }
+    const uint8_t lastItem = (uint8_t)visibleEnd;
+
+    for (uint8_t i = firstItem; i <= lastItem; i++) {
+        const int16_t rowTop = itemT;
+        const int16_t rowBottom = itemT + itemH;
+
+        if (localY >= rowTop && localY < rowBottom) {
+            if (items.at(i).isHeader) {
+                // Consume taps on headers so they don't fall back to button semantics.
+                return true;
+            }
+
+            cursor = i;
+            cursorShown = true;
+            execute(items.at(cursor));
+
+            if (!wantsToRender()) {
+                requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            }
+            return true;
+        }
+
+        itemT += itemH;
+    }
+
+    // Consume taps on menu whitespace so we don't trigger button-like fallback behavior.
+    return true;
+}
+
 void InkHUD::MenuApplet::onButtonShortPress()
 {
     if (!freeTextMode) {
         // Push the auto-close timer back
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
-        if (!settings->joystick.enabled) {
+        // Touch-first nodes keep user-button short-press as "advance selection" in menus.
+        // Any button-driven navigation should restore visible highlight.
+        hideTouchSelectionHighlight = false;
+        if (!settings->joystick.enabled || useTouchFriendlyMenuLayout(inkhud)) {
             if (!cursorShown) {
                 cursorShown = true;
                 // Select the first item that isn't a header
@@ -1566,6 +2115,32 @@ void InkHUD::MenuApplet::onNavUp()
     if (!freeTextMode) {
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
 
+        // Touch-first menus: swipe up/down should scroll only.
+        // Keep cursor movement for scroll math, but selection box is hidden in onRender().
+        if (useTouchFriendlyMenuLayout(inkhud)) {
+            hideTouchSelectionHighlight = true;
+            if (!cursorShown) {
+                cursorShown = true;
+                cursor = items.size() - 1;
+                while (items.at(cursor).isHeader) {
+                    if (cursor == 0) {
+                        cursorShown = false;
+                        break;
+                    }
+                    cursor--;
+                }
+            } else {
+                do {
+                    if (cursor == 0)
+                        cursor = items.size() - 1;
+                    else
+                        cursor--;
+                } while (items.at(cursor).isHeader);
+            }
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            return;
+        }
+
         if (!cursorShown) {
             cursorShown = true;
             // Select the last item that isn't a header
@@ -1594,6 +2169,29 @@ void InkHUD::MenuApplet::onNavDown()
 {
     if (!freeTextMode) {
         OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+        // Touch-first menus: swipe up/down should scroll only.
+        // Keep cursor movement for scroll math, but selection box is hidden in onRender().
+        if (useTouchFriendlyMenuLayout(inkhud)) {
+            hideTouchSelectionHighlight = true;
+            if (!cursorShown) {
+                cursorShown = true;
+                cursor = 0;
+                while (cursor < items.size() && items.at(cursor).isHeader) {
+                    cursor++;
+                }
+                if (cursor >= items.size()) {
+                    cursorShown = false;
+                    cursor = 0;
+                }
+            } else {
+                do {
+                    cursor = (cursor + 1) % items.size();
+                } while (items.at(cursor).isHeader);
+            }
+            requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+            return;
+        }
 
         if (!cursorShown) {
             cursorShown = true;
@@ -1727,6 +2325,17 @@ void InkHUD::MenuApplet::populateRecentsPage()
     }
 }
 
+void InkHUD::MenuApplet::populateDisplayTimeoutPage()
+{
+    constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
+    for (uint8_t i = 0; i < optionCount; i++) {
+        displayTimeoutSelected[i] = (config.display.screen_on_secs == DISPLAY_TIMEOUT_OPTIONS[i].seconds);
+        nodeConfigLabels.emplace_back(DISPLAY_TIMEOUT_OPTIONS[i].label);
+        items.push_back(MenuItem(nodeConfigLabels.back().c_str(), MenuAction::SET_DISPLAY_TIMEOUT, MenuPage::NODE_CONFIG_DISPLAY,
+                                 &displayTimeoutSelected[i]));
+    }
+}
+
 // MenuItem entries for the "send" page
 // Dynamically creates menu items based on available canned messages
 void InkHUD::MenuApplet::populateSendPage()
@@ -1734,8 +2343,8 @@ void InkHUD::MenuApplet::populateSendPage()
     // Position / NodeInfo packet
     items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
 
-    // If joystick is available, include the Free Text option
-    if (settings->joystick.enabled && !inkhud->twoWayRocker)
+    // Show the Free Text option on any node that supports the on-screen keyboard.
+    if (supportsFreeTextKeyboard(inkhud, settings))
         items.push_back(MenuItem("Free Text", MenuAction::FREE_TEXT, MenuPage::SEND));
 
     // One menu item for each canned message
@@ -1799,7 +2408,7 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
     // Count favorites
     for (uint32_t i = 0; i < nodeCount; i++) {
-        if (nodeDB->getMeshNodeByIndex(i)->is_favorite)
+        if (nodeInfoLiteIsFavorite(nodeDB->getMeshNodeByIndex(i)))
             favoriteCount++;
     }
 
@@ -1807,10 +2416,10 @@ void InkHUD::MenuApplet::populateRecipientPage()
     // Don't want some monstrous list that takes 100 clicks to reach exit
     if (favoriteCount < 20) {
         for (uint32_t i = 0; i < nodeCount; i++) {
-            meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
 
             // Skip node if not a favorite
-            if (!node->is_favorite)
+            if (!nodeInfoLiteIsFavorite(node))
                 continue;
 
             CannedMessages::RecipientItem r;
@@ -1820,8 +2429,8 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
             // Set a label for the menu item
             r.label = "DM: ";
-            if (node->has_user)
-                r.label += parse(node->user.long_name);
+            if (nodeInfoLiteHasUser(node))
+                r.label += parse(node->long_name);
             else
                 r.label += hexifyNodeNum(node->num); // Unsure if it's possible to favorite a node without NodeInfo?
 
@@ -1916,26 +2525,29 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     const int16_t divY = top + height;
     height += fontSmall.lineHeight() * 0.2; // Padding *below* the divider. (Above first menu item)
 
-    // Create a variable number of columns
-    // Either 3 or 4, depending on whether we have GPS
-    // Todo
-    constexpr uint8_t N_COL = 3;
-    int16_t colL[N_COL];
-    int16_t colC[N_COL];
-    int16_t colR[N_COL];
-    for (uint8_t i = 0; i < N_COL; i++) {
-        colL[i] = left + ((width / N_COL) * i);
-        colC[i] = colL[i] + ((width / N_COL) / 2);
-        colR[i] = colL[i] + (width / N_COL);
+    // Create a variable number of columns.
+#if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
+    const bool showGpsInfo = config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
+#else
+    const bool showGpsInfo = false;
+#endif
+    const uint8_t columnCount = showGpsInfo ? 4 : 3;
+    int16_t colL[4] = {};
+    int16_t colC[4] = {};
+    int16_t colR[4] = {};
+    for (uint8_t i = 0; i < columnCount; i++) {
+        colL[i] = left + ((width / columnCount) * i);
+        colC[i] = colL[i] + ((width / columnCount) / 2);
+        colR[i] = colL[i] + (width / columnCount);
     }
 
     // Info blocks, left to right
 
     // Voltage
     float voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
-    char voltageStr[6]; // "XX.XV"
-    sprintf(voltageStr, "%.2fV", voltage);
-    printAt(colC[0], labelT, "Bat", CENTER, TOP);
+    char voltageStr[8]; // e.g. "4.12"
+    snprintf(voltageStr, sizeof(voltageStr), "%.2f", voltage);
+    printAt(colC[0], labelT, "Bat V", CENTER, TOP);
     printAt(colC[0], valT, voltageStr, CENTER, TOP);
 
     // Divider
@@ -1943,8 +2555,8 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
         drawPixel(colR[0], y, BLACK);
 
     // Channel Util
-    char chUtilStr[4]; // "XX%"
-    sprintf(chUtilStr, "%2.f%%", airTime->channelUtilizationPercent());
+    char chUtilStr[8]; // e.g. "100%"
+    snprintf(chUtilStr, sizeof(chUtilStr), "%2.f%%", airTime->channelUtilizationPercent());
     printAt(colC[1], labelT, "Ch", CENTER, TOP);
     printAt(colC[1], valT, chUtilStr, CENTER, TOP);
 
@@ -1953,20 +2565,34 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
         drawPixel(colR[1], y, BLACK);
 
     // Duty Cycle (AirTimeTx)
-    char dutyUtilStr[4]; // "XX%"
-    sprintf(dutyUtilStr, "%2.f%%", airTime->utilizationTXPercent());
+    char dutyUtilStr[8]; // e.g. "100%"
+    snprintf(dutyUtilStr, sizeof(dutyUtilStr), "%2.f%%", airTime->utilizationTXPercent());
     printAt(colC[2], labelT, "Duty", CENTER, TOP);
     printAt(colC[2], valT, dutyUtilStr, CENTER, TOP);
 
-    /*
-    // Divider
-    for (int16_t y = valT; y <= divY; y += 3)
-        drawPixel(colR[2], y, BLACK);
+    if (showGpsInfo) {
+        // Divider
+        for (int16_t y = valT; y <= divY; y += 3)
+            drawPixel(colR[2], y, BLACK);
 
-    // GPS satellites - todo
-    printAt(colC[3], labelT, "Sats", CENTER, TOP);
-    printAt(colC[3], valT, "ToDo", CENTER, TOP);
-    */
+        const bool gpsDisabled = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+        const char *gpsLabel = "GPS";
+        printAt(colC[3], labelT, gpsLabel, CENTER, TOP);
+
+        if (gpsDisabled) {
+            const int16_t labelW = getTextWidth(gpsLabel);
+            const int16_t strikeY = labelT + (fontSmall.lineHeight() / 2);
+            drawLine(colC[3] - (labelW / 2), strikeY, colC[3] + ((labelW - 1) / 2), strikeY, BLACK);
+        }
+
+        if (!gpsDisabled && gpsStatus != nullptr && gpsStatus->getIsConnected()) {
+            char satsStr[12];
+            snprintf(satsStr, sizeof(satsStr), "%lu", (unsigned long)gpsStatus->getNumSatellites());
+            printAt(colC[3], valT, satsStr, CENTER, TOP);
+        } else {
+            printAt(colC[3], valT, "--", CENTER, TOP);
+        }
+    }
 
     // Horizontal divider, at bottom of system info panel
     for (int16_t x = 0; x < width; x += 2) // Divider, centered in the padding between first system panel and first item

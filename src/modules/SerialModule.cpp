@@ -94,12 +94,14 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
         const char *warning =
             "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        snprintf(cn->message, sizeof(cn->message), "%s", warning);
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message), "%s", warning);
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
     }
@@ -250,9 +252,12 @@ int32_t SerialModule::runOnce()
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     while (tempNodeInfo != NULL) {
-                        if (tempNodeInfo->has_user && nodeDB->hasValidPosition(tempNodeInfo)) {
-                            printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
-                            serialPrint->printf("%s", outbuf);
+                        if (nodeInfoLiteHasUser(tempNodeInfo) && nodeDB->hasValidPosition(tempNodeInfo)) {
+                            meshtastic_PositionLite pos;
+                            if (nodeDB->copyNodePosition(tempNodeInfo->num, pos)) {
+                                printWPL(outbuf, sizeof(outbuf), pos, tempNodeInfo->long_name, true);
+                                serialPrint->printf("%s", outbuf);
+                            }
                         }
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
@@ -374,7 +379,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         }
 
         auto &p = mp.decoded;
-        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
+        // LOG_DEBUG("Received text msg self=0x%08x, from=0x%08x, to=0x%08x, id=%d, msg=%.*s",
         //          nodeDB->getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
         if (isFromUs(&mp)) {
@@ -401,7 +406,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 serialPrint->write(p.payload.bytes, p.payload.size);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-                const char *sender = (node && node->has_user) ? node->user.short_name : "???";
+                const char *sender = nodeInfoLiteHasUser(node) ? node->short_name : "???";
                 serialPrint->println();
                 serialPrint->printf("%s: %s", sender, p.payload.bytes);
                 serialPrint->println();
@@ -417,9 +422,13 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
-                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB->getMeshNode(getFrom(&mp))->user.long_name,
-                             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
-                    serialPrint->printf("%s", outbuf);
+                    {
+                        meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
+                        const char *senderName = senderNode ? senderNode->long_name : "";
+                        printWPL(outbuf, sizeof(outbuf), *decoded, senderName,
+                                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
+                        serialPrint->printf("%s", outbuf);
+                    }
                 }
             }
         }

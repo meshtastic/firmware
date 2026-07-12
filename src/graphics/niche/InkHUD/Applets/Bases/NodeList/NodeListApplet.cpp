@@ -50,21 +50,23 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     c.signal = getSignalStrength(mp.rx_snr, mp.rx_rssi);
 
     // Assemble info: from nodeDB (needed to detect changes)
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(c.nodeNum);
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(c.nodeNum);
+    const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node) {
         if (node->has_hops_away)
             c.hopsAway = node->hops_away;
 
         if (nodeDB->hasValidPosition(node) && nodeDB->hasValidPosition(ourNode)) {
-            // Get lat and long as float
-            // Meshtastic stores these as integers internally
-            float ourLat = ourNode->position.latitude_i * 1e-7;
-            float ourLong = ourNode->position.longitude_i * 1e-7;
-            float theirLat = node->position.latitude_i * 1e-7;
-            float theirLong = node->position.longitude_i * 1e-7;
+            meshtastic_PositionLite ourPos;
+            meshtastic_PositionLite theirPos;
+            if (nodeDB->copyNodePosition(ourNode->num, ourPos) && nodeDB->copyNodePosition(node->num, theirPos)) {
+                float ourLat = ourPos.latitude_i * 1e-7;
+                float ourLong = ourPos.longitude_i * 1e-7;
+                float theirLat = theirPos.latitude_i * 1e-7;
+                float theirLong = theirPos.longitude_i * 1e-7;
 
-            c.distanceMeters = (int32_t)GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
+                c.distanceMeters = (int32_t)GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
+            }
         }
     }
 
@@ -179,8 +181,8 @@ void InkHUD::NodeListApplet::onRender(bool full)
         // -- Longname --
         // Parse special chars in long name
         // Use node id if unknown
-        if (node && node->has_user)
-            longName = parse(node->user.long_name); // Found in nodeDB
+        if (nodeInfoLiteHasUser(node))
+            longName = parse(node->long_name); // Found in nodeDB
         else {
             // Not found in nodeDB, show a hex nodeid instead
             longName = hexifyNodeNum(nodeNum);

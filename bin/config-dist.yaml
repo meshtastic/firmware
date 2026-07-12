@@ -104,7 +104,9 @@ Lora:
 ### Define GPS
 
 GPS:
-#  SerialPath: /dev/ttyS0
+#  SerialPath: /dev/ttyS0  # Use a physical serial GPS device (mutually exclusive with GpsdHost)
+#  GpsdHost: localhost      # Use gpsd daemon as GPS source instead of a serial device
+#  GpsdPort: 2947           # gpsd TCP port (default: 2947)
 #  ExtraPins:
 #    - 22
 
@@ -171,6 +173,16 @@ Input:
 
 #  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
 
+### Configure device for USB gamepad/joystick input (evdev). The D-pad drives
+### Up/Down/Left/Right; buttons are mapped below. Find button codes with `evtest`.
+#  JoystickDevice: /dev/input/by-id/usb-0079_USB_Gamepad-event-joystick
+### Map evdev button codes (hex or decimal) to actions. Omit to use built-in
+### defaults (select=0x121, cancel=0x122). Actions: select, cancel, back, up,
+### down, left, right, user.
+#  JoystickButtons:
+#    select: 0x122
+#    cancel: 0x121
+
 ### Standard User Button Config
 #  UserButton: 6
 
@@ -196,7 +208,6 @@ Webserver:
 #  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
-
 
 HostMetrics:
 #  ReportInterval: 30 # Interval in minutes between HostMetrics report packets, or 0 for disabled

@@ -35,9 +35,10 @@
 // code)
 #endif
 
-// Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
-// and waking from light sleep
-// #define PMU_IRQ 35
+// Voiding more warranties.
+#define PMU_IRQ 35
+#define PMU_POWER_BUTTON_IS_CANCEL // maps a short click of the power button to a cancel action (turning off the screen)
+
 #define HAS_AXP192
 #define GPS_UBLOX
 #define GPS_RX_PIN 34
@@ -51,8 +52,10 @@
 #undef LED_STATE_ON
 #undef LED_POWER
 
+#define HAS_SPI_TFT 1
 #define HAS_CST226SE 1
 #define HAS_TOUCHSCREEN 1
+#define VARIANT_TOUCHSCREEN 1
 // #define TOUCH_IRQ 35 // broken in this version of the lib 0.3.1
 #ifndef TOUCH_IRQ
 #define TOUCH_IRQ -1

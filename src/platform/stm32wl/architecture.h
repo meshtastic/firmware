@@ -1,6 +1,7 @@
 #pragma once
 
 #define ARCH_STM32WL
+#define ARCH_STM32
 
 //
 // defaults for STM32WL architecture

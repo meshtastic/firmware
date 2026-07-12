@@ -31,8 +31,10 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
-    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack))
-        startRetransmission(packetPool.allocCopy(*p)); // start retransmission for relayed packet
+    if ((!isFromUs(p) || !p->want_ack) && p->next_hop != NO_NEXT_HOP_PREFERENCE && (p->hop_limit > 0 || p->want_ack)) {
+        if (auto *copy = packetPool.allocCopy(*p))
+            startRetransmission(copy); // start retransmission for relayed packet
+    }
 
     return Router::send(p);
 }
@@ -98,18 +100,38 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         // destination
         if (p->from != 0) {
             meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
-            if (origTx) {
-                // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came
-                // directly from the destination
-                bool wasAlreadyRelayer = wasRelayer(p->relay_node, p->decoded.request_id, p->to);
-                bool weWereSoleRelayer = false;
-                bool weWereRelayer = wasRelayer(ourRelayID, p->decoded.request_id, p->to, &weWereSoleRelayer);
-                if ((weWereRelayer && wasAlreadyRelayer) || (getHopsAway(*p) == 0 && weWereSoleRelayer)) {
-                    if (origTx->next_hop != p->relay_node) { // Not already set
-                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
+            // Either relayer of ACK was also a relayer of the packet, or we were the *only* relayer and the ACK came
+            // directly from the destination. checkRelayers is read-only on PacketHistory and O(1), so we run it even
+            // when origTx is absent - that lets us still capture the confirmed hop into the TMM overflow cache below.
+            // Single lookup for both relayer checks on the same (request_id, to) pair
+            bool wasAlreadyRelayer = false;
+            bool weWereSoleRelayer = false;
+            bool weWereRelayer = false;
+            checkRelayers(p->relay_node, ourRelayID, p->decoded.request_id, p->to, &wasAlreadyRelayer, &weWereRelayer,
+                          &weWereSoleRelayer);
+            if ((weWereRelayer && wasAlreadyRelayer) || (getHopsAway(*p) == 0 && weWereSoleRelayer)) {
+                // M1/M2: only learn a next hop whose last byte maps to a single plausible relay. On a dense
+                // mesh the byte may be ambiguous; storing it would aim future DMs at the wrong node. This gate
+                // now protects BOTH the hot-store route (NodeInfoLite.next_hop) AND the TMM overflow cache -
+                // the overflow cache deliberately holds many more next-hop bytes (long-tail nodes), so it is
+                // even more collision-prone and must never store an ambiguous byte either. Ambiguous/unknown
+                // -> store nothing and keep flooding (safe).
+                if (nodeDB->resolveUniqueLastByte(p->relay_node, /*requireDirectNeighbor=*/false)) {
+                    if (origTx && origTx->next_hop != p->relay_node) { // Not already set
+                        LOG_INFO("Update next hop of 0x%08x to 0x%x based on ACK/reply (was relayer %d we were sole %d)", p->from,
                                  p->relay_node, wasAlreadyRelayer, weWereSoleRelayer);
                         origTx->next_hop = p->relay_node;
                     }
+                    noteRouteLearned(p->from, p->relay_node, millis()); // M3: anchor freshness (hot or overflow route)
+#if HAS_TRAFFIC_MANAGEMENT
+                    // Mirror the confirmed (and now unique-resolved) hop into the TMM overflow cache so it
+                    // survives even when the source isn't (or is no longer) in the hot NodeDB.
+                    if (trafficManagementModule)
+                        trafficManagementModule->setNextHop(p->from, p->relay_node);
+#endif
+                } else {
+                    LOG_DEBUG("Not learning next hop for 0x%08x: relay byte 0x%x ambiguous/unknown; keep flooding", p->from,
+                              p->relay_node);
                 }
             }
         }
@@ -141,8 +163,15 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     if (!isToUs(p) && !isFromUs(p) && (p->hop_limit > 0 || exhaustHops)) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
+                // NOTE: this is a self-identity match (is the addressed next_hop OUR last byte?), so it
+                // cannot be hardened with resolveLastByte() - a remote node that legitimately shares our
+                // last byte will also match here and rebroadcast. That residual collision needs a wider
+                // on-wire field to fix. M1/M2 instead shrink the blast radius by reducing how often an
+                // ambiguous next_hop byte is ever learned (sniffReceived) or originated (getNextHop).
                 if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
                     meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+                    if (!tosend)
+                        return true;
                     LOG_INFO("Rebroadcast received message coming from %x", p->relay_node);
 
                     // If exhausting hops, force hop_limit = 0 regardless of other logic
@@ -203,15 +232,63 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
     if (isBroadcast(to))
         return std::nullopt;
 
+    // Hot store first: a direct array hit on the live NodeDB entry.
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
     if (node && node->next_hop) {
+        // M3: proactively decay a stale or repeatedly-failing route back to flooding, so a dead hop
+        // isn't trusted on the next DM's first (and on dense meshes, slowest) attempt. We only act on
+        // a health record that still matches the stored byte; a next_hop set by another path (e.g.
+        // TraceRouteModule) with no matching record is left authoritative.
+        const RouteHealth *h = findRouteHealth(to);
+        if (h && h->lastNextHop == node->next_hop && isRouteStale(*h, millis())) {
+            LOG_INFO("Next hop 0x%x for 0x%08x is stale (age/fails); flood and clear", node->next_hop, to);
+            node->next_hop = NO_NEXT_HOP_PREFERENCE; // clear persisted route
+            clearRouteHealth(to);                    // clear RAM health
+            return std::nullopt;
+        }
+
         // We are careful not to return the relay node as the next hop
         if (node->next_hop != relay_node) {
-            // LOG_DEBUG("Next hop for 0x%x is 0x%x", to, node->next_hop);
-            return node->next_hop;
+            // M1/M2: only emit a stored next_hop if its last byte still maps to a UNIQUE, currently
+            // reachable direct neighbor. On a dense mesh the last byte collides, so an ambiguous byte
+            // would unicast a hint toward the wrong physical node; if the neighbor has gone away we'd
+            // unicast into a void. In both cases flood instead (managed flooding still delivers).
+            ResolvedNode r = nodeDB->resolveLastByte(node->next_hop, /*requireDirectNeighbor=*/true);
+            if (r.status == LastByteResolution::Unique)
+                return node->next_hop;
+            LOG_WARN("Next hop 0x%x for 0x%08x %s; set no pref", node->next_hop, to,
+                     r.status == LastByteResolution::Ambiguous ? "ambiguous among neighbors" : "not a known neighbor");
         } else
-            LOG_WARN("Next hop for 0x%x is 0x%x, same as relayer; set no pref", to, node->next_hop);
+            LOG_WARN("Next hop for 0x%08x is 0x%x, same as relayer; set no pref", to, node->next_hop);
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Fallback: TMM overflow cache holds confirmed hops for nodes that have aged out of the hot store.
+    // It is the same byte source/confidence as NodeInfoLite.next_hop, so it gets the same M1/M2/M3
+    // protection: decay a stale/failing route, then only emit a byte that still resolves to a unique
+    // reachable neighbor. Without this the overflow cache (which holds MORE bytes for MORE nodes) would
+    // reintroduce exactly the silent-misroute that M1/M2 closes on the hot path.
+    if (trafficManagementModule) {
+        uint8_t hint = trafficManagementModule->getNextHopHint(to);
+        if (hint && hint != relay_node) {
+            const RouteHealth *h = findRouteHealth(to);
+            if (h && h->lastNextHop == hint && isRouteStale(*h, millis())) {
+                LOG_INFO("TMM next hop 0x%x for 0x%08x is stale (age/fails); flood and clear", hint, to);
+                trafficManagementModule->clearNextHop(to); // clear overflow route (setNextHop won't store 0)
+                clearRouteHealth(to);                      // clear RAM health
+                return std::nullopt;
+            }
+            ResolvedNode r = nodeDB->resolveLastByte(hint, /*requireDirectNeighbor=*/true);
+            if (r.status == LastByteResolution::Unique) {
+                LOG_DEBUG("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
+                return hint;
+            }
+            LOG_WARN("TMM next hop 0x%x for 0x%08x %s; set no pref", hint, to,
+                     r.status == LastByteResolution::Ambiguous ? "ambiguous among neighbors" : "not a known neighbor");
+        }
+    }
+#endif
+
     return std::nullopt;
 }
 
@@ -307,35 +384,66 @@ int32_t NextHopRouter::doRetransmissions()
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
-                    LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
-                              p.packet->id);
+                    LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from,
+                              p.packet->to, p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
             } else {
-                LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
+                LOG_DEBUG("Sending retransmission fr=0x%08x,to=0x%08x,id=0x%08x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
 
                 if (!isBroadcast(p.packet->to)) {
                     if (p.numRetransmissions == 1) {
-                        // Last retransmission, reset next_hop (fallback to FloodingRouter)
+                        // Last retransmission: this directed delivery went un-ACKed. Record the failure
+                        // (M3 - accumulates across DMs to age out a flapping/dead route) and reset
+                        // next_hop so the final try falls back to FloodingRouter.
+                        noteRouteFailure(p.packet->to);
                         p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
                         // Also reset it in the nodeDB
                         meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                         if (sentTo) {
-                            LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                            LOG_INFO("Resetting next hop for packet with dest 0x%08x", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
-                        FloodingRouter::send(packetPool.allocCopy(*p.packet));
+#if HAS_TRAFFIC_MANAGEMENT
+                        if (trafficManagementModule) {
+                            trafficManagementModule->clearNextHop(p.packet->to);
+                        }
+#endif
+                        if (auto *copy = packetPool.allocCopy(*p.packet))
+                            FloodingRouter::send(copy);
                     } else {
-                        NextHopRouter::send(packetPool.allocCopy(*p.packet));
+#if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
+                        // M4 (gated): if the route isn't proven healthy, don't spend a second directed
+                        // attempt - start flooding one retry sooner to cut recovery latency. A verified
+                        // route (fresh, zero recent failures) keeps the unchanged directed-retry path so
+                        // the sparse-mesh happy path is untouched.
+                        RouteHealth *h = findRouteHealth(p.packet->to);
+                        bool verified = h && h->consecutiveFailures == 0 && !isRouteStale(*h, now);
+                        if (!verified) {
+                            p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
+                            meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
+                            if (sentTo)
+                                sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
+                            if (auto *copy = packetPool.allocCopy(*p.packet))
+                                FloodingRouter::send(copy);
+                        } else {
+                            if (auto *copy = packetPool.allocCopy(*p.packet))
+                                NextHopRouter::send(copy);
+                        }
+#else
+                        if (auto *copy = packetPool.allocCopy(*p.packet))
+                            NextHopRouter::send(copy);
+#endif
                     }
                 } else {
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
-                    FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                    if (auto *copy = packetPool.allocCopy(*p.packet))
+                        FloodingRouter::send(copy);
                 }
 
                 // Queue again
@@ -363,4 +471,97 @@ void NextHopRouter::setNextTx(PendingPacket *pending)
     LOG_DEBUG("Setting next retransmission in %u msecs: ", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
+}
+
+// ---------------------------------------------------------------------------
+// M3: RAM route-health table. Bounded array with reuse-oldest eviction (same discipline as
+// PacketHistory). All age comparisons use unsigned subtraction so they survive the 49.7-day millis()
+// rollover. dest == 0 marks an empty slot; learnedAtMsec is normalized to 1 on write so an occupied
+// slot is never read as infinitely old.
+// ---------------------------------------------------------------------------
+
+RouteHealth *NextHopRouter::findRouteHealth(NodeNum dest)
+{
+    if (dest == 0)
+        return nullptr;
+    for (auto &h : routeHealth)
+        if (h.dest == dest)
+            return &h;
+    return nullptr;
+}
+
+RouteHealth *NextHopRouter::getOrAllocRouteHealth(NodeNum dest, uint32_t now)
+{
+    if (dest == 0)
+        return nullptr;
+
+    RouteHealth *oldest = &routeHealth[0];
+    RouteHealth *freeSlot = nullptr;
+    for (auto &h : routeHealth) {
+        if (h.dest == dest)
+            return &h; // existing record
+        if (h.dest == 0) {
+            if (!freeSlot)
+                freeSlot = &h; // remember the first free slot; prefer it over evicting
+            continue;
+        }
+        // Track the oldest occupied slot in case the table is full (rollover-safe).
+        if ((uint32_t)(now - h.learnedAtMsec) > (uint32_t)(now - oldest->learnedAtMsec))
+            oldest = &h;
+    }
+    // Claim the free slot if there is one, else reuse the oldest. Reset before use and stamp the dest
+    // so the record is findable.
+    RouteHealth *slot = freeSlot ? freeSlot : oldest;
+    *slot = RouteHealth{};
+    slot->dest = dest;
+    return slot;
+}
+
+void NextHopRouter::noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now)
+{
+    if (dest == 0 || nextHop == NO_NEXT_HOP_PREFERENCE)
+        return;
+    RouteHealth *h = getOrAllocRouteHealth(dest, now);
+    if (!h)
+        return;
+    // A genuinely new next hop earns a clean slate; re-learning the SAME hop keeps the accumulated
+    // failure count so an asymmetric reverse path that keeps re-teaching a dead forward hop still ages
+    // out instead of resetting the counter every time.
+    if (h->lastNextHop != nextHop) {
+        h->lastNextHop = nextHop;
+        h->consecutiveFailures = 0;
+    }
+    h->learnedAtMsec = now ? now : 1;
+}
+
+void NextHopRouter::noteRouteSuccess(NodeNum dest, uint32_t now)
+{
+    RouteHealth *h = findRouteHealth(dest);
+    if (!h)
+        return; // only routes we actually learned have health to refresh
+    h->consecutiveFailures = 0;
+    h->learnedAtMsec = now ? now : 1;
+}
+
+void NextHopRouter::noteRouteFailure(NodeNum dest)
+{
+    RouteHealth *h = findRouteHealth(dest);
+    if (!h)
+        return; // nothing to penalize (we were flooding, or never learned a route here)
+    if (h->consecutiveFailures < 255)
+        h->consecutiveFailures++;
+}
+
+bool NextHopRouter::isRouteStale(const RouteHealth &h, uint32_t now) const
+{
+    if (h.consecutiveFailures >= ROUTE_FAILURE_THRESHOLD)
+        return true;
+    return (uint32_t)(now - h.learnedAtMsec) >= ROUTE_TTL_MSEC;
+}
+
+void NextHopRouter::clearRouteHealth(NodeNum dest)
+{
+    RouteHealth *h = findRouteHealth(dest);
+    if (h)
+        *h = RouteHealth{};
 }

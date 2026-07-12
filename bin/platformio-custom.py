@@ -45,6 +45,78 @@ def infer_architecture(board_cfg):
         return "stm32"
     return None
 
+def run_size_tool(env, flag, purpose):
+    """Run the toolchain size tool against the built ELF and return its output.
+
+    Shared plumbing for compute_ram_bytes / compute_flash_bytes. Returns None
+    when the ELF is missing or the tool fails; the manifest then simply omits
+    the metric and downstream size reports show "n/a".
+    """
+    elf = env.File(env.subst("$BUILD_DIR/${PROGNAME}.elf"))
+    if not elf.exists():
+        return None
+    size_tool = env.subst("$SIZETOOL") or "size"
+    try:
+        return subprocess.check_output(
+            [size_tool, flag, elf.get_abspath()],
+            env=env["ENV"],
+            universal_newlines=True,
+        )
+    except Exception as exc:
+        print(f"mtjson: skipping {purpose} ({size_tool} failed: {exc})")
+        return None
+
+def compute_ram_bytes(env):
+    """Static RAM usage (.data + .bss) of the ELF, via the toolchain size tool.
+
+    Deliberately excludes heap/stack placeholder sections (e.g. the nRF52 .heap
+    section): on nRF52840 the heap arena is the linker gap after .bss, so static
+    RAM growth shrinks the usable heap 1:1 - which is exactly why we track it.
+    Returns None when the value cannot be determined; the manifest then simply
+    omits ram_bytes and downstream size reports show "n/a".
+    """
+    output = run_size_tool(env, "-A", "ram_bytes")
+    if output is None:
+        return None
+    ram = 0
+    found = False
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        name = parts[0]
+        # Main-SRAM static sections: .data/.bss, platform-prefixed variants (e.g.
+        # ESP32 .dram0.data/.dram0.bss), and RISC-V small-data .sdata/.sbss.
+        # ESP-IDF .rtc.* sections live outside the heap-competing SRAM; .heap and
+        # .tdata never match.
+        if name.startswith(".rtc"):
+            continue
+        if name in (".data", ".bss", ".sdata", ".sbss") or name.endswith(".data") or name.endswith(".bss"):
+            try:
+                ram += int(parts[1])
+                found = True
+            except ValueError:
+                continue
+    return ram if found else None
+
+def compute_flash_bytes(env):
+    """Flash footprint (text + data) of the ELF via the toolchain size tool.
+
+    Approximates the flashed app image for targets whose packaged artifacts do
+    not include a raw .bin (e.g. nRF52: hex/uf2/DFU zip only); consumed by
+    bin/collect_sizes.py as a fallback flash measurement for the size report
+    and the bin/ram_budgets.json budget gate. Returns None when the value
+    cannot be determined; the manifest then simply omits flash_bytes.
+    """
+    output = run_size_tool(env, "-B", "flash_bytes")
+    if output is None:
+        return None
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
+            return int(parts[0]) + int(parts[1])
+    return None
+
 def manifest_gather(source, target, env):
     global manifest_ran
     if manifest_ran:
@@ -98,9 +170,9 @@ def manifest_gather(source, target, env):
                 d["part_name"] = partition_map[p]
             out.append(d)
             print(d)
-    manifest_write(out, env)
+    manifest_write(out, env, compute_ram_bytes(env), compute_flash_bytes(env))
 
-def manifest_write(files, env):
+def manifest_write(files, env, ram_bytes=None, flash_bytes=None):
     # Defensive: also skip manifest writing if we cannot determine architecture
     def get_project_option(name):
         try:
@@ -137,6 +209,14 @@ def manifest_write(files, env):
         "has_mui": False,
         "has_inkhud": False,
     }
+    # Static RAM footprint (.data + .bss); consumed by bin/collect_sizes.py for
+    # the CI size report and the bin/ram_budgets.json budget gate.
+    if ram_bytes is not None:
+        manifest["ram_bytes"] = ram_bytes
+    # Flash footprint (text + data); fallback flash measurement for targets
+    # whose packaged artifacts include no raw .bin (e.g. nRF52).
+    if flash_bytes is not None:
+        manifest["flash_bytes"] = flash_bytes
     # Get partition table (generated in esp32_pre.py) if it exists
     if env.get("custom_mtjson_part"):
         # custom_mtjson_part is a JSON string, convert it back to a dict
@@ -293,9 +373,12 @@ if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
 board_arch = infer_architecture(env.BoardConfig())
 should_skip_manifest = board_arch is None
 
-# For host/native envs, avoid depending on 'buildprog' (some targets don't define it)
-mtjson_deps = [] if should_skip_manifest else ["buildprog"]
-if not should_skip_manifest and platform.name == "espressif32":
+# Most platforms can generate the manifest as part of the default 'buildprog' target.
+# Typically this passes success/failure properly.
+mtjson_deps = ["buildprog"]
+if platform.name == "espressif32":
+    # On ESP32, we need to explicitly depend upon the binary to prevent fake-success upon failure.
+    mtjson_deps = ["$BUILD_DIR/${PROGNAME}.bin"]
     # Build littlefs image as part of mtjson target
     # Equivalent to `pio run -t buildfs`
     target_lfs = env.DataToBin(
@@ -309,7 +392,8 @@ if should_skip_manifest:
 
     env.AddCustomTarget(
         name="mtjson",
-        dependencies=mtjson_deps,
+        # For host/native envs, avoid depending on 'buildprog' (some targets don't define it)
+        dependencies=[],
         actions=[skip_manifest],
         title="Meshtastic Manifest (skipped)",
         description="mtjson generation is skipped for native environments",

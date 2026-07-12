@@ -87,7 +87,7 @@ void TransmitHistory::setLastSentToMesh(uint16_t key)
         const uint8_t flags = (getRTCQuality() == RTCQualityNone) ? ENTRY_FLAG_BOOT_RELATIVE : ENTRY_FLAG_NONE;
         history[key] = makeStoredTimestamp(now, flags);
         dirty = true;
-        // Don't flush to disk on every transmit — flash has limited write endurance.
+        // Don't flush to disk on every transmit - flash has limited write endurance.
         // The in-memory lastMillis map handles throttle during normal operation.
         // Disk is flushed: before deep sleep (sleep.cpp) and periodically here,
         // throttled to at most once per 5 minutes. Always save the first time
@@ -189,7 +189,7 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
     // Fall back to epoch conversion (loaded from disk after reboot)
     auto it = history.find(key);
     if (it == history.end() || it->second.seconds == 0) {
-        return 0; // No stored time — module has never sent
+        return 0; // No stored time - module has never sent
     }
 
     // Convert to a millis()-relative timestamp: millis() - msAgo.
@@ -255,8 +255,23 @@ bool TransmitHistory::saveToDisk()
     return false;
 }
 
+void TransmitHistory::clear()
+{
+    history.clear();
+    lastMillis.clear();
+    dirty = false;
+    lastDiskSave = 0; // so the next legit broadcast persists immediately
+
+    spiLock->lock();
+    if (FSCom.exists(FILENAME)) {
+        FSCom.remove(FILENAME);
+    }
+    spiLock->unlock();
+    LOG_INFO("TransmitHistory: cleared in-memory state + on-disk file");
+}
+
 #else
-// No filesystem available — provide stub with in-memory tracking
+// No filesystem available - provide stub with in-memory tracking
 TransmitHistory *transmitHistory = nullptr;
 
 TransmitHistory *TransmitHistory::getInstance()
@@ -288,6 +303,12 @@ uint32_t TransmitHistory::getLastSentToMeshMillis(uint16_t key) const
 bool TransmitHistory::saveToDisk()
 {
     return true;
+}
+
+void TransmitHistory::clear()
+{
+    history.clear();
+    lastMillis.clear();
 }
 
 #endif
