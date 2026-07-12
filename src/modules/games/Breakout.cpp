@@ -47,32 +47,42 @@ void BreakoutGame::reset(uint32_t seed)
     livesLeft = START_LIVES;
     levelNum = 1;
     alive = true;
+    ballTick = false;
     buildBricks();
     serveBall();
 }
 
-void BreakoutGame::moveLeft()
+void BreakoutGame::movePaddle(int16_t dxPx)
 {
     if (!alive)
         return;
-    paddleLeft -= PADDLE_STEP;
+    paddleLeft += dxPx;
     if (paddleLeft < 0)
         paddleLeft = 0;
+    else if (paddleLeft > BOARD_W - PADDLE_W)
+        paddleLeft = BOARD_W - PADDLE_W;
+}
+
+void BreakoutGame::moveLeft()
+{
+    movePaddle(-PADDLE_STEP);
 }
 
 void BreakoutGame::moveRight()
 {
-    if (!alive)
-        return;
-    paddleLeft += PADDLE_STEP;
-    if (paddleLeft > BOARD_W - PADDLE_W)
-        paddleLeft = BOARD_W - PADDLE_W;
+    movePaddle(PADDLE_STEP);
 }
 
 bool BreakoutGame::step()
 {
     if (!alive)
         return false;
+
+    // The ball advances on every other step() so the caller can tick (and poll the paddle) at twice
+    // the ball's rate -- this keeps the ball speed constant while paddle control refreshes faster.
+    ballTick = !ballTick;
+    if (!ballTick)
+        return true;
 
     ballPxX += ballVx;
     ballPxY += ballVy;
@@ -151,8 +161,36 @@ bool BreakoutGame::step()
 
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "main.h"
+#if ARCH_PORTDUINO && defined(__linux__)
+#include "input/LinuxJoystick.h"
+#endif
+
+// Paddle pixels moved per tick while a joystick direction is held (continuous polling path).
+static constexpr int16_t PADDLE_POLL_STEP = 3;
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+// Classic Breakout brick-wall colours, top row to bottom.
+static uint16_t brickRowColor(uint8_t row)
+{
+    using namespace graphics;
+    switch (row) {
+    case 0:
+        return TFTPalette::Red;
+    case 1:
+        return TFTPalette::Orange;
+    case 2:
+        return TFTPalette::Yellow;
+    case 3:
+        return TFTPalette::Green;
+    default:
+        return TFTPalette::Cyan;
+    }
+}
+#endif
 
 Breakout::Breakout()
 {
@@ -161,13 +199,39 @@ Breakout::Breakout()
 
 int32_t Breakout::tickIntervalMs() const
 {
-    // Speed ramps with level: 45 ms base, 5 ms per level, floor 20 ms.
+    // Tick at twice the ball's cadence: the ball advances every other step() (BreakoutGame::step),
+    // so halving the interval keeps the ball speed the same while the paddle is polled/redrawn twice
+    // as often. Speed ramps with level: ~22 ms base, floor 10 ms.
     int32_t iv = 45 - static_cast<int32_t>(game.level() - 1) * 5;
-    return iv < 20 ? 20 : iv;
+    if (iv < 20)
+        iv = 20;
+    return iv / 2;
+}
+
+bool Breakout::tick()
+{
+#if ARCH_PORTDUINO && defined(__linux__)
+    // Poll the joystick's held direction directly so the paddle glides continuously instead of
+    // creeping along at the D-pad's slow auto-repeat rate.
+    if (aLinuxJoystick) {
+        const int held = aLinuxJoystick->heldXZone();
+        if (held < 0)
+            game.movePaddle(-PADDLE_POLL_STEP);
+        else if (held > 0)
+            game.movePaddle(PADDLE_POLL_STEP);
+    }
+#endif
+    return game.step();
 }
 
 void Breakout::handleInput(input_broker_event ev)
 {
+#if ARCH_PORTDUINO && defined(__linux__)
+    // When a joystick is present the paddle is polled continuously in tick(); ignore the discrete
+    // (and slow) repeat events so we don't double-move.
+    if (aLinuxJoystick)
+        return;
+#endif
     switch (ev) {
     case INPUT_BROKER_LEFT:
         game.moveLeft();
@@ -188,7 +252,18 @@ void Breakout::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(cx, y, "B R E A K O U T");
-    display->drawXbm(x + (w - breakout_width) / 2, y + 15, breakout_width, breakout_height, breakout);
+    const int16_t logoX = x + (w - breakout_width) / 2;
+    const int16_t logoY = y + 15;
+    display->drawXbm(logoX, logoY, breakout_width, breakout_height, breakout);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // The glyph is three brick courses, a ball, and a paddle -- colour each to match the game.
+    const uint16_t abg = graphics::getThemeBodyBg();
+    graphics::registerTFTColorRegionDirect(logoX, logoY + 1, breakout_width, 2, graphics::TFTPalette::Red, abg);
+    graphics::registerTFTColorRegionDirect(logoX, logoY + 4, breakout_width, 2, graphics::TFTPalette::Yellow, abg);
+    graphics::registerTFTColorRegionDirect(logoX, logoY + 7, breakout_width, 2, graphics::TFTPalette::Green, abg);
+    graphics::registerTFTColorRegionDirect(logoX + 4, logoY + 14, 8, 2, graphics::TFTPalette::Blue, abg);  // paddle
+    graphics::registerTFTColorRegionDirect(logoX + 7, logoY + 10, 2, 2, graphics::TFTPalette::White, abg); // ball
+#endif
     char hi[32];
     if (scores_.scoreAt(0) > 0 && scores_.nameAt(0)[0] != '\0')
         snprintf(hi, sizeof(hi), "High: %s %lu", scores_.nameAt(0), static_cast<unsigned long>(scores_.scoreAt(0)));
@@ -222,6 +297,19 @@ void Breakout::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
 
     // Ball.
     display->fillRect(x + game.ballX(), y + game.ballY(), 2, 2);
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Colour the wall by row, plus a blue paddle and white ball. One region per brick row (the row's
+    // lit bricks take the colour; cleared cells and gaps stay background). Paddle then ball register
+    // last so the ball always wins where it overlaps.
+    const uint16_t bg = graphics::getThemeBodyBg();
+    for (uint8_t r = 0; r < BreakoutGame::BRICK_ROWS; r++)
+        graphics::registerTFTColorRegionDirect(x, y + BreakoutGame::BRICK_TOP + r * BreakoutGame::BRICK_H, BreakoutGame::BOARD_W,
+                                               BreakoutGame::BRICK_H - 1, brickRowColor(r), bg);
+    graphics::registerTFTColorRegionDirect(x + game.paddleX(), y + BreakoutGame::PADDLE_Y, BreakoutGame::PADDLE_W,
+                                           BreakoutGame::PADDLE_H, graphics::TFTPalette::Blue, bg);
+    graphics::registerTFTColorRegionDirect(x + game.ballX(), y + game.ballY(), 2, 2, graphics::TFTPalette::White, bg);
+#endif
 }
 
 #endif // HAS_SCREEN && BASEUI_HAS_GAMES

@@ -20,9 +20,7 @@ GamesModule::GamesModule() : SinglePortModule("games", meshtastic_PortNum_PRIVAT
     games.push_back(new Snake());
     games.push_back(new Tetris());
     games.push_back(new ChirpyRunner());
-    // Breakout is implemented (see Breakout.{h,cpp}) but disabled for now -- the gameplay needs
-    // more work before it's fun. Re-enable by registering it here.
-    // games.push_back(new Breakout());
+    games.push_back(new Breakout());
     inputObserver.observe(inputBroker);
 
     // Keep the tick thread alive at boot only if a game broadcasts periodically; otherwise idle

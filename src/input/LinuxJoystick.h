@@ -31,6 +31,12 @@ class LinuxJoystick : public Observable<const InputEvent *>, public concurrency:
     void init();   // Registers this source with the InputBroker
     void deInit(); // Strictly for cleanly "rebooting" the binary on native
 
+    // Current held D-pad zone, updated the instant the axis moves (independent of the typematic
+    // auto-repeat). -1 = left/up edge, 0 = centered, +1 = right/down edge. Lets a game poll for
+    // smooth continuous control instead of waiting for the slow repeat events.
+    int heldXZone() const { return heldX; }
+    int heldYZone() const { return heldY; }
+
   protected:
     virtual int32_t runOnce() override;
 

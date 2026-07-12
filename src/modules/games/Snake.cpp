@@ -255,6 +255,15 @@ void Snake::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
     // Food: a 2x2 dot centred in its cell.
     SnakeGame::Cell f = game.food();
     display->fillRect(ox + f.x * CELL_PX + 1, oy + f.y * CELL_PX + 1, 2, 2);
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // On a colour display, paint the whole snake green, then the apple red on top. One region over
+    // the board tints every lit body cell green (the snake can be too long for per-cell regions);
+    // a red region over the food pixel wins where it overlaps.
+    const uint16_t bg = graphics::getThemeBodyBg();
+    graphics::registerTFTColorRegionDirect(ox, oy, boardW, boardH, graphics::TFTPalette::MeshtasticGreen, bg);
+    graphics::registerTFTColorRegionDirect(ox + f.x * CELL_PX + 1, oy + f.y * CELL_PX + 1, 2, 2, graphics::TFTPalette::Red, bg);
+#endif
 }
 
 #if SNAKE_ANNOUNCE_HIGH_SCORE

@@ -46,7 +46,9 @@ class BreakoutGame
      * game is still in progress, false once the last life is lost. No-op returning false once dead. */
     bool step();
 
-    /** Slide the paddle one step; the ball is unaffected. */
+    /** Slide the paddle; the ball is unaffected. moveLeft/moveRight use the default per-press step;
+     * movePaddle takes an explicit signed pixel delta (used when polling a held joystick). */
+    void movePaddle(int16_t dxPx);
     void moveLeft();
     void moveRight();
 
@@ -85,6 +87,7 @@ class BreakoutGame
     uint8_t levelNum = 1;
     uint32_t rng = 1; // xorshift32 state (never 0)
     bool alive = false;
+    bool ballTick = false; // ball advances on every other step() (see step())
 };
 
 #include "configuration.h"
@@ -107,7 +110,7 @@ class Breakout : public Game
     const char *name() const override { return "Breakout"; }
 
     void start(uint32_t seed) override { game.reset(seed); }
-    bool tick() override { return game.step(); }
+    bool tick() override; // polls a held joystick for the paddle, then advances the ball
     bool isPlaying() const override { return game.isPlaying(); }
     uint32_t score() const override { return game.score(); }
     int32_t tickIntervalMs() const override;
