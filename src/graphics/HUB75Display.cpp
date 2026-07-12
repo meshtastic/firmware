@@ -66,7 +66,6 @@ void HUB75Display::display()
     const uint16_t onNative = graphics::TFTPalette::White;
     const uint16_t offNative = graphics::getThemeBodyBg();
 
-
     const uint16_t onBe = (uint16_t)((onNative >> 8) | (onNative << 8));
     const uint16_t offBe = (uint16_t)((offNative >> 8) | (offNative << 8));
 
