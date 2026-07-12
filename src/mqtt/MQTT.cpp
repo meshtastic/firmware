@@ -124,6 +124,9 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
             if (!pAck)
                 return;
             pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+            // sendLocal consumes packets sent to a live interface, but returns SHOULD_RELEASE
+            // when it handled a local delivery synchronously. Match MeshService::sendToMesh's
+            // ownership contract so the MQTT acknowledgement cannot leak on the local path.
             if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
                 packetPool.release(pAck);
         } else {
@@ -158,6 +161,11 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
 
     if (shouldDropMqttDownlink(*p))
         return;
+    // A decoded MQTT packet has already crossed the broker boundary, so authenticate it in place
+    // before handing it to the router. The routing-auth cache intentionally keeps an authenticated
+    // copy separate for encrypted packets, but a cache hit alone does not update this packet's
+    // xeddsa_signed marker (which is part of the downstream message metadata).
+    bool decodedAuthChecked = false;
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {
@@ -175,11 +183,14 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // protection for known signers. Without this, a peer on a plaintext broker could
         // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
         // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
-        // CryptoEngine cache state, and MQTT ingress can run on a different task.
-        if (passesRoutingAuthGate(p.get()) != RoutingAuthVerdict::ACCEPT) {
+        // CryptoEngine cache state, and MQTT ingress can run on a different task. The in-place
+        // call preserves the verified xeddsa_signed marker for downstream routing/UI consumers.
+        concurrency::LockGuard g(cryptLock);
+        if (!checkXeddsaReceivePolicy(p.get())) {
             LOG_INFO("Ignore decoded message failing XEdDSA policy");
             return;
         }
+        decodedAuthChecked = true;
 #endif
     }
 
@@ -191,7 +202,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // likely they discovered each other via a channel we have downlink enabled for
         if (isToUs(p.get()) || (nodeInfoLiteHasUser(tx) && nodeInfoLiteHasUser(rx)))
             router->enqueueReceivedMessage(p.release());
-    } else if (router && passesRoutingAuthGate(p.get()) == RoutingAuthVerdict::ACCEPT)
+    } else if (router && (decodedAuthChecked || passesRoutingAuthGate(p.get()) == RoutingAuthVerdict::ACCEPT))
         router->enqueueReceivedMessage(p.release());
 }
 
