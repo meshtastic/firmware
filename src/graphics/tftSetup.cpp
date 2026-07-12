@@ -21,34 +21,59 @@
 #include "mesh/comms/FakeI2C.h"
 
 // Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
-// over the interdevice link
+// over the interdevice link.
+//
+// Every operation retries once on a transport timeout: a frame lost to an
+// overflow or resync must not fail the whole tile. Correlation ids make
+// this safe, a late response to the first attempt is dropped as stale.
+// Definitive answers (success=false from the co-processor) are never
+// retried, missing-tile probes stay a single round trip.
 class IndicatorRemoteFS : public IRemoteFS
 {
+    static const int LINK_RETRIES = 1;
+
   public:
     bool readChunk(const char *path, uint32_t offset, uint8_t *buf, uint32_t len, uint32_t *bytesRead,
                    uint32_t *fileSize) override
     {
         if (!sensecapIndicator)
             return false;
-        memset(&result, 0, sizeof(result));
-        if (!sensecapIndicator->file_read(path, offset, len, &result) || !result.success)
-            return false;
-        uint32_t n = result.filedata.size;
-        if (n > len)
-            n = len;
-        memcpy(buf, result.filedata.bytes, n);
-        *bytesRead = n;
-        // lv_fs positions are 32 bit, map tiles never come close
-        *fileSize = (uint32_t)result.file_size;
-        return true;
+        for (int attempt = 0; attempt <= LINK_RETRIES; attempt++) {
+            memset(&result, 0, sizeof(result));
+            if (!sensecapIndicator->file_read(path, offset, len, &result))
+                continue; // transport timeout, retry
+            if (!result.success)
+                return false;
+            uint32_t n = result.filedata.size;
+            if (n > len)
+                n = len;
+            memcpy(buf, result.filedata.bytes, n);
+            *bytesRead = n;
+            // lv_fs positions are 32 bit, map tiles never come close
+            *fileSize = (uint32_t)result.file_size;
+            return true;
+        }
+        return false;
     }
 
     bool writeChunk(const char *path, uint32_t offset, const uint8_t *buf, uint32_t len, bool create) override
     {
         if (!sensecapIndicator)
             return false;
-        memset(&result, 0, sizeof(result));
-        return sensecapIndicator->file_write(path, offset, buf, len, create, &result) && result.success;
+        for (int attempt = 0; attempt <= LINK_RETRIES; attempt++) {
+            memset(&result, 0, sizeof(result));
+            if (!sensecapIndicator->file_write(path, offset, buf, len, create, &result))
+                continue; // transport timeout, retry (POST re-truncates, safe)
+            if (result.success)
+                return true;
+            // The retry of an append whose first attempt landed but whose
+            // response was lost is rejected as an offset conflict carrying
+            // the resulting file size
+            if (attempt > 0 && !create && result.file_size == (uint64_t)offset + len)
+                return true;
+            return false;
+        }
+        return false;
     }
 
     bool sdInfo(RemoteSdInfo &info) override
@@ -56,7 +81,10 @@ class IndicatorRemoteFS : public IRemoteFS
         if (!sensecapIndicator)
             return false;
         meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
-        if (!sensecapIndicator->sd_info(&result))
+        bool ok = false;
+        for (int attempt = 0; attempt <= LINK_RETRIES && !ok; attempt++)
+            ok = sensecapIndicator->sd_info(&result);
+        if (!ok)
             return false;
         info.present = result.present;
         info.cardType = (uint8_t)result.card_type;
@@ -72,8 +100,16 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        memset(&result, 0, sizeof(result));
-        return sensecapIndicator->file_remove(path, &result) && result.success;
+        for (int attempt = 0; attempt <= LINK_RETRIES; attempt++) {
+            memset(&result, 0, sizeof(result));
+            if (!sensecapIndicator->file_remove(path, &result))
+                continue; // transport timeout, retry
+            if (result.success)
+                return true;
+            // after a lost response the retry finds the file already gone
+            return attempt > 0;
+        }
+        return false;
     }
 
     bool listDir(const char *path, std::set<std::string> &entries) override
@@ -82,8 +118,12 @@ class IndicatorRemoteFS : public IRemoteFS
             return false;
         uint32_t offset = 0;
         while (true) {
-            memset(&listing, 0, sizeof(listing));
-            if (!sensecapIndicator->list_directory(path, offset, &listing) || !listing.success)
+            bool ok = false;
+            for (int attempt = 0; attempt <= LINK_RETRIES && !ok; attempt++) {
+                memset(&listing, 0, sizeof(listing));
+                ok = sensecapIndicator->list_directory(path, offset, &listing);
+            }
+            if (!ok || !listing.success)
                 return false;
             for (pb_size_t i = 0; i < listing.filenames_count; i++)
                 entries.insert(listing.filenames[i]);

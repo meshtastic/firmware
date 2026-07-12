@@ -35,10 +35,13 @@ typedef enum _meshtastic_SdCardInfo_FatType {
 } meshtastic_SdCardInfo_FatType;
 
 typedef enum _meshtastic_I2CResult_Status {
-    meshtastic_I2CResult_Status_OK = 0,
-    meshtastic_I2CResult_Status_NACK_ADDRESS = 1,
-    meshtastic_I2CResult_Status_NACK_DATA = 2,
-    meshtastic_I2CResult_Status_ERROR = 3
+    /* Never sent: an all-defaults (e.g. accidentally empty) message must
+ not decode as a successful transaction */
+    meshtastic_I2CResult_Status_UNSPECIFIED = 0,
+    meshtastic_I2CResult_Status_OK = 1,
+    meshtastic_I2CResult_Status_NACK_ADDRESS = 2,
+    meshtastic_I2CResult_Status_NACK_DATA = 3,
+    meshtastic_I2CResult_Status_ERROR = 4
 } meshtastic_I2CResult_Status;
 
 /* Struct definitions */
@@ -151,7 +154,7 @@ extern "C" {
 #define _meshtastic_SdCardInfo_FatType_MAX meshtastic_SdCardInfo_FatType_EXFAT
 #define _meshtastic_SdCardInfo_FatType_ARRAYSIZE ((meshtastic_SdCardInfo_FatType)(meshtastic_SdCardInfo_FatType_EXFAT+1))
 
-#define _meshtastic_I2CResult_Status_MIN meshtastic_I2CResult_Status_OK
+#define _meshtastic_I2CResult_Status_MIN meshtastic_I2CResult_Status_UNSPECIFIED
 #define _meshtastic_I2CResult_Status_MAX meshtastic_I2CResult_Status_ERROR
 #define _meshtastic_I2CResult_Status_ARRAYSIZE ((meshtastic_I2CResult_Status)(meshtastic_I2CResult_Status_ERROR+1))
 
