@@ -8,6 +8,9 @@
 #if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
+#if defined(SENSECAP_INDICATOR)
+#include "mesh/comms/FakeI2C.h"
+#endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32)
 #include "meshUtils.h" // vformat
 
@@ -245,7 +248,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
 #if WIRE_INTERFACES_COUNT == 2
     if (port == I2CPort::WIRE1) {
+#if defined(SENSECAP_INDICATOR)
+        i2cBus = FakeWire; // WIRE1 is bridged to the RP2040
+#else
         i2cBus = &Wire1;
+#endif
     } else {
 #endif
         i2cBus = &Wire;
@@ -908,7 +915,9 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address)
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;
     } else {
-#if WIRE_INTERFACES_COUNT == 2
+#if defined(SENSECAP_INDICATOR)
+        return FakeWire; // WIRE1 is bridged to the RP2040
+#elif WIRE_INTERFACES_COUNT == 2
         return &Wire1;
 #else
         return &Wire;

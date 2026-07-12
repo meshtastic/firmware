@@ -14,6 +14,85 @@
 #include <thread>
 #endif
 
+#ifdef SENSECAP_INDICATOR
+#include "graphics/map/RemoteSDService.h"
+#include "input/I2CKeyboardScanner.h"
+#include "mesh/IndicatorSerial.h"
+#include "mesh/comms/FakeI2C.h"
+
+// Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
+// over the interdevice link
+class IndicatorRemoteFS : public IRemoteFS
+{
+  public:
+    bool readChunk(const char *path, uint32_t offset, uint8_t *buf, uint32_t len, uint32_t *bytesRead,
+                   uint32_t *fileSize) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        memset(&result, 0, sizeof(result));
+        if (!sensecapIndicator->file_read(path, offset, len, &result) || !result.success)
+            return false;
+        uint32_t n = result.filedata.size;
+        if (n > len)
+            n = len;
+        memcpy(buf, result.filedata.bytes, n);
+        *bytesRead = n;
+        // lv_fs positions are 32 bit, map tiles never come close
+        *fileSize = (uint32_t)result.file_size;
+        return true;
+    }
+
+    bool writeChunk(const char *path, uint32_t offset, const uint8_t *buf, uint32_t len, bool create) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        memset(&result, 0, sizeof(result));
+        return sensecapIndicator->file_write(path, offset, buf, len, create, &result) && result.success;
+    }
+
+    bool sdInfo(RemoteSdInfo &info) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
+        if (!sensecapIndicator->sd_info(&result))
+            return false;
+        info.present = result.present;
+        info.cardType = (uint8_t)result.card_type;
+        info.fatType = (uint8_t)result.fat_type;
+        info.cardSize = result.card_size;
+        info.usedBytes = result.used_bytes;
+        info.freeBytes = result.free_bytes;
+        return true;
+    }
+
+    bool listDir(const char *path, std::set<std::string> &entries) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        uint32_t offset = 0;
+        while (true) {
+            memset(&listing, 0, sizeof(listing));
+            if (!sensecapIndicator->list_directory(path, offset, &listing) || !listing.success)
+                return false;
+            for (pb_size_t i = 0; i < listing.filenames_count; i++)
+                entries.insert(listing.filenames[i]);
+            offset += listing.filenames_count;
+            if (listing.filenames_count == 0 || offset >= listing.total_count)
+                break;
+        }
+        return true;
+    }
+
+  private:
+    // Several KB each, kept off the UI task stack. All file operations
+    // originate from the single UI task.
+    meshtastic_FileTransfer result;
+    meshtastic_DirectoryListing listing;
+};
+#endif
+
 DeviceScreen *deviceScreen = nullptr;
 
 #ifndef TFT_TASK_STACK_SIZE
@@ -40,6 +119,12 @@ void tft_task_handler(void *param = nullptr)
 
 void tftSetup(void)
 {
+#ifdef SENSECAP_INDICATOR
+    RemoteSDService::setBackend(new IndicatorRemoteFS());
+    // the second bus is bridged to the RP2040, keep the keyboard scan off the
+    // uninitialized local Wire1
+    I2CKeyboardScanner::setSecondaryBus(FakeWire);
+#endif
 #ifndef ARCH_PORTDUINO
     deviceScreen = &DeviceScreen::create();
     PacketAPI::create(PacketServer::init());

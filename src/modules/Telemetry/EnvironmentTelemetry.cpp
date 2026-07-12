@@ -123,10 +123,6 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/SPA06Sensor.h"
 #endif
 
-#ifdef SENSECAP_INDICATOR
-#include "Sensor/IndicatorSensor.h"
-#endif
-
 #if __has_include(<Adafruit_TSL2561_U.h>)
 #include "Sensor/TSL2561Sensor.h"
 #endif
@@ -167,10 +163,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // Not a real I2C device
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #else
-#ifdef SENSECAP_INDICATOR
-    // Not a real I2C device, uses UART
-    addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
-#endif
 #if HAS_SPA06 && __has_include(<Adafruit_SPA06_003.h>)
     addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
 #endif

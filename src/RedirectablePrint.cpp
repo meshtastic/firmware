@@ -78,6 +78,17 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         if (!std::isprint(static_cast<unsigned char>(printBuf[f])) && printBuf[f] != '\n')
             printBuf[f] = '#';
     }
+    // A leading "[Tag] " in the message simulates the thread name tag (used
+    // by contexts without an OSThread, e.g. the device-ui task). Print it
+    // before applying the level color so it renders like a real thread name.
+    size_t tagLen = 0;
+    if (printBuf[0] == '[') {
+        const char *end = (const char *)memchr(printBuf, ']', len < 24 ? len : 24);
+        if (end && (size_t)(end - printBuf) + 1 < len && end[1] == ' ')
+            tagLen = end - printBuf + 2;
+    }
+    if (tagLen)
+        Print::write(printBuf, tagLen);
     if (color && logLevel != nullptr) {
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
             Print::write("\u001b[34m", 5);
@@ -88,7 +99,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
             Print::write("\u001b[31m", 5);
     }
-    len = Print::write(printBuf, len);
+    len = tagLen + Print::write(printBuf + tagLen, len - tagLen);
     if (color && logLevel != nullptr) {
         Print::write("\u001b[0m", 4);
     }
@@ -161,7 +172,9 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 #endif
     }
     auto thread = concurrency::OSThread::currentThread;
-    if (thread) {
+    // A message starting with "[Tag] " brings its own tag (e.g. device-ui
+    // logging from the UI task, where currentThread is unrelated)
+    if (thread && format[0] != '[') {
         print("[");
         // printf("%p ", thread);
         // assert(thread->ThreadName.length());
