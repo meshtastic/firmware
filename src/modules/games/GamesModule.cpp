@@ -2,6 +2,7 @@
 
 #if HAS_SCREEN && BASEUI_HAS_GAMES
 
+#include "Breakout.h"
 #include "PowerFSM.h"
 #include "Snake.h"
 #include "Tetris.h"
@@ -17,6 +18,7 @@ GamesModule::GamesModule() : SinglePortModule("games", meshtastic_PortNum_PRIVAT
     // Register the hosted games. Order sets the attract-screen cycle order (Snake is shown first).
     games.push_back(new Snake());
     games.push_back(new Tetris());
+    games.push_back(new Breakout());
     inputObserver.observe(inputBroker);
 
     // Keep the tick thread alive at boot only if a game broadcasts periodically; otherwise idle
