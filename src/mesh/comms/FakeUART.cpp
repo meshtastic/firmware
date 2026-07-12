@@ -28,6 +28,7 @@ int FakeUART::peek()
 {
     if (buf_tail == buf_head)
         return -1;
+    __sync_synchronize(); // pair with the producer barrier in buf_push
     return buf[buf_tail];
 }
 
@@ -35,6 +36,7 @@ int FakeUART::read()
 {
     if (buf_tail == buf_head)
         return -1;
+    __sync_synchronize(); // pair with the producer barrier in buf_push
     uint8_t ret = buf[buf_tail];
     buf_tail = (buf_tail + 1) % BUF_SIZE;
     return ret;

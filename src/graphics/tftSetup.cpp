@@ -64,7 +64,16 @@ class IndicatorRemoteFS : public IRemoteFS
         info.cardSize = result.card_size;
         info.usedBytes = result.used_bytes;
         info.freeBytes = result.free_bytes;
+        info.statsValid = result.stats_valid;
         return true;
+    }
+
+    bool remove(const char *path) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        memset(&result, 0, sizeof(result));
+        return sensecapIndicator->file_remove(path, &result) && result.success;
     }
 
     bool listDir(const char *path, std::set<std::string> &entries) override

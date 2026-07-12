@@ -237,7 +237,7 @@ bool SensecapIndicator::send_uplink_unlocked(const meshtastic_InterdeviceMessage
     pb_tx_buf[0] = MT_MAGIC_0;
     pb_tx_buf[1] = MT_MAGIC_1;
 
-    pb_ostream_t stream = pb_ostream_from_buffer(pb_tx_buf + MT_HEADER_SIZE, PB_BUFSIZE);
+    pb_ostream_t stream = pb_ostream_from_buffer(pb_tx_buf + MT_HEADER_SIZE, PB_BUFSIZE - MT_HEADER_SIZE);
     if (!pb_encode(&stream, meshtastic_InterdeviceMessage_fields, &message)) {
         LOG_DEBUG("pb_encode failed");
         return false;
@@ -254,43 +254,47 @@ bool SensecapIndicator::send_uplink_unlocked(const meshtastic_InterdeviceMessage
 
 size_t SensecapIndicator::serial_check(char *buf, size_t space_left)
 {
-    size_t bytes_read = 0;
-    while (bytes_read < space_left && _serial->available()) {
-        buf[bytes_read++] = _serial->read();
+    int avail = _serial->available();
+    if (avail <= 0)
+        return 0;
+    if ((size_t)avail > space_left)
+        avail = space_left;
+    // bulk copy out of the driver's RX buffer; only reads what is available
+    return _serial->read((uint8_t *)buf, avail);
+}
+
+// Distance to the next byte that could start a frame. Skips the corrupt
+// prefix while keeping anything that may be a frame queued behind it (a
+// trailing lone MT_MAGIC_0 counts, its successor has not arrived yet).
+static size_t scan_magic(const pb_byte_t *buf, size_t len)
+{
+    for (size_t i = 1; i < len; i++) {
+        if (buf[i] == MT_MAGIC_0 && (i + 1 == len || buf[i + 1] == MT_MAGIC_1))
+            return i;
     }
-    return bytes_read;
+    return len;
 }
 
 void SensecapIndicator::check_packet()
 {
-    if (pb_rx_size < MT_HEADER_SIZE) {
-        // We don't even have a header yet
-        return;
-    }
+    // process everything buffered; one pump can deliver several frames
+    while (pb_rx_size >= MT_HEADER_SIZE) {
+        size_t payload_len = (size_t)(pb_rx_buf[2] << 8 | pb_rx_buf[3]);
+        if (pb_rx_buf[0] != MT_MAGIC_0 || pb_rx_buf[1] != MT_MAGIC_1 || payload_len + MT_HEADER_SIZE > PB_BUFSIZE) {
+            // Corrupt or false header: resync on the next magic instead of
+            // flushing, one bad byte must not cost the frames behind it
+            size_t skip = scan_magic(pb_rx_buf, pb_rx_size);
+            LOG_DEBUG("Bad frame header, dropping %u bytes", (unsigned)skip);
+            memmove(pb_rx_buf, pb_rx_buf + skip, pb_rx_size - skip);
+            pb_rx_size -= skip;
+            continue;
+        }
 
-    if (pb_rx_buf[0] != MT_MAGIC_0 || pb_rx_buf[1] != MT_MAGIC_1) {
-        LOG_DEBUG("Got bad magic");
-        memset(pb_rx_buf, 0, PB_BUFSIZE);
-        pb_rx_size = 0;
-        return;
-    }
+        if (payload_len + MT_HEADER_SIZE > pb_rx_size)
+            return; // frame not complete yet
 
-    uint16_t payload_len = pb_rx_buf[2] << 8 | pb_rx_buf[3];
-    if ((size_t)payload_len + MT_HEADER_SIZE > PB_BUFSIZE) {
-        // oversized frame can never complete, resync on the next magic
-        LOG_DEBUG("Got packet claiming to be ridiculous length");
-        memset(pb_rx_buf, 0, PB_BUFSIZE);
-        pb_rx_size = 0;
-        return;
+        handle_packet(payload_len);
     }
-
-    if ((size_t)(payload_len + 4) > pb_rx_size) {
-        // Packet not complete yet
-        return;
-    }
-
-    // We have a complete packet, handle it
-    handle_packet(payload_len);
 }
 
 bool SensecapIndicator::handle_packet(size_t payload_len)

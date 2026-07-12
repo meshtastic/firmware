@@ -1,6 +1,7 @@
 #include "ICM20948Sensor.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
+#include "detect/ScanI2CTwoWire.h"
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
@@ -169,12 +170,9 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
     enableDebugging();
 #endif
 
-    // startup
-#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
-    TwoWire &bus = (device.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
-#else
-    TwoWire &bus = Wire; // fallback if only one I2C interface
-#endif
+    // startup; the bus is resolved via the scanner: WIRE1 may be a bridged
+    // bus rather than the local Wire1 (e.g. SenseCAP Indicator)
+    TwoWire &bus = *ScanI2CTwoWire::fetchI2CBus(device.address);
 
     bool bAddr = (device.address.address == 0x69);
     delay(100);

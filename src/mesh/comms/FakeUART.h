@@ -20,16 +20,23 @@ class FakeUART : public Stream
     int available();
     int peek();
     int read();
-    void flush(bool wait = true);
+    void flush(bool wait);
+    // Stream/Print contract: flush() through a base pointer must behave
+    // like the HardwareSerial variant callers expect
+    void flush() override { flush(true); }
+    // writes are buffered into one uplink message, so this is its capacity
+    // (Print's default of 0 would make drivers back off forever)
+    int availableForWrite() override { return (int)sizeof(meshtastic_InterdeviceMessage{}.data.nmea) - 1; }
     uint32_t baudRate();
     void updateBaudRate(unsigned long speed);
     size_t setRxBufferSize(size_t size);
     size_t write(const char *buffer);
     size_t write(char *buffer, size_t size);
     size_t write(uint8_t *buffer, size_t size);
+    size_t write(const uint8_t *buffer, size_t size) override { return write((char *)buffer, size); }
 
     size_t stuff_buffer(const char *buffer, size_t size);
-    virtual size_t write(uint8_t c) { return write(&c, 1); }
+    size_t write(uint8_t c) override { return write(&c, 1); }
 
   private:
     unsigned long baudrate = 115200;
@@ -48,6 +55,9 @@ class FakeUART : public Stream
         if (next == buf_tail)
             return false; // full
         buf[buf_head] = c;
+        // producer and consumer run on different cores: the byte must be
+        // visible before the index says it is there
+        __sync_synchronize();
         buf_head = next;
         return true;
     }

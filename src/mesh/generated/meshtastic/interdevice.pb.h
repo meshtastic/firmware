@@ -61,9 +61,11 @@ typedef struct _meshtastic_FileTransfer {
 /* Message for structured directory listing */
 typedef struct _meshtastic_DirectoryListing {
     char directory[256]; /* Path of the directory */
-    /* One page of entry names, full FAT LFN length so they round-trip into
- FileTransfer.filepath. Page size is the max_count in
- interdevice.options; page through with offset and total_count. */
+    /* One page of entry names, full FAT LFN length. Subdirectories carry a
+ trailing slash. Note that a name whose directory prefix pushes the
+ combined path past the FileTransfer.filepath limit cannot round-trip.
+ Page size is the max_count in interdevice.options; page through with
+ offset and total_count. */
     pb_size_t filenames_count;
     char filenames[16][256];
     bool success; /* Response: Was the operation successful? */
@@ -93,6 +95,10 @@ typedef struct _meshtastic_SdCardInfo {
     uint64_t card_size; /* Filesystem size in bytes */
     uint64_t used_bytes; /* Used bytes (may be expensive to compute on FAT32) */
     uint64_t free_bytes; /* Free bytes */
+    /* used_bytes/free_bytes are only meaningful when true: the scan behind
+ them runs in the background after mount and can take a while, and a
+ full card is otherwise indistinguishable from a scan in progress */
+    bool stats_valid;
 } meshtastic_SdCardInfo;
 
 typedef PB_BYTES_ARRAY_T(256) meshtastic_I2CResult_read_data_t;
@@ -164,13 +170,13 @@ extern "C" {
 #define meshtastic_FileTransfer_init_default     {_meshtastic_FileOperation_MIN, "", {0, {0}}, 0, "", 0, 0, 0}
 #define meshtastic_DirectoryListing_init_default {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, 0, "", 0, 0}
 #define meshtastic_I2CTransaction_init_default   {0, {0, {0}}, 0}
-#define meshtastic_SdCardInfo_init_default       {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0}
+#define meshtastic_SdCardInfo_init_default       {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_default        {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
 #define meshtastic_InterdeviceMessage_init_default {0, {""}, 0}
 #define meshtastic_FileTransfer_init_zero        {_meshtastic_FileOperation_MIN, "", {0, {0}}, 0, "", 0, 0, 0}
 #define meshtastic_DirectoryListing_init_zero    {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, 0, "", 0, 0}
 #define meshtastic_I2CTransaction_init_zero      {0, {0, {0}}, 0}
-#define meshtastic_SdCardInfo_init_zero          {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0}
+#define meshtastic_SdCardInfo_init_zero          {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_zero           {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
 #define meshtastic_InterdeviceMessage_init_zero  {0, {""}, 0}
 
@@ -198,6 +204,7 @@ extern "C" {
 #define meshtastic_SdCardInfo_card_size_tag      4
 #define meshtastic_SdCardInfo_used_bytes_tag     5
 #define meshtastic_SdCardInfo_free_bytes_tag     6
+#define meshtastic_SdCardInfo_stats_valid_tag    7
 #define meshtastic_I2CResult_status_tag          1
 #define meshtastic_I2CResult_read_data_tag       2
 #define meshtastic_InterdeviceMessage_nmea_tag   1
@@ -250,7 +257,8 @@ X(a, STATIC,   SINGULAR, UENUM,    card_type,         2) \
 X(a, STATIC,   SINGULAR, UENUM,    fat_type,          3) \
 X(a, STATIC,   SINGULAR, UINT64,   card_size,         4) \
 X(a, STATIC,   SINGULAR, UINT64,   used_bytes,        5) \
-X(a, STATIC,   SINGULAR, UINT64,   free_bytes,        6)
+X(a, STATIC,   SINGULAR, UINT64,   free_bytes,        6) \
+X(a, STATIC,   SINGULAR, BOOL,     stats_valid,       7)
 #define meshtastic_SdCardInfo_CALLBACK NULL
 #define meshtastic_SdCardInfo_DEFAULT NULL
 
@@ -304,7 +312,7 @@ extern const pb_msgdesc_t meshtastic_InterdeviceMessage_msg;
 #define meshtastic_I2CResult_size                261
 #define meshtastic_I2CTransaction_size           271
 #define meshtastic_InterdeviceMessage_size       4666
-#define meshtastic_SdCardInfo_size               39
+#define meshtastic_SdCardInfo_size               41
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -21,7 +21,7 @@
 // Wait this many msec if there's nothing new on the channel
 #define NO_NEWS_PAUSE 25
 
-#define PB_BUFSIZE meshtastic_InterdeviceMessage_size + MT_HEADER_SIZE
+#define PB_BUFSIZE (meshtastic_InterdeviceMessage_size + MT_HEADER_SIZE)
 
 class SensecapIndicator : public concurrency::OSThread
 {
