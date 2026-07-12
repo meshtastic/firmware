@@ -47,7 +47,7 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 #endif
 
 #if defined(SENSECAP_INDICATOR)
-FakeUART *GPS::_serial_gps = FakeSerial;
+FakeUART *GPS::_serial_gps = nullptr; // assigned in createGps(), see there
 #elif defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
@@ -1914,7 +1914,13 @@ std::unique_ptr<GPS> GPS::createGps()
     } else
         return nullptr;
 #endif
-#if !defined(SENSECAP_INDICATOR)
+#if defined(SENSECAP_INDICATOR)
+    // assigned at runtime, static initialization order across translation
+    // units is undefined
+    _serial_gps = FakeSerial;
+    if (!_serial_gps)
+        return nullptr;
+#else
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 #endif

@@ -288,7 +288,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
     switch (message.which_data) {
     case meshtastic_InterdeviceMessage_nmea_tag:
         // send String to NMEA processing
-        FakeSerial->stuff_buffer(message.data.nmea, strlen(message.data.nmea));
+        FakeSerial->stuff_buffer(message.data.nmea, strnlen(message.data.nmea, sizeof(message.data.nmea) - 1));
         return true;
     case meshtastic_InterdeviceMessage_i2c_result_tag:
         // response for the transaction i2c_transact() is waiting on
