@@ -3,6 +3,7 @@
 #ifdef SENSECAP_INDICATOR
 
 #include "../generated/meshtastic/interdevice.pb.h"
+#include "concurrency/Lock.h"
 #include <Wire.h>
 
 /**
@@ -19,6 +20,13 @@
  * Constructed on bus number 0: TwoWire::begin() is final and cannot be
  * intercepted, but it returns without touching hardware when the bus is
  * already initialized, which is always true for bus 0 (local touch panel).
+ *
+ * Thread safety: the bus is shared between the main loop (sensor drivers)
+ * and the UI task (keyboard scanner), so a transaction holds an internal
+ * lock from beginTransmission()/requestFrom() until the transaction
+ * executes, like the HAL lock of the real ESP32 TwoWire. As with the real
+ * TwoWire, the read buffer must be consumed before the next transaction
+ * from another thread replaces it.
  */
 class FakeI2C : public TwoWire
 {
@@ -58,6 +66,15 @@ class FakeI2C : public TwoWire
     uint8_t _rxBuf[MAX_READ];
     size_t _rxLen = 0;
     size_t _rxPos = 0;
+
+    // Serializes staged transactions across threads. Held from
+    // beginTransmission() (or a standalone requestFrom()) until the
+    // transaction executes. The lock is a plain binary semaphore, so the
+    // owning task is tracked to keep re-entry from deadlocking.
+    concurrency::Lock _lock;
+    TaskHandle_t _owner = nullptr;
+    void acquire();
+    void release();
 
     uint8_t transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen);
 };

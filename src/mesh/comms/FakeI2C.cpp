@@ -5,8 +5,23 @@
 
 FakeI2C *FakeWire = new FakeI2C();
 
+void FakeI2C::acquire()
+{
+    _lock.lock();
+    _owner = xTaskGetCurrentTaskHandle();
+}
+
+void FakeI2C::release()
+{
+    _owner = nullptr;
+    _lock.unlock();
+}
+
 void FakeI2C::beginTransmission(uint8_t address)
 {
+    // re-begin from the owning thread just restages, everyone else waits
+    if (_owner != xTaskGetCurrentTaskHandle())
+        acquire();
     _txAddress = address;
     _txLen = 0;
     _txPending = true;
@@ -30,14 +45,18 @@ size_t FakeI2C::write(const uint8_t *data, size_t len)
 
 uint8_t FakeI2C::endTransmission(bool stopBit)
 {
+    if (_owner != xTaskGetCurrentTaskHandle())
+        return 4; // endTransmission without beginTransmission
     if (!stopBit) {
         // Keep the buffered write pending, it is combined with the following
-        // requestFrom() into a single write+read transaction
+        // requestFrom() into a single write+read transaction; the lock stays
+        // held across the repeated start
         return 0;
     }
     uint8_t rv = transact(_txAddress, _txBuf, _txLen, 0);
     _txLen = 0;
     _txPending = false;
+    release();
     return rv;
 }
 
@@ -46,6 +65,10 @@ size_t FakeI2C::requestFrom(uint8_t address, size_t len, bool stopBit)
     (void)stopBit;
     if (len > MAX_READ)
         len = MAX_READ;
+
+    // standalone read without a preceding beginTransmission
+    if (_owner != xTaskGetCurrentTaskHandle())
+        acquire();
 
     const uint8_t *wbuf = NULL;
     size_t wlen = 0;
@@ -56,6 +79,7 @@ size_t FakeI2C::requestFrom(uint8_t address, size_t len, bool stopBit)
     uint8_t rv = transact(address, wbuf, wlen, len);
     _txLen = 0;
     _txPending = false;
+    release();
     return rv == 0 ? _rxLen : 0;
 }
 
@@ -84,8 +108,8 @@ uint8_t FakeI2C::transact(uint8_t address, const uint8_t *wbuf, size_t wlen, siz
     if (!sensecapIndicator)
         return 4;
 
-    // static: ~4.6KB struct, too large for task stacks; I2C transactions
-    // only originate from the cooperative main loop
+    // static: ~4.6KB struct, too large for task stacks. Safe because every
+    // caller holds _lock while the transaction executes
     static meshtastic_InterdeviceMessage msg;
     memset(&msg, 0, sizeof(msg));
     msg.which_data = meshtastic_InterdeviceMessage_i2c_transaction_tag;

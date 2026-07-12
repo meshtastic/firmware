@@ -26,6 +26,11 @@ SensecapIndicator::SensecapIndicator(HardwareSerial &serial) : OSThread("Senseca
 int32_t SensecapIndicator::runOnce()
 {
     if (running) {
+        // A requester is pumping the link itself and holds link_lock for up
+        // to its full request timeout; blocking on the lock here would stall
+        // every other thread of the cooperative main loop with it
+        if (request_in_flight)
+            return (10);
         concurrency::LockGuard guard(&link_lock);
         pump();
         return (10);
@@ -70,6 +75,7 @@ uint32_t SensecapIndicator::stamp_request(meshtastic_InterdeviceMessage &request
 
 bool SensecapIndicator::i2c_transact(meshtastic_InterdeviceMessage &request, meshtastic_I2CResult *result, uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (packets_received == 0)
         return false; // co-processor has never talked to us, fail fast instead of timing out
@@ -88,6 +94,7 @@ bool SensecapIndicator::i2c_transact(meshtastic_InterdeviceMessage &request, mes
 
 bool SensecapIndicator::file_request(meshtastic_InterdeviceMessage &request, meshtastic_FileTransfer *out, uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (packets_received == 0)
         return false;
@@ -143,6 +150,7 @@ bool SensecapIndicator::file_remove(const char *path, meshtastic_FileTransfer *o
 
 bool SensecapIndicator::list_directory(const char *path, uint32_t offset, meshtastic_DirectoryListing *out, uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (packets_received == 0)
         return false;
@@ -165,6 +173,7 @@ bool SensecapIndicator::list_directory(const char *path, uint32_t offset, meshta
 
 bool SensecapIndicator::sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (packets_received == 0)
         return false;
@@ -186,9 +195,26 @@ bool SensecapIndicator::sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms)
 
 bool SensecapIndicator::wait_ready(uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
     concurrency::LockGuard guard(&link_lock);
     uint32_t start = millis();
+    uint32_t last_probe = 0;
+    bool probed = false;
     while (packets_received == 0) {
+        // The co-processor never sends anything unsolicited unless a GPS
+        // module is attached, so waiting passively would leave the bridge
+        // down forever on GPS-less units. Ping until any response marks
+        // the link up; pong touches no peripherals on the other side.
+        if (!probed || millis() - last_probe >= 250) {
+            meshtastic_InterdeviceMessage &msg = tx_message;
+            memset(&msg, 0, sizeof(msg));
+            msg.which_data = meshtastic_InterdeviceMessage_ping_tag;
+            msg.data.ping = true;
+            stamp_request(msg);
+            send_uplink_unlocked(msg);
+            last_probe = millis();
+            probed = true;
+        }
         pump();
         if (packets_received > 0)
             break;
@@ -316,6 +342,22 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
         } else {
             LOG_DEBUG("Drop stale listing response id=%u", message.id);
         }
+        return true;
+    case meshtastic_InterdeviceMessage_ping_tag: {
+        // Liveness probe from the other side, answer regardless of state.
+        // tx_message is safe to reuse: a request in flight was already
+        // encoded into pb_tx_buf when it was sent
+        meshtastic_InterdeviceMessage &pong = tx_message;
+        memset(&pong, 0, sizeof(pong));
+        pong.id = message.id;
+        pong.which_data = meshtastic_InterdeviceMessage_pong_tag;
+        pong.data.pong = true;
+        send_uplink_unlocked(pong);
+        return true;
+    }
+    case meshtastic_InterdeviceMessage_pong_tag:
+        // no payload to deliver: receiving it already counted the packet,
+        // which is all wait_ready() is looking for
         return true;
     case meshtastic_InterdeviceMessage_sd_info_tag:
         if (pending_sd_info && message.id == expected_id) {

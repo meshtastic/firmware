@@ -54,8 +54,10 @@ class SensecapIndicator : public concurrency::OSThread
     bool sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms = 2000);
 
     // True once at least one valid packet was received from the RP2040.
-    // Pumps the link until then or until the timeout expires. Used to defer
-    // bridge traffic until the co-processor has booted.
+    // Actively probes the co-processor (it never speaks unsolicited unless a
+    // GPS module is attached) and pumps the link until a response arrives or
+    // the timeout expires. Used to defer bridge traffic until the
+    // co-processor has booted.
     bool wait_ready(uint32_t timeout_ms);
 
   private:
@@ -87,6 +89,15 @@ class SensecapIndicator : public concurrency::OSThread
     // arrives after its request timed out cannot satisfy a later request
     uint32_t next_request_id = 0;
     uint32_t expected_id = 0;
+    // True while a requester holds link_lock for a full request/response
+    // round trip (up to the request timeout). runOnce checks it so the
+    // cooperative main loop is not blocked on the lock for that long.
+    volatile bool request_in_flight = false;
+    struct InFlight {
+        volatile bool &flag;
+        explicit InFlight(volatile bool &f) : flag(f) { flag = true; }
+        ~InFlight() { flag = false; }
+    };
     uint32_t stamp_request(meshtastic_InterdeviceMessage &request);
     bool send_uplink_unlocked(const meshtastic_InterdeviceMessage &message);
     bool file_request(meshtastic_InterdeviceMessage &request, meshtastic_FileTransfer *out, uint32_t timeout_ms);

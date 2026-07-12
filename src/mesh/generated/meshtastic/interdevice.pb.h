@@ -117,6 +117,10 @@ typedef struct _meshtastic_InterdeviceMessage {
         meshtastic_DirectoryListing directory_listing;
         bool get_sd_info; /* Request: SD card statistics */
         meshtastic_SdCardInfo sd_info; /* Response */
+        /* Link liveness probe. The receiver answers ping with pong, echoing the
+     id. Touches no peripherals, so it works with nothing attached. */
+        bool ping;
+        bool pong;
     } data;
     /* Correlates a response with its request: responses echo the id of the
  request they answer. 0 for unsolicited messages (e.g. the nmea stream). */
@@ -206,6 +210,8 @@ extern "C" {
 #define meshtastic_InterdeviceMessage_directory_listing_tag 8
 #define meshtastic_InterdeviceMessage_get_sd_info_tag 9
 #define meshtastic_InterdeviceMessage_sd_info_tag 10
+#define meshtastic_InterdeviceMessage_ping_tag   11
+#define meshtastic_InterdeviceMessage_pong_tag   12
 #define meshtastic_InterdeviceMessage_id_tag     15
 
 /* Struct field encoding specification for nanopb */
@@ -265,6 +271,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (data,file_transfer,data.file_transfer),   7)
 X(a, STATIC,   ONEOF,    MESSAGE,  (data,directory_listing,data.directory_listing),   8) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,get_sd_info,data.get_sd_info),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (data,sd_info,data.sd_info),  10) \
+X(a, STATIC,   ONEOF,    BOOL,     (data,ping,data.ping),  11) \
+X(a, STATIC,   ONEOF,    BOOL,     (data,pong,data.pong),  12) \
 X(a, STATIC,   SINGULAR, UINT32,   id,               15)
 #define meshtastic_InterdeviceMessage_CALLBACK NULL
 #define meshtastic_InterdeviceMessage_DEFAULT NULL
