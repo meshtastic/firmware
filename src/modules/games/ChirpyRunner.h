@@ -64,7 +64,7 @@ class ChirpyRunnerGame
   private:
     static constexpr int32_t SUBPX = 16;          // fixed-point sub-pixels per pixel
     static constexpr int32_t GRAVITY = 7;         // downward accel (sub-px/step^2)
-    static constexpr int32_t JUMP_V = 78;         // initial upward velocity on a hop (sub-px/step)
+    static constexpr int32_t JUMP_V = 75;         // initial upward velocity on a hop (sub-px/step)
     static constexpr int32_t SPEED_BASE = 32;     // base scroll speed (sub-px/step == 2 px)
     static constexpr int32_t SPEED_INC = 2;       // speed added per point scored
     static constexpr uint32_t SPEED_CAP_PTS = 35; // score at which the speed ramp caps (== 5 px/step)
@@ -74,6 +74,8 @@ class ChirpyRunnerGame
     // The min is kept just above the ~22-tick jump so obstacles come in a tight but landable rhythm.
     static constexpr int16_t GAP_STEPS_MIN = 23; // min ticks between spawns (> jump duration)
     static constexpr int16_t GAP_STEPS_MAX = 40; // max ticks between spawns
+
+    static constexpr int8_t BUILDING_HEIGHTS[] = {8, 12, 16}; // three tiers of obstacle heights (pixels)
 
     static constexpr int32_t CLOUD_SPEED_SUB = 6; // background scroll speed (sub-px/step, slow parallax)
     static constexpr int16_t CLOUD_W = 8;         // cloud puff width (for off-screen wrap)
@@ -131,7 +133,7 @@ class ChirpyRunner : public Game
   public:
     ChirpyRunner();
 
-    const char *name() const override { return "Chirpy Runner"; }
+    const char *name() const override { return "Chirpy Dash"; }
 
     void start(uint32_t seed) override { game.reset(seed); }
     bool tick() override { return game.step(); }

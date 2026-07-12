@@ -51,7 +51,7 @@ void ChirpyRunnerGame::spawnObstacle()
         obst[i].w = OBST_W;
         // Three height tiers so timing varies (kept clearable with margin for a forgiving jump).
         const uint32_t tier = nextRandom() % 3u;
-        obst[i].h = tier == 0 ? 8 : (tier == 1 ? 11 : 15);
+        obst[i].h = BUILDING_HEIGHTS[tier];
         obst[i].colorIdx = static_cast<uint8_t>((spawnCount / 10u) % OBST_COLOR_COUNT);
         spawnCount++;
         return;
@@ -179,7 +179,7 @@ void ChirpyRunner::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
     const int16_t cx = x + w / 2;
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(cx, y, "CHIRPY RUNNER");
+    display->drawString(cx, y, "CHIRPY DASH");
     const int16_t logoX = x + (w - chirpy_run_width) / 2;
     const int16_t logoY = y + 15;
     display->drawXbm(logoX, logoY, chirpy_run_width, chirpy_run_height, chirpy_run);
