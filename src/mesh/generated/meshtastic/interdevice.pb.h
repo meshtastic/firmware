@@ -46,7 +46,7 @@ typedef PB_BYTES_ARRAY_T(4096) meshtastic_FileTransfer_filedata_t;
 /* Message for file operations */
 typedef struct _meshtastic_FileTransfer {
     meshtastic_FileOperation operation; /* File operation (GET, POST, PUT, DELETE) */
-    char filepath[255]; /* Path of the file on the SD card */
+    char filepath[256]; /* Path of the file on the SD card */
     meshtastic_FileTransfer_filedata_t filedata; /* Chunk content (POST/PUT request, GET response) */
     bool success; /* Response: Was the operation successful? */
     char message[255]; /* Response: Status message */
@@ -60,7 +60,7 @@ typedef struct _meshtastic_FileTransfer {
 
 /* Message for structured directory listing */
 typedef struct _meshtastic_DirectoryListing {
-    char directory[255]; /* Path of the directory */
+    char directory[256]; /* Path of the directory */
     /* One page of entry names, full FAT LFN length so they round-trip into
  FileTransfer.filepath. Page size is the max_count in
  interdevice.options; page through with offset and total_count. */
@@ -291,11 +291,11 @@ extern const pb_msgdesc_t meshtastic_InterdeviceMessage_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_INTERDEVICE_PB_H_MAX_SIZE meshtastic_InterdeviceMessage_size
-#define meshtastic_DirectoryListing_size         4656
-#define meshtastic_FileTransfer_size             4645
+#define meshtastic_DirectoryListing_size         4657
+#define meshtastic_FileTransfer_size             4646
 #define meshtastic_I2CResult_size                261
 #define meshtastic_I2CTransaction_size           271
-#define meshtastic_InterdeviceMessage_size       4665
+#define meshtastic_InterdeviceMessage_size       4666
 #define meshtastic_SdCardInfo_size               39
 
 #ifdef __cplusplus
