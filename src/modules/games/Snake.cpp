@@ -148,6 +148,8 @@ bool SnakeGame::step()
 
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "main.h"
 #if SNAKE_ANNOUNCE_HIGH_SCORE
@@ -204,14 +206,23 @@ void Snake::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(cx, y, "S N A K E");
     // Snake glyph, centred below the title.
-    display->drawXbm(x + (w - snake_width) / 2, y + 15, snake_width, snake_height, snake);
+    const int16_t logoX = x + (w - snake_width) / 2;
+    const int16_t logoY = y + 15;
+    display->drawXbm(logoX, logoY, snake_width, snake_height, snake);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // On a colour display, paint the snake green with a red tongue. The forked tongue is the pair
+    // of pixels poking out past the body on the right edge (~row 6 of the 16x16 glyph); a red
+    // region registered after the green one wins where they overlap, so the body stays green.
+    const uint16_t bg = graphics::getThemeBodyBg();
+    graphics::registerTFTColorRegionDirect(logoX, logoY, snake_width, snake_height, graphics::TFTPalette::Green, bg);
+    graphics::registerTFTColorRegionDirect(logoX + 13, logoY + 5, 3, 4, graphics::TFTPalette::Red, bg);
+#endif
     char hi[32];
     if (scores_.scoreAt(0) > 0 && scores_.nameAt(0)[0] != '\0')
         snprintf(hi, sizeof(hi), "High: %s %lu", scores_.nameAt(0), static_cast<unsigned long>(scores_.scoreAt(0)));
     else
         snprintf(hi, sizeof(hi), "High: %lu", static_cast<unsigned long>(scores_.scoreAt(0)));
     display->drawString(cx, y + 34, hi);
-    display->drawString(cx, y + 48, "SELECT to play");
 }
 
 void Snake::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)

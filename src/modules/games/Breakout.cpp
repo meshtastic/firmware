@@ -195,7 +195,6 @@ void Breakout::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
     else
         snprintf(hi, sizeof(hi), "High: %lu", static_cast<unsigned long>(scores_.scoreAt(0)));
     display->drawString(cx, y + 34, hi);
-    display->drawString(cx, y + 48, "SELECT to play");
 }
 
 void Breakout::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)

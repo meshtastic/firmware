@@ -251,6 +251,8 @@ bool TetrisGame::step()
 #include "NodeDB.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "main.h"
 #include <cstddef>
@@ -342,6 +344,32 @@ void Tetris::handleInput(input_broker_event ev)
 // Rendering
 // ---------------------------------------------------------------------------
 
+#if GRAPHICS_TFT_COLORING_ENABLED
+// Classic tetromino colours, indexed by piece type (0..6 == I O T S Z J L). Native RGB565.
+static uint16_t tetrominoColor(uint8_t type)
+{
+    using namespace graphics;
+    switch (type) {
+    case 0:
+        return TFTPalette::Cyan; // I
+    case 1:
+        return TFTPalette::Yellow; // O
+    case 2:
+        return TFTPalette::Magenta; // T
+    case 3:
+        return TFTPalette::Green; // S
+    case 4:
+        return TFTPalette::Red; // Z
+    case 5:
+        return TFTPalette::Blue; // J
+    case 6:
+        return TFTPalette::Orange; // L
+    default:
+        return TFTPalette::White;
+    }
+}
+#endif
+
 void Tetris::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
 {
     display->setColor(WHITE);
@@ -350,14 +378,20 @@ void Tetris::drawAttract(OLEDDisplay *display, int16_t x, int16_t y)
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(cx, y, "T E T R I S");
-    display->drawXbm(x + (w - tetris_width) / 2, y + 15, tetris_width, tetris_height, tetris);
+    const int16_t logoX = x + (w - tetris_width) / 2;
+    const int16_t logoY = y + 15;
+    display->drawXbm(logoX, logoY, tetris_width, tetris_height, tetris);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // The logo glyph is a T tetromino -- tint it the T-piece colour on colour displays.
+    graphics::registerTFTColorRegionDirect(logoX, logoY, tetris_width, tetris_height, tetrominoColor(2),
+                                           graphics::getThemeBodyBg());
+#endif
     char hi[32];
     if (scores_.scoreAt(0) > 0 && scores_.nameAt(0)[0] != '\0')
         snprintf(hi, sizeof(hi), "High: %s %lu", scores_.nameAt(0), static_cast<unsigned long>(scores_.scoreAt(0)));
     else
         snprintf(hi, sizeof(hi), "High: %lu", static_cast<unsigned long>(scores_.scoreAt(0)));
     display->drawString(cx, y + 34, hi);
-    display->drawString(cx, y + 48, "SEL=Play  Hold=Scores");
 }
 
 void Tetris::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
@@ -444,6 +478,48 @@ void Tetris::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
             if (TetrisGame::pieceCell(nxt.type, nxt.rot, pr, pc))
                 display->fillRect(lpx + static_cast<int16_t>(pc) * PREV_PX, nxtPreviewY + static_cast<int16_t>(pr) * PREV_PX,
                                   PREV_PX - 1, PREV_PX - 1);
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // On a colour display (e.g. HUB75), tint every block with its tetromino colour. The mono buffer
+    // still carries the block pixels drawn above; registering a colour region over each run of
+    // same-colour cells makes those "on" pixels render in colour instead of the theme foreground.
+    // Runs are merged horizontally per row to stay within the region budget, and empty cells cost
+    // nothing, so the region count only grows with how full the board is.
+    const uint16_t bg = graphics::getThemeBodyBg();
+
+    // Combined colour grid: locked cells plus the falling piece (same colour source == type + 1).
+    uint8_t cg[TetrisGame::BOARD_ROWS][TetrisGame::BOARD_COLS];
+    for (uint8_t r = 0; r < TetrisGame::BOARD_ROWS; r++)
+        for (uint8_t c = 0; c < TetrisGame::BOARD_COLS; c++)
+            cg[r][c] = game.board[r][c];
+    for (uint8_t pr = 0; pr < 4; pr++)
+        for (uint8_t pc = 0; pc < 4; pc++) {
+            if (!TetrisGame::pieceCell(cur.type, cur.rot, pr, pc))
+                continue;
+            const int br = cur.row + pr, bc = cur.col + pc;
+            if (br >= 0 && br < TetrisGame::BOARD_ROWS && bc >= 0 && bc < TetrisGame::BOARD_COLS)
+                cg[br][bc] = static_cast<uint8_t>(cur.type + 1);
+        }
+    for (uint8_t r = 0; r < TetrisGame::BOARD_ROWS; r++) {
+        uint8_t c = 0;
+        while (c < TetrisGame::BOARD_COLS) {
+            const uint8_t v = cg[r][c];
+            if (v == 0) {
+                c++;
+                continue;
+            }
+            const uint8_t c0 = c;
+            while (c < TetrisGame::BOARD_COLS && cg[r][c] == v)
+                c++;
+            const int16_t rx = ox + static_cast<int16_t>(c0) * CELL_PX;
+            const int16_t ry = oy + static_cast<int16_t>(r) * CELL_PX;
+            const int16_t rw = static_cast<int16_t>(c - c0) * CELL_PX - 1; // span the run, drop the trailing gap
+            graphics::registerTFTColorRegionDirect(rx, ry, rw, CELL_PX - 1, tetrominoColor(static_cast<uint8_t>(v - 1)), bg);
+        }
+    }
+    // Next-piece preview: one region over the 4x4 grid tinted with its colour.
+    graphics::registerTFTColorRegionDirect(lpx, nxtPreviewY, 4 * PREV_PX, 4 * PREV_PX, tetrominoColor(nxt.type), bg);
+#endif
 }
 
 // ---------------------------------------------------------------------------

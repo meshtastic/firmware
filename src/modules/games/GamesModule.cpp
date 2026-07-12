@@ -3,6 +3,7 @@
 #if HAS_SCREEN && BASEUI_HAS_GAMES
 
 #include "Breakout.h"
+#include "ChirpyRunner.h"
 #include "PowerFSM.h"
 #include "Snake.h"
 #include "Tetris.h"
@@ -18,7 +19,10 @@ GamesModule::GamesModule() : SinglePortModule("games", meshtastic_PortNum_PRIVAT
     // Register the hosted games. Order sets the attract-screen cycle order (Snake is shown first).
     games.push_back(new Snake());
     games.push_back(new Tetris());
-    games.push_back(new Breakout());
+    games.push_back(new ChirpyRunner());
+    // Breakout is implemented (see Breakout.{h,cpp}) but disabled for now -- the gameplay needs
+    // more work before it's fun. Re-enable by registering it here.
+    // games.push_back(new Breakout());
     inputObserver.observe(inputBroker);
 
     // Keep the tick thread alive at boot only if a game broadcasts periodically; otherwise idle
@@ -265,8 +269,6 @@ void GamesModule::drawHighScores(OLEDDisplay *display, int16_t x, int16_t y, Hig
     display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(x, y, "HIGH SCORES");
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(x + display->getWidth() - 2, y, "Hold=Clear");
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const int16_t rowH = (display->getHeight() - FONT_HEIGHT_SMALL) / HighScoreTableBase::HS_COUNT;
     for (uint8_t i = 0; i < HighScoreTableBase::HS_COUNT; i++) {
