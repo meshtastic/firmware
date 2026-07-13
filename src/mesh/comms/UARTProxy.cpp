@@ -44,9 +44,13 @@ int UARTProxy::read()
     return ret;
 }
 
-void UARTProxy::flush(bool wait)
+void UARTProxy::flush(bool txOnly)
 {
-    buf_clear();
+    // writes are packed into one uplink message each, so there is never
+    // anything in flight to wait for. Dropping the unread receive buffer is
+    // what flush(false) is for (GPS::clearBuffer uses it).
+    if (!txOnly)
+        buf_clear();
 }
 
 uint32_t UARTProxy::baudRate()
@@ -88,7 +92,11 @@ size_t UARTProxy::write(char *buffer, size_t size)
     memcpy(message.data.nmea, buffer, size);
     message.which_data = meshtastic_InterdeviceMessage_nmea_tag;
     LOG_DEBUG("UARTProxy::write %u bytes", (unsigned)size);
-    sensecapIndicator->send_uplink(message);
+    // the link refuses to send before the handshake, and to a co-processor
+    // running incompatible firmware: report the bytes as not written rather
+    // than pretending a GPS command was delivered
+    if (!sensecapIndicator->send_uplink(message))
+        return 0;
     return size;
 }
 

@@ -7,12 +7,8 @@
 #include <inttypes.h>
 
 /**
- * Stream implementation that proxies a serial port living on the RP2040
- * over the interdevice link, so the regular GPS driver of the main
- * firmware can talk to the GNSS module attached to the secondary MCU.
- *
- * Reads are served from a ring buffer that the link fills with the NMEA
- * sentences the co-processor forwards; writes are packed into a single
+ * Stream that proxies the GPS serial port of the RP2040 over the interdevice
+ * link: reads come from a ring buffer the link fills, writes go out as one
  * uplink message each.
  */
 class UARTProxy : public Stream
@@ -26,9 +22,11 @@ class UARTProxy : public Stream
     int available();
     int peek();
     int read();
-    void flush(bool wait);
-    // Stream/Print contract: flush() through a base pointer must behave
-    // like the HardwareSerial variant callers expect
+    // HardwareSerial semantics: the flag is txOnly, not "wait". Only a
+    // flush(false) discards what has been received but not read yet.
+    void flush(bool txOnly);
+    // HardwareSerial::flush() is uartFlushTxOnly(txOnly = true): it waits
+    // for the transmitter and keeps the receive buffer
     void flush() override { flush(true); }
     // writes are buffered into one uplink message, so this is its capacity
     // (Print's default of 0 would make drivers back off forever)

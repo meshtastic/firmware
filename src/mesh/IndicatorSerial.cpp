@@ -4,6 +4,7 @@
 #include "concurrency/LockGuard.h"
 #include "mesh/comms/UARTProxy.h"
 #include <HardwareSerial.h>
+#include <Throttle.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -41,7 +42,8 @@ int32_t SensecapIndicator::runOnce()
 // the protocol version it speaks. Caller holds link_lock.
 void SensecapIndicator::probe_link()
 {
-    if (last_probe != 0 && millis() - last_probe < 250)
+    // last_probe 0 means we have not probed at all yet, which must not throttle
+    if (last_probe != 0 && Throttle::isWithinTimespanMs(last_probe, 250))
         return;
     meshtastic_InterdeviceMessage &msg = tx_message;
     memset(&msg, 0, sizeof(msg));

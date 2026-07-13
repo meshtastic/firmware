@@ -640,11 +640,8 @@ void setup()
     digitalWrite(SENSOR_POWER_CTRL_EXPANDER, SENSOR_POWER_ON_EXPANDER);
 #endif
     sensecapIndicator = new SensecapIndicator(Serial2);
-    // The bus behind the co-processor is scanned right below and the devices
-    // found there are registered once, so the link has to be up by then: a
-    // co-processor that only answers later would leave its sensors
-    // undiscovered for the rest of the session. It announces itself when it
-    // has booted, so this normally returns as soon as that message arrives.
+    // the bus behind it is scanned right below and its devices are registered
+    // once, so the link has to be up by then
     if (!sensecapIndicator->wait_ready(5000))
         LOG_ERROR("RP2040 co-processor did not answer, its sensors, GPS and SD card are unavailable this session");
 #endif
