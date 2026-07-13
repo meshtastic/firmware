@@ -50,11 +50,7 @@
 #include "SPILock.h"
 #include "modules/StoreForwardModule.h"
 #include <Preferences.h>
-#include <esp_efuse.h>
-#include <esp_efuse_table.h>
 #include <nvs_flash.h>
-#include <soc/efuse_reg.h>
-#include <soc/soc.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -69,11 +65,6 @@
 
 #ifdef ARCH_RP2040
 #include <hardware/watchdog.h>
-#include <pico/unique_id.h>
-#endif
-
-#ifdef ARCH_STM32WL
-#include <stm32wlxx_hal.h>
 #endif
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
@@ -380,6 +371,9 @@ uint32_t radioGeneration;
 // FIXME - move this somewhere else
 extern void getMacAddr(uint8_t *dmac);
 
+// Per-architecture hardware device id (see target_specific.h); implemented in src/platform/<arch>/.
+extern bool getDeviceId(uint8_t *deviceId);
+
 /**
  *
  * Normally userids are unique and start with +country code to look like Signal phone numbers.
@@ -403,21 +397,6 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-// Derive device_id from the factory MAC when no better silicon source exists:
-// MAC in bytes 0-5, bytes 6-15 zero. Deterministic, survives reboots and flash erases.
-static void deriveDeviceIdFromMacAddr()
-{
-    getMacAddr(ourMacAddr);
-    const uint8_t zero_mac[sizeof(ourMacAddr)] = {0};
-    if (memcmp(ourMacAddr, zero_mac, sizeof(ourMacAddr)) == 0) {
-        LOG_WARN("MAC is all zeros, leaving device_id unset");
-        return;
-    }
-    memset(myNodeInfo.device_id.bytes, 0, sizeof(myNodeInfo.device_id.bytes));
-    memcpy(myNodeInfo.device_id.bytes, ourMacAddr, sizeof(ourMacAddr));
-    myNodeInfo.device_id.size = 16;
-}
-
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
@@ -430,64 +409,14 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    // Get device unique id. Re-derived from silicon on every boot: clear any value loaded
-    // from disk first so a failed read below leaves it unset rather than stale.
+    // Get device unique id. Derived from silicon (or the factory MAC) by the per-architecture
+    // getDeviceId() in src/platform/<arch>/. Re-read on every boot: clear any value loaded from
+    // disk first so getDeviceId() returning false leaves it unset rather than stale.
     myNodeInfo.device_id.size = 0;
     memset(myNodeInfo.device_id.bytes, 0, sizeof(myNodeInfo.device_id.bytes));
-#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) ||            \
-    defined(CONFIG_IDF_TARGET_ESP32C6)
-    uint32_t unique_id[4];
-    // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
-    // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
-    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
-    if (err == ESP_OK) {
-        memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
-        myNodeInfo.device_id.size = 16;
-    } else {
-        LOG_WARN("Failed to read unique id from efuse");
+    if (getDeviceId(myNodeInfo.device_id.bytes)) {
+        myNodeInfo.device_id.size = sizeof(myNodeInfo.device_id.bytes);
     }
-#elif defined(ARCH_NRF54L15)
-    // nRF54L15: DEVICEID is under FICR->INFO sub-struct (not top-level as on nRF52)
-    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
-    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
-    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
-    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
-    myNodeInfo.device_id.size = 16;
-#elif defined(ARCH_NRF52)
-    // Nordic applies a FIPS compliant Random ID to each chip at the factory
-    // We concatenate the device address to the Random ID to create a unique ID for now
-    // This will likely utilize a crypto module in the future
-    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
-    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
-    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
-    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
-    myNodeInfo.device_id.size = 16;
-    // Uncomment below to print the device id
-#elif defined(ARCH_RP2040)
-    // RP2040/RP2350: 64-bit unique board id (flash serial / OTP) in bytes 0-7, bytes 8-15 zero
-    pico_unique_board_id_t board_id;
-    pico_get_unique_board_id(&board_id);
-    memcpy(myNodeInfo.device_id.bytes, board_id.id, sizeof(board_id.id));
-    memset(myNodeInfo.device_id.bytes + sizeof(board_id.id), 0, sizeof(myNodeInfo.device_id.bytes) - sizeof(board_id.id));
-    myNodeInfo.device_id.size = 16;
-#elif defined(ARCH_STM32WL)
-    // STM32WL: 96-bit factory-programmed silicon UID (words w0..w2 little-endian) in bytes 0-11, bytes 12-15 zero
-    uint32_t uid[3] = {HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2()};
-    memcpy(myNodeInfo.device_id.bytes, uid, sizeof(uid));
-    memset(myNodeInfo.device_id.bytes + sizeof(uid), 0, sizeof(myNodeInfo.device_id.bytes) - sizeof(uid));
-    myNodeInfo.device_id.size = 16;
-#elif ARCH_PORTDUINO
-    if (portduino_config.has_device_id) {
-        memcpy(myNodeInfo.device_id.bytes, portduino_config.device_id, sizeof(portduino_config.device_id));
-        myNodeInfo.device_id.size = sizeof(portduino_config.device_id);
-    } else {
-        // Config-supplied id stays preferred: host NIC/BT MACs can be unstable (docker, multi-NIC)
-        deriveDeviceIdFromMacAddr();
-    }
-#else
-    // No factory unique-id silicon source on this platform (classic ESP32 in particular)
-    deriveDeviceIdFromMacAddr();
-#endif
 
     // if (myNodeInfo.device_id.size == 16) {
     //     std::string deviceIdHex;

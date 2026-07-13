@@ -49,6 +49,13 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes);
 // is the memory region filled with a single character?
 bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
 
+// Fallback device_id derivation for platforms without dedicated unique-id silicon:
+// copies the 6-byte factory MAC into the caller's (pre-zeroed) deviceId buffer. Returns
+// true, or false when the MAC is all zeros (so two blank devices can't collide on an
+// all-zero id, and the caller leaves device_id unset). Deterministic; survives reboots
+// and flash erases. See getDeviceId() in target_specific.h.
+bool getMacAddrDeviceId(uint8_t *deviceId);
+
 bool isOneOf(int item, int count, ...);
 
 const std::string vformat(const char *const zcFormat, ...);

@@ -12,6 +12,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
+#include <cstring>
 #include <stdio.h>
 
 #include "NodeDB.h"
@@ -94,6 +95,21 @@ void getMacAddr(uint8_t *dmac)
     dmac[3] = 0x15;
     dmac[4] = 0x00;
     dmac[5] = 0x01;
+#endif
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+#if defined(NRF_FICR)
+    // nRF54L15: DEVICEID lives under the FICR->INFO sub-struct (not top-level as on nRF52).
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(deviceId, &device_id_start, sizeof(device_id_start));
+    memcpy(deviceId + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    return true;
+#else
+    // No confirmed FICR path yet: fall back to the (placeholder) MAC derivation.
+    return getMacAddrDeviceId(deviceId);
 #endif
 }
 

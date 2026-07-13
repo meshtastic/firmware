@@ -79,6 +79,22 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
     return true;
 }
 
+// Defined per-architecture in src/platform/<arch>/; forward-declared here to avoid
+// pulling the Arduino headers of target_specific.h into this lightweight utility TU.
+extern void getMacAddr(uint8_t *dmac);
+
+bool getMacAddrDeviceId(uint8_t *deviceId)
+{
+    uint8_t mac[6];
+    getMacAddr(mac);
+    if (memfll(mac, 0, sizeof(mac))) {
+        LOG_WARN("MAC is all zeros, leaving device_id unset");
+        return false;
+    }
+    memcpy(deviceId, mac, sizeof(mac));
+    return true;
+}
+
 bool isOneOf(int item, int count, ...)
 {
     va_list args;
