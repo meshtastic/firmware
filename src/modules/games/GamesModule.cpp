@@ -11,6 +11,9 @@
 #include "graphics/ScreenFonts.h"
 #include "main.h"
 #include "mesh/NodeDB.h"
+#if GAMES_ANNOUNCE_HIGH_SCORE
+#include "MeshService.h"
+#endif
 
 GamesModule *gamesModule;
 
@@ -87,9 +90,31 @@ void GamesModule::recordHighScore(const char *initials)
     lastWasNewTop = isNewTop;
     if (lastRank >= 0)
         active->scores().save(); // table changed -- the only time we write flash
-    active->onNewHighScore(*this, initials, lastScore, isNewTop);
+#if GAMES_ANNOUNCE_HIGH_SCORE
+    if (isNewTop && lastScore > 0)
+        announceHighScore(initials, lastScore);
+#endif
     requestRedraw();
 }
+
+#if GAMES_ANNOUNCE_HIGH_SCORE
+void GamesModule::announceHighScore(const char *initials, uint32_t score)
+{
+    if (!active || !service)
+        return;
+    meshtastic_MeshPacket *p = allocDataPacket();
+    p->to = NODENUM_BROADCAST;
+    p->channel = 0; // primary channel
+    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    // One shared message for every game, with the game's name spliced in. ASCII only -- avoids tofu
+    // if a receiving node's font lacks a glyph.
+    p->decoded.payload.size = snprintf(reinterpret_cast<char *>(p->decoded.payload.bytes), sizeof(p->decoded.payload.bytes),
+                                       "%s set a new %s high score: %lu", (initials && initials[0]) ? initials : owner.short_name,
+                                       active->name(), static_cast<unsigned long>(score));
+    service->sendToMesh(p);
+    LOG_INFO("Games: announced new %s high score %lu", active->name(), static_cast<unsigned long>(score));
+}
+#endif
 
 void GamesModule::exitToIdle()
 {

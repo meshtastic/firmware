@@ -152,11 +152,6 @@ bool SnakeGame::step()
 #include "graphics/TFTPalette.h"
 #include "graphics/images.h"
 #include "main.h"
-#if SNAKE_ANNOUNCE_HIGH_SCORE
-#include "GamesModule.h"
-#include "MeshService.h"
-#include "mesh/NodeDB.h"
-#endif
 
 // --- Pixel layout on a 128x64 OLED -----------------------------------------------------------
 // Each cell is CELL_PX square. The GRID_W x GRID_H playfield (128x48) is bottom-aligned, leaving
@@ -265,24 +260,5 @@ void Snake::drawPlaying(OLEDDisplay *display, int16_t x, int16_t y)
     graphics::registerTFTColorRegionDirect(ox + f.x * CELL_PX + 1, oy + f.y * CELL_PX + 1, 2, 2, graphics::TFTPalette::Red, bg);
 #endif
 }
-
-#if SNAKE_ANNOUNCE_HIGH_SCORE
-void Snake::onNewHighScore(GamesModule &host, const char *initials, uint32_t score, bool isNewTop)
-{
-    if (!isNewTop || score == 0 || !service)
-        return;
-    meshtastic_MeshPacket *p = host.gameAllocDataPacket();
-    p->to = NODENUM_BROADCAST;
-    p->channel = 0; // primary channel for v1
-    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-    // ASCII only -- avoids tofu if a receiving node's font lacks an emoji glyph.
-    p->decoded.payload.size =
-        snprintf(reinterpret_cast<char *>(p->decoded.payload.bytes), sizeof(p->decoded.payload.bytes),
-                 "%s set a new Snake high score: %lu", (initials && initials[0]) ? initials : owner.short_name,
-                 static_cast<unsigned long>(score));
-    service->sendToMesh(p);
-    LOG_INFO("Snake: announced new high score %lu", static_cast<unsigned long>(score));
-}
-#endif
 
 #endif // HAS_SCREEN && BASEUI_HAS_GAMES

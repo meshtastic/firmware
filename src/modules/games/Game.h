@@ -46,12 +46,12 @@ class Game
     virtual HighScoreTableBase &scores() = 0;
 
     // --- Mesh (defaults are no-ops; only games with a wire protocol override these) ---
+    // Note: the new-high-score announcement is NOT here -- it is shared by every game and lives in
+    // GamesModule (which splices name() into one common message).
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) { return ProcessMessage::CONTINUE; }
     virtual bool wantsPeriodicMesh() const { return false; }
     // Perform any due periodic broadcast and return ms until the next one (-1 == nothing pending).
     virtual int32_t meshTick(GamesModule &host) { return -1; }
-    // Called after a local high score is recorded, so the game can broadcast it.
-    virtual void onNewHighScore(GamesModule &host, const char *initials, uint32_t score, bool isNewTop) {}
 };
 
 #endif // HAS_SCREEN && BASEUI_HAS_GAMES

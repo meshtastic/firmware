@@ -110,17 +110,10 @@ class SnakeGame
 #include "Game.h"
 #include "HighScoreTable.h"
 
-// High-score mesh announcement is a COMPILE-TIME option, default OFF. Broadcasting to shared
-// airtime must be opted into at build time with -DSNAKE_ANNOUNCE_HIGH_SCORE=1; when disabled
-// (the default) the announcement code is compiled out entirely -- there is no runtime toggle.
-#ifndef SNAKE_ANNOUNCE_HIGH_SCORE
-#define SNAKE_ANNOUNCE_HIGH_SCORE 0
-#endif
-
 /**
  * Snake as a hosted Game. Wraps the pure SnakeGame logic above and supplies the attract art, the
  * playfield renderer, the direction input, the length-based speed curve, and its own high-score
- * table. Optionally announces a new all-time #1 as a plain text message (compile-time gated).
+ * table. The new-high-score mesh announcement is shared by all games and lives in GamesModule.
  */
 class Snake : public Game
 {
@@ -141,10 +134,6 @@ class Snake : public Game
     void drawPlaying(OLEDDisplay *display, int16_t x, int16_t y) override;
 
     HighScoreTableBase &scores() override { return scores_; }
-
-#if SNAKE_ANNOUNCE_HIGH_SCORE
-    void onNewHighScore(GamesModule &host, const char *initials, uint32_t score, bool isNewTop) override;
-#endif
 
   private:
     // On-disk high-score record; layout preserved from the original SnakeModule so snake.dat keeps

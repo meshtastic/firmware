@@ -11,6 +11,14 @@
 #include "mesh/SinglePortModule.h"
 #include <vector>
 
+// Broadcasting a new all-time #1 to the mesh is a COMPILE-TIME option, default OFF. Spending shared
+// airtime must be opted into at build time with -DGAMES_ANNOUNCE_HIGH_SCORE=1; when disabled (the
+// default) the announcement code is compiled out entirely -- there is no runtime toggle. The
+// announcement is shared by every hosted game, with the game's name() spliced into the message.
+#ifndef GAMES_ANNOUNCE_HIGH_SCORE
+#define GAMES_ANNOUNCE_HIGH_SCORE 0
+#endif
+
 enum GamesUiState : uint8_t {
     GAMES_IDLE,     // attract screen of the selected game; OSThread idle (unless a game broadcasts)
     GAMES_PLAYING,  // active game running; tick thread ticking
@@ -65,6 +73,10 @@ class GamesModule : public SinglePortModule, public Observable<const UIFrameEven
     // === Shared game-over / high-score flow ===
     void promptForInitials();
     void recordHighScore(const char *initials);
+#if GAMES_ANNOUNCE_HIGH_SCORE
+    // Broadcast a new all-time #1 as a plain text message, shared by every game (name() spliced in).
+    void announceHighScore(const char *initials, uint32_t score);
+#endif
 
     // === Shared rendering ===
     void drawCenteredLines(OLEDDisplay *display, int16_t x, int16_t y, const char *const *lines, uint8_t count);
