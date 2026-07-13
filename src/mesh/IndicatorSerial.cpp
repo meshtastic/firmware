@@ -25,11 +25,31 @@ int32_t SensecapIndicator::runOnce()
     // A requester is pumping the link itself and holds link_lock for up
     // to its full request timeout; blocking on the lock here would stall
     // every other thread of the cooperative main loop with it
-    if (request_in_flight)
+    if (requests_in_flight > 0)
         return (10);
     concurrency::LockGuard guard(&link_lock);
     pump();
+    // Keep probing until the co-processor has answered the handshake: it
+    // may boot slower than we do, or reboot on its watchdog. Without this
+    // the bridge would stay dead for the rest of the session.
+    if (!handshake_done)
+        probe_link();
     return (10);
+}
+
+// Send a ping, rate limited. The co-processor answers with a pong carrying
+// the protocol version it speaks. Caller holds link_lock.
+void SensecapIndicator::probe_link()
+{
+    if (last_probe != 0 && millis() - last_probe < 250)
+        return;
+    meshtastic_InterdeviceMessage &msg = tx_message;
+    memset(&msg, 0, sizeof(msg));
+    msg.which_data = meshtastic_InterdeviceMessage_ping_tag;
+    msg.data.ping = meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT;
+    stamp_request(msg);
+    send_uplink_unlocked(msg);
+    last_probe = millis();
 }
 
 // Read whatever is available on the link and process complete packets
@@ -69,23 +89,35 @@ uint32_t SensecapIndicator::stamp_request(meshtastic_InterdeviceMessage &request
     return next_request_id;
 }
 
-// callers hold link_lock: the co-processor has answered at least once and
+// callers hold link_lock: the co-processor has completed the handshake and
 // speaks our protocol version. Fails fast instead of timing out per request.
 bool SensecapIndicator::link_ready()
 {
-    return packets_received > 0 && link_compatible;
+    return handshake_done && link_compatible;
 }
 
-bool SensecapIndicator::i2c_transact(meshtastic_InterdeviceMessage &request, meshtastic_I2CResult *result, uint32_t timeout_ms)
+bool SensecapIndicator::i2c_transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen, meshtastic_I2CResult *result,
+                                     uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (!link_ready())
         return false;
 
-    stamp_request(request);
+    meshtastic_InterdeviceMessage &msg = tx_message;
+    memset(&msg, 0, sizeof(msg));
+    msg.which_data = meshtastic_InterdeviceMessage_i2c_transaction_tag;
+    msg.data.i2c_transaction.address = address;
+    msg.data.i2c_transaction.read_len = rlen;
+    if (wlen > sizeof(msg.data.i2c_transaction.write_data.bytes))
+        return false;
+    msg.data.i2c_transaction.write_data.size = wlen;
+    if (wlen)
+        memcpy(msg.data.i2c_transaction.write_data.bytes, wbuf, wlen);
+
+    stamp_request(msg);
     i2c_result_ready = false;
-    if (!send_uplink_unlocked(request))
+    if (!send_uplink_unlocked(msg))
         return false;
 
     if (!wait_response(i2c_result_ready, timeout_ms))
@@ -110,7 +142,7 @@ bool SensecapIndicator::file_request(meshtastic_InterdeviceMessage &request, mes
 bool SensecapIndicator::file_read(const char *path, uint32_t offset, uint32_t length, meshtastic_FileTransfer *out,
                                   uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (!link_ready())
         return false;
@@ -128,7 +160,7 @@ bool SensecapIndicator::file_read(const char *path, uint32_t offset, uint32_t le
 bool SensecapIndicator::file_write(const char *path, uint32_t offset, const uint8_t *data, size_t len, bool create,
                                    meshtastic_FileTransfer *out, uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (!link_ready())
         return false;
@@ -148,7 +180,7 @@ bool SensecapIndicator::file_write(const char *path, uint32_t offset, const uint
 
 bool SensecapIndicator::file_remove(const char *path, meshtastic_FileTransfer *out, uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (!link_ready())
         return false;
@@ -163,7 +195,7 @@ bool SensecapIndicator::file_remove(const char *path, meshtastic_FileTransfer *o
 
 bool SensecapIndicator::list_directory(const char *path, uint32_t offset, meshtastic_DirectoryListing *out, uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (!link_ready())
         return false;
@@ -186,7 +218,7 @@ bool SensecapIndicator::list_directory(const char *path, uint32_t offset, meshta
 
 bool SensecapIndicator::sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
     if (!link_ready())
         return false;
@@ -208,38 +240,23 @@ bool SensecapIndicator::sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms)
 
 bool SensecapIndicator::wait_ready(uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
     uint32_t start = millis();
-    uint32_t last_probe = 0;
-    bool probed = false;
-    while (!pong_received) {
+    while (!handshake_done) {
         // The co-processor never sends anything unsolicited unless a GPS
         // module is attached, so waiting passively would leave the bridge
         // down forever on GPS-less units. Ping until it answers; the pong
         // touches no peripherals on the other side and carries the
-        // protocol version it speaks.
-        if (!probed || millis() - last_probe >= 250) {
-            meshtastic_InterdeviceMessage &msg = tx_message;
-            memset(&msg, 0, sizeof(msg));
-            msg.which_data = meshtastic_InterdeviceMessage_ping_tag;
-            msg.data.ping = meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT;
-            stamp_request(msg);
-            send_uplink_unlocked(msg);
-            last_probe = millis();
-            probed = true;
-        }
+        // protocol version it speaks. If it does not answer in time,
+        // runOnce keeps probing (a slow boot must not disable the bridge
+        // for the session), but no request is sent until it does.
+        probe_link();
         pump();
-        if (pong_received)
+        if (handshake_done)
             break;
-        if (millis() - start >= timeout_ms) {
-            if (packets_received > 0) {
-                // it talks (NMEA), it just did not answer the handshake
-                LOG_WARN("RP2040 did not answer the version handshake");
-                return true;
-            }
+        if (millis() - start >= timeout_ms)
             return false;
-        }
         delay(1);
     }
     return link_compatible;
@@ -379,26 +396,34 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
         send_uplink_unlocked(pong);
         return true;
     }
-    case meshtastic_InterdeviceMessage_pong_tag:
+    case meshtastic_InterdeviceMessage_pong_tag: {
         // The handshake: the co-processor reports the protocol version it
         // speaks. Anything else than ours means its firmware does not match
         // this build, and every request would be misinterpreted.
-        pong_received = true;
-        if (message.data.pong != meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT) {
-            link_compatible = false;
-            LOG_ERROR("RP2040 speaks interdevice protocol v%u, this firmware speaks v%u. Flash the matching "
-                      "indicator_rp2040 firmware; sensors, GPS and SD card stay disabled",
-                      (unsigned)message.data.pong, (unsigned)meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT);
-        } else {
-            LOG_INFO("RP2040 link up, interdevice protocol v%u", (unsigned)message.data.pong);
+        bool compatible = message.data.pong == meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT;
+        if (!handshake_done || compatible != link_compatible) {
+            if (compatible)
+                LOG_INFO("RP2040 link up, interdevice protocol v%u", (unsigned)message.data.pong);
+            else
+                LOG_ERROR("RP2040 speaks interdevice protocol v%u, this firmware speaks v%u. Flash the matching "
+                          "indicator_rp2040 firmware; sensors, GPS and SD card stay disabled",
+                          (unsigned)message.data.pong, (unsigned)meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT);
         }
+        link_compatible = compatible;
+        handshake_done = true;
         return true;
+    }
     case meshtastic_InterdeviceMessage_nack_tag:
-        // id 0 means the request was undecodable over there; the link is
-        // single-outstanding, so that can only be the request in flight
-        if (message.id == expected_id || message.id == 0) {
+        // A nack for the request in flight is definitive: resending it would
+        // only be refused again. An id of 0 means the co-processor could not
+        // even decode the frame, which may just as well have been an
+        // unrelated NMEA uplink, so that one only ends the wait (the caller
+        // may retry it as the transport failure it is).
+        if (message.id == expected_id) {
             LOG_WARN("Request %u nacked by the co-processor", expected_id);
             request_nacked = true;
+        } else if (message.id == 0) {
+            LOG_WARN("Co-processor could not decode a frame");
         }
         return true;
     case meshtastic_InterdeviceMessage_sd_info_tag:

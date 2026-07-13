@@ -20,17 +20,68 @@
 #include "mesh/IndicatorSerial.h"
 #include "mesh/comms/I2CProxy.h"
 
+// Set while the TFT task holds spiLock around the LVGL handler, so the file
+// operations below (which run inside LVGL callbacks) can hand the SPI bus
+// back to the radio while they wait on the interdevice link
+static volatile TaskHandle_t spiLockHolder = nullptr;
+
+/**
+ * The remote FS round trips block for the request timeout, and the LVGL
+ * handler runs with spiLock held, which would starve the LoRa radio for
+ * that whole time. Nothing in a link round trip touches SPI, so give the
+ * bus back for its duration.
+ */
+class SpiLockBreak
+{
+  public:
+    SpiLockBreak()
+    {
+        held = spiLockHolder == xTaskGetCurrentTaskHandle();
+        if (held) {
+            spiLockHolder = nullptr;
+            spiLock->unlock();
+        }
+    }
+    ~SpiLockBreak()
+    {
+        if (held) {
+            spiLock->lock();
+            spiLockHolder = xTaskGetCurrentTaskHandle();
+        }
+    }
+
+  private:
+    bool held;
+};
+
 // Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
 // over the interdevice link.
 //
-// Every operation retries once on a transport timeout: a frame lost to an
-// overflow or resync must not fail the whole tile. Correlation ids make
-// this safe, a late response to the first attempt is dropped as stale.
-// Definitive answers (success=false from the co-processor) are never
-// retried, missing-tile probes stay a single round trip.
+// Retry policy: a lost frame (timeout) and a co-processor busy with card
+// maintenance (FILE_BUSY) are transient, so they are retried; a request the
+// co-processor refused (nack) or answered definitively (missing file, IO
+// error) is not. Correlation ids make retrying safe, a late response to the
+// first attempt is dropped as stale.
 class IndicatorRemoteFS : public IRemoteFS
 {
-    static const int LINK_RETRIES = 1;
+    static const int LINK_ATTEMPTS = 3;
+    static const uint32_t BUSY_BACKOFF_MS = 150;
+
+    // Returns true when the request should be sent again. `answered` is
+    // false when the link itself failed (timeout), true when the
+    // co-processor replied.
+    static bool retryable(bool answered, meshtastic_FileStatus status, int attempt)
+    {
+        if (attempt + 1 >= LINK_ATTEMPTS)
+            return false;
+        if (!answered)
+            return !sensecapIndicator->last_request_nacked(); // refused, not lost
+        if (status == meshtastic_FileStatus_FILE_BUSY) {
+            delay(BUSY_BACKOFF_MS); // card maintenance, give it a moment
+            return true;
+        }
+        return false;
+    }
 
   public:
     bool readChunk(const char *path, uint32_t offset, uint8_t *buf, uint32_t len, uint32_t *bytesRead,
@@ -38,20 +89,22 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        for (int attempt = 0; attempt <= LINK_RETRIES; attempt++) {
+        SpiLockBreak spiFree;
+        for (int attempt = 0; attempt < LINK_ATTEMPTS; attempt++) {
             memset(&result, 0, sizeof(result));
-            if (!sensecapIndicator->file_read(path, offset, len, &result))
-                continue; // transport timeout, retry
-            if (!result.success)
+            bool answered = sensecapIndicator->file_read(path, offset, len, &result);
+            if (answered && result.status == meshtastic_FileStatus_FILE_OK) {
+                uint32_t n = result.filedata.size;
+                if (n > len)
+                    n = len;
+                memcpy(buf, result.filedata.bytes, n);
+                *bytesRead = n;
+                // lv_fs positions are 32 bit, map tiles never come close
+                *fileSize = (uint32_t)result.file_size;
+                return true;
+            }
+            if (!retryable(answered, result.status, attempt))
                 return false;
-            uint32_t n = result.filedata.size;
-            if (n > len)
-                n = len;
-            memcpy(buf, result.filedata.bytes, n);
-            *bytesRead = n;
-            // lv_fs positions are 32 bit, map tiles never come close
-            *fileSize = (uint32_t)result.file_size;
-            return true;
         }
         return false;
     }
@@ -60,18 +113,22 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        for (int attempt = 0; attempt <= LINK_RETRIES; attempt++) {
+        SpiLockBreak spiFree;
+        for (int attempt = 0; attempt < LINK_ATTEMPTS; attempt++) {
             memset(&result, 0, sizeof(result));
-            if (!sensecapIndicator->file_write(path, offset, buf, len, create, &result))
-                continue; // transport timeout, retry (POST re-truncates, safe)
-            if (result.success)
-                return true;
-            // The retry of an append whose first attempt landed but whose
-            // response was lost is rejected as an offset conflict carrying
-            // the resulting file size
-            if (attempt > 0 && !create && result.file_size == (uint64_t)offset + len)
-                return true;
-            return false;
+            bool answered = sensecapIndicator->file_write(path, offset, buf, len, create, &result);
+            if (answered) {
+                if (result.status == meshtastic_FileStatus_FILE_OK)
+                    return true;
+                // An append whose first attempt landed but whose response was
+                // lost is refused as an offset conflict, and the file already
+                // holds this chunk: that is the outcome we wanted
+                if (attempt > 0 && !create && result.status == meshtastic_FileStatus_FILE_OFFSET_CONFLICT &&
+                    result.file_size == (uint64_t)offset + len)
+                    return true;
+            }
+            if (!retryable(answered, result.status, attempt))
+                return false;
         }
         return false;
     }
@@ -80,10 +137,14 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
+        SpiLockBreak spiFree;
         meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
         bool ok = false;
-        for (int attempt = 0; attempt <= LINK_RETRIES && !ok; attempt++)
+        for (int attempt = 0; attempt < LINK_ATTEMPTS && !ok; attempt++) {
             ok = sensecapIndicator->sd_info(&result);
+            if (!ok && sensecapIndicator->last_request_nacked())
+                break;
+        }
         if (!ok)
             return false;
         info.present = result.present;
@@ -100,14 +161,17 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        for (int attempt = 0; attempt <= LINK_RETRIES; attempt++) {
+        SpiLockBreak spiFree;
+        for (int attempt = 0; attempt < LINK_ATTEMPTS; attempt++) {
             memset(&result, 0, sizeof(result));
-            if (!sensecapIndicator->file_remove(path, &result))
-                continue; // transport timeout, retry
-            if (result.success)
+            bool answered = sensecapIndicator->file_remove(path, &result);
+            // delete is idempotent on the co-processor: a file that is
+            // already gone reports OK, so a retry after a lost response does
+            // not have to be guessed at here
+            if (answered && result.status == meshtastic_FileStatus_FILE_OK)
                 return true;
-            // after a lost response the retry finds the file already gone
-            return attempt > 0;
+            if (!retryable(answered, result.status, attempt))
+                return false;
         }
         return false;
     }
@@ -116,14 +180,19 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
+        SpiLockBreak spiFree;
         uint32_t offset = 0;
         while (true) {
-            bool ok = false;
-            for (int attempt = 0; attempt <= LINK_RETRIES && !ok; attempt++) {
+            bool got_page = false;
+            for (int attempt = 0; attempt < LINK_ATTEMPTS && !got_page; attempt++) {
                 memset(&listing, 0, sizeof(listing));
-                ok = sensecapIndicator->list_directory(path, offset, &listing);
+                bool answered = sensecapIndicator->list_directory(path, offset, &listing);
+                if (answered && listing.status == meshtastic_FileStatus_FILE_OK)
+                    got_page = true;
+                else if (!retryable(answered, listing.status, attempt))
+                    return false;
             }
-            if (!ok || !listing.success)
+            if (!got_page)
                 return false;
             for (pb_size_t i = 0; i < listing.filenames_count; i++)
                 entries.insert(listing.filenames[i]);
@@ -160,7 +229,14 @@ void tft_task_handler(void *param = nullptr)
 {
     while (true) {
         spiLock->lock();
+#ifdef SENSECAP_INDICATOR
+        // lets the remote FS hand the bus back while it waits on the link
+        spiLockHolder = xTaskGetCurrentTaskHandle();
+#endif
         deviceScreen->task_handler();
+#ifdef SENSECAP_INDICATOR
+        spiLockHolder = nullptr;
+#endif
         spiLock->unlock();
         deviceScreen->sleep();
     }

@@ -33,6 +33,25 @@ typedef enum _meshtastic_FileOperation {
     meshtastic_FileOperation_DELETE = 3
 } meshtastic_FileOperation;
 
+/* Outcome of a file or directory operation. The requester must be able to
+ tell a transient condition from a definitive one: BUSY is worth another
+ try, NOT_FOUND is not. */
+typedef enum _meshtastic_FileStatus {
+    meshtastic_FileStatus_FILE_UNSPECIFIED = 0,
+    meshtastic_FileStatus_FILE_OK = 1,
+    /* Retry later: the co-processor is doing card maintenance (mount,
+ free space scan) and cannot serve the request right now */
+    meshtastic_FileStatus_FILE_BUSY = 2,
+    meshtastic_FileStatus_FILE_NO_CARD = 3,
+    meshtastic_FileStatus_FILE_NOT_FOUND = 4,
+    /* PUT only: offset did not match the current end of the file. file_size
+ carries the size the file actually has, so the writer can resync (or
+ recognize its own chunk as already written after a lost response). */
+    meshtastic_FileStatus_FILE_OFFSET_CONFLICT = 5,
+    meshtastic_FileStatus_FILE_IO_ERROR = 6,
+    meshtastic_FileStatus_FILE_NOT_A_FILE = 7 /* path is a directory (GET) or not one (listing) */
+} meshtastic_FileStatus;
+
 typedef enum _meshtastic_SdCardInfo_CardType {
     meshtastic_SdCardInfo_CardType_NONE = 0,
     meshtastic_SdCardInfo_CardType_MMC = 1,
@@ -66,8 +85,8 @@ typedef struct _meshtastic_FileTransfer {
     meshtastic_FileOperation operation; /* File operation (GET, POST, PUT, DELETE) */
     char filepath[256]; /* Path of the file on the SD card */
     meshtastic_FileTransfer_filedata_t filedata; /* Chunk content (POST/PUT request, GET response) */
-    bool success; /* Response: Was the operation successful? */
-    char message[255]; /* Response: Status message */
+    meshtastic_FileStatus status; /* Response: outcome of the operation */
+    char message[255]; /* Response: human readable detail, may be empty */
     uint64_t offset; /* Byte offset of this chunk within the file (ranged GET/PUT) */
     /* GET request: number of bytes to read, 0 = max chunk size. A response
  carries at most the filedata max_size (see interdevice.options) per
@@ -86,8 +105,8 @@ typedef struct _meshtastic_DirectoryListing {
  offset and total_count. */
     pb_size_t filenames_count;
     char filenames[16][256];
-    bool success; /* Response: Was the operation successful? */
-    char message[255]; /* Response: Status message */
+    meshtastic_FileStatus status; /* Response: outcome of the operation */
+    char message[255]; /* Response: human readable detail, may be empty */
     uint32_t offset; /* Request: skip this many entries (paging) */
     uint32_t total_count; /* Response: total number of entries in the directory */
 } meshtastic_DirectoryListing;
@@ -173,6 +192,10 @@ extern "C" {
 #define _meshtastic_FileOperation_MAX meshtastic_FileOperation_DELETE
 #define _meshtastic_FileOperation_ARRAYSIZE ((meshtastic_FileOperation)(meshtastic_FileOperation_DELETE+1))
 
+#define _meshtastic_FileStatus_MIN meshtastic_FileStatus_FILE_UNSPECIFIED
+#define _meshtastic_FileStatus_MAX meshtastic_FileStatus_FILE_NOT_A_FILE
+#define _meshtastic_FileStatus_ARRAYSIZE ((meshtastic_FileStatus)(meshtastic_FileStatus_FILE_NOT_A_FILE+1))
+
 #define _meshtastic_SdCardInfo_CardType_MIN meshtastic_SdCardInfo_CardType_NONE
 #define _meshtastic_SdCardInfo_CardType_MAX meshtastic_SdCardInfo_CardType_UNKNOWN_CARD
 #define _meshtastic_SdCardInfo_CardType_ARRAYSIZE ((meshtastic_SdCardInfo_CardType)(meshtastic_SdCardInfo_CardType_UNKNOWN_CARD+1))
@@ -186,7 +209,9 @@ extern "C" {
 #define _meshtastic_I2CResult_Status_ARRAYSIZE ((meshtastic_I2CResult_Status)(meshtastic_I2CResult_Status_ERROR+1))
 
 #define meshtastic_FileTransfer_operation_ENUMTYPE meshtastic_FileOperation
+#define meshtastic_FileTransfer_status_ENUMTYPE meshtastic_FileStatus
 
+#define meshtastic_DirectoryListing_status_ENUMTYPE meshtastic_FileStatus
 
 
 #define meshtastic_SdCardInfo_card_type_ENUMTYPE meshtastic_SdCardInfo_CardType
@@ -197,14 +222,14 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_FileTransfer_init_default     {_meshtastic_FileOperation_MIN, "", {0, {0}}, 0, "", 0, 0, 0}
-#define meshtastic_DirectoryListing_init_default {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, 0, "", 0, 0}
+#define meshtastic_FileTransfer_init_default     {_meshtastic_FileOperation_MIN, "", {0, {0}}, _meshtastic_FileStatus_MIN, "", 0, 0, 0}
+#define meshtastic_DirectoryListing_init_default {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, _meshtastic_FileStatus_MIN, "", 0, 0}
 #define meshtastic_I2CTransaction_init_default   {0, {0, {0}}, 0}
 #define meshtastic_SdCardInfo_init_default       {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_default        {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
 #define meshtastic_InterdeviceMessage_init_default {0, {""}, 0}
-#define meshtastic_FileTransfer_init_zero        {_meshtastic_FileOperation_MIN, "", {0, {0}}, 0, "", 0, 0, 0}
-#define meshtastic_DirectoryListing_init_zero    {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, 0, "", 0, 0}
+#define meshtastic_FileTransfer_init_zero        {_meshtastic_FileOperation_MIN, "", {0, {0}}, _meshtastic_FileStatus_MIN, "", 0, 0, 0}
+#define meshtastic_DirectoryListing_init_zero    {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, _meshtastic_FileStatus_MIN, "", 0, 0}
 #define meshtastic_I2CTransaction_init_zero      {0, {0, {0}}, 0}
 #define meshtastic_SdCardInfo_init_zero          {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_zero           {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
@@ -214,14 +239,14 @@ extern "C" {
 #define meshtastic_FileTransfer_operation_tag    1
 #define meshtastic_FileTransfer_filepath_tag     2
 #define meshtastic_FileTransfer_filedata_tag     3
-#define meshtastic_FileTransfer_success_tag      4
+#define meshtastic_FileTransfer_status_tag       4
 #define meshtastic_FileTransfer_message_tag      5
 #define meshtastic_FileTransfer_offset_tag       6
 #define meshtastic_FileTransfer_length_tag       7
 #define meshtastic_FileTransfer_file_size_tag    8
 #define meshtastic_DirectoryListing_directory_tag 1
 #define meshtastic_DirectoryListing_filenames_tag 2
-#define meshtastic_DirectoryListing_success_tag  3
+#define meshtastic_DirectoryListing_status_tag   3
 #define meshtastic_DirectoryListing_message_tag  4
 #define meshtastic_DirectoryListing_offset_tag   5
 #define meshtastic_DirectoryListing_total_count_tag 6
@@ -257,7 +282,7 @@ extern "C" {
 X(a, STATIC,   SINGULAR, UENUM,    operation,         1) \
 X(a, STATIC,   SINGULAR, STRING,   filepath,          2) \
 X(a, STATIC,   SINGULAR, BYTES,    filedata,          3) \
-X(a, STATIC,   SINGULAR, BOOL,     success,           4) \
+X(a, STATIC,   SINGULAR, UENUM,    status,            4) \
 X(a, STATIC,   SINGULAR, STRING,   message,           5) \
 X(a, STATIC,   SINGULAR, UINT64,   offset,            6) \
 X(a, STATIC,   SINGULAR, UINT32,   length,            7) \
@@ -268,7 +293,7 @@ X(a, STATIC,   SINGULAR, UINT64,   file_size,         8)
 #define meshtastic_DirectoryListing_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   directory,         1) \
 X(a, STATIC,   REPEATED, STRING,   filenames,         2) \
-X(a, STATIC,   SINGULAR, BOOL,     success,           3) \
+X(a, STATIC,   SINGULAR, UENUM,    status,            3) \
 X(a, STATIC,   SINGULAR, STRING,   message,           4) \
 X(a, STATIC,   SINGULAR, UINT32,   offset,            5) \
 X(a, STATIC,   SINGULAR, UINT32,   total_count,       6)

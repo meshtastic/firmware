@@ -5,33 +5,40 @@
 
 I2CProxy *i2cProxy = new I2CProxy();
 
-void I2CProxy::acquire()
+// Transaction state of the calling task. Slots are claimed on first use and
+// never released: the set of tasks touching the bridged bus is fixed (main
+// loop, UI task).
+I2CProxy::Context &I2CProxy::ctx()
 {
-    _lock.lock();
-    _owner = xTaskGetCurrentTaskHandle();
-}
-
-void I2CProxy::release()
-{
-    _owner = nullptr;
-    _lock.unlock();
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    for (size_t i = 0; i < MAX_TASKS; i++) {
+        if (_ctx[i].task == self)
+            return _ctx[i];
+    }
+    for (size_t i = 0; i < MAX_TASKS; i++) {
+        if (_ctx[i].task == nullptr) {
+            _ctx[i].task = self;
+            return _ctx[i];
+        }
+    }
+    LOG_WARN("I2CProxy: more tasks than contexts, sharing the last one");
+    return _ctx[MAX_TASKS - 1];
 }
 
 void I2CProxy::beginTransmission(uint8_t address)
 {
-    // re-begin from the owning thread just restages, everyone else waits
-    if (_owner != xTaskGetCurrentTaskHandle())
-        acquire();
-    _txAddress = address;
-    _txLen = 0;
-    _txPending = true;
+    Context &c = ctx();
+    c.txAddress = address;
+    c.txLen = 0;
+    c.txPending = true;
 }
 
 size_t I2CProxy::write(uint8_t data)
 {
-    if (!_txPending || _txLen >= MAX_WRITE)
+    Context &c = ctx();
+    if (!c.txPending || c.txLen >= MAX_WRITE)
         return 0;
-    _txBuf[_txLen++] = data;
+    c.txBuf[c.txLen++] = data;
     return 1;
 }
 
@@ -45,96 +52,81 @@ size_t I2CProxy::write(const uint8_t *data, size_t len)
 
 uint8_t I2CProxy::endTransmission(bool stopBit)
 {
-    if (_owner != xTaskGetCurrentTaskHandle())
-        return 4; // endTransmission without beginTransmission
+    Context &c = ctx();
     if (!stopBit) {
         // Keep the buffered write pending, it is combined with the following
-        // requestFrom() into a single write+read transaction; the lock stays
-        // held across the repeated start
+        // requestFrom() into a single write+read transaction
         return 0;
     }
-    uint8_t rv = transact(_txAddress, _txBuf, _txLen, 0);
-    _txLen = 0;
-    _txPending = false;
-    release();
+    uint8_t rv = transact(c, c.txAddress, 0);
+    c.txLen = 0;
+    c.txPending = false;
     return rv;
 }
 
 size_t I2CProxy::requestFrom(uint8_t address, size_t len, bool stopBit)
 {
     (void)stopBit;
+    Context &c = ctx();
     if (len > MAX_READ)
         len = MAX_READ;
 
-    // standalone read without a preceding beginTransmission
-    if (_owner != xTaskGetCurrentTaskHandle())
-        acquire();
+    // a write pending for this address is executed together with the read as
+    // one transaction with repeated start
+    if (!c.txPending || c.txAddress != address)
+        c.txLen = 0;
 
-    const uint8_t *wbuf = NULL;
-    size_t wlen = 0;
-    if (_txPending && _txAddress == address) {
-        wbuf = _txBuf;
-        wlen = _txLen;
-    }
-    uint8_t rv = transact(address, wbuf, wlen, len);
-    _txLen = 0;
-    _txPending = false;
-    release();
-    return rv == 0 ? _rxLen : 0;
+    uint8_t rv = transact(c, address, len);
+    c.txLen = 0;
+    c.txPending = false;
+    return rv == 0 ? c.rxLen : 0;
 }
 
 int I2CProxy::available()
 {
-    return (int)(_rxLen - _rxPos);
+    Context &c = ctx();
+    return (int)(c.rxLen - c.rxPos);
 }
 
 int I2CProxy::read()
 {
-    return _rxPos < _rxLen ? _rxBuf[_rxPos++] : -1;
+    Context &c = ctx();
+    return c.rxPos < c.rxLen ? c.rxBuf[c.rxPos++] : -1;
 }
 
 int I2CProxy::peek()
 {
-    return _rxPos < _rxLen ? _rxBuf[_rxPos] : -1;
+    Context &c = ctx();
+    return c.rxPos < c.rxLen ? c.rxBuf[c.rxPos] : -1;
 }
 
 // Run one tunneled transaction, returns TwoWire endTransmission error codes:
 // 0 success, 1 data too long, 2 NACK on address, 3 NACK on data, 4 other, 5 timeout
-uint8_t I2CProxy::transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen)
+uint8_t I2CProxy::transact(Context &c, uint8_t address, size_t rlen)
 {
-    _rxLen = 0;
-    _rxPos = 0;
+    c.rxLen = 0;
+    c.rxPos = 0;
 
     if (!sensecapIndicator)
         return 4;
-
-    // static: ~4.6KB struct, too large for task stacks. Safe because every
-    // caller holds _lock while the transaction executes
-    static meshtastic_InterdeviceMessage msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.which_data = meshtastic_InterdeviceMessage_i2c_transaction_tag;
-    msg.data.i2c_transaction.address = address;
-    msg.data.i2c_transaction.read_len = rlen;
-    if (wlen > sizeof(msg.data.i2c_transaction.write_data.bytes))
+    if (c.txLen > MAX_WRITE)
         return 1;
-    msg.data.i2c_transaction.write_data.size = wlen;
-    if (wlen)
-        memcpy(msg.data.i2c_transaction.write_data.bytes, wbuf, wlen);
 
     meshtastic_I2CResult result = meshtastic_I2CResult_init_zero;
-    if (!sensecapIndicator->i2c_transact(msg, &result))
+    if (!sensecapIndicator->i2c_transact(address, c.txBuf, c.txLen, rlen, &result))
         return 5;
 
     switch (result.status) {
     case meshtastic_I2CResult_Status_OK:
-        _rxLen = result.read_data.size > MAX_READ ? MAX_READ : result.read_data.size;
-        memcpy(_rxBuf, result.read_data.bytes, _rxLen);
+        c.rxLen = result.read_data.size > MAX_READ ? MAX_READ : result.read_data.size;
+        memcpy(c.rxBuf, result.read_data.bytes, c.rxLen);
         return 0;
     case meshtastic_I2CResult_Status_NACK_ADDRESS:
         return 2;
     case meshtastic_I2CResult_Status_NACK_DATA:
         return 3;
     default:
+        // includes UNSPECIFIED: an empty result must not read as success
         return 4;
     }
 }

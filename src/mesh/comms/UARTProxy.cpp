@@ -38,6 +38,8 @@ int UARTProxy::read()
         return -1;
     __sync_synchronize(); // pair with the producer barrier in buf_push
     uint8_t ret = buf[buf_tail];
+    // the slot must be read before the producer is told it is free again
+    __sync_synchronize();
     buf_tail = (buf_tail + 1) % BUF_SIZE;
     return ret;
 }
@@ -74,6 +76,8 @@ size_t UARTProxy::write(uint8_t *buffer, size_t size)
 
 size_t UARTProxy::write(char *buffer, size_t size)
 {
+    if (!sensecapIndicator)
+        return 0; // the link is constructed after this global
     // static: ~4.6KB struct, too large for task stacks; only written from
     // the cooperative main loop (GPS thread)
     static meshtastic_InterdeviceMessage message;

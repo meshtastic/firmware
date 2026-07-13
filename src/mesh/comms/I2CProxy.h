@@ -3,7 +3,6 @@
 #ifdef SENSECAP_INDICATOR
 
 #include "../generated/meshtastic/interdevice.pb.h"
-#include "concurrency/Lock.h"
 #include <Wire.h>
 
 /**
@@ -22,11 +21,12 @@
  * already initialized, which is always true for bus 0 (local touch panel).
  *
  * Thread safety: the bus is shared between the main loop (sensor drivers)
- * and the UI task (keyboard scanner), so a transaction holds an internal
- * lock from beginTransmission()/requestFrom() until the transaction
- * executes, like the HAL lock of the real ESP32 TwoWire. As with the real
- * TwoWire, the read buffer must be consumed before the next transaction
- * from another thread replaces it.
+ * and the UI task (keyboard scanner), and TwoWire has no transaction
+ * bracket a lock could safely span - drivers drain the read buffer with
+ * available()/read() long after requestFrom() returned. Each calling task
+ * therefore gets its own staging and read buffers; the tunneled round trip
+ * itself is serialized by the link. Tasks beyond MAX_TASKS share the last
+ * context, which is only correct if they do not run concurrently.
  */
 class I2CProxy : public TwoWire
 {
@@ -58,25 +58,24 @@ class I2CProxy : public TwoWire
     static const size_t MAX_WRITE = sizeof(meshtastic_I2CTransaction{}.write_data.bytes);
     static const size_t MAX_READ = sizeof(meshtastic_I2CResult{}.read_data.bytes);
 
-    uint8_t _txAddress = 0;
-    uint8_t _txBuf[MAX_WRITE];
-    size_t _txLen = 0;
-    bool _txPending = false;
+    // main loop, UI task, and one spare
+    static const size_t MAX_TASKS = 3;
 
-    uint8_t _rxBuf[MAX_READ];
-    size_t _rxLen = 0;
-    size_t _rxPos = 0;
+    struct Context {
+        TaskHandle_t task = nullptr;
+        uint8_t txAddress = 0;
+        uint8_t txBuf[MAX_WRITE];
+        size_t txLen = 0;
+        bool txPending = false;
+        uint8_t rxBuf[MAX_READ];
+        size_t rxLen = 0;
+        size_t rxPos = 0;
+    };
+    Context _ctx[MAX_TASKS];
 
-    // Serializes staged transactions across threads. Held from
-    // beginTransmission() (or a standalone requestFrom()) until the
-    // transaction executes. The lock is a plain binary semaphore, so the
-    // owning task is tracked to keep re-entry from deadlocking.
-    concurrency::Lock _lock;
-    TaskHandle_t _owner = nullptr;
-    void acquire();
-    void release();
-
-    uint8_t transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen);
+    // per-task transaction state, claimed on first use
+    Context &ctx();
+    uint8_t transact(Context &c, uint8_t address, size_t rlen);
 };
 
 extern I2CProxy *i2cProxy;

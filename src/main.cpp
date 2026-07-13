@@ -641,7 +641,8 @@ void setup()
 #endif
     sensecapIndicator = new SensecapIndicator(Serial2);
     if (!sensecapIndicator->wait_ready(3000))
-        LOG_WARN("RP2040 co-processor not answering, bridged I2C bus unavailable");
+        LOG_WARN("RP2040 co-processor did not complete the handshake in time, bridged peripherals stay disabled until it "
+                 "answers");
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C

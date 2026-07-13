@@ -7,6 +7,7 @@
 #include "configuration.h"
 
 #include "mesh/generated/meshtastic/interdevice.pb.h"
+#include <atomic>
 
 // Magic number at the start of all MT packets
 #define MT_MAGIC_0 0x94
@@ -26,14 +27,17 @@ class SensecapIndicator : public concurrency::OSThread
     // serialize the shared TX buffer against the request methods
     bool send_uplink(const meshtastic_InterdeviceMessage &message);
 
-    // Send a request and pump the link until the matching response arrives.
-    // Cooperative threading means nothing else runs while we wait, so the
-    // response cannot be consumed behind our back.
-    bool i2c_transact(meshtastic_InterdeviceMessage &request, meshtastic_I2CResult *result, uint32_t timeout_ms = 100);
+    // Run one tunneled I2C transaction: an optional write of wlen bytes
+    // followed by an optional read of rlen bytes with repeated start. The
+    // request is staged under the link lock, so callers need no locking.
+    bool i2c_transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen, meshtastic_I2CResult *result,
+                      uint32_t timeout_ms = 100);
 
     // Synchronous file operations against the SD card attached to the RP2040.
     // The response (chunk data, file size, status) is written to *out.
-    // Returns false when the link is down or the request timed out.
+    // Returns false when the link is down or the request timed out; a
+    // request the co-processor answered is true, with out->status carrying
+    // the outcome (FILE_BUSY is worth retrying, the other failures are not).
     bool file_read(const char *path, uint32_t offset, uint32_t length, meshtastic_FileTransfer *out, uint32_t timeout_ms = 1000);
     // Sequential chunked write: create=true starts a new file (offset must be 0),
     // create=false appends (offset must equal the current file size)
@@ -47,6 +51,10 @@ class SensecapIndicator : public concurrency::OSThread
     // used/free are only meaningful once stats_valid is set: the FAT scan
     // behind them runs in the background after the card is mounted
     bool sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms = 2000);
+
+    // True when the last request was refused by the co-processor rather than
+    // lost: retrying it would only be refused again
+    bool last_request_nacked() const { return request_nacked; }
 
     // True once the co-processor has answered and speaks our protocol
     // version. Actively probes it (it never speaks unsolicited unless a GPS
@@ -65,10 +73,13 @@ class SensecapIndicator : public concurrency::OSThread
     size_t pb_rx_size = 0; // Number of bytes currently in the buffer
     HardwareSerial *_serial = nullptr;
     uint32_t packets_received = 0;
-    // cleared when a pong reports a protocol version we do not speak; the
-    // bridge stays shut down for the rest of the session
-    bool link_compatible = true;
-    bool pong_received = false;
+    // The handshake gates the bridge: no request is sent before the
+    // co-processor has answered a ping with the protocol version we speak.
+    // A mismatch is permanent, a missing answer is retried by runOnce (the
+    // co-processor may boot slower than we do, or reboot on its watchdog).
+    bool link_compatible = false;
+    bool handshake_done = false;
+    uint32_t last_probe = 0;
     meshtastic_I2CResult i2c_result = meshtastic_I2CResult_init_zero;
     bool i2c_result_ready = false;
     // Statically allocated message structs: with 4KB file chunks an
@@ -90,16 +101,20 @@ class SensecapIndicator : public concurrency::OSThread
     uint32_t expected_id = 0;
     // a nack response fails the request in flight without its timeout
     bool request_nacked = false;
-    // True while a requester holds link_lock for a full request/response
-    // round trip (up to the request timeout). runOnce checks it so the
-    // cooperative main loop is not blocked on the lock for that long.
-    volatile bool request_in_flight = false;
+    // Number of requesters inside a request/response round trip, each
+    // holding link_lock for up to its timeout. runOnce skips its pump while
+    // this is nonzero so the cooperative main loop is not blocked on the
+    // lock for that long. A counter, not a flag: the UI task and the main
+    // loop can both be in a request, and the first one out must not clear
+    // the state of the other.
+    std::atomic<int> requests_in_flight{0};
     struct InFlight {
-        volatile bool &flag;
-        explicit InFlight(volatile bool &f) : flag(f) { flag = true; }
-        ~InFlight() { flag = false; }
+        std::atomic<int> &count;
+        explicit InFlight(std::atomic<int> &c) : count(c) { count++; }
+        ~InFlight() { count--; }
     };
     bool link_ready();
+    void probe_link(); // caller holds link_lock
     uint32_t stamp_request(meshtastic_InterdeviceMessage &request);
     bool send_uplink_unlocked(const meshtastic_InterdeviceMessage &message);
     // callers hold link_lock (the request was staged in the shared tx_message)
