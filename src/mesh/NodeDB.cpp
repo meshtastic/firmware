@@ -3083,14 +3083,12 @@ HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
         return HopStartStatus::INVALID;
 
     if (p.hop_start == 0) {
-        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition -
-        // the packet was never meant to travel any hops, so no hop_start ambiguity applies.
-        if (p.hop_limit == 0)
-            return HopStartStatus::VALID;
-        // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
-        // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
-        // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
-        // the bitfield is encrypted under the channel encryption key.
+        // hop_start == 0 is either a modern zero-hop broadcast (e.g. beacon) or pre-2.3.0 firmware (585805c)
+        // that never populated hop_start. Firmware 2.5.0 (bf34329) introduced a bitfield that is always
+        // present; use it to tell the two apart. The bitfield is encrypted under the channel key, so this can
+        // only be resolved for decoded packets - until then the status stays MISSING_OR_UNKNOWN. Callers
+        // acting before decode must therefore not treat UNKNOWN as a drop (the bitfield isn't readable yet);
+        // the verdict is re-checked post-decode in Router::handleReceived.
         if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield)
             return HopStartStatus::VALID;
         return HopStartStatus::MISSING_OR_UNKNOWN;

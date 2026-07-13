@@ -847,6 +847,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             return -6.0f;
         case PRESET(MEDIUM_SLOW):
         case PRESET(MEDIUM_FAST):
+        case PRESET(MEDIUM_TURBO):
             return -5.5f;
         case PRESET(SHORT_SLOW):
         case PRESET(SHORT_FAST):
