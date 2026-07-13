@@ -48,11 +48,12 @@ class SensecapIndicator : public concurrency::OSThread
     // behind them runs in the background after the card is mounted
     bool sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms = 2000);
 
-    // True once at least one valid packet was received from the RP2040.
-    // Actively probes the co-processor (it never speaks unsolicited unless a
-    // GPS module is attached) and pumps the link until a response arrives or
-    // the timeout expires. Used to defer bridge traffic until the
-    // co-processor has booted.
+    // True once the co-processor has answered and speaks our protocol
+    // version. Actively probes it (it never speaks unsolicited unless a GPS
+    // module is attached) and pumps the link until a pong arrives or the
+    // timeout expires. Used to defer bridge traffic until the co-processor
+    // has booted. A version mismatch fails permanently: no request is sent
+    // to a co-processor running incompatible firmware.
     bool wait_ready(uint32_t timeout_ms);
 
   private:
@@ -64,6 +65,10 @@ class SensecapIndicator : public concurrency::OSThread
     size_t pb_rx_size = 0; // Number of bytes currently in the buffer
     HardwareSerial *_serial = nullptr;
     uint32_t packets_received = 0;
+    // cleared when a pong reports a protocol version we do not speak; the
+    // bridge stays shut down for the rest of the session
+    bool link_compatible = true;
+    bool pong_received = false;
     meshtastic_I2CResult i2c_result = meshtastic_I2CResult_init_zero;
     bool i2c_result_ready = false;
     // Statically allocated message structs: with 4KB file chunks an
@@ -94,6 +99,7 @@ class SensecapIndicator : public concurrency::OSThread
         explicit InFlight(volatile bool &f) : flag(f) { flag = true; }
         ~InFlight() { flag = false; }
     };
+    bool link_ready();
     uint32_t stamp_request(meshtastic_InterdeviceMessage &request);
     bool send_uplink_unlocked(const meshtastic_InterdeviceMessage &message);
     // callers hold link_lock (the request was staged in the shared tx_message)

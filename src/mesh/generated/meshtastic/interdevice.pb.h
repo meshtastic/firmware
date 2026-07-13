@@ -10,6 +10,18 @@
 #endif
 
 /* Enum definitions */
+/* Version of the interdevice protocol spoken on the link. Both sides send
+ theirs in the ping/pong handshake; a peer reporting a different one runs
+ firmware that does not match and is not talked to.
+
+ On a change that breaks the other side (renumbered fields, changed
+ semantics, removed messages), raise the value of CURRENT. Do not add
+ another entry: this enum carries a single constant, not a history. */
+typedef enum _meshtastic_InterdeviceVersion {
+    meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_UNSPECIFIED = 0,
+    meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT = 1
+} meshtastic_InterdeviceVersion;
+
 /* Defines the supported file operations */
 typedef enum _meshtastic_FileOperation {
     meshtastic_FileOperation_GET = 0,
@@ -126,10 +138,13 @@ typedef struct _meshtastic_InterdeviceMessage {
         meshtastic_DirectoryListing directory_listing;
         bool get_sd_info; /* Request: SD card statistics */
         meshtastic_SdCardInfo sd_info; /* Response */
-        /* Link liveness probe. The receiver answers ping with pong, echoing the
-     id. Touches no peripherals, so it works with nothing attached. */
-        bool ping;
-        bool pong;
+        /* Link liveness probe and version handshake. The receiver answers ping
+     with pong, echoing the id. Touches no peripherals, so it works with
+     nothing attached. Both carry the sender's InterdeviceVersion; a peer
+     that answers with a different one speaks another protocol and must
+     not be used. */
+        uint32_t ping;
+        uint32_t pong;
         /* Response: the request could not be decoded or is of an unhandled
      type, so the requester fails fast instead of burning its timeout.
      Echoes the id when known, 0 when the frame was undecodable. Never
@@ -147,6 +162,10 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
+#define _meshtastic_InterdeviceVersion_MIN meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_UNSPECIFIED
+#define _meshtastic_InterdeviceVersion_MAX meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT
+#define _meshtastic_InterdeviceVersion_ARRAYSIZE ((meshtastic_InterdeviceVersion)(meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT+1))
+
 #define _meshtastic_FileOperation_MIN meshtastic_FileOperation_GET
 #define _meshtastic_FileOperation_MAX meshtastic_FileOperation_DELETE
 #define _meshtastic_FileOperation_ARRAYSIZE ((meshtastic_FileOperation)(meshtastic_FileOperation_DELETE+1))
@@ -288,8 +307,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (data,file_transfer,data.file_transfer),   7)
 X(a, STATIC,   ONEOF,    MESSAGE,  (data,directory_listing,data.directory_listing),   8) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,get_sd_info,data.get_sd_info),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (data,sd_info,data.sd_info),  10) \
-X(a, STATIC,   ONEOF,    BOOL,     (data,ping,data.ping),  11) \
-X(a, STATIC,   ONEOF,    BOOL,     (data,pong,data.pong),  12) \
+X(a, STATIC,   ONEOF,    UINT32,   (data,ping,data.ping),  11) \
+X(a, STATIC,   ONEOF,    UINT32,   (data,pong,data.pong),  12) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,nack,data.nack),  13) \
 X(a, STATIC,   SINGULAR, UINT32,   id,               15)
 #define meshtastic_InterdeviceMessage_CALLBACK NULL
