@@ -100,9 +100,8 @@ void getMacAddr(uint8_t *dmac)
 
 bool getDeviceId(uint8_t *deviceId)
 {
-    // nRF54L15: DEVICEID lives under the FICR->INFO sub-struct (not top-level as on nRF52).
-    // Read unconditionally: if a future build lacks NRF_FICR we want a loud compile error, not a
-    // silent fallback to getMacAddr()'s placeholder MAC (which would give every unit the same id).
+    // nRF54L15: DEVICEID under the FICR->INFO sub-struct. Read unconditionally so a future build
+    // lacking NRF_FICR fails loudly rather than silently sharing getMacAddr()'s placeholder MAC.
     uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
     uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
     memcpy(deviceId, &device_id_start, sizeof(device_id_start));

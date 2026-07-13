@@ -406,9 +406,8 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    // Get device unique id. Derived from silicon (or the factory MAC) by the per-architecture
-    // getDeviceId() in src/platform/<arch>/. Re-read on every boot: clear any value loaded from
-    // disk first so getDeviceId() returning false leaves it unset rather than stale.
+    // Re-read the device id from silicon each boot via the per-arch getDeviceId(); clear the
+    // disk-loaded value first so a failed/empty derivation leaves it unset rather than stale.
     myNodeInfo.device_id.size = 0;
     memset(myNodeInfo.device_id.bytes, 0, sizeof(myNodeInfo.device_id.bytes));
     if (getDeviceId(myNodeInfo.device_id.bytes)) {
