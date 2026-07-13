@@ -1,6 +1,7 @@
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #include "CryptoEngine.h"
+#include "HardwareRNG.h"
 #include "MeshService.h"
 #include "RTC.h"
 #include "graphics/draw/MenuHandler.h"
@@ -8,6 +9,7 @@
 #include "meshUtils.h"
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
+#include <RNG.h>
 #include <SHA256.h>
 
 KeyVerificationModule *keyVerificationModule;
@@ -80,7 +82,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         auto *responderNode = nodeDB->getMeshNode(currentRemoteNode);
         if (responderNode == nullptr || responderNode->public_key.size != 32)
             crypto->setPendingPublicKey(currentRemoteNode, r->hash1.bytes);
-        IF_SCREEN(screen->showNumberPicker("Enter Security Number", 60000, 6, false, [](int number_picked) -> void {
+        IF_SCREEN(screen->showNumberPicker("Enter Security Number", 60000, 6, false, [](uint32_t number_picked) -> void {
             keyVerificationModule->processSecurityNumber(number_picked);
         });)
 
@@ -97,7 +99,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         }
         LOG_INFO("Received hash2");
         currentState = KEY_VERIFICATION_SENDER_AWAITING_NUMBER;
-        return false;
+        return true;
 
     } else if (currentState == KEY_VERIFICATION_RECEIVER_AWAITING_HASH1 && mp.pki_encrypted && r->hash1.size == 32 &&
                r->nonce == currentNonce) {
@@ -196,12 +198,20 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     response.nonce = scratch.nonce;
     currentRemoteNode = req.from;
     currentNonceTimestamp = getTime();
-    currentSecurityNumber = random(1, 999999); // fixme, use better random
+    // The security number is the handshake's MitM-resistance entropy, so draw it from the hardware
+    // RNG (falling back to the CSPRNG used for key material), never the predictable random().
+    // Hold cryptLock like xeddsa_sign does: on nRF52 the fill toggles the CC310 that packet crypto
+    // on the BLE task also uses, and the CryptRNG state is shared with the signing path.
+    uint32_t securityEntropy = 0;
+    {
+        concurrency::LockGuard g(cryptLock);
+        if (!HardwareRNG::fill((uint8_t *)&securityEntropy, sizeof(securityEntropy)))
+            CryptRNG.rand((uint8_t *)&securityEntropy, sizeof(securityEntropy));
+    }
+    currentSecurityNumber = (securityEntropy % 999999) + 1;
 
-    // Resolve the requester's public key. When the request arrived PKI-encrypted the Router populated
-    // currentRequest->public_key; otherwise (channel-encrypted bootstrap) it rides in the hash1 field.
-    // If we don't already hold the key in NodeDB, stash it as a pending key so the Router can DH-decode
-    // the follow-on PKI packet. The pending key is only committed to NodeDB once verification is accepted.
+    // Resolve the requester's public key: from the PKI envelope, else carried in hash1 (bootstrap).
+    // Stash unknown keys as pending (committed to NodeDB only once verification is accepted).
     const uint8_t *senderKey = nullptr;
     if (currentRequest->pki_encrypted && currentRequest->public_key.size == 32) {
         senderKey = currentRequest->public_key.bytes; // this is bizarre, fixme
@@ -376,9 +386,10 @@ void KeyVerificationModule::commitVerifiedRemoteNode()
     LOG_INFO("Node 0x%08x manually verified with security number %u", currentRemoteNode, currentSecurityNumber);
     if (nodeInfoModule)
         nodeInfoModule->sendOurNodeInfo(currentRemoteNode, false, node->channel, true);
-    // todo: initiate save
     crypto->clearPendingPublicKey();
     currentState = KEY_VERIFICATION_IDLE;
+    // Persist the committed key and verified flag so manual verification survives a reboot.
+    nodeDB->saveToDisk(SEGMENT_NODEDATABASE);
 }
 
 void KeyVerificationModule::generateVerificationCode(char *readableCode)

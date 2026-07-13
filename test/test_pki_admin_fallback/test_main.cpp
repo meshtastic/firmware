@@ -1,13 +1,6 @@
-// Tests for the admin-key fallback in Router::perhapsDecode.
-//
-// When a PKI/PKC-encrypted unicast DM arrives addressed to us from a sender we have NO public key for,
-// perhapsDecode falls back to trying each configured admin_key as a candidate sender key. On success it
-// (a) decodes the packet and sets p->public_key to the admin key that worked, and (b) persists that key
-// into NodeDB for the sender (getOrCreateMeshNode), so future packets take the fast path and we can
-// PKI-reply. decryptCurve25519 is AES-CCM AEAD, so a wrong candidate key reliably fails authentication.
-//
-// These drive the real crypto + NodeDB path: we mint an admin keypair, encrypt a packet exactly as the
-// admin's radio would (DH against our public key), then hand it to perhapsDecode and inspect the result.
+// Tests for the admin-key fallback in Router::perhapsDecode: a PKI unicast from an unknown sender is
+// tried against each configured admin_key; on success the packet decodes and the key is persisted to
+// NodeDB. Drives the real crypto + NodeDB path with packets encrypted exactly as an admin radio would.
 
 #include "MeshTypes.h" // include BEFORE TestUtil.h
 #include "TestUtil.h"
@@ -29,10 +22,8 @@ static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A; // us (the receiver)
 static constexpr NodeNum ADMIN_NODE = 0x0B0B0B0B; // an authorized admin, absent from our NodeDB
 static constexpr uint32_t PKT_ID = 0x12345678;
 
-// ---------------------------------------------------------------------------
-// MockNodeDB - inject nodes with controlled public keys. Mirrors test/test_packet_signing.
-// meshNodes/numMeshNodes are public on NodeDB.
-// ---------------------------------------------------------------------------
+// MockNodeDB - inject nodes with controlled public keys (meshNodes/numMeshNodes are public on NodeDB).
+// Mirrors test/test_packet_signing.
 class MockNodeDB : public NodeDB
 {
   public:
@@ -69,10 +60,6 @@ static MockNodeDB *mockNodeDB = nullptr;
 static uint8_t ourPub[32], ourPriv[32];
 static uint8_t adminPub[32], adminPriv[32];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 // Store a 32-byte key into config.security.admin_key[slot].
 static void setAdminKey(int slot, const uint8_t *key32)
 {
@@ -82,9 +69,8 @@ static void setAdminKey(int slot, const uint8_t *key32)
         config.security.admin_key_count = slot + 1;
 }
 
-// Build a PKI/PKC-encrypted unicast packet FROM `from` TO us, encrypted with `senderPriv` against our
-// public key - i.e. exactly what the admin's radio puts on the air. Leaves the CryptoEngine holding our
-// private key afterwards (as it would be during normal receive) so perhapsDecode can decrypt.
+// Build a PKI-encrypted unicast from `from` to us, encrypted with `senderPriv` against our public key,
+// leaving the engine holding our private key afterwards (as during receive) so perhapsDecode can decrypt.
 static meshtastic_MeshPacket makePkiPacket(NodeNum from, meshtastic_PortNum port, size_t payloadLen, const uint8_t *senderPriv)
 {
     meshtastic_Data data = meshtastic_Data_init_zero;
@@ -134,9 +120,6 @@ static void assertDecodedAndLearned(meshtastic_MeshPacket *p, const uint8_t *exp
     TEST_ASSERT_EQUAL_MEMORY_MESSAGE(expectedKey, learned->public_key.bytes, 32, "persisted key mismatch");
 }
 
-// ---------------------------------------------------------------------------
-// Unity lifecycle
-// ---------------------------------------------------------------------------
 void setUp(void)
 {
     // Construct the mock FIRST: the NodeDB ctor can reload persisted host state and repopulate globals.
@@ -169,10 +152,6 @@ void tearDown(void)
     mockNodeDB = nullptr;
     nodeDB = nullptr;
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 // Admin key in slot 0: a DM from an unknown sender decrypts via the fallback, and the key is persisted.
 void test_admin_key_slot0_decrypts_and_persists(void)
@@ -208,8 +187,7 @@ void test_no_admin_key_unknown_sender_not_decoded(void)
     TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(ADMIN_NODE), "must not learn a key when nothing decrypted");
 }
 
-// A configured admin key that is NOT the sender's must fail authentication (no false-positive decode,
-// no bogus key learned).
+// A configured admin key that is NOT the sender's must fail authentication (no bogus key learned).
 void test_wrong_admin_key_does_not_decode(void)
 {
     uint8_t otherPub[32], otherPriv[32];

@@ -532,9 +532,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     meshtastic_NodeInfoLite *ourNode = nullptr;
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
         (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
-        // If we know the sender's key, make a single attempt with it. Otherwise fall back to trying each
-        // configured admin key, so an authorized admin can reach a node that has not yet learned their
-        // key. decryptCurve25519 is AES-CCM AEAD, so a wrong key fails authentication and we try the next.
+        // Try the sender's known key first, then each configured admin key so an authorized admin can
+        // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
@@ -567,10 +566,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
                 if (viaAdminKey) {
-                    // We decrypted this using a configured admin key, so we had no pubkey from the sender.
-                    // Persist the key so future packets take the fast path and we can PKI-reply. The from
-                    // nodenum is bound into the AEAD nonce, so this NodeNum->key binding is authenticated
-                    // by the (trusted) admin that produced the packet.
+                    // Persist the admin key for the sender so future packets take the fast path and we can
+                    // PKI-reply; p->from is bound into the AEAD nonce, so the trusted admin authenticated it.
                     meshtastic_NodeInfoLite *fromNode = nodeDB->getOrCreateMeshNode(p->from);
                     if (fromNode != nullptr)
                         fromNode->public_key = remotePublic;

@@ -63,6 +63,8 @@ class CryptoEngine
     // in-progress key-verification handshake before it is committed to NodeDB. Lets the Router
     // run the DH handshake to encode/decode the follow-on PKI packet. Single slot is enough:
     // only one verification runs at a time. Discarded when the handshake ends (resetToIdle).
+    // Internally guarded by pendingKeyLock, not cryptLock: the Router calls the getter while
+    // already holding the non-recursive cryptLock; KeyVerificationModule writes from elsewhere.
     void setPendingPublicKey(uint32_t node, const uint8_t *key);
     void clearPendingPublicKey();
     // Fills `out` (size set to 32) and returns true iff a pending key is held for `node`.
@@ -106,6 +108,7 @@ class CryptoEngine
     uint32_t pendingKeyVerificationNode = 0;
     uint8_t pendingKeyVerificationPublicKey[32] = {0};
     bool hasPendingKeyVerificationKey = false;
+    concurrency::Lock pendingKeyLock;
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
     uint8_t xeddsa_public_key[32] = {0};
     uint8_t xeddsa_private_key[32] = {0};
