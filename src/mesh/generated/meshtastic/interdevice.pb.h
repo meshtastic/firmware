@@ -19,7 +19,10 @@
  another entry: this enum carries a single constant, not a history. */
 typedef enum _meshtastic_InterdeviceVersion {
     meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_UNSPECIFIED = 0,
-    meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT = 1
+    /* Never use 1: ping/pong were bools before the handshake existed, and a
+ bool true is the same varint on the wire as the number 1, so firmware
+ predating the handshake would pass it. */
+    meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT = 2
 } meshtastic_InterdeviceVersion;
 
 /* Defines the supported file operations */
