@@ -1,18 +1,24 @@
 #pragma once
 
-#ifndef FAKEUART_H
-#define FAKEUART_H
-
 #ifdef SENSECAP_INDICATOR
 
 #include "../IndicatorSerial.h"
 #include <Stream.h>
 #include <inttypes.h>
 
-class FakeUART : public Stream
+/**
+ * Stream implementation that proxies a serial port living on the RP2040
+ * over the interdevice link, so the regular GPS driver of the main
+ * firmware can talk to the GNSS module attached to the secondary MCU.
+ *
+ * Reads are served from a ring buffer that the link fills with the NMEA
+ * sentences the co-processor forwards; writes are packed into a single
+ * uplink message each.
+ */
+class UARTProxy : public Stream
 {
   public:
-    FakeUART();
+    UARTProxy();
 
     void begin(unsigned long baud, uint32_t config = 0x800001c, int8_t rxPin = -1, int8_t txPin = -1, bool invert = false,
                unsigned long timeout_ms = 20000UL, uint8_t rxfifo_full_thrhd = 112);
@@ -65,8 +71,6 @@ class FakeUART : public Stream
     size_t buf_avail() { return (buf_head + BUF_SIZE - buf_tail) % BUF_SIZE; }
 };
 
-extern FakeUART *FakeSerial;
+extern UARTProxy *uartProxy;
 
 #endif // SENSECAP_INDICATOR
-
-#endif // FAKEUART_H

@@ -14,7 +14,7 @@
 #include "modules/PositionModule.h"
 
 #ifdef SENSECAP_INDICATOR
-#include "mesh/comms/FakeUART.h"
+#include "mesh/comms/UARTProxy.h"
 #endif
 
 // Allow defining the polarity of the ENABLE output.  default is active high
@@ -224,7 +224,7 @@ class GPS : private concurrency::OSThread
 
     /** If !NULL we will use this serial port to construct our GPS */
 #if defined(SENSECAP_INDICATOR)
-    static FakeUART *_serial_gps;
+    static UARTProxy *_serial_gps;
 #elif defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
 #elif defined(ARCH_NRF52)

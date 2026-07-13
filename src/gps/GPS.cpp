@@ -47,7 +47,7 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 #endif
 
 #if defined(SENSECAP_INDICATOR)
-FakeUART *GPS::_serial_gps = nullptr; // assigned in createGps(), see there
+UARTProxy *GPS::_serial_gps = nullptr; // assigned in createGps(), see there
 #elif defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
@@ -1931,7 +1931,7 @@ std::unique_ptr<GPS> GPS::createGps()
 #if defined(SENSECAP_INDICATOR)
     // assigned at runtime, static initialization order across translation
     // units is undefined
-    _serial_gps = FakeSerial;
+    _serial_gps = uartProxy;
     if (!_serial_gps)
         return nullptr;
 #else
@@ -1998,8 +1998,12 @@ std::unique_ptr<GPS> GPS::createGps()
         _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
+#if defined(SENSECAP_INDICATOR)
+        LOG_DEBUG("Use the RP2040 tunnel for GPS, no local pins");
+#else
         LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
         LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
+#endif
 
 //  ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)

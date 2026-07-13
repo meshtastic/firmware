@@ -32,7 +32,7 @@
 
 #ifdef SENSECAP_INDICATOR // on the indicator run the additional serial port for the RP2040
 #include "IndicatorSerial.h"
-#include "mesh/comms/FakeI2C.h"
+#include "mesh/comms/I2CProxy.h"
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -568,7 +568,7 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
 #if defined(SENSECAP_INDICATOR)
     // The Sensecap Indicator has its second I2C bus on the RP2040, bridged
-    // over serial as FakeWire. No local interface to initialize.
+    // over serial as i2cProxy. No local interface to initialize.
 #elif defined(I2C_SDA1) && defined(ARCH_RP2040)
     Wire1.setSDA(I2C_SDA1);
     Wire1.setSCL(I2C_SCL1);

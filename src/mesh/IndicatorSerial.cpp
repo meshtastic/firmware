@@ -2,7 +2,7 @@
 
 #include "IndicatorSerial.h"
 #include "concurrency/LockGuard.h"
-#include "mesh/comms/FakeUART.h"
+#include "mesh/comms/UARTProxy.h"
 #include <HardwareSerial.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -11,33 +11,25 @@ SensecapIndicator *sensecapIndicator;
 
 SensecapIndicator::SensecapIndicator(HardwareSerial &serial) : OSThread("SensecapIndicator")
 {
-    if (!running) {
-        _serial = &serial;
-        // Twice the largest frame: the pump runs from the cooperative main
-        // loop, which can stall for tens of ms while data keeps arriving
-        _serial->setRxBufferSize(2 * PB_BUFSIZE);
-        _serial->setPins(SENSOR_RP2040_RXD, SENSOR_RP2040_TXD);
-        _serial->begin(SENSOR_BAUD_RATE);
-        running = true;
-        LOG_DEBUG("Start indicator communication thread");
-    }
+    _serial = &serial;
+    // Twice the largest frame: the pump runs from the cooperative main
+    // loop, which can stall for tens of ms while data keeps arriving
+    _serial->setRxBufferSize(2 * PB_BUFSIZE);
+    _serial->setPins(SENSOR_RP2040_RXD, SENSOR_RP2040_TXD);
+    _serial->begin(SENSOR_BAUD_RATE);
+    LOG_DEBUG("Start indicator communication thread");
 }
 
 int32_t SensecapIndicator::runOnce()
 {
-    if (running) {
-        // A requester is pumping the link itself and holds link_lock for up
-        // to its full request timeout; blocking on the lock here would stall
-        // every other thread of the cooperative main loop with it
-        if (request_in_flight)
-            return (10);
-        concurrency::LockGuard guard(&link_lock);
-        pump();
+    // A requester is pumping the link itself and holds link_lock for up
+    // to its full request timeout; blocking on the lock here would stall
+    // every other thread of the cooperative main loop with it
+    if (request_in_flight)
         return (10);
-    } else {
-        LOG_DEBUG("Not running");
-        return (1000);
-    }
+    concurrency::LockGuard guard(&link_lock);
+    pump();
+    return (10);
 }
 
 // Read whatever is available on the link and process complete packets
@@ -48,7 +40,8 @@ void SensecapIndicator::pump()
     check_packet();
 }
 
-// Pump the link until `flag` goes true or the timeout expires
+// Pump the link until `flag` goes true, a nack arrives, or the timeout
+// expires
 bool SensecapIndicator::wait_response(bool &flag, uint32_t timeout_ms)
 {
     uint32_t start = millis();
@@ -56,6 +49,8 @@ bool SensecapIndicator::wait_response(bool &flag, uint32_t timeout_ms)
         pump();
         if (flag)
             break;
+        if (request_nacked)
+            return false; // the other side could not handle the request
         if (millis() - start >= timeout_ms)
             return false;
         delay(1);
@@ -70,6 +65,7 @@ uint32_t SensecapIndicator::stamp_request(meshtastic_InterdeviceMessage &request
         next_request_id = 1;
     request.id = next_request_id;
     expected_id = next_request_id;
+    request_nacked = false;
     return next_request_id;
 }
 
@@ -94,11 +90,6 @@ bool SensecapIndicator::i2c_transact(meshtastic_InterdeviceMessage &request, mes
 
 bool SensecapIndicator::file_request(meshtastic_InterdeviceMessage &request, meshtastic_FileTransfer *out, uint32_t timeout_ms)
 {
-    InFlight busy(request_in_flight);
-    concurrency::LockGuard guard(&link_lock);
-    if (packets_received == 0)
-        return false;
-
     stamp_request(request);
     file_response_ready = false;
     pending_file = out;
@@ -112,6 +103,11 @@ bool SensecapIndicator::file_request(meshtastic_InterdeviceMessage &request, mes
 bool SensecapIndicator::file_read(const char *path, uint32_t offset, uint32_t length, meshtastic_FileTransfer *out,
                                   uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
+    concurrency::LockGuard guard(&link_lock);
+    if (packets_received == 0)
+        return false;
+
     meshtastic_InterdeviceMessage &msg = tx_message;
     memset(&msg, 0, sizeof(msg));
     msg.which_data = meshtastic_InterdeviceMessage_file_transfer_tag;
@@ -125,6 +121,11 @@ bool SensecapIndicator::file_read(const char *path, uint32_t offset, uint32_t le
 bool SensecapIndicator::file_write(const char *path, uint32_t offset, const uint8_t *data, size_t len, bool create,
                                    meshtastic_FileTransfer *out, uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
+    concurrency::LockGuard guard(&link_lock);
+    if (packets_received == 0)
+        return false;
+
     meshtastic_InterdeviceMessage &msg = tx_message;
     memset(&msg, 0, sizeof(msg));
     msg.which_data = meshtastic_InterdeviceMessage_file_transfer_tag;
@@ -140,6 +141,11 @@ bool SensecapIndicator::file_write(const char *path, uint32_t offset, const uint
 
 bool SensecapIndicator::file_remove(const char *path, meshtastic_FileTransfer *out, uint32_t timeout_ms)
 {
+    InFlight busy(request_in_flight);
+    concurrency::LockGuard guard(&link_lock);
+    if (packets_received == 0)
+        return false;
+
     meshtastic_InterdeviceMessage &msg = tx_message;
     memset(&msg, 0, sizeof(msg));
     msg.which_data = meshtastic_InterdeviceMessage_file_transfer_tag;
@@ -318,7 +324,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
     switch (message.which_data) {
     case meshtastic_InterdeviceMessage_nmea_tag:
         // send String to NMEA processing
-        FakeSerial->stuff_buffer(message.data.nmea, strnlen(message.data.nmea, sizeof(message.data.nmea) - 1));
+        uartProxy->stuff_buffer(message.data.nmea, strnlen(message.data.nmea, sizeof(message.data.nmea) - 1));
         return true;
     case meshtastic_InterdeviceMessage_i2c_result_tag:
         // response for the transaction i2c_transact() is waiting on
@@ -362,6 +368,14 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
     case meshtastic_InterdeviceMessage_pong_tag:
         // no payload to deliver: receiving it already counted the packet,
         // which is all wait_ready() is looking for
+        return true;
+    case meshtastic_InterdeviceMessage_nack_tag:
+        // id 0 means the request was undecodable over there; the link is
+        // single-outstanding, so that can only be the request in flight
+        if (message.id == expected_id || message.id == 0) {
+            LOG_WARN("Request %u nacked by the co-processor", expected_id);
+            request_nacked = true;
+        }
         return true;
     case meshtastic_InterdeviceMessage_sd_info_tag:
         if (pending_sd_info && message.id == expected_id) {

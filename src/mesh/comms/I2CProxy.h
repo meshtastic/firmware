@@ -28,10 +28,10 @@
  * TwoWire, the read buffer must be consumed before the next transaction
  * from another thread replaces it.
  */
-class FakeI2C : public TwoWire
+class I2CProxy : public TwoWire
 {
   public:
-    FakeI2C() : TwoWire(0) {}
+    I2CProxy() : TwoWire(0) {}
 
     bool end() override { return true; }
     bool setClock(uint32_t) override { return true; }
@@ -79,6 +79,6 @@ class FakeI2C : public TwoWire
     uint8_t transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen);
 };
 
-extern FakeI2C *FakeWire;
+extern I2CProxy *i2cProxy;
 
 #endif // SENSECAP_INDICATOR

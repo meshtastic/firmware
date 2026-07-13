@@ -1,23 +1,23 @@
 #ifdef SENSECAP_INDICATOR
 
-#include "FakeI2C.h"
+#include "I2CProxy.h"
 #include "../IndicatorSerial.h"
 
-FakeI2C *FakeWire = new FakeI2C();
+I2CProxy *i2cProxy = new I2CProxy();
 
-void FakeI2C::acquire()
+void I2CProxy::acquire()
 {
     _lock.lock();
     _owner = xTaskGetCurrentTaskHandle();
 }
 
-void FakeI2C::release()
+void I2CProxy::release()
 {
     _owner = nullptr;
     _lock.unlock();
 }
 
-void FakeI2C::beginTransmission(uint8_t address)
+void I2CProxy::beginTransmission(uint8_t address)
 {
     // re-begin from the owning thread just restages, everyone else waits
     if (_owner != xTaskGetCurrentTaskHandle())
@@ -27,7 +27,7 @@ void FakeI2C::beginTransmission(uint8_t address)
     _txPending = true;
 }
 
-size_t FakeI2C::write(uint8_t data)
+size_t I2CProxy::write(uint8_t data)
 {
     if (!_txPending || _txLen >= MAX_WRITE)
         return 0;
@@ -35,7 +35,7 @@ size_t FakeI2C::write(uint8_t data)
     return 1;
 }
 
-size_t FakeI2C::write(const uint8_t *data, size_t len)
+size_t I2CProxy::write(const uint8_t *data, size_t len)
 {
     size_t n = 0;
     while (n < len && write(data[n]))
@@ -43,7 +43,7 @@ size_t FakeI2C::write(const uint8_t *data, size_t len)
     return n;
 }
 
-uint8_t FakeI2C::endTransmission(bool stopBit)
+uint8_t I2CProxy::endTransmission(bool stopBit)
 {
     if (_owner != xTaskGetCurrentTaskHandle())
         return 4; // endTransmission without beginTransmission
@@ -60,7 +60,7 @@ uint8_t FakeI2C::endTransmission(bool stopBit)
     return rv;
 }
 
-size_t FakeI2C::requestFrom(uint8_t address, size_t len, bool stopBit)
+size_t I2CProxy::requestFrom(uint8_t address, size_t len, bool stopBit)
 {
     (void)stopBit;
     if (len > MAX_READ)
@@ -83,24 +83,24 @@ size_t FakeI2C::requestFrom(uint8_t address, size_t len, bool stopBit)
     return rv == 0 ? _rxLen : 0;
 }
 
-int FakeI2C::available()
+int I2CProxy::available()
 {
     return (int)(_rxLen - _rxPos);
 }
 
-int FakeI2C::read()
+int I2CProxy::read()
 {
     return _rxPos < _rxLen ? _rxBuf[_rxPos++] : -1;
 }
 
-int FakeI2C::peek()
+int I2CProxy::peek()
 {
     return _rxPos < _rxLen ? _rxBuf[_rxPos] : -1;
 }
 
 // Run one tunneled transaction, returns TwoWire endTransmission error codes:
 // 0 success, 1 data too long, 2 NACK on address, 3 NACK on data, 4 other, 5 timeout
-uint8_t FakeI2C::transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen)
+uint8_t I2CProxy::transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen)
 {
     _rxLen = 0;
     _rxPos = 0;

@@ -395,7 +395,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef WIRE_INTERFACES_COUNT
 // Officially an NRF52 macro
 // Repurposed cross-platform to identify devices using Wire1
-// The SenseCAP Indicator has a second bus bridged to the RP2040 (FakeI2C)
+// The SenseCAP Indicator has a second bus bridged to the RP2040 (I2CProxy)
 #if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA) || defined(SENSECAP_INDICATOR)
 #define WIRE_INTERFACES_COUNT 2
 #elif HAS_WIRE

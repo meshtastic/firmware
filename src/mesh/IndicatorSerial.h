@@ -1,8 +1,5 @@
 #pragma once
 
-#ifndef INDICATORSERIAL_H
-#define INDICATORSERIAL_H
-
 #ifdef SENSECAP_INDICATOR
 
 #include "concurrency/Lock.h"
@@ -18,9 +15,6 @@
 // The header is the magic number plus a 16-bit payload-length field
 #define MT_HEADER_SIZE 4
 
-// Wait this many msec if there's nothing new on the channel
-#define NO_NEWS_PAUSE 25
-
 #define PB_BUFSIZE (meshtastic_InterdeviceMessage_size + MT_HEADER_SIZE)
 
 class SensecapIndicator : public concurrency::OSThread
@@ -28,7 +22,7 @@ class SensecapIndicator : public concurrency::OSThread
   public:
     SensecapIndicator(HardwareSerial &serial);
     int32_t runOnce() override;
-    // Standalone send (e.g. NMEA from FakeUART), takes link_lock to
+    // Standalone send (e.g. NMEA from UARTProxy), takes link_lock to
     // serialize the shared TX buffer against the request methods
     bool send_uplink(const meshtastic_InterdeviceMessage &message);
 
@@ -50,7 +44,8 @@ class SensecapIndicator : public concurrency::OSThread
     // subdirectories get a trailing slash)
     bool list_directory(const char *path, uint32_t offset, meshtastic_DirectoryListing *out, uint32_t timeout_ms = 1000);
     // SD card statistics, answered from a cache on the co-processor.
-    // used/free read zero while its background FAT scan is still running
+    // used/free are only meaningful once stats_valid is set: the FAT scan
+    // behind them runs in the background after the card is mounted
     bool sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms = 2000);
 
     // True once at least one valid packet was received from the RP2040.
@@ -67,15 +62,14 @@ class SensecapIndicator : public concurrency::OSThread
     pb_byte_t pb_tx_buf[PB_BUFSIZE];
     pb_byte_t pb_rx_buf[PB_BUFSIZE];
     size_t pb_rx_size = 0; // Number of bytes currently in the buffer
-    HardwareSerial *_serial = &Serial2;
-    bool running = false;
+    HardwareSerial *_serial = nullptr;
     uint32_t packets_received = 0;
     meshtastic_I2CResult i2c_result = meshtastic_I2CResult_init_zero;
     bool i2c_result_ready = false;
     // Statically allocated message structs: with 4KB file chunks an
-    // InterdeviceMessage is ~4.6KB, too large for task stacks. rx is used
-    // by handle_packet (under link_lock); tx only by the file/dir/sd
-    // requests, which all originate from the single UI task.
+    // InterdeviceMessage is ~4.6KB, too large for task stacks. Both are
+    // only touched while link_lock is held, so requests staged by one
+    // thread cannot be overwritten by another.
     meshtastic_InterdeviceMessage rx_message;
     meshtastic_InterdeviceMessage tx_message;
     // Response destinations for the file operation in flight
@@ -89,6 +83,8 @@ class SensecapIndicator : public concurrency::OSThread
     // arrives after its request timed out cannot satisfy a later request
     uint32_t next_request_id = 0;
     uint32_t expected_id = 0;
+    // a nack response fails the request in flight without its timeout
+    bool request_nacked = false;
     // True while a requester holds link_lock for a full request/response
     // round trip (up to the request timeout). runOnce checks it so the
     // cooperative main loop is not blocked on the lock for that long.
@@ -100,6 +96,7 @@ class SensecapIndicator : public concurrency::OSThread
     };
     uint32_t stamp_request(meshtastic_InterdeviceMessage &request);
     bool send_uplink_unlocked(const meshtastic_InterdeviceMessage &message);
+    // callers hold link_lock (the request was staged in the shared tx_message)
     bool file_request(meshtastic_InterdeviceMessage &request, meshtastic_FileTransfer *out, uint32_t timeout_ms);
     bool wait_response(bool &flag, uint32_t timeout_ms);
     void pump();
@@ -112,4 +109,3 @@ class SensecapIndicator : public concurrency::OSThread
 extern SensecapIndicator *sensecapIndicator;
 
 #endif // SENSECAP_INDICATOR
-#endif // INDICATORSERIAL_H

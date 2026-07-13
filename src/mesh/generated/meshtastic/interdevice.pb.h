@@ -130,6 +130,11 @@ typedef struct _meshtastic_InterdeviceMessage {
      id. Touches no peripherals, so it works with nothing attached. */
         bool ping;
         bool pong;
+        /* Response: the request could not be decoded or is of an unhandled
+     type, so the requester fails fast instead of burning its timeout.
+     Echoes the id when known, 0 when the frame was undecodable. Never
+     sent in reaction to a nack. */
+        bool nack;
     } data;
     /* Correlates a response with its request: responses echo the id of the
  request they answer. 0 for unsolicited messages (e.g. the nmea stream). */
@@ -222,6 +227,7 @@ extern "C" {
 #define meshtastic_InterdeviceMessage_sd_info_tag 10
 #define meshtastic_InterdeviceMessage_ping_tag   11
 #define meshtastic_InterdeviceMessage_pong_tag   12
+#define meshtastic_InterdeviceMessage_nack_tag   13
 #define meshtastic_InterdeviceMessage_id_tag     15
 
 /* Struct field encoding specification for nanopb */
@@ -284,6 +290,7 @@ X(a, STATIC,   ONEOF,    BOOL,     (data,get_sd_info,data.get_sd_info),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (data,sd_info,data.sd_info),  10) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,ping,data.ping),  11) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,pong,data.pong),  12) \
+X(a, STATIC,   ONEOF,    BOOL,     (data,nack,data.nack),  13) \
 X(a, STATIC,   SINGULAR, UINT32,   id,               15)
 #define meshtastic_InterdeviceMessage_CALLBACK NULL
 #define meshtastic_InterdeviceMessage_DEFAULT NULL

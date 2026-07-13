@@ -18,7 +18,7 @@
 #include "graphics/map/RemoteSDService.h"
 #include "input/I2CKeyboardScanner.h"
 #include "mesh/IndicatorSerial.h"
-#include "mesh/comms/FakeI2C.h"
+#include "mesh/comms/I2CProxy.h"
 
 // Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
 // over the interdevice link.
@@ -172,7 +172,7 @@ void tftSetup(void)
     RemoteSDService::setBackend(new IndicatorRemoteFS());
     // the second bus is bridged to the RP2040, keep the keyboard scan off the
     // uninitialized local Wire1
-    I2CKeyboardScanner::setSecondaryBus(FakeWire);
+    I2CKeyboardScanner::setSecondaryBus(i2cProxy);
 #endif
 #ifndef ARCH_PORTDUINO
     deviceScreen = &DeviceScreen::create();
