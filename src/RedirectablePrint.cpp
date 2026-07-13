@@ -48,7 +48,7 @@ size_t RedirectablePrint::write(uint8_t c)
               // serial port said (which could be zero)
 }
 
-size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
+size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg, const char *threadName)
 {
     va_list copy;
 #if ARCH_PORTDUINO
@@ -78,9 +78,8 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         if (!std::isprint(static_cast<unsigned char>(printBuf[f])) && printBuf[f] != '\n')
             printBuf[f] = '#';
     }
-    // A leading "[Tag] " in the message simulates the thread name tag (used
-    // by contexts without an OSThread, e.g. the device-ui task). Print it
-    // before applying the level color so it renders like a real thread name.
+    // A message with its own "[Tag] " (the device-ui task has no OSThread)
+    // uses it instead of the thread name, printed uncolored like a real one.
     size_t tagLen = 0;
     if (printBuf[0] == '[') {
         const char *end = (const char *)memchr(printBuf, ']', len < 24 ? len : 24);
@@ -89,6 +88,11 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
     }
     if (tagLen)
         Print::write(printBuf, tagLen);
+    else if (threadName) {
+        Print::write("[", 1);
+        Print::write(threadName, strlen(threadName));
+        Print::write("] ", 2);
+    }
     if (color && logLevel != nullptr) {
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
             Print::write("\u001b[34m", 5);
@@ -172,15 +176,8 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 #endif
     }
     auto thread = concurrency::OSThread::currentThread;
-    // A message starting with "[Tag] " brings its own tag (e.g. device-ui
-    // logging from the UI task, where currentThread is unrelated)
-    if (thread && format[0] != '[') {
-        print("[");
-        // printf("%p ", thread);
-        // assert(thread->ThreadName.length());
-        print(thread->ThreadName);
-        print("] ");
-    }
+    // the tag is printed by vprintf, which knows whether the formatted
+    // message already carries one of its own
 
 #ifdef DEBUG_HEAP
     // Add heap free space bytes prefix before every log message
@@ -191,7 +188,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 #endif
 #endif // DEBUG_HEAP
 
-    r += vprintf(logLevel, format, arg);
+    r += vprintf(logLevel, format, arg, thread ? thread->ThreadName.c_str() : nullptr);
 }
 
 void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, va_list arg)

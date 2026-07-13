@@ -73,7 +73,7 @@ bool SensecapIndicator::wait_response(bool &flag, uint32_t timeout_ms)
             break;
         if (request_nacked)
             return false; // the other side could not handle the request
-        if (millis() - start >= timeout_ms)
+        if (!Throttle::isWithinTimespanMs(start, timeout_ms))
             return false;
         delay(1);
     }
@@ -277,7 +277,7 @@ bool SensecapIndicator::wait_ready(uint32_t timeout_ms)
         pump();
         if (handshake_done)
             break;
-        if (millis() - start >= timeout_ms)
+        if (!Throttle::isWithinTimespanMs(start, timeout_ms))
             return false;
         delay(1);
     }
@@ -369,8 +369,9 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
     // next loop)
     pb_istream_t stream = pb_istream_from_buffer(pb_rx_buf + MT_HEADER_SIZE, payload_len);
     bool status = pb_decode(&stream, meshtastic_InterdeviceMessage_fields, &message);
-    memmove(pb_rx_buf, pb_rx_buf + MT_HEADER_SIZE + payload_len, PB_BUFSIZE - MT_HEADER_SIZE - payload_len);
-    pb_rx_size -= MT_HEADER_SIZE + payload_len;
+    size_t remaining = pb_rx_size - MT_HEADER_SIZE - payload_len;
+    memmove(pb_rx_buf, pb_rx_buf + MT_HEADER_SIZE + payload_len, remaining);
+    pb_rx_size = remaining;
 
     if (!status) {
         LOG_DEBUG("Decoding failed");
@@ -388,7 +389,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
             i2c_result = message.data.i2c_result;
             i2c_result_ready = true;
         } else {
-            LOG_DEBUG("Drop stale i2c response id=%u", message.id);
+            LOG_DEBUG("Drop stale i2c response id=0x%08x", message.id);
         }
         return true;
     case meshtastic_InterdeviceMessage_file_transfer_tag:
@@ -397,7 +398,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
             pending_file = NULL;
             file_response_ready = true;
         } else {
-            LOG_DEBUG("Drop stale file response id=%u", message.id);
+            LOG_DEBUG("Drop stale file response id=0x%08x", message.id);
         }
         return true;
     case meshtastic_InterdeviceMessage_directory_listing_tag:
@@ -406,7 +407,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
             pending_dir = NULL;
             dir_response_ready = true;
         } else {
-            LOG_DEBUG("Drop stale listing response id=%u", message.id);
+            LOG_DEBUG("Drop stale listing response id=0x%08x", message.id);
         }
         return true;
     case meshtastic_InterdeviceMessage_ping_tag: {
@@ -440,7 +441,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
         // unrelated NMEA uplink, so that one only ends the wait (the caller
         // may retry it as the transport failure it is).
         if (message.id == expected_id) {
-            LOG_WARN("Request %u nacked by the co-processor", expected_id);
+            LOG_WARN("Request 0x%08x nacked by the co-processor", expected_id);
             request_nacked = true;
         } else if (message.id == 0) {
             LOG_WARN("Co-processor could not decode a frame");
@@ -452,7 +453,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
             pending_sd_info = NULL;
             sd_info_ready = true;
         } else {
-            LOG_DEBUG("Drop stale sd info response id=%u", message.id);
+            LOG_DEBUG("Drop stale sd info response id=0x%08x", message.id);
         }
         return true;
     default:
