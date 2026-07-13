@@ -168,11 +168,11 @@ typedef struct _meshtastic_InterdeviceMessage {
         meshtastic_SdCardInfo sd_info; /* Response */
         /* Link liveness probe and version handshake. The receiver answers ping
      with pong, echoing the id. Touches no peripherals, so it works with
-     nothing attached. Both carry the sender's InterdeviceVersion; a peer
+     nothing attached. Both carry the version the sender speaks; a peer
      that answers with a different one speaks another protocol and must
      not be used. */
-        uint32_t ping;
-        uint32_t pong;
+        meshtastic_InterdeviceVersion ping;
+        meshtastic_InterdeviceVersion pong;
         /* Response: the request could not be decoded or is of an unhandled
      type, so the requester fails fast instead of burning its timeout.
      Echoes the id when known, 0 when the frame was undecodable. Never
@@ -225,6 +225,8 @@ extern "C" {
 
 #define meshtastic_I2CResult_status_ENUMTYPE meshtastic_I2CResult_Status
 
+#define meshtastic_InterdeviceMessage_data_ping_ENUMTYPE meshtastic_InterdeviceVersion
+#define meshtastic_InterdeviceMessage_data_pong_ENUMTYPE meshtastic_InterdeviceVersion
 
 
 /* Initializer values for message structs */
@@ -343,8 +345,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (data,file_transfer,data.file_transfer),   7)
 X(a, STATIC,   ONEOF,    MESSAGE,  (data,directory_listing,data.directory_listing),   8) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,get_sd_info,data.get_sd_info),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (data,sd_info,data.sd_info),  10) \
-X(a, STATIC,   ONEOF,    UINT32,   (data,ping,data.ping),  11) \
-X(a, STATIC,   ONEOF,    UINT32,   (data,pong,data.pong),  12) \
+X(a, STATIC,   ONEOF,    UENUM,    (data,ping,data.ping),  11) \
+X(a, STATIC,   ONEOF,    UENUM,    (data,pong,data.pong),  12) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,nack,data.nack),  13) \
 X(a, STATIC,   SINGULAR, UINT32,   id,               15)
 #define meshtastic_InterdeviceMessage_CALLBACK NULL
