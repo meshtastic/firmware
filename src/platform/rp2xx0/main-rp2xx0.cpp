@@ -101,8 +101,7 @@ void getMacAddr(uint8_t *dmac)
 
 bool getDeviceId(uint8_t *deviceId)
 {
-    // RP2040/RP2350: 64-bit unique board id (flash serial / OTP) in bytes 0-7; the caller
-    // pre-zeroes the buffer so bytes 8-15 stay zero.
+    // RP2040/RP2350: 64-bit unique board id (flash serial / OTP) in bytes 0-7 (rest stay zero).
     pico_unique_board_id_t board_id;
     pico_get_unique_board_id(&board_id);
     memcpy(deviceId, board_id.id, sizeof(board_id.id));

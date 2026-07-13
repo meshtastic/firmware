@@ -27,6 +27,7 @@
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
@@ -368,11 +369,7 @@ void NodeDB::disarmNodeDatabaseDecodeTargets()
  */
 uint32_t radioGeneration;
 
-// FIXME - move this somewhere else
-extern void getMacAddr(uint8_t *dmac);
-
-// Per-architecture hardware device id (see target_specific.h); implemented in src/platform/<arch>/.
-extern bool getDeviceId(uint8_t *deviceId);
+// getMacAddr() and getDeviceId() are the per-architecture hooks declared in target_specific.h.
 
 /**
  *
@@ -417,16 +414,6 @@ NodeDB::NodeDB()
     if (getDeviceId(myNodeInfo.device_id.bytes)) {
         myNodeInfo.device_id.size = sizeof(myNodeInfo.device_id.bytes);
     }
-
-    // if (myNodeInfo.device_id.size == 16) {
-    //     std::string deviceIdHex;
-    //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
-    //         char buf[3];
-    //         snprintf(buf, sizeof(buf), "%02X", myNodeInfo.device_id.bytes[i]);
-    //         deviceIdHex += buf;
-    //     }
-    //     LOG_DEBUG("Device ID (HEX): %s", deviceIdHex.c_str());
-    // }
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00

@@ -80,8 +80,7 @@ void getMacAddr(uint8_t *dmac)
 
 bool getDeviceId(uint8_t *deviceId)
 {
-    // STM32WL: 96-bit factory-programmed silicon UID (words w0..w2, little-endian) in bytes
-    // 0-11; the caller pre-zeroes the buffer so bytes 12-15 stay zero.
+    // STM32WL: 96-bit factory silicon UID (words w0..w2, little-endian) in bytes 0-11 (rest stay zero).
     uint32_t uid[3] = {HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2()};
     memcpy(deviceId, uid, sizeof(uid));
     return true;
