@@ -46,11 +46,14 @@ class SensecapIndicator : public concurrency::OSThread
     bool file_remove(const char *path, meshtastic_FileTransfer *out, uint32_t timeout_ms = 1000);
     // List directory entries starting at entry number `offset` (paged,
     // subdirectories get a trailing slash)
-    bool list_directory(const char *path, uint32_t offset, meshtastic_DirectoryListing *out, uint32_t timeout_ms = 1000);
-    // SD card statistics, answered from a cache on the co-processor.
-    // used/free are only meaningful once stats_valid is set: the FAT scan
-    // behind them runs in the background after the card is mounted
-    bool sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms = 2000);
+    // the first page of a large directory has to walk it to the end to count
+    // the entries, so this one gets a longer budget
+    bool list_directory(const char *path, uint32_t offset, meshtastic_DirectoryListing *out, uint32_t timeout_ms = 5000);
+    // SD card statistics, answered from state the co-processor cached at
+    // mount time, so this never waits on the card. used/free are only
+    // meaningful once stats_valid is set: the FAT scan behind them runs in
+    // the background. `busy` means a card is being mounted right now.
+    bool sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms = 500);
 
     // True when the last request was refused by the co-processor rather than
     // lost: retrying it would only be refused again
@@ -114,7 +117,8 @@ class SensecapIndicator : public concurrency::OSThread
         ~InFlight() { count--; }
     };
     bool link_ready();
-    void probe_link(); // caller holds link_lock
+    void probe_link();                          // caller holds link_lock
+    void note_handshake(uint32_t peer_version); // caller holds link_lock
     uint32_t stamp_request(meshtastic_InterdeviceMessage &request);
     bool send_uplink_unlocked(const meshtastic_InterdeviceMessage &message);
     // callers hold link_lock (the request was staged in the shared tx_message)

@@ -72,6 +72,7 @@ class I2CProxy : public TwoWire
         size_t rxPos = 0;
     };
     Context _ctx[MAX_TASKS];
+    portMUX_TYPE _claim_mux = portMUX_INITIALIZER_UNLOCKED;
 
     // per-task transaction state, claimed on first use
     Context &ctx();

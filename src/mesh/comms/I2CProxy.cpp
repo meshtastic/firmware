@@ -2,8 +2,12 @@
 
 #include "I2CProxy.h"
 #include "../IndicatorSerial.h"
+#include "LinkSpiLock.h"
 
 I2CProxy *i2cProxy = new I2CProxy();
+
+// the TFT task publishes itself here while it holds spiLock, see LinkSpiLock.h
+volatile TaskHandle_t spiLockHolder = nullptr;
 
 // Transaction state of the calling task. Slots are claimed on first use and
 // never released: the set of tasks touching the bridged bus is fixed (main
@@ -15,12 +19,19 @@ I2CProxy::Context &I2CProxy::ctx()
         if (_ctx[i].task == self)
             return _ctx[i];
     }
-    for (size_t i = 0; i < MAX_TASKS; i++) {
+    // claiming a slot must be atomic: two tasks that pick the same one would
+    // interleave their transactions in one buffer set
+    Context *claimed = nullptr;
+    portENTER_CRITICAL(&_claim_mux);
+    for (size_t i = 0; i < MAX_TASKS && !claimed; i++) {
         if (_ctx[i].task == nullptr) {
             _ctx[i].task = self;
-            return _ctx[i];
+            claimed = &_ctx[i];
         }
     }
+    portEXIT_CRITICAL(&_claim_mux);
+    if (claimed)
+        return *claimed;
     LOG_WARN("I2CProxy: more tasks than contexts, sharing the last one");
     return _ctx[MAX_TASKS - 1];
 }
@@ -111,6 +122,10 @@ uint8_t I2CProxy::transact(Context &c, uint8_t address, size_t rlen)
         return 4;
     if (c.txLen > MAX_WRITE)
         return 1;
+
+    // the keyboard scanner polls this bus from the LVGL task, which holds the
+    // SPI lock the radio needs
+    SpiLockBreak spiFree;
 
     meshtastic_I2CResult result = meshtastic_I2CResult_init_zero;
     if (!sensecapIndicator->i2c_transact(address, c.txBuf, c.txLen, rlen, &result))

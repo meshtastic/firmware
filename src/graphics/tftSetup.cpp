@@ -19,40 +19,7 @@
 #include "input/I2CKeyboardScanner.h"
 #include "mesh/IndicatorSerial.h"
 #include "mesh/comms/I2CProxy.h"
-
-// Set while the TFT task holds spiLock around the LVGL handler, so the file
-// operations below (which run inside LVGL callbacks) can hand the SPI bus
-// back to the radio while they wait on the interdevice link
-static volatile TaskHandle_t spiLockHolder = nullptr;
-
-/**
- * The remote FS round trips block for the request timeout, and the LVGL
- * handler runs with spiLock held, which would starve the LoRa radio for
- * that whole time. Nothing in a link round trip touches SPI, so give the
- * bus back for its duration.
- */
-class SpiLockBreak
-{
-  public:
-    SpiLockBreak()
-    {
-        held = spiLockHolder == xTaskGetCurrentTaskHandle();
-        if (held) {
-            spiLockHolder = nullptr;
-            spiLock->unlock();
-        }
-    }
-    ~SpiLockBreak()
-    {
-        if (held) {
-            spiLock->lock();
-            spiLockHolder = xTaskGetCurrentTaskHandle();
-        }
-    }
-
-  private:
-    bool held;
-};
+#include "mesh/comms/LinkSpiLock.h"
 
 // Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
 // over the interdevice link.
@@ -64,20 +31,28 @@ class SpiLockBreak
 // first attempt is dropped as stale.
 class IndicatorRemoteFS : public IRemoteFS
 {
+    // A lost frame is retried a couple of times. A co-processor busy with
+    // card maintenance is a different story: mounting a card takes seconds,
+    // and the free space scan of a large card walks its whole FAT, so wait
+    // that out rather than reporting a missing tile.
     static const int LINK_ATTEMPTS = 3;
-    static const uint32_t BUSY_BACKOFF_MS = 150;
+    static const int BUSY_ATTEMPTS = 20;
+    static const uint32_t BUSY_BACKOFF_MS = 250;
 
     // Returns true when the request should be sent again. `answered` is
     // false when the link itself failed (timeout), true when the
     // co-processor replied.
-    static bool retryable(bool answered, meshtastic_FileStatus status, int attempt)
+    static bool retryable(bool answered, meshtastic_FileStatus status, int &attempts_left)
     {
-        if (attempt + 1 >= LINK_ATTEMPTS)
+        if (--attempts_left <= 0)
             return false;
         if (!answered)
             return !sensecapIndicator->last_request_nacked(); // refused, not lost
         if (status == meshtastic_FileStatus_FILE_BUSY) {
-            delay(BUSY_BACKOFF_MS); // card maintenance, give it a moment
+            // it answered, so nothing was lost: only the wait counts
+            if (attempts_left < BUSY_ATTEMPTS)
+                attempts_left = BUSY_ATTEMPTS;
+            delay(BUSY_BACKOFF_MS);
             return true;
         }
         return false;
@@ -90,7 +65,8 @@ class IndicatorRemoteFS : public IRemoteFS
         if (!sensecapIndicator)
             return false;
         SpiLockBreak spiFree;
-        for (int attempt = 0; attempt < LINK_ATTEMPTS; attempt++) {
+        int attempts_left = LINK_ATTEMPTS;
+        do {
             memset(&result, 0, sizeof(result));
             bool answered = sensecapIndicator->file_read(path, offset, len, &result);
             if (answered && result.status == meshtastic_FileStatus_FILE_OK) {
@@ -103,10 +79,9 @@ class IndicatorRemoteFS : public IRemoteFS
                 *fileSize = (uint32_t)result.file_size;
                 return true;
             }
-            if (!retryable(answered, result.status, attempt))
+            if (!retryable(answered, result.status, attempts_left))
                 return false;
-        }
-        return false;
+        } while (true);
     }
 
     bool writeChunk(const char *path, uint32_t offset, const uint8_t *buf, uint32_t len, bool create) override
@@ -114,7 +89,9 @@ class IndicatorRemoteFS : public IRemoteFS
         if (!sensecapIndicator)
             return false;
         SpiLockBreak spiFree;
-        for (int attempt = 0; attempt < LINK_ATTEMPTS; attempt++) {
+        int attempts_left = LINK_ATTEMPTS;
+        bool retried = false;
+        do {
             memset(&result, 0, sizeof(result));
             bool answered = sensecapIndicator->file_write(path, offset, buf, len, create, &result);
             if (answered) {
@@ -123,14 +100,14 @@ class IndicatorRemoteFS : public IRemoteFS
                 // An append whose first attempt landed but whose response was
                 // lost is refused as an offset conflict, and the file already
                 // holds this chunk: that is the outcome we wanted
-                if (attempt > 0 && !create && result.status == meshtastic_FileStatus_FILE_OFFSET_CONFLICT &&
+                if (retried && !create && result.status == meshtastic_FileStatus_FILE_OFFSET_CONFLICT &&
                     result.file_size == (uint64_t)offset + len)
                     return true;
             }
-            if (!retryable(answered, result.status, attempt))
+            if (!retryable(answered, result.status, attempts_left))
                 return false;
-        }
-        return false;
+            retried = true;
+        } while (true);
     }
 
     bool sdInfo(RemoteSdInfo &info) override
@@ -139,14 +116,19 @@ class IndicatorRemoteFS : public IRemoteFS
             return false;
         SpiLockBreak spiFree;
         meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
-        bool ok = false;
-        for (int attempt = 0; attempt < LINK_ATTEMPTS && !ok; attempt++) {
-            ok = sensecapIndicator->sd_info(&result);
-            if (!ok && sensecapIndicator->last_request_nacked())
+        int attempts_left = LINK_ATTEMPTS;
+        while (true) {
+            result = meshtastic_SdCardInfo_init_zero;
+            bool answered = sensecapIndicator->sd_info(&result);
+            // `busy` means a card is being mounted: whether one is there is
+            // not decided yet, and reporting an empty slot would stick for
+            // the session
+            if (answered && !result.busy)
                 break;
+            if (!retryable(answered, answered ? meshtastic_FileStatus_FILE_BUSY : meshtastic_FileStatus_FILE_UNSPECIFIED,
+                           attempts_left))
+                return false;
         }
-        if (!ok)
-            return false;
         info.present = result.present;
         info.cardType = (uint8_t)result.card_type;
         info.fatType = (uint8_t)result.fat_type;
@@ -162,7 +144,8 @@ class IndicatorRemoteFS : public IRemoteFS
         if (!sensecapIndicator)
             return false;
         SpiLockBreak spiFree;
-        for (int attempt = 0; attempt < LINK_ATTEMPTS; attempt++) {
+        int attempts_left = LINK_ATTEMPTS;
+        do {
             memset(&result, 0, sizeof(result));
             bool answered = sensecapIndicator->file_remove(path, &result);
             // delete is idempotent on the co-processor: a file that is
@@ -170,10 +153,9 @@ class IndicatorRemoteFS : public IRemoteFS
             // not have to be guessed at here
             if (answered && result.status == meshtastic_FileStatus_FILE_OK)
                 return true;
-            if (!retryable(answered, result.status, attempt))
+            if (!retryable(answered, result.status, attempts_left))
                 return false;
-        }
-        return false;
+        } while (true);
     }
 
     bool listDir(const char *path, std::set<std::string> &entries) override
@@ -184,12 +166,13 @@ class IndicatorRemoteFS : public IRemoteFS
         uint32_t offset = 0;
         while (true) {
             bool got_page = false;
-            for (int attempt = 0; attempt < LINK_ATTEMPTS && !got_page; attempt++) {
+            int attempts_left = LINK_ATTEMPTS;
+            while (!got_page) {
                 memset(&listing, 0, sizeof(listing));
                 bool answered = sensecapIndicator->list_directory(path, offset, &listing);
                 if (answered && listing.status == meshtastic_FileStatus_FILE_OK)
                     got_page = true;
-                else if (!retryable(answered, listing.status, attempt))
+                else if (!retryable(answered, listing.status, attempts_left))
                     return false;
             }
             if (!got_page)

@@ -85,7 +85,6 @@ typedef struct _meshtastic_FileTransfer {
     meshtastic_FileOperation operation; /* File operation (GET, POST, PUT, DELETE) */
     char filepath[256]; /* Path of the file on the SD card */
     meshtastic_FileTransfer_filedata_t filedata; /* Chunk content (POST/PUT request, GET response) */
-    meshtastic_FileStatus status; /* Response: outcome of the operation */
     char message[255]; /* Response: human readable detail, may be empty */
     uint64_t offset; /* Byte offset of this chunk within the file (ranged GET/PUT) */
     /* GET request: number of bytes to read, 0 = max chunk size. A response
@@ -93,6 +92,7 @@ typedef struct _meshtastic_FileTransfer {
  chunk; larger requests are truncated, visible in the filedata length. */
     uint32_t length;
     uint64_t file_size; /* GET response: total size of the file */
+    meshtastic_FileStatus status; /* Response: outcome of the operation */
 } meshtastic_FileTransfer;
 
 /* Message for structured directory listing */
@@ -105,10 +105,10 @@ typedef struct _meshtastic_DirectoryListing {
  offset and total_count. */
     pb_size_t filenames_count;
     char filenames[16][256];
-    meshtastic_FileStatus status; /* Response: outcome of the operation */
     char message[255]; /* Response: human readable detail, may be empty */
     uint32_t offset; /* Request: skip this many entries (paging) */
     uint32_t total_count; /* Response: total number of entries in the directory */
+    meshtastic_FileStatus status; /* Response: outcome of the operation */
 } meshtastic_DirectoryListing;
 
 typedef PB_BYTES_ARRAY_T(256) meshtastic_I2CTransaction_write_data_t;
@@ -126,7 +126,9 @@ typedef struct _meshtastic_I2CTransaction {
 
 /* SD card statistics */
 typedef struct _meshtastic_SdCardInfo {
-    bool present; /* Card initialized and usable */
+    /* Card initialized and usable. False while `busy` is set does not mean
+ there is no card: the co-processor does not know yet. */
+    bool present;
     meshtastic_SdCardInfo_CardType card_type;
     meshtastic_SdCardInfo_FatType fat_type;
     uint64_t card_size; /* Filesystem size in bytes */
@@ -136,6 +138,10 @@ typedef struct _meshtastic_SdCardInfo {
  them runs in the background after mount and can take a while, and a
  full card is otherwise indistinguishable from a scan in progress */
     bool stats_valid;
+    /* The co-processor is mounting a card right now, so whether one is
+ present is not decided yet. Ask again rather than concluding the slot
+ is empty. */
+    bool busy;
 } meshtastic_SdCardInfo;
 
 typedef PB_BYTES_ARRAY_T(256) meshtastic_I2CResult_read_data_t;
@@ -222,16 +228,16 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_FileTransfer_init_default     {_meshtastic_FileOperation_MIN, "", {0, {0}}, _meshtastic_FileStatus_MIN, "", 0, 0, 0}
-#define meshtastic_DirectoryListing_init_default {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, _meshtastic_FileStatus_MIN, "", 0, 0}
+#define meshtastic_FileTransfer_init_default     {_meshtastic_FileOperation_MIN, "", {0, {0}}, "", 0, 0, 0, _meshtastic_FileStatus_MIN}
+#define meshtastic_DirectoryListing_init_default {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, "", 0, 0, _meshtastic_FileStatus_MIN}
 #define meshtastic_I2CTransaction_init_default   {0, {0, {0}}, 0}
-#define meshtastic_SdCardInfo_init_default       {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0}
+#define meshtastic_SdCardInfo_init_default       {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_default        {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
 #define meshtastic_InterdeviceMessage_init_default {0, {""}, 0}
-#define meshtastic_FileTransfer_init_zero        {_meshtastic_FileOperation_MIN, "", {0, {0}}, _meshtastic_FileStatus_MIN, "", 0, 0, 0}
-#define meshtastic_DirectoryListing_init_zero    {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, _meshtastic_FileStatus_MIN, "", 0, 0}
+#define meshtastic_FileTransfer_init_zero        {_meshtastic_FileOperation_MIN, "", {0, {0}}, "", 0, 0, 0, _meshtastic_FileStatus_MIN}
+#define meshtastic_DirectoryListing_init_zero    {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, "", 0, 0, _meshtastic_FileStatus_MIN}
 #define meshtastic_I2CTransaction_init_zero      {0, {0, {0}}, 0}
-#define meshtastic_SdCardInfo_init_zero          {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0}
+#define meshtastic_SdCardInfo_init_zero          {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_zero           {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
 #define meshtastic_InterdeviceMessage_init_zero  {0, {""}, 0}
 
@@ -239,17 +245,17 @@ extern "C" {
 #define meshtastic_FileTransfer_operation_tag    1
 #define meshtastic_FileTransfer_filepath_tag     2
 #define meshtastic_FileTransfer_filedata_tag     3
-#define meshtastic_FileTransfer_status_tag       4
 #define meshtastic_FileTransfer_message_tag      5
 #define meshtastic_FileTransfer_offset_tag       6
 #define meshtastic_FileTransfer_length_tag       7
 #define meshtastic_FileTransfer_file_size_tag    8
+#define meshtastic_FileTransfer_status_tag       9
 #define meshtastic_DirectoryListing_directory_tag 1
 #define meshtastic_DirectoryListing_filenames_tag 2
-#define meshtastic_DirectoryListing_status_tag   3
 #define meshtastic_DirectoryListing_message_tag  4
 #define meshtastic_DirectoryListing_offset_tag   5
 #define meshtastic_DirectoryListing_total_count_tag 6
+#define meshtastic_DirectoryListing_status_tag   7
 #define meshtastic_I2CTransaction_address_tag    1
 #define meshtastic_I2CTransaction_write_data_tag 2
 #define meshtastic_I2CTransaction_read_len_tag   3
@@ -260,6 +266,7 @@ extern "C" {
 #define meshtastic_SdCardInfo_used_bytes_tag     5
 #define meshtastic_SdCardInfo_free_bytes_tag     6
 #define meshtastic_SdCardInfo_stats_valid_tag    7
+#define meshtastic_SdCardInfo_busy_tag           8
 #define meshtastic_I2CResult_status_tag          1
 #define meshtastic_I2CResult_read_data_tag       2
 #define meshtastic_InterdeviceMessage_nmea_tag   1
@@ -282,21 +289,21 @@ extern "C" {
 X(a, STATIC,   SINGULAR, UENUM,    operation,         1) \
 X(a, STATIC,   SINGULAR, STRING,   filepath,          2) \
 X(a, STATIC,   SINGULAR, BYTES,    filedata,          3) \
-X(a, STATIC,   SINGULAR, UENUM,    status,            4) \
 X(a, STATIC,   SINGULAR, STRING,   message,           5) \
 X(a, STATIC,   SINGULAR, UINT64,   offset,            6) \
 X(a, STATIC,   SINGULAR, UINT32,   length,            7) \
-X(a, STATIC,   SINGULAR, UINT64,   file_size,         8)
+X(a, STATIC,   SINGULAR, UINT64,   file_size,         8) \
+X(a, STATIC,   SINGULAR, UENUM,    status,            9)
 #define meshtastic_FileTransfer_CALLBACK NULL
 #define meshtastic_FileTransfer_DEFAULT NULL
 
 #define meshtastic_DirectoryListing_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   directory,         1) \
 X(a, STATIC,   REPEATED, STRING,   filenames,         2) \
-X(a, STATIC,   SINGULAR, UENUM,    status,            3) \
 X(a, STATIC,   SINGULAR, STRING,   message,           4) \
 X(a, STATIC,   SINGULAR, UINT32,   offset,            5) \
-X(a, STATIC,   SINGULAR, UINT32,   total_count,       6)
+X(a, STATIC,   SINGULAR, UINT32,   total_count,       6) \
+X(a, STATIC,   SINGULAR, UENUM,    status,            7)
 #define meshtastic_DirectoryListing_CALLBACK NULL
 #define meshtastic_DirectoryListing_DEFAULT NULL
 
@@ -314,7 +321,8 @@ X(a, STATIC,   SINGULAR, UENUM,    fat_type,          3) \
 X(a, STATIC,   SINGULAR, UINT64,   card_size,         4) \
 X(a, STATIC,   SINGULAR, UINT64,   used_bytes,        5) \
 X(a, STATIC,   SINGULAR, UINT64,   free_bytes,        6) \
-X(a, STATIC,   SINGULAR, BOOL,     stats_valid,       7)
+X(a, STATIC,   SINGULAR, BOOL,     stats_valid,       7) \
+X(a, STATIC,   SINGULAR, BOOL,     busy,              8)
 #define meshtastic_SdCardInfo_CALLBACK NULL
 #define meshtastic_SdCardInfo_DEFAULT NULL
 
@@ -369,7 +377,7 @@ extern const pb_msgdesc_t meshtastic_InterdeviceMessage_msg;
 #define meshtastic_I2CResult_size                261
 #define meshtastic_I2CTransaction_size           271
 #define meshtastic_InterdeviceMessage_size       4666
-#define meshtastic_SdCardInfo_size               41
+#define meshtastic_SdCardInfo_size               43
 
 #ifdef __cplusplus
 } /* extern "C" */

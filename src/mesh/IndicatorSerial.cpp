@@ -96,6 +96,26 @@ bool SensecapIndicator::link_ready()
     return handshake_done && link_compatible;
 }
 
+// The co-processor reported the protocol version it speaks, in a pong or in
+// the unsolicited ping it sends when it has booted. Anything else than ours
+// means its firmware does not match this build, and every request would be
+// misinterpreted. Caller holds link_lock.
+void SensecapIndicator::note_handshake(uint32_t peer_version)
+{
+    bool compatible = peer_version == meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT;
+    bool changed = !handshake_done || compatible != link_compatible;
+    if (changed) {
+        if (compatible)
+            LOG_INFO("RP2040 link up, interdevice protocol v%u", (unsigned)peer_version);
+        else
+            LOG_ERROR("RP2040 speaks interdevice protocol v%u, this firmware speaks v%u. Flash the matching "
+                      "indicator_rp2040 firmware; sensors, GPS and SD card stay disabled",
+                      (unsigned)peer_version, (unsigned)meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT);
+    }
+    link_compatible = compatible;
+    handshake_done = true;
+}
+
 bool SensecapIndicator::i2c_transact(uint8_t address, const uint8_t *wbuf, size_t wlen, size_t rlen, meshtastic_I2CResult *result,
                                      uint32_t timeout_ms)
 {
@@ -264,7 +284,10 @@ bool SensecapIndicator::wait_ready(uint32_t timeout_ms)
 
 bool SensecapIndicator::send_uplink(const meshtastic_InterdeviceMessage &message)
 {
+    InFlight busy(requests_in_flight);
     concurrency::LockGuard guard(&link_lock);
+    if (!link_ready())
+        return false; // nothing is sent to a peer we do not speak the same protocol with
     return send_uplink_unlocked(message);
 }
 
@@ -385,9 +408,17 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
         }
         return true;
     case meshtastic_InterdeviceMessage_ping_tag: {
-        // Liveness probe from the other side, answer regardless of state.
-        // tx_message is safe to reuse: a request in flight was already
-        // encoded into pb_tx_buf when it was sent
+        // The co-processor pings us unsolicited (id 0) when it has booted,
+        // which is also how a reboot after its watchdog is noticed. It
+        // reports the version it speaks, so this completes the handshake
+        // just like a pong does.
+        if (message.id == 0) {
+            if (handshake_done)
+                LOG_WARN("RP2040 rebooted");
+            note_handshake(message.data.ping);
+        }
+        // answer regardless of state. tx_message is safe to reuse: a request
+        // in flight was already encoded into pb_tx_buf when it was sent
         meshtastic_InterdeviceMessage &pong = tx_message;
         memset(&pong, 0, sizeof(pong));
         pong.id = message.id;
@@ -396,23 +427,10 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
         send_uplink_unlocked(pong);
         return true;
     }
-    case meshtastic_InterdeviceMessage_pong_tag: {
-        // The handshake: the co-processor reports the protocol version it
-        // speaks. Anything else than ours means its firmware does not match
-        // this build, and every request would be misinterpreted.
-        bool compatible = message.data.pong == meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT;
-        if (!handshake_done || compatible != link_compatible) {
-            if (compatible)
-                LOG_INFO("RP2040 link up, interdevice protocol v%u", (unsigned)message.data.pong);
-            else
-                LOG_ERROR("RP2040 speaks interdevice protocol v%u, this firmware speaks v%u. Flash the matching "
-                          "indicator_rp2040 firmware; sensors, GPS and SD card stay disabled",
-                          (unsigned)message.data.pong, (unsigned)meshtastic_InterdeviceVersion_INTERDEVICE_VERSION_CURRENT);
-        }
-        link_compatible = compatible;
-        handshake_done = true;
+    case meshtastic_InterdeviceMessage_pong_tag:
+        // the answer to our probe, carrying the version it speaks
+        note_handshake(message.data.pong);
         return true;
-    }
     case meshtastic_InterdeviceMessage_nack_tag:
         // A nack for the request in flight is definitive: resending it would
         // only be refused again. An id of 0 means the co-processor could not
