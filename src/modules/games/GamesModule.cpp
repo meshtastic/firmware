@@ -102,6 +102,8 @@ void GamesModule::announceHighScore(const char *initials, uint32_t score)
 {
     if (!active || !service)
         return;
+    if (!initials || initials[0] == '\0')
+        return;
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = NODENUM_BROADCAST;
     p->channel = 0; // primary channel
@@ -109,8 +111,7 @@ void GamesModule::announceHighScore(const char *initials, uint32_t score)
     // One shared message for every game, with the game's name spliced in. ASCII only -- avoids tofu
     // if a receiving node's font lacks a glyph.
     p->decoded.payload.size = snprintf(reinterpret_cast<char *>(p->decoded.payload.bytes), sizeof(p->decoded.payload.bytes),
-                                       "%s set a new %s high score: %lu", (initials && initials[0]) ? initials : owner.short_name,
-                                       active->name(), static_cast<unsigned long>(score));
+                                       GAMES_HIGH_SCORE_STRING, active->name(), initials, static_cast<unsigned long>(score));
     service->sendToMesh(p);
     LOG_INFO("Games: announced new %s high score %lu", active->name(), static_cast<unsigned long>(score));
 }

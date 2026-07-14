@@ -281,8 +281,8 @@ Tetris::Tetris()
 int32_t Tetris::tickIntervalMs() const
 {
     // Speed ramps with level: 600 ms base, 30 ms per level, floor 80 ms.
-    int32_t iv = 600 - static_cast<int32_t>(game.level()) * 30;
-    return iv < 80 ? 80 : iv;
+    int32_t iv = 600 - static_cast<int32_t>(game.level()) * 45;
+    return iv < 50 ? 50 : iv;
 }
 
 void Tetris::handleInput(input_broker_event ev)

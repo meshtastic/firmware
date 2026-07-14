@@ -19,6 +19,10 @@
 #define GAMES_ANNOUNCE_HIGH_SCORE 0
 #endif
 
+#ifndef GAMES_HIGH_SCORE_STRING
+#define GAMES_HIGH_SCORE_STRING "New %s high score %lu by %s!"
+#endif
+
 enum GamesUiState : uint8_t {
     GAMES_IDLE,     // attract screen of the selected game; OSThread idle (unless a game broadcasts)
     GAMES_PLAYING,  // active game running; tick thread ticking
