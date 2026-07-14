@@ -260,6 +260,28 @@ bool SensecapIndicator::sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms)
     return true;
 }
 
+bool SensecapIndicator::sd_command(meshtastic_SdCommand command, meshtastic_SdCardInfo *out, uint32_t timeout_ms)
+{
+    InFlight busy(requests_in_flight);
+    concurrency::LockGuard guard(&link_lock);
+    if (!link_ready())
+        return false;
+
+    meshtastic_InterdeviceMessage &msg = tx_message;
+    memset(&msg, 0, sizeof(msg));
+    msg.which_data = meshtastic_InterdeviceMessage_sd_command_tag;
+    msg.data.sd_command = command;
+
+    stamp_request(msg);
+    sd_info_ready = false;
+    pending_sd_info = out;
+    if (!send_uplink_unlocked(msg) || !wait_response(sd_info_ready, timeout_ms)) {
+        pending_sd_info = NULL;
+        return false;
+    }
+    return true;
+}
+
 bool SensecapIndicator::wait_ready(uint32_t timeout_ms)
 {
     InFlight busy(requests_in_flight);

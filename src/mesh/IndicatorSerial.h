@@ -54,6 +54,9 @@ class SensecapIndicator : public concurrency::OSThread
     // meaningful once stats_valid is set: the FAT scan behind them runs in
     // the background. `busy` means a card is being mounted right now.
     bool sd_info(meshtastic_SdCardInfo *out, uint32_t timeout_ms = 500);
+    // Mount the card, or release it so it can be pulled safely. Answered with
+    // the card state as it is right now (a mount is still busy at that point).
+    bool sd_command(meshtastic_SdCommand command, meshtastic_SdCardInfo *out, uint32_t timeout_ms = 500);
 
     // True when the last request was refused by the co-processor rather than
     // lost: retrying it would only be refused again

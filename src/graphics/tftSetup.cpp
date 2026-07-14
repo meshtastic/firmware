@@ -136,7 +136,17 @@ class IndicatorRemoteFS : public IRemoteFS
         info.usedBytes = result.used_bytes;
         info.freeBytes = result.free_bytes;
         info.statsValid = result.stats_valid;
+        info.unformatted = result.unformatted;
         return true;
+    }
+
+    bool sdEject(void) override { return sdCommand(meshtastic_SdCommand_SD_EJECT); }
+    bool sdMount(void) override { return sdCommand(meshtastic_SdCommand_SD_MOUNT); }
+    bool sdFormat(void) override
+    {
+        // wiping the card takes seconds; the co-processor answers right away
+        // and mounts the fresh filesystem afterwards
+        return sdCommand(meshtastic_SdCommand_SD_FORMAT);
     }
 
     bool remove(const char *path) override
@@ -187,6 +197,15 @@ class IndicatorRemoteFS : public IRemoteFS
     }
 
   private:
+    bool sdCommand(meshtastic_SdCommand command)
+    {
+        if (!sensecapIndicator)
+            return false;
+        SpiLockBreak spiFree;
+        meshtastic_SdCardInfo state = meshtastic_SdCardInfo_init_zero;
+        return sensecapIndicator->sd_command(command, &state);
+    }
+
     // Several KB each, kept off the UI task stack. All file operations
     // originate from the single UI task.
     meshtastic_FileTransfer result;
