@@ -37,6 +37,9 @@ class IndicatorRemoteFS : public IRemoteFS
     // that out rather than reporting a missing tile.
     static const int LINK_ATTEMPTS = 3;
     static const int BUSY_ATTEMPTS = 20;
+    // card state is answered from a cache, so it is only ever busy across a
+    // mount: a much shorter wait than a file operation has to sit out
+    static const int INFO_BUSY_ATTEMPTS = 10;
     static const uint32_t BUSY_BACKOFF_MS = 250;
 
     // Returns true when the request should be sent again. `answered` is
@@ -116,17 +119,24 @@ class IndicatorRemoteFS : public IRemoteFS
             return false;
         SpiLockBreak spiFree;
         meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
+        // A mount takes up to two seconds. Waiting it out here is worth it (an
+        // empty slot reported once sticks in the UI), but this runs on the UI
+        // task, so the wait is bounded well below what a user would call a
+        // hang, and a card that stays busy longer is simply asked again later.
+        int busy_left = INFO_BUSY_ATTEMPTS;
         int attempts_left = LINK_ATTEMPTS;
         while (true) {
             result = meshtastic_SdCardInfo_init_zero;
             bool answered = sensecapIndicator->sd_info(&result);
-            // `busy` means a card is being mounted: whether one is there is
-            // not decided yet, and reporting an empty slot would stick for
-            // the session
             if (answered && !result.busy)
                 break;
-            if (!retryable(answered, answered ? meshtastic_FileStatus_FILE_BUSY : meshtastic_FileStatus_FILE_UNSPECIFIED,
-                           attempts_left))
+            if (answered && result.busy) {
+                if (--busy_left <= 0)
+                    return false;
+                delay(BUSY_BACKOFF_MS);
+                continue;
+            }
+            if (!retryable(answered, meshtastic_FileStatus_FILE_UNSPECIFIED, attempts_left))
                 return false;
         }
         info.present = result.present;
