@@ -374,7 +374,11 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
  Note: TCXO with tight tolerances (±5 ppm or better) is *absolutely required* at these narrow bandwidths.
  Only compatible with SX127x and SX126x chipsets.
  Comparable link budget and data rate to LONG_MODERATE. */
-    meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW = 15
+    meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW = 15,
+    /* Medium Range - Turbo
+ This preset performs similarly to MEDIUM_FAST, but with 500kHz bandwidth.
+ It is not legal to use in all regions due to this wider bandwidth. */
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO = 16
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_LoRaConfig_FEM_LNA_Mode {
@@ -767,8 +771,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO+1))
 
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT
