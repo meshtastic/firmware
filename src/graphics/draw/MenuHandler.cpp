@@ -239,6 +239,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"RU", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_RU},
         {"IN", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_IN},
         {"NZ_865", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NZ_865},
+        {"NZ_915", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_NZ_915},
         {"TH", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_TH},
         {"LORA_24", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_LORA_24},
         {"UA_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_UA_433},
