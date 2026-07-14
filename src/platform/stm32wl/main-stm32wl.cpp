@@ -1,5 +1,6 @@
 #include "RTC.h"
 #include "configuration.h"
+#include <cstring>
 #include <stdarg.h>
 #include <stm32wle5xx.h>
 #include <stm32wlxx_hal.h>
@@ -75,6 +76,14 @@ void getMacAddr(uint8_t *dmac)
     dmac[2] = (uint8_t)(uid1 >> 8);
     dmac[1] = (uint8_t)uid2;
     dmac[0] = (uint8_t)(uid2 >> 8);
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+    // STM32WL: 96-bit factory silicon UID (words w0..w2, little-endian) in bytes 0-11 (rest stay zero).
+    uint32_t uid[3] = {HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2()};
+    memcpy(deviceId, uid, sizeof(uid));
+    return true;
 }
 
 void cpuDeepSleep(uint32_t msecToWake) {}

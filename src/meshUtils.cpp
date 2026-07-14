@@ -1,4 +1,5 @@
 #include "meshUtils.h"
+#include "target_specific.h"
 #include <string.h>
 
 /*
@@ -76,6 +77,20 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
         if (mem[i] != find)
             return false;
     }
+    return true;
+}
+
+bool getMacAddrDeviceId(uint8_t *deviceId)
+{
+    // Zero-initialized: getMacAddr() may return without writing (e.g. Portduino with no MAC
+    // source), and we want that no-write case to hit the all-zeros guard below, not read garbage.
+    uint8_t mac[6] = {0};
+    getMacAddr(mac);
+    if (memfll(mac, 0, sizeof(mac))) {
+        LOG_WARN("MAC is all zeros, leaving device_id unset");
+        return false;
+    }
+    memcpy(deviceId, mac, sizeof(mac));
     return true;
 }
 
