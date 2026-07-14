@@ -63,8 +63,8 @@ Allocator<meshtastic_ClientNotification> &clientNotificationPool = staticClientN
 
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
-#include "Router.h"
 #include "PositionPrecision.h"
+#include "Router.h"
 
 MeshService::MeshService()
 #ifdef ARCH_PORTDUINO
