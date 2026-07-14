@@ -201,6 +201,16 @@ void getMacAddr(uint8_t *dmac)
     }
 }
 
+bool getDeviceId(uint8_t *deviceId)
+{
+    if (portduino_config.has_device_id) {
+        memcpy(deviceId, portduino_config.device_id, sizeof(portduino_config.device_id));
+        return true;
+    }
+    // Config-supplied id stays preferred: host NIC/BT MACs can be unstable (docker, multi-NIC).
+    return getMacAddrDeviceId(deviceId);
+}
+
 std::string cleanupNameForAutoconf(std::string name)
 {
     // Convert spaces -> dashes, lowercase
