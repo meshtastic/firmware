@@ -39,8 +39,8 @@
 #endif
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
-    PRESET(LONG_FAST),  PRESET(LONG_SLOW),     PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST), PRESET(SHORT_SLOW),
-    PRESET(SHORT_FAST), PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  MODEM_PRESET_END};
+    PRESET(LONG_FAST),     PRESET(LONG_SLOW),   PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST),  PRESET(SHORT_SLOW), PRESET(SHORT_FAST),
+    PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  PRESET(MEDIUM_TURBO), MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
     PRESET(LONG_FAST),  PRESET(LONG_SLOW),  PRESET(MEDIUM_SLOW),   PRESET(MEDIUM_FAST),
@@ -337,7 +337,11 @@ LoRaRadioType radioType = NO_RADIO;
 
 extern RadioLibHal *RadioLibHAL;
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+#if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
+extern SPIClass &SPI1; // alias for SPI_HSPI; both on SPI2_HOST
+#else
 extern SPIClass SPI1;
+#endif
 #endif
 
 std::unique_ptr<RadioInterface> initLoRa()

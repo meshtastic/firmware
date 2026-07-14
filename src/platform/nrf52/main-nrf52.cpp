@@ -195,6 +195,17 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
+bool getDeviceId(uint8_t *deviceId)
+{
+    // Nordic burns a FIPS-compliant random id into each chip at the factory. We concatenate
+    // the device address to that random id to form the 16-byte hardware identifier.
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(deviceId, &device_id_start, sizeof(device_id_start));
+    memcpy(deviceId + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    return true;
+}
+
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
