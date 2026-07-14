@@ -65,14 +65,24 @@ class GeoCoord
     int32_t _altitude = 0;
 
     DMS _dms = {};
-    UTM _utm = {};
-    MGRS _mgrs = {};
-    OSGR _osgr = {};
-    OLC _olc = {};
+    // Computed lazily on first access via ensure*() below; mutable so const getters can populate
+    // them on demand.
+    mutable UTM _utm = {};
+    mutable MGRS _mgrs = {};
+    mutable OSGR _osgr = {};
+    mutable OLC _olc = {};
+    mutable bool _utmValid = false;
+    mutable bool _mgrsValid = false;
+    mutable bool _osgrValid = false;
+    mutable bool _olcValid = false;
 
     bool _dirty = true;
 
     void setCoords();
+    void ensureUTM() const;
+    void ensureMGRS() const;
+    void ensureOSGR() const;
+    void ensureOLC() const;
 
   public:
     GeoCoord();
@@ -123,26 +133,86 @@ class GeoCoord
     uint32_t getDMSLonSec() const { return _dms.lonSec; }
     char getDMSLonCP() const { return _dms.lonCP; }
 
-    // UTM getters
-    uint8_t getUTMZone() const { return _utm.zone; }
-    char getUTMBand() const { return _utm.band; }
-    uint32_t getUTMEasting() const { return _utm.easting; }
-    uint32_t getUTMNorthing() const { return _utm.northing; }
+    // UTM getters (computed on first access - see ensureUTM())
+    uint8_t getUTMZone() const
+    {
+        ensureUTM();
+        return _utm.zone;
+    }
+    char getUTMBand() const
+    {
+        ensureUTM();
+        return _utm.band;
+    }
+    uint32_t getUTMEasting() const
+    {
+        ensureUTM();
+        return _utm.easting;
+    }
+    uint32_t getUTMNorthing() const
+    {
+        ensureUTM();
+        return _utm.northing;
+    }
 
-    // MGRS getters
-    uint8_t getMGRSZone() const { return _mgrs.zone; }
-    char getMGRSBand() const { return _mgrs.band; }
-    char getMGRSEast100k() const { return _mgrs.east100k; }
-    char getMGRSNorth100k() const { return _mgrs.north100k; }
-    uint32_t getMGRSEasting() const { return _mgrs.easting; }
-    uint32_t getMGRSNorthing() const { return _mgrs.northing; }
+    // MGRS getters (computed on first access - see ensureMGRS())
+    uint8_t getMGRSZone() const
+    {
+        ensureMGRS();
+        return _mgrs.zone;
+    }
+    char getMGRSBand() const
+    {
+        ensureMGRS();
+        return _mgrs.band;
+    }
+    char getMGRSEast100k() const
+    {
+        ensureMGRS();
+        return _mgrs.east100k;
+    }
+    char getMGRSNorth100k() const
+    {
+        ensureMGRS();
+        return _mgrs.north100k;
+    }
+    uint32_t getMGRSEasting() const
+    {
+        ensureMGRS();
+        return _mgrs.easting;
+    }
+    uint32_t getMGRSNorthing() const
+    {
+        ensureMGRS();
+        return _mgrs.northing;
+    }
 
-    // OSGR getters
-    char getOSGRE100k() const { return _osgr.e100k; }
-    char getOSGRN100k() const { return _osgr.n100k; }
-    uint32_t getOSGREasting() const { return _osgr.easting; }
-    uint32_t getOSGRNorthing() const { return _osgr.northing; }
+    // OSGR getters (computed on first access - see ensureOSGR())
+    char getOSGRE100k() const
+    {
+        ensureOSGR();
+        return _osgr.e100k;
+    }
+    char getOSGRN100k() const
+    {
+        ensureOSGR();
+        return _osgr.n100k;
+    }
+    uint32_t getOSGREasting() const
+    {
+        ensureOSGR();
+        return _osgr.easting;
+    }
+    uint32_t getOSGRNorthing() const
+    {
+        ensureOSGR();
+        return _osgr.northing;
+    }
 
-    // OLC getter
-    void getOLCCode(char *code) { strncpy(code, _olc.code, OLC_CODE_LEN + 1); } // +1 for null termination
+    // OLC getter (computed on first access - see ensureOLC())
+    void getOLCCode(char *code)
+    {
+        ensureOLC();
+        strncpy(code, _olc.code, OLC_CODE_LEN + 1); // +1 for null termination
+    }
 };
