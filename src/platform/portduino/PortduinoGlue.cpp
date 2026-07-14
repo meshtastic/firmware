@@ -1009,7 +1009,7 @@ bool loadConfig(const char *configPath)
             }
             // HUB75 RGB matrix (Raspberry Pi). Options map onto rgb_matrix::RGBMatrix::Options +
             // RuntimeOptions; the library owns its GPIO pins so nothing is read via readGPIOFromYaml.
-            if (yamlConfig["Display"]["HUB75"]) {
+            if (portduino_config.displayPanel == hub75 && yamlConfig["Display"]["HUB75"]) {
                 YAML::Node hub75 = yamlConfig["Display"]["HUB75"];
                 portduino_config.hub75_hardware_mapping = hub75["HardwareMapping"].as<std::string>("regular");
                 portduino_config.hub75_rows = hub75["Rows"].as<int>(64);
