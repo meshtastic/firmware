@@ -65,6 +65,7 @@ void ChirpyRunnerGame::reset(uint32_t seed)
     alive = true;
     chirpyTop = groundedTopSub();
     vy = 0;
+    jumpGravity = GRAVITY;
     grounded = true;
     for (uint8_t i = 0; i < MAX_OBSTACLES; i++)
         obst[i] = {};
@@ -74,11 +75,26 @@ void ChirpyRunnerGame::reset(uint32_t seed)
     resetClouds();
 }
 
+int32_t ChirpyRunnerGame::jumpScaleQ8() const
+{
+    // ratio = current scroll speed / base scroll speed, in Q8 (256 == 1.0).
+    const int32_t ratioQ8 = (speedSub * 256) / SPEED_BASE;
+    // Feed only JUMP_SPEEDUP_PCT of the speed increase into the jump scale: k = 1 + (ratio-1)*pct.
+    const int32_t kQ8 = 256 + ((ratioQ8 - 256) * JUMP_SPEEDUP_PCT) / 100;
+    return kQ8 < 256 ? 256 : kQ8; // never slower than the base hop
+}
+
 void ChirpyRunnerGame::jump()
 {
     if (!alive || !grounded)
         return;
-    vy = -JUMP_V;
+    // Scale velocity by k and gravity by k*k: the apex height is unchanged (Chirpy still clears the
+    // same buildings) but the air-time shrinks by k, so the clearing window tightens with the speed.
+    const int32_t kQ8 = jumpScaleQ8();
+    vy = -(JUMP_V * kQ8) / 256;
+    jumpGravity = (GRAVITY * kQ8 * kQ8) / (256 * 256);
+    if (jumpGravity < GRAVITY)
+        jumpGravity = GRAVITY;
     grounded = false;
 }
 
@@ -89,8 +105,8 @@ bool ChirpyRunnerGame::step()
 
     scrollClouds(); // decorative background parallax
 
-    // --- Chirpy vertical motion ---
-    vy += GRAVITY;
+    // --- Chirpy vertical motion (gravity latched at launch, so the arc stays consistent mid-air) ---
+    vy += jumpGravity;
     chirpyTop += vy;
     const int32_t gt = groundedTopSub();
     if (chirpyTop >= gt) {

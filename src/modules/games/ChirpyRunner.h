@@ -67,13 +67,23 @@ class ChirpyRunnerGame
     static constexpr int32_t JUMP_V = 75;         // initial upward velocity on a hop (sub-px/step)
     static constexpr int32_t SPEED_BASE = 32;     // base scroll speed (sub-px/step == 2 px)
     static constexpr int32_t SPEED_INC = 2;       // speed added per point scored
-    static constexpr uint32_t SPEED_CAP_PTS = 35; // score at which the speed ramp caps (== 5 px/step)
+    static constexpr uint32_t SPEED_CAP_PTS = 40; // score at which the speed ramp caps (== 5 px/step)
     // Obstacle spacing is measured in TICKS, not pixels, so the time between obstacles stays
     // constant as the scroll speed ramps up -- otherwise a fixed pixel gap collapses into fewer
     // ticks at high speed until it drops below the jump duration and clearing becomes impossible.
     // The min is kept just above the ~22-tick jump so obstacles come in a tight but landable rhythm.
     static constexpr int16_t GAP_STEPS_MIN = 23; // min ticks between spawns (> jump duration)
     static constexpr int16_t GAP_STEPS_MAX = 40; // max ticks between spawns
+
+    // Chirpy's hop scales with the scroll speed. A fixed-length jump actually makes the game EASIER
+    // as the buildings speed up: his "high enough to clear" window stays ~constant while the time a
+    // building spends crossing his x-range shrinks (width / speed). Scaling the launch velocity by k
+    // and gravity by k*k keeps the apex height identical (so he still clears the same buildings)
+    // while cutting the air-time by k, which shrinks the clearing window in step with the world.
+    // JUMP_SPEEDUP_PCT is how much of the scroll-speed increase feeds into k:
+    //   100 == fully proportional (difficulty stays flat), lower == Chirpy speeds up sub-linearly
+    //   (so it still eases off slightly at high speed), higher == it gets harder.
+    static constexpr int32_t JUMP_SPEEDUP_PCT = 50;
 
     static constexpr int8_t BUILDING_HEIGHTS[] = {8, 12, 16}; // three tiers of obstacle heights (pixels)
 
@@ -95,14 +105,17 @@ class ChirpyRunnerGame
     };
 
     int32_t groundedTopSub() const { return static_cast<int32_t>(GROUND_Y - CHIRPY_H) * SUBPX; }
+    // Jump scale factor k for the current scroll speed, in Q8 fixed point (256 == 1.0 == base speed).
+    int32_t jumpScaleQ8() const;
     uint32_t nextRandom();
     void spawnObstacle();
     int16_t pickGapSteps();
     void resetClouds();
     void scrollClouds();
 
-    int32_t chirpyTop = 0; // sprite-top y, sub-pixels
-    int32_t vy = 0;        // vertical velocity, sub-pixels/step
+    int32_t chirpyTop = 0;         // sprite-top y, sub-pixels
+    int32_t vy = 0;                // vertical velocity, sub-pixels/step
+    int32_t jumpGravity = GRAVITY; // gravity for the current hop (latched at launch, scaled by k*k)
     bool grounded = true;
 
     Obstacle obst[MAX_OBSTACLES] = {};
