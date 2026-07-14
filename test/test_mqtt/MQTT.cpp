@@ -12,6 +12,8 @@
 #include "mqtt/MQTT.h"
 #include "mqtt/ServiceEnvelope.h"
 
+#include "support/DeterministicRng.h" // rngSeed/rngNext/rngByte/rngRange - shared seeded LCG (fuzz group)
+
 #include <PubSubClient.h>
 #include <WiFiClient.h>
 
@@ -26,12 +28,6 @@
 #include <string_view>
 #include <utility>
 #include <variant>
-
-#if defined(UNIT_TEST)
-#define IS_RUNNING_TESTS 1
-#else
-#define IS_RUNNING_TESTS 0
-#endif
 
 namespace
 {
@@ -230,6 +226,7 @@ MockPubSubServer *pubsub;
 MockRoutingModule *mockRoutingModule;
 MockMeshService *mockMeshService;
 MockRouter *mockRouter;
+MockNodeDB *mockNodeDB;
 
 // Keep running the loop until either conditionMet returns true or 4 seconds elapse.
 // Returns true if conditionMet returns true, returns false on timeout.
@@ -279,6 +276,13 @@ class MQTTUnitTest : public MQTT
         uint8_t bytes[256];
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
         mqttCallback(const_cast<char *>(topic.str().c_str()), bytes, numBytes);
+    }
+    // Feed arbitrary bytes straight into the subscription callback - the non-RF ingress a malicious or
+    // broken broker could push. Mirrors publish()'s final mqttCallback() call but with an unconstrained
+    // payload, so it exercises DecodedServiceEnvelope decode + onReceiveProto with garbage.
+    void deliverRaw(const std::string &topic, const uint8_t *bytes, size_t n)
+    {
+        mqttCallback(const_cast<char *>(topic.c_str()), const_cast<uint8_t *>(bytes), (unsigned int)n);
     }
     static void restart()
     {
@@ -345,6 +349,11 @@ void setUp(void)
     myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 0x12345678}; // Match the expected gateway ID in topic
     localPosition =
         meshtastic_Position{.has_latitude_i = true, .latitude_i = 700000000, .has_longitude_i = true, .longitude_i = 300000000};
+
+    // The shared MockNodeDB node is mutated by the XEdDSA policy tests (signer bit, public
+    // key); reset it so state can't leak between tests.
+    if (mockNodeDB)
+        mockNodeDB->emptyNode = meshtastic_NodeInfoLite();
 
     router = mockRouter = new MockRouter();
     service = mockMeshService = new MockMeshService();
@@ -657,6 +666,86 @@ void test_receiveIgnoresDecodedAdminApp(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+// Small decoded broadcast from a remote node, as a plaintext broker would deliver it.
+static meshtastic_MeshPacket makeDecodedBroadcast()
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = 1;
+    p.to = NODENUM_BROADCAST;
+    p.id = 7;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    p.decoded.payload.size = 5;
+    memcpy(p.decoded.payload.bytes, "hello", 5);
+    return p;
+}
+
+// Decoded (plaintext-broker) downlink skips perhapsDecode's crypto path, so MQTT applies
+// checkXeddsaReceivePolicy at ingress. An unsigned broadcast claiming to come from a node that
+// previously signed must be dropped - without this, a rogue broker peer could impersonate any
+// signing node (audit F3).
+void test_receiveDropsUnsignedBroadcastFromSigner(void)
+{
+    mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// The same unsigned broadcast from a node never seen signing is accepted.
+void test_receiveAcceptsUnsignedBroadcastFromNonSigner(void)
+{
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_FALSE(mockRouter->packets_.front().xeddsa_signed);
+}
+
+// A validly signed decoded downlink verifies at ingress: delivered with xeddsa_signed set and
+// the sender's signer bit learned.
+void test_receiveVerifiesSignedDecodedDownlink(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->emptyNode.public_key.size = 32;
+    memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
+
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
+                                         p.decoded.xeddsa_signature.bytes));
+    p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_TRUE(mockRouter->packets_.front().xeddsa_signed);
+    TEST_ASSERT_TRUE(mockNodeDB->emptyNode.bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+
+// A decoded downlink carrying a signature that fails verification is dropped.
+void test_receiveDropsBadSignatureOnDecodedDownlink(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->emptyNode.public_key.size = 32;
+    memcpy(mockNodeDB->emptyNode.public_key.bytes, pub, 32);
+
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(p.from, p.id, p.decoded.portnum, p.decoded.payload.bytes, p.decoded.payload.size,
+                                         p.decoded.xeddsa_signature.bytes));
+    p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
+    p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+#endif // !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+
 // Only the same fields that are transmitted over LoRa should be set in MQTT messages.
 void test_receiveIgnoresUnexpectedFields(void)
 {
@@ -800,6 +889,17 @@ void test_disabled(void)
     TEST_ASSERT_FALSE(mqtt->isEnabled());
 }
 
+void test_mqttInitSkipsAllocationWhenDisabled(void)
+{
+    delete unitTest;
+    mqtt = unitTest = NULL;
+
+    moduleConfig.mqtt.enabled = false;
+    mqttInit();
+
+    TEST_ASSERT_NULL(mqtt);
+}
+
 // Subscriptions contain the moduleConfig.mqtt.root prefix.
 void test_customMqttRoot(void)
 {
@@ -851,7 +951,7 @@ void test_configCustomHostAndPort(void)
     TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
 }
 
-// An unreachable server is still a valid config — settings always save.
+// An unreachable server is still a valid config - settings always save.
 // A warning notification is sent in non-test builds, but isValidConfig returns true.
 void test_configWithUnreachableServerIsStillValid(void)
 {
@@ -872,11 +972,69 @@ void test_configWithTLSEnabled(void)
 #endif
 }
 
+// ===========================================================================
+// Fuzz - adversarial MQTT downlink ingress (the non-RF path a broker can push)
+// ===========================================================================
+// Blitzes the onReceiveProto() chain with (a) raw garbage that must fail envelope decode cleanly and
+// (b) well-formed envelopes wrapping crafted inner packets. Contract: no crash, at most one enqueue per envelope.
+constexpr uint64_t MQTT_FUZZ_SEED = 0x00E3A71C0FULL;
+
+void test_receiveFuzzServiceEnvelope(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)MQTT_FUZZ_SEED);
+    rngSeed(MQTT_FUZZ_SEED);
+
+    const char *channelIds[] = {"test", "PKI", "nope", ""};
+    const char *gatewayIds[] = {"!12345678", "!87654321", "!00000000"}; // [0] == our node id -> self path
+
+    for (unsigned k = 0; k < 4000; k++) {
+        if (rngRange(3) == 0) {
+            // (a) Raw bytes: mostly random, must be rejected at DecodedServiceEnvelope without crashing.
+            uint8_t raw[128];
+            size_t n = rngRange(sizeof(raw) + 1);
+            rngFill(raw, n);
+            unitTest->deliverRaw("msh/2/e/test/!87654321", raw, n);
+        } else {
+            // (b) Well-formed envelope around a crafted inner packet.
+            meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+            p.from = (rngRange(3) == 0) ? myNodeInfo.my_node_num : rngNext(); // self origin hits isFromUs
+            p.to = (rngRange(2)) ? myNodeInfo.my_node_num : rngNext();
+            p.id = rngNext();
+            p.channel = (uint8_t)rngByte();
+            p.hop_limit = (uint8_t)rngRange(10); // includes > HOP_MAX (the invalid-hop reject path)
+            p.hop_start = (uint8_t)rngRange(10);
+            p.want_ack = (rngRange(2) == 0);
+            p.pki_encrypted = (rngRange(2) == 0);
+            if (rngRange(2) == 0) {
+                p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+                p.decoded.portnum = (rngRange(6) == 0) ? meshtastic_PortNum_ADMIN_APP : (meshtastic_PortNum)rngRange(80);
+                p.decoded.want_response = (rngRange(2) == 0);
+                p.decoded.has_bitfield = (rngRange(2) == 0);
+                p.decoded.bitfield = (uint32_t)rngNext();
+                p.decoded.payload.size = rngRange(64);
+                rngFill(p.decoded.payload.bytes, p.decoded.payload.size);
+            } else {
+                p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+                p.encrypted.size = rngRange(64);
+                rngFill(p.encrypted.bytes, p.encrypted.size);
+            }
+            unitTest->publish(&p, gatewayIds[rngRange(3)], channelIds[rngRange(4)]);
+        }
+
+        // A single envelope reaches at most one enqueueReceivedMessage; more would be a routing bug.
+        TEST_ASSERT_TRUE_MESSAGE(mockRouter->packets_.size() <= 1, "MQTT downlink enqueued >1 packet per envelope");
+        // Drain capture lists so 4000 iterations stay bounded (values already released to their pools).
+        mockRouter->packets_.clear();
+        mockRoutingModule->ackNacks_.clear();
+        mockMeshService->messages_.clear();
+        mockMeshService->notifications_.clear();
+    }
+}
+
 void setup()
 {
     initializeTestEnvironment();
-    const std::unique_ptr<MockNodeDB> mockNodeDB(new MockNodeDB());
-    nodeDB = mockNodeDB.get();
+    nodeDB = mockNodeDB = new MockNodeDB(); // freed implicitly by exit(UNITY_END()) below
 
     UNITY_BEGIN();
     RUN_TEST(test_sendDirectlyConnectedDecoded);
@@ -900,8 +1058,15 @@ void setup()
     RUN_TEST(test_receiveIgnoresSentMessagesFromOthers);
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    RUN_TEST(test_receiveDropsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
+    RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
+    RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
+#endif
     RUN_TEST(test_receiveIgnoresUnexpectedFields);
     RUN_TEST(test_receiveIgnoresInvalidHopLimit);
+    RUN_TEST(test_receiveFuzzServiceEnvelope);
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
@@ -912,6 +1077,7 @@ void setup()
     RUN_TEST(test_usingCustomServer);
     RUN_TEST(test_enabled);
     RUN_TEST(test_disabled);
+    RUN_TEST(test_mqttInitSkipsAllocationWhenDisabled);
     RUN_TEST(test_customMqttRoot);
     RUN_TEST(test_configEmptyIsValid);
     RUN_TEST(test_configEnabledEmptyIsValid);

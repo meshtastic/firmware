@@ -17,12 +17,13 @@
 #include <nrfx_wdt.h>
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
+#include "HardwareRNG.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerMon.h"
 #include "error.h"
 #include "main.h"
 #include "meshUtils.h"
-#include "power.h"
 #include <power/PowerHAL.h>
 
 #include "Nrf52SaadcLock.h"
@@ -183,6 +184,17 @@ void getMacAddr(uint8_t *dmac)
     dmac[2] = src[3];
     dmac[1] = src[4];
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+    // Nordic burns a FIPS-compliant random id into each chip at the factory. We concatenate
+    // the device address to that random id to form the 16-byte hardware identifier.
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(deviceId, &device_id_start, sizeof(device_id_start));
+    memcpy(deviceId + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    return true;
 }
 
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -377,7 +389,11 @@ void nrf52Setup()
     pinMode(ADC_V, INPUT);
 #endif
 
-    uint32_t why = NRF_POWER->RESETREAS;
+    // The Adafruit core's init() (cores/nRF5/wiring.c) caches RESETREAS into a static and then
+    // W1C-clears the hardware register before setup() ever runs, so a raw NRF_POWER->RESETREAS
+    // read here is ALWAYS 0. Use the core's cached copy so this log line is actually meaningful
+    // (0x1 pin reset, 0x2 watchdog, 0x4 soft reset/SREQ, 0x8 CPU lockup, 0x10000 System OFF wake).
+    uint32_t why = readResetReason();
     // per
     // https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
     LOG_DEBUG("Reset reason: 0x%x", why);
@@ -398,15 +414,14 @@ void nrf52Setup()
 #endif
 
     // Init random seed
-    union seedParts {
-        uint32_t seed32;
-        uint8_t seed8[4];
-    } seed;
-    nRFCrypto.begin();
-    nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
-    LOG_DEBUG("Set random seed %u", seed.seed32);
-    randomSeed(seed.seed32);
-    nRFCrypto.end();
+    uint32_t seed = 0;
+    if (!HardwareRNG::seed(seed)) {
+        LOG_WARN("Hardware RNG seed unavailable, using PRNG fallback");
+        // Use a hardware timer value as a fallback seed for better entropy
+        seed = micros();
+    }
+    LOG_DEBUG("Set random seed %u", seed);
+    randomSeed(seed);
 
     // Set up nrfx watchdog. Do not enable the watchdog yet (we do that
     // the first time through the main loop), so that other threads can

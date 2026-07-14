@@ -145,7 +145,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr, true, true);
+    graphics::drawCommonHeader(display, x, y, titleStr, true, true, true);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     char timeString[16];
@@ -183,9 +183,13 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     static float segmentHeight = SEGMENT_HEIGHT * 0.75f;
 
     if (!scaleInitialized) {
+#ifdef DISPLAY_FORCE_SMALL_FONTS
+        float screenwidth_target_ratio = 0.70f; // Target 70% of display width (adjustable)
+#else
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
-        float max_scale = 3.5f;                 // Safety limit to avoid runaway scaling
-        float step = 0.05f;                     // Step increment per iteration
+#endif
+        float max_scale = 3.5f; // Safety limit to avoid runaway scaling
+        float step = 0.05f;     // Step increment per iteration
 
         float target_width = display->getWidth() * screenwidth_target_ratio;
         float target_height =
@@ -293,11 +297,15 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 // Draw an analog clock
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Clear previous frame pixels so moving hands don't leave stale artifacts on TFT light theme.
+    display->clear();
+#endif
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr, true, true);
+    graphics::drawCommonHeader(display, x, y, titleStr, true, true, true);
 
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;

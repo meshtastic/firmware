@@ -83,7 +83,9 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
     /* Traffic management module config */
     meshtastic_AdminMessage_ModuleConfigType_TRAFFICMANAGEMENT_CONFIG = 14,
     /* TAK module config */
-    meshtastic_AdminMessage_ModuleConfigType_TAK_CONFIG = 15
+    meshtastic_AdminMessage_ModuleConfigType_TAK_CONFIG = 15,
+    /* Mesh Beacon module config */
+    meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG = 16
 } meshtastic_AdminMessage_ModuleConfigType;
 
 typedef enum _meshtastic_AdminMessage_BackupLocation {
@@ -130,6 +132,98 @@ typedef struct _meshtastic_AdminMessage_OTAEvent {
     meshtastic_AdminMessage_OTAEvent_ota_hash_t ota_hash;
 } meshtastic_AdminMessage_OTAEvent;
 
+typedef PB_BYTES_ARRAY_T(32) meshtastic_LockdownAuth_passphrase_t;
+/* Lockdown passphrase delivery payload.
+
+ One message handles three operations distinguished by content:
+   - Provision (first-time): passphrase set, lock_now=false. Firmware
+     generates DEK, wraps with passphrase-derived KEK, persists.
+   - Unlock: passphrase set, lock_now=false. Firmware verifies
+     passphrase against stored DEK, unlocks storage, authorizes the
+     connection that delivered this packet.
+   - Lock now: lock_now=true, passphrase ignored. Firmware revokes
+     all client auth and reboots into the locked state.
+
+ Firmware decides between provision and unlock based on its own state
+ (whether a DEK file already exists). Clients do not need to track
+ which case applies. */
+typedef struct _meshtastic_LockdownAuth {
+    /* Passphrase bytes (1-32). Empty when lock_now is true.
+ Capped to 32 to match the proto cap on related security fields. */
+    meshtastic_LockdownAuth_passphrase_t passphrase;
+    /* Optional override of the boot-count token TTL granted on success.
+ 0 = use firmware default (TOKEN_DEFAULT_BOOTS).
+ On reboot the firmware decrements this; when it reaches 0 the
+ device boots fully locked and requires a fresh passphrase. */
+    uint32_t boots_remaining;
+    /* Optional wall-clock expiry for the unlock token, as absolute
+ Unix-epoch seconds. 0 = no time limit (only the boot-count TTL
+ applies). On boot, if the device RTC is set and now > this value,
+ the token is treated as expired. */
+    uint32_t valid_until_epoch;
+    /* If true, ignore passphrase fields, immediately revoke all
+ connection-level admin authorization, and reboot the device into
+ the locked state. Always honoured regardless of current lock state. */
+    bool lock_now;
+    /* Optional per-boot uptime cap on the unlocked session, in seconds.
+ 0 = unlimited (token-only enforcement, suitable for unattended
+ tower / infrastructure nodes).
+
+ When non-zero, the firmware arms an uptime timer at unlock. On
+ each expiry, while there is still boot-count budget, the firmware
+ decrements the on-flash boot count in place, revokes per-
+ connection admin auth (clients must re-authenticate to see
+ content), re-engages the screen lock, and re-arms the timer
+ without rebooting. Mesh routing keeps running across session
+ boundaries; only when the boot-count budget reaches zero does
+ the device hard-lock and reboot.
+
+ Total exposure ceiling = ((resolved boot count) + 1) * max_session_seconds.
+ The +1 accounts for the initial passphrase-unlocked session
+ itself, since boots_remaining is the number of subsequent
+ session rolls (each consuming one boot from the rollback ledger).
+ The resolved boot count is the value the firmware writes into the
+ token at unlock time: the client-supplied boots_remaining when
+ non-zero, otherwise the firmware default (TOKEN_DEFAULT_BOOTS).
+ Note that boots_remaining == 0 in this message means "use firmware
+ default", NOT "zero boots" - a client computing the ceiling for
+ display should mirror that resolution rather than multiplying the
+ raw request value.
+
+ The cap is persisted in the token, so it survives token-based
+ auto-unlock across reboots. Explicit operator Lock Now still
+ deletes the token and forces passphrase re-entry.
+
+ Uses millis() (CPU uptime), not wall-clock time, so the cap is
+ immune to GPS spoofing, RTC backup-battery removal, and Faraday
+ cage isolation - none of those move the uptime counter. The only
+ way to reset the session clock is a reboot, which costs a boot
+ from the on-flash, HMAC-bound counter. */
+    uint32_t max_session_seconds;
+    /* Disable lockdown mode. Requires a valid passphrase in the same
+ message (the device must prove the operator owns it before
+ reverting at-rest encryption). On success the firmware decrypts
+ every stored config / channel / nodedb file back to plaintext,
+ removes the wrapped DEK, unlock token, monotonic-counter, and
+ backoff files, and reboots out of lockdown.
+
+ This is the inverse of the provision/unlock path: it is how the
+ client app's "lockdown mode" toggle returns a device to normal
+ operation.
+
+ NOT reversed by this operation: APPROTECT. Once the debug port
+ lockout has been burned (on silicon where it is effective) it is
+ permanent - disabling lockdown decrypts your data and removes the
+ access gates, but the SWD/JTAG port stays locked for the life of
+ the device (recoverable only via a full chip erase over a debug
+ probe, which destroys all data). Clients should make this
+ irreversibility clear at the moment lockdown is first enabled.
+
+ When true the passphrase field is still required; boots_remaining,
+ valid_until_epoch, max_session_seconds, and lock_now are ignored. */
+    bool disable;
+} meshtastic_LockdownAuth;
+
 /* Parameters for setting up Meshtastic for ameteur radio usage */
 typedef struct _meshtastic_HamParameters {
     /* Amateur radio call sign, eg. KD2ABC */
@@ -142,6 +236,9 @@ typedef struct _meshtastic_HamParameters {
     float frequency;
     /* Optional short name of user */
     char short_name[5];
+    /* Optional long name of user
+ Appended to callsign */
+    char long_name[15];
 } meshtastic_HamParameters;
 
 /* Response envelope for node_remote_hardware_pins */
@@ -384,6 +481,15 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_AdminMessage_OTAEvent ota_request;
         /* Parameters and sensor configuration */
         meshtastic_SensorConfig sensor_config;
+        /* Lockdown passphrase delivery / unlock / lock-now command for hardened
+     firmware builds (see MESHTASTIC_LOCKDOWN). Used to provision the
+     passphrase on first boot, unlock encrypted storage on subsequent
+     reboots, re-verify on already-unlocked devices to authorize a new
+     client connection, or immediately re-lock the device.
+    
+     Replaces the earlier scheme that repurposed SecurityConfig.private_key
+     to carry passphrase bytes; that hack is retired. */
+        meshtastic_LockdownAuth lockdown_auth;
     };
     /* The node generates this key and sends it with any get_x_response packets.
  The client MUST include the same key with any set_x commands. Key expires after 300 seconds.
@@ -406,8 +512,8 @@ extern "C" {
 #define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG+1))
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_TAK_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_TAK_CONFIG+1))
+#define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG
+#define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG+1))
 
 #define _meshtastic_AdminMessage_BackupLocation_MIN meshtastic_AdminMessage_BackupLocation_FLASH
 #define _meshtastic_AdminMessage_BackupLocation_MAX meshtastic_AdminMessage_BackupLocation_SD
@@ -429,6 +535,7 @@ extern "C" {
 
 
 
+
 #define meshtastic_KeyVerificationAdmin_message_type_ENUMTYPE meshtastic_KeyVerificationAdmin_MessageType
 
 
@@ -441,7 +548,8 @@ extern "C" {
 #define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_default {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_default {_meshtastic_OTAMode_MIN, {0, {0}}}
-#define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
+#define meshtastic_LockdownAuth_init_default     {{0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_HamParameters_init_default    {"", 0, 0, "", ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_SharedContact_init_default    {0, false, meshtastic_User_init_default, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_default {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
@@ -453,7 +561,8 @@ extern "C" {
 #define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_AdminMessage_InputEvent_init_zero {0, 0, 0, 0}
 #define meshtastic_AdminMessage_OTAEvent_init_zero {_meshtastic_OTAMode_MIN, {0, {0}}}
-#define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
+#define meshtastic_LockdownAuth_init_zero        {{0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_HamParameters_init_zero       {"", 0, 0, "", ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_SharedContact_init_zero       {0, false, meshtastic_User_init_zero, 0, 0}
 #define meshtastic_KeyVerificationAdmin_init_zero {_meshtastic_KeyVerificationAdmin_MessageType_MIN, 0, 0, false, 0}
@@ -470,10 +579,17 @@ extern "C" {
 #define meshtastic_AdminMessage_InputEvent_touch_y_tag 4
 #define meshtastic_AdminMessage_OTAEvent_reboot_ota_mode_tag 1
 #define meshtastic_AdminMessage_OTAEvent_ota_hash_tag 2
+#define meshtastic_LockdownAuth_passphrase_tag   1
+#define meshtastic_LockdownAuth_boots_remaining_tag 2
+#define meshtastic_LockdownAuth_valid_until_epoch_tag 3
+#define meshtastic_LockdownAuth_lock_now_tag     4
+#define meshtastic_LockdownAuth_max_session_seconds_tag 5
+#define meshtastic_LockdownAuth_disable_tag      6
 #define meshtastic_HamParameters_call_sign_tag   1
 #define meshtastic_HamParameters_tx_power_tag    2
 #define meshtastic_HamParameters_frequency_tag   3
 #define meshtastic_HamParameters_short_name_tag  4
+#define meshtastic_HamParameters_long_name_tag   5
 #define meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag 1
 #define meshtastic_SharedContact_node_num_tag    1
 #define meshtastic_SharedContact_user_tag        2
@@ -560,6 +676,7 @@ extern "C" {
 #define meshtastic_AdminMessage_nodedb_reset_tag 100
 #define meshtastic_AdminMessage_ota_request_tag  102
 #define meshtastic_AdminMessage_sensor_config_tag 103
+#define meshtastic_AdminMessage_lockdown_auth_tag 104
 #define meshtastic_AdminMessage_session_passkey_tag 101
 
 /* Struct field encoding specification for nanopb */
@@ -621,7 +738,8 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,nodedb_reset,nodedb_reset), 100) \
 X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ota_request,ota_request), 102) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config), 103)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config), 103) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_auth,lockdown_auth), 104)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel
@@ -644,6 +762,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sensor_config,sensor_config)
 #define meshtastic_AdminMessage_payload_variant_key_verification_MSGTYPE meshtastic_KeyVerificationAdmin
 #define meshtastic_AdminMessage_payload_variant_ota_request_MSGTYPE meshtastic_AdminMessage_OTAEvent
 #define meshtastic_AdminMessage_payload_variant_sensor_config_MSGTYPE meshtastic_SensorConfig
+#define meshtastic_AdminMessage_payload_variant_lockdown_auth_MSGTYPE meshtastic_LockdownAuth
 
 #define meshtastic_AdminMessage_InputEvent_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   event_code,        1) \
@@ -659,11 +778,22 @@ X(a, STATIC,   SINGULAR, BYTES,    ota_hash,          2)
 #define meshtastic_AdminMessage_OTAEvent_CALLBACK NULL
 #define meshtastic_AdminMessage_OTAEvent_DEFAULT NULL
 
+#define meshtastic_LockdownAuth_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BYTES,    passphrase,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   boots_remaining,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   valid_until_epoch,   3) \
+X(a, STATIC,   SINGULAR, BOOL,     lock_now,          4) \
+X(a, STATIC,   SINGULAR, UINT32,   max_session_seconds,   5) \
+X(a, STATIC,   SINGULAR, BOOL,     disable,           6)
+#define meshtastic_LockdownAuth_CALLBACK NULL
+#define meshtastic_LockdownAuth_DEFAULT NULL
+
 #define meshtastic_HamParameters_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   call_sign,         1) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,          2) \
 X(a, STATIC,   SINGULAR, FLOAT,    frequency,         3) \
-X(a, STATIC,   SINGULAR, STRING,   short_name,        4)
+X(a, STATIC,   SINGULAR, STRING,   short_name,        4) \
+X(a, STATIC,   SINGULAR, STRING,   long_name,         5)
 #define meshtastic_HamParameters_CALLBACK NULL
 #define meshtastic_HamParameters_DEFAULT NULL
 
@@ -737,6 +867,7 @@ X(a, STATIC,   OPTIONAL, UINT32,   set_accuracy,      1)
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_InputEvent_msg;
 extern const pb_msgdesc_t meshtastic_AdminMessage_OTAEvent_msg;
+extern const pb_msgdesc_t meshtastic_LockdownAuth_msg;
 extern const pb_msgdesc_t meshtastic_HamParameters_msg;
 extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePinsResponse_msg;
 extern const pb_msgdesc_t meshtastic_SharedContact_msg;
@@ -751,6 +882,7 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
 #define meshtastic_AdminMessage_InputEvent_fields &meshtastic_AdminMessage_InputEvent_msg
 #define meshtastic_AdminMessage_OTAEvent_fields &meshtastic_AdminMessage_OTAEvent_msg
+#define meshtastic_LockdownAuth_fields &meshtastic_LockdownAuth_msg
 #define meshtastic_HamParameters_fields &meshtastic_HamParameters_msg
 #define meshtastic_NodeRemoteHardwarePinsResponse_fields &meshtastic_NodeRemoteHardwarePinsResponse_msg
 #define meshtastic_SharedContact_fields &meshtastic_SharedContact_msg
@@ -766,8 +898,9 @@ extern const pb_msgdesc_t meshtastic_SHTXX_config_msg;
 #define meshtastic_AdminMessage_InputEvent_size  14
 #define meshtastic_AdminMessage_OTAEvent_size    36
 #define meshtastic_AdminMessage_size             511
-#define meshtastic_HamParameters_size            31
+#define meshtastic_HamParameters_size            47
 #define meshtastic_KeyVerificationAdmin_size     25
+#define meshtastic_LockdownAuth_size             56
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
 #define meshtastic_SCD30_config_size             27
 #define meshtastic_SCD4X_config_size             29

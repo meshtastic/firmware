@@ -1,8 +1,60 @@
 #include "RTC.h"
 #include "configuration.h"
+#include <cstring>
 #include <stdarg.h>
 #include <stm32wle5xx.h>
 #include <stm32wlxx_hal.h>
+
+// ─── Bootloader redirect ──────────────────────────────────────────────────────
+//
+// Why .noinit + constructor instead of TAMP backup registers:
+//
+//   The STM32duino startup sequence initialises clocks which may call
+//   __HAL_RCC_BACKUPRESET_FORCE/RELEASE when configuring the LSE oscillator,
+//   wiping the entire backup domain (including TAMP->BKP0R) before setup()
+//   ever runs. The backup-register approach therefore cannot reliably survive
+//   a soft reset in this toolchain.
+//
+//   Solution: store the magic in a .noinit SRAM variable.
+//   - NVIC_SystemReset() does NOT clear SRAM.
+//   - The linker script skips zero-init for .noinit sections.
+//   - __attribute__((constructor)) fires before main()/HAL_Init(), so we can
+//     intercept and jump before anything disturbs peripheral state.
+
+#define BOOTLOADER_MAGIC 0xD00DB007UL
+#define SYS_MEM_BASE 0x1FFF0000UL
+
+// Placed in .noinit - not zeroed at startup, survives NVIC_SystemReset().
+__attribute__((section(".noinit"), used)) volatile uint32_t g_bootloaderMagic;
+
+// Fires before main() / HAL_Init(). Must use only core Cortex-M registers.
+__attribute__((constructor(101), used)) static void earlyBootCheck(void)
+{
+    if (g_bootloaderMagic != BOOTLOADER_MAGIC)
+        return;
+    g_bootloaderMagic = 0;
+
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL = 0;
+    for (int i = 0; i < 8; i++) {
+        NVIC->ICER[i] = 0xFFFFFFFF;
+        NVIC->ICPR[i] = 0xFFFFFFFF;
+    }
+    __DSB();
+    __ISB();
+    SCB->VTOR = SYS_MEM_BASE;
+    __set_MSP(*(volatile uint32_t *)SYS_MEM_BASE);
+    ((void (*)(void))(*(volatile uint32_t *)(SYS_MEM_BASE + 4)))();
+    while (1)
+        ;
+}
+
+void enterDfuMode()
+{
+    g_bootloaderMagic = BOOTLOADER_MAGIC;
+    HAL_NVIC_SystemReset();
+}
 
 void setBluetoothEnable(bool enable) {}
 
@@ -24,6 +76,14 @@ void getMacAddr(uint8_t *dmac)
     dmac[2] = (uint8_t)(uid1 >> 8);
     dmac[1] = (uint8_t)uid2;
     dmac[0] = (uint8_t)(uid2 >> 8);
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+    // STM32WL: 96-bit factory silicon UID (words w0..w2, little-endian) in bytes 0-11 (rest stay zero).
+    uint32_t uid[3] = {HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2()};
+    memcpy(deviceId, uid, sizeof(uid));
+    return true;
 }
 
 void cpuDeepSleep(uint32_t msecToWake) {}

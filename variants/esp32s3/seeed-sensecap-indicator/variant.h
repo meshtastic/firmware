@@ -4,7 +4,7 @@
 // This board has a serial coprocessor for sensor readings
 #define SENSOR_RP2040_TXD 19
 #define SENSOR_RP2040_RXD 20
-#define SENSOR_PORT_NUM 2
+#define SENSOR_PORT_NUM UART_NUM_2
 #define SENSOR_BAUD_RATE 115200
 
 #define BUTTON_PIN 38
@@ -14,10 +14,11 @@
 // #define BUTTON_NEED_PULLUP
 
 // #define BATTERY_PIN 27 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-// #define ADC_CHANNEL ADC1_GPIO27_CHANNEL
+// #define ADC_CHANNEL ADC2_GPIO27_CHANNEL
 // #define ADC_MULTIPLIER 2
 
 // ST7701 TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7701_CS (4 | IO_EXPANDER)
 #define ST7701_RS -1  // DC
 #define ST7701_SDA 48 // MOSI
@@ -36,7 +37,7 @@
 #define TFT_OFFSET_ROTATION 0
 #define TFT_BL 45
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 5 // fps
+#define SCREEN_TRANSITION_FRAMERATE 30 // fps
 #define USE_TFTDISPLAY 1
 
 #define HAS_TOUCHSCREEN 1
@@ -67,6 +68,9 @@
 #define LORA_DIO1 (3 | IO_EXPANDER) // SX1262 IRQ
 #define LORA_DIO2 (2 | IO_EXPANDER) // SX1262 BUSY
 #define LORA_DIO3
+// LORA_DIO1 is an expander pin, not an ESP32 GPIO, so it can't be used as a sleep/GPIO wakeup source
+// (shared capability; see its use in sleep.cpp).
+#define LORA_DIO1_EXTENDED_IO
 
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1

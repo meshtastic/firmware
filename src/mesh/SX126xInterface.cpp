@@ -52,8 +52,8 @@ template <typename T> bool SX126xInterface<T>::init()
 
 #ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
                        // used and not part of the 'default' set of pin definitions.
-    digitalWrite(SX126X_POWER_EN, HIGH);
     pinMode(SX126X_POWER_EN, OUTPUT);
+    digitalWrite(SX126X_POWER_EN, HIGH);
 #endif
 
 #if HAS_LORA_FEM
@@ -65,8 +65,8 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #ifdef RF95_FAN_EN
-    digitalWrite(RF95_FAN_EN, HIGH);
     pinMode(RF95_FAN_EN, OUTPUT);
+    digitalWrite(RF95_FAN_EN, HIGH);
 #endif
 
 #if ARCH_PORTDUINO
@@ -251,24 +251,84 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = -9;
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE) {
+        // Don't abort: this power is operator config (tx_power/SX126X_MAX_POWER); a value above the
+        // driver's max would crash the daemon before reloadConfig() persists. Flag it and keep prior power.
+        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keeping previous Tx power", power, radioLibErr, err);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    }
 
-    // Apply RX gain mode — valid in STDBY (datasheet §9.6), matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY (datasheet §9.6), matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("SX126X setRxBoostedGainMode %s%d", radioLibErr, err);
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
+}
+
+template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false);
+    return (int16_t)round(rssi);
+}
+
+template <typename T> void SX126xInterface<T>::enableInterrupt(void (*callback)())
+{
+#ifdef LORA_DIO1_SOFTWARE_POLL
+    irqPollingActive = true;
+    pollTxMode = isIsrTxCallback(callback);
+    scheduleIrqPollTick();
+#else
+    lora.setDio1Action(callback);
+#endif
 }
 
 template <typename T> void SX126xInterface<T>::disableInterrupt()
 {
+#ifdef LORA_DIO1_SOFTWARE_POLL
+    irqPollingActive = false;
+#else
     lora.clearDio1Action();
+#endif
 }
+
+#ifdef LORA_DIO1_SOFTWARE_POLL
+template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
+{
+    if (!irqPollingActive)
+        return;
+
+    // getIrqFlags()/clearIrqFlags() both operate on the raw SX126x IRQ register, so use the
+    // chip-specific RADIOLIB_SX126X_IRQ_* masks on both the read and the clear.
+    uint16_t irq = lora.getIrqFlags();
+    const uint16_t rxEventMask =
+        RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
+    const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
+
+    // Do NOT treat a preamble/header-only IRQ as a full RX event: noisy preamble detections would
+    // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
+    // poll loop spins at high rate while they stay latched.
+    if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
+        lora.clearIrqFlags(noisyRxMask);
+        scheduleIrqPollTick();
+        return;
+    }
+
+    if (pollTxMode) {
+        if (irq & (RADIOLIB_SX126X_IRQ_TX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT)) {
+            deliverPendingIrqFromPoll(ISR_TX);
+            return;
+        }
+    } else if (irq & rxEventMask) {
+        deliverPendingIrqFromPoll(ISR_RX);
+        return;
+    }
+
+    scheduleIrqPollTick();
+}
+#endif
 
 template <typename T> void SX126xInterface<T>::setStandby()
 {
@@ -322,10 +382,18 @@ template <typename T> void SX126xInterface<T>::startReceive()
     setTransmitEnable(false);
     setStandby();
 
+#ifdef ARCH_PORTDUINO_WASM
+    // Continuous RX in the browser: duty-cycle sleep parks BUSY high between RX
+    // windows and stalls the slow WebUSB SPI link. No battery to save here.
+    int err = lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    const char *rxMethod = "startReceive";
+#else
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
+    const char *rxMethod = "startReceiveDutyCycleAuto";
+#endif
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X startReceiveDutyCycleAuto %s%d", radioLibErr, err);
+        LOG_ERROR("SX126X %s %s%d", rxMethod, radioLibErr, err);
 #ifdef ARCH_PORTDUINO
     if (err != RADIOLIB_ERR_NONE)
         portduino_status.LoRa_in_error = true;
@@ -412,7 +480,7 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 
     LOG_DEBUG("SX126x AGC reset: warm sleep + Calibrate(0x7F)");
 
-    // 1. Warm sleep — powers down the entire analog frontend, resetting AGC state.
+    // 1. Warm sleep - powers down the entire analog frontend, resetting AGC state.
     //    A plain standby→startReceive cycle does NOT reset the AGC.
     lora.sleep(true);
 
@@ -454,6 +522,15 @@ template <typename T> void SX126xInterface<T>::resetAGC()
 
     // RX boosted gain mode
     lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+
+    // Re-apply the undocumented 0x8B5 RX sensitivity patch that was set in init().
+    // The CALIBRATE_ALL (0x7F) command above clears bit 0 of register 0x8B5, which
+    // silently removes the RX sensitivity improvement introduced in #9571 / #9777.
+    // Without this re-apply, every SX1262 node loses its RX boost ~60s after boot
+    // and never recovers until reboot. See empirical evidence in the PR description.
+    if (module.SPIsetRegValue(0x8B5, 0x01, 0, 0) != RADIOLIB_ERR_NONE) {
+        LOG_WARN("SX126x resetAGC: failed to re-apply 0x8B5 RX sensitivity patch");
+    }
 
     // 6. Resume receiving
     startReceive();

@@ -58,7 +58,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     const char *getSenderShortName(const meshtastic_MeshPacket &mp)
     {
         auto node = nodeDB->getMeshNode(getFrom(&mp));
-        const char *sender = (node) ? node->user.short_name : "???";
+        const char *sender = (node && nodeInfoLiteHasUser(node) && node->short_name[0]) ? node->short_name : "???";
         return sender;
     }
 
@@ -89,7 +89,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
-                LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d", name, mp.from, mp.id, p.portnum,
+                LOG_INFO("Received %s from=0x%08x, id=0x%08x, portnum=%d, payloadlen=%d", name, mp.from, mp.id, p.portnum,
                          p.payload.size);
             } else {
                 LOG_ERROR("Error decoding proto module!");
