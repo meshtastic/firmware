@@ -314,7 +314,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
  Note: Some countries do not allocate 220-222 MHz (Ex: USA/Canada).
  Check local law! */
     meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM = 37,
-    /* New Zealand 924MHz
+    /* New Zealand 915MHz-928MHz
  Same band as ANZ, for use with the Short Fast modem preset */
     meshtastic_Config_LoRaConfig_RegionCode_NZ_915 = 38
 } meshtastic_Config_LoRaConfig_RegionCode;
