@@ -348,8 +348,29 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 LOG_DEBUG("Skip position ping; no fresh position since boot");
                 return false;
             }
-            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
-            positionModule->sendOurPosition(dest, wantReplies, node->channel);
+            // Prefer the node's current channel, but fall back to the first channel with
+            // position enabled (matching PositionModule::sendOurPosition() behavior).
+            uint8_t sendChan = node->channel;
+            if (getPositionPrecisionForChannel(sendChan) == 0) {
+                bool found = false;
+                for (uint8_t ch = 0; ch < 8; ++ch) {
+                    if (getPositionPrecisionForChannel(ch) != 0) {
+                        sendChan = ch;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // No channel with position enabled: fall back to sending nodeinfo, as before.
+                    if (nodeInfoModule) {
+                        LOG_INFO("No channel with position enabled; sending nodeinfo instead to 0x%08x", dest);
+                        nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
+                    }
+                    return false;
+                }
+            }
+            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
+            positionModule->sendOurPosition(dest, wantReplies, sendChan);
             return true;
         }
     } else {
