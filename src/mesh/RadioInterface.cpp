@@ -139,7 +139,7 @@ const RegionInfo regions[] = {
         Same band as ANZ, for New Zealand nodes wanting ShortFast as their default preset
         instead of LongFast. https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
      */
-    RDEF(NZ_924, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(SHORT_FAST), 0),
+    RDEF(NZ_915, 915.0f, 928.0f, 100, 30, false, false, PROFILE_STD, PRESET(SHORT_FAST), 0),
 
     /*
         433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions

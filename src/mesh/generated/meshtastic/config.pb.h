@@ -316,7 +316,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM = 37,
     /* New Zealand 924MHz
  Same band as ANZ, for use with the Short Fast modem preset */
-    meshtastic_Config_LoRaConfig_RegionCode_NZ_924 = 38
+    meshtastic_Config_LoRaConfig_RegionCode_NZ_915 = 38
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -770,8 +770,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_NZ_924
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_NZ_924+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_NZ_915
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_NZ_915+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO
