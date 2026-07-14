@@ -42,19 +42,27 @@ class IndicatorRemoteFS : public IRemoteFS
     static const int INFO_BUSY_ATTEMPTS = 10;
     static const uint32_t BUSY_BACKOFF_MS = 250;
 
+    // Both budgets are separate and only ever count down: a co-processor that
+    // stays busy must not be able to keep a caller here for ever. This runs on
+    // the UI task, an unbounded wait is a frozen screen.
+    struct Budget {
+        int attempts = LINK_ATTEMPTS;
+        int busy = BUSY_ATTEMPTS;
+    };
+
     // Returns true when the request should be sent again. `answered` is
     // false when the link itself failed (timeout), true when the
     // co-processor replied.
-    static bool retryable(bool answered, meshtastic_FileStatus status, int &attempts_left)
+    static bool retryable(bool answered, meshtastic_FileStatus status, Budget &budget)
     {
-        if (--attempts_left <= 0)
-            return false;
-        if (!answered)
+        if (!answered) {
+            if (--budget.attempts <= 0)
+                return false;
             return !sensecapIndicator->last_request_nacked(); // refused, not lost
+        }
         if (status == meshtastic_FileStatus_FILE_BUSY) {
-            // it answered, so nothing was lost: only the wait counts
-            if (attempts_left < BUSY_ATTEMPTS)
-                attempts_left = BUSY_ATTEMPTS;
+            if (--budget.busy <= 0)
+                return false;
             delay(BUSY_BACKOFF_MS);
             return true;
         }
@@ -68,7 +76,7 @@ class IndicatorRemoteFS : public IRemoteFS
         if (!sensecapIndicator)
             return false;
         SpiLockBreak spiFree;
-        int attempts_left = LINK_ATTEMPTS;
+        Budget budget;
         do {
             memset(&result, 0, sizeof(result));
             bool answered = sensecapIndicator->file_read(path, offset, len, &result);
@@ -82,7 +90,7 @@ class IndicatorRemoteFS : public IRemoteFS
                 *fileSize = (uint32_t)result.file_size;
                 return true;
             }
-            if (!retryable(answered, result.status, attempts_left))
+            if (!retryable(answered, result.status, budget))
                 return false;
         } while (true);
     }
@@ -92,7 +100,7 @@ class IndicatorRemoteFS : public IRemoteFS
         if (!sensecapIndicator)
             return false;
         SpiLockBreak spiFree;
-        int attempts_left = LINK_ATTEMPTS;
+        Budget budget;
         bool retried = false;
         do {
             memset(&result, 0, sizeof(result));
@@ -107,7 +115,7 @@ class IndicatorRemoteFS : public IRemoteFS
                     result.file_size == (uint64_t)offset + len)
                     return true;
             }
-            if (!retryable(answered, result.status, attempts_left))
+            if (!retryable(answered, result.status, budget))
                 return false;
             retried = true;
         } while (true);
@@ -123,20 +131,15 @@ class IndicatorRemoteFS : public IRemoteFS
         // empty slot reported once sticks in the UI), but this runs on the UI
         // task, so the wait is bounded well below what a user would call a
         // hang, and a card that stays busy longer is simply asked again later.
-        int busy_left = INFO_BUSY_ATTEMPTS;
-        int attempts_left = LINK_ATTEMPTS;
+        Budget budget;
+        budget.busy = INFO_BUSY_ATTEMPTS; // a mount, not a whole FAT scan
         while (true) {
             result = meshtastic_SdCardInfo_init_zero;
             bool answered = sensecapIndicator->sd_info(&result);
             if (answered && !result.busy)
                 break;
-            if (answered && result.busy) {
-                if (--busy_left <= 0)
-                    return false;
-                delay(BUSY_BACKOFF_MS);
-                continue;
-            }
-            if (!retryable(answered, meshtastic_FileStatus_FILE_UNSPECIFIED, attempts_left))
+            meshtastic_FileStatus status = answered ? meshtastic_FileStatus_FILE_BUSY : meshtastic_FileStatus_FILE_UNSPECIFIED;
+            if (!retryable(answered, status, budget))
                 return false;
         }
         info.present = result.present;
@@ -164,7 +167,7 @@ class IndicatorRemoteFS : public IRemoteFS
         if (!sensecapIndicator)
             return false;
         SpiLockBreak spiFree;
-        int attempts_left = LINK_ATTEMPTS;
+        Budget budget;
         do {
             memset(&result, 0, sizeof(result));
             bool answered = sensecapIndicator->file_remove(path, &result);
@@ -173,7 +176,7 @@ class IndicatorRemoteFS : public IRemoteFS
             // not have to be guessed at here
             if (answered && result.status == meshtastic_FileStatus_FILE_OK)
                 return true;
-            if (!retryable(answered, result.status, attempts_left))
+            if (!retryable(answered, result.status, budget))
                 return false;
         } while (true);
     }
@@ -186,13 +189,13 @@ class IndicatorRemoteFS : public IRemoteFS
         uint32_t offset = 0;
         while (true) {
             bool got_page = false;
-            int attempts_left = LINK_ATTEMPTS;
+            Budget budget;
             while (!got_page) {
                 memset(&listing, 0, sizeof(listing));
                 bool answered = sensecapIndicator->list_directory(path, offset, &listing);
                 if (answered && listing.status == meshtastic_FileStatus_FILE_OK)
                     got_page = true;
-                else if (!retryable(answered, listing.status, attempts_left))
+                else if (!retryable(answered, listing.status, budget))
                     return false;
             }
             if (!got_page)
