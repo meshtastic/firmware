@@ -364,7 +364,7 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 if (!found) {
                     // No channel with position enabled: fall back to sending nodeinfo, as before.
                     if (nodeInfoModule) {
-                        LOG_INFO("No channel with position enabled; sending nodeinfo instead to 0x%08x", dest);
+                        LOG_INFO("No channel with position enabled; sending nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
                         nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
                     }
                     return false;
