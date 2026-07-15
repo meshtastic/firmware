@@ -351,7 +351,8 @@ class Screen : public concurrency::OSThread
     void showOverlayBanner(BannerOverlayOptions);
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
-    void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
+    void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
+                          std::function<void(uint32_t)> bannerCallback);
     // Arcade-style initials entry. `length` positions each cycle A-Z/0-9 (UP/DOWN), LEFT/RIGHT
     // moves the cursor, SELECT advances; the assembled string is delivered to `bannerCallback`.
     // `initialText` pre-seeds the positions (uppercased & filtered), defaulting to 'A'.
