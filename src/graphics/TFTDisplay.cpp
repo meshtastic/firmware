@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #if USE_TFTDISPLAY
 
 #if ARCH_PORTDUINO
@@ -536,7 +537,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.memory_width = 240;
             cfg.memory_height = 320;
             cfg.offset_x = 0;
-            cfg.offset_y = 0;                             // No vertical shift needed — panel is top-aligned
+            cfg.offset_y = 0;                             // No vertical shift needed - panel is top-aligned
             cfg.offset_rotation = 2;                      // Rotate 180° to correct upside-down layout
 #else
             cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
@@ -1142,8 +1143,17 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#endif
+#elif defined(VARIANT_DISPLAY_DRIVER)
+// Board-specific framebuffer backends (class LGFX) can livee in the
+// variant files - variant_display.h (declaration) and
+// variant_display.cpp (bodies) - so this shared
+// file isn't inflated for a single board. It exposes the same surface TFTDisplay
+// drives, so the generic `tft = new LGFX;` in connect() works.
+#include "variant_display.h"
 
+static LGFX *tft = nullptr;
+
+#endif
 #include "SPILock.h"
 #include "TFTColorRegions.h"
 #include "TFTDisplay.h"
@@ -1219,6 +1229,7 @@ TFTDisplay::~TFTDisplay()
         free(repaintChunkBuffer);
         repaintChunkBuffer = nullptr;
     }
+    memaudit::set("display", 0);
 }
 
 // Write the buffer to the display memory
@@ -1645,6 +1656,7 @@ bool TFTDisplay::connect()
             LOG_ERROR("Not enough memory to create TFT line buffer\n");
             return false;
         }
+        memaudit::add("display", sizeof(uint16_t) * displayWidth);
     }
     if (this->repaintChunkBuffer == NULL) {
         this->repaintChunkBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
@@ -1653,6 +1665,7 @@ bool TFTDisplay::connect()
             LOG_ERROR("Not enough memory to create TFT repaint chunk buffer\n");
             return false;
         }
+        memaudit::add("display", sizeof(uint16_t) * displayWidth * kFullRepaintChunkRows);
     }
     return true;
 }

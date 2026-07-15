@@ -2,9 +2,9 @@
 BaseUI
 
 Developed and Maintained By:
-- Ronald Garcia (HarukiToreda) – Lead development and implementation.
-- JasonP (Xaositek)  – Screen layout and icon design, UI improvements and testing.
-- TonyG (Tropho) – Project management, structural planning, and testing
+- Ronald Garcia (HarukiToreda) - Lead development and implementation.
+- JasonP (Xaositek)  - Screen layout and icon design, UI improvements and testing.
+- TonyG (Tropho) - Project management, structural planning, and testing
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -126,7 +126,7 @@ static inline void prepareFrameColorRegions()
 // "LOCKED" plus battery so the operator can see the device is alive and
 // charged without leaking any node/channel/message/position content.
 // Draw the LOCKED frame into the host-side framebuffer. Does NOT commit
-// to the panel — the caller is responsible for calling display->display()
+// to the panel - the caller is responsible for calling display->display()
 // once it has composited any overlays on top. Committing here would cause
 // visible flicker between "just LOCKED" and "LOCKED + banner overlay" when
 // the pairing-PIN special-case in updateUiFrame paints the overlay after
@@ -166,8 +166,8 @@ static inline void updateUiFrame(OLEDDisplayUi *ui)
     if (meshtastic_security::shouldRedactDisplay() && screen != nullptr) {
         OLEDDisplay *display = screen->getDisplayDevice();
         // Paint LOCKED into the framebuffer WITHOUT committing. We commit
-        // exactly once at the bottom — after any overlay has been composed
-        // on top — so the panel never visibly transitions from "just LOCKED"
+        // exactly once at the bottom - after any overlay has been composed
+        // on top - so the panel never visibly transitions from "just LOCKED"
         // to "LOCKED + overlay" mid-frame. Committing twice per cycle was
         // the source of the H13 flicker.
         drawLockdownLockScreenIntoBuffer(display);
@@ -343,7 +343,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
+void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
                               std::function<void(uint32_t)> bannerCallback)
 {
 #ifdef USE_EINK
@@ -356,7 +356,10 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
-    NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
+    if (useBase16)
+        NotificationRenderer::current_notification_type = notificationTypeEnum::hex_picker;
+    else
+        NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
     NotificationRenderer::numDigits = digits;
     NotificationRenderer::currentNumber = 0;
 
@@ -481,6 +484,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isI2cScreen = true;
 #elif defined(USE_ST7789)
 #ifdef ESP_PLATFORM
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
@@ -498,6 +502,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isI2cScreen = true;
 #if defined(OLED_Y_OFFSET_PAGES)
     // Panels whose active window does not start at GDDRAM row 0 (e.g. 72x40
     // modules on pages 3..7) need a fixed vertical page shift on every write.
@@ -521,6 +526,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
             dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
                                        (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
             isAUTOOled = true;
+            isI2cScreen = true;
         }
     }
 #elif USE_TFTDISPLAY
@@ -538,10 +544,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isI2cScreen = true;
 #else
     dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
                                (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     isAUTOOled = true;
+    isI2cScreen = true;
 #endif
 
 #if defined(USE_ST7789)
@@ -663,7 +671,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // 16-50 ms before the next ui->update() lands. Painting the
             // LOCKED frame now ensures the only thing the operator (or
             // someone over their shoulder) can see on wake is the redacted
-            // view. Gated on lockdown — non-lockdown builds keep the
+            // view. Gated on lockdown - non-lockdown builds keep the
             // previous frame as a UX cue that the display is just dimmed.
             // dispdev is dereferenced unguarded throughout this file (incl.
             // displayOff() just below), so no null check here.
@@ -793,7 +801,7 @@ void Screen::setup()
     // M20: e-ink panels physically retain the last-rendered image without
     // power, so a power-cycled lockdown handheld would keep showing
     // operator-identifying content (position, messages, node info) until
-    // the firmware's first natural refresh — which on e-ink can be seconds
+    // the firmware's first natural refresh - which on e-ink can be seconds
     // into boot. Force a full refresh to the LOCKED frame here, immediately
     // after the display is initialised and before any other rendering, so
     // the persistent pixels are wiped to the redacted view before an
@@ -1035,7 +1043,7 @@ int32_t Screen::runOnce()
     bool suppressRegionOnboard = false;
 #ifdef MESHTASTIC_LOCKDOWN
     // While lockdown is active and storage is still locked, config.lora.region
-    // is a deliberate UNSET placeholder — the real region lives in encrypted
+    // is a deliberate UNSET placeholder - the real region lives in encrypted
     // storage and is restored on unlock (see NodeDB's locked-boot path). Don't
     // pop the region picker over the lock screen: it would trap input, and the
     // operator can't set a region until they unlock anyway.
@@ -1473,7 +1481,7 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        //  No more adjustment — force stay on same index
+        //  No more adjustment - force stay on same index
         if (previousFrameCount > fsi.frameCount) {
             ui->switchToFrame(originalPosition - 1);
         } else if (previousFrameCount < fsi.frameCount) {
@@ -1828,7 +1836,7 @@ void Screen::handleOnPress()
 void Screen::logFrameChange(const char *reason, uint8_t targetIdx)
 {
     // Reverse-map an index to a stable name string keyed off FramePositions
-    // field names — so the pytest harness can assert `name=nodelist_nodes`
+    // field names - so the pytest harness can assert `name=nodelist_nodes`
     // without caring about how the positions were ordered this boot.
     const auto &p = framesetInfo.positions;
     const char *name = "unknown";

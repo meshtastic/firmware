@@ -120,6 +120,9 @@ extern struct portduino_config_struct {
 
     // GPS
     bool has_gps = false;
+    std::string gps_serial_path = "";
+    std::string gpsd_host = "";
+    int gpsd_port = 2947;
 
     // I2C
     std::string i2cdev = "";
@@ -157,6 +160,11 @@ extern struct portduino_config_struct {
     // Input
     std::string keyboardDevice = "";
     std::string pointerDevice = "";
+    std::string joystickDevice = "";
+    // Joystick/gamepad button map: evdev button code -> lowercase action name
+    // ("select", "cancel", "back", "up", "down", "left", "right", "user").
+    // Empty means the LinuxJoystick driver uses its built-in defaults.
+    std::map<int, std::string> joystickButtons;
     int tbDirection;
     pinMapping userButtonPin = {"Input", "User"};
     pinMapping tbUpPin = {"Input", "TrackballUp"};
@@ -360,6 +368,18 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // GPIO
         }
 
+        if (has_gps) {
+            out << YAML::Key << "GPS" << YAML::Value << YAML::BeginMap;
+            if (!gpsd_host.empty()) {
+                out << YAML::Key << "GpsdHost" << YAML::Value << gpsd_host;
+                if (gpsd_port != 2947)
+                    out << YAML::Key << "GpsdPort" << YAML::Value << gpsd_port;
+            } else if (!gps_serial_path.empty()) {
+                out << YAML::Key << "SerialPath" << YAML::Value << gps_serial_path;
+            }
+            out << YAML::EndMap; // GPS
+        }
+
         if (i2cdev != "") {
             out << YAML::Key << "I2C" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "I2CDevice" << YAML::Value << i2cdev;
@@ -443,6 +463,14 @@ extern struct portduino_config_struct {
             out << YAML::Key << "KeyboardDevice" << YAML::Value << keyboardDevice;
         if (pointerDevice != "")
             out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
+        if (joystickDevice != "")
+            out << YAML::Key << "JoystickDevice" << YAML::Value << joystickDevice;
+        if (!joystickButtons.empty()) {
+            out << YAML::Key << "JoystickButtons" << YAML::Value << YAML::BeginMap;
+            for (const auto &button : joystickButtons)
+                out << YAML::Key << button.second << YAML::Value << button.first;
+            out << YAML::EndMap;
+        }
 
         for (const auto *input_pin : all_pins) {
             if (input_pin->config_section == "Input" && input_pin->enabled) {

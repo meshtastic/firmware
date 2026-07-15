@@ -27,6 +27,8 @@
 #include "target_specific.h"
 #include <Preferences.h>
 #include <driver/rtc_io.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 
@@ -52,8 +54,25 @@ static bool isNetworkConfiguredToDisableBluetooth()
 #endif
 }
 
+static bool isPaxcounterActiveForBoot()
+{
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
+    return moduleConfig.has_paxcounter && moduleConfig.paxcounter.enabled && !config.bluetooth.enabled &&
+           !config.network.wifi_enabled;
+#else
+    return false;
+#endif
+}
+
 static bool shouldReleaseBluetoothMemory()
 {
+    // Paxcounter disables the Meshtastic BLE service, but libpax still needs the
+    // ESP32 BLE controller memory for scanning.
+    if (isPaxcounterActiveForBoot()) {
+        LOG_DEBUG("Skipping Bluetooth memory release because Paxcounter is active");
+        return false;
+    }
+
     // On ESP32 targets WiFi and BLE share radio resources. When WiFi is configured for this boot,
     // BLE will not be started, so its reserved memory can be returned to the heap until reboot.
     if (isNetworkConfiguredToDisableBluetooth()) {
@@ -138,6 +157,26 @@ void getMacAddr(uint8_t *dmac)
 #else
     auto res = esp_efuse_mac_get_default(dmac);
     assert(res == ESP_OK);
+#endif
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) ||            \
+    defined(CONFIG_IDF_TARGET_ESP32C6)
+    // ESP32 factory burns a 128-bit unique id in efuse for S2+ and C3+ series (used for HMACs
+    // in the esp-rainmaker AIOT platform); a good stable hardware anchor for us too.
+    uint32_t unique_id[4];
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
+    if (err != ESP_OK) {
+        LOG_WARN("Failed to read unique id from efuse");
+        return false;
+    }
+    memcpy(deviceId, unique_id, sizeof(unique_id));
+    return true;
+#else
+    // Classic ESP32 has no OPTIONAL_UNIQUE_ID efuse: fall back to the factory-burned MAC.
+    return getMacAddrDeviceId(deviceId);
 #endif
 }
 
@@ -349,7 +388,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 #endif
 
-    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer — align with nRF52 system_off semantics.
+    // User shutdown (DELAY_FOREVER / portMAX_DELAY): no RTC timer - align with nRF52 system_off semantics.
     if (msecToWake != portMAX_DELAY)
         esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();

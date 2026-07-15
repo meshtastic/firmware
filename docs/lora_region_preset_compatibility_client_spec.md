@@ -1,4 +1,4 @@
-# LoRa Region → Preset Compatibility — Client Implementation Spec
+# LoRa Region → Preset Compatibility - Client Implementation Spec
 
 **Status:** Draft for 2.8 · **Audience:** Meshtastic client app developers (Android first,
 Apple second, then web/python) · **Firmware side:** implemented in `firmware`
@@ -13,7 +13,7 @@ Apple second, then web/python) · **Firmware side:** implemented in `firmware`
 ## 1. Why this exists
 
 For 2.8 the LoRa regions and modem presets were reworked. **Not every modem preset is legal
-in every region** — narrow EU SRD bands, the EU 868 "narrow" band, amateur/ham bands, and
+in every region** - narrow EU SRD bands, the EU 868 "narrow" band, amateur/ham bands, and
 the 2.4 GHz band each accept only a specific subset of presets. The firmware already
 enforces this internally (it clamps or rejects illegal combinations), but until now a client
 had no way to _know_ the rules, so a user could pick an illegal region+preset pair in the UI
@@ -22,7 +22,7 @@ and only discover the problem after the device silently corrected it.
 This feature has the firmware **declare the legal region→preset combinations** to the client
 during the `want_config` handshake, so the client UI can constrain the preset picker to the
 valid set for the currently selected region (and warn about licensed-only bands). It is
-purely advisory metadata — the firmware remains the source of truth and still
+purely advisory metadata - the firmware remains the source of truth and still
 validates/clamps on its own.
 
 ---
@@ -69,12 +69,12 @@ message LoRaRegionPresetMap {
 ### 2.3 Why grouped (and the size envelope clients should respect)
 
 A `FromRadio` packet is capped at **512 bytes** (`MAX_TO_FROM_RADIO_SIZE`). Most regions
-share one identical preset list (the "standard" 9-preset list), so the map is delivered
+share one identical preset list (the "standard" 10-preset list), so the map is delivered
 **grouped**: `groups` holds each _distinct_ preset list once, and `region_groups` maps every
 known region to one of those groups by index. This keeps the encoded size additive
 (`groups` + `region_groups`) rather than multiplicative, well under the cap.
 
-nanopb (firmware) array bounds — clients do **not** need to enforce these, but they bound
+nanopb (firmware) array bounds - clients do **not** need to enforce these, but they bound
 what you can receive:
 
 | field                               | max_count                            |
@@ -154,7 +154,7 @@ These rules are what keep the UX correct across firmware versions. Implement all
    (`EU_868` / `EU_866` / `EU_N_868`) specially: if the user is in one of them and selects a
    preset that belongs to a sibling's list, the firmware **swaps the region** rather than
    rejecting the preset. Consequence for clients: **do not assume the region is immutable
-   across a preset change** — after an admin config write, re-read the resulting
+   across a preset change** - after an admin config write, re-read the resulting
    `LoRaConfig` and reflect the (possibly changed) region back into the UI.
 
 6. **Use it as a UI guard, not a validator of truth.** The firmware still validates/clamps
@@ -171,7 +171,7 @@ These rules are what keep the UX correct across firmware versions. Implement all
   that region's `default_preset`.
 - Show a **licensed badge / confirmation** for regions where `licensed_only == true`.
 - If a region is absent from the map (rule §5.1) or the whole message is absent (§5.2),
-  render the full preset list as before — never show an empty picker.
+  render the full preset list as before - never show an empty picker.
 
 ---
 
@@ -193,14 +193,14 @@ These rules are what keep the UX correct across firmware versions. Implement all
 > Verified against the `main` branch of each repo. Both have been refactored away from
 > older layouts; re-pin file paths against a specific commit if you need them durable.
 
-### 8.1 Android — `meshtastic/Meshtastic-Android` (Kotlin / Compose, KMP)
+### 8.1 Android - `meshtastic/Meshtastic-Android` (Kotlin / Compose, KMP)
 
 - **Protobufs are a published Maven artifact, _not_ a submodule.** Declared in
   `gradle/libs.versions.toml` (`org.meshtastic:protobufs`, currently `2.7.25`); generated
   package is **`org.meshtastic.proto`**. **A `region_presets`-aware build requires a new
   published `org.meshtastic:protobufs` release**, then bumping that one version string.
 - **The protobufs are Wire-generated**, so the `FromRadio` oneof is **not** a
-  `payloadVariantCase` enum — each arm is a **nullable field**. Handle the new variant in
+  `payloadVariantCase` enum - each arm is a **nullable field**. Handle the new variant in
   `FromRadioPacketHandlerImpl.handleFromRadio(...)`
   (`core/data/.../manager/FromRadioPacketHandlerImpl.kt`) by adding a
   `regionPresets != null -> …` arm to the existing `when { … }`, delegating to a handler
@@ -213,16 +213,16 @@ These rules are what keep the UX correct across firmware versions. Implement all
   `LoRaConfigScreen`). Gate/filter the `ChannelOption` (preset) dropdown by the selected
   `RegionInfo`'s entry in the map.
 
-### 8.2 Apple — `meshtastic/Meshtastic-Apple` (Swift / SwiftUI)
+### 8.2 Apple - `meshtastic/Meshtastic-Apple` (Swift / SwiftUI)
 
 - **Protobufs are vendored** into a local Swift package `MeshtasticProtobufs`
   (`MeshtasticProtobufs/Sources/meshtastic/*.pb.swift`), generated from the `protobufs` git
   submodule via `scripts/gen_protos.sh`. **To get field 19:** advance the `protobufs`
   submodule, run `scripts/gen_protos.sh`, commit the regenerated `.pb.swift` + submodule
-  pointer. (No published-artifact dependency — Apple can regenerate from any commit.)
+  pointer. (No published-artifact dependency - Apple can regenerate from any commit.)
 - **Dispatch:** `AccessoryManager.processFromRadio(_:)`
   (`Meshtastic/Accessory/Accessory Manager/AccessoryManager.swift`) is a real
-  `switch decodedInfo.payloadVariant { … }` — add a `.regionPresets` case, with the handler
+  `switch decodedInfo.payloadVariant { … }` - add a `.regionPresets` case, with the handler
   in `AccessoryManager+FromRadio.swift` (mirror `handleConfig` / `handleMetadata`).
 - **Persistence:** config is **SwiftData** (`@Model` entities), upserted via
   `MeshPackets`/`UpdateSwiftData.swift`. Store the decoded map (e.g. on a settings/connection
@@ -246,14 +246,14 @@ For decoder unit tests. With the 2.8 region table, the firmware emits **6 groups
 indices are assigned in region-table order (first region to use a profile creates its group),
 so they are stable as listed here:
 
-| group_index             | default_preset | licensed_only | presets                                                                                                        |
-| ----------------------- | -------------- | ------------- | -------------------------------------------------------------------------------------------------------------- |
-| 0 (standard)            | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, SHORT_TURBO, LONG_TURBO |
-| 1 (EU 868)              | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE                          |
-| 2 (EU 866 SRD / "lite") | `LITE_FAST`    | false         | LITE_FAST, LITE_SLOW                                                                                           |
-| 3 (EU 868 narrow)       | `NARROW_SLOW`  | false         | NARROW_FAST, NARROW_SLOW                                                                                       |
-| 4 (ham 20 kHz)          | `TINY_FAST`    | **true**      | TINY_FAST, TINY_SLOW                                                                                           |
-| 5 (ham 100 kHz)         | `NARROW_SLOW`  | **true**      | NARROW_FAST, NARROW_SLOW                                                                                       |
+| group_index             | default_preset | licensed_only | presets                                                                                                                      |
+| ----------------------- | -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 0 (standard)            | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, SHORT_TURBO, LONG_TURBO, MEDIUM_TURBO |
+| 1 (EU 868)              | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE                                        |
+| 2 (EU 866 SRD / "lite") | `LITE_FAST`    | false         | LITE_FAST, LITE_SLOW                                                                                                         |
+| 3 (EU 868 narrow)       | `NARROW_SLOW`  | false         | NARROW_FAST, NARROW_SLOW                                                                                                     |
+| 4 (ham 20 kHz)          | `TINY_FAST`    | **true**      | TINY_FAST, TINY_SLOW                                                                                                         |
+| 5 (ham 100 kHz)         | `NARROW_SLOW`  | **true**      | NARROW_FAST, NARROW_SLOW                                                                                                     |
 
 `region_groups` (region → group_index):
 

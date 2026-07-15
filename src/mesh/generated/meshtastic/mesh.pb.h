@@ -308,9 +308,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TDISPLAY_S3_PRO = 126,
     /* Heltec Mesh Node T096 board features an nRF52840 CPU and a TFT screen. */
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T096 = 127,
-    /* Seeed studio T1000-E Pro tracker card. NRF52840 w/ LR2021 radio,
+    /* Seeed studio Mesh Tracker X1card. NRF52840 w/ LR2021 radio,
  GPS, button, buzzer, and sensors. */
-    meshtastic_HardwareModel_TRACKER_T1000_E_PRO = 128,
+    meshtastic_HardwareModel_MESH_TRACKER_X1 = 128,
     /* Elecrow ThinkNode M7, M8 and M9 */
     meshtastic_HardwareModel_THINKNODE_M7 = 129,
     meshtastic_HardwareModel_THINKNODE_M8 = 130,
@@ -333,6 +333,12 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_MESH_TOWER_V2 = 139,
     /* Meshnology W10 */
     meshtastic_HardwareModel_MESHNOLOGY_W10 = 140,
+    /* Heltec ESP32S3 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RC32 = 141,
+    /* Heltec NRF52840 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RC52 = 142,
+    /* Heltec ESP32C6 + SX1262 */
+    meshtastic_HardwareModel_HELTEC_RCC6 = 143,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -1244,15 +1250,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        — storage already unlocked, client must auth
-   "token_missing"     — no boot token on flash
-   "token_expired"     — boot token wall-clock TTL elapsed
-   "token_boots_zero"  — boot token boot-count TTL exhausted
-   "token_hmac_fail"   — token tampered or wrong device
-   "token_dek_fail"    — token DEK decrypt failed
-   "token_wrong_size"  — token file corrupted
-   "token_bad_magic"   — token file corrupted
-   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
+   "needs_auth"        - storage already unlocked, client must auth
+   "token_missing"     - no boot token on flash
+   "token_expired"     - boot token wall-clock TTL elapsed
+   "token_boots_zero"  - boot token boot-count TTL exhausted
+   "token_hmac_fail"   - token tampered or wrong device
+   "token_dek_fail"    - token DEK decrypt failed
+   "token_wrong_size"  - token file corrupted
+   "token_bad_magic"   - token file corrupted
+   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];
