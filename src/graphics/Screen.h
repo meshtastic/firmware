@@ -287,6 +287,10 @@ class Screen : public concurrency::OSThread
 
     bool isOverlayBannerShowing();
 
+    // True if the always-present games frame is the one currently on screen. Lets the games module
+    // ignore D-pad input when the player has navigated to a different frame.
+    bool isGamesFrameShown();
+
     bool isScreenOn() { return screenOn; }
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier

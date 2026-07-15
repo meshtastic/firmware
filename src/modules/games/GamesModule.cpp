@@ -182,7 +182,11 @@ int32_t GamesModule::runOnce()
 
 int GamesModule::handleInputEvent(const InputEvent *event)
 {
-    if (screen && screen->isOverlayBannerShowing())
+    // Ignore all input unless the games frame is the one actually on screen -- otherwise the attract
+    // screen's UP/DOWN would hijack normal frame navigation from wherever the player happens to be.
+    if (!screen || !screen->isGamesFrameShown())
+        return 0;
+    if (screen->isOverlayBannerShowing())
         return 0; // a menu banner is up; don't steal its input
 
     const input_broker_event ev = event->inputEvent;

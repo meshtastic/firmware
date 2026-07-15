@@ -2307,6 +2307,11 @@ bool Screen::isOverlayBannerShowing()
     return NotificationRenderer::isOverlayBannerShowing();
 }
 
+bool Screen::isGamesFrameShown()
+{
+    return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
+}
+
 } // namespace graphics
 
 #else
