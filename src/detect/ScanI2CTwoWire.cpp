@@ -648,7 +648,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("BMA423", (uint8_t)addr.address);
                 }
                 break;
-            case TCA9535_ADDR:
+            case TCA9535_ADDR: // this can also be MCP23017_ADDR (both 0x20
             case RAK120352_ADDR:
             case RAK120353_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1);
@@ -656,8 +656,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = RAK12035;
                     logFoundDevice("RAK12035", (uint8_t)addr.address);
                 } else {
-                    type = TCA9535;
-                    logFoundDevice("TCA9535", (uint8_t)addr.address);
+                     // TCA9535 only has registers 0x00-0x07; MCP23017 has IOCON at 0x0A
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1);
+                    if (registerValue != 0xFF) { 
+                        type = MCP23017;
+                        logFoundDevice("MCP23017", (uint8_t)addr.address);
+                    } else {
+                        type = TCA9535;
+                        logFoundDevice("TCA9535", (uint8_t)addr.address);
+                    }
                 }
 
                 break;
