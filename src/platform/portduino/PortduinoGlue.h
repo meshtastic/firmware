@@ -160,6 +160,11 @@ extern struct portduino_config_struct {
     // Input
     std::string keyboardDevice = "";
     std::string pointerDevice = "";
+    std::string joystickDevice = "";
+    // Joystick/gamepad button map: evdev button code -> lowercase action name
+    // ("select", "cancel", "back", "up", "down", "left", "right", "user").
+    // Empty means the LinuxJoystick driver uses its built-in defaults.
+    std::map<int, std::string> joystickButtons;
     int tbDirection;
     pinMapping userButtonPin = {"Input", "User"};
     pinMapping tbUpPin = {"Input", "TrackballUp"};
@@ -458,6 +463,14 @@ extern struct portduino_config_struct {
             out << YAML::Key << "KeyboardDevice" << YAML::Value << keyboardDevice;
         if (pointerDevice != "")
             out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
+        if (joystickDevice != "")
+            out << YAML::Key << "JoystickDevice" << YAML::Value << joystickDevice;
+        if (!joystickButtons.empty()) {
+            out << YAML::Key << "JoystickButtons" << YAML::Value << YAML::BeginMap;
+            for (const auto &button : joystickButtons)
+                out << YAML::Key << button.second << YAML::Value << button.first;
+            out << YAML::EndMap;
+        }
 
         for (const auto *input_pin : all_pins) {
             if (input_pin->config_section == "Input" && input_pin->enabled) {

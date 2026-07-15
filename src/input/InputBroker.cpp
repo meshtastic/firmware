@@ -10,6 +10,7 @@
 
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#include "input/LinuxJoystick.h"
 #include "input/SeesawRotary.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -438,6 +439,9 @@ void InputBroker::Init()
         // Linux evdev keyboard input only - macOS has no <linux/input.h>.
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
+        // Linux evdev gamepad/joystick input (D-pad + confirm/cancel buttons).
+        aLinuxJoystick = new LinuxJoystick("LinuxJoystick");
+        aLinuxJoystick->init();
 #endif
     }
 #endif
