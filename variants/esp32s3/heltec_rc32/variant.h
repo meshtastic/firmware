@@ -48,9 +48,6 @@
 #define LED_POWER 47
 #define PIN_BUZZER 48
 
-#define VEXT_ENABLE 3
-#define VEXT_ON_VALUE HIGH
-
 #define USE_SX1262
 #define LORA_SCK 11
 #define LORA_MISO 13
