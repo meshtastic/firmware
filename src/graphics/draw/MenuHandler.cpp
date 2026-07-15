@@ -182,7 +182,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
 
     // Reconcile the preset with the explicitly chosen region: a preset locked to another
     // region would leave config.lora invalid until applyModemConfig() repairs it with
-    // error/critical-error side effects — or, for the swappable EU trio, the clamp would
+    // error/critical-error side effects - or, for the swappable EU trio, the clamp would
     // flip the region right back. The user picked the region, so the preset follows it.
     const RegionInfo *newRegion = getRegion(region);
     if (config.lora.use_preset && !newRegion->supportsPreset(config.lora.modem_preset)) {
@@ -214,6 +214,11 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
         snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
     }
+#if !MESHTASTIC_EXCLUDE_GPS
+    // Enable gps if it was previously disabled due to region not being set
+    if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+        gps->enable();
+#endif
     service->reloadConfig(changes);
 }
 
@@ -253,6 +258,9 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"ITU2_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M},
         {"ITU3_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M},
         {"ITU2_125CM (220-225)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM},
+        {"ITU1_70CM (430-440)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU1_70CM},
+        {"ITU2_70CM (420-450)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM},
+        {"ITU3_70CM (430-450)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM},
 
     };
 
@@ -277,7 +285,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 
             // Guard: without a reboot, reconfigure() applies the region directly, so reject
             // regions this node can't use up front: unrecognized codes, licensed-only regions,
-            // and radio hardware mismatches (2.4 GHz vs sub-GHz) — the same checks the admin
+            // and radio hardware mismatches (2.4 GHz vs sub-GHz) - the same checks the admin
             // set-config path applies, but side-effect-free: ignoring a menu selection should
             // not record a critical error or notify clients. getRadio() used to catch hardware
             // mismatches post-reboot only.
@@ -463,7 +471,7 @@ static constexpr int MAX_PRESET_OPTIONS = 16;
 
 static BannerOverlayOptions buildRegionPresetBanner()
 {
-    // Static storage reused each call — safe because the banner is shown immediately after.
+    // Static storage reused each call - safe because the banner is shown immediately after.
     static const char *optionsArray[MAX_PRESET_OPTIONS];
     static int optionsEnumArray[MAX_PRESET_OPTIONS];
     static char presetLabelBuf[MAX_PRESET_OPTIONS][12]; // scratch space for name copies
@@ -1688,16 +1696,17 @@ void menuHandler::resetNodeDBMenu()
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1 || selected == 2) {
-            disableBluetooth();
             screen->setFrames(Screen::FOCUS_DEFAULT);
         }
         if (selected == 1) {
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
+            disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 2) {
             LOG_INFO("Initiate node-db reset but keeping favorites");
             nodeDB->resetNodes(1);
+            disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 0) {
             menuQueue = NodeBaseMenu;
@@ -2314,8 +2323,10 @@ void menuHandler::testMenu()
 
 void menuHandler::numberTest()
 {
-    screen->showNumberPicker("Pick a number\n ", 30000, 4,
-                             [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
+    screen->showNumberPicker("Verify Nodenum:\n ", 30000, 8, true, [](uint32_t number_picked) -> void {
+        LOG_DEBUG("Nodenum: 0x%08x", number_picked);
+        keyVerificationModule->sendInitialRequest(number_picked);
+    });
 }
 
 void menuHandler::wifiBaseMenu()
@@ -2499,8 +2510,7 @@ void menuHandler::keyVerificationFinalPrompt()
         options.notificationType = graphics::notificationTypeEnum::selection_picker;
         options.bannerCallback = [=](int selected) {
             if (selected == 1) {
-                auto remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
-                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                keyVerificationModule->commitVerifiedRemoteNode();
             }
         };
         screen->showOverlayBanner(options);

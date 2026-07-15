@@ -6,6 +6,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
+#include "mesh/CryptoEngine.h"
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
@@ -131,6 +132,21 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
             return;
         }
         p->channel = ch.index;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        // Already-decoded downlink skips perhapsDecode's crypto path entirely, so enforce the
+        // signature policy here: verify a carried signature and apply unsigned-downgrade
+        // protection for known signers. Without this, a peer on a plaintext broker could
+        // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
+        // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
+        // CryptoEngine cache state, and MQTT ingress can run on a different task.
+        {
+            concurrency::LockGuard g(cryptLock);
+            if (!checkXeddsaReceivePolicy(p.get())) {
+                LOG_INFO("Ignore decoded message failing XEdDSA policy");
+                return;
+            }
+        }
+#endif
     }
 
     // PKI messages get accepted even if we can't decrypt
@@ -376,6 +392,8 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg)
+            return false;
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0';
@@ -397,6 +415,8 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        if (!msg)
+            return false;
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
         strncpy(msg->topic, topic, sizeof(msg->topic));
         msg->topic[sizeof(msg->topic) - 1] = '\0'; // Ensure null termination
@@ -454,8 +474,16 @@ void MQTT::reconnect()
             reconnectCount++;
             LOG_ERROR("Failed to contact MQTT server directly (%d/%d)", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
+#if defined(USE_WS5500) || defined(USE_CH390D)
+                LOG_WARN("MQTT connect failed repeatedly; waiting for Ethernet reconnect");
+#else
                 needReconnect = true;
-                wifiReconnect->setIntervalFromNow(0);
+                if (wifiReconnect) {
+                    wifiReconnect->setIntervalFromNow(0);
+                } else {
+                    LOG_WARN("MQTT connect failed repeatedly, but WiFi reconnect is unavailable");
+                }
+#endif
                 reconnectCount = 0;
             }
 #endif
@@ -545,7 +573,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         }
         // Perform a lightweight TCP connectivity check without using connectPubSub(),
         // which mutates the module's isConnected state. This only checks if the server
-        // is reachable — it does not establish an MQTT session.
+        // is reachable - it does not establish an MQTT session.
         // Settings are always saved regardless of the result.
         if (isConnectedToNetwork()) {
             MQTTClient testClient;
@@ -571,11 +599,13 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        strncpy(cn->message, warning, sizeof(cn->message) - 1);
-        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            strncpy(cn->message, warning, sizeof(cn->message) - 1);
+            cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
 #endif
@@ -587,11 +617,13 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         LOG_ERROR(warning);
 #ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        strncpy(cn->message, warning, sizeof(cn->message) - 1);
-        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            strncpy(cn->message, warning, sizeof(cn->message) - 1);
+            cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
     }
@@ -722,6 +754,8 @@ void MQTT::perhapsReportToMap()
 
     // Allocate MeshPacket and fill it
     meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+    if (!mp)
+        return;
     mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     mp->from = nodeDB->getNodeNum();
     mp->to = NODENUM_BROADCAST;

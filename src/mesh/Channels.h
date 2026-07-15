@@ -88,6 +88,12 @@ class Channels
 
     // Returns true if this channel's effective key is publicly decryptable (open or well-known/default PSK).
     bool usesPublicKey(ChannelIndex chIndex);
+    // Returns true if the channel is "well known": its PSK is absent or a
+    // single-byte well-known key index, AND its name is any modem-preset
+    // display name (e.g. a channel named "LongFast" counts even while the
+    // radio runs MediumFast). Broader than isDefaultChannel, which only
+    // matches the current preset's name and PSK byte 1.
+    bool isWellKnownChannel(ChannelIndex chIndex);
 
     // Returns true if we can be reached via a channel with the default settings given a region and modem preset
     bool hasDefaultChannel();
@@ -98,6 +104,11 @@ class Channels
     bool ensureLicensedOperation();
 
     bool setDefaultPresetCryptoForHash(ChannelHash channelHash);
+
+    /**
+     * Validate a channel, fixing any errors as needed
+     */
+    meshtastic_Channel &fixupChannel(ChannelIndex chIndex);
 
     int16_t getHash(ChannelIndex i) { return hashes[i]; }
 
@@ -117,11 +128,6 @@ class Channels
      * called by fixupChannel when a new channel is set
      */
     int16_t generateHash(ChannelIndex channelNum);
-
-    /**
-     * Validate a channel, fixing any errors as needed
-     */
-    meshtastic_Channel &fixupChannel(ChannelIndex chIndex);
 
     /**
      * Writes the default lora config
@@ -149,6 +155,12 @@ static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0
 
 /// True if a getKey()-resolved key offers no privacy: length 0 (off) or the public defaultpsk family. Pure; for tests.
 bool cryptoKeyIsPublic(const CryptoKey &key);
+
+/// True if channel `chIndex` in a raw ChannelFile is publicly decryptable (open / single-byte well-known
+/// index / defaultpsk family). Pure equivalent of Channels::usesPublicKey that operates on the on-disk
+/// struct directly, so it is callable before the `channels` singleton is initialized (e.g. during the
+/// NodeDB boot migration). Resolves a PSK-less SECONDARY against the PRIMARY channel's key. For tests.
+bool channelFileUsesPublicKey(const meshtastic_ChannelFile &cf, ChannelIndex chIndex);
 
 static const uint8_t eventpsk[] = {0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36,
                                    0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74,

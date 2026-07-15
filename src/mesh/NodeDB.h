@@ -90,6 +90,15 @@ DeviceState versions used to be defined in the .proto file but really only this 
 // at boot via the parallel deviceonly_legacy descriptor and re-saved as v25.
 #define DEVICESTATE_MIN_VER 24
 
+// One-time behavioral migration marker for the 2.8 position/telemetry opt-in flip.
+// Deliberately kept separate from DEVICESTATE_CUR_VER: that constant also drives the
+// NodeDatabase slim-schema legacy gate (NodeDB.cpp, `nodeDatabase.version < CUR_VER`),
+// so bumping it would wrongly re-run the v24 legacy decoder on already-migrated v25
+// node DBs. This watermark is stamped only onto channelFile.version / moduleConfig.version
+// once the opt-in migration has run. RESERVES 26 - the next real on-disk schema change
+// should raise DEVICESTATE_CUR_VER to 27, not 26.
+#define POSITION_TELEMETRY_OPTIN_VER 26
+
 extern meshtastic_DeviceState devicestate;
 extern meshtastic_NodeDatabase nodeDatabase;
 extern meshtastic_ChannelFile channelFile;
@@ -115,6 +124,20 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
+/// Outcome of mapping a single on-wire last-byte (next_hop / relay_node) back to a full NodeNum.
+/// Because the wire only carries the last byte of a 32-bit node number, the mapping is ambiguous on
+/// dense meshes (the "birthday problem"). Callers must treat Ambiguous and None as "don't trust it".
+enum class LastByteResolution : uint8_t {
+    None,      ///< no relevant candidate node has this last byte
+    Unique,    ///< exactly one relevant candidate -> `num` is valid
+    Ambiguous, ///< two or more relevant candidates collide on this byte
+};
+
+struct ResolvedNode {
+    LastByteResolution status = LastByteResolution::None;
+    NodeNum num = 0; ///< valid only when status == Unique
+};
+
 /// Given a packet, return the number of hops used to reach this node.
 /// Returns defaultIfUnknown if the number of hops couldn't be determined.
 int8_t getHopsAway(const meshtastic_MeshPacket &p, int8_t defaultIfUnknown = -1);
@@ -133,12 +156,22 @@ inline bool shouldDropPacketForPreHop(const meshtastic_MeshPacket &p)
     if (isFromUs(&p)) {
         return false; // local-originated packets should never be dropped by pre-hop drop policy
     }
-    return classifyHopStart(p) != HopStartStatus::VALID;
+    // Pre-decode: the channel-encrypted bitfield isn't readable yet, so a missing/unknown hop_start can't be
+    // distinguished from a modern packet. Only drop the provably-corrupt case here; the bitfield-dependent
+    // verdict is re-checked post-decode in Router::handleReceived.
+    return classifyHopStart(p) == HopStartStatus::INVALID;
 #endif
 }
 
 /// Rate-limited debug log when hop_start is invalid/missing and packet is dropped.
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context);
+
+/// 2.8 position/telemetry opt-in migration (pure field mutators; exposed for native tests).
+/// Disable position broadcast on every PUBLIC/default-PSK channel (precision -> 0); private-PSK
+/// channels (deliberate trusted groups) are left untouched.
+void optInDisablePositionSharing(meshtastic_ChannelFile &cf);
+/// Force all mesh-broadcast device telemetry (and the MQTT map-report location) back to opt-in/off.
+void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc);
 
 enum LoadFileResult {
     // Successfully opened the file
@@ -323,13 +356,35 @@ class NodeDB
     WarmNodeStore warmStore;
 #endif
 
-    /// Copy the 32-byte public key for node n — hot store first, then the warm
+    /// Copy the 32-byte public key for node n - hot store first, then the warm
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
+    /// Resolve a node's device role - hot store (with user) first, then the role
+    /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
+    /// nodes that have aged out of the hot store.
+    meshtastic_Config_DeviceConfig_Role getNodeRole(NodeNum n);
 
     /// last_heard of a hot-store node, or 0 if absent. Plain scan of meshNodes
     /// with no allocation side effects (unlike getOrCreateMeshNode).
     uint32_t hotNodeLastHeard(NodeNum n) const;
+
+    /**
+     * Resolve a single on-wire last-byte (e.g. next_hop / relay_node) back to a unique full NodeNum,
+     * detecting last-byte collisions instead of silently picking the first match. A 1-byte id only
+     * needs to be unique among a node's plausible relays, not the whole mesh, so we scope the search:
+     *  - requireDirectNeighbor == true  : candidates are direct neighbors (hops_away==0) heard within
+     *                                     NEXTHOP_NEIGHBOR_FRESH_SECS. Use on the SEND path.
+     *  - requireDirectNeighbor == false : also accept favorites and router-role nodes (unknown hop
+     *                                     distance allowed). Use when learning / preserving hops.
+     * Ignored nodes, our own node, and the broadcast/0 sentinels are never candidates. On a tie the
+     * result is Ambiguous (no tie-break) so callers fall back to flooding rather than misroute.
+     */
+    ResolvedNode resolveLastByte(uint8_t lastByte, bool requireDirectNeighbor);
+
+    /// Convenience wrapper around resolveLastByte(): true iff exactly one relevant candidate matches.
+    /// Ambiguous and None both return false (the safe answer for learning / hop preservation).
+    bool resolveUniqueLastByte(uint8_t lastByte, bool requireDirectNeighbor, NodeNum *outNum = nullptr);
 
     // Thread-safe satellite-map accessors. Return false if absent or the
     // corresponding DB is compiled out.
@@ -376,7 +431,7 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        // Decode-stream size ceiling only — no buffer this big is allocated (load
+        // Decode-stream size ceiling only - no buffer this big is allocated (load
         // streams from the file). Sized for the largest file any prior firmware
         // could write (250-node ESP32-S3, satellites uncapped) so capacity
         // downgrades / peer backups still decode; excess is trimmed after load.
@@ -444,7 +499,7 @@ class NodeDB
     /// Returns true iff every encrypted file decrypted and decoded cleanly.
     /// On false the caller MUST treat the storage as corrupt: leave the
     /// connection unauthenticated, emit a LOCKED(storage_corrupt) status,
-    /// and refuse to call setAdminAuthorized — otherwise a subsequent
+    /// and refuse to call setAdminAuthorized - otherwise a subsequent
     /// set_config would re-encrypt a wrong baseline (the locked-default
     /// values still resident in `config` / `channelFile` / `nodeDatabase`)
     /// and overwrite the operator's persisted state.
@@ -453,7 +508,7 @@ class NodeDB
     /// Disable lockdown: decrypt every encrypted pref file back to plaintext,
     /// then remove the DEK / token / counter / backoff artifacts. Requires
     /// EncryptedStorage to be unlocked (DEK in RAM). Returns false if any
-    /// file failed to revert — in which case the DEK is still present and the
+    /// file failed to revert - in which case the DEK is still present and the
     /// device remains in lockdown so the operator can retry. APPROTECT is not
     /// reversed. Called from the main loop via lockdownDisablePending.
     bool disableLockdownToPlaintext();
@@ -470,6 +525,10 @@ class NodeDB
     bool duplicateWarned = false;
     bool localPositionUpdatedSinceBoot = false;
     bool migrationSavePending = false;
+    /// Set when loadFromDisk() hit a present-but-undecodable config (DECODE_FAILED). The ctor uses it to
+    /// skip boot keygen and skip persisting defaults, so a transient read failure can't change our NodeNum
+    /// or overwrite the on-disk config. Cleared at the top of every loadFromDisk() run.
+    bool configDecodeFailed = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
@@ -531,7 +590,7 @@ class NodeDB
     bool migrateLegacyNodeDatabase();
 
     // Route satellite-store decode entries straight into our maps instead of
-    // temp vectors. Must be paired — disarm before any other NodeDatabase decode.
+    // temp vectors. Must be paired - disarm before any other NodeDatabase decode.
     void armNodeDatabaseDecodeTargets();
     void disarmNodeDatabaseDecodeTargets();
 };

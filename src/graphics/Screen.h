@@ -43,7 +43,7 @@ struct BannerOverlayOptions {
 bool shouldWakeOnReceivedMessage();
 
 #if !HAS_SCREEN
-#include "power.h"
+#include "Power.h"
 namespace graphics
 {
 // Noop class for boards without screen.
@@ -73,6 +73,9 @@ class Screen
     void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
+    bool getIsI2cScreen() const { return false; }
+    uint32_t getI2cFrequency() const { return 0; }
+    ScanI2C::I2CPort getI2CPort() const { return ScanI2C::I2CPort::NO_I2C; }
 };
 } // namespace graphics
 #else
@@ -104,6 +107,7 @@ class Screen
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
 #include "PointStruct.h"
+#include "Power.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"
@@ -113,7 +117,6 @@ class Screen
 #include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
 #include "modules/AdminModule.h"
-#include "power.h"
 #include <string>
 #include <vector>
 
@@ -260,6 +263,22 @@ class Screen : public concurrency::OSThread
     Screen &operator=(const Screen &) = delete;
 
     ScanI2C::DeviceAddress address_found;
+    bool getIsI2cScreen() const { return isI2cScreen; }
+    // Return I2C Speed, or 0 if none
+    uint32_t getI2cFrequency() const
+    {
+        if (getIsI2cScreen())
+            return dispdev->getI2cFrequency();
+        else
+            return 0;
+    }
+    ScanI2C::I2CPort getI2CPort() const
+    {
+        if (getIsI2cScreen())
+            return address_found.port;
+        else
+            return ScanI2C::I2CPort::NO_I2C;
+    }
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
@@ -325,7 +344,8 @@ class Screen : public concurrency::OSThread
     void showOverlayBanner(BannerOverlayOptions);
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
-    void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
+    void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, bool useBase16,
+                          std::function<void(uint32_t)> bannerCallback);
     void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                        std::function<void(const std::string &)> textCallback);
 
@@ -654,6 +674,7 @@ class Screen : public concurrency::OSThread
     int32_t runOnce() final;
 
     bool isAUTOOled = false;
+    bool isI2cScreen = false;
 
     // Screen dimensions (for convenience)
     // Defined during Screen::setup
@@ -691,9 +712,10 @@ class Screen : public concurrency::OSThread
     // Test-only: emits one LOG_INFO line on every frame transition so the
     // pytest harness can assert which frame is shown. Gated behind a macro
     // so the chatty log doesn't ship in release builds. Enabled via
-    // build_testing_profile(enable_ui_log=True) in mcp-server/userprefs.py.
+    // build_testing_profile(enable_ui_log=True) in the meshtastic-mcp harness
+    // (https://github.com/meshtastic/meshtastic-mcp).
     // Member function (not free) because FramesetInfo is a private nested
-    // type — only methods of Screen can reach it.
+    // type - only methods of Screen can reach it.
     void logFrameChange(const char *reason, uint8_t targetIdx);
 #endif
 

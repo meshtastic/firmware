@@ -8,6 +8,10 @@
 #include "meshUtils.h"
 #include <vector>
 
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
+
 extern graphics::Screen *screen;
 
 TraceRouteModule *traceRouteModule;
@@ -323,6 +327,14 @@ void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
         LOG_INFO("Updating next-hop for 0x%08x to 0x%02x based on traceroute", target, nextHopByte);
         node->next_hop = nextHopByte;
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Mirror into the TMM overflow cache. Traceroute is the highest-confidence
+    // source (full known route), and this captures the target even when it isn't
+    // in the hot NodeDB - same rationale as the ACK-confirmed path in NextHopRouter.
+    if (trafficManagementModule)
+        trafficManagementModule->setNextHop(target, nextHopByte);
+#endif
 }
 
 void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
@@ -440,7 +452,7 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
         route += "\n";
-        if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
+        if (origin == nodeDB->getNodeNum() && r->snr_back_count > 0 && r->snr_back[r->snr_back_count - 1] != INT8_MIN)
             route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
         else
             route += "...";

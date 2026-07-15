@@ -261,7 +261,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
     case notificationTypeEnum::pairing_pin:
-        // pairing_pin is rendered the same as text_banner — it's just a
+        // pairing_pin is rendered the same as text_banner - it's just a
         // text banner. The split type exists only so the lockdown UI
         // short-circuit in Screen.cpp can recognise the BLE pair-PIN
         // banner as the one safe banner to composite over the LOCKED
@@ -1038,10 +1038,9 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             // Cancel virtual keyboard - call callback with empty string to indicate timeout
             auto callback = textInputCallback; // Store callback before clearing
 
-            // Clean up first to prevent re-entry
-            delete virtualKeyboard;
-            virtualKeyboard = nullptr;
-            textInputCallback = nullptr;
+            // Clean up first to prevent re-entry. The keyboard belongs to OnScreenKeyboardModule; only stop()
+            // may free it, and it clears virtualKeyboard/textInputCallback for us.
+            OnScreenKeyboardModule::instance().stop(false);
             resetBanner();
 
             // Call callback after cleanup
@@ -1060,9 +1059,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             bool handled = OnScreenKeyboardModule::processVirtualKeyboardInput(inEvent, virtualKeyboard);
             if (!handled && inEvent.inputEvent == INPUT_BROKER_CANCEL) {
                 auto callback = textInputCallback;
-                delete virtualKeyboard;
-                virtualKeyboard = nullptr;
-                textInputCallback = nullptr;
+                OnScreenKeyboardModule::instance().stop(false); // sole owner of the keyboard; also clears our aliases
                 resetBanner();
                 if (callback) {
                     callback("");

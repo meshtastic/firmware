@@ -174,7 +174,7 @@ void getMacAddr(uint8_t *dmac)
         // the same kind of stable, host-derived identifier that the BlueZ
         // path provides on Linux. If en0 isn't found or has no MAC, dmac is
         // left untouched and the caller's "Blank MAC Address not allowed!"
-        // check will still fire — preserving existing behavior for users
+        // check will still fire - preserving existing behavior for users
         // who deliberately rely on --hwid or YAML override.
         struct ifaddrs *ifap = nullptr;
         if (getifaddrs(&ifap) == 0) {
@@ -199,6 +199,16 @@ void getMacAddr(uint8_t *dmac)
         (void)dmac;
 #endif
     }
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+    if (portduino_config.has_device_id) {
+        memcpy(deviceId, portduino_config.device_id, sizeof(portduino_config.device_id));
+        return true;
+    }
+    // Config-supplied id stays preferred: host NIC/BT MACs can be unstable (docker, multi-NIC).
+    return getMacAddrDeviceId(deviceId);
 }
 
 std::string cleanupNameForAutoconf(std::string name)
@@ -231,6 +241,18 @@ void portduinoSetup()
     // We do this super early so that we can log from the rest of the init code
     concurrency::hasBeenSetup = true;
     consoleInit();
+
+#ifdef ARCH_PORTDUINO_WASM
+    // Browser build: no YAML/filesystem config. Apply a hardcoded SX1262/CH341
+    // setup and create the WebUSB-backed Ch341Hal, then skip the Linux config path.
+    {
+        extern void wasm_config_apply();
+        wasm_config_apply();
+        ch341Hal =
+            new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+    }
+    return;
+#endif
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
@@ -275,10 +297,12 @@ void portduinoSetup()
         }
     }
 
+#ifndef ARCH_PORTDUINO_WASM
     if (yamlOnly) {
         std::cout << portduino_config.emit_yaml() << std::endl;
         exit(EXIT_SUCCESS);
     }
+#endif
 
     if (portduino_config.force_simradio) {
         std::cout << "Running in simulated mode." << std::endl;
@@ -534,7 +558,7 @@ void portduinoSetup()
         // Pass the full buffer size (9 = 8 chars + null) to getSerialString,
         // not 8. The function treats `len` as buffer size and reserves one
         // slot for the null terminator, so passing 8 produced a 7-char serial
-        // and broke the `strlen(serial) == 8` check below — masked on Linux
+        // and broke the `strlen(serial) == 8` check below - masked on Linux
         // by the BlueZ HCI MAC fallback in getMacAddr(), but on macOS (where
         // the BlueZ path is __linux__-guarded) it left mac_address empty and
         // meshtasticd refused to start.
@@ -733,6 +757,16 @@ int initGPIOPin(int pinNum, const std::string &gpioChipName, int line)
 #endif
 }
 
+#ifdef ARCH_PORTDUINO_WASM
+// Browser node: configuration comes from the wasm_set_lora_* setters, not a YAML
+// file. Reached only as dead code after portduinoSetup()'s early return; kept
+// defined (and yaml-free) so those references still link.
+bool loadConfig(const char *configPath)
+{
+    (void)configPath;
+    return false;
+}
+#else
 bool loadConfig(const char *configPath)
 {
     YAML::Node yamlConfig;
@@ -784,11 +818,18 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Lora"]) {
 
             if (yamlConfig["Lora"]["Module"]) {
+                const std::string moduleName = yamlConfig["Lora"]["Module"].as<std::string>("");
+                bool found = false;
                 for (const auto &loraModule : portduino_config.loraModules) {
-                    if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.second) {
+                    if (moduleName == loraModule.second) {
                         portduino_config.lora_module = loraModule.first;
+                        found = true;
                         break;
                     }
+                }
+                if (!found) {
+                    std::cerr << "Unknown Lora.Module: " << moduleName << std::endl;
+                    exit(EXIT_FAILURE);
                 }
             }
             if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
@@ -911,7 +952,22 @@ bool loadConfig(const char *configPath)
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
                 Serial1.setPath(serialPath);
+                portduino_config.gps_serial_path = serialPath;
                 portduino_config.has_gps = 1;
+            }
+            std::string gpsdHost = yamlConfig["GPS"]["GpsdHost"].as<std::string>("");
+            if (!gpsdHost.empty()) {
+                if (portduino_config.has_gps) {
+                    LOG_WARN("GPS config: both SerialPath and GpsdHost are set; GpsdHost takes priority");
+                }
+                int gpsdPort = yamlConfig["GPS"]["GpsdPort"].as<int>(2947);
+                if (gpsdPort < 1 || gpsdPort > 65535) {
+                    LOG_ERROR("GPS config: GpsdPort %d is out of range [1, 65535]; ignoring GPS config", gpsdPort);
+                } else {
+                    portduino_config.gpsd_host = gpsdHost;
+                    portduino_config.gpsd_port = gpsdPort;
+                    portduino_config.has_gps = 1;
+                }
             }
         }
         if (yamlConfig["GPIO"]["ExtraPins"]) {
@@ -992,6 +1048,25 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Input"]) {
             portduino_config.keyboardDevice = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
+            portduino_config.joystickDevice = (yamlConfig["Input"]["JoystickDevice"]).as<std::string>("");
+            if (yamlConfig["Input"]["JoystickButtons"]) {
+                // action name -> evdev button code (hex like 0x122 or decimal); stored inverted
+                // as code -> lowercase action name for the driver to look up per keypress.
+                for (const auto &button : yamlConfig["Input"]["JoystickButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    int code = 0;
+                    try {
+                        // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
+                        code = std::stoi(button.second.as<std::string>(""), nullptr, 0);
+                    } catch (const std::exception &) {
+                        code = 0;
+                    }
+                    if (code != 0 && action != "")
+                        portduino_config.joystickButtons[code] = action;
+                }
+            }
 
             readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.userButtonPin);
             readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.tbUpPin);
@@ -1083,6 +1158,7 @@ bool loadConfig(const char *configPath)
     }
     return true;
 }
+#endif // !ARCH_PORTDUINO_WASM
 
 // https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
 static bool ends_with(std::string_view str, std::string_view suffix)
@@ -1122,6 +1198,10 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 
 std::string exec(const char *cmd)
 { // https://stackoverflow.com/a/478960
+#ifdef ARCH_PORTDUINO_WASM
+    (void)cmd; // no shell/popen in the browser - shell-outs degrade to empty
+    return "";
+#endif
     std::array<char, 128> buffer;
     std::string result;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
@@ -1134,6 +1214,7 @@ std::string exec(const char *cmd)
     return result;
 }
 
+#ifndef ARCH_PORTDUINO_WASM
 void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault)
 {
     if (sourceNode.IsMap()) {
@@ -1148,3 +1229,4 @@ void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault
         destPin.gpiochip = portduino_config.lora_default_gpiochip;
     }
 }
+#endif // !ARCH_PORTDUINO_WASM

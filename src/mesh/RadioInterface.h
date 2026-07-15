@@ -141,8 +141,12 @@ class RadioInterface
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
      * This method must be used before putting the CPU into deep or light sleep.
+     *
+     * @param deepSleep true when the radio itself is about to be powered down (deep sleep or
+     * shutdown) - an in-flight transmission then vetoes sleep, since it would be truncated on
+     * air. false for a light sleep where the radio stays powered and finishes the TX on its own.
      */
-    virtual bool canSleep() { return true; }
+    virtual bool canSleep(bool deepSleep = false) { return true; }
 
     virtual bool wideLora() { return false; }
 
@@ -314,8 +318,9 @@ class RadioInterface
      */
     void applyModemConfig();
 
-    /// Return 0 if sleep is okay
-    int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
+    /// Return 0 if sleep is okay. A non-NULL argument means the radio is about to be powered
+    /// down (deep sleep / shutdown), see doPreflightSleep()
+    int preflightSleepCb(void *deepSleep = NULL) { return canSleep(deepSleep != NULL) ? 0 : 1; }
 
     int notifyDeepSleepCb(void *unused = NULL);
 

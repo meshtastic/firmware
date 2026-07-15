@@ -98,6 +98,11 @@ typedef enum _meshtastic_PortNum {
  This module allows setting an extra string of status for a node.
  Broadcasts on change and on a timer, possibly once a day. */
     meshtastic_PortNum_NODE_STATUS_APP = 36,
+    /* Beacon module broadcast packets.
+ ENCODING: protobuf
+ Periodically broadcast by nodes in beacon mode; received by nodes with MeshBeaconConfig.FLAG_LISTEN_ENABLED.
+ Carries a text message plus optional channel/preset offers for client apps. */
+    meshtastic_PortNum_MESH_BEACON_APP = 37,
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.
@@ -156,6 +161,10 @@ typedef enum _meshtastic_PortNum {
  Portnum for payloads from the official Meshtastic ATAK plugin using
  TAKPacketV2 with zstd dictionary compression. */
     meshtastic_PortNum_ATAK_PLUGIN_V2 = 78,
+    /* signed firmware updates over lora.
+
+ ENCODING: binary (ota-common transport frames) */
+    meshtastic_PortNum_LORA_OTA_APP = 79,
     /* GroupAlarm integration
  Used for transporting GroupAlarm-related messages between Meshtastic nodes
  and companion applications/services. */

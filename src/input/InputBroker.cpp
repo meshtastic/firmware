@@ -2,6 +2,7 @@
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/HapticFeedback.h"
 #include "modules/ExternalNotificationModule.h"
 #ifdef MESHTASTIC_LOCKDOWN
 #include "security/LockdownDisplay.h"
@@ -9,6 +10,7 @@
 
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#include "input/LinuxJoystick.h"
 #include "input/SeesawRotary.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -128,14 +130,14 @@ int InputBroker::handleInputEvent(const InputEvent *event)
 #ifdef MESHTASTIC_LOCKDOWN
     // Lockdown: when the display is redacted (storage locked, or screen-lock
     // latch set after idle) the screen content is hidden, but local input
-    // would otherwise still flow into UI handlers — letting an operator
+    // would otherwise still flow into UI handlers - letting an operator
     // drive menus, fire canned messages, change settings etc. blind. Eat
     // the event here so input is no-op until the redaction clears.
     // The latch is cleared only by unlockScreen() on a successful
-    // passphrase auth (see PhoneAPI::handleLockdownAuthInline) — local
+    // passphrase auth (see PhoneAPI::handleLockdownAuthInline) - local
     // input does not clear it, even if storage happens to be unlocked.
     // PowerFSM was already triggered above, so the backlight still wakes
-    // to show the LOCKED frame — the input just doesn't act on anything.
+    // to show the LOCKED frame - the input just doesn't act on anything.
     if (meshtastic_security::shouldRedactDisplay()) {
         return 0;
     }
@@ -267,6 +269,16 @@ void InputBroker::Init()
         }
         touchBacklightActive = false;
     };
+#endif
+#if defined(HAPTIC_FEEDBACK_PIN)
+    // Blip on touch, second blip when long-press fires (500 ms = touchConfig.longPressTime default).
+    touchConfig.suppressLeadUpSound = true;
+    initHapticFeedback();
+    touchConfig.onPress = []() {
+        hapticFeedback->pulse(80);
+        hapticFeedback->armDelayedPulse(500, 80);
+    };
+    touchConfig.onRelease = []() { hapticFeedback->cancelDelayedPulse(); };
 #endif
     TouchButtonThread->initButton(touchConfig);
 #endif
@@ -434,9 +446,12 @@ void InputBroker::Init()
             }
         }
 #ifdef __linux__
-        // Linux evdev keyboard input only — macOS has no <linux/input.h>.
+        // Linux evdev keyboard input only - macOS has no <linux/input.h>.
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
+        // Linux evdev gamepad/joystick input (D-pad + confirm/cancel buttons).
+        aLinuxJoystick = new LinuxJoystick("LinuxJoystick");
+        aLinuxJoystick->init();
 #endif
     }
 #endif

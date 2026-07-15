@@ -1369,7 +1369,7 @@ int32_t CannedMessageModule::runOnce()
             case INPUT_BROKER_RIGHT:
                 break;
             default:
-                // Only insert ASCII printable characters (32–126)
+                // Only insert ASCII printable characters (32-126)
                 if (this->payload >= 32 && this->payload <= 126) {
                     requestFocus();
                     if (this->cursor == this->freetext.length()) {
@@ -2118,6 +2118,7 @@ static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
         return -6.0f;
     case PRESET(MEDIUM_SLOW):
     case PRESET(MEDIUM_FAST):
+    case PRESET(MEDIUM_TURBO):
         return -5.5f;
     case PRESET(SHORT_SLOW):
     case PRESET(SHORT_FAST):
@@ -2128,7 +2129,7 @@ static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
     }
 }
 
-// Return Good/Fair/Bad label and set 1–5 bars based on SNR and RSSI
+// Return Good/Fair/Bad label and set 1-5 bars based on SNR and RSSI
 static const char *getSignalGrade(float snr, int32_t rssi, float snrLimit, int &bars)
 {
     // 5-bar logic: strength inside Good/Fair/Bad category

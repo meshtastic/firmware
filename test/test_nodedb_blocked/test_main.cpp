@@ -1,6 +1,6 @@
 // Tests for the NodeDB hot-store migration and favourite/ignored (blocked)
-// retention paths — src/mesh/NodeDB.cpp.
-#include "MeshTypes.h" // BEFORE TestUtil.h — provides WARM_NODE_COUNT / MAX_NUM_NODES via mesh-pb-constants.h
+// retention paths - src/mesh/NodeDB.cpp.
+#include "MeshTypes.h" // BEFORE TestUtil.h - provides WARM_NODE_COUNT / MAX_NUM_NODES via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>
 
@@ -19,12 +19,15 @@
 // Subclass shim: exposes the private maintenance paths (via the friend
 // declaration in NodeDB.h) and lets a test own the hot store directly
 // (meshNodes/numMeshNodes are public). Declared at global scope so it matches
-// `friend class NodeDBTestShim` — an anonymous-namespace class would not.
+// `friend class NodeDBTestShim` - an anonymous-namespace class would not.
 class NodeDBTestShim : public NodeDB
 {
   public:
     void runDemote() { demoteOldestHotNodesToWarm(); }
     void runCleanup() { cleanupMeshDB(); }
+
+    // Read back the role + protected category the warm tier cached for a node.
+    bool warmMeta(NodeNum n, uint8_t &role, uint8_t &prot) { return warmStore.lookupMeta(n, role, prot); }
 
     void clearHot()
     {
@@ -32,11 +35,13 @@ class NodeDBTestShim : public NodeDB
         numMeshNodes = 0;
     }
 
-    void push(NodeNum num, uint32_t lastHeard, bool favorite, bool ignored, bool withUser, bool withKey)
+    void push(NodeNum num, uint32_t lastHeard, bool favorite, bool ignored, bool withUser, bool withKey,
+              meshtastic_Config_DeviceConfig_Role role = meshtastic_Config_DeviceConfig_Role_CLIENT)
     {
         meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
         n.num = num;
         n.last_heard = lastHeard;
+        n.role = role;
         if (favorite)
             nodeInfoLiteSetBit(&n, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
         if (ignored)
@@ -99,6 +104,34 @@ static void test_migration_demotesOldestKeepsKeepersAndSelf(void)
     TEST_ASSERT_TRUE(warmHasKey(2000 + 3));              // ...but its key kept in the warm tier
 }
 
+// Eviction carries the device role + protected category into the warm tier. A TRACKER is
+// hop-protected but NOT eviction-protected, so it gets demoted with its key; the warm
+// record must report role=TRACKER / category=Role. A plain CLIENT carries role=CLIENT/None.
+static void test_migration_carriesRoleAndProtectedIntoWarm(void)
+{
+    db->seedSelf();
+    const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected are demoted
+    for (int i = 1; i <= extra; i++) {
+        const auto role = (i == 3) ? meshtastic_Config_DeviceConfig_Role_TRACKER : meshtastic_Config_DeviceConfig_Role_CLIENT;
+        db->push(2000 + i, /*last_heard=*/i, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true,
+                 /*withKey=*/true, role);
+    }
+
+    db->runDemote();
+
+    uint8_t role = 0xFF, prot = 0xFF;
+    // TRACKER (i=3): demoted out of hot, key kept, role + protected carried into warm.
+    TEST_ASSERT_NULL(db->getMeshNode(2000 + 3));
+    TEST_ASSERT_TRUE(warmHasKey(2000 + 3));
+    TEST_ASSERT_TRUE(db->warmMeta(2000 + 3, role, prot));
+    TEST_ASSERT_EQUAL(meshtastic_Config_DeviceConfig_Role_TRACKER, role);
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, prot);
+    // CLIENT (i=4): also demoted, carries role=CLIENT / category=None.
+    TEST_ASSERT_TRUE(db->warmMeta(2000 + 4, role, prot));
+    TEST_ASSERT_EQUAL(meshtastic_Config_DeviceConfig_Role_CLIENT, role);
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
+}
+
 // Favourite handling: a favourite is never the eviction victim, even when it is
 // the oldest node in a full hot store.
 static void test_eviction_preservesFavorite(void)
@@ -132,7 +165,7 @@ static void test_ignored_survivesEvictionAndCleanup(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(4000 + 1)); // blocked node survived
     TEST_ASSERT_NULL(db->getMeshNode(4000 + 2));     // oldest non-blocked evicted
 
-    // (b) cleanup protection — ignored kept without user info, plain no-user purged
+    // (b) cleanup protection - ignored kept without user info, plain no-user purged
     db->clearHot();
     db->seedSelf();
     db->push(5000, 100, false, /*ignored=*/true, /*withUser=*/false, false);
@@ -172,6 +205,7 @@ NDB_TEST_ENTRY void setup()
 
     UNITY_BEGIN();
     RUN_TEST(test_migration_demotesOldestKeepsKeepersAndSelf);
+    RUN_TEST(test_migration_carriesRoleAndProtectedIntoWarm);
     RUN_TEST(test_eviction_preservesFavorite);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
@@ -179,7 +213,7 @@ NDB_TEST_ENTRY void setup()
 }
 NDB_TEST_ENTRY void loop() {}
 
-#else // WARM_NODE_COUNT == 0 — nothing to exercise here
+#else // WARM_NODE_COUNT == 0 - nothing to exercise here
 
 void setUp(void) {}
 void tearDown(void) {}

@@ -140,7 +140,7 @@ bool SimRadio::cancelSending(NodeNum from, PacketId id)
         packetPool.release(p); // free the packet we just removed
 
     bool result = (p != NULL);
-    LOG_DEBUG("cancelSending id=0x%x, removed=%d", id, result);
+    LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
     return result;
 }
 
@@ -209,6 +209,8 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
     isReceiving = false;
     size_t numbytes = beginSending(txp);
     meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
+    if (!p)
+        return;
 
     // A packet we originate that's encrypted for someone else (a PKI DM, channel == 0) can't be
     // decrypted here. Attempting it only logs a spurious "no suitable channel" miss, and the
@@ -252,7 +254,14 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
 
     // pb_encode_to_bytes writes into decoded.payload, which aliases `encrypted` in the union, so all
     // reads of p->encrypted above must be complete before this point.
-    p->decoded = meshtastic_Data_init_zero;
+    if (carryEncrypted) {
+        // On the encrypted path, `decoded` aliases the ciphertext we just copied into c.data;
+        // the remaining `Data` fields hold ciphertext bytes that would serialize as spurious
+        // wire fields, so clear the struct.
+        p->decoded = meshtastic_Data_init_zero;
+    }
+    // On the decoded path, `p->decoded` is already a valid Data from perhapsDecode(),
+    // so retain the existing fields (want_response, request_id, bitfield, etc.)
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);
@@ -354,6 +363,8 @@ void SimRadio::handleReceiveInterrupt()
     meshtastic_MeshPacket *mp = packetPool.allocCopy(*receivingPacket); // keep a copy in packetPool
     packetPool.release(receivingPacket);                                // release the original
     receivingPacket = nullptr;
+    if (!mp)
+        return;
 
     printPacket("Lora RX", mp);
 
