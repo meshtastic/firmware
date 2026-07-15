@@ -305,20 +305,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RUN_ID=$(gh run list -R "${{ github.repository }}" \
-            --workflow CI --branch develop --status success \
-            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-          if [ -n "$RUN_ID" ]; then
-            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
-            if [ -n "$ARTIFACT_NAME" ]; then
-              gh run download "$RUN_ID" -R "${{ github.repository }}" \
-                --name "$ARTIFACT_NAME" --dir ./baseline-develop/
-              cp "./baseline-develop/current-sizes.json" ./develop-sizes.json
-              echo "found=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "found=false" >> "$GITHUB_OUTPUT"
-            fi
+          # See bin/fetch-ci-baseline.sh for why this doesn't require conclusion=success.
+          if RESULT=$(bin/fetch-ci-baseline.sh "${{ github.repository }}" develop ./develop-sizes.json ./baseline-develop/); then
+            read -r BASE_SHA BASE_DATE <<< "$RESULT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "date=$BASE_DATE" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -330,20 +322,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RUN_ID=$(gh run list -R "${{ github.repository }}" \
-            --workflow CI --branch master --status success \
-            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-          if [ -n "$RUN_ID" ]; then
-            ARTIFACT_NAME=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.name | startswith("firmware-sizes-")) | select(.expired == false) | .name' | head -1)
-            if [ -n "$ARTIFACT_NAME" ]; then
-              gh run download "$RUN_ID" -R "${{ github.repository }}" \
-                --name "$ARTIFACT_NAME" --dir ./baseline-master/
-              cp "./baseline-master/current-sizes.json" ./master-sizes.json
-              echo "found=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "found=false" >> "$GITHUB_OUTPUT"
-            fi
+          # Same approach as the develop baseline above - see bin/fetch-ci-baseline.sh.
+          if RESULT=$(bin/fetch-ci-baseline.sh "${{ github.repository }}" master ./master-sizes.json ./baseline-master/); then
+            read -r BASE_SHA BASE_DATE <<< "$RESULT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "date=$BASE_DATE" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -359,7 +343,7 @@ jobs:
           if [ -f ./master-sizes.json ]; then
             ARGS="$ARGS --baseline master:./master-sizes.json"
           fi
-          REPORT=$(python3 bin/size_report.py $ARGS)
+          REPORT=$(python3 bin/size_report.py $ARGS --status-out ./size-status.txt)
           if [ -z "$REPORT" ]; then
             echo "has_report=false" >> "$GITHUB_OUTPUT"
           else
@@ -370,8 +354,16 @@ jobs:
               echo ''
               echo "$REPORT"
               echo ''
+              if [ -n "${{ steps.baseline-develop.outputs.sha }}" ]; then
+                echo "_Baseline \`develop\` = ${{ steps.baseline-develop.outputs.sha }} (${{ steps.baseline-develop.outputs.date }})_  "
+              fi
+              if [ -n "${{ steps.baseline-master.outputs.sha }}" ]; then
+                echo "_Baseline \`master\` = ${{ steps.baseline-master.outputs.sha }} (${{ steps.baseline-master.outputs.date }})_  "
+              fi
               echo '---'
               echo "*Updated for ${{ github.sha }}*"
+              echo ''
+              echo "_This comment may be deprecated in favor of the \`firmware-size\` commit status check, if that proves sufficient on its own._"
             } > ./size-report.md
             cat ./size-report.md >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -387,6 +379,7 @@ jobs:
           name: size-report
           path: |
             ./size-report.md
+            ./size-status.txt
             ./pr-number.txt
           retention-days: 5
 
