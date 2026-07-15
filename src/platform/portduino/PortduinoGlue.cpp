@@ -1017,6 +1017,12 @@ bool loadConfig(const char *configPath)
                     }
                 }
             }
+#if !defined(HAS_HUB75_NATIVE)
+            if (portduino_config.displayPanel == hub75) {
+                std::cerr << "HUB75 display panel selected, but this build does not support HUB75" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+#endif
             // HUB75 RGB matrix (Raspberry Pi). Options map onto rgb_matrix::RGBMatrix::Options +
             // RuntimeOptions; the library owns its GPIO pins so nothing is read via readGPIOFromYaml.
             if (portduino_config.displayPanel == hub75 && yamlConfig["Display"]["HUB75"]) {
