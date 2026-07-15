@@ -86,6 +86,11 @@ class SensecapIndicator : public concurrency::OSThread
     bool link_compatible = false;
     bool handshake_done = false;
     uint32_t last_probe = 0;
+    // link health diagnostics for the map-tile transfers, reported rarely
+    uint32_t link_resyncs = 0;
+    uint32_t link_decode_fail = 0;
+    uint32_t link_timeouts = 0;
+    uint32_t last_link_report = 0;
     meshtastic_I2CResult i2c_result = meshtastic_I2CResult_init_zero;
     bool i2c_result_ready = false;
     // Statically allocated message structs: with 4KB file chunks an

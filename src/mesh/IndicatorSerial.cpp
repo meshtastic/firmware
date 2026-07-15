@@ -35,6 +35,16 @@ int32_t SensecapIndicator::runOnce()
     // the bridge would stay dead for the rest of the session.
     if (!handshake_done)
         probe_link();
+    // Diagnostics for the map-tile transfers: a resync or a decode failure
+    // means a response was corrupted on the wire, a timeout means it never
+    // arrived. Printed at most once every two seconds, and only when
+    // something went wrong.
+    if ((link_resyncs || link_decode_fail || link_timeouts) && !Throttle::isWithinTimespanMs(last_link_report, 2000)) {
+        last_link_report = millis();
+        LOG_WARN("link: resync=%u decode_fail=%u timeout=%u", (unsigned)link_resyncs, (unsigned)link_decode_fail,
+                 (unsigned)link_timeouts);
+        link_resyncs = link_decode_fail = link_timeouts = 0;
+    }
     return (10);
 }
 
@@ -73,8 +83,10 @@ bool SensecapIndicator::wait_response(bool &flag, uint32_t timeout_ms)
             break;
         if (request_nacked)
             return false; // the other side could not handle the request
-        if (!Throttle::isWithinTimespanMs(start, timeout_ms))
+        if (!Throttle::isWithinTimespanMs(start, timeout_ms)) {
+            link_timeouts++;
             return false;
+        }
         delay(1);
     }
     return true;
@@ -88,6 +100,14 @@ uint32_t SensecapIndicator::stamp_request(meshtastic_InterdeviceMessage &request
     request.id = next_request_id;
     expected_id = next_request_id;
     request_nacked = false;
+    // Start the response for this request from an aligned buffer. A byte run
+    // lost mid-response (a UART overflow during a 4KB chunk) leaves the
+    // assembly misaligned, and without this that poison would outlive the
+    // request and cascade into the following chunks of the same tile. The
+    // link is single-outstanding and stale responses are dropped by id, so
+    // nothing worth keeping is ever pending here (at most a partial NMEA
+    // sentence, which self-heals).
+    pb_rx_size = 0;
     return next_request_id;
 }
 
@@ -368,6 +388,7 @@ void SensecapIndicator::check_packet()
             // Corrupt or false header: resync on the next magic instead of
             // flushing, one bad byte must not cost the frames behind it
             size_t skip = scan_magic(pb_rx_buf, pb_rx_size);
+            link_resyncs++;
             LOG_DEBUG("Bad frame header, dropping %u bytes", (unsigned)skip);
             memmove(pb_rx_buf, pb_rx_buf + skip, pb_rx_size - skip);
             pb_rx_size -= skip;
@@ -396,6 +417,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
     pb_rx_size = remaining;
 
     if (!status) {
+        link_decode_fail++;
         LOG_DEBUG("Decoding failed");
         return false;
     }
