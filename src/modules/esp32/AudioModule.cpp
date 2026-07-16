@@ -79,8 +79,9 @@ void run_codec2(void *parameter)
                     memcmp(audioModule->rx_encode_frame, &audioModule->tx_header, headerLen) == 0) {
                     for (int i = headerLen; i + frameSize <= limit; i += frameSize) {
                         codec2_decode(audioModule->codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
-                        i2s_write(I2S_PORT, &audioModule->output_buffer, audioModule->adc_buffer_size, &bytesOut,
-                                  pdMS_TO_TICKS(500));
+                        // adc_buffer_size is a sample count; i2s_write wants bytes (int16_t samples).
+                        i2s_write(I2S_PORT, &audioModule->output_buffer, audioModule->adc_buffer_size * sizeof(int16_t),
+                                  &bytesOut, pdMS_TO_TICKS(500));
                     }
                 } else {
                     LOG_WARN("Audio: dropping frame with mismatched or short codec2 header");
