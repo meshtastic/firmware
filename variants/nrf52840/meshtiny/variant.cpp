@@ -32,12 +32,12 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-    // LED1 & LED2
+    // LED1 & LED_BLUE
     pinMode(PIN_LED1, OUTPUT);
     ledOff(PIN_LED1);
 
-    pinMode(PIN_LED2, OUTPUT);
-    ledOff(PIN_LED2);
+    pinMode(LED_BLUE, OUTPUT);
+    ledOff(LED_BLUE);
 
     // 3V3 Power Rail
     pinMode(PIN_3V3_EN, OUTPUT);

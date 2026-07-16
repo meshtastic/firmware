@@ -26,10 +26,10 @@
 #undef GPS_TX_PIN
 #define NO_GPS 1
 #define HAS_GPS 0
-#define NO_SCREEN
 #define HAS_SCREEN 0
 
 // Default SPI1 will be mapped to the display
+#define HAS_SPI_TFT 1
 #define ST7789_SDA 23
 #define ST7789_SCK 18
 #define ST7789_CS 5

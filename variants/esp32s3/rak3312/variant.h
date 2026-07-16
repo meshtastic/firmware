@@ -22,16 +22,15 @@
 #define LED_BLUE 45
 
 #define PIN_LED1 LED_GREEN
-#define PIN_LED2 LED_BLUE
+#define LED_NOTIFICATION LED_BLUE
 
-#define LED_CONN LED_BLUE
-#define LED_PIN LED_GREEN
+#define LED_POWER LED_GREEN
 #define ledOff(pin) pinMode(pin, INPUT)
 
 #define LED_STATE_ON 1 // State when LED is litted
 
 #define BATTERY_PIN 1
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_0
 
 #ifdef _VARIANT_RAK3112_ //  Modular variant (stamp)
 #define ADC_MULTIPLIER 2.11

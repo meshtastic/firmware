@@ -5,7 +5,6 @@
 SerialKeyboard *globalSerialKeyboard = nullptr;
 
 #ifdef INPUTBROKER_SERIAL_TYPE
-#define CANNED_MESSAGE_MODULE_ENABLE 1 // in case it's not set in the variant file
 
 #if INPUTBROKER_SERIAL_TYPE == 1 // It's a Chatter
 // 3 SHIFT level (lower case, upper case, numbers), up to 4 repeated presses, button number

@@ -146,7 +146,7 @@ void CannedMessageStore::handleGet(meshtastic_AdminMessage *response)
     std::string merged;
     if (!messages.empty()) { // Don't run if no messages: error on pop_back with size=0
         merged.reserve(201);
-        for (std::string &s : messages) {
+        for (const std::string &s : messages) {
             merged += s;
             merged += '|';
         }

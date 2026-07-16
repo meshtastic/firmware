@@ -23,13 +23,9 @@
 #define PIN_LED1 (11) // LED        P1.15
 #define PIN_LED2 (12) //
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
-
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
-// #define LED_PIN PIN_LED2
-#define LED_STATE_ON 1 // State when LED is litted
+#define LED_STATE_ON 1 // State when LED is lit
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -117,7 +113,9 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define BAT_READ 30 // D30 = P0.04  Reads battery voltage from divider on signal board.
+#define BAT_READ 30 // D30 = P0.04  Battery divider enable (BAT_CTL) on signal board.
+#define ADC_CTRL BAT_READ
+#define ADC_CTRL_ENABLED HIGH
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT // PIN_A7
@@ -177,7 +175,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define TB_PRESS 29
 #define TB_DIRECTION FALLING
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 #define CANNED_MESSAGE_ADD_CONFIRMATION 1
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

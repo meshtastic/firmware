@@ -1,4 +1,5 @@
 // ST7789 TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7789_CS 12
 #define ST7789_RS 38  // DC
 #define ST7789_SDA 13 // MOSI
@@ -20,6 +21,8 @@
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define USE_TFTDISPLAY 1
 
+#define HAS_DRV2605 1
+
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
 #define SCREEN_TOUCH_USE_I2C1
@@ -37,13 +40,13 @@
 #define DAC_I2S_BCK 48
 #define DAC_I2S_WS 15
 #define DAC_I2S_DOUT 46
-#define DAC_I2S_MCLK 0
+#define DAC_I2S_MCLK -1
 
 #define HAS_AXP2101
+#define PMU_POWER_BUTTON_IS_CANCEL // maps a short click of the power button to a cancel action (turning off the screen)
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
-#define HAS_RTC 1
 
 #define I2C_SDA 10 // For QMC6310 sensors and screens
 #define I2C_SCL 11 // For QMC6310 sensors and screens
@@ -51,9 +54,15 @@
 #define HAS_BMA423 1
 #define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
-#define HAS_GPS 0
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define HAS_GPS 1
+#define GPS_DEFAULT_NOT_PRESENT 1
+#define GPS_BAUDRATE 38400
+#define GPS_RX_PIN 41
+#define GPS_TX_PIN 42
+
+#define BUTTON_PIN 0 // only for Plus version
+
+#define PMU_IRQ 21 // Interrupt pin for the PMU
 
 #define USE_SX1262
 #define USE_SX1268

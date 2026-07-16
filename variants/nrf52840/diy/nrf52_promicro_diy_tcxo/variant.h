@@ -81,7 +81,6 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 
 // LED
 #define PIN_LED1 (0 + 15) // P0.15
-#define LED_BUILTIN PIN_LED1
 // Actually red
 #define LED_BLUE PIN_LED1
 #define LED_STATE_ON 1 // State when LED is lit
@@ -122,9 +121,9 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define USE_RF95
 #define USE_SX1268
 #define USE_LR1121
+#define USE_LR2021
 
 // RF95 CONFIG
-
 #define LORA_DIO0 (0 + 29) // P0.29 BUSY
 #define LORA_DIO1 (0 + 10) // P0.10 IRQ
 #define LORA_RESET (0 + 9) // P0.09 NRST
@@ -154,6 +153,17 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define LR1121_SPI_MISO_PIN LORA_MISO
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.8
 #define LR11X0_DIO_AS_RF_SWITCH
+#endif
+
+// LR2021
+#ifdef USE_LR2021
+#define LR2021_IRQ_PIN (0 + 10)      // P0.10 IRQ
+#define LR2021_NRESET_PIN LORA_RESET // P0.09 NRST
+#define LR2021_BUSY_PIN (0 + 29)     // P0.29 BUSY
+#define LR2021_SPI_NSS_PIN LORA_CS   // P1.13
+#define LR2021_DIO3_TCXO_VOLTAGE 1.8
+#define LR2021_DIO_AS_RF_SWITCH
+#define LR2021_IRQ_DIO_NUM 9 // DIO9 → P0.10
 #endif
 
 // #define SX126X_MAX_POWER 8 set this if using a high-power board!

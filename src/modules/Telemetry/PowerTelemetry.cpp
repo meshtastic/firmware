@@ -6,13 +6,14 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerFSM.h"
 #include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TransmitHistory.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
-#include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -21,6 +22,8 @@
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+
+static constexpr uint16_t TX_HISTORY_KEY_POWER_TELEMETRY = 0x8005;
 
 namespace graphics
 {
@@ -31,6 +34,8 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 int32_t PowerTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
+        if (shouldDeferDeepSleep())
+            return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
@@ -52,8 +57,9 @@ int32_t PowerTelemetryModule::runOnce()
         return disable();
     }
 
-    uint32_t sendToMeshIntervalMs = Default::getConfiguredOrDefaultMsScaled(
-        moduleConfig.telemetry.power_update_interval, default_telemetry_broadcast_interval_secs, numOnlineNodes);
+    uint32_t sendToMeshIntervalMs = Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.power_update_interval,
+                                                                            default_telemetry_broadcast_interval_secs,
+                                                                            numOnlineNodes, TrafficType::TELEMETRY);
 
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
@@ -88,10 +94,12 @@ int32_t PowerTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.power_measurement_enabled)
             return disable();
 
-        if (((lastSentToMesh == 0) || !Throttle::isWithinTimespanMs(lastSentToMesh, sendToMeshIntervalMs)) &&
+        uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_POWER_TELEMETRY) : 0;
+        if (((lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, sendToMeshIntervalMs)) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = millis();
+            if (transmitHistory)
+                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_POWER_TELEMETRY);
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
@@ -99,6 +107,11 @@ int32_t PowerTelemetryModule::runOnce()
             sendTelemetry(NODENUM_BROADCAST, true);
             lastSentToPhone = millis();
         }
+    }
+    if (sleepOnNextExecution) {
+        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
+        // this return value, which would otherwise override setIntervalFromNow()
+        return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, sendToMeshIntervalMs);
 }
@@ -217,6 +230,10 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
 meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
 {
     if (currentRequest) {
+        if (isMultiHopBroadcastRequest() && !isSensorOrRouterRole()) {
+            ignoreRequest = true;
+            return NULL;
+        }
         auto req = *currentRequest;
         const auto &p = req.decoded;
         meshtastic_Telemetry scratch;
@@ -248,7 +265,8 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;
     m.time = getTime();
-    if (getPowerTelemetry(&m)) {
+    bool validTelemetry = getPowerTelemetry(&m);
+    if (validTelemetry) {
         LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
                  "ch3_voltage=%f, ch3_current=%f",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
@@ -274,16 +292,21 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         } else {
             LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
-
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Start next execution in 5s then sleep");
-                sleepOnNextExecution = true;
-                setIntervalFromNow(5000);
-            }
         }
-        return true;
     }
-    return false;
+
+    // Arm the pre-sleep sequence even when no valid reading was available this cycle: a
+    // power-saving SENSOR node must still return to deep sleep, otherwise it stays awake
+    // until the next telemetry interval and drains its battery
+    if (!phoneOnly && isPowerSavingSensor()) {
+        if (!validTelemetry)
+            LOG_WARN("Power telemetry unavailable this cycle, sleep without sending");
+        sleepOnNextExecution = true;
+        preflightSleepDeferrals = 0;
+        LOG_DEBUG("Start next execution in 5s then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
+    }
+    return validTelemetry;
 }
 
 #endif

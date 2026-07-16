@@ -2,11 +2,12 @@
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
-from os.path import join, basename, isfile
+from os.path import join
 import subprocess
 import json
 import re
 from datetime import datetime
+from typing import Dict
 
 from readprops import readProps
 
@@ -14,11 +15,131 @@ Import("env")
 platform = env.PioPlatform()
 progname = env.get("PROGNAME")
 lfsbin = f"{progname.replace('firmware-', 'littlefs-')}.bin"
+manifest_ran = False
+
+def infer_architecture(board_cfg):
+    try:
+        mcu = board_cfg.get("build.mcu") if board_cfg else None
+    except KeyError:
+        mcu = None
+    except Exception:
+        mcu = None
+    if not mcu:
+        return None
+    mcu_l = str(mcu).lower()
+    if "esp32s3" in mcu_l:
+        return "esp32-s3"
+    if "esp32c6" in mcu_l:
+        return "esp32-c6"
+    if "esp32c3" in mcu_l:
+        return "esp32-c3"
+    if "esp32" in mcu_l:
+        return "esp32"
+    if "rp2040" in mcu_l:
+        return "rp2040"
+    if "rp2350" in mcu_l:
+        return "rp2350"
+    if "nrf52" in mcu_l or "nrf52840" in mcu_l:
+        return "nrf52840"
+    if "stm32" in mcu_l:
+        return "stm32"
+    return None
+
+def run_size_tool(env, flag, purpose):
+    """Run the toolchain size tool against the built ELF and return its output.
+
+    Shared plumbing for compute_ram_bytes / compute_flash_bytes. Returns None
+    when the ELF is missing or the tool fails; the manifest then simply omits
+    the metric and downstream size reports show "n/a".
+    """
+    elf = env.File(env.subst("$BUILD_DIR/${PROGNAME}.elf"))
+    if not elf.exists():
+        return None
+    size_tool = env.subst("$SIZETOOL") or "size"
+    try:
+        return subprocess.check_output(
+            [size_tool, flag, elf.get_abspath()],
+            env=env["ENV"],
+            universal_newlines=True,
+        )
+    except Exception as exc:
+        print(f"mtjson: skipping {purpose} ({size_tool} failed: {exc})")
+        return None
+
+def compute_ram_bytes(env):
+    """Static RAM usage (.data + .bss) of the ELF, via the toolchain size tool.
+
+    Deliberately excludes heap/stack placeholder sections (e.g. the nRF52 .heap
+    section): on nRF52840 the heap arena is the linker gap after .bss, so static
+    RAM growth shrinks the usable heap 1:1 - which is exactly why we track it.
+    Returns None when the value cannot be determined; the manifest then simply
+    omits ram_bytes and downstream size reports show "n/a".
+    """
+    output = run_size_tool(env, "-A", "ram_bytes")
+    if output is None:
+        return None
+    ram = 0
+    found = False
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        name = parts[0]
+        # Main-SRAM static sections: .data/.bss, platform-prefixed variants (e.g.
+        # ESP32 .dram0.data/.dram0.bss), and RISC-V small-data .sdata/.sbss.
+        # ESP-IDF .rtc.* sections live outside the heap-competing SRAM; .heap and
+        # .tdata never match.
+        if name.startswith(".rtc"):
+            continue
+        if name in (".data", ".bss", ".sdata", ".sbss") or name.endswith(".data") or name.endswith(".bss"):
+            try:
+                ram += int(parts[1])
+                found = True
+            except ValueError:
+                continue
+    return ram if found else None
+
+def compute_flash_bytes(env):
+    """Flash footprint (text + data) of the ELF via the toolchain size tool.
+
+    Approximates the flashed app image for targets whose packaged artifacts do
+    not include a raw .bin (e.g. nRF52: hex/uf2/DFU zip only); consumed by
+    bin/collect_sizes.py as a fallback flash measurement for the size report
+    and the bin/ram_budgets.json budget gate. Returns None when the value
+    cannot be determined; the manifest then simply omits flash_bytes.
+    """
+    output = run_size_tool(env, "-B", "flash_bytes")
+    if output is None:
+        return None
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
+            return int(parts[0]) + int(parts[1])
+    return None
 
 def manifest_gather(source, target, env):
+    global manifest_ran
+    if manifest_ran:
+        return
+    # Skip manifest generation if we cannot determine architecture (host/native builds)
+    board_arch = infer_architecture(env.BoardConfig())
+    if not board_arch:
+        print(f"Skipping mtjson generation for unknown architecture (env={env.get('PIOENV')})")
+        manifest_ran = True
+        return
+    manifest_ran = True
     out = []
     board_platform = env.BoardConfig().get("platform")
+    board_mcu = env.BoardConfig().get("build.mcu").lower()
     needs_ota_suffix = board_platform == "nordicnrf52"
+    
+    # Mapping of bin files to their target partition names
+    # Maps the filename pattern to the partition name where it should be flashed
+    partition_map = {
+        f"{progname}.bin": "app0",              # primary application slot (app0 / OTA_0)
+        lfsbin: "spiffs",                        # filesystem image flashed to spiffs
+    }
+    
     check_paths = [
         progname,
         f"{progname}.elf",
@@ -29,7 +150,9 @@ def manifest_gather(source, target, env):
         f"{progname}.uf2",
         f"{progname}.factory.uf2",
         f"{progname}.zip",
-        lfsbin
+        lfsbin,
+        f"mt-{board_mcu}-ota.bin",
+        "bleota-c3.bin"
     ]
     for p in check_paths:
         f = env.File(env.subst(f"$BUILD_DIR/{p}"))
@@ -42,22 +165,58 @@ def manifest_gather(source, target, env):
                 "md5": f.get_content_hash(), # Returns MD5 hash
                 "bytes": f.get_size() # Returns file size in bytes
             }
+            # Add part_name if this file represents a partition that should be flashed
+            if p in partition_map:
+                d["part_name"] = partition_map[p]
             out.append(d)
             print(d)
-    manifest_write(out, env)
+    manifest_write(out, env, compute_ram_bytes(env), compute_flash_bytes(env))
 
-def manifest_write(files, env):
+def manifest_write(files, env, ram_bytes=None, flash_bytes=None):
+    # Defensive: also skip manifest writing if we cannot determine architecture
+    def get_project_option(name):
+        try:
+            return env.GetProjectOption(name)
+        except Exception:
+            return None
+
+    def get_project_option_any(names):
+        for name in names:
+            val = get_project_option(name)
+            if val is not None:
+                return val
+        return None
+
+    def as_bool(val):
+        return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+    def as_int(val):
+        try:
+            return int(str(val), 10)
+        except (TypeError, ValueError):
+            return None
+
+    def as_list(val):
+        return [item.strip() for item in str(val).split(",") if item.strip()]
+
     manifest = {
         "version": verObj["long"],
         "build_epoch": build_epoch,
-        "board": env.get("PIOENV"),
+        "platformioTarget": env.get("PIOENV"),
         "mcu": env.get("BOARD_MCU"),
         "repo": repo_owner,
         "files": files,
-        "part": None,
         "has_mui": False,
         "has_inkhud": False,
     }
+    # Static RAM footprint (.data + .bss); consumed by bin/collect_sizes.py for
+    # the CI size report and the bin/ram_budgets.json budget gate.
+    if ram_bytes is not None:
+        manifest["ram_bytes"] = ram_bytes
+    # Flash footprint (text + data); fallback flash measurement for targets
+    # whose packaged artifacts include no raw .bin (e.g. nRF52).
+    if flash_bytes is not None:
+        manifest["flash_bytes"] = flash_bytes
     # Get partition table (generated in esp32_pre.py) if it exists
     if env.get("custom_mtjson_part"):
         # custom_mtjson_part is a JSON string, convert it back to a dict
@@ -68,6 +227,51 @@ def manifest_write(files, env):
         manifest["has_mui"] = True
     if "MESHTASTIC_INCLUDE_INKHUD" in env.get("CPPDEFINES", []):
         manifest["has_inkhud"] = True
+
+    pioenv = env.get("PIOENV")
+    device_meta = {}
+    device_meta_fields = [
+        ("hwModel", ["custom_meshtastic_hw_model"], as_int),
+        ("hwModelSlug", ["custom_meshtastic_hw_model_slug"], str),
+        ("architecture", ["custom_meshtastic_architecture"], str),
+        ("activelySupported", ["custom_meshtastic_actively_supported"], as_bool),
+        ("displayName", ["custom_meshtastic_display_name"], str),
+        ("supportLevel", ["custom_meshtastic_support_level"], as_int),
+        ("images", ["custom_meshtastic_images"], as_list),
+        ("tags", ["custom_meshtastic_tags"], as_list),
+        ("requiresDfu", ["custom_meshtastic_requires_dfu"], as_bool),
+        ("partitionScheme", ["custom_meshtastic_partition_scheme"], str),
+        ("url", ["custom_meshtastic_url"], str),
+        ("key", ["custom_meshtastic_key"], str),
+        ("variant", ["custom_meshtastic_variant"], str),
+    ]
+
+
+    for manifest_key, option_keys, caster in device_meta_fields:
+        raw_val = get_project_option_any(option_keys)
+        if raw_val is None:
+            continue
+        parsed = caster(raw_val) if callable(caster) else raw_val
+        if parsed is not None and parsed != "":
+            device_meta[manifest_key] = parsed
+
+    # Determine architecture once; if we can't infer it, skip manifest generation
+    board_arch = device_meta.get("architecture") or infer_architecture(env.BoardConfig())
+    if not board_arch:
+        print(f"Skipping mtjson write for unknown architecture (env={env.get('PIOENV')})")
+        return
+
+    device_meta["architecture"] = board_arch
+
+    # Always set requiresDfu: true for nrf52840 targets
+    if board_arch == "nrf52840":
+        device_meta["requiresDfu"] = True
+
+    device_meta.setdefault("displayName", pioenv)
+    device_meta.setdefault("activelySupported", False)
+
+    if device_meta:
+        manifest.update(device_meta)
 
     # Write the manifest to the build directory
     with open(env.subst("$BUILD_DIR/${PROGNAME}.mt.json"), "w") as f:
@@ -166,8 +370,15 @@ def load_boot_logo(source, target, env):
 if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
     env.AddPreAction(f"$BUILD_DIR/{lfsbin}", load_boot_logo)
 
+board_arch = infer_architecture(env.BoardConfig())
+should_skip_manifest = board_arch is None
+
+# Most platforms can generate the manifest as part of the default 'buildprog' target.
+# Typically this passes success/failure properly.
 mtjson_deps = ["buildprog"]
 if platform.name == "espressif32":
+    # On ESP32, we need to explicitly depend upon the binary to prevent fake-success upon failure.
+    mtjson_deps = ["$BUILD_DIR/${PROGNAME}.bin"]
     # Build littlefs image as part of mtjson target
     # Equivalent to `pio run -t buildfs`
     target_lfs = env.DataToBin(
@@ -175,11 +386,28 @@ if platform.name == "espressif32":
     )
     mtjson_deps.append(target_lfs)
 
-env.AddCustomTarget(
-    name="mtjson",
-    dependencies=mtjson_deps,
-    actions=[manifest_gather],
-    title="Meshtastic Manifest",
-    description="Generating Meshtastic manifest JSON + Checksums",
-    always_build=False,
-)
+if should_skip_manifest:
+    def skip_manifest(source, target, env):
+        print(f"mtjson: skipped for native environment: {env.get('PIOENV')}")
+
+    env.AddCustomTarget(
+        name="mtjson",
+        # For host/native envs, avoid depending on 'buildprog' (some targets don't define it)
+        dependencies=[],
+        actions=[skip_manifest],
+        title="Meshtastic Manifest (skipped)",
+        description="mtjson generation is skipped for native environments",
+        always_build=True,
+    )
+else:
+    env.AddCustomTarget(
+        name="mtjson",
+        dependencies=mtjson_deps,
+        actions=[manifest_gather],
+        title="Meshtastic Manifest",
+        description="Generating Meshtastic manifest JSON + Checksums",
+        always_build=True,
+    )
+
+    # Run manifest generation as part of the default build pipeline for non-native builds.
+    env.Default("mtjson")

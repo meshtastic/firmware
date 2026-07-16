@@ -1,5 +1,5 @@
 #define BATTERY_PIN 35
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_7
 #define BATTERY_SENSE_SAMPLES 30
 
 // ratio of voltage divider = 2.0 (R42=100k, R43=100k)
@@ -8,10 +8,10 @@
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22
 
-#if defined(LED_PIN) && LED_PIN == -1
-#undef LED_PIN
+#if defined(LED_POWER) && LED_POWER == -1
+#undef LED_POWER
 #else
-#define LED_PIN 25 // If defined we will blink this LED
+#define LED_POWER 25 // If defined we will blink this LED
 #endif
 
 #define USE_RF95

@@ -1,13 +1,14 @@
 #pragma once
 #include "Observer.h"
 #include "SinglePortModule.h"
+#define TEXT_PACKET_LIST_SIZE 50
 
 /**
  * Text message handling for Meshtastic.
  *
  * This module is responsible for receiving and storing incoming text messages
- * from the mesh. It updates device state and notifies observers so that other
- * components (such as the MessageRenderer) can later display or process them.
+ * from the mesh. It notifies observers so that other components (such as the
+ * MessageRenderer) can later display or process them.
  *
  * Rendering of messages on screen is no longer done here.
  */
@@ -19,6 +20,8 @@ class TextMessageModule : public SinglePortModule, public Observable<const mesht
      */
     TextMessageModule() : SinglePortModule("text", meshtastic_PortNum_TEXT_MESSAGE_APP) {}
 
+    bool recentlySeen(uint32_t id);
+
   protected:
     /** Called to handle a particular incoming message
      *
@@ -27,6 +30,10 @@ class TextMessageModule : public SinglePortModule, public Observable<const mesht
      */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override;
+
+  private:
+    uint32_t textPacketList[TEXT_PACKET_LIST_SIZE] = {0};
+    size_t textPacketListIndex = 0;
 };
 
 extern TextMessageModule *textMessageModule;

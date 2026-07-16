@@ -1,4 +1,4 @@
-#define LED_PIN 45 // LED is not populated on earliest board variant
+#define LED_POWER 45 // LED is not populated on earliest board variant
 #define BUTTON_PIN 0
 #define PIN_BUTTON2 21             // Second built-in button
 #define ALT_BUTTON_PIN PIN_BUTTON2 // Send the up event
@@ -28,7 +28,7 @@
 #define ADC_CTRL 46
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_PIN 7
-#define ADC_CHANNEL ADC1_GPIO7_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_6
 #define ADC_MULTIPLIER 4.9 * 1.03
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5
 

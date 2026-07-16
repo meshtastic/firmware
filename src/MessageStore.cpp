@@ -1,16 +1,21 @@
 #include "configuration.h"
-#if HAS_SCREEN
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 #include "FSCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "gps/RTC.h"
-#include "graphics/draw/MessageRenderer.h"
+#include "memory/MemAudit.h"
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
 #define MESSAGE_TEXT_POOL_SIZE (MAX_MESSAGES_SAVED * MAX_MESSAGE_SIZE)
+#endif
+
+// Default autosave interval 2 hours, override per device later with -DMESSAGE_AUTOSAVE_INTERVAL_SEC=300 (etc)
+#ifndef MESSAGE_AUTOSAVE_INTERVAL_SEC
+#define MESSAGE_AUTOSAVE_INTERVAL_SEC (2 * 60 * 60)
 #endif
 
 // Global message text pool and state
@@ -24,8 +29,10 @@ static inline void resetMessagePool()
         g_messagePool = static_cast<char *>(malloc(MESSAGE_TEXT_POOL_SIZE));
         if (!g_messagePool) {
             LOG_ERROR("MessageStore: Failed to allocate %d bytes for message pool", MESSAGE_TEXT_POOL_SIZE);
+            memaudit::set("msgstore", 0);
             return;
         }
+        memaudit::set("msgstore", MESSAGE_TEXT_POOL_SIZE);
     }
     g_poolWritePos = 0;
     memset(g_messagePool, 0, MESSAGE_TEXT_POOL_SIZE);
@@ -102,6 +109,60 @@ void MessageStore::addLiveMessage(const StoredMessage &msg)
     pushWithLimit(liveMessages, msg);
 }
 
+#if ENABLE_MESSAGE_PERSISTENCE
+static bool g_messageStoreHasUnsavedChanges = false;
+static uint32_t g_lastAutoSaveMs = 0; // last time we actually saved
+
+static inline uint32_t autosaveIntervalMs()
+{
+    uint32_t sec = (uint32_t)MESSAGE_AUTOSAVE_INTERVAL_SEC;
+    if (sec < 60)
+        sec = 60;
+    return sec * 1000UL;
+}
+
+static inline bool reachedMs(uint32_t now, uint32_t target)
+{
+    return (int32_t)(now - target) >= 0;
+}
+
+// Mark new messages in RAM that need to be saved later
+static inline void markMessageStoreUnsaved()
+{
+    g_messageStoreHasUnsavedChanges = true;
+
+    if (g_lastAutoSaveMs == 0) {
+        g_lastAutoSaveMs = millis();
+    }
+}
+
+// Called periodically from the main loop in main.cpp
+static inline void autosaveTick(MessageStore *store)
+{
+    if (!store)
+        return;
+
+    uint32_t now = millis();
+
+    if (g_lastAutoSaveMs == 0) {
+        g_lastAutoSaveMs = now;
+        return;
+    }
+
+    if (!reachedMs(now, g_lastAutoSaveMs + autosaveIntervalMs()))
+        return;
+
+    // Autosave interval reached, only save if there are unsaved messages.
+    if (g_messageStoreHasUnsavedChanges) {
+        LOG_INFO("Autosaving MessageStore to flash");
+        store->saveToFlash();
+    } else {
+        LOG_INFO("Autosave skipped, no changes to save");
+        g_lastAutoSaveMs = now;
+    }
+}
+#endif
+
 // Add from incoming/outgoing packet
 const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
 {
@@ -122,15 +183,19 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
 
     bool isDM = (sm.dest != 0 && sm.dest != NODENUM_BROADCAST);
 
-    if (packet.from == 0) {
-        sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
-        sm.ackStatus = AckStatus::NONE;
-    } else {
-        sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
-        sm.ackStatus = AckStatus::ACKED;
-    }
+    sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
+    sm.ackStatus = (packet.from == 0) ? AckStatus::NONE : AckStatus::ACKED;
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    sm.xeddsaSigned = packet.xeddsa_signed;
+#endif
 
     addLiveMessage(sm);
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    markMessageStoreUnsaved();
+#endif
+
     return liveMessages.back();
 }
 
@@ -155,6 +220,10 @@ void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const st
     sm.ackStatus = AckStatus::NONE;
 
     addLiveMessage(sm);
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    markMessageStoreUnsaved();
+#endif
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -168,6 +237,7 @@ struct __attribute__((packed)) StoredMessageRecord {
     uint8_t isBootRelative;
     uint8_t ackStatus;           // static_cast<uint8_t>(AckStatus)
     uint8_t type;                // static_cast<uint8_t>(MessageType)
+    uint8_t xeddsaSigned;        // 1 if packet carried a verified XEdDSA signature
     uint16_t textLength;         // message length
     char text[MAX_MESSAGE_SIZE]; // store actual text here
 };
@@ -183,6 +253,7 @@ static inline void writeMessageRecord(SafeFile &f, const StoredMessage &m)
     rec.isBootRelative = m.isBootRelative;
     rec.ackStatus = static_cast<uint8_t>(m.ackStatus);
     rec.type = static_cast<uint8_t>(m.type);
+    rec.xeddsaSigned = m.xeddsaSigned ? 1 : 0;
     rec.textLength = m.textLength;
 
     // Copy the actual text into the record from RAM pool
@@ -207,6 +278,7 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
     m.isBootRelative = rec.isBootRelative;
     m.ackStatus = static_cast<AckStatus>(rec.ackStatus);
     m.type = static_cast<MessageType>(rec.type);
+    m.xeddsaSigned = rec.xeddsaSigned != 0;
     m.textLength = rec.textLength;
 
     // 💡 Re-store text into pool and update offset
@@ -239,6 +311,10 @@ void MessageStore::saveToFlash()
 
     f.close();
 #endif
+
+    // Reset autosave state after any save
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 }
 
 void MessageStore::loadFromFlash()
@@ -270,6 +346,9 @@ void MessageStore::loadFromFlash()
 
     f.close();
 #endif
+    // Loading messages does not trigger an autosave
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 }
 
 #else
@@ -287,31 +366,42 @@ void MessageStore::clearAllMessages()
 #ifdef FSCom
     SafeFile f(filename.c_str(), false);
     uint8_t count = 0;
-    f.write(&count, 1); // write "0 messages"
+
+    // SafeFile already does its own spiLock in its constructor and close().
+    // Avoid nesting spiLocks, as this will hang until watchdog reset!
+    {
+        concurrency::LockGuard guard(spiLock);
+        f.write(&count, 1); // write "0 messages"
+    }
+
     f.close();
+#endif
+
+#if ENABLE_MESSAGE_PERSISTENCE
+    g_messageStoreHasUnsavedChanges = false;
+    g_lastAutoSaveMs = millis();
 #endif
 }
 
-// Internal helper: erase first or last message matching a predicate
-template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deque, Predicate pred, bool fromBack = false)
+// Internal helpers for targeted erasure.
+template <typename Predicate> static bool eraseFirstMatch(std::deque<StoredMessage> &deque, Predicate pred)
 {
-    if (fromBack) {
-        // Iterate from the back and erase all matches from the end
-        for (auto it = deque.rbegin(); it != deque.rend();) {
-            if (pred(*it)) {
-                it = std::deque<StoredMessage>::reverse_iterator(deque.erase(std::next(it).base()));
-            } else {
-                ++it;
-            }
+    for (auto it = deque.begin(); it != deque.end(); ++it) {
+        if (pred(*it)) {
+            deque.erase(it);
+            return true;
         }
-    } else {
-        // Manual forward search to erase all matches
-        for (auto it = deque.begin(); it != deque.end();) {
-            if (pred(*it)) {
-                it = deque.erase(it);
-            } else {
-                ++it;
-            }
+    }
+    return false;
+}
+
+template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessage> &deque, Predicate pred)
+{
+    for (auto it = deque.begin(); it != deque.end();) {
+        if (pred(*it)) {
+            it = deque.erase(it);
+        } else {
+            ++it;
         }
     }
 }
@@ -319,7 +409,9 @@ template <typename Predicate> static void eraseIf(std::deque<StoredMessage> &deq
 // Delete oldest message (RAM + persisted queue)
 void MessageStore::deleteOldestMessage()
 {
-    eraseIf(liveMessages, [](StoredMessage &) { return true; });
+    if (!liveMessages.empty()) {
+        liveMessages.pop_front();
+    }
     saveToFlash();
 }
 
@@ -327,14 +419,14 @@ void MessageStore::deleteOldestMessage()
 void MessageStore::deleteOldestMessageInChannel(uint8_t channel)
 {
     auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
-    eraseIf(liveMessages, pred);
+    eraseFirstMatch(liveMessages, pred);
     saveToFlash();
 }
 
 void MessageStore::deleteAllMessagesInChannel(uint8_t channel)
 {
     auto pred = [channel](const StoredMessage &m) { return m.type == MessageType::BROADCAST && m.channelIndex == channel; };
-    eraseIf(liveMessages, pred, false /* delete ALL, not just first */);
+    eraseAllMatches(liveMessages, pred);
     saveToFlash();
 }
 
@@ -347,7 +439,7 @@ void MessageStore::deleteAllMessagesWithPeer(uint32_t peer)
         uint32_t other = (m.sender == local) ? m.dest : m.sender;
         return other == peer;
     };
-    eraseIf(liveMessages, pred, false);
+    eraseAllMatches(liveMessages, pred);
     saveToFlash();
 }
 
@@ -360,7 +452,7 @@ void MessageStore::deleteOldestMessageWithPeer(uint32_t peer)
         uint32_t other = (m.sender == nodeDB->getNodeNum()) ? m.dest : m.sender;
         return other == peer;
     };
-    eraseIf(liveMessages, pred);
+    eraseFirstMatch(liveMessages, pred);
     saveToFlash();
 }
 
@@ -420,6 +512,14 @@ uint16_t MessageStore::storeText(const char *src, size_t len)
     // Wrapper around the internal helper
     return storeTextInPool(src, len);
 }
+
+#if ENABLE_MESSAGE_PERSISTENCE
+void messageStoreAutosaveTick()
+{
+    // Called from the main loop to check autosave timing
+    autosaveTick(&messageStore);
+}
+#endif
 
 // Global definition
 MessageStore messageStore("default");

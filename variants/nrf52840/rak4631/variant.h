@@ -45,13 +45,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (36)
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -62,8 +59,6 @@ extern "C" {
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
-#define PIN_BUTTON3 24
-#define PIN_BUTTON4 25
 
 /*
  * Analog pins
@@ -225,7 +220,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Testing USB detection
 #define NRF_APM
 // If using a power chip like the INA3221 you can override the default battery voltage channel below
-// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging
+// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging.
+// INA3221Sensor.h provides compatibility aliases such as INA3221_CH1/INA3221_CH2/INA3221_CH3,
+// so board variants can continue to use the channel names below.
 // #define INA3221_BAT_CH INA3221_CH2
 // #define INA3221_ENV_CH INA3221_CH1
 
@@ -233,6 +230,11 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Do not toggle this for GPS power savings
 #define PIN_3V3_EN (34)
 #define WB_IO2 PIN_3V3_EN
+
+#if defined(WISMESH_POCKET)
+// Pocket v3: P1.02 (GPIO 34) = GPS_PWR_EN
+#define PIN_GPS_EN PIN_3V3_EN
+#endif
 
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base
@@ -253,8 +255,14 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define RV3028_RTC (uint8_t)0b1010010
 
 // RAK18001 Buzzer in Slot C
-// #define PIN_BUZZER 21 // IO3 is PWM2
+#define PIN_BUZZER 21 // IO3 is PWM2
 // NEW: set this via protobuf instead!
+
+// RAK4631 custom ringtone (but not for Pocket - it uses the default ringtone)
+#ifndef WISMESH_POCKET
+#undef USERPREFS_RINGTONE_RTTTL
+#define USERPREFS_RINGTONE_RTTTL "Rak:d=32,o=5,b=200:b7,p,b7,4p,p"
+#endif
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
@@ -281,9 +289,11 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_11_16
 
-#define HAS_RTC 1
-
+#if defined(WISMESH_POCKET)
+#define HAS_ETHERNET 0
+#else
 #define HAS_ETHERNET 1
+#endif
 
 #define RAK_4631 1
 

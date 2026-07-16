@@ -45,13 +45,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (36)
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -169,7 +166,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Testing USB detection
 #define NRF_APM
 // If using a power chip like the INA3221 you can override the default battery voltage channel below
-// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging
+// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging.
+// INA3221Sensor.h provides INA3221_CH1/INA3221_CH2/INA3221_CH3 compatibility aliases, so
+// board variants can continue to use the named channel constants here.
 // #define INA3221_BAT_CH INA3221_CH2
 // #define INA3221_ENV_CH INA3221_CH1
 
@@ -210,8 +209,13 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
-
-#define HAS_RTC 1
+#if defined(LOW_VDD_SYSTEMOFF_DELAY_MS)
+#if !defined(OCV_ARRAY)
+#define OCV_ARRAY 4160, 4020, 3940, 3870, 3810, 3760, 3740, 3720, 3680, 3620, 2990
+#endif
+#define BATTERY_LPCOMP_INPUT NRF_LPCOMP_INPUT_3
+#define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_5_8 // VDD=3.3V AIN3=5/8*VDD=2.06V VBAT=1.66*AIN3=3.41V
+#endif
 
 #define RAK_4631 1
 

@@ -8,6 +8,10 @@
 #include "meshUtils.h"
 #include <vector>
 
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
+
 extern graphics::Screen *screen;
 
 TraceRouteModule *traceRouteModule;
@@ -266,7 +270,7 @@ void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtasti
     }
 }
 
-void TraceRouteModule::updateNextHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
+void TraceRouteModule::updateNextHops(const meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
     // E.g. if the route is A->B->C->D and we are B, we can set C as next-hop for C and D
     // Similarly, if we are C, we can set D as next-hop for D
@@ -323,6 +327,14 @@ void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
         LOG_INFO("Updating next-hop for 0x%08x to 0x%02x based on traceroute", target, nextHopByte);
         node->next_hop = nextHopByte;
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Mirror into the TMM overflow cache. Traceroute is the highest-confidence
+    // source (full known route), and this captures the target even when it isn't
+    // in the hot NodeDB - same rationale as the ACK-confirmed path in NextHopRouter.
+    if (trafficManagementModule)
+        trafficManagementModule->setNextHop(target, nextHopByte);
+#endif
 }
 
 void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
@@ -440,7 +452,7 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
         route += "\n";
-        if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
+        if (origin == nodeDB->getNodeNum() && r->snr_back_count > 0 && r->snr_back[r->snr_back_count - 1] != INT8_MIN)
             route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
         else
             route += "...";
@@ -492,12 +504,12 @@ TraceRouteModule::TraceRouteModule()
 const char *TraceRouteModule::getNodeName(NodeNum node)
 {
     meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    if (info && info->has_user) {
-        if (strlen(info->user.short_name) > 0) {
-            return info->user.short_name;
+    if (nodeInfoLiteHasUser(info)) {
+        if (strlen(info->short_name) > 0) {
+            return info->short_name;
         }
-        if (strlen(info->user.long_name) > 0) {
-            return info->user.long_name;
+        if (strlen(info->long_name) > 0) {
+            return info->long_name;
         }
     }
 

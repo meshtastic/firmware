@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../freertosinc.h"
+#include "Print.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
-#include <Print.h>
 #include <stdarg.h>
 #include <string>
 
@@ -44,7 +44,7 @@ class RedirectablePrint : public Print
     /** like printf but va_list based */
     size_t vprintf(const char *logLevel, const char *format, va_list arg);
 
-    void hexDump(const char *logLevel, unsigned char *buf, uint16_t len);
+    void hexDump(const char *logLevel, const unsigned char *buf, uint16_t len);
 
     std::string mt_sprintf(const std::string fmt_str, ...);
 

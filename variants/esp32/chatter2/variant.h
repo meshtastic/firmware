@@ -23,8 +23,6 @@
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_RXEN RADIOLIB_NC
 
-// Status
-// #define LED_PIN 1
 // External notification
 // FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the
 // app/preferences
@@ -45,6 +43,7 @@
 #define HAS_SCREEN 1 // Assume no screen present by default to prevent crash...
 
 // ST7735S TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7735S 1 // there are different (sub-)versions of ST7735
 #define ST7735_CS -1
 #define ST7735_RS 33  // DC
@@ -72,14 +71,14 @@
 // Battery
 
 #define BATTERY_PIN 34 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO34_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_6
 #define ADC_ATTENUATION                                                                                                          \
     ADC_ATTEN_DB_2_5       // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
                            // ESP32-S2/C3/S3 are different
                            // lower dB for lower voltage rnage
 #define ADC_MULTIPLIER 5.0 // VBATT---10k--pin34---2.5K---GND
 // Chatter2 uses 3 AAA cells
-#define CELL_TYPE_ALKALINE
+#define OCV_ARRAY 1580, 1400, 1350, 1300, 1280, 1250, 1230, 1190, 1150, 1100, 1000
 #define NUM_CELLS 3
 #undef EXT_PWR_DETECT
 
@@ -98,7 +97,6 @@
 #define KB_LOAD 21 // load values from the switch and store in shift register
 #define KB_CLK 22  // clock pin for serial data out
 #define KB_DATA 23 // data pin
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 /////////////////////////////////////////////////////////////////////////////////
 //                                                                             //

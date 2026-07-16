@@ -2,12 +2,14 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Throttle.h"
+#include "concurrency/LockGuard.h"
 #include "configuration.h"
 
 #define START1 0x94
 #define START2 0xc3
 #define HEADER_LEN 4
 
+/// Poll the underlying stream, drain output, and update connection state.
 int32_t StreamAPI::runOncePart()
 {
     auto result = readStream();
@@ -16,6 +18,7 @@ int32_t StreamAPI::runOncePart()
     return result;
 }
 
+/// Consume supplied input bytes, drain output, and update connection state.
 int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 {
     auto result = readStream(buf, bufLen);
@@ -27,7 +30,7 @@ int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 /**
  * Read any rx chars from the link and call handleRecStream
  */
-int32_t StreamAPI::readStream(char *buf, uint16_t bufLen)
+int32_t StreamAPI::readStream(const char *buf, uint16_t bufLen)
 {
     if (bufLen < 1) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
@@ -47,16 +50,23 @@ int32_t StreamAPI::readStream(char *buf, uint16_t bufLen)
 void StreamAPI::writeStream()
 {
     if (canWrite) {
+        // A transport that retained a short frame must complete it before
+        // getFromRadio() advances the PhoneAPI state to the next packet.
+        if (!finishPendingFrame())
+            return;
+
         uint32_t len;
         do {
             // Send every packet we can
             len = getFromRadio(txBuf + HEADER_LEN);
-            emitTxBuffer(len);
+            if (len != 0 && !emitTxBuffer(len))
+                break;
         } while (len);
     }
 }
 
-int32_t StreamAPI::handleRecStream(char *buf, uint16_t bufLen)
+/// Parse supplied bytes through the framed ToRadio receive state machine.
+int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
     while (bufLen > index) { // Currently we never want to block
@@ -165,23 +175,50 @@ int32_t StreamAPI::readStream()
     }
 }
 
+/// Encode the stream marker and big-endian payload length.
+size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen)
+{
+    buf[0] = START1;
+    buf[1] = START2;
+    buf[2] = (payloadLen >> 8) & 0xff;
+    buf[3] = payloadLen & 0xff;
+    return payloadLen + HEADER_LEN;
+}
+
 /**
  * Send the current txBuffer over our stream
  */
-void StreamAPI::emitTxBuffer(size_t len)
+/// Write one framed payload using the transport's failure semantics.
+bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 {
-    if (len != 0) {
-        txBuf[0] = START1;
-        txBuf[1] = START2;
-        txBuf[2] = (len >> 8) & 0xff;
-        txBuf[3] = len & 0xff;
+    (void)bestEffort;
+    if (len == 0 || !canWrite)
+        return false;
 
-        auto totalLen = len + HEADER_LEN;
-        stream->write(txBuf, totalLen);
+    const size_t totalLen = buildFrameHeader(buf, len);
+    // Serialize write-readiness checks, writes and write-failure handling
+    // against concurrent stream writes/close.
+    concurrency::LockGuard guard(&streamLock);
+    if (!canWriteFrame(totalLen))
+        return false;
+
+    size_t written = stream->write(buf, totalLen);
+    if (written == totalLen) {
         stream->flush();
+        return true;
     }
+
+    onFrameWriteFailed(totalLen, written);
+    return false;
 }
 
+/// Emit the prepared main PhoneAPI payload as required output.
+bool StreamAPI::emitTxBuffer(size_t len)
+{
+    return writeFrame(txBuf, len, false);
+}
+
+/// Emit the initial reboot notification as a framed FromRadio payload.
 void StreamAPI::emitRebooted()
 {
     // In case we send a FromRadio packet
@@ -193,23 +230,36 @@ void StreamAPI::emitRebooted()
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 
+/// Encode and emit one protobuf LogRecord using the dedicated log buffers.
 void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
 {
-    // In case we send a FromRadio packet
-    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_log_record_tag;
-    fromRadioScratch.log_record.level = level;
+    // A retained short log frame still points into txBufLog, so do not overwrite it.
+    if (!canEncodeLogRecord())
+        return;
+
+    // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here - those
+    // belong to the main packet-emission path and a LOG_ firing during
+    // `writeStream()` would corrupt an in-flight encode. We keep a
+    // dedicated `fromRadioScratchLog` + `txBufLog` for log records and
+    // only serialize the actual `stream->write` call via `streamLock` so
+    // a concurrent packet emission doesn't interleave bytes on the wire.
+    memset(&fromRadioScratchLog, 0, sizeof(fromRadioScratchLog));
+    fromRadioScratchLog.which_payload_variant = meshtastic_FromRadio_log_record_tag;
+    fromRadioScratchLog.log_record.level = level;
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    fromRadioScratch.log_record.time = rtc_sec;
-    strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source) - 1);
+    fromRadioScratchLog.log_record.time = rtc_sec;
+    strncpy(fromRadioScratchLog.log_record.source, src, sizeof(fromRadioScratchLog.log_record.source) - 1);
 
     auto num_printed =
-        vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message) - 1, format, arg);
-    if (num_printed > 0 && fromRadioScratch.log_record.message[num_printed - 1] ==
+        vsnprintf(fromRadioScratchLog.log_record.message, sizeof(fromRadioScratchLog.log_record.message) - 1, format, arg);
+    if (num_printed > 0 && fromRadioScratchLog.log_record.message[num_printed - 1] ==
                                '\n') // Strip any ending newline, because we have records for framing instead.
-        fromRadioScratch.log_record.message[num_printed - 1] = '\0';
-    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
+        fromRadioScratchLog.log_record.message[num_printed - 1] = '\0';
+
+    size_t len =
+        pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
+    writeFrame(txBufLog, len, true);
 }
 
 /// Hookable to find out when connection changes

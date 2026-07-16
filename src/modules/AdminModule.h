@@ -1,7 +1,9 @@
-#include <sys/types.h>
-
 #pragma once
+#ifdef ESP_PLATFORM
+#include <esp_ota_ops.h>
+#endif
 #include "ProtobufModule.h"
+#include <sys/types.h>
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -20,6 +22,8 @@ struct AdminModule_ObserverData {
  */
 class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
 {
+    friend class AdminModuleTestShim; // test/support/AdminModuleTestShim.h - native tests reach the private handlers/state
+
   public:
     /** Constructor
      * name is for debugging output
@@ -58,10 +62,22 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
      */
     void handleSetOwner(const meshtastic_User &o);
     void handleSetChannel(const meshtastic_Channel &cc);
-    void handleSetConfig(const meshtastic_Config &c);
+
+  protected:
+    void handleSetConfig(const meshtastic_Config &c, bool fromOthers);
+
+#ifdef PIO_UNIT_TESTING
+  protected:
+#else
+  private:
+#endif
     bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
+
+  public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
+
+  private:
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);
@@ -71,11 +87,36 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
     bool messageIsResponse(const meshtastic_AdminMessage *r);
     bool messageIsRequest(const meshtastic_AdminMessage *r);
-    void sendWarning(const char *message);
+    void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
+    void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
+    void warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora);
+    void warnOnChannelSet(const meshtastic_Channel &cc);
+
+    // Channel-configuration warnings are coalesced into a single client notification.
+    // queueChannelWarning() records one warning for a channel; while an edit transaction
+    // is open (begin/commit_edit_settings) the warnings accumulate and flushChannelWarnings()
+    // emits one combined message at commit. Outside a transaction the caller flushes
+    // immediately, so a single channel/preset edit still produces a single message.
+    void queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue, const char *format, ...)
+        __attribute__((format(printf, 5, 6)));
+    // Emit the "licensed mode activated" notice, deferring to commit during an edit transaction
+    // so repeated triggers (e.g. owner + several channels) produce a single message.
+    void warnLicensedMode();
+    void flushChannelWarnings();
+
+    char pendingWarningText[250] = {};    // the lone queued message, used verbatim when only one fired
+    uint32_t pendingWarningChannels = 0;  // bitmask of channel indices with a queued warning
+    uint8_t pendingWarningCount = 0;      // number of queued warnings this transaction
+    bool pendingWarningNameIssue = false; // any queued warning was about a channel name
+    bool pendingWarningPskIssue = false;  // any queued warning was about a PSK
+    bool pendingLicenseWarning = false;   // a licensed-mode notice is queued for this transaction
 };
 
 static constexpr const char *licensedModeMessage =
     "Licensed mode activated, removing admin channel and encryption from all channels";
+
+static constexpr const char *publicChannelPrecisionMessage =
+    "Precise position is not allowed on a public (open / known-key) channel; reduced to coarse precision";
 
 extern AdminModule *adminModule;
 

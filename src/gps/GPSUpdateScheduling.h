@@ -8,7 +8,8 @@ class GPSUpdateScheduling
   public:
     // Marks the time of these events, for calculation use
     void informSearching();
-    void informGotLock(); // Predicted lock-time is recalculated here
+    void informGotLock();      // Predicted lock-time is recalculated here
+    void informSearchFailed(); // Search ended without a fix; prediction is left untouched
 
     void reset();           // Reset the prediction - after GPS::disable() / GPS::enable()
     bool isUpdateDue();     // Is it time to begin searching for a GPS position?
@@ -24,6 +25,7 @@ class GPSUpdateScheduling
     uint32_t searchEndedMs = 0;
     uint32_t searchCount = 0;
     uint32_t predictedMsToGetLock = 0;
+    uint32_t consecutiveFailures = 0; // Count of search cycles that ended without a fix; reset on lock
 
     const float weighting = 0.2; // Controls exponential smoothing of lock-times prediction. 20% weighting of "latest lock-time".
 };

@@ -14,10 +14,8 @@ jobs:
     name: Native Simulator Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
           submodules: recursive
 
       - name: Setup native build
@@ -39,13 +37,33 @@ jobs:
           sed -i -e "s#${PWD}#.#" coverage_base.info # Make paths relative.
 
       - name: Integration test
+        # Cap the whole step: if the simulator ever fails to exit (e.g. the
+        # exit_simulator admin path regresses again) the job must fail fast,
+        # not run to GitHub's 6-hour limit.
+        timeout-minutes: 5
         run: |
           .pio/build/coverage/meshtasticd -s &
           PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
           timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
           echo "Simulator started, launching python test..."
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-          wait
+          # The Python harness sends exit_simulator and exits; the simulator is
+          # expected to terminate on its own. Give it a moment, then verify.
+          # If it is still alive the exit handshake is broken - fail loudly and
+          # do NOT fall through to `wait`, which would otherwise block until the
+          # job's hard timeout.
+          for i in $(seq 1 10); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "::error title=Simulator did not exit::meshtasticd ignored exit_simulator and is still running after the integration test. The exit_simulator admin path is broken (see AdminModule::handleReceivedProtobuf, ARCH_PORTDUINO bypass). Killing it to avoid a 6-hour CI overrun."
+            kill -9 "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+            exit 1
+          fi
+          wait "$PID" 2>/dev/null || true
 
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
@@ -59,7 +77,7 @@ jobs:
         id: version
 
       - name: Save coverage information
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always() # run this step even if previous step failed
         with:
           name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.long }}
@@ -70,10 +88,8 @@ jobs:
     name: Native PlatformIO Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
           submodules: recursive
 
       - name: Setup native build
@@ -90,11 +106,17 @@ jobs:
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
       - name: PlatformIO Tests
-        run: platformio test -e coverage -v --junit-output-path testreport.xml
+        run: |
+          set -o pipefail
+          # Filter out SKIPPED summary rows for hardware variants that can't run on the
+          # native host. They flood the log and make it harder to spot real failures.
+          # The JUnit XML is written directly to testreport.xml before the pipe, so
+          # the test artifact is unaffected.
+          platformio test -e coverage -v --junit-output-path testreport.xml 2>&1 | grep -v "[[:space:]]SKIPPED$"
 
       - name: Save test results
         if: always() # run this step even if previous step failed
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}
           overwrite: true
@@ -108,7 +130,7 @@ jobs:
           sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
 
       - name: Save coverage information
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always() # run this step even if previous step failed
         with:
           name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.long }}
@@ -127,30 +149,35 @@ jobs:
       - platformio-tests
     if: always()
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
+      - uses: actions/checkout@v7
 
       - name: Get release version string
         run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Download test artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}
           merge-multiple: true
 
+      - name: Drop no-status testsuites from the report
+        # PlatformIO emits a self-closing <testsuite tests="0"/> row for every test_* dir
+        # crossed with every hardware variant it cannot run on the native host (~4900 rows).
+        # They carry no pass/fail/skip status and bury the suites that actually ran. Strip
+        # them so the Test Report lists only suites with a real status. Only the copy the
+        # reporter renders is trimmed; the uploaded artifact keeps the full XML.
+        run: sed -i -E 's#<testsuite [^>]*tests="0"[^>]*/>##g' testreport.xml
+
       - name: Test Report
-        uses: dorny/test-reporter@v2.4.0
+        uses: dorny/test-reporter@v3.0.0
         with:
           name: PlatformIO Tests
           path: testreport.xml
           reporter: java-junit
 
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}
           path: code-coverage-report
@@ -163,7 +190,7 @@ jobs:
           genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
       - name: Save Code Coverage Report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: code-coverage-report-${{ steps.version.outputs.long }}
           path: code-coverage-report
