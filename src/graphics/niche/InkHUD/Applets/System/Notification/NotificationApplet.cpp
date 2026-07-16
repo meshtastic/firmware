@@ -5,6 +5,11 @@
 #include "./Notification.h"
 #include "MessageStore.h"
 #include "graphics/niche/InkHUD/Persistence.h"
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "modules/GeofenceModule.h"
+#endif
+
+#include <algorithm>
 
 #include "meshUtils.h"
 #include "modules/TextMessageModule.h"
@@ -16,6 +21,148 @@ using namespace NicheGraphics;
 InkHUD::NotificationApplet::NotificationApplet()
 {
     textMessageObserver.observe(textMessageModule);
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    if (geofenceModule)
+        geofenceObserver.observe(geofenceModule);
+#endif
+}
+
+void InkHUD::NotificationApplet::clearPreparedLines()
+{
+    preparedWrapped = false;
+    preparedLineCount = 0;
+    preparedTextHeight = 0;
+    for (PreparedLine &line : preparedLines) {
+        line.text.clear();
+        line.width = 0;
+    }
+}
+
+void InkHUD::NotificationApplet::resetTileHeight()
+{
+    if (Tile *tile = getTile())
+        tile->setRegion(tile->getLeft(), tile->getTop(), inkhud->width(), DEFAULT_HEIGHT);
+}
+
+void InkHUD::NotificationApplet::prepareCurrentNotificationLayout()
+{
+    Tile *tile = getTile();
+    if (!tile)
+        return;
+
+    clearPreparedLines();
+    updateDimensions();
+    resetDrawingSpace();
+    setFont(fontSmall);
+
+    const uint16_t padW = 4;
+    std::string ts = getTimeString(currentNotification.timestamp);
+    const uint16_t tsW = ts.length() > 0 ? getTextWidth(ts) : 0;
+    const int16_t divX = ts.length() > 0 ? (padW + tsW + padW) : 0;
+    const int16_t textLeft = divX + padW;
+    const uint16_t availableWidth = (textLeft + 2 < width()) ? (width() - textLeft - 2) : 1;
+
+    std::string text = getNotificationText(availableWidth);
+    if (text.empty()) {
+        resetTileHeight();
+        return;
+    }
+
+    preparedWrapped = getTextWidth(text) > availableWidth;
+    if (!preparedWrapped) {
+        preparedLines[0].text = std::move(text);
+        preparedLines[0].width = getTextWidth(preparedLines[0].text);
+        preparedLineCount = 1;
+        preparedTextHeight = fontSmall.lineHeight();
+        resetTileHeight();
+        return;
+    }
+
+    std::string current;
+    std::string word;
+    const auto commitCurrentLine = [&]() {
+        if (!current.empty() && preparedLineCount < MAX_WRAPPED_LINES) {
+            preparedLines[preparedLineCount].text = current;
+            preparedLines[preparedLineCount].width = getTextWidth(current);
+            preparedLineCount++;
+            current.clear();
+        }
+    };
+
+    const auto appendWord = [&](bool forceLineBreak) {
+        if (!word.empty()) {
+            std::string candidate = current.empty() ? word : (current + " " + word);
+            if (!current.empty() && getTextWidth(candidate) > availableWidth && preparedLineCount < (MAX_WRAPPED_LINES - 1)) {
+                commitCurrentLine();
+                current = word;
+            } else {
+                current = candidate;
+            }
+            word.clear();
+        }
+
+        if (forceLineBreak && preparedLineCount < MAX_WRAPPED_LINES)
+            commitCurrentLine();
+    };
+
+    for (char c : text) {
+        if (c == ' ') {
+            appendWord(false);
+        } else if (c == '\n') {
+            appendWord(true);
+        } else {
+            word += c;
+        }
+    }
+    appendWord(false);
+    commitCurrentLine();
+
+    if (preparedLineCount == 0) {
+        preparedLines[0].text = std::move(text);
+        preparedLines[0].width = getTextWidth(preparedLines[0].text);
+        preparedLineCount = 1;
+        preparedWrapped = false;
+        preparedTextHeight = fontSmall.lineHeight();
+        resetTileHeight();
+        return;
+    }
+
+    const uint16_t lineGap = 2;
+    preparedTextHeight = (fontSmall.lineHeight() * preparedLineCount) + (lineGap * (preparedLineCount - 1));
+    const uint16_t desiredHeight = std::max<uint16_t>(DEFAULT_HEIGHT, preparedTextHeight + 4);
+    tile->setRegion(tile->getLeft(), tile->getTop(), inkhud->width(), desiredHeight);
+}
+
+void InkHUD::NotificationApplet::showNotification(const Notification &n)
+{
+    assert(isActive());
+
+    if (!settings->optionalFeatures.notifications)
+        return;
+
+    if (hasNotification && isForeground() && currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE &&
+        n.type != Notification::Type::NOTIFICATION_GEOFENCE)
+        return;
+
+    const bool hadNotification = hasNotification;
+    Notification previousNotification = currentNotification;
+    hasNotification = true;
+    currentNotification = n;
+    prepareCurrentNotificationLayout();
+    if (isApproved()) {
+        bringToForeground();
+        inkhud->forceUpdate();
+    } else {
+        if (hadNotification) {
+            currentNotification = previousNotification;
+            hasNotification = true;
+            prepareCurrentNotificationLayout();
+        } else {
+            hasNotification = false;
+            clearPreparedLines();
+            resetTileHeight();
+        }
+    }
 }
 
 // Collect meta-info about the text message, and ask for approval for the notification
@@ -49,25 +196,41 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
         n.sender = p->from;
     }
 
-    // Close an old notification, if shown
-    dismiss();
-
-    // Check if we should display the notification
-    // A foreground applet might already be displaying this info
-    hasNotification = true;
-    currentNotification = n;
-    if (isApproved()) {
-        bringToForeground();
-        inkhud->forceUpdate();
-    } else
-        hasNotification = false; // Clear the pending notification: it was rejected
+    showNotification(n);
 
     // Return zero: no issues here, carry on notifying other observers!
     return 0;
 }
 
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+int InkHUD::NotificationApplet::onGeofenceEvent(const GeofenceNotificationEvent *event)
+{
+    assert(isActive());
+
+    if (!event)
+        return 0;
+
+    Notification n;
+    n.type = Notification::Type::NOTIFICATION_GEOFENCE;
+    n.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true);
+    n.setGeofenceName(event->geofenceName);
+    n.setGeofenceEntered(event->entered);
+    n.setGeofenceNodeName(event->nodeName);
+
+    showNotification(n);
+    return 0;
+}
+#endif
+
 void InkHUD::NotificationApplet::onRender(bool full)
 {
+    updateDimensions();
+    setFont(fontSmall);
+    if (preparedLineCount == 0)
+        prepareCurrentNotificationLayout();
+    if (preparedLineCount == 0)
+        return;
+
     // Clear the region beneath the tile
     // Most applets are drawing onto an empty frame buffer and don't need to do this
     // We do need to do this with the battery though, as it is an "overlay"
@@ -112,24 +275,39 @@ void InkHUD::NotificationApplet::onRender(bool full)
     // - medium dark (1/3)
     hatchRegion(divX, 0, width() - divX - 1, height(), 3, BLACK);
 
-    uint16_t availableWidth = width() - divX - padW;
-    std::string text = getNotificationText(availableWidth);
-
-    int16_t textM = divX + padW + (getTextWidth(text) / 2);
+    const int16_t textLeft = divX + padW;
 
     // Restrict area for printing
     // - don't overlap border, or divider
     setCrop(divX + 1, 1, (width() - (divX + 1) - 1), height() - 2);
 
-    // Drop shadow
-    // - thick white text
-    setTextColor(WHITE);
-    printThick(textM, height() / 2, text, 4, 4);
+    if (preparedWrapped && preparedLineCount > 0) {
+        const uint16_t lineGap = 2;
+        const int16_t textTop = std::max<int16_t>(1, (height() - preparedTextHeight) / 2);
 
-    // Main text
-    // - faux bold: double width
-    setTextColor(BLACK);
-    printThick(textM, height() / 2, text, 2, 1);
+        for (uint8_t i = 0; i < preparedLineCount; ++i) {
+            const int16_t lineY = textTop + (i * (fontSmall.lineHeight() + lineGap)) + (fontSmall.lineHeight() / 2);
+            const int16_t lineX = textLeft + (preparedLines[i].width / 2);
+
+            setTextColor(WHITE);
+            printThick(lineX, lineY, preparedLines[i].text, 4, 3);
+
+            setTextColor(BLACK);
+            printThick(lineX, lineY, preparedLines[i].text, 2, 1);
+        }
+    } else {
+        const int16_t textM = textLeft + (preparedLines[0].width / 2);
+
+        // Drop shadow
+        // - thick white text
+        setTextColor(WHITE);
+        printThick(textM, height() / 2, preparedLines[0].text, 4, 4);
+
+        // Main text
+        // - faux bold: double width
+        setTextColor(BLACK);
+        printThick(textM, height() / 2, preparedLines[0].text, 2, 1);
+    }
 }
 
 void InkHUD::NotificationApplet::onForeground()
@@ -140,6 +318,8 @@ void InkHUD::NotificationApplet::onForeground()
 void InkHUD::NotificationApplet::onBackground()
 {
     handleInput = false;
+    clearPreparedLines();
+    resetTileHeight();
     inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
 }
 
@@ -155,32 +335,38 @@ void InkHUD::NotificationApplet::onButtonLongPress()
 
 void InkHUD::NotificationApplet::onExitShort()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onExitLong()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavUp()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavDown()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavLeft()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 void InkHUD::NotificationApplet::onNavRight()
 {
-    dismiss();
+    if (dismissOnAuxInput())
+        dismiss();
 }
 
 // Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification
@@ -203,10 +389,17 @@ bool InkHUD::NotificationApplet::isApproved()
     return true;
 }
 
+bool InkHUD::NotificationApplet::dismissOnAuxInput() const
+{
+    return currentNotification.type != Notification::Type::NOTIFICATION_GEOFENCE;
+}
+
 // Mark that the notification should no-longer be rendered
 // In addition to calling thing method, code needs to request a re-render of all applets
 void InkHUD::NotificationApplet::dismiss()
 {
+    clearPreparedLines();
+    resetTileHeight();
     sendToBackground();
     hasNotification = false;
     // Not requesting update directly from this method,
@@ -264,6 +457,12 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text += ": ";
             text += MessageStore::getText(*message);
         }
+    }
+
+    else if (currentNotification.type == Notification::Type::NOTIFICATION_GEOFENCE) {
+        text += currentNotification.getGeofenceNodeName();
+        text += currentNotification.getGeofenceEntered() ? " IN " : " OUT ";
+        text += currentNotification.getGeofenceName();
     }
 
     // Parse any non-ascii characters and return

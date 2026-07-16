@@ -55,6 +55,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void populateAutoshowPage();       // Dynamically create MenuItems for selecting which applets can autoshow
     void populateRecentsPage();        // Create menu items: a choice of values for settings.recentlyActiveSeconds
     void populateDisplayTimeoutPage(); // Create menu items for config.display.screen_on_secs
+    void populateRemoveWaypointPage(); // Create menu items: one per waypoint in the active WaypointListApplet
 
     void drawInputField(uint16_t left, uint16_t top, uint16_t width, uint16_t height,
                         const std::string &text); // Draw input field for free text
@@ -75,6 +76,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     uint16_t menuTextLimit = 200;
 
     std::vector<MenuItem> items;               // MenuItems for the current page. Filled by ShowPage
+    std::vector<uint32_t> removeWaypointIds;   // Parallel to items, for REMOVE_WAYPOINT page
     std::vector<std::string> nodeConfigLabels; // Persistent labels for Node Config pages
     uint8_t selectedChannelIndex = 0;          // Currently selected LoRa channel (Node Config → Radio → Channel)
     bool channelPositionEnabled = false;

@@ -548,9 +548,7 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     float bearing = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
     float relativeBearing = CompassRenderer::adjustBearingForCompassMode(bearing, myHeadingRadian);
     float relativeBearingDeg = CompassRenderer::radiansToDegrees360(relativeBearing);
-    // Shrink size by 2px
-    int size = FONT_HEIGHT_SMALL - 5;
-    CompassRenderer::drawArrowToNode(display, centerX, centerY, size, relativeBearingDeg);
+    drawRelativeCompassArrow(display, centerX, centerY, relativeBearingDeg);
     /*
     float angle = relativeBearing * DEG_TO_RAD;
     float halfSize = size / 2.0;
@@ -593,6 +591,12 @@ void drawCompassUnknown(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->drawString(centerX, y, "?");
+}
+
+void drawRelativeCompassArrow(OLEDDisplay *display, int16_t centerX, int16_t centerY, float relativeBearingDeg)
+{
+    const int size = FONT_HEIGHT_SMALL - 5;
+    CompassRenderer::drawArrowToNode(display, centerX, centerY, size, relativeBearingDeg);
 }
 
 // =============================

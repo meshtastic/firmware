@@ -141,6 +141,8 @@ enum MenuAction {
     MAP_ZOOM_IN,
     MAP_ZOOM_OUT,
     MAP_ZOOM_RESET,
+    // Waypoints (WaypointListApplet)
+    REMOVE_WAYPOINT,
 };
 
 } // namespace NicheGraphics::InkHUD

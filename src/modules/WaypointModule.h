@@ -2,6 +2,10 @@
 #include "Observer.h"
 #include "SinglePortModule.h"
 
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+#include "WaypointStore.h"
+#endif
+
 /**
  * Waypoint message handling for meshtastic
  */
@@ -14,6 +18,11 @@ class WaypointModule : public SinglePortModule, public Observable<const UIFrameE
     WaypointModule() : SinglePortModule("waypoint", meshtastic_PortNum_WAYPOINT_APP) {}
 #if HAS_SCREEN
     bool shouldDraw();
+    void onDeviceTimeChanged();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    /// Broadcast an expired copy of the waypoint so the mesh (and we) discard it.
+    bool broadcastDelete(uint32_t waypointId);
 #endif
   protected:
     /** Called to handle a particular incoming message

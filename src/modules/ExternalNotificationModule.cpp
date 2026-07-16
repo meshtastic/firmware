@@ -458,15 +458,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
-                    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-#ifdef HAS_I2S
-                        audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-#endif
-                    } else if (moduleConfig.external_notification.use_pwm) {
-                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-                    } else {
-                        setExternalState(2, true);
-                    }
+                    triggerBuzzerOutput();
                 }
             }
 
@@ -477,6 +469,75 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
     }
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+}
+
+void ExternalNotificationModule::triggerBuzzerOutput()
+{
+#ifdef HAS_DRV2605
+    drv.setWaveform(0, 16); // Long buzzer 100%
+    drv.setWaveform(1, 0);  // Pause
+    drv.setWaveform(2, 16);
+    drv.setWaveform(3, 0);
+    drv.setWaveform(4, 16);
+    drv.setWaveform(5, 0);
+    drv.setWaveform(6, 16);
+    drv.setWaveform(7, 0);
+    drv.go();
+#endif
+
+    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+#ifdef HAS_I2S
+        audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+#endif
+    } else if (moduleConfig.external_notification.use_pwm) {
+        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+    } else {
+        setExternalState(2, true);
+    }
+}
+
+void ExternalNotificationModule::startNotification()
+{
+    // Trigger the configured *message-style* outputs for a non-message event (e.g. a geofence
+    // crossing). Respects the module's enabled/mute state, the alert_message_* output selection,
+    // and buzzer_mode (DIRECT_MSG_ONLY suppresses the buzzer, same as for messages), but carries
+    // no bell semantics. PWM/I2S ringtone playback is driven by runOnce() while isNagging is set.
+    if (!moduleConfig.external_notification.enabled || isSilenced)
+        return;
+
+    // A geofence crossing is neither a DM to us nor a bell character, so DIRECT_MSG_ONLY
+    // suppresses its buzzer output entirely - same rule handleReceived() applies to messages.
+    const bool buzzerModeIsDirectOnly = (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY);
+
+    const bool generic = moduleConfig.external_notification.alert_message;
+    const bool vibra = moduleConfig.external_notification.alert_message_vibra;
+    const bool buzzer = canBuzz() && moduleConfig.external_notification.alert_message_buzzer && !buzzerModeIsDirectOnly;
+    if (canBuzz() && moduleConfig.external_notification.alert_message_buzzer && buzzerModeIsDirectOnly)
+        LOG_INFO("Geofence buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
+    if (!generic && !vibra && !buzzer)
+        return;
+
+    buzzerShouldAlert |= buzzer;
+
+    nagCycleCutoff =
+        millis() + (moduleConfig.external_notification.nag_timeout ? (moduleConfig.external_notification.nag_timeout * 1000)
+                                                                   : moduleConfig.external_notification.output_ms);
+    isNagging = true;
+
+    if (generic) {
+        LOG_INFO("externalNotificationModule - Generic alert");
+        setExternalState(0, true);
+    }
+    if (vibra) {
+        LOG_INFO("externalNotificationModule - Vibra alert");
+        setExternalState(1, true);
+    }
+    if (buzzer) {
+        LOG_INFO("externalNotificationModule - Buzzer alert");
+        triggerBuzzerOutput();
+    }
+
+    setIntervalFromNow(0); // run once so the nag/stop lifecycle in runOnce() takes over
 }
 
 /**

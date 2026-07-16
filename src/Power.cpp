@@ -19,6 +19,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "Throttle.h"
+#include "WaypointStore.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
@@ -842,6 +843,9 @@ void Power::powerCommandsCheck()
 void Power::reboot()
 {
     notifyReboot.notifyObservers(NULL);
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.saveToFlash();
+#endif
 #if defined(ARCH_ESP32)
     ESP.restart();
 #elif defined(ARCH_NRF52)
@@ -905,6 +909,9 @@ void Power::shutdown()
     nodeDB->saveToDisk();
 #if HAS_SCREEN
     messageStore.saveToFlash();
+#endif
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    waypointStore.saveToFlash();
 #endif
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
