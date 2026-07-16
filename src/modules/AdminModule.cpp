@@ -125,9 +125,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 #endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
-    // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
-    // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
+        // Only accept a response from a remote we sent the matching request to. from == 0 is a
+        // local client, which PhoneAPI has already gated.
+        if (mp.from != 0 && !responseIsSolicited(mp)) {
+            LOG_INFO("Ignore admin response from 0x%08x, no outstanding request", mp.from);
+            return handled;
+        }
         LOG_DEBUG("Allow admin response message");
     } else if (mp.from == 0) {
         // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
@@ -472,8 +476,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_get_module_config_response_tag: {
         LOG_INFO("Client received a get_module_config response");
-        if (fromOthers && r->get_module_config_response.which_payload_variant ==
-                              meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
+        // which_payload_variant is the ModuleConfig oneof tag, so compare against that tag, not the
+        // AdminMessage ModuleConfigType enum (whose REMOTEHARDWARE value is a different number).
+        if (fromOthers && r->get_module_config_response.which_payload_variant == meshtastic_ModuleConfig_remote_hardware_tag) {
             handleGetModuleConfigResponse(mp, r);
         }
         break;
@@ -1819,6 +1824,66 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
+        return;
+    // Local admin is answered in-process, and a broadcast is never a request to one remote.
+    if (p.to == 0 || isBroadcast(p.to) || p.to == nodeDB->getNodeNum())
+        return;
+
+    meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
+        return;
+    if (!messageIsRequest(&admin))
+        return;
+
+    // Reuse this remote's slot if it has one, else a free slot, else the oldest.
+    OutstandingAdminRequest *slot = nullptr;
+    for (auto &o : outstandingAdminRequests)
+        if (o.to == p.to)
+            slot = &o;
+    if (!slot)
+        for (auto &o : outstandingAdminRequests)
+            if (o.to == 0) {
+                slot = &o;
+                break;
+            }
+    if (!slot) {
+        slot = &outstandingAdminRequests[0];
+        for (auto &o : outstandingAdminRequests)
+            if (o.sentAtSecs < slot->sentAtSecs)
+                slot = &o;
+    }
+
+    slot->to = p.to;
+    slot->sentAtSecs = millis() / 1000;
+    slot->keyValid = p.pki_encrypted && p.public_key.size == 32;
+    if (slot->keyValid)
+        memcpy(slot->key, p.public_key.bytes, 32);
+    else
+        memset(slot->key, 0, 32);
+    LOG_DEBUG("Admin request sent to 0x%08x, expecting its response", p.to);
+}
+
+bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp)
+{
+    const uint32_t now = millis() / 1000;
+    for (auto &o : outstandingAdminRequests) {
+        if (o.to == 0 || o.to != mp.from)
+            continue;
+        if (now > o.sentAtSecs + kOutstandingAdminRequestSecs) {
+            o.to = 0;
+            return false;
+        }
+        // A request the client pinned to a key must be answered over PKC by that same key.
+        if (o.keyValid && (!mp.pki_encrypted || mp.public_key.size != 32 || memcmp(mp.public_key.bytes, o.key, 32) != 0))
+            return false;
+        return true;
+    }
+    return false;
 }
 
 bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)

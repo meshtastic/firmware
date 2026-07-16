@@ -77,7 +77,26 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
   public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
 
+    /// Note an admin request leaving this node for a remote, so that remote's response is
+    /// accepted. Called from the client-to-mesh path (MeshService::handleToRadio).
+    void noteOutgoingAdminRequest(const meshtastic_MeshPacket &p);
+
   private:
+    // An admin response carries no session passkey and its sender is not an admin-key holder, so
+    // the only thing vouching for one is a request we sent. Track those per remote: a client may
+    // have several nodes in flight, and each keeps answering until the window lapses.
+    static constexpr size_t kOutstandingAdminRequests = 3;
+    static constexpr uint32_t kOutstandingAdminRequestSecs = 300; // same window as the session passkey
+    struct OutstandingAdminRequest {
+        NodeNum to;          // 0 = free slot
+        uint32_t sentAtSecs; // millis()/1000 when the request went out
+        uint8_t key[32];     // destination key, when the client pinned one
+        bool keyValid;
+    };
+    OutstandingAdminRequest outstandingAdminRequests[kOutstandingAdminRequests] = {};
+
+    /// Whether mp answers a request we actually sent to mp.from.
+    bool responseIsSolicited(const meshtastic_MeshPacket &mp);
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);
