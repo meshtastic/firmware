@@ -1603,8 +1603,10 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
         const size_t first = numMeshNodes;
         const size_t last = std::min(first + removed, nodeDatabase.nodes.size());
         std::fill(nodeDatabase.nodes.begin() + first, nodeDatabase.nodes.begin() + last, meshtastic_NodeInfoLite());
-        eraseNodeSatellites(nodeNum);
     }
+    // Drop the node's satellite stores and warm-tier copy regardless of which tier it lived in, so
+    // an explicit removal fully forgets it.
+    eraseNodeSatellites(nodeNum);
 #if WARM_NODE_COUNT > 0
     // Explicit user removal: don't let the warm tier resurrect the node
     warmStore.remove(nodeNum);
