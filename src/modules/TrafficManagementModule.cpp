@@ -45,6 +45,8 @@ constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot in
 // heard from within this window. Without it, a cached (or forged) entry is served
 // indefinitely for a long-gone node while the genuine request is suppressed - the
 // requestor sees a fresh-looking answer for a node that may no longer exist.
+// TODO(T8): these two constants encode the same 6 h window independently and can desync;
+// derive one from the other (e.g. kNodeInfoMaxServeAgeSecs = kNodeInfoMaxServeAgeMs / 1000UL).
 constexpr uint32_t kNodeInfoMaxServeAgeMs = 6UL * 60UL * 60UL * 1000UL; // 6 h (PSRAM cache path)
 constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL;        // 6 h (NodeDB fallback path)
 
@@ -504,6 +506,9 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
     // the direct-response cache. This cache is served back to requestors as a spoofed
     // reply on the target's behalf, so poisoning it is materially worse than a plain
     // NodeDB overwrite - apply the same protections NodeDB applies to itself.
+    // TODO(T6): the owner-match and the two pin blocks below repeat the same 32-byte
+    // key compare; extract a local helper (e.g. keyMismatch(a, b)) to document intent
+    // once and avoid drift if the compare ever changes (e.g. constant-time).
     if (user.public_key.size == 32) {
         // Someone advertising our own public key is impersonating this node - never cache it.
         if (owner.public_key.size == 32 && memcmp(user.public_key.bytes, owner.public_key.bytes, 32) == 0) {
@@ -1145,6 +1150,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         // heard more than kNodeInfoMaxServeAgeSecs ago. last_heard == 0 means recency is
         // unknown (e.g. clock not yet set) - we can't prove it's stale, so we still answer,
         // matching sinceLastSeen()'s own "clock not set" tolerance.
+        // TODO(T7): sinceLastSeen(node) is called twice here (condition + log); it calls
+        // getTime() each time, so the logged age can differ from the tested one. Cache it
+        // in a local (const uint32_t age = sinceLastSeen(node);).
         if (node->last_heard != 0 && sinceLastSeen(node) > kNodeInfoMaxServeAgeSecs) {
             TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x stale (%us ago), not responding", p->to,
                          static_cast<unsigned>(sinceLastSeen(node)));
@@ -1156,6 +1164,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Staleness gate (PSRAM cache path): never spoof a reply on behalf of a node we have
     // not actually heard from within the serve window. cachedLastObservedMs is only set on
     // a PSRAM cache hit, so this leaves the NodeDB fallback (gated above) untouched.
+    // TODO(T4): this age uses millis(); at a ~49.7-day uptime wrap boundary an entry that
+    // is never LRU-evicted can wrap to a small age and read as fresh, defeating the gate.
+    // TODO(T9): 0 is the "never observed" sentinel, but clockMs()==0 is a real value at the
+    // millis wrap instant, which would skip this gate for that entry until re-observed.
     if (cachedLastObservedMs != 0 && (clockMs() - cachedLastObservedMs) > kNodeInfoMaxServeAgeMs) {
         TM_LOG_DEBUG("NodeInfo PSRAM entry for 0x%08x stale (age=%lu ms), not responding", p->to,
                      static_cast<unsigned long>(clockMs() - cachedLastObservedMs));
@@ -1178,6 +1190,14 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // unbounded local transmissions / reflected floods. Suppress the duplicate request
     // (return true) rather than letting it propagate and generate more mesh traffic.
     // Only the PSRAM path tracks lastResponseMs; the NodeDB fallback is left unthrottled.
+    // TODO(T1): keyed on p->to, so a DISTINCT legitimate requestor for the same target gets
+    // no reply for up to the window (returning true STOPs it). Consider returning false when
+    // throttled (let it propagate), or key the throttle on the requestor.
+    // TODO(T2): per-target key does not bound aggregate local TX - an attacker cycling N
+    // distinct cached targets still gets N spoofed transmits per window. A global/per-requestor
+    // rate cap would actually bound the flood this throttle targets.
+    // TODO(T3): throttle state lives only in the PSRAM cache entry, so non-PSRAM boards (NodeDB
+    // fallback path) are entirely unthrottled - the flood mitigation misses that path.
     if (cachedLastResponseMs != 0 && (clockMs() - cachedLastResponseMs) < kNodeInfoResponseThrottleMs) {
         TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x (%lu ms since last)", p->to,
                      static_cast<unsigned long>(clockMs() - cachedLastResponseMs));
@@ -1237,6 +1257,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Record the send so the throttle can suppress a burst of requests for this same node.
     // Only meaningful on the PSRAM cache path (the entry we just served from); the NodeDB
     // fallback has no per-node entry to stamp.
+    // TODO(T5): this is a second full O(n) scan under a second lock, after findNodeInfoEntry()
+    // already located this slot at the top of the function. Capture the index in the first
+    // pass (re-validate node == p->to after re-locking) to avoid the redundant scan.
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     if (nodeInfoPayload) {
         concurrency::LockGuard guard(&cacheLock);
