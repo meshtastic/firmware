@@ -14,8 +14,8 @@
 #define FILE_O_READ "r"
 #endif
 
-#if defined(ARCH_STM32WL)
-// STM32WL
+#if defined(ARCH_STM32)
+// STM32
 #include "LittleFS.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin()
@@ -49,7 +49,7 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 #if defined(ARCH_NRF54L15)
-// nRF54L15 — Zephyr LittleFS on 36 KB storage_partition (internal RRAM)
+// nRF54L15 - Zephyr LittleFS on 36 KB storage_partition (internal RRAM)
 #include "InternalFileSystem.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin()
@@ -57,11 +57,16 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 void fsInit();
-void fsListFiles();
 bool copyFile(const char *from, const char *to);
 bool renameFile(const char *pathFrom, const char *pathTo);
 bool fsFormat();
-std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount = 64, bool *wasLimited = nullptr);
 void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();
+
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI) && defined(SDCARD_USE_SPI1)
+#include <SPI.h>
+// HSPI bus set up by setupSDCard(). Reuse this for other devices on the same bus.
+extern SPIClass SPI_HSPI;
+#endif

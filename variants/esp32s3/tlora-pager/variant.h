@@ -1,5 +1,6 @@
 // ST7796 TFT LCD
 #define TFT_CS 38
+#define HAS_SPI_TFT 1
 #define ST7796_CS TFT_CS
 #define ST7796_RS 37    // DC
 #define ST7796_SDA MOSI // MOSI
@@ -91,6 +92,8 @@
 #define EXPANDS_DRV_EN (0)
 #define EXPANDS_AMP_EN (1)
 #define EXPANDS_KB_RST (2)
+// AudioThread powers the amp on/off around playback via this (opt-in) hook.
+#define AUDIO_AMP_ENABLE(on) io.digitalWrite(EXPANDS_AMP_EN, (on) ? HIGH : LOW)
 #define EXPANDS_LORA_EN (3)
 #define EXPANDS_GPS_EN (4)
 #define EXPANDS_NFC_EN (5)

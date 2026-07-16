@@ -56,6 +56,11 @@ class TelemetrySensor
     }
 
     const char *sensorName;
+    // TODO: Rename?
+    uint8_t _address = 0;
+    TwoWire *_bus{};
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
+
     // TODO: delete after migration
     bool hasSensor() { return nodeTelemetrySensorsMap[sensorType].first > 0; }
 

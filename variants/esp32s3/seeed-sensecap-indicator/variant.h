@@ -18,6 +18,7 @@
 // #define ADC_MULTIPLIER 2
 
 // ST7701 TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7701_CS (4 | IO_EXPANDER)
 #define ST7701_RS -1  // DC
 #define ST7701_SDA 48 // MOSI
@@ -67,6 +68,9 @@
 #define LORA_DIO1 (3 | IO_EXPANDER) // SX1262 IRQ
 #define LORA_DIO2 (2 | IO_EXPANDER) // SX1262 BUSY
 #define LORA_DIO3
+// LORA_DIO1 is an expander pin, not an ESP32 GPIO, so it can't be used as a sleep/GPIO wakeup source
+// (shared capability; see its use in sleep.cpp).
+#define LORA_DIO1_EXTENDED_IO
 
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
