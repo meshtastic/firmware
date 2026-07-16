@@ -329,11 +329,8 @@ class PhoneAPI
         AuthorizedPassThrough, ///< Admin payload from an authorized connection; normal handling.
     };
 
-    /// Classify a phone->radio packet for the lockdown admin gate. Deliberately independent of the
-    /// wire `from` field: every packet here originates from the local connection and the phone does
-    /// not own `from` (MeshService rewrites it), so keying the gate on `from` lets a client bypass
-    /// it by setting `from != 0`. Static and free of connection state so it is unit-testable; the
-    /// caller supplies the connection's authorization and consumes `outAdmin` for the lockdown case.
+    /// Classify a phone->radio packet for the lockdown admin gate, ignoring the wire `from` (which a
+    /// client can forge) and deciding on the connection's authorization. Fills outAdmin for lockdown.
     static LocalAdminGate classifyLocalAdminPacket(const meshtastic_MeshPacket &p, bool adminAuthorized,
                                                    meshtastic_AdminMessage &outAdmin);
 };

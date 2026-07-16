@@ -1734,19 +1734,21 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     //       the gate here closes that race and covers H6/H7 from the
     //       audit: get_config_request and set_config from unauthed
     //       clients no longer reach AdminModule at all.
-    // Gate on the connection, not the wire `from`. `from` is attacker-controlled and MeshService
-    // rewrites it to 0 downstream, so keying this on `from == 0` let a client bypass the check by
-    // sending `from != 0` and have AdminModule treat it as authorized local admin.
+    // Gate on the connection, not the wire `from`, which a client can forge to a non-zero value to
+    // bypass the check before MeshService normalizes it back to a local identity.
     {
         meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
         switch (classifyLocalAdminPacket(p, getAdminAuthorized(), admin)) {
         case LocalAdminGate::LockdownAuth: {
             handleLockdownAuthInline(admin.lockdown_auth);
-            // Wipe the decoded passphrase scratch - the byte array in
-            // p.decoded.payload.bytes is wiped by handleLockdownAuthInline.
+            // Wipe both copies of the passphrase: the decoded scratch and the still-encoded bytes in
+            // the packet buffer (handleLockdownAuthInline only clears the decoded copy).
             volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
             for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
                 adminVol[i] = 0;
+            volatile uint8_t *encodedVol = const_cast<volatile uint8_t *>(p.decoded.payload.bytes);
+            for (size_t i = 0; i < sizeof(p.decoded.payload.bytes); i++)
+                encodedVol[i] = 0;
             return true;
         }
         case LocalAdminGate::DropUnauthorized:
