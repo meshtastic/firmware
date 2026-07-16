@@ -110,6 +110,21 @@ class MockNodeDB : public NodeDB
         clearCachedNode();
     }
 
+    // Seed a hot-store node that has been learned as an XEdDSA signer, with a known name, so the
+    // identity-update gate can be exercised. Distinct from setCachedNode() so a separate cached
+    // node (the direct-response target) can coexist.
+    void setSignerHotNode(NodeNum n, const char *longName)
+    {
+        if (meshNodes->size() < 2)
+            meshNodes->resize(2);
+        (*meshNodes)[1] = meshtastic_NodeInfoLite_init_zero;
+        (*meshNodes)[1].num = n;
+        nodeInfoLiteSetBit(&(*meshNodes)[1], NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
+        nodeInfoLiteSetBit(&(*meshNodes)[1], NODEINFO_BITFIELD_HAS_USER_MASK, true);
+        strncpy((*meshNodes)[1].long_name, longName, sizeof((*meshNodes)[1].long_name) - 1);
+        numMeshNodes = 2;
+    }
+
   private:
     bool hasCachedNode = false;
     NodeNum cachedNodeNum = 0;
@@ -587,6 +602,45 @@ static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
     TEST_ASSERT_EQUAL_STRING("requester-long", requestor->long_name);
     TEST_ASSERT_EQUAL_STRING("rq", requestor->short_name);
     TEST_ASSERT_EQUAL_UINT8(request.channel, requestor->channel);
+}
+
+/**
+ * A unicast NodeInfo request is never signed, so a known signer's identity claim on the
+ * direct-response path is unauthenticated. It must not overwrite the stored name (spoofing
+ * defense), while the direct response itself still goes out. The non-signer case
+ * (test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo) is the control: it still learns.
+ */
+static void test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->setCachedNode(kTargetNode);                   // the direct-response target
+    mockNodeDB->setSignerHotNode(kRemoteNode, "victim-real"); // the requester is a known signer
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeNodeInfoPacket(kRemoteNode, "attacker-name", "atk");
+    request.to = kTargetNode;
+    request.decoded.want_response = true;
+    request.id = 0x0A0B0C0D;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    request.xeddsa_signed = false; // unicast: never signed
+
+    ProcessMessage result = module.handleReceived(request);
+
+    // The response still went out (the request was consumed from cache)...
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(1, module.getStats().nodeinfo_cache_hits);
+    // ...but the known signer's stored name was not overwritten by the unauthenticated claim.
+    const meshtastic_NodeInfoLite *requestor = mockNodeDB->getMeshNode(kRemoteNode);
+    TEST_ASSERT_NOT_NULL(requestor);
+    TEST_ASSERT_EQUAL_STRING("victim-real", requestor->long_name);
 }
 
 /**
@@ -1715,6 +1769,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_routerClamp_skipsWhenTooManyHops);
     RUN_TEST(test_tm_nodeinfo_directResponse_respondsFromCache);
     RUN_TEST(test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo);
+    RUN_TEST(test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity);
     RUN_TEST(test_tm_nodeinfo_clientClamp_skipsWhenNotDirect);
 #if !(defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM))
     RUN_TEST(test_tm_nodeinfo_directResponse_withoutNodeDbEntry_skips);
