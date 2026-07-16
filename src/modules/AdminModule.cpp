@@ -794,6 +794,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             accelerometerThread->enabled = true;
             accelerometerThread->start();
         }
+        // Turning double-tap off: stop the accelerometer thread, but only if wake-on-motion doesn't still need it.
+        // disable() clears enabled so a later re-enable can restart it.
+        else if (config.device.double_tap_as_button_press == true &&
+                 c.payload_variant.device.double_tap_as_button_press == false && config.display.wake_on_tap_or_motion == false &&
+                 accelerometerThread->enabled == true) {
+            accelerometerThread->disable();
+        }
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
@@ -897,6 +904,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
             accelerometerThread->enabled = true;
             accelerometerThread->start();
+        }
+        // Turning wake-on-motion off: stop the accelerometer thread, but only if double-tap doesn't still need it.
+        // disable() clears enabled so a later re-enable can restart it.
+        else if (config.display.wake_on_tap_or_motion == true && c.payload_variant.display.wake_on_tap_or_motion == false &&
+                 config.device.double_tap_as_button_press == false && accelerometerThread->enabled == true) {
+            accelerometerThread->disable();
         }
 #endif
         config.display = c.payload_variant.display;
