@@ -7,9 +7,11 @@
 class AdminModuleTestShim : public AdminModule
 {
   public:
+    using AdminModule::checkPassKey; // session-key gate seam (see test_admin_session_repro)
     using AdminModule::handleReceivedProtobuf;
     using AdminModule::handleSetConfig;
     using AdminModule::handleSetModuleConfig;
+    using AdminModule::setPassKey;
 
     // With an "open edit transaction" saveChanges() is a pure no-op: no reloadConfig/saveToDisk/reboot.
     void deferSaves() { hasOpenEditTransaction = true; }
