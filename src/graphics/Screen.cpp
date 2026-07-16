@@ -29,6 +29,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if HAS_SCREEN
 #include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
+#if defined(USE_HUB75)
+#include "graphics/HUB75Display.h" // ESP32 HUB75 (I2S-DMA)
+#endif
+#if defined(HAS_HUB75_NATIVE)
+#include "HUB75Native.h" // native/Portduino HUB75 (rpi-rgb-led-matrix), from variants/native/portduino
+#endif
 
 #include "DisplayFormatters.h"
 #include "TimeFormatters.h"
@@ -67,6 +73,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Default.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/ExternalNotificationModule.h"
+#if BASEUI_HAS_GAMES
+#include "modules/games/GamesModule.h"
+#endif
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -99,7 +108,11 @@ namespace graphics
 #define COMPASS_ACTIVE_FRAMERATE 20
 
 // DEBUG
+#if BASEUI_HAS_GAMES
+#define NUM_EXTRA_FRAMES 4 // text message, debug frame, and the always-present games frame
+#else
 #define NUM_EXTRA_FRAMES 3 // text message and debug frame
+#endif
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
 #define ASCII_BELL '\x07'
@@ -369,6 +382,43 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     updateUiFrame(ui);
 }
 
+// Called to trigger an arcade-style initials picker (see showNumberPicker for the sibling flow).
+void Screen::showAlphanumericPicker(const char *message, const char *initialText, uint32_t durationMs, uint8_t length,
+                                    std::function<void(const std::string &)> bannerCallback)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    if (length >= sizeof(NotificationRenderer::alphanumericValue))
+        length = sizeof(NotificationRenderer::alphanumericValue) - 1;
+
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::textInputCallback = bannerCallback;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::alphanumeric_picker;
+    NotificationRenderer::numDigits = length;
+
+    // Seed each position from initialText (uppercased & filtered to A-Z/0-9), defaulting to 'A'.
+    const size_t seedLen = initialText ? strnlen(initialText, length) : 0;
+    for (uint8_t i = 0; i < length; i++) {
+        char c = (i < seedLen) ? initialText[i] : 'A';
+        if (c >= 'a' && c <= 'z')
+            c = static_cast<char>(c - 'a' + 'A');
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')))
+            c = 'A';
+        NotificationRenderer::alphanumericValue[i] = c;
+    }
+    NotificationRenderer::alphanumericValue[length] = '\0';
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, 2);
+    ui->setTargetFPS(60);
+    updateUiFrame(ui);
+}
+
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                            std::function<void(const std::string &)> textCallback)
 {
@@ -411,6 +461,17 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
+
+#if BASEUI_HAS_GAMES
+// The games frame is a dedicated, always-present frame (unlike generic module frames it is placed
+// at a fixed position right after home), so it draws through its own trampoline rather than the
+// moduleFrames lockstep used by drawModuleFrame.
+static void drawGamesFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    if (gamesModule)
+        gamesModule->drawFrame(display, state, x, y);
+}
+#endif
 
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
@@ -499,6 +560,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #else
     dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
+#elif defined(USE_HUB75)
+    dispdev = new HUB75Display(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -517,7 +580,17 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         LOG_INFO("SSD1306 init success");
     }
 #elif ARCH_PORTDUINO
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+
+    // HUB75 RGB matrix (hzeller/rpi-rgb-led-matrix) is a BaseUI framebuffer panel, selected at
+    // runtime via config.yaml Display: Panel: HUB75.
+    if (portduino_config.displayPanel == hub75) {
+#if defined(HAS_HUB75_NATIVE)
+        LOG_DEBUG("Make HUB75Native!");
+        dispdev = new HUB75Native(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
+#else
+        LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in!");
+#endif
+    } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         if (portduino_config.displayPanel != no_screen) {
             LOG_DEBUG("Make TFTDisplay!");
             dispdev = new TFTDisplay(address.address, -1, -1, geometry,
@@ -1304,6 +1377,15 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_home);
     }
 
+#if BASEUI_HAS_GAMES
+    // Games frame: always present (even with no game running), positioned directly after home.
+    if (gamesModule) {
+        fsi.positions.games = numframes;
+        normalFrames[numframes++] = drawGamesFrame;
+        indicatorIcons.push_back(joystick_small);
+    }
+#endif
+
     fsi.positions.textMessage = numframes;
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
@@ -2076,6 +2158,12 @@ int Screen::handleInputEvent(const InputEvent *event)
             if (module && module->interceptingKeyboardInput())
                 inputIntercepted = true;
         }
+#if BASEUI_HAS_GAMES
+        // The games frame isn't a moduleFrame, so check it explicitly: while a game is running it
+        // owns the D-pad (turns/pause) and we must not switch frames or open menus underneath it.
+        if (gamesModule && gamesModule->interceptingKeyboardInput())
+            inputIntercepted = true;
+#endif
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
@@ -2150,6 +2238,11 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
+#if BASEUI_HAS_GAMES
+                } else if (gamesModule && framesetInfo.positions.games != 255 &&
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.games) {
+                    gamesModule->launchGame(); // launch the game shown on the attract screen
+#endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.system) {
                     menuHandler::systemBaseMenu();
 #if HAS_GPS
@@ -2215,6 +2308,11 @@ int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
 bool Screen::isOverlayBannerShowing()
 {
     return NotificationRenderer::isOverlayBannerShowing();
+}
+
+bool Screen::isGamesFrameShown()
+{
+    return framesetInfo.positions.games != 255 && ui && ui->getUiState()->currentFrame == framesetInfo.positions.games;
 }
 
 } // namespace graphics
