@@ -1597,10 +1597,16 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
             removed++;
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
-              meshtastic_NodeInfoLite());
-    if (removed)
-        eraseNodeSatellites(nodeNum);
+    if (removed) {
+        // Clear exactly the slots compaction vacated. Sizing this from `removed` (rather than a
+        // fixed one) keeps it inside the vector when nothing matched and the store is full.
+        const size_t first = numMeshNodes;
+        const size_t last = std::min(first + removed, nodeDatabase.nodes.size());
+        std::fill(nodeDatabase.nodes.begin() + first, nodeDatabase.nodes.begin() + last, meshtastic_NodeInfoLite());
+    }
+    // Drop the node's satellite stores and warm-tier copy regardless of which tier it lived in, so
+    // an explicit removal fully forgets it.
+    eraseNodeSatellites(nodeNum);
 #if WARM_NODE_COUNT > 0
     // Explicit user removal: don't let the warm tier resurrect the node
     warmStore.remove(nodeNum);

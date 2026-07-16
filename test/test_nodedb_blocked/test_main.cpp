@@ -225,6 +225,39 @@ static void test_protectedCap_refusesBeyondLimit(void)
     TEST_ASSERT_TRUE(db->setProtectedFlag(already, NODEINFO_BITFIELD_IS_IGNORED_MASK, true));
 }
 
+// removeNodeByNum() compacts survivors down and clears the slots that leaves free. A full
+// store with no matching node frees none, so there is nothing past the last node to clear.
+static void test_removeNodeByNum_absentNodeOnFullDb(void)
+{
+    db->seedSelf();
+    for (int i = 1; i < MAX_NUM_NODES; i++) // fill to MAX_NUM_NODES total (incl. self)
+        db->push(8000 + i, /*last_heard=*/i, false, false, /*withUser=*/true, /*withKey=*/true);
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes());
+
+    db->removeNodeByNum(0xDEADBEEF); // absent; ASan flags a write past the last slot
+
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes()); // nothing removed
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x0BADF00D));                // self intact
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + 1));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // last slot intact
+}
+
+// Control for the above: a matching node on a full store is still removed, the survivors
+// compact down, and the freed tail slot is cleared.
+static void test_removeNodeByNum_presentNodeOnFullDb(void)
+{
+    db->seedSelf();
+    for (int i = 1; i < MAX_NUM_NODES; i++)
+        db->push(8000 + i, /*last_heard=*/i, false, false, /*withUser=*/true, /*withKey=*/true);
+
+    db->removeNodeByNum(8000 + 5);
+
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES - 1, (int)db->getNumMeshNodes());
+    TEST_ASSERT_NULL(db->getMeshNode(8000 + 5));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + 4));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // survivors kept
+}
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -238,6 +271,8 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_eviction_preservesFavorite);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
+    RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
+    RUN_TEST(test_removeNodeByNum_presentNodeOnFullDb);
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
