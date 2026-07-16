@@ -319,4 +319,21 @@ class PhoneAPI
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;
+
+  public:
+    /// How the lockdown admin gate should treat a phone->radio packet.
+    enum class LocalAdminGate {
+        NotAdmin,              ///< Not a decodable ADMIN_APP payload; normal handling.
+        LockdownAuth,          ///< A lockdown_auth payload; authenticate the connection inline.
+        DropUnauthorized,      ///< Admin payload from a connection that has not authenticated; drop.
+        AuthorizedPassThrough, ///< Admin payload from an authorized connection; normal handling.
+    };
+
+    /// Classify a phone->radio packet for the lockdown admin gate. Deliberately independent of the
+    /// wire `from` field: every packet here originates from the local connection and the phone does
+    /// not own `from` (MeshService rewrites it), so keying the gate on `from` lets a client bypass
+    /// it by setting `from != 0`. Static and free of connection state so it is unit-testable; the
+    /// caller supplies the connection's authorization and consumes `outAdmin` for the lockdown case.
+    static LocalAdminGate classifyLocalAdminPacket(const meshtastic_MeshPacket &p, bool adminAuthorized,
+                                                   meshtastic_AdminMessage &outAdmin);
 };
