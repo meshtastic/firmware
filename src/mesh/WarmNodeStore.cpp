@@ -16,11 +16,8 @@
 #define WARM_RING_MAGIC 0x334E5257u    // "WRN3" - v3: last_heard low bits carry role + protected + signer
 #define WARM_RING_MAGIC_V2 0x324E5257u // "WRN2" - v2: role + protected only; bit 6 was still timestamp.
 #define WARM_RING_MAGIC_V1 0x474E5257u // "WRNG" - v1: last_heard was a plain timestamp.
-// Older pages are still read on upgrade. v1: keep identity + public key but DISCARD
-// last_heard (the old timestamp would be misread as role/protected bits). v2: keep the
-// whole word but clear the signer bit, which was a timestamp bit then and would otherwise
-// read as a signer we never verified. Records re-rank and re-learn on the next contact;
-// legacy pages convert to v3 naturally as the ring rotates.
+// Older pages are still read on upgrade: v1 keeps identity + key but discards last_heard,
+// v2 keeps the word but clears bit 6, which was still part of the timestamp then.
 // A tombstone is an entry record whose last_heard is all-ones - getTime()
 // (unix seconds) cannot reach 0xFFFFFFFF until 2106, and erased flash is
 // detected via num == 0xFFFFFFFF before last_heard is ever inspected.
@@ -454,10 +451,8 @@ void WarmNodeStore::load()
                     memset(e, 0, sizeof(*e));
                 }
             } else {
-                // v1: keep identity + key, but discard the old timestamp - its low bits would
-                // otherwise be misread as role/protected metadata. v2: the word is valid except
-                // for bit 6, which was still part of the timestamp, so clear it rather than let
-                // it read as a signer we never verified.
+                // Normalise older records: v1's timestamp would be misread as role/protected,
+                // and v2's bit 6 as a signer we never verified.
                 uint32_t lh = rec.last_heard;
                 if (fmt == WarmFormat::V1) {
                     lh = 0;
@@ -475,9 +470,8 @@ void WarmNodeStore::load()
             activePage = p;
             writeSlot = slot;
             nextSeq = seqs[k] + 1;
-            // If the head is an older page, force the next append to rotate into a fresh v3
-            // page, so new records never land in a page whose header says v1 or v2 (a later
-            // load would normalise them to that older format and drop metadata we just set).
+            // Rotate rather than append into an older-format page: a later load would
+            // normalise the new records to that page's format and drop metadata.
             if (fmt != WarmFormat::Current)
                 writeSlot = kRecordsPerPage;
         }
@@ -579,16 +573,14 @@ void WarmNodeStore::load()
             memset(entries, 0, WARM_NODE_COUNT * sizeof(WarmNodeEntry));
             return;
         }
+        // Normalise older records, then mark dirty so save() rewrites in the current format:
+        // v1's timestamp would be misread as role/protected, v2's bit 6 as an unverified signer.
         if (fmt == WarmFormat::V1) {
-            // v1: discard the old last_heard (its low bits would be misread as role/protected);
-            // keep num + public_key. Mark dirty so save() rewrites in the current format.
             for (size_t i = 0; i < WARM_NODE_COUNT; i++)
                 if (entries[i].num)
                     entries[i].last_heard = 0;
             dirty = true;
         } else if (fmt == WarmFormat::V2) {
-            // v2: bit 6 was still part of the timestamp, so clear it rather than let it read
-            // as a signer we never verified. Role/protected/time bits carry over unchanged.
             for (size_t i = 0; i < WARM_NODE_COUNT; i++)
                 if (entries[i].num)
                     entries[i].last_heard &= ~(WARM_SIGNER_MASK << WARM_SIGNER_SHIFT);

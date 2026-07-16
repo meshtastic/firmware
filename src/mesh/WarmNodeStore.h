@@ -43,10 +43,9 @@ static_assert(sizeof(WarmNodeEntry) == 40, "WarmNodeEntry must stay 40 B - persi
 //
 // The warm tier only uses last_heard to LRU-rank evicted (long-tail) nodes, so ~minute
 // recency resolution is plenty. We reclaim the low WARM_META_BITS of that field to carry
-// the evicted node's device role, a protected category, and whether we ever verified an
-// XEdDSA signature from it, at zero cost to record size (entry stays 40 B; no RAM/flash
-// growth). The high bits remain a real unix-seconds timestamp quantised to
-// (1 << WARM_META_BITS) seconds.
+// the evicted node's device role, a protected category + a signer flag, at zero cost to
+// record size (entry stays 40 B; no RAM/flash growth). The high bits remain a real
+// unix-seconds timestamp quantised to (1 << WARM_META_BITS) seconds.
 //
 // Safe because: a real timestamp can never be all-ones (the tombstone sentinel) before
 // 2106, and tombstones/erased flash are detected via num before last_heard is read. Only
@@ -60,8 +59,7 @@ static constexpr uint32_t WARM_PROT_MASK = 0x03u;
 static constexpr uint32_t WARM_SIGNER_SHIFT = 6; // bit [6] we verified an XEdDSA signature from this node
 static constexpr uint32_t WARM_SIGNER_MASK = 0x01u;
 
-// On-disk record format, resolved from the page/file magic. Older records carry fewer
-// metadata bits, so load() normalises them before the accessors below run.
+// On-disk record format, from the page/file magic; older ones are normalised by load().
 enum class WarmFormat : uint8_t { Current, V2, V1 };
 
 // Protected category cached alongside role so consumers needn't re-derive the mapping.

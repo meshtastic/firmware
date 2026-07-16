@@ -282,9 +282,8 @@ void test_ws_v1_migration_discardsLastHeard()
     b.saveIfDirty();
 }
 
-// Migration: a v2 (WRM2) warm.dat carried role + protected in last_heard, but bit 6 was
-// still part of the timestamp. Loading one must read that bit as "not a signer" rather than
-// inheriting a stale timestamp bit, while role/protected/time carry over. File backend only.
+// A v2 (WRM2) warm.dat used bit 6 as a timestamp bit, so loading one must not read it as a
+// signer, while role/protected/time carry over. File backend only.
 void test_ws_v2_migration_clearsSignerBit()
 {
     WarmNodeStore a;
@@ -329,7 +328,8 @@ void test_ws_v2_migration_clearsSignerBit()
     WarmNodeEntry e;
     TEST_ASSERT_TRUE(b.take(0x910, e));
     TEST_ASSERT_FALSE_MESSAGE(warmSignerOf(e), "a v2 timestamp bit must not read as a signer");
-    // Unlike v1, v2 kept role/protected in the same place, so they survive the migration.
+    // Unlike v1, v2 kept role/protected/time in place, so they survive the migration.
+    TEST_ASSERT_EQUAL(123456u & WARM_TIME_MASK, warmTimeOf(e));
     TEST_ASSERT_EQUAL(5, warmRoleOf(e));
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
 

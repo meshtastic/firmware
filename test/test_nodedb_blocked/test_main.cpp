@@ -132,10 +132,8 @@ static void test_migration_carriesRoleAndProtectedIntoWarm(void)
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
 }
 
-// The XEdDSA signer bit is learned from verified traffic rather than from NodeInfo, so a
-// node that round-trips through the warm tier must come back still marked as a signer -
-// otherwise it would have to be relearned from the next signed packet. The plain node in
-// the same run is the control: re-admission restores the stored bit, it does not invent one.
+// The signer bit is learned from verified traffic, not NodeInfo, so it must survive a warm
+// round trip. The plain node is the control: re-admission restores it, it doesn't invent it.
 static void test_migration_carriesSignerBitThroughWarm(void)
 {
     db->seedSelf();
