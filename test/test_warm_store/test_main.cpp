@@ -116,15 +116,15 @@ void test_ws_keyedCandidate_evictsOldestKeylessFirst()
     // Fill with keyed entries except two keyless ones in the middle
     for (size_t i = 0; i < ws.capacity(); i++) {
         const bool keyless = (i == 5 || i == 10);
-        // Timestamps far enough apart that LRU order survives quantisation to the warm
-        // metadata quantum: keyless i=10 is oldest (50), i=5 next (60), keyed all older (10).
-        TEST_ASSERT_TRUE(ws.absorb(0x1000 + i, (keyless ? (i == 10 ? 50u : 60u) : 10u) << 6, keyless ? NULL : key));
+        // One quantum apart (shift by WARM_META_BITS) so LRU order survives quantisation:
+        // keyless i=10 is oldest (50), i=5 next (60), keyed all older (10).
+        TEST_ASSERT_TRUE(ws.absorb(0x1000 + i, (keyless ? (i == 10 ? 50u : 60u) : 10u) << WARM_META_BITS, keyless ? NULL : key));
     }
     // Keyed candidate must displace the OLDEST KEYLESS entry (0x100A, ts=50),
     // even though every keyed entry is older (ts=10)
     uint8_t k2[32];
     makeKey(k2, 0x43);
-    TEST_ASSERT_TRUE(ws.absorb(0x8888, 70u << 6, k2));
+    TEST_ASSERT_TRUE(ws.absorb(0x8888, 70u << WARM_META_BITS, k2));
     TEST_ASSERT_FALSE(ws.contains(0x1000 + 10));
     TEST_ASSERT_TRUE(ws.contains(0x1000 + 5));
     TEST_ASSERT_TRUE(ws.contains(0x8888));
@@ -306,8 +306,9 @@ void test_ws_v2_migration_clearsSignerBit()
             return;
         }
         buf.resize(f.size());
-        f.read(buf.data(), buf.size());
+        const size_t got = f.read(buf.data(), buf.size());
         f.close();
+        TEST_ASSERT_EQUAL_MESSAGE(buf.size(), got, "short read patching warm.dat");
     }
     TEST_ASSERT_TRUE(buf.size() >= 4);
     const uint32_t v2magic = 0x324D5257u; // "WRM2"
@@ -315,8 +316,9 @@ void test_ws_v2_migration_clearsSignerBit()
     {
         auto f = FSCom.open("/prefs/warm.dat", FILE_O_WRITE);
         TEST_ASSERT_TRUE((bool)f);
-        f.write(buf.data(), buf.size());
+        const size_t wrote = f.write(buf.data(), buf.size());
         f.close();
+        TEST_ASSERT_EQUAL_MESSAGE(buf.size(), wrote, "short write patching warm.dat");
     }
 
     WarmNodeStore b;

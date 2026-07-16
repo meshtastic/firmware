@@ -548,12 +548,12 @@ void WarmNodeStore::load()
     }
     // Older snapshots are still accepted: same record size, fewer metadata bits in
     // last_heard. Both are normalised to the current format below.
-    const WarmFormat fmt = h.magic == WARM_STORE_MAGIC      ? WarmFormat::Current
+    const bool known = h.magic == WARM_STORE_MAGIC || h.magic == WARM_STORE_MAGIC_V2 || h.magic == WARM_STORE_MAGIC_V1;
+    const WarmFormat fmt = h.magic == WARM_STORE_MAGIC_V1   ? WarmFormat::V1
                            : h.magic == WARM_STORE_MAGIC_V2 ? WarmFormat::V2
-                           : h.magic == WARM_STORE_MAGIC_V1 ? WarmFormat::V1
                                                             : WarmFormat::Current;
-    const bool legacy = (h.magic == WARM_STORE_MAGIC_V1 || h.magic == WARM_STORE_MAGIC_V2);
-    if ((h.magic != WARM_STORE_MAGIC && !legacy) || h.entrySize != sizeof(WarmNodeEntry) || h.count > WARM_NODE_COUNT) {
+    const bool legacy = fmt != WarmFormat::Current;
+    if (!known || h.entrySize != sizeof(WarmNodeEntry) || h.count > WARM_NODE_COUNT) {
         f.close();
         LOG_WARN("WarmStore: %s header invalid (magic=0x%08x entrySize=%u count=%u), starting empty", warmFileName, h.magic,
                  h.entrySize, h.count);

@@ -85,7 +85,7 @@ inline uint8_t warmProtOf(const WarmNodeEntry &e)
 }
 inline bool warmSignerOf(const WarmNodeEntry &e)
 {
-    return (e.last_heard >> WARM_SIGNER_SHIFT) & WARM_SIGNER_MASK;
+    return ((e.last_heard >> WARM_SIGNER_SHIFT) & WARM_SIGNER_MASK) != 0;
 }
 
 // Gated on NRF52840_XXAA: the ring sits at 0xEA000
