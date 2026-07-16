@@ -41,7 +41,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool hasOpenEditTransaction = false;
 
     uint8_t session_passkey[8] = {0};
-    uint session_time = 0;
+    uint32_t session_time = 0;
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
 

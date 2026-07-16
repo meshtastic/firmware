@@ -22,6 +22,12 @@ extern Adafruit_nRFCrypto nRFCrypto;
 #include <unistd.h>
 #ifdef __linux__
 #include <sys/random.h> // getrandom()
+#elif defined(_WIN32)
+// Order is load-bearing, hence the blank line: bcrypt.h uses LONG/ULONG from
+// windows.h and does not include it itself.
+#include <windows.h>
+
+#include <bcrypt.h> // BCryptGenRandom()
 #else
 #include <stdlib.h> // arc4random_buf() on Darwin/BSD
 #endif
@@ -126,6 +132,15 @@ bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
 #ifdef __linux__
     ssize_t generated = ::getrandom(buffer, length, 0);
     if (generated == static_cast<ssize_t>(length)) {
+        filled = true;
+    }
+#elif defined(_WIN32)
+    // No getrandom/arc4random on Windows. BCryptGenRandom with the
+    // system-preferred RNG is the documented CSPRNG, preferred over the
+    // std::random_device fallback below because libstdc++'s Windows backend
+    // reports entropy() == 0, promising no cryptographic source, and this
+    // buffer seeds key material.
+    if (BCryptGenRandom(NULL, buffer, static_cast<ULONG>(length), BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0) { // STATUS_SUCCESS
         filled = true;
     }
 #elif defined(__EMSCRIPTEN__)
