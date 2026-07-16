@@ -694,6 +694,35 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
     }
 };
 
+// Reset per-session PhoneAPI and transport state. Runs from onDisconnect, and again from
+// setupService() on BLE re-enable because deinit()'s bounded disconnect wait can expire
+// before the disconnect event delivers this cleanup (leaving stale queues/state behind).
+static void resetBleSessionState()
+{
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->close();
+
+        { // scope for fromPhoneMutex mutex
+            std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->fromPhoneMutex);
+            bluetoothPhoneAPI->fromPhoneQueueSize = 0;
+        }
+
+        bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false;
+        { // scope for toPhoneMutex mutex
+            std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);
+            bluetoothPhoneAPI->toPhoneQueueSize = 0;
+        }
+
+        bluetoothPhoneAPI->readCount = 0;
+        bluetoothPhoneAPI->notifyCount = 0;
+        bluetoothPhoneAPI->writeCount = 0;
+    }
+
+    memset(lastToRadio, 0, sizeof(lastToRadio));
+
+    nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE;
+}
+
 class NimbleBluetoothServerCallback : public BLEServerCallbacks
 {
   public:
@@ -736,28 +765,7 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
         bluetoothStatus->updateStatus(&newStatus);
         clearPairingDisplay();
 
-        if (bluetoothPhoneAPI) {
-            bluetoothPhoneAPI->close();
-
-            { // scope for fromPhoneMutex mutex
-                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->fromPhoneMutex);
-                bluetoothPhoneAPI->fromPhoneQueueSize = 0;
-            }
-
-            bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false;
-            { // scope for toPhoneMutex mutex
-                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);
-                bluetoothPhoneAPI->toPhoneQueueSize = 0;
-            }
-
-            bluetoothPhoneAPI->readCount = 0;
-            bluetoothPhoneAPI->notifyCount = 0;
-            bluetoothPhoneAPI->writeCount = 0;
-        }
-
-        memset(lastToRadio, 0, sizeof(lastToRadio));
-
-        nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE;
+        resetBleSessionState();
 
         // Defer the advertising restart to runOnce (see pendingStartAdvertising): calling
         // startAdvertising() here would crash if this disconnect was a host reset.
@@ -768,9 +776,6 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
         concurrency::mainDelay.interrupt(); // wake the main loop to service the restart
     }
 };
-
-static NimbleBluetoothToRadioCallback *toRadioCallbacks;
-static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 
 void NimbleBluetooth::startAdvertising()
 {
@@ -858,7 +863,7 @@ int NimbleBluetooth::getRssi()
 {
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     uint16_t conn_handle = nimbleBluetoothConnHandle.load();
-    if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+    if (conn_handle == BLE_HS_CONN_HANDLE_NONE) {
         return 0; // No active BLE connection
     }
 
@@ -903,8 +908,7 @@ void NimbleBluetooth::setup()
         LOG_WARN("Unable to request MTU %u, rc=%d", kPreferredBleMtu, mtuResult);
     }
 
-    // BLESecurity only forwards to NimBLEDevice static setters, so a stack instance
-    // suffices (the old heap instance leaked once per BLE enable cycle).
+    // BLESecurity only forwards to static NimBLEDevice setters; a stack instance suffices.
     BLESecurity security;
     security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
@@ -930,13 +934,10 @@ void NimbleBluetooth::setup()
         // No PIN mode: no MITM protection
         security.setAuthenticationMode(true, false, false);
     }
-    // Set the security callbacks. setup() re-runs when BLE is re-enabled after an
-    // admin-triggered deinit(), and BLEDevice::deinit() does not free caller-owned
-    // callback objects — reuse them instead of leaking one per cycle.
-    static NimbleBluetoothSecurityCallback *securityCallbacks;
-    if (!securityCallbacks)
-        securityCallbacks = new NimbleBluetoothSecurityCallback();
-    BLEDevice::setSecurityCallbacks(securityCallbacks);
+    // Statics: setup() re-runs on BLE re-enable, and the library never frees these
+    // caller-owned callback objects, so register the same instances every cycle.
+    static NimbleBluetoothSecurityCallback securityCallbacks;
+    BLEDevice::setSecurityCallbacks(&securityCallbacks);
     bleServer = BLEDevice::createServer();
 
     // BLEDevice::createServer calls ble_svc_gap_init, which resets the device
@@ -946,10 +947,8 @@ void NimbleBluetooth::setup()
         LOG_ERROR("ble_svc_gap_device_name_set: rc=%d %s", nameRc, BLEUtils::returnCodeToString(nameRc));
     }
 
-    static NimbleBluetoothServerCallback *serverCallbacks;
-    if (!serverCallbacks)
-        serverCallbacks = new NimbleBluetoothServerCallback(this);
-    bleServer->setCallbacks(serverCallbacks);
+    static NimbleBluetoothServerCallback serverCallbacks(this); // safe: NimbleBluetooth is a never-deleted singleton
+    bleServer->setCallbacks(&serverCallbacks);
     setupService();
     startAdvertising();
 }
@@ -982,20 +981,20 @@ void NimbleBluetooth::setupService()
             LOGRADIO_UUID, BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ |
                                BLECharacteristic::PROPERTY_READ_AUTHEN | BLECharacteristic::PROPERTY_READ_ENC);
     }
-    // setupService() re-runs when BLE is re-enabled after deinit(). BLEDevice::deinit()
-    // frees the GATT objects but not these caller-owned ones — reuse them instead of
-    // leaking ~3.5KB (and a still-scheduled duplicate BluetoothPhoneAPI OSThread) per cycle.
-    // The setCallbacks() calls must still run every time: the characteristics are new.
+    // setupService() re-runs on BLE re-enable; a fresh BluetoothPhoneAPI here would leak
+    // the old one as a still-scheduled zombie OSThread, so reuse it and reset its state
+    // (a skipped onDisconnect during deinit() can leave the previous session's behind).
     if (!bluetoothPhoneAPI)
         bluetoothPhoneAPI = new BluetoothPhoneAPI();
+    else
+        resetBleSessionState();
 
-    if (!toRadioCallbacks)
-        toRadioCallbacks = new NimbleBluetoothToRadioCallback();
-    ToRadioCharacteristic->setCallbacks(toRadioCallbacks);
+    // The characteristics are new each cycle, so setCallbacks() must re-run every time.
+    static NimbleBluetoothToRadioCallback toRadioCallbacks;
+    ToRadioCharacteristic->setCallbacks(&toRadioCallbacks);
 
-    if (!fromRadioCallbacks)
-        fromRadioCallbacks = new NimbleBluetoothFromRadioCallback();
-    FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
+    static NimbleBluetoothFromRadioCallback fromRadioCallbacks;
+    FromRadioCharacteristic->setCallbacks(&fromRadioCallbacks);
 
     bleService->start();
 
