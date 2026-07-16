@@ -126,6 +126,7 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
 uint32_t menuHandler::pickedNodeNum = 0;
+meshtastic_Config_LoRaConfig_RegionCode menuHandler::pendingRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
@@ -174,6 +175,53 @@ void menuHandler::OnboardMessage()
     screen->showOverlayBanner(bannerOptions);
 }
 
+static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
+{
+    config.lora.region = region;
+    config.lora.channel_num = 0; // Reset to default channel
+
+    // Reconcile the preset with the explicitly chosen region: a preset locked to another
+    // region would leave config.lora invalid until applyModemConfig() repairs it with
+    // error/critical-error side effects - or, for the swappable EU trio, the clamp would
+    // flip the region right back. The user picked the region, so the preset follows it.
+    const RegionInfo *newRegion = getRegion(region);
+    if (config.lora.use_preset && !newRegion->supportsPreset(config.lora.modem_preset)) {
+        LOG_INFO("Preset %s not available in %s, using default %s",
+                 DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), newRegion->name,
+                 DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
+        config.lora.modem_preset = newRegion->getDefaultPreset();
+    }
+
+    if (isHam && adminModule) {
+        meshtastic_HamParameters hamParams = meshtastic_HamParameters_init_zero;
+        strncpy(hamParams.call_sign, "N0CALL", sizeof(hamParams.call_sign) - 1);
+        strncpy(hamParams.short_name, "N0CL", sizeof(hamParams.short_name));
+        hamParams.tx_power = config.lora.tx_power;
+        hamParams.frequency = config.lora.override_frequency;
+        adminModule->handleSetHamMode(hamParams);
+    }
+    auto changes = SEGMENT_CONFIG;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (crypto) {
+        crypto->ensurePkiKeys(config.security, owner);
+    }
+#endif
+    initRegion();
+    if (getEffectiveDutyCycle() < 100) {
+        config.lora.ignore_mqtt = true;
+    }
+    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
+        changes |= SEGMENT_MODULECONFIG;
+    }
+#if !MESHTASTIC_EXCLUDE_GPS
+    // Enable gps if it was previously disabled due to region not being set
+    if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+        gps->enable();
+#endif
+    service->reloadConfig(changes);
+}
+
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
     static const LoraRegionOption regionOptions[] = {
@@ -194,7 +242,6 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"TH", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_TH},
         {"LORA_24", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_LORA_24},
         {"UA_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_UA_433},
-        {"UA_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_UA_868},
         {"MY_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_MY_433},
         {"MY_919", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_MY_919},
         {"SG_923", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_SG_923},
@@ -210,6 +257,9 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"ITU2_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M},
         {"ITU3_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M},
         {"ITU2_125CM (220-225)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM},
+        {"ITU1_70CM (430-440)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU1_70CM},
+        {"ITU2_70CM (420-450)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM},
+        {"ITU3_70CM (430-450)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM},
 
     };
 
@@ -232,37 +282,34 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
-            // Guard: without a reboot, reconfigure() applies the region directly.
-            // Reject LORA_24 on sub-GHz-only hardware — getRadio() used to catch this post-reboot.
-            // TODO: change this to either use the validateLoraConfig() logic or at least check the region for wideLora
-            // rather than a hardcoded check for LORA_24.
-            if (selectedRegion == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
-                !(RadioLibInterface::instance && RadioLibInterface::instance->wideLora())) {
-                LOG_WARN("Radio hardware does not support 2.4 GHz; ignoring region selection");
+            // Guard: without a reboot, reconfigure() applies the region directly, so reject
+            // regions this node can't use up front: unrecognized codes, licensed-only regions,
+            // and radio hardware mismatches (2.4 GHz vs sub-GHz) - the same checks the admin
+            // set-config path applies, but side-effect-free: ignoring a menu selection should
+            // not record a critical error or notify clients. getRadio() used to catch hardware
+            // mismatches post-reboot only.
+            auto candidateLora = config.lora;
+            candidateLora.region = selectedRegion;
+            char regionErr[160];
+            if (!RadioInterface::checkConfigRegion(candidateLora, regionErr, sizeof(regionErr))) {
+                LOG_WARN("Ignoring region selection: %s", regionErr);
                 return;
             }
 
-            config.lora.region = selectedRegion;
-            auto changes = SEGMENT_CONFIG;
-
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-            if (crypto) {
-                crypto->ensurePkiKeys(config.security, owner);
+            bool hamMode = getRegion(selectedRegion)->profile->licensedOnly;
+            if (hamMode) {
+                LOG_INFO("User chose an amateur radio mode region");
+                pendingRegion = selectedRegion;
+                menuQueue = HamModeConfirm;
+                screen->runNow();
+            } else if (owner.is_licensed) {
+                LOG_INFO("Licensed user chose a non-ham region; prompting to revert licensed mode");
+                pendingRegion = selectedRegion;
+                menuQueue = LicensedToNormalConfirm;
+                screen->runNow();
+            } else {
+                applyLoraRegion(selectedRegion, false);
             }
-#endif
-            config.lora.tx_enabled = true;
-            initRegion();
-            if (getEffectiveDutyCycle() < 100) {
-                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-            }
-
-            if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                //  Default broker is in use, so subscribe to the appropriate MQTT root topic for this region
-                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-                changes |= SEGMENT_MODULECONFIG;
-            }
-
-            service->reloadConfig(changes);
         });
 
     bannerOptions.durationMs = duration;
@@ -277,6 +324,38 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
     bannerOptions.InitialSelected = initialSelection;
 
     screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::hamModeConfirmMenu()
+{
+    static const char *confirmOptions[] = {"No", "Yes"};
+    BannerOverlayOptions confirmBanner;
+    confirmBanner.message = "I confirm I am a\nlicensed amateur\nradio operator";
+    confirmBanner.optionsArrayPtr = confirmOptions;
+    confirmBanner.optionsCount = 2;
+    confirmBanner.bannerCallback = [](int selected) {
+        if (selected == 1)
+            applyLoraRegion(pendingRegion, true);
+    };
+    screen->showOverlayBanner(confirmBanner);
+}
+
+void menuHandler::licensedToNormalConfirmMenu()
+{
+    static const char *confirmOptions[] = {"Keep licensed", "Revert to Normal"};
+    BannerOverlayOptions confirmBanner;
+    confirmBanner.message = "Revert licensed\nmode? This will\nre-enable encryption.";
+    confirmBanner.optionsArrayPtr = confirmOptions;
+    confirmBanner.optionsCount = 2;
+    confirmBanner.bannerCallback = [](int selected) {
+        if (selected == 1) {
+            owner.is_licensed = false;
+            config.lora.override_duty_cycle = false;
+            service->reloadOwner(false);
+        }
+        applyLoraRegion(pendingRegion, false);
+    };
+    screen->showOverlayBanner(confirmBanner);
 }
 
 void menuHandler::deviceRolePicker()
@@ -391,7 +470,7 @@ static constexpr int MAX_PRESET_OPTIONS = 16;
 
 static BannerOverlayOptions buildRegionPresetBanner()
 {
-    // Static storage reused each call — safe because the banner is shown immediately after.
+    // Static storage reused each call - safe because the banner is shown immediately after.
     static const char *optionsArray[MAX_PRESET_OPTIONS];
     static int optionsEnumArray[MAX_PRESET_OPTIONS];
     static char presetLabelBuf[MAX_PRESET_OPTIONS][12]; // scratch space for name copies
@@ -1500,6 +1579,7 @@ void menuHandler::manageNodeMenu()
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
                 LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
+                // set_favorite() already logs PROTECTED_CAP_WARN_FMT on a cap refusal; don't double-log here.
                 nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
             }
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -1543,15 +1623,23 @@ void menuHandler::manageNodeMenu()
                 return;
             }
 
+            bool changed = false;
             if (nodeInfoLiteIsIgnored(n)) {
                 nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
                 LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
-            } else {
-                nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+                changed = true;
+            } else if (nodeDB->setProtectedFlag(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
+                changed = true;
+            } else {
+                LOG_WARN(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", menuHandler::pickedNodeNum, MAX_NUM_NODES - 2);
             }
-            nodeDB->notifyObservers(true);
-            nodeDB->saveToDisk();
+            // Only persist/notify when the ignore bit actually moved; a cap
+            // refusal changed nothing and shouldn't trigger a prefs save.
+            if (changed) {
+                nodeDB->notifyObservers(true);
+                nodeDB->saveToDisk();
+            }
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
@@ -1607,16 +1695,17 @@ void menuHandler::resetNodeDBMenu()
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1 || selected == 2) {
-            disableBluetooth();
             screen->setFrames(Screen::FOCUS_DEFAULT);
         }
         if (selected == 1) {
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
+            disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 2) {
             LOG_INFO("Initiate node-db reset but keeping favorites");
             nodeDB->resetNodes(1);
+            disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 0) {
             menuQueue = NodeBaseMenu;
@@ -2233,8 +2322,10 @@ void menuHandler::testMenu()
 
 void menuHandler::numberTest()
 {
-    screen->showNumberPicker("Pick a number\n ", 30000, 4,
-                             [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
+    screen->showNumberPicker("Verify Nodenum:\n ", 30000, 8, true, [](uint32_t number_picked) -> void {
+        LOG_DEBUG("Nodenum: 0x%08x", number_picked);
+        keyVerificationModule->sendInitialRequest(number_picked);
+    });
 }
 
 void menuHandler::wifiBaseMenu()
@@ -2418,8 +2509,7 @@ void menuHandler::keyVerificationFinalPrompt()
         options.notificationType = graphics::notificationTypeEnum::selection_picker;
         options.bannerCallback = [=](int selected) {
             if (selected == 1) {
-                auto remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
-                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                keyVerificationModule->commitVerifiedRemoteNode();
             }
         };
         screen->showOverlayBanner(options);
@@ -2821,6 +2911,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case ThemeMenu:
         themeMenu();
+        break;
+    case HamModeConfirm:
+        hamModeConfirmMenu();
+        break;
+    case LicensedToNormalConfirm:
+        licensedToNormalConfirmMenu();
         break;
     }
     menuQueue = MenuNone;

@@ -13,7 +13,8 @@
  * This file is part of the Meshtastic project.
  * For more information, see: https://meshtastic.org/
  */
-#include "power.h"
+#include "Power.h"
+#include "BluetoothCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -23,6 +24,7 @@
 #include "main.h"
 #include "meshUtils.h"
 #include "power/PowerHAL.h"
+#include "power/SGM41562.h"
 #include "sleep.h"
 #ifdef ARCH_ESP32
 // #include <driver/adc.h>
@@ -35,6 +37,7 @@
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
+#include "input/LinuxJoystick.h"
 #endif
 
 // Working USB detection for powered/charging states on the RAK platform
@@ -47,7 +50,7 @@
 #include "concurrency/LockGuard.h"
 #endif
 
-#if defined(ARCH_STM32WL) && defined(BATTERY_PIN)
+#if defined(ARCH_STM32) && defined(BATTERY_PIN)
 #include "stm32yyxx_ll_adc.h"
 
 /* Analog read resolution */
@@ -430,7 +433,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             float scaled = 0;
 
             battery_adcEnable();
-#ifdef ARCH_STM32WL
+#ifdef ARCH_STM32
             // STM32 ADC with VREFINT runtime calibration
             Vref = __LL_ADC_CALC_VREFANALOG_VOLTAGE(analogRead(AVREF), LL_ADC_RESOLUTION);
             raw = analogRead(BATTERY_PIN);
@@ -544,8 +547,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // lastly provide a fallback to indicate external power when fully charged.
     virtual bool isVbusIn() override
     {
+#ifdef HAS_SGM41562
+        if (sgm41562 && sgm41562->refresh())
+            return sgm41562->isInputPowerGood();
+#endif
 #ifdef EXT_PWR_DETECT
-        return digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE;
+        if (digitalRead(EXT_PWR_DETECT) == EXT_PWR_DETECT_VALUE)
+            return true;
+#ifdef EXT_CHRG_DETECT
+        // EXT_PWR_DETECT alone may not catch active charging (e.g. a charge-complete
+        // pin that only asserts once the battery is full) - CHRG being active implies
+        // power is present regardless.
+        return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
+#else
+        return false;
+#endif
 
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
@@ -560,6 +576,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// we can't be smart enough to say 'full'?
     virtual bool isCharging() override
     {
+#ifdef HAS_SGM41562
+        if (sgm41562 && sgm41562->refresh())
+            return sgm41562->isCharging();
+#endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT) && !defined(HAS_PMU)
         if (hasRAK()) {
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
@@ -567,7 +587,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 #if defined(ELECROW_ThinkNode_M6)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE || isVbusIn();
-#elif EXT_CHRG_DETECT
+#elif defined(EXT_CHRG_DETECT)
         return digitalRead(EXT_CHRG_DETECT) == EXT_CHRG_DETECT_VALUE;
 #elif defined(BATTERY_CHARGING_INV)
         return !digitalRead(BATTERY_CHARGING_INV);
@@ -607,7 +627,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
-#ifdef ARCH_STM32WL
+#ifdef ARCH_STM32
     // 3300mV placeholder for STM32 errata where VREFINT factory calibration may be missing
     // (e.g. STM32U0, see DS14756 Rev 3 §2.4.1 "VREFINT offset")
     uint32_t Vref = 3300;
@@ -717,7 +737,7 @@ bool Power::analogInit()
 #define BATTERY_SENSE_RESOLUTION_BITS 10
 #endif
 
-#ifdef ARCH_STM32WL
+#ifdef ARCH_STM32
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 #elif defined(ARCH_ESP32) // ESP32 needs special analog stuff
     adc_oneshot_unit_init_cfg_t init_config = {
@@ -748,7 +768,7 @@ bool Power::analogInit()
 
     // NRF52 ADC init moved to powerHAL_init in nrf52 platform
 
-#if !defined(ARCH_ESP32) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_ESP32) && !defined(ARCH_STM32)
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 #endif
 
@@ -766,6 +786,12 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
+#ifdef HAS_SGM41562
+    // Initialize the charger early so AnalogBatteryLevel can read charging
+    // state from it. The charger does not provide battery voltage / percent -
+    // those still come from the platform ADC via analogInit() below.
+    initSGM41562(SGM41562_WIRE);
+#endif
     bool found = false;
     if (axpChipInit()) {
         found = true;
@@ -822,11 +848,21 @@ void Power::reboot()
     NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
     rp2040.reboot();
+#elif defined(ARCH_PORTDUINO_WASM)
+    // Browser/headless WASM node: no in-process restart. notifyReboot above
+    // already let modules persist; hand off to the host (reboot() ->
+    // location.reload() in a tab, or Module.onReboot() headless). Deliberately
+    // skip the ARCH_PORTDUINO SPI/Wire/Serial teardown below - it would kill the
+    // radio with no actual restart to follow, leaving a wedged node. Must come
+    // before the ARCH_PORTDUINO arm: the wasm build defines both macros.
+    ::reboot();
 #elif defined(ARCH_PORTDUINO)
     deInitApiServer();
 #ifdef __linux__
     if (aLinuxInputImpl)
         aLinuxInputImpl->deInit();
+    if (aLinuxJoystick)
+        aLinuxJoystick->deInit();
 #endif
     SPI.end();
     Wire.end();
@@ -837,7 +873,7 @@ void Power::reboot()
     }
     LOG_DEBUG("final reboot!");
     ::reboot();
-#elif defined(ARCH_STM32WL)
+#elif defined(ARCH_STM32)
     HAL_NVIC_SystemReset();
 #else
     rebootAtMsec = -1;
@@ -962,6 +998,10 @@ void Power::readPowerStatus()
         lastLogTime = millis();
     }
     newStatus.notifyObservers(&powerStatus2);
+
+    // Mirror battery level to the BLE Battery Service (0x2A19); the platform layer clamps and dedupes.
+    if (hasBattery == OptTrue)
+        updateBatteryLevel(powerStatus2.getBatteryChargePercent());
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
         // Use stack-allocated buffer to avoid heap allocations in monitoring code

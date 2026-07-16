@@ -8,7 +8,7 @@
 # Namespace rewrite:
 # The .proto files declare `package meshtastic;`, which makes protoc emit
 # imports like `from meshtastic import mesh_pb2`. That conflicts with the
-# PyPI `meshtastic` package (which the mcp-server relies on for its
+# PyPI `meshtastic` package (which the meshtastic-mcp tooling relies on for its
 # SerialInterface/BLEInterface transport). We post-process the generated
 # files to live under `meshtastic_v25` instead — both the directory layout
 # and all internal imports — so they coexist cleanly with the PyPI package.
