@@ -69,7 +69,7 @@ message LoRaRegionPresetMap {
 ### 2.3 Why grouped (and the size envelope clients should respect)
 
 A `FromRadio` packet is capped at **512 bytes** (`MAX_TO_FROM_RADIO_SIZE`). Most regions
-share one identical preset list (the "standard" 9-preset list), so the map is delivered
+share one identical preset list (the "standard" 10-preset list), so the map is delivered
 **grouped**: `groups` holds each _distinct_ preset list once, and `region_groups` maps every
 known region to one of those groups by index. This keeps the encoded size additive
 (`groups` + `region_groups`) rather than multiplicative, well under the cap.
@@ -246,25 +246,25 @@ For decoder unit tests. With the 2.8 region table, the firmware emits **6 groups
 indices are assigned in region-table order (first region to use a profile creates its group),
 so they are stable as listed here:
 
-| group_index             | default_preset | licensed_only | presets                                                                                                        |
-| ----------------------- | -------------- | ------------- | -------------------------------------------------------------------------------------------------------------- |
-| 0 (standard)            | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, SHORT_TURBO, LONG_TURBO |
-| 1 (EU 868)              | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE                          |
-| 2 (EU 866 SRD / "lite") | `LITE_FAST`    | false         | LITE_FAST, LITE_SLOW                                                                                           |
-| 3 (EU 868 narrow)       | `NARROW_SLOW`  | false         | NARROW_FAST, NARROW_SLOW                                                                                       |
-| 4 (ham 20 kHz)          | `TINY_FAST`    | **true**      | TINY_FAST, TINY_SLOW                                                                                           |
-| 5 (ham 100 kHz)         | `NARROW_SLOW`  | **true**      | NARROW_FAST, NARROW_SLOW                                                                                       |
+| group_index             | default_preset | licensed_only | presets                                                                                                                      |
+| ----------------------- | -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 0 (standard)            | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, SHORT_TURBO, LONG_TURBO, MEDIUM_TURBO |
+| 1 (EU 868)              | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE                                        |
+| 2 (EU 866 SRD / "lite") | `LITE_FAST`    | false         | LITE_FAST, LITE_SLOW                                                                                                         |
+| 3 (EU 868 narrow)       | `NARROW_SLOW`  | false         | NARROW_FAST, NARROW_SLOW                                                                                                     |
+| 4 (ham 20 kHz)          | `TINY_FAST`    | **true**      | TINY_FAST, TINY_SLOW                                                                                                         |
+| 5 (ham 100 kHz)         | `NARROW_SLOW`  | **true**      | NARROW_FAST, NARROW_SLOW                                                                                                     |
 
 `region_groups` (region → group_index):
 
-| group | regions                                                                                                                                                               |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | US, EU_433, CN, JP, ANZ, ANZ_433, RU, KR, TW, IN, NZ_865, TH, UA_433, UA_868, MY_433, MY_919, SG_923, PH_433, PH_868, PH_915, KZ_433, KZ_863, NP_865, BR_902, LORA_24 |
-| 1     | EU_868                                                                                                                                                                |
-| 2     | EU_866                                                                                                                                                                |
-| 3     | EU_N_868                                                                                                                                                              |
-| 4     | ITU1_2M, ITU2_2M, ITU3_2M                                                                                                                                             |
-| 5     | ITU2_125CM                                                                                                                                                            |
+| group | regions                                                                                                                                                       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | US, EU_433, CN, JP, ANZ, ANZ_433, RU, KR, TW, IN, NZ_865, TH, UA_433, MY_433, MY_919, SG_923, PH_433, PH_868, PH_915, KZ_433, KZ_863, NP_865, BR_902, LORA_24 |
+| 1     | EU_868                                                                                                                                                        |
+| 2     | EU_866                                                                                                                                                        |
+| 3     | EU_N_868                                                                                                                                                      |
+| 4     | ITU1_2M, ITU2_2M, ITU3_2M                                                                                                                                     |
+| 5     | ITU2_125CM                                                                                                                                                    |
 
 > Note groups **3** and **5** carry the same preset list (NARROW\_\*) but are distinct groups
 > because they differ in `licensed_only`. Decoders must key on the group, not on the preset
