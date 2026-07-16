@@ -20,6 +20,10 @@
 #define JOY_AXIS_LOW 64      // below this -> "min" edge (0)
 #define JOY_AXIS_HIGH 192    // above this -> "max" edge (255)
 
+// D-pad auto-repeat while a direction is held (typematic).
+#define JOY_REPEAT_DELAY_MS 400    // hold this long before repeats start
+#define JOY_REPEAT_INTERVAL_MS 150 // then repeat this often
+
 class LinuxJoystick : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
@@ -27,10 +31,18 @@ class LinuxJoystick : public Observable<const InputEvent *>, public concurrency:
     void init();   // Registers this source with the InputBroker
     void deInit(); // Strictly for cleanly "rebooting" the binary on native
 
+    // Current held D-pad zone, updated the instant the axis moves (independent of the typematic
+    // auto-repeat). -1 = left/up edge, 0 = centered, +1 = right/down edge. Lets a game poll for
+    // smooth continuous control instead of waiting for the slow repeat events.
+    int heldXZone() const { return heldX; }
+    int heldYZone() const { return heldY; }
+
   protected:
     virtual int32_t runOnce() override;
 
   private:
+    void emitEvent(input_broker_event event);
+
     const char *_originName;
     bool firstTime = true;
 
@@ -42,10 +54,12 @@ class LinuxJoystick : public Observable<const InputEvent *>, public concurrency:
     int fd = -1;
     int epollfd = -1;
 
-    // Latch the last emitted axis position so a held direction fires exactly
-    // once (on the transition away from center), not a continuous stream.
-    int lastX = JOY_AXIS_CENTER;
-    int lastY = JOY_AXIS_CENTER;
+    // D-pad auto-repeat state: currently held zone per axis (-1 / 0 / +1) and the
+    // next millis() timestamp at which to re-emit while the direction is held.
+    int heldX = 0;
+    int heldY = 0;
+    uint32_t nextRepeatX = 0;
+    uint32_t nextRepeatY = 0;
 };
 extern LinuxJoystick *aLinuxJoystick;
 #endif
