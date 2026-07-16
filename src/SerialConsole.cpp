@@ -70,15 +70,8 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.setRX(SERIAL2_RX);
 #endif
     Port.begin(SERIAL_BAUD);
-<<<<<<< HEAD
-#if defined(IS_USB_SERIAL) && defined(T5_S3_EPAPER_PRO)
-    // Native USB disconnects during reset; do not block boot while the host re-enumerates the CDC port.
-    Port.setTxTimeoutMs(0);
-#endif
-=======
     // Boot with console TX in non-blocking mode: no host is provably listening yet.
     setHostDraining(false);
->>>>>>> 43084873a693f038c3dced11061b77ede10e1e35
     time_t timeout = millis();
     while (!Port) {
         if (Throttle::isWithinTimespanMs(timeout, FIVE_SECONDS_MS)) {
