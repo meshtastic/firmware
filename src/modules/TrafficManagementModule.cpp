@@ -45,10 +45,10 @@ constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot in
 // heard from within this window. Without it, a cached (or forged) entry is served
 // indefinitely for a long-gone node while the genuine request is suppressed - the
 // requestor sees a fresh-looking answer for a node that may no longer exist.
-// TODO(T8): these two constants encode the same 6 h window independently and can desync;
-// derive one from the other (e.g. kNodeInfoMaxServeAgeSecs = kNodeInfoMaxServeAgeMs / 1000UL).
-constexpr uint32_t kNodeInfoMaxServeAgeMs = 6UL * 60UL * 60UL * 1000UL; // 6 h (PSRAM cache path)
-constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL;        // 6 h (NodeDB fallback path)
+// One source of truth for the 6 h window; the seconds form (NodeDB fallback path) is
+// derived from the millis form (PSRAM cache path) so the two paths cannot desync.
+constexpr uint32_t kNodeInfoMaxServeAgeMs = 6UL * 60UL * 60UL * 1000UL;        // 6 h (PSRAM cache path)
+constexpr uint32_t kNodeInfoMaxServeAgeSecs = kNodeInfoMaxServeAgeMs / 1000UL; // 6 h (NodeDB fallback path)
 
 // Throttle: emit at most one spoofed direct reply per target node per this interval.
 // Direct responses are otherwise un-throttled (they STOP the request before the
@@ -486,6 +486,17 @@ uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 #endif
 }
 
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && !(MESHTASTIC_EXCLUDE_PKI)
+// True iff both are full 32-byte public keys with identical bytes. Single point of
+// truth for the NodeInfo-cache key-hygiene checks (owner impersonation + key pinning),
+// so the compare (and any future hardening, e.g. constant-time) lives in one place.
+// Takes raw ptr+size because the User and NodeInfoLite key fields are distinct types.
+static bool pubKeysEqual(const uint8_t *a, size_t aSize, const uint8_t *b, size_t bSize)
+{
+    return aSize == 32 && bSize == 32 && memcmp(a, b, 32) == 0;
+}
+#endif
+
 void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &mp)
 {
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
@@ -506,25 +517,19 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
     // the direct-response cache. This cache is served back to requestors as a spoofed
     // reply on the target's behalf, so poisoning it is materially worse than a plain
     // NodeDB overwrite - apply the same protections NodeDB applies to itself.
-    // TODO(T6): the owner-match and the two pin blocks below repeat the same 32-byte
-    // key compare; extract a local helper (e.g. keyMismatch(a, b)) to document intent
-    // once and avoid drift if the compare ever changes (e.g. constant-time).
-    if (user.public_key.size == 32) {
-        // Someone advertising our own public key is impersonating this node - never cache it.
-        if (owner.public_key.size == 32 && memcmp(user.public_key.bytes, owner.public_key.bytes, 32) == 0) {
-            TM_LOG_WARN("NodeInfo cache: incoming key matches owner, dropping 0x%08x", from);
-            return;
-        }
+    // Someone advertising our own public key is impersonating this node - never cache it.
+    if (pubKeysEqual(user.public_key.bytes, user.public_key.size, owner.public_key.bytes, owner.public_key.size)) {
+        TM_LOG_WARN("NodeInfo cache: incoming key matches owner, dropping 0x%08x", from);
+        return;
     }
     // Key pinning against the authoritative NodeDB key: once a 32-byte key is known for a
     // node, refuse to cache a NodeInfo carrying a different (or missing) key. This is the
     // same rule as NodeDB::updateUser() ("Public Key mismatch, dropping NodeInfo").
     const meshtastic_NodeInfoLite *dbNode = nodeDB ? nodeDB->getMeshNode(from) : nullptr;
-    if (dbNode && dbNode->public_key.size == 32) {
-        if (user.public_key.size != 32 || memcmp(user.public_key.bytes, dbNode->public_key.bytes, 32) != 0) {
-            TM_LOG_WARN("NodeInfo cache: public key mismatch vs NodeDB, dropping 0x%08x", from);
-            return;
-        }
+    if (dbNode && dbNode->public_key.size == 32 &&
+        !pubKeysEqual(user.public_key.bytes, user.public_key.size, dbNode->public_key.bytes, dbNode->public_key.size)) {
+        TM_LOG_WARN("NodeInfo cache: public key mismatch vs NodeDB, dropping 0x%08x", from);
+        return;
     }
 #endif
 
@@ -540,11 +545,11 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         // Trust-on-first-use pinning within our own cache: if NodeDB has since evicted the
         // node but we already cached a key for it, still refuse a mismatching key. (A matched
         // existing slot is returned un-zeroed, so entry->user holds the previously cached key.)
-        if (!usedEmptySlot && entry->node == from && entry->user.public_key.size == 32) {
-            if (user.public_key.size != 32 || memcmp(user.public_key.bytes, entry->user.public_key.bytes, 32) != 0) {
-                TM_LOG_WARN("NodeInfo cache: public key mismatch vs cache, dropping 0x%08x", from);
-                return;
-            }
+        if (!usedEmptySlot && entry->node == from && entry->user.public_key.size == 32 &&
+            !pubKeysEqual(user.public_key.bytes, user.public_key.size, entry->user.public_key.bytes,
+                          entry->user.public_key.size)) {
+            TM_LOG_WARN("NodeInfo cache: public key mismatch vs cache, dropping 0x%08x", from);
+            return;
         }
 #endif
 
@@ -1149,13 +1154,12 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         // Staleness gate (fallback path): don't spoof a reply for a node NodeDB last
         // heard more than kNodeInfoMaxServeAgeSecs ago. last_heard == 0 means recency is
         // unknown (e.g. clock not yet set) - we can't prove it's stale, so we still answer,
-        // matching sinceLastSeen()'s own "clock not set" tolerance.
-        // TODO(T7): sinceLastSeen(node) is called twice here (condition + log); it calls
-        // getTime() each time, so the logged age can differ from the tested one. Cache it
-        // in a local (const uint32_t age = sinceLastSeen(node);).
-        if (node->last_heard != 0 && sinceLastSeen(node) > kNodeInfoMaxServeAgeSecs) {
+        // matching sinceLastSeen()'s own "clock not set" tolerance. Compute the age once so
+        // the tested value and the logged value can't diverge (sinceLastSeen calls getTime()).
+        const uint32_t nodeAgeSecs = sinceLastSeen(node);
+        if (node->last_heard != 0 && nodeAgeSecs > kNodeInfoMaxServeAgeSecs) {
             TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x stale (%us ago), not responding", p->to,
-                         static_cast<unsigned>(sinceLastSeen(node)));
+                         static_cast<unsigned>(nodeAgeSecs));
             return false;
         }
         cachedUser = TypeConversions::ConvertToUser(node);
