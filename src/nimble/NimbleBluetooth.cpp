@@ -903,33 +903,40 @@ void NimbleBluetooth::setup()
         LOG_WARN("Unable to request MTU %u, rc=%d", kPreferredBleMtu, mtuResult);
     }
 
-    BLESecurity *pSecurity = new BLESecurity();
-    pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
-    pSecurity->setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    // BLESecurity only forwards to NimBLEDevice static setters, so a stack instance
+    // suffices (the old heap instance leaked once per BLE enable cycle).
+    BLESecurity security;
+    security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         // Set IO capability to DisplayOnly for MITM authentication
-        pSecurity->setCapability(ESP_IO_CAP_OUT);
+        security.setCapability(ESP_IO_CAP_OUT);
         // Set the passkey
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
-            pSecurity->setPassKey(false); // generate a random passkey
+            security.setPassKey(false); // generate a random passkey
         } else {
             LOG_INFO("Use fixed passkey");
-            pSecurity->setPassKey(true, config.bluetooth.fixed_pin);
+            security.setPassKey(true, config.bluetooth.fixed_pin);
         }
         // Enable authorization requirements:
         // - bonding: true (for persistent storage of the keys)
         // - MITM: true (enables Man-In-The-Middle protection for password prompts)
         // - secure connection: true (enables secure connection for encryption)
-        pSecurity->setAuthenticationMode(true, true, true);
+        security.setAuthenticationMode(true, true, true);
     } else {
         // No IO capability for no PIN mode
-        pSecurity->setCapability(ESP_IO_CAP_NONE);
+        security.setCapability(ESP_IO_CAP_NONE);
         // No PIN mode: no MITM protection
-        pSecurity->setAuthenticationMode(true, false, false);
+        security.setAuthenticationMode(true, false, false);
     }
-    // Set the security callbacks
-    BLEDevice::setSecurityCallbacks(new NimbleBluetoothSecurityCallback());
+    // Set the security callbacks. setup() re-runs when BLE is re-enabled after an
+    // admin-triggered deinit(), and BLEDevice::deinit() does not free caller-owned
+    // callback objects — reuse them instead of leaking one per cycle.
+    static NimbleBluetoothSecurityCallback *securityCallbacks;
+    if (!securityCallbacks)
+        securityCallbacks = new NimbleBluetoothSecurityCallback();
+    BLEDevice::setSecurityCallbacks(securityCallbacks);
     bleServer = BLEDevice::createServer();
 
     // BLEDevice::createServer calls ble_svc_gap_init, which resets the device
@@ -939,7 +946,10 @@ void NimbleBluetooth::setup()
         LOG_ERROR("ble_svc_gap_device_name_set: rc=%d %s", nameRc, BLEUtils::returnCodeToString(nameRc));
     }
 
-    bleServer->setCallbacks(new NimbleBluetoothServerCallback(this));
+    static NimbleBluetoothServerCallback *serverCallbacks;
+    if (!serverCallbacks)
+        serverCallbacks = new NimbleBluetoothServerCallback(this);
+    bleServer->setCallbacks(serverCallbacks);
     setupService();
     startAdvertising();
 }
@@ -972,12 +982,19 @@ void NimbleBluetooth::setupService()
             LOGRADIO_UUID, BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ |
                                BLECharacteristic::PROPERTY_READ_AUTHEN | BLECharacteristic::PROPERTY_READ_ENC);
     }
-    bluetoothPhoneAPI = new BluetoothPhoneAPI();
+    // setupService() re-runs when BLE is re-enabled after deinit(). BLEDevice::deinit()
+    // frees the GATT objects but not these caller-owned ones — reuse them instead of
+    // leaking ~3.5KB (and a still-scheduled duplicate BluetoothPhoneAPI OSThread) per cycle.
+    // The setCallbacks() calls must still run every time: the characteristics are new.
+    if (!bluetoothPhoneAPI)
+        bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
-    toRadioCallbacks = new NimbleBluetoothToRadioCallback();
+    if (!toRadioCallbacks)
+        toRadioCallbacks = new NimbleBluetoothToRadioCallback();
     ToRadioCharacteristic->setCallbacks(toRadioCallbacks);
 
-    fromRadioCallbacks = new NimbleBluetoothFromRadioCallback();
+    if (!fromRadioCallbacks)
+        fromRadioCallbacks = new NimbleBluetoothFromRadioCallback();
     FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
 
     bleService->start();
