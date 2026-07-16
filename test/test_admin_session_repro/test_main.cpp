@@ -84,14 +84,10 @@ static void seedRemoteHardwarePin(NodeNum owner)
     devicestate.node_remote_hardware_pins[0].pin.gpio_pin = 4;
 }
 
-// The outgoing request a local client would send to `to`, as MeshService sees it (from == 0,
+// The outgoing request `req` a local client would send to `to`, as MeshService sees it (from == 0,
 // ADMIN_APP, payload still plaintext).
-static meshtastic_MeshPacket makeOutgoingModuleConfigRequest(NodeNum to)
+static meshtastic_MeshPacket makeOutgoingRequest(NodeNum to, const meshtastic_AdminMessage &req)
 {
-    meshtastic_AdminMessage req = meshtastic_AdminMessage_init_zero;
-    req.which_payload_variant = meshtastic_AdminMessage_get_module_config_request_tag;
-    req.get_module_config_request = meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG;
-
     meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
     p.from = 0;
     p.to = to;
@@ -100,6 +96,14 @@ static meshtastic_MeshPacket makeOutgoingModuleConfigRequest(NodeNum to)
     p.decoded.payload.size =
         pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &req);
     return p;
+}
+
+static meshtastic_MeshPacket makeOutgoingModuleConfigRequest(NodeNum to)
+{
+    meshtastic_AdminMessage req = meshtastic_AdminMessage_init_zero;
+    req.which_payload_variant = meshtastic_AdminMessage_get_module_config_request_tag;
+    req.get_module_config_request = meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG;
+    return makeOutgoingRequest(to, req);
 }
 
 void setUp(void)
@@ -248,12 +252,15 @@ void test_local_security_config_keeps_private_key(void)
 // An admin response carries no session passkey and its sender is not an admin-key holder, so a
 // request we sent is the only thing vouching for it. A get_module_config_response from a node we
 // never queried is not.
+static constexpr pb_size_t MODULE_CONFIG_RESPONSE = meshtastic_AdminMessage_get_module_config_response_tag;
+
 void test_unsolicited_response_is_not_solicited(void)
 {
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
 
-    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp), "a response nobody asked for must not be accepted");
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE),
+                              "a response nobody asked for must not be accepted");
 }
 
 // Control: once the client has sent that node a request, its response is accepted. Without this,
@@ -265,7 +272,8 @@ void test_response_after_our_request_is_solicited(void)
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
 
-    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(mp), "the answer to our own request must be accepted");
+    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE),
+                             "the answer to our own request must be accepted");
 }
 
 // A request to one remote does not vouch for a different remote's response.
@@ -276,7 +284,24 @@ void test_request_to_one_node_does_not_admit_another(void)
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // answered by someone else
 
-    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp));
+    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE));
+}
+
+// A response only answers its own request type: a get_owner_request does not admit a
+// get_module_config_response from the same node.
+void test_response_variant_must_match_request(void)
+{
+    meshtastic_AdminMessage owner_req = meshtastic_AdminMessage_init_zero;
+    owner_req.which_payload_variant = meshtastic_AdminMessage_get_owner_request_tag;
+    admin->noteOutgoingAdminRequest(makeOutgoingRequest(STRANGER_NODE, owner_req));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // wrong type for the request
+
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE),
+                              "a get_owner request must not admit a get_module_config response");
+    // ...but the response it actually asked for is still accepted from the same slot.
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, meshtastic_AdminMessage_get_owner_response_tag));
 }
 
 // Only requests arm the gate: sending a setter to a node must not make it a trusted responder.
@@ -284,18 +309,12 @@ void test_outgoing_setter_does_not_admit_responses(void)
 {
     meshtastic_AdminMessage setter = meshtastic_AdminMessage_init_zero;
     setter.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
-    meshtastic_MeshPacket out = meshtastic_MeshPacket_init_zero;
-    out.to = STRANGER_NODE;
-    out.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
-    out.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
-    out.decoded.payload.size =
-        pb_encode_to_bytes(out.decoded.payload.bytes, sizeof(out.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &setter);
-    admin->noteOutgoingAdminRequest(out);
+    admin->noteOutgoingAdminRequest(makeOutgoingRequest(STRANGER_NODE, setter));
 
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
 
-    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp));
+    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE));
 }
 
 // End to end through the real handler: an unsolicited get_module_config_response must not reach
@@ -346,6 +365,7 @@ void setup()
     RUN_TEST(test_unsolicited_response_is_not_solicited);
     RUN_TEST(test_response_after_our_request_is_solicited);
     RUN_TEST(test_request_to_one_node_does_not_admit_another);
+    RUN_TEST(test_response_variant_must_match_request);
     RUN_TEST(test_outgoing_setter_does_not_admit_responses);
     RUN_TEST(test_unsolicited_response_does_not_poison_pins);
     RUN_TEST(test_solicited_response_updates_pins);

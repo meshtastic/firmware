@@ -86,17 +86,18 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     // the only thing vouching for one is a request we sent. Track those per remote: a client may
     // have several nodes in flight, and each keeps answering until the window lapses.
     static constexpr size_t kOutstandingAdminRequests = 3;
-    static constexpr uint32_t kOutstandingAdminRequestSecs = 300; // same window as the session passkey
+    static constexpr uint32_t kOutstandingAdminRequestMs = 300 * 1000; // same window as the session passkey
     struct OutstandingAdminRequest {
-        NodeNum to;          // 0 = free slot
-        uint32_t sentAtSecs; // millis()/1000 when the request went out
-        uint8_t key[32];     // destination key, when the client pinned one
+        NodeNum to;                 // 0 = free slot
+        uint32_t sentAtMs;          // millis() when the most recent request to this node went out
+        uint32_t expectedResponses; // bitmask of response variants these requests authorize
+        uint8_t key[32];            // destination key, when the client pinned one
         bool keyValid;
     };
     OutstandingAdminRequest outstandingAdminRequests[kOutstandingAdminRequests] = {};
 
-    /// Whether mp answers a request we actually sent to mp.from.
-    bool responseIsSolicited(const meshtastic_MeshPacket &mp);
+    /// Whether a response of variant responseVariant from mp.from answers a request we sent it.
+    bool responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant);
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);

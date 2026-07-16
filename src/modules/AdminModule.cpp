@@ -10,6 +10,7 @@
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
+#include <Throttle.h>
 #include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "MeshtasticOTA.h"
@@ -128,7 +129,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (messageIsResponse(r)) {
         // Only accept a response from a remote we sent the matching request to. from == 0 is a
         // local client, which PhoneAPI has already gated.
-        if (mp.from != 0 && !responseIsSolicited(mp)) {
+        if (mp.from != 0 && !responseIsSolicited(mp, r->which_payload_variant)) {
             LOG_INFO("Ignore admin response from 0x%08x, no outstanding request", mp.from);
             return handled;
         }
@@ -1826,6 +1827,64 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         return false;
 }
 
+// The response variant that answers a getter request, or 0 if the request has none.
+static pb_size_t adminResponseForRequest(pb_size_t requestVariant)
+{
+    switch (requestVariant) {
+    case meshtastic_AdminMessage_get_channel_request_tag:
+        return meshtastic_AdminMessage_get_channel_response_tag;
+    case meshtastic_AdminMessage_get_owner_request_tag:
+        return meshtastic_AdminMessage_get_owner_response_tag;
+    case meshtastic_AdminMessage_get_config_request_tag:
+        return meshtastic_AdminMessage_get_config_response_tag;
+    case meshtastic_AdminMessage_get_module_config_request_tag:
+        return meshtastic_AdminMessage_get_module_config_response_tag;
+    case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
+        return meshtastic_AdminMessage_get_canned_message_module_messages_response_tag;
+    case meshtastic_AdminMessage_get_device_metadata_request_tag:
+        return meshtastic_AdminMessage_get_device_metadata_response_tag;
+    case meshtastic_AdminMessage_get_ringtone_request_tag:
+        return meshtastic_AdminMessage_get_ringtone_response_tag;
+    case meshtastic_AdminMessage_get_device_connection_status_request_tag:
+        return meshtastic_AdminMessage_get_device_connection_status_response_tag;
+    case meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag:
+        return meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag;
+    case meshtastic_AdminMessage_get_ui_config_request_tag:
+        return meshtastic_AdminMessage_get_ui_config_response_tag;
+    default:
+        return 0;
+    }
+}
+
+// A one-bit identifier for a response variant, so several expected responses pack into a mask.
+static uint32_t adminResponseBit(pb_size_t responseVariant)
+{
+    switch (responseVariant) {
+    case meshtastic_AdminMessage_get_channel_response_tag:
+        return 1u << 0;
+    case meshtastic_AdminMessage_get_owner_response_tag:
+        return 1u << 1;
+    case meshtastic_AdminMessage_get_config_response_tag:
+        return 1u << 2;
+    case meshtastic_AdminMessage_get_module_config_response_tag:
+        return 1u << 3;
+    case meshtastic_AdminMessage_get_canned_message_module_messages_response_tag:
+        return 1u << 4;
+    case meshtastic_AdminMessage_get_device_metadata_response_tag:
+        return 1u << 5;
+    case meshtastic_AdminMessage_get_ringtone_response_tag:
+        return 1u << 6;
+    case meshtastic_AdminMessage_get_device_connection_status_response_tag:
+        return 1u << 7;
+    case meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag:
+        return 1u << 8;
+    case meshtastic_AdminMessage_get_ui_config_response_tag:
+        return 1u << 9;
+    default:
+        return 0;
+    }
+}
+
 void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
 {
     if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
@@ -1837,14 +1896,16 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
     if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
         return;
-    if (!messageIsRequest(&admin))
-        return;
+    const uint32_t bit = adminResponseBit(adminResponseForRequest(admin.which_payload_variant));
+    if (!bit)
+        return; // not a getter whose response we can pair
 
     // Reuse this remote's slot if it has one, else a free slot, else the oldest.
     OutstandingAdminRequest *slot = nullptr;
     for (auto &o : outstandingAdminRequests)
         if (o.to == p.to)
             slot = &o;
+    const bool sameNode = slot != nullptr;
     if (!slot)
         for (auto &o : outstandingAdminRequests)
             if (o.to == 0) {
@@ -1854,12 +1915,14 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     if (!slot) {
         slot = &outstandingAdminRequests[0];
         for (auto &o : outstandingAdminRequests)
-            if (o.sentAtSecs < slot->sentAtSecs)
+            if (o.sentAtMs < slot->sentAtMs)
                 slot = &o;
     }
 
     slot->to = p.to;
-    slot->sentAtSecs = millis() / 1000;
+    slot->sentAtMs = millis();
+    // Keep the types already pending for this node so a client may pipeline several to it.
+    slot->expectedResponses = sameNode ? (slot->expectedResponses | bit) : bit;
     slot->keyValid = p.pki_encrypted && p.public_key.size == 32;
     if (slot->keyValid)
         memcpy(slot->key, p.public_key.bytes, 32);
@@ -1868,16 +1931,18 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     LOG_DEBUG("Admin request sent to 0x%08x, expecting its response", p.to);
 }
 
-bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp)
+bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant)
 {
-    const uint32_t now = millis() / 1000;
+    const uint32_t bit = adminResponseBit(responseVariant);
     for (auto &o : outstandingAdminRequests) {
         if (o.to == 0 || o.to != mp.from)
             continue;
-        if (now > o.sentAtSecs + kOutstandingAdminRequestSecs) {
-            o.to = 0;
+        if (!Throttle::isWithinTimespanMs(o.sentAtMs, kOutstandingAdminRequestMs)) {
+            o.to = 0; // lapsed; free the slot
             return false;
         }
+        if (!(o.expectedResponses & bit))
+            return false; // we queried this node, but not for this
         // A request the client pinned to a key must be answered over PKC by that same key.
         if (o.keyValid && (!mp.pki_encrypted || mp.public_key.size != 32 || memcmp(mp.public_key.bytes, o.key, 32) != 0))
             return false;
