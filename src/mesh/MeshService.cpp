@@ -173,6 +173,51 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     return nodenum;
 }
 
+#if MESHTASTIC_ENABLE_FRAME_INJECTION
+// Deliver a client-supplied frame into the receive pipeline as if it arrived off the LoRa chip. Mirrors
+// the portduino SimRadio SIMULATOR_APP unwrap so the same host wire format works on real hardware: the
+// frame rides inside a Compressed envelope wrapped in a MeshPacket that carries from/to/id/channel.
+//   Compressed.portnum == UNKNOWN_APP -> Compressed.data is verbatim ciphertext, decrypted as if off-air
+//   otherwise                         -> Compressed.data is the plaintext payload for Compressed.portnum
+void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
+{
+    meshtastic_Compressed scratch;
+    if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        memset(&scratch, 0, sizeof(scratch));
+        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch)) {
+            if (scratch.portnum == meshtastic_PortNum_UNKNOWN_APP) {
+                p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+                memcpy(p.encrypted.bytes, scratch.data.bytes, scratch.data.size);
+                p.encrypted.size = scratch.data.size;
+            } else {
+                memcpy(&p.decoded.payload, &scratch.data, sizeof(scratch.data));
+                p.decoded.portnum = scratch.portnum;
+            }
+        } else {
+            LOG_ERROR("inject: could not decode Compressed envelope, dropping");
+            return;
+        }
+    }
+    // The real RX path (RadioLibInterface::handleReceiveInterrupt) drops sender==0; mirror it so injection
+    // behaves identically to an over-the-air frame.
+    if (p.from == 0) {
+        LOG_WARN("inject: dropping frame with from==0 (matches real LoRa RX)");
+        return;
+    }
+    meshtastic_MeshPacket *mp = packetPool.allocCopy(p);
+    if (!mp)
+        return;
+    if (mp->rx_snr == 0) // plausible synthetic link metadata unless the caller set it
+        mp->rx_snr = 8;
+    if (mp->rx_rssi == 0)
+        mp->rx_rssi = -40;
+    mp->rx_time = getValidTime(RTCQualityFromNet);
+    LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
+             mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");
+    router->enqueueReceivedMessage(mp);
+}
+#endif
+
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
@@ -184,6 +229,16 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     if (SimRadio::instance && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulates device received a packet via the LoRa chip
         SimRadio::instance->unpackAndReceive(p);
+        return;
+    }
+#endif
+#if MESHTASTIC_ENABLE_FRAME_INJECTION
+    // Real-hardware analog of the SimRadio path above: deliver a client-supplied frame into the RX
+    // pipeline exactly as if it had arrived off the LoRa chip. Reached before the p.from=0 line below,
+    // so an injected sender is preserved. Build-flag gated (off by default) - it lets anything with a
+    // wired connection forge over-the-air traffic, so it must never ship enabled.
+    if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
+        injectAsReceived(p);
         return;
     }
 #endif

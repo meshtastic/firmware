@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FSCommon.h"
 #include "configuration.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -30,9 +31,8 @@ void setupNicheGraphics()
     // SPI
     // -----------------------------
 
-    // Display is connected to HSPI
-    SPIClass *hspi = new SPIClass(HSPI);
-    hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
+    // Display shares the HSPI bus with the SD card; reuse it rather than re-init the same host.
+    SPIClass *hspi = &SPI_HSPI;
 
     // E-Ink Driver
     // -----------------------------
