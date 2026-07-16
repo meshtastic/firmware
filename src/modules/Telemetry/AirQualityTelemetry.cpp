@@ -35,6 +35,9 @@ static constexpr uint16_t TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY = 0x8004;
 #if __has_include(<SensirionI2cScd30.h>)
 #include "Sensor/SCD30Sensor.h"
 #endif
+#if __has_include(<Seeed_HM330X.h>)
+#include "Sensor/HM330XSensor.h"
+#endif
 
 void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 {
@@ -65,6 +68,9 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #endif
 #if __has_include(<SensirionI2cScd30.h>)
     addSensor<SCD30Sensor>(i2cScanner, ScanI2C::DeviceType::SCD30);
+#endif
+#if __has_include(<Seeed_HM330X.h>)
+    addSensor<HM330XSensor>(i2cScanner, ScanI2C::DeviceType::HM330X);
 #endif
 }
 

@@ -232,6 +232,21 @@ bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 }
 #endif
 
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && HAS_TELEMETRY
+bool probeHM330x(TwoWire *i2cBus, uint8_t address) {
+
+    i2cBus->beginTransmission(address);
+    i2cBus->write(0X88);
+    byte ret = i2cBus->endTransmission();
+
+    if (ret == 0) {
+        return true;
+    }
+
+    return false;
+}
+#endif
+
 #define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
     case ADDR:                                                                                                                   \
         logFoundDevice(__VA_ARGS__);                                                                                             \
@@ -429,7 +444,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L)
-            case INA_ADDR:
+            case INA_ADDR: //same as HMM330X_ADDR
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
@@ -445,6 +460,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         logFoundDevice("INA260", (uint8_t)addr.address);
                         type = INA260;
                     }
+                } else if (probeHM330x(i2cBus, addr.address)){
+                    logFoundDevice("HM330X", (uint8_t)addr.address);
+                    type = HM330X;
                 } else { // Assume INA219 if INA260 ID is not found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
