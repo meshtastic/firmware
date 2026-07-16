@@ -213,16 +213,18 @@ int32_t AudioModule::runOnce()
                 }
             }
             if (radio_state == RadioState::tx) {
-                // Get I2S data from the microphone and place in data buffer
+                // Get I2S data from the microphone and place in data buffer. adc_buffer_size is a
+                // sample count; i2s_read and adc_buffer_index are in bytes, so scale by int16_t.
                 size_t bytesIn = 0;
-                res = i2s_read(I2S_PORT, adc_buffer + adc_buffer_index, adc_buffer_size - adc_buffer_index, &bytesIn,
+                const size_t frameBytes = adc_buffer_size * sizeof(uint16_t);
+                res = i2s_read(I2S_PORT, (uint8_t *)adc_buffer + adc_buffer_index, frameBytes - adc_buffer_index, &bytesIn,
                                pdMS_TO_TICKS(40)); // wait 40ms for audio to arrive.
 
                 if (res == ESP_OK) {
                     adc_buffer_index += bytesIn;
-                    if (adc_buffer_index == adc_buffer_size) {
+                    if (adc_buffer_index >= frameBytes) {
                         adc_buffer_index = 0;
-                        memcpy((void *)speech, (void *)adc_buffer, 2 * adc_buffer_size);
+                        memcpy((void *)speech, (void *)adc_buffer, frameBytes);
                         // Notify run_codec2 task that the buffer is ready.
                         radio_state = RadioState::tx;
                         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
