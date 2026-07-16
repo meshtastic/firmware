@@ -68,23 +68,22 @@ void run_codec2(void *parameter)
             }
             if (audioModule->radio_state == RadioState::rx) {
                 size_t bytesOut = 0;
-                if (memcmp(audioModule->rx_encode_frame, &audioModule->tx_header, sizeof(audioModule->tx_header)) == 0) {
-                    for (int i = 4; i < audioModule->rx_encode_frame_index; i += audioModule->encode_codec_size) {
+                // Reject frames not carrying our own header (magic + mode); an invalid mode byte
+                // would else NULL-deref via codec2_create. The bound keeps reads inside the buffer.
+                const int headerLen = sizeof(audioModule->tx_header);
+                const int frameSize = audioModule->encode_codec_size;
+                int limit = audioModule->rx_encode_frame_index;
+                if (limit > (int)sizeof(audioModule->rx_encode_frame))
+                    limit = sizeof(audioModule->rx_encode_frame);
+                if (frameSize > 0 && limit >= headerLen &&
+                    memcmp(audioModule->rx_encode_frame, &audioModule->tx_header, headerLen) == 0) {
+                    for (int i = headerLen; i + frameSize <= limit; i += frameSize) {
                         codec2_decode(audioModule->codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
                         i2s_write(I2S_PORT, &audioModule->output_buffer, audioModule->adc_buffer_size, &bytesOut,
                                   pdMS_TO_TICKS(500));
                     }
                 } else {
-                    // if the buffer header does not match our own codec, make a temp decoding setup.
-                    CODEC2 *tmp_codec2 = codec2_create(audioModule->rx_encode_frame[3]);
-                    codec2_set_lpc_post_filter(tmp_codec2, 1, 0, 0.8, 0.2);
-                    int tmp_encode_codec_size = (codec2_bits_per_frame(tmp_codec2) + 7) / 8;
-                    int tmp_adc_buffer_size = codec2_samples_per_frame(tmp_codec2);
-                    for (int i = 4; i < audioModule->rx_encode_frame_index; i += tmp_encode_codec_size) {
-                        codec2_decode(tmp_codec2, audioModule->output_buffer, audioModule->rx_encode_frame + i);
-                        i2s_write(I2S_PORT, &audioModule->output_buffer, tmp_adc_buffer_size, &bytesOut, pdMS_TO_TICKS(500));
-                    }
-                    codec2_destroy(tmp_codec2);
+                    LOG_WARN("Audio: dropping frame with mismatched or short codec2 header");
                 }
             }
         }
@@ -273,9 +272,12 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->profile->audioPermitted)) {
         auto &p = mp.decoded;
         if (!isFromUs(&mp)) {
-            memcpy(rx_encode_frame, p.payload.bytes, p.payload.size);
+            size_t n = p.payload.size;
+            if (n > sizeof(rx_encode_frame)) // bound a crafted payload to the RX buffer
+                n = sizeof(rx_encode_frame);
+            memcpy(rx_encode_frame, p.payload.bytes, n);
             radio_state = RadioState::rx;
-            rx_encode_frame_index = p.payload.size;
+            rx_encode_frame_index = n;
             // Notify run_codec2 task that the buffer is ready.
             BaseType_t xHigherPriorityTaskWoken = pdFALSE;
             vTaskNotifyGiveFromISR(codec2HandlerTask, &xHigherPriorityTaskWoken);
