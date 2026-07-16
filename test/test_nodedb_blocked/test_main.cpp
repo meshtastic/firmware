@@ -132,6 +132,36 @@ static void test_migration_carriesRoleAndProtectedIntoWarm(void)
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
 }
 
+// The XEdDSA signer bit is learned from verified traffic rather than from NodeInfo, so a
+// node that round-trips through the warm tier must come back still marked as a signer -
+// otherwise it would have to be relearned from the next signed packet. The plain node in
+// the same run is the control: re-admission restores the stored bit, it does not invent one.
+static void test_migration_carriesSignerBitThroughWarm(void)
+{
+    db->seedSelf();
+    const NodeNum signerNum = 2000 + 3;
+    const NodeNum plainNum = 2000 + 4;
+    const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected are demoted
+    for (int i = 1; i <= extra; i++)
+        db->push(2000 + i, /*last_heard=*/i, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true, /*withKey=*/true);
+    nodeInfoLiteSetBit(db->getMeshNode(signerNum), NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
+    TEST_ASSERT_TRUE(nodeInfoLiteHasXeddsaSigned(db->getMeshNode(signerNum)));
+
+    db->runDemote();
+
+    // Both are out of the hot store and held in the warm tier.
+    TEST_ASSERT_NULL(db->getMeshNode(signerNum));
+    TEST_ASSERT_NULL(db->getMeshNode(plainNum));
+
+    const meshtastic_NodeInfoLite *back = db->getOrCreateMeshNode(signerNum);
+    TEST_ASSERT_NOT_NULL(back);
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasXeddsaSigned(back), "signer bit must survive a warm-tier round trip");
+
+    const meshtastic_NodeInfoLite *plainBack = db->getOrCreateMeshNode(plainNum);
+    TEST_ASSERT_NOT_NULL(plainBack);
+    TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasXeddsaSigned(plainBack), "re-admission must not invent the signer bit");
+}
+
 // Favourite handling: a favourite is never the eviction victim, even when it is
 // the oldest node in a full hot store.
 static void test_eviction_preservesFavorite(void)
@@ -206,6 +236,7 @@ NDB_TEST_ENTRY void setup()
     UNITY_BEGIN();
     RUN_TEST(test_migration_demotesOldestKeepsKeepersAndSelf);
     RUN_TEST(test_migration_carriesRoleAndProtectedIntoWarm);
+    RUN_TEST(test_migration_carriesSignerBitThroughWarm);
     RUN_TEST(test_eviction_preservesFavorite);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
