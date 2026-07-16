@@ -1601,16 +1601,22 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Do TFT init");
+    // connect() re-runs on every display wake on variants whose handleSetOn() calls
+    // ui->init() (Heltec Tracker V1.x/V2, VTFT_LEDA/ST7796 boards, ...): reuse the
+    // existing driver instance instead of leaking one per wake.
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-    tft = new TFT_eSPI;
+    if (!tft)
+        tft = new TFT_eSPI;
 #elif defined(HACKADAY_COMMUNICATOR)
-    bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
-    tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */, 12 /* col offset 1 */,
-                             0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */, nv3007_279_init_operations,
-                             sizeof(nv3007_279_init_operations));
-
+    if (!tft) {
+        bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
+        tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */,
+                                 12 /* col offset 1 */, 0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */,
+                                 nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
+    }
 #else
-    tft = new LGFX;
+    if (!tft)
+        tft = new LGFX;
 #endif
 
     backlightEnable->set(true);
