@@ -34,9 +34,6 @@ extern "C" {
 
 #define LED_STATE_ON 0 // State when LED is lit
 
-// Testing USB detection
-// #define NRF_APM
-
 /*
  * Analog pins
  */
