@@ -2066,10 +2066,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int rowHeight = getRowHeightForEmoteText(msg, baseRowSpacing);
             bool _highlight = (msgIdx == currentMessageIndex);
 
+#ifdef USE_EINK
             // Vertically center based on rowHeight
             int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
-
-#ifdef USE_EINK
             int nextX = x + (_highlight ? 12 : 0);
             if (_highlight)
                 display->drawString(x + 0, lineY + textYOffset, ">");
@@ -2244,19 +2243,19 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                         snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSignal: %s",
                                  (channelName && channelName[0]) ? channelName : "unknown", qualityLabel);
                     } else {
-                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s",
-                                 (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s", nodeName[0] ? nodeName : "unknown",
+                                 qualityLabel);
                     }
                 } else if (isAck && !isFromDest) {
                     // Relay ACK banner
                     snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s",
-                             (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                             nodeName[0] ? nodeName : "unknown", qualityLabel);
                 } else {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
                         snprintf(buf, sizeof(buf), "Message failed to\n#%s",
                                  (channelName && channelName[0]) ? channelName : "unknown");
                     } else {
-                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", (nodeName && nodeName[0]) ? nodeName : "unknown");
+                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", nodeName[0] ? nodeName : "unknown");
                     }
                 }
 
