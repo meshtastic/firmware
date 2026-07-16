@@ -1206,7 +1206,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Node Identity ===
     int textWidth = 0;
     int nameX = 0;
-    const char *shortName = owner.short_name ? owner.short_name : "";
+    const char *shortName = owner.short_name[0] ? owner.short_name : "";
 
     // === ShortName Centered ===
     textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
@@ -1249,7 +1249,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (!config.bluetooth.enabled) {
         extraoffset = (currentResolution == ScreenResolution::High) ? 6 : 1;
     }
-    const int raw_chutil_percent = chutil_percent;
+    [[maybe_unused]] const int raw_chutil_percent = chutil_percent;
 
     // With BT disabled we pin this row left to make room for the extra "BT off" indicator.
     const int starting_position = config.bluetooth.enabled ? x : 0;
@@ -1295,7 +1295,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int nameX = 0;
     int yOffset = (currentResolution == ScreenResolution::High) ? 0 : 5;
     const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
-    const char *shortName = owner.short_name ? owner.short_name : "";
+    const char *shortName = owner.short_name[0] ? owner.short_name : "";
     char combinedName[96];
     if (longName[0] && shortName[0]) {
         snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortName);
@@ -1504,7 +1504,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     }
     // Draw version and short name in bottom middle
     char footer[64];
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         snprintf(footer, sizeof(footer), "%s   %s", xstr(APP_VERSION_SHORT), owner.short_name);
     } else {
         snprintf(footer, sizeof(footer), "%s", xstr(APP_VERSION_SHORT));
@@ -1547,7 +1547,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     if (gBootSplashBoldPass) {
         display->drawString(versionX + 1, y + 5, version);
     }
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW - 5;
@@ -1789,7 +1789,7 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
     const char *version = xstr(APP_VERSION_SHORT);
     int versionX = x + SCREEN_WIDTH - display->getStringWidth(version);
     display->drawString(versionX, y + 0, version);
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW;
@@ -1971,10 +1971,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Right arrow
     if (navBarVisible && pageEnd < totalIcons) {
-        int baseX = rectX + rectWidth + offset;
-        int regionX = baseX;
-
 #if GRAPHICS_TFT_COLORING_ENABLED
+        int regionX = rectX + rectWidth + offset;
         registerTFTColorRegion(TFTColorRole::NavigationArrow, regionX, top, maxW, halfH);
 #endif
 
@@ -1983,10 +1981,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Left arrow
     if (navBarVisible && pageStart > 0) {
-        int baseX = rectX - offset - 1;
-        int regionX = baseX - maxW + 1;
-
 #if GRAPHICS_TFT_COLORING_ENABLED
+        int regionX = rectX - offset - 1 - maxW + 1;
         registerTFTColorRegion(TFTColorRole::NavigationArrow, regionX, top, maxW, halfH);
 #endif
 
