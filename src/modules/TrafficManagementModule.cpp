@@ -39,6 +39,21 @@ constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interv
 constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
 constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot increase)
 
+// NodeInfo direct-response safety limits.
+//
+// Staleness: never spoof a NodeInfo reply on behalf of a node we have not actually
+// heard from within this window. Without it, a cached (or forged) entry is served
+// indefinitely for a long-gone node while the genuine request is suppressed - the
+// requestor sees a fresh-looking answer for a node that may no longer exist.
+constexpr uint32_t kNodeInfoMaxServeAgeMs = 6UL * 60UL * 60UL * 1000UL; // 6 h (PSRAM cache path)
+constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL;        // 6 h (NodeDB fallback path)
+
+// Throttle: emit at most one spoofed direct reply per target node per this interval.
+// Direct responses are otherwise un-throttled (they STOP the request before the
+// per-sender rate limiter runs) and the reply target is attacker-controlled, so an
+// attacker could otherwise drive unbounded local transmissions / reflected floods.
+constexpr uint32_t kNodeInfoResponseThrottleMs = 30UL * 1000UL; // 30 s
+
 /**
  * Convert seconds to milliseconds with overflow protection.
  */
@@ -479,16 +494,54 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
     if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &user))
         return;
 
+    const NodeNum from = getFrom(&mp);
+
     // Normalize user.id to the packet sender's node number.
-    snprintf(user.id, sizeof(user.id), "!%08x", getFrom(&mp));
+    snprintf(user.id, sizeof(user.id), "!%08x", from);
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // Mirror NodeDB::updateUser() key hygiene before we let an overheard NodeInfo into
+    // the direct-response cache. This cache is served back to requestors as a spoofed
+    // reply on the target's behalf, so poisoning it is materially worse than a plain
+    // NodeDB overwrite - apply the same protections NodeDB applies to itself.
+    if (user.public_key.size == 32) {
+        // Someone advertising our own public key is impersonating this node - never cache it.
+        if (owner.public_key.size == 32 && memcmp(user.public_key.bytes, owner.public_key.bytes, 32) == 0) {
+            TM_LOG_WARN("NodeInfo cache: incoming key matches owner, dropping 0x%08x", from);
+            return;
+        }
+    }
+    // Key pinning against the authoritative NodeDB key: once a 32-byte key is known for a
+    // node, refuse to cache a NodeInfo carrying a different (or missing) key. This is the
+    // same rule as NodeDB::updateUser() ("Public Key mismatch, dropping NodeInfo").
+    const meshtastic_NodeInfoLite *dbNode = nodeDB ? nodeDB->getMeshNode(from) : nullptr;
+    if (dbNode && dbNode->public_key.size == 32) {
+        if (user.public_key.size != 32 || memcmp(user.public_key.bytes, dbNode->public_key.bytes, 32) != 0) {
+            TM_LOG_WARN("NodeInfo cache: public key mismatch vs NodeDB, dropping 0x%08x", from);
+            return;
+        }
+    }
+#endif
 
     bool usedEmptySlot = false;
     uint16_t cachedCount = 0;
     {
         concurrency::LockGuard guard(&cacheLock);
-        NodeInfoPayloadEntry *entry = findOrCreateNodeInfoEntry(getFrom(&mp), &usedEmptySlot);
+        NodeInfoPayloadEntry *entry = findOrCreateNodeInfoEntry(from, &usedEmptySlot);
         if (!entry)
             return;
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+        // Trust-on-first-use pinning within our own cache: if NodeDB has since evicted the
+        // node but we already cached a key for it, still refuse a mismatching key. (A matched
+        // existing slot is returned un-zeroed, so entry->user holds the previously cached key.)
+        if (!usedEmptySlot && entry->node == from && entry->user.public_key.size == 32) {
+            if (user.public_key.size != 32 || memcmp(user.public_key.bytes, entry->user.public_key.bytes, 32) != 0) {
+                TM_LOG_WARN("NodeInfo cache: public key mismatch vs cache, dropping 0x%08x", from);
+                return;
+            }
+        }
+#endif
 
         // Cache both payload and response metadata so direct replies can use
         // richer context than "just the user protobuf" when PSRAM is present.
@@ -1057,6 +1110,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     uint8_t cachedSourceChannel = 0;
     uint32_t cachedLastObservedMs = 0;
     uint32_t cachedLastObservedRxTime = 0;
+    uint32_t cachedLastResponseMs = 0;
 
     {
         concurrency::LockGuard guard(&cacheLock);
@@ -1069,6 +1123,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedSourceChannel = entry->sourceChannel;
             cachedLastObservedMs = entry->lastObservedMs;
             cachedLastObservedRxTime = entry->lastObservedRxTime;
+            cachedLastResponseMs = entry->lastResponseMs;
         }
     }
 
@@ -1086,16 +1141,47 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
         if (!nodeInfoLiteHasUser(node))
             return false;
+        // Staleness gate (fallback path): don't spoof a reply for a node NodeDB last
+        // heard more than kNodeInfoMaxServeAgeSecs ago. last_heard == 0 means recency is
+        // unknown (e.g. clock not yet set) - we can't prove it's stale, so we still answer,
+        // matching sinceLastSeen()'s own "clock not set" tolerance.
+        if (node->last_heard != 0 && sinceLastSeen(node) > kNodeInfoMaxServeAgeSecs) {
+            TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x stale (%us ago), not responding", p->to,
+                         static_cast<unsigned>(sinceLastSeen(node)));
+            return false;
+        }
         cachedUser = TypeConversions::ConvertToUser(node);
+    }
+
+    // Staleness gate (PSRAM cache path): never spoof a reply on behalf of a node we have
+    // not actually heard from within the serve window. cachedLastObservedMs is only set on
+    // a PSRAM cache hit, so this leaves the NodeDB fallback (gated above) untouched.
+    if (cachedLastObservedMs != 0 && (clockMs() - cachedLastObservedMs) > kNodeInfoMaxServeAgeMs) {
+        TM_LOG_DEBUG("NodeInfo PSRAM entry for 0x%08x stale (age=%lu ms), not responding", p->to,
+                     static_cast<unsigned long>(clockMs() - cachedLastObservedMs));
+        return false;
     }
 
     if (!sendResponse)
         return true;
 
-    // Checked here, once a reply would actually go out, so declined requests do not consume the budget.
+    // Per-sender throttle (upstream #11104): checked here, once a reply would actually go out,
+    // so declined requests do not consume the budget.
     if (!directResponseAllowed(getFrom(p), clockMs())) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x", getFrom(p));
         return false;
+    }
+
+    // Response throttle: at most one spoofed reply per target node per throttle window.
+    // Direct responses bypass the per-sender rate limiter (they STOP the request first),
+    // and the reply target is attacker-controlled, so without this an attacker could drive
+    // unbounded local transmissions / reflected floods. Suppress the duplicate request
+    // (return true) rather than letting it propagate and generate more mesh traffic.
+    // Only the PSRAM path tracks lastResponseMs; the NodeDB fallback is left unthrottled.
+    if (cachedLastResponseMs != 0 && (clockMs() - cachedLastResponseMs) < kNodeInfoResponseThrottleMs) {
+        TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x (%lu ms since last)", p->to,
+                     static_cast<unsigned long>(clockMs() - cachedLastResponseMs));
+        return true;
     }
 
     meshtastic_MeshPacket *reply = router->allocForSending();
@@ -1147,6 +1233,22 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
     service->sendToMesh(reply);
+
+    // Record the send so the throttle can suppress a burst of requests for this same node.
+    // Only meaningful on the PSRAM cache path (the entry we just served from); the NodeDB
+    // fallback has no per-node entry to stamp.
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (nodeInfoPayload) {
+        concurrency::LockGuard guard(&cacheLock);
+        for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+            if (nodeInfoPayload[i].node == p->to) {
+                nodeInfoPayload[i].lastResponseMs = clockMs();
+                break;
+            }
+        }
+    }
+#endif
+
     return true;
 }
 

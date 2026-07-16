@@ -12,6 +12,7 @@
 #if HAS_TRAFFIC_MANAGEMENT
 
 #include "airtime.h"
+#include "gps/RTC.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/Default.h"
 #include "mesh/MeshService.h"
@@ -784,6 +785,225 @@ static void test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb(voi
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
     TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
     TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+/**
+ * Verify a PSRAM-cached NodeInfo is NOT served once it ages past the serve window.
+ * Important: without this gate a long-gone (or forged) node's cached NodeInfo would be
+ * spoofed back to requestors indefinitely while the genuine request is suppressed.
+ */
+static void test_tm_nodeinfo_directResponse_psramStaleEntryNotServed(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    // Learn a NodeInfo for the target into the PSRAM cache (broadcast, so it is only cached).
+    meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
+    module.handleReceived(observed);
+
+    // Advance the virtual clock just past the 6 h serve window.
+    TrafficManagementModule::s_testNowMs += (6UL * 60UL * 60UL * 1000UL) + 1000UL;
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+/**
+ * Verify repeated NodeInfo requests for the same target are throttled to one spoofed
+ * reply per throttle window, then allowed again once the window elapses.
+ * Important: direct responses bypass the per-sender rate limiter, so this is the only
+ * bound on attacker-driven transmissions / reflected floods.
+ */
+static void test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
+    module.handleReceived(observed);
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    // First request: served.
+    request.id = 0xAAAA0001;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Second request within the throttle window: suppressed (STOP) but NOT transmitted again.
+    TrafficManagementModule::s_testNowMs += 5000; // 5 s < 30 s window
+    request.id = 0xAAAA0002;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_TRUE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Past the throttle window: served again.
+    TrafficManagementModule::s_testNowMs += 30000; // now > 30 s since first reply
+    request.id = 0xAAAA0003;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+// Build a NODEINFO_APP broadcast whose User carries a 32-byte public key of `keyByte`.
+static meshtastic_MeshPacket makeNodeInfoPacketWithKey(NodeNum from, const char *longName, uint8_t keyByte)
+{
+    meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, from, NODENUM_BROADCAST);
+    meshtastic_User user = meshtastic_User_init_zero;
+    snprintf(user.id, sizeof(user.id), "!%08x", from);
+    strncpy(user.long_name, longName, sizeof(user.long_name) - 1);
+    user.public_key.size = 32;
+    memset(user.public_key.bytes, keyByte, 32);
+    packet.decoded.payload.size =
+        pb_encode_to_bytes(packet.decoded.payload.bytes, sizeof(packet.decoded.payload.bytes), &meshtastic_User_msg, &user);
+    return packet;
+}
+
+/**
+ * Verify the NodeInfo cache pins the first-seen public key: a later NodeInfo for the same
+ * node carrying a DIFFERENT key is rejected, and the served reply keeps the original key.
+ * Mirrors NodeDB::updateUser()'s "Public Key mismatch, dropping NodeInfo" protection.
+ */
+static void test_tm_nodeinfo_cache_rejectsMismatchedKey(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode(); // no authoritative NodeDB key -> exercise the cache's own TOFU pin
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    // First-seen key (0x11...) is pinned.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x11));
+    // Poisoning attempt with a different key (0x22...) must be rejected.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "attacker", 0x22));
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // The served reply must still carry the original (pinned) key, not the attacker's.
+    meshtastic_User served = meshtastic_User_init_zero;
+    const meshtastic_MeshPacket &reply = mockRouter.sentPackets.front();
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(reply.decoded.payload.bytes, reply.decoded.payload.size, &meshtastic_User_msg, &served));
+    TEST_ASSERT_EQUAL_UINT32(32, served.public_key.size);
+    TEST_ASSERT_EQUAL_UINT8(0x11, served.public_key.bytes[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x11, served.public_key.bytes[31]);
+}
+#endif // !MESHTASTIC_EXCLUDE_PKI
+#endif
+
+/**
+ * Verify the NodeDB-fallback direct-response path (non-PSRAM) refuses to spoof a reply
+ * for a node NodeDB last heard beyond the serve window, but still answers a fresh one.
+ */
+#if !(defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM))
+static void test_tm_nodeinfo_directResponse_fallbackStaleEntryNotServed(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+
+    // Drive getTime() to a known uptime so sinceLastSeen() is deterministic.
+    setBootRelativeTimeForUnitTest(1000000);
+    const uint32_t now = getTime();
+
+    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->cachedNodeForTest().last_heard = now - (7UL * 60UL * 60UL); // 7 h ago -> stale
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(0, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    resetRTCStateForTests();
+}
+
+/**
+ * Verify the NodeDB-fallback path still answers when the node was heard recently.
+ */
+static void test_tm_nodeinfo_directResponse_fallbackFreshEntryServed(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+
+    setBootRelativeTimeForUnitTest(1000000);
+    const uint32_t now = getTime();
+
+    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->cachedNodeForTest().last_heard = now - 60UL; // 1 min ago -> fresh
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    meshtastic_TrafficManagementStats stats = module.getStats();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(1, stats.nodeinfo_cache_hits);
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    resetRTCStateForTests();
 }
 #endif
 
@@ -1773,10 +1993,17 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_clientClamp_skipsWhenNotDirect);
 #if !(defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM))
     RUN_TEST(test_tm_nodeinfo_directResponse_withoutNodeDbEntry_skips);
+    RUN_TEST(test_tm_nodeinfo_directResponse_fallbackStaleEntryNotServed);
+    RUN_TEST(test_tm_nodeinfo_directResponse_fallbackFreshEntryServed);
 #endif
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);
     RUN_TEST(test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb);
+    RUN_TEST(test_tm_nodeinfo_directResponse_psramStaleEntryNotServed);
+    RUN_TEST(test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow);
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    RUN_TEST(test_tm_nodeinfo_cache_rejectsMismatchedKey);
+#endif
 #endif
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);

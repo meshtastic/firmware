@@ -228,6 +228,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // Last local uptime tick (millis) when this entry was refreshed.
         uint32_t lastObservedMs;
 
+        // Local uptime (millis) of the most recent spoofed direct reply we emitted
+        // for this node. 0 = never. Used purely to throttle direct responses (at most
+        // one per node per kNodeInfoResponseThrottleMs); the modular/subtraction compare
+        // self-expires, so no sweep is needed to "clear" it. This is separate from
+        // lastObservedMs, which tracks when we last *heard* the node (LRU + staleness).
+        uint32_t lastResponseMs;
+
         // Last RTC/packet timestamp (seconds) observed for this NodeInfo frame.
         // If unavailable in packet, remains 0.
         uint32_t lastObservedRxTime;
