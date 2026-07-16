@@ -409,6 +409,8 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         uint8_t val[4];
         put_le32(val, fromRadioNum);
 
+        if (!fromNumCharacteristic) // BLE may have been torn down; never notify a freed characteristic
+            return;
         fromNumCharacteristic->setValue(val, sizeof(val));
         fromNumCharacteristic->notify();
     }
@@ -845,7 +847,14 @@ void NimbleBluetooth::deinit()
     BLEDevice::deinit(true);
     bleServer = nullptr;             // deleted by deinit(); clear the dangling copy
     BatteryCharacteristic = nullptr; // freed by deinit; clear so updateBatteryLevel() won't touch it
+    fromNumCharacteristic = nullptr; // freed by deinit; a late onNowHasData() must not notify freed memory
+    logRadioCharacteristic = nullptr;
     lastBatteryLevel = -1;
+
+    // The bounded disconnect wait above can expire before onDisconnect runs, leaving the PhoneAPI
+    // observer attached with a live state machine; a later mesh packet would then drive onNowHasData()
+    // into the now-freed characteristics. Detach the observer and reset session state unconditionally.
+    resetBleSessionState();
 #endif
 }
 
