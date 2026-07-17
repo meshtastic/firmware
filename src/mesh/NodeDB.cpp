@@ -1526,12 +1526,6 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
 
-#ifdef USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL
-    moduleConfig.telemetry.environment_update_interval = USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL;
-#else
-    moduleConfig.telemetry.environment_update_interval = 0;
-#endif
-
 #ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
     moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
 #endif
