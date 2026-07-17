@@ -1231,13 +1231,16 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // than letting it propagate and generate more mesh traffic.
     //   - PSRAM path: cachedLastResponseMs is per target node (NodeInfoPayloadEntry).
     //   - Fallback path: cachedLastResponseMs is the module-global stamp (no per-node slot).
-    // TODO(T1): on the PSRAM path this is keyed on p->to, so a DISTINCT legitimate requestor
-    // for the same target gets no reply for up to the window (returning true STOPs it).
-    // Accepted: the mesh is redundant - the genuine node or another cache-holder answers.
-    // TODO(T2): the per-target PSRAM key does not bound aggregate local TX - an attacker
-    // cycling N distinct cached targets still gets N spoofed transmits per window. The
-    // fallback path's global stamp does bound aggregate; a global cap on the PSRAM path
-    // would too, at the cost of throughput on multi-target responders.
+    // NOTE (accepted design, not a defect):
+    //   - On the PSRAM path this is keyed on p->to, so a DISTINCT legitimate requestor for the
+    //     same target gets no reply for up to one window (returning true STOPs it). That is
+    //     fine: the mesh is redundant - the genuine node or another cache-holder answers, and
+    //     a real node would rate-limit its own replies the same way.
+    //   - The per-target PSRAM key does not bound aggregate local TX: an attacker cycling N
+    //     distinct cached targets still draws N spoofed transmits per window. The fallback
+    //     path's global stamp does bound aggregate; a global cap on the PSRAM path would too,
+    //     but at the cost of throughput on legitimate multi-target responders, so it is left
+    //     per-target by choice.
     if (cachedLastResponseMs != 0 && (clockMs() - cachedLastResponseMs) < kNodeInfoResponseThrottleMs) {
         TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x (%lu ms since last)", p->to,
                      static_cast<unsigned long>(clockMs() - cachedLastResponseMs));
