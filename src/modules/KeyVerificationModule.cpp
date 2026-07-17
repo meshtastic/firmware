@@ -3,7 +3,7 @@
 #include "CryptoEngine.h"
 #include "HardwareRNG.h"
 #include "MeshService.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
 #include "meshUtils.h"

@@ -16,6 +16,22 @@
 #ifndef HAS_WIRE
 #define HAS_WIRE 1
 #endif
+#ifndef HAS_LSE
+#define HAS_LSE 0
+#endif
+
+// How long to wait for the LSE 32.768kHz crystal to lock before giving up on hardware RTC support.
+// Override in a variant's variant.h if that board's crystal needs longer to stabilize.
+#ifndef STM32WL_LSE_TIMEOUT_MS
+#define STM32WL_LSE_TIMEOUT_MS 2000
+#endif
+
+// A variant that sets HAS_LSE must also define STM32WL_LSE_DRIVE - catch that mistake here, not as a confusing
+// HAL compile error deep in main-stm32wl.cpp.
+#if HAS_LSE && !defined(STM32WL_LSE_DRIVE)
+#error                                                                                                                           \
+    "HAS_LSE is set but STM32WL_LSE_DRIVE is not defined - set it in the variant's variant.h to one of RCC_LSEDRIVE_LOW/MEDIUMLOW/MEDIUMHIGH/HIGH"
+#endif
 
 //
 // set HW_VENDOR

@@ -30,6 +30,16 @@
 
 SerialConsole *console;
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+// Last-seen USB-CDC host link (DTR/mount) state, sampled each runOnce() so a
+// physical unplug/replug re-locks the per-connection admin auth (see runOnce()).
+// Kept at file scope rather than as a member both because there is exactly one
+// console singleton and because adding per-instance members to the PhoneAPI
+// hierarchy has historically perturbed nRF52 USB-CDC enumeration (see PhoneAPI.h).
+// Only compiled on lockdown (nRF52) builds.
+static bool s_serialLinkUp = false;
+#endif
+
 /// Create the shared serial console once and register receive wakeups.
 void consoleInit()
 {
@@ -88,6 +98,30 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 /// Service one serial API iteration and select the next polling interval.
 int32_t SerialConsole::runOnce()
 {
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    // Lockdown (nRF52) builds only. The SerialConsole is a process-lifetime
+    // singleton, so its inherited PhoneAPI object - and therefore its entry in
+    // the per-connection admin-auth slot table (keyed by PhoneAPI*) - is reused
+    // for every USB/serial client for the whole boot. Nothing re-locks that slot
+    // when the operator unplugs and a different client plugs in before the
+    // 15-minute inactivity timeout fires, so a fresh client would inherit the
+    // prior operator's admin authorization. Re-lock when the physical USB-CDC link
+    // drops - the serial analog of the BLE onDisconnect() -> close() session reset.
+    //
+    // On the nRF52 TinyUSB (Adafruit) core, (bool)Port == tud_cdc_n_connected():
+    // it goes false on cable unplug or host port-close (DTR de-assert). close()
+    // frees the auth slot and resets PhoneAPI state, so whoever connects next
+    // re-locks via handleStartConfig()'s !isConnected() branch on their first
+    // want_config - the same physical-link boundary BLE enforces in onConnect().
+    // Console transports without a real DTR line (e.g. a UART USER_DEBUG_PORT) hold
+    // this constant, so no edge fires and we fall back to the existing inactivity
+    // timeout - no worse than the pre-fix behavior.
+    const bool linkUp = static_cast<bool>(Port);
+    if (s_serialLinkUp && !linkUp)
+        close();
+    s_serialLinkUp = linkUp;
+#endif
+
 #ifdef HELTEC_MESH_SOLAR
     // After enabling the mesh solar serial port module configuration, command processing is handled by the serial port module.
     if (moduleConfig.serial.enabled && moduleConfig.serial.override_console_serial_port &&
