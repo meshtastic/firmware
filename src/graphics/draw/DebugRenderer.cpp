@@ -743,17 +743,18 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
+    int scale = 1;
     int iconX = SCREEN_WIDTH - chirpy_width - (chirpy_width / 3);
     int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
     int textX_offset = 10;
     if (currentResolution == ScreenResolution::High) {
         textX_offset = textX_offset * 4;
-        const int scale = 2;
+        scale = 2;
+        iconX = SCREEN_WIDTH - (chirpy_width * 2) - ((chirpy_width * 2) / 3);
+        iconY = (SCREEN_HEIGHT - (chirpy_height * 2)) / 2;
         const int bytesPerRow = (chirpy_width + 7) / 8;
 
         for (int yy = 0; yy < chirpy_height; ++yy) {
-            iconX = SCREEN_WIDTH - (chirpy_width * 2) - ((chirpy_width * 2) / 3);
-            iconY = (SCREEN_HEIGHT - (chirpy_height * 2)) / 2;
             const uint8_t *rowPtr = chirpy + yy * bytesPerRow;
             for (int xx = 0; xx < chirpy_width; ++xx) {
                 const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
@@ -766,6 +767,19 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     } else {
         display->drawXbm(iconX, iconY, chirpy_width, chirpy_height, chirpy);
     }
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Colour Chirpy on colour displays. The glyph is a filled head silhouette whose eyes are holes
+    // (off pixels), so two stacked regions render the proper mascot without a second bitmap:
+    //   A) whole glyph -> green body / frame / legs
+    //   B) the eye band -> black face, with the eye holes turning white via the region's off-colour
+    // Start the face band one column in from the head's left edge (col 6) so that edge stays green,
+    // matching the green column already left on the right edge (col 31).
+    graphics::registerTFTColorRegionDirect(iconX, iconY, chirpy_width * scale, chirpy_height * scale,
+                                           graphics::TFTPalette::MeshtasticGreen, graphics::getThemeBodyBg());
+    graphics::registerTFTColorRegionDirect(iconX + 7 * scale, iconY + 12 * scale, 24 * scale, 16 * scale,
+                                           graphics::TFTPalette::Black, graphics::TFTPalette::White);
+#endif
 
     int textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("Hello") / 2);
     display->drawString(textX, getTextPositions(display)[line++], "Hello");

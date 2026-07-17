@@ -2,7 +2,7 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include <Throttle.h>
 
 NeighborInfoModule *neighborInfoModule;

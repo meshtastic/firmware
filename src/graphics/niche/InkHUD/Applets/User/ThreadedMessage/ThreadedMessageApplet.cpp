@@ -2,7 +2,7 @@
 
 #include "./ThreadedMessageApplet.h"
 
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 
 using namespace NicheGraphics;

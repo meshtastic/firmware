@@ -132,6 +132,34 @@ static void test_migration_carriesRoleAndProtectedIntoWarm(void)
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
 }
 
+// The signer bit is learned from verified traffic, not NodeInfo, so it must survive a warm
+// round trip. The plain node is the control: re-admission restores it, it doesn't invent it.
+static void test_migration_carriesSignerBitThroughWarm(void)
+{
+    db->seedSelf();
+    const NodeNum signerNum = 2000 + 3;
+    const NodeNum plainNum = 2000 + 4;
+    const int extra = MAX_NUM_NODES + 30; // overflow so the oldest non-protected are demoted
+    for (int i = 1; i <= extra; i++)
+        db->push(2000 + i, /*last_heard=*/i, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true, /*withKey=*/true);
+    nodeInfoLiteSetBit(db->getMeshNode(signerNum), NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
+    TEST_ASSERT_TRUE(nodeInfoLiteHasXeddsaSigned(db->getMeshNode(signerNum)));
+
+    db->runDemote();
+
+    // Both are out of the hot store and held in the warm tier.
+    TEST_ASSERT_NULL(db->getMeshNode(signerNum));
+    TEST_ASSERT_NULL(db->getMeshNode(plainNum));
+
+    const meshtastic_NodeInfoLite *back = db->getOrCreateMeshNode(signerNum);
+    TEST_ASSERT_NOT_NULL(back);
+    TEST_ASSERT_TRUE_MESSAGE(nodeInfoLiteHasXeddsaSigned(back), "signer bit must survive a warm-tier round trip");
+
+    const meshtastic_NodeInfoLite *plainBack = db->getOrCreateMeshNode(plainNum);
+    TEST_ASSERT_NOT_NULL(plainBack);
+    TEST_ASSERT_FALSE_MESSAGE(nodeInfoLiteHasXeddsaSigned(plainBack), "re-admission must not invent the signer bit");
+}
+
 // Favourite handling: a favourite is never the eviction victim, even when it is
 // the oldest node in a full hot store.
 static void test_eviction_preservesFavorite(void)
@@ -197,6 +225,39 @@ static void test_protectedCap_refusesBeyondLimit(void)
     TEST_ASSERT_TRUE(db->setProtectedFlag(already, NODEINFO_BITFIELD_IS_IGNORED_MASK, true));
 }
 
+// removeNodeByNum() compacts survivors down and clears the slots that leaves free. A full
+// store with no matching node frees none, so there is nothing past the last node to clear.
+static void test_removeNodeByNum_absentNodeOnFullDb(void)
+{
+    db->seedSelf();
+    for (int i = 1; i < MAX_NUM_NODES; i++) // fill to MAX_NUM_NODES total (incl. self)
+        db->push(8000 + i, /*last_heard=*/i, false, false, /*withUser=*/true, /*withKey=*/true);
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes());
+
+    db->removeNodeByNum(0xDEADBEEF); // absent; ASan flags a write past the last slot
+
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES, (int)db->getNumMeshNodes()); // nothing removed
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(0x0BADF00D));                // self intact
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + 1));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // last slot intact
+}
+
+// Control for the above: a matching node on a full store is still removed, the survivors
+// compact down, and the freed tail slot is cleared.
+static void test_removeNodeByNum_presentNodeOnFullDb(void)
+{
+    db->seedSelf();
+    for (int i = 1; i < MAX_NUM_NODES; i++)
+        db->push(8000 + i, /*last_heard=*/i, false, false, /*withUser=*/true, /*withKey=*/true);
+
+    db->removeNodeByNum(8000 + 5);
+
+    TEST_ASSERT_EQUAL_INT(MAX_NUM_NODES - 1, (int)db->getNumMeshNodes());
+    TEST_ASSERT_NULL(db->getMeshNode(8000 + 5));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + 4));
+    TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // survivors kept
+}
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -206,9 +267,12 @@ NDB_TEST_ENTRY void setup()
     UNITY_BEGIN();
     RUN_TEST(test_migration_demotesOldestKeepsKeepersAndSelf);
     RUN_TEST(test_migration_carriesRoleAndProtectedIntoWarm);
+    RUN_TEST(test_migration_carriesSignerBitThroughWarm);
     RUN_TEST(test_eviction_preservesFavorite);
     RUN_TEST(test_ignored_survivesEvictionAndCleanup);
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
+    RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
+    RUN_TEST(test_removeNodeByNum_presentNodeOnFullDb);
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}

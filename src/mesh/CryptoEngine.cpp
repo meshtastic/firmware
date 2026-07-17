@@ -341,6 +341,32 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     return true;
 }
 
+void CryptoEngine::setPendingPublicKey(uint32_t node, const uint8_t *key)
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    pendingKeyVerificationNode = node;
+    memcpy(pendingKeyVerificationPublicKey, key, 32);
+    hasPendingKeyVerificationKey = true;
+}
+
+void CryptoEngine::clearPendingPublicKey()
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    pendingKeyVerificationNode = 0;
+    memset(pendingKeyVerificationPublicKey, 0, 32);
+    hasPendingKeyVerificationKey = false;
+}
+
+bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    if (!hasPendingKeyVerificationKey || node == 0 || node != pendingKeyVerificationNode)
+        return false;
+    out.size = 32;
+    memcpy(out.bytes, pendingKeyVerificationPublicKey, 32);
+    return true;
+}
+
 #endif
 concurrency::Lock *cryptLock;
 

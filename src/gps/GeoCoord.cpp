@@ -36,17 +36,50 @@ GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
     GeoCoord::setCoords();
 }
 
-// Initialize all the coordinate systems
+// Initialize DMS eagerly (cheap, most commonly used); UTM/MGRS/OSGR/OLC are computed lazily on
+// first access via their getters (see ensure*() below), since most callers never touch them.
 void GeoCoord::setCoords()
 {
     double lat = _latitude * 1e-7;
     double lon = _longitude * 1e-7;
     GeoCoord::latLongToDMS(lat, lon, _dms);
-    GeoCoord::latLongToUTM(lat, lon, _utm);
-    GeoCoord::latLongToMGRS(lat, lon, _mgrs);
-    GeoCoord::latLongToOSGR(lat, lon, _osgr);
-    GeoCoord::latLongToOLC(lat, lon, _olc);
+    _utmValid = false;
+    _mgrsValid = false;
+    _osgrValid = false;
+    _olcValid = false;
     _dirty = false;
+}
+
+void GeoCoord::ensureUTM() const
+{
+    if (!_utmValid) {
+        GeoCoord::latLongToUTM(_latitude * 1e-7, _longitude * 1e-7, _utm);
+        _utmValid = true;
+    }
+}
+
+void GeoCoord::ensureMGRS() const
+{
+    if (!_mgrsValid) {
+        GeoCoord::latLongToMGRS(_latitude * 1e-7, _longitude * 1e-7, _mgrs);
+        _mgrsValid = true;
+    }
+}
+
+void GeoCoord::ensureOSGR() const
+{
+    if (!_osgrValid) {
+        GeoCoord::latLongToOSGR(_latitude * 1e-7, _longitude * 1e-7, _osgr);
+        _osgrValid = true;
+    }
+}
+
+void GeoCoord::ensureOLC() const
+{
+    if (!_olcValid) {
+        GeoCoord::latLongToOLC(_latitude * 1e-7, _longitude * 1e-7, _olc);
+        _olcValid = true;
+    }
 }
 
 void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt)

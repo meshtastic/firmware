@@ -763,7 +763,7 @@ The repo registers the server via `.mcp.json` at the repo root - Claude Code / C
 
 **One MCP call per port at a time.** `SerialInterface` holds an exclusive OS-level lock on the serial port for its lifetime. If a `serial_*` session is open on `/dev/cu.usbmodem101`, calling `device_info` on the same port will fail fast pointing at the active session. Sequence calls: open → read/mutate → close, then next device. Never parallelize tool calls on the same port.
 
-### MCP tool surface (43 tools)
+### MCP tool surface (44 tools)
 
 Grouped by purpose. Full argument shapes in the meshtastic-mcp repo's README; a few high-value signatures are called out here.
 
@@ -771,7 +771,7 @@ Grouped by purpose. Full argument shapes in the meshtastic-mcp repo's README; a 
 - **Build & flash**: `build`, `clean`, `pio_flash`, `erase_and_flash` (ESP32 only), `update_flash` (ESP32 OTA), `touch_1200bps`
 - **Serial sessions** (long-running, 10k-line ring buffer): `serial_open`, `serial_read`, `serial_list`, `serial_close`
 - **Device reads**: `device_info`, `list_nodes`
-- **Device writes**: `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `send_input_event` (inject a button/key press via the firmware's InputBroker), `set_debug_log_api`; destructive/power-state writes require `confirm=True`: `reboot`, `shutdown`, `factory_reset`
+- **Device writes**: `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `send_input_event` (inject a button/key press via the firmware's InputBroker), `inject_frame` (inject an over-the-air-style frame into the RX pipeline - see below), `set_debug_log_api`; destructive/power-state writes require `confirm=True`: `reboot`, `shutdown`, `factory_reset`
 - **userPrefs admin** (build-time constants, not runtime config): `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_chip_info`, `esptool_erase_flash`, `esptool_raw`, `nrfutil_dfu`, `nrfutil_raw`, `picotool_info`, `picotool_load`, `picotool_raw`
 - **USB power control** (via `uhubctl`, per-port PPPS toggle): `uhubctl_list` (read-only), `uhubctl_power(action='on'|'off', confirm=True)`, `uhubctl_cycle(delay_s, confirm=True)`. Target by raw `(location, port)` or by `role` (`"nrf52"`, `"esp32s3"`); role lookup checks `MESHTASTIC_UHUBCTL_LOCATION_<ROLE>` + `_PORT_<ROLE>` env vars first, falls back to VID auto-detection.
@@ -780,6 +780,15 @@ Grouped by purpose. Full argument shapes in the meshtastic-mcp repo's README; a 
 `confirm=True` is a tool-level gate on top of whatever permission prompt your MCP host shows. **Don't bypass it** by asking the host to auto-approve - it exists specifically because MCP hosts sometimes remember "always allow this tool" and that's dangerous for `factory_reset`, `erase_and_flash`, `uhubctl_power(action='off')`, and `uhubctl_cycle`.
 
 **TCP / native-host nodes.** Setting `MESHTASTIC_MCP_TCP_HOST=<host[:port]>` makes `list_devices` surface a `meshtasticd` daemon (e.g. the `native-macos` build) as a synthetic `tcp://host:port` entry, and `connect()` routes through `meshtastic.tcp_interface.TCPInterface` instead of `SerialInterface`. Every read/write/admin tool that flows through `connect()` works against the daemon transparently. USB-only tools (`pio_flash`, `erase_and_flash`, `update_flash`, `touch_1200bps`, `serial_open`, `esptool_*`, `nrfutil_*`, `picotool_*`) raise a clear `ConnectionError` when handed a `tcp://` port; `pio_flash` against a `native*` env raises a `FlashError` (no upload step - use `build` and run the binary directly). The pytest harness still assumes USB-attached devices per role; TCP-aware fixtures are deferred. See the meshtastic-mcp repo's README § "TCP / native-host nodes".
+
+### Frame injection: testing the off-air receive path
+
+The `toRadio` API can only inject **locally-originated** traffic - the firmware forces `p.from = 0` in `MeshService::handleToRadio`, which bypasses the `from != 0` receive path and everything gated on it (remote admin authorization, the admin session-passkey check, hop handling, promiscuous sniffing). To exercise those paths you either need a second transmitting radio, or **frame injection**: a build-flagged seam that delivers a client-supplied frame into the real RX pipeline as if it arrived off the LoRa chip.
+
+- **Firmware:** build with `-D MESHTASTIC_ENABLE_FRAME_INJECTION=1` (`src/configuration.h`, off by default - it forges over-the-air traffic and must never ship enabled). `MeshService::injectAsReceived` extends the existing portduino `SimRadio` `SIMULATOR_APP` path to real hardware: it unwraps a `Compressed` envelope (`portnum == UNKNOWN_APP` → verbatim ciphertext the router decrypts; else → decoded payload for that portnum), then calls `router->enqueueReceivedMessage()` - the exact entry point `RadioLibInterface::handleReceiveInterrupt` uses. Injection is reached before the `p.from = 0` line, so a forged sender survives; `from == 0` is dropped to match real RX.
+- **Host:** drive it with the meshtastic-mcp `inject_frame` tool (or `cli/meshinject.py`). The crafter replicates channel crypto (default-PSK expansion, `xorHash` channel hash, AES-CTR with the `packetId|from|0` nonce), so an encrypted frame decrypts on-device as if received. Modes: `text`, `raw`, `admin` (+ `pki`/`public_key` for the PKC-admin path), `ciphertext`, `fuzz` (malformed-frame decode-path/crash testing).
+- **Example - remote-admin session-key repro:** set the target's `admin_key[0]` to a key you hold, then inject an `admin` set_owner with `pki=true`, that key, and a stale `session_hex`. The node logs `PKC admin payload with authorized sender key` → `Expected session key: 00…` → `Admin message without session_key!` - the exact ndoo scenario, on real silicon. Capture logs via `set_debug_log_api` on the same connection.
+- **nRF52 gotcha:** the USB CDC wedges under rapid `SerialInterface` open/close churn (unrelated to injection) - keep setup + inject + log-capture on one connection; recover a hung board via a 1200 bps-touch DFU reflash.
 
 ### Hardware test suite (`run-tests.sh`, from a meshtastic-mcp checkout)
 

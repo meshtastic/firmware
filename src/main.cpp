@@ -22,13 +22,13 @@
 
 #include "FSCommon.h"
 #include "Power.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
+#include "gps/RTC.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
@@ -814,6 +814,10 @@ void setup()
 
 #ifdef ARCH_RP2040
     rp2040Setup();
+#endif
+
+#ifdef ARCH_STM32WL
+    stm32wlSetup();
 #endif
 
     // We do this as early as possible because this loads preferences from flash

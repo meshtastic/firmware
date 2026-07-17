@@ -183,16 +183,15 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
  * downgrade protection: drop a non-PKI broadcast from a known signer whose signed encoding would
  * still fit a LoRa frame (unicast, PKI, and oversized broadcasts always pass).
  *
- * encodedDataSize is the wire size of the encoded Data as the sender built it; pass 0 to size
- * p->decoded canonically instead (for already-decoded ingress such as plaintext-MQTT downlink,
- * which bypasses perhapsDecode's crypto path).
+ * The fit test sizes p->decoded with the real encoder, so it measures the fields the sender
+ * encoded rather than any raw wire length.
  *
  * The caller MUST hold cryptLock: verification runs through the shared CryptoEngine key cache.
  * (perhapsDecode already holds it; other call sites must take it themselves.)
  *
  * @return false if the packet must be dropped.
  */
-bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize = 0);
+bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p);
 #endif
 
 extern Router *router;
