@@ -1,7 +1,7 @@
 #include "TransmitHistory.h"
 #include "FSCommon.h"
-#include "RTC.h"
 #include "SPILock.h"
+#include "gps/RTC.h"
 #include <Throttle.h>
 
 #ifdef FSCom

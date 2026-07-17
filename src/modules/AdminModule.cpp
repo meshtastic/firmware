@@ -5,8 +5,8 @@
 #include "NodeDB.h"
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "SPILock.h"
+#include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
@@ -1408,6 +1408,15 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
             LOG_INFO("Get config: Security");
             res.get_config_response.which_payload_variant = meshtastic_Config_security_tag;
             res.get_config_response.payload_variant.security = config.security;
+            // The device identity private key is backup material for the local owner only. A local
+            // admin client sets from == 0 (BLE/USB/TCP); never return the key to a remote requester,
+            // even an authorized one, since it would travel over the air. public_key/admin_key are
+            // public and stay put.
+            if (req.from != 0) {
+                auto &sec = res.get_config_response.payload_variant.security;
+                memset(sec.private_key.bytes, 0, sizeof(sec.private_key.bytes));
+                sec.private_key.size = 0;
+            }
             break;
         case meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG:
             LOG_INFO("Get config: Sessionkey");
