@@ -82,16 +82,17 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void noteOutgoingAdminRequest(const meshtastic_MeshPacket &p);
 
   private:
-    // An admin response carries no session passkey and its sender is not an admin-key holder, so
-    // the only thing vouching for one is a request we sent. Track those per remote: a client may
-    // have several nodes in flight, and each keeps answering until the window lapses.
-    static constexpr size_t kOutstandingAdminRequests = 3;
+    // An admin response carries no session passkey and its sender is not an admin-key holder, so a
+    // request we sent is the only thing vouching for it. Track each request independently - its own
+    // expiry window and pinned key - so a later request to the same node can neither extend an
+    // earlier one's window nor relax its PKC pin.
+    static constexpr size_t kOutstandingAdminRequests = 8;
     static constexpr uint32_t kOutstandingAdminRequestMs = 300 * 1000; // same window as the session passkey
     struct OutstandingAdminRequest {
         NodeNum to;                 // 0 = free slot
-        uint32_t sentAtMs;          // millis() when the most recent request to this node went out
-        uint32_t expectedResponses; // bitmask of response variants these requests authorize
-        uint8_t key[32];            // destination key, when the client pinned one
+        uint32_t sentAtMs;          // millis() when this request went out
+        pb_size_t expectedResponse; // the one response variant this request authorizes
+        uint8_t key[32];            // pinned destination key when the request went out over PKC
         bool keyValid;
     };
     OutstandingAdminRequest outstandingAdminRequests[kOutstandingAdminRequests] = {};

@@ -1856,35 +1856,6 @@ static pb_size_t adminResponseForRequest(pb_size_t requestVariant)
     }
 }
 
-// A one-bit identifier for a response variant, so several expected responses pack into a mask.
-static uint32_t adminResponseBit(pb_size_t responseVariant)
-{
-    switch (responseVariant) {
-    case meshtastic_AdminMessage_get_channel_response_tag:
-        return 1u << 0;
-    case meshtastic_AdminMessage_get_owner_response_tag:
-        return 1u << 1;
-    case meshtastic_AdminMessage_get_config_response_tag:
-        return 1u << 2;
-    case meshtastic_AdminMessage_get_module_config_response_tag:
-        return 1u << 3;
-    case meshtastic_AdminMessage_get_canned_message_module_messages_response_tag:
-        return 1u << 4;
-    case meshtastic_AdminMessage_get_device_metadata_response_tag:
-        return 1u << 5;
-    case meshtastic_AdminMessage_get_ringtone_response_tag:
-        return 1u << 6;
-    case meshtastic_AdminMessage_get_device_connection_status_response_tag:
-        return 1u << 7;
-    case meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag:
-        return 1u << 8;
-    case meshtastic_AdminMessage_get_ui_config_response_tag:
-        return 1u << 9;
-    default:
-        return 0;
-    }
-}
-
 void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
 {
     if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
@@ -1896,16 +1867,22 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
     if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
         return;
-    const uint32_t bit = adminResponseBit(adminResponseForRequest(admin.which_payload_variant));
-    if (!bit)
+    const pb_size_t responseVariant = adminResponseForRequest(admin.which_payload_variant);
+    if (!responseVariant)
         return; // not a getter whose response we can pair
 
-    // Reuse this remote's slot if it has one, else a free slot, else the oldest.
+    const bool keyValid = p.pki_encrypted && p.public_key.size == 32;
+
+    // One entry per (node, response variant, pinning). Refresh an identical outstanding request
+    // rather than duplicate it (a client may fetch several config subtypes, all answered by one
+    // response variant); else take a free slot, else evict the oldest (rollover-safe elapsed).
     OutstandingAdminRequest *slot = nullptr;
     for (auto &o : outstandingAdminRequests)
-        if (o.to == p.to)
+        if (o.to == p.to && o.expectedResponse == responseVariant && o.keyValid == keyValid &&
+            (!keyValid || memcmp(o.key, p.public_key.bytes, 32) == 0)) {
             slot = &o;
-    const bool sameNode = slot != nullptr;
+            break;
+        }
     if (!slot)
         for (auto &o : outstandingAdminRequests)
             if (o.to == 0) {
@@ -1913,18 +1890,18 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
                 break;
             }
     if (!slot) {
+        const uint32_t now = millis();
         slot = &outstandingAdminRequests[0];
         for (auto &o : outstandingAdminRequests)
-            if (o.sentAtMs < slot->sentAtMs)
+            if ((uint32_t)(now - o.sentAtMs) > (uint32_t)(now - slot->sentAtMs))
                 slot = &o;
     }
 
     slot->to = p.to;
     slot->sentAtMs = millis();
-    // Keep the types already pending for this node so a client may pipeline several to it.
-    slot->expectedResponses = sameNode ? (slot->expectedResponses | bit) : bit;
-    slot->keyValid = p.pki_encrypted && p.public_key.size == 32;
-    if (slot->keyValid)
+    slot->expectedResponse = responseVariant;
+    slot->keyValid = keyValid;
+    if (keyValid)
         memcpy(slot->key, p.public_key.bytes, 32);
     else
         memset(slot->key, 0, 32);
@@ -1933,19 +1910,18 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
 
 bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant)
 {
-    const uint32_t bit = adminResponseBit(responseVariant);
+    // Scan every entry: several requests for the same variant may differ only in pinning, and an
+    // unpinned one still authorizes the response even if a pinned one does not.
     for (auto &o : outstandingAdminRequests) {
-        if (o.to == 0 || o.to != mp.from)
+        if (o.to != mp.from || o.expectedResponse != responseVariant)
             continue;
         if (!Throttle::isWithinTimespanMs(o.sentAtMs, kOutstandingAdminRequestMs)) {
-            o.to = 0; // lapsed; free the slot
-            return false;
+            o.to = 0; // lapsed; free the slot and keep looking for another live match
+            continue;
         }
-        if (!(o.expectedResponses & bit))
-            return false; // we queried this node, but not for this
-        // A request the client pinned to a key must be answered over PKC by that same key.
+        // A request pinned to a PKC key must be answered over PKC by that same key.
         if (o.keyValid && (!mp.pki_encrypted || mp.public_key.size != 32 || memcmp(mp.public_key.bytes, o.key, 32) != 0))
-            return false;
+            continue;
         return true;
     }
     return false;

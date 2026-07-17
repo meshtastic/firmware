@@ -304,6 +304,44 @@ void test_response_variant_must_match_request(void)
     TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, meshtastic_AdminMessage_get_owner_response_tag));
 }
 
+// Regression: each request keeps its own pinned key. A later unpinned request to the same node
+// must not relax the PKC pin of an earlier one (the old shared-slot model cleared it).
+void test_pinned_request_keeps_its_key_after_an_unpinned_request(void)
+{
+    uint8_t key[32];
+    memset(key, 0xC1, 32);
+
+    // A PKC-pinned get_config request to STRANGER (pins `key`).
+    meshtastic_AdminMessage cfg = meshtastic_AdminMessage_init_zero;
+    cfg.which_payload_variant = meshtastic_AdminMessage_get_config_request_tag;
+    meshtastic_MeshPacket pinned = makeOutgoingRequest(STRANGER_NODE, cfg);
+    pinned.pki_encrypted = true;
+    pinned.public_key.size = 32;
+    memcpy(pinned.public_key.bytes, key, 32);
+    admin->noteOutgoingAdminRequest(pinned);
+
+    // A later, unpinned get_owner request to the same node.
+    meshtastic_AdminMessage own = meshtastic_AdminMessage_init_zero;
+    own.which_payload_variant = meshtastic_AdminMessage_get_owner_request_tag;
+    admin->noteOutgoingAdminRequest(makeOutgoingRequest(STRANGER_NODE, own));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket resp = makeModuleConfigResponse(STRANGER_NODE, m); // from set; pki off by default
+
+    // A plaintext get_config_response is still rejected: the config request was pinned.
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag),
+                              "an unpinned request must not relax an earlier request's key pin");
+    // Over PKC with the pinned key it is accepted.
+    resp.pki_encrypted = true;
+    resp.public_key.size = 32;
+    memcpy(resp.public_key.bytes, key, 32);
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag));
+    // The unpinned get_owner_response is accepted in plaintext (its request carried no pin).
+    resp.pki_encrypted = false;
+    resp.public_key.size = 0;
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_owner_response_tag));
+}
+
 // Only requests arm the gate: sending a setter to a node must not make it a trusted responder.
 void test_outgoing_setter_does_not_admit_responses(void)
 {
@@ -366,6 +404,7 @@ void setup()
     RUN_TEST(test_response_after_our_request_is_solicited);
     RUN_TEST(test_request_to_one_node_does_not_admit_another);
     RUN_TEST(test_response_variant_must_match_request);
+    RUN_TEST(test_pinned_request_keeps_its_key_after_an_unpinned_request);
     RUN_TEST(test_outgoing_setter_does_not_admit_responses);
     RUN_TEST(test_unsolicited_response_does_not_poison_pins);
     RUN_TEST(test_solicited_response_updates_pins);
