@@ -639,7 +639,9 @@ static void test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
-    mockNodeDB->setCachedNode(kTargetNode);                   // the direct-response target
+    mockNodeDB->setCachedNode(kTargetNode); // the direct-response target
+    // Signed-only replay gate (default) requires the target be a known signer to be served.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
     mockNodeDB->setSignerHotNode(kRemoteNode, "victim-real"); // the requester is a known signer
 
     MockRouter mockRouter;
@@ -649,6 +651,7 @@ static void test_tm_nodeinfo_directResponse_ignoresUnsignedSignerIdentity(void)
     service = &mockService;
 
     TrafficManagementModuleTestShim module;
+    module.dropNodeInfoCacheForTest(); // exercise the NodeDB fallback path this test was written for
     meshtastic_MeshPacket request = makeNodeInfoPacket(kRemoteNode, "attacker-name", "atk");
     request.to = kTargetNode;
     request.decoded.want_response = true;
@@ -1044,8 +1047,12 @@ static void test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes(void)
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 
-    // A genuinely observed frame (key matches the NodeDB pin) makes it servable.
-    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "hot-name", 0x77));
+    // A genuinely observed frame (key matches the NodeDB pin) makes it servable. The node is
+    // a known signer, so per #11035 only a signature-verified frame may drive cache writes -
+    // mark it as Router-verified, as the real receive path would.
+    meshtastic_MeshPacket observed = makeNodeInfoPacketWithKey(kTargetNode, "hot-name", 0x77);
+    observed.xeddsa_signed = true;
+    module.handleReceived(observed);
     request.id = 0xCCCC0002;
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
