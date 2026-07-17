@@ -315,14 +315,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // held, so a first-contact key is always TOFU (0) until a later signed frame upgrades it.
         uint8_t keySignerProven : 1;
     };
-    // Tail metadata past `user` is node(4) + three uint32 timestamps(12) + one 4-byte word
-    // holding sourceChannel + decodedBitfield + the packed flag byte (+1 pad) = 20 bytes; the
-    // struct's 4-byte alignment rounds the three trailing bytes up to that word. New boolean
-    // flags must go in the spare bits above (6 left), not new fields: the array is 2000 entries
-    // in PSRAM, so a 4th trailing byte would open a fresh word (~8 KB). This assert fires if
-    // that happens.
-    static_assert(sizeof(NodeInfoPayloadEntry) == sizeof(meshtastic_User) + 20,
-                  "NodeInfoPayloadEntry grew past its packed tail word - pack new flags into the spare flag bits");
+    // sourceChannel, decodedBitfield, and the two 1-bit flags (hasDecodedBitfield,
+    // keySignerProven) make up the entry's trailing metadata; the two bits share a single byte,
+    // leaving 6 spare bits. Add future booleans as more 1-bit fields here rather than new bytes -
+    // the array is 2000 entries in PSRAM, so a fresh byte can cost a whole aligned word. (No
+    // exact-size static_assert: sizeof(meshtastic_User) and its trailing padding vary by platform
+    // - nanopb packs the generated struct differently on embedded targets - so any fixed byte
+    // count is non-portable and would fail the build on some boards.)
 
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM (flat array, linear scan)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
