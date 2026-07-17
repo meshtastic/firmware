@@ -283,6 +283,23 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
 #endif
 }
 
+void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    concurrency::LockGuard guard(&cacheLock);
+    if (!nodeInfoPayload)
+        return;
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+        if (nodeInfoPayload[i].node == node) {
+            nodeInfoPayload[i].keySignerProven = true;
+            return;
+        }
+    }
+#else
+    (void)node;
+#endif
+}
+
 /**
  * Find or create an entry for the given node.
  *
@@ -1199,6 +1216,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     uint32_t cachedLastObservedMs = 0;
     uint32_t cachedLastObservedRxTime = 0;
     uint32_t cachedLastResponseMs = 0;
+    // Signer-proven provenance of the cached key, consumed by the replay gate below
+    // (maybe_unused: read only when TMM_NODEINFO_REPLAY_SIGNED_GATE is compiled in).
+    [[maybe_unused]] bool cachedKeySignerProven = false;
     // True once we commit to answering from the NodeDB fallback (non-PSRAM) path, so the
     // shared throttle check/stamp below target the module-global fallback stamp instead of
     // a per-node PSRAM entry (which does not exist on this path).
@@ -1221,6 +1241,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedLastObservedMs = entry->lastObservedMs;
             cachedLastObservedRxTime = entry->lastObservedRxTime;
             cachedLastResponseMs = entry->lastResponseMs;
+            cachedKeySignerProven = entry->keySignerProven;
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
             cachedNodeInfoIndex = static_cast<int32_t>(entry - nodeInfoPayload);
 #endif
@@ -1252,6 +1273,15 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
                          static_cast<unsigned>(nodeAgeSecs));
             return false;
         }
+#if TMM_NODEINFO_REPLAY_SIGNED_GATE
+        // Replay provenance gate (fallback path): only vouch for a node NodeDB knows as a
+        // verified signer. An unproven (trust-on-first-use) identity is left for the genuine
+        // node or another cache-holder to answer.
+        if (!nodeInfoLiteHasXeddsaSigned(node)) {
+            TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x not signer-proven, not responding", p->to);
+            return false;
+        }
+#endif
         cachedUser = TypeConversions::ConvertToUser(node);
         // T3: the fallback path has no per-node cache entry, so it throttles against the
         // module-global stamp. Load it here so the shared throttle check below covers this
@@ -1276,6 +1306,16 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
                      static_cast<unsigned long>(clockMs() - cachedLastObservedMs));
         return false;
     }
+
+#if TMM_NODEINFO_REPLAY_SIGNED_GATE
+    // Replay provenance gate (PSRAM path): only spoof a reply for a signer-proven cached key.
+    // The fallback path is gated above; this covers the PSRAM cache hit. usedFallback entries
+    // were already gated, so skip them here. See TMM_NODEINFO_REPLAY_REQUIRE_SIGNED.
+    if (!usedFallback && !cachedKeySignerProven) {
+        TM_LOG_DEBUG("NodeInfo PSRAM entry for 0x%08x not signer-proven, not responding", p->to);
+        return false;
+    }
+#endif
 
     if (!sendResponse)
         return true;

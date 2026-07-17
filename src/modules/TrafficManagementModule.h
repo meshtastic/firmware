@@ -8,6 +8,25 @@
 
 #if HAS_TRAFFIC_MANAGEMENT
 
+// Replay provenance gate (compile-time). When 1 (default), the NodeInfo direct-response path
+// only spoofs a reply on behalf of a node whose cached key is signer-proven - an XEdDSA
+// signature was verified against it - in addition to the staleness gate. Replay is a courtesy
+// feature, and vouching for an unverified (trust-on-first-use) identity to other nodes is the
+// risk this closes, so signed-only is the safer default. Define as 0 at build time to also
+// serve fresh TOFU-only nodes (the prior, more permissive behavior). No effect when PKI is
+// excluded from the build: nothing can be signed there, so the gate is bypassed to avoid
+// disabling the courtesy feature outright.
+#ifndef TMM_NODEINFO_REPLAY_REQUIRE_SIGNED
+#define TMM_NODEINFO_REPLAY_REQUIRE_SIGNED 1
+#endif
+
+// Effective gate: only meaningful when PKI is compiled in.
+#if TMM_NODEINFO_REPLAY_REQUIRE_SIGNED && !(MESHTASTIC_EXCLUDE_PKI)
+#define TMM_NODEINFO_REPLAY_SIGNED_GATE 1
+#else
+#define TMM_NODEINFO_REPLAY_SIGNED_GATE 0
+#endif
+
 /**
  * TrafficManagementModule - Packet inspection and traffic shaping for mesh networks.
  *
@@ -109,6 +128,11 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // Introspection for tests: the cached device role for a node, or -1 if the node has
     // no cache entry (distinguishes "not tracked / evicted" from CLIENT == 0).
     int peekCachedRole(NodeNum node);
+
+    // Test hook: force a cached NodeInfo entry's key to signer-proven, so replay-gate tests can
+    // exercise the signed-only path without standing up a full XEdDSA verification. No-op if the
+    // node is not cached or the PSRAM NodeInfo cache is absent.
+    void markKeySignerProvenForTest(NodeNum node);
 
   private:
     // =========================================================================

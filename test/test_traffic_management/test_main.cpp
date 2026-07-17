@@ -176,6 +176,7 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
     using TrafficManagementModule::alterReceived;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
+    using TrafficManagementModule::markKeySignerProvenForTest;
     using TrafficManagementModule::peekCachedRole;
     using TrafficManagementModule::runOnce;
 
@@ -535,6 +536,8 @@ static void test_tm_nodeinfo_directResponse_respondsFromCache(void)
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     config.lora.config_ok_to_mqtt = true;
     mockNodeDB->setCachedNode(kTargetNode);
+    // Signed-only replay gate (default) requires the target be a known signer to be served.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -579,6 +582,8 @@ static void test_tm_nodeinfo_directResponse_learnsRequestorNodeInfo(void)
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     mockNodeDB->setCachedNode(kTargetNode);
+    // Signed-only replay gate (default) requires the target be a known signer to be served.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -730,6 +735,8 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
 
     ProcessMessage observedResult = module.handleReceived(observed);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(observedResult));
+    // Signed-only replay gate (default) requires signer-proven provenance to serve.
+    module.markKeySignerProvenForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -809,6 +816,8 @@ static void test_tm_nodeinfo_directResponse_psramStaleEntryNotServed(void)
     // Learn a NodeInfo for the target into the PSRAM cache (broadcast, so it is only cached).
     meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
     module.handleReceived(observed);
+    // Signer-proven so staleness is the sole reason it is not served (isolates the gate under test).
+    module.markKeySignerProvenForTest(kTargetNode);
 
     // Advance the virtual clock just past the 6 h serve window.
     TrafficManagementModule::s_testNowMs += (6UL * 60UL * 60UL * 1000UL) + 1000UL;
@@ -848,6 +857,8 @@ static void test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow(void)
 
     meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
     module.handleReceived(observed);
+    // Signed-only replay gate (default) requires signer-proven provenance to serve.
+    module.markKeySignerProvenForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -911,6 +922,8 @@ static void test_tm_nodeinfo_cache_rejectsMismatchedKey(void)
     module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x11));
     // Poisoning attempt with a different key (0x22...) must be rejected.
     module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "attacker", 0x22));
+    // Signed-only replay gate (default) requires signer-proven provenance to serve the reply.
+    module.markKeySignerProvenForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -1002,6 +1015,38 @@ static void test_tm_nodeinfo_copyPublicKey_missReturnsFalse(void)
     uint8_t key[32] = {0};
     TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
 }
+
+#if TMM_NODEINFO_REPLAY_SIGNED_GATE
+/**
+ * Replay gate (PSRAM path): a fresh but trust-on-first-use (never signer-proven) cached entry
+ * is withheld - the reply is suppressed though the entry is fresh.
+ */
+static void test_tm_nodeinfo_directResponse_psramUnsignedNotServed(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    // Cache a fresh but unsigned (TOFU) NodeInfo and do NOT mark it signer-proven.
+    module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+#endif // TMM_NODEINFO_REPLAY_SIGNED_GATE
 #endif // !MESHTASTIC_EXCLUDE_PKI
 #endif
 
@@ -1021,6 +1066,8 @@ static void test_tm_nodeinfo_directResponse_fallbackStaleEntryNotServed(void)
 
     mockNodeDB->setCachedNode(kTargetNode);
     mockNodeDB->cachedNodeForTest().last_heard = now - (7UL * 60UL * 60UL); // 7 h ago -> stale
+    // Signer-proven so staleness is the sole reason this is not served (isolates the gate under test).
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1057,6 +1104,8 @@ static void test_tm_nodeinfo_directResponse_fallbackFreshEntryServed(void)
 
     mockNodeDB->setCachedNode(kTargetNode);
     mockNodeDB->cachedNodeForTest().last_heard = now - 60UL; // 1 min ago -> fresh
+    // Signed-only replay gate (default) requires the target be a known signer to be served.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1096,6 +1145,8 @@ static void test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow(void)
 
     mockNodeDB->setCachedNode(kTargetNode);
     mockNodeDB->cachedNodeForTest().last_heard = now - 60UL; // fresh, passes staleness gate
+    // Signed-only replay gate (default) requires the target be a known signer to be served.
+    mockNodeDB->cachedNodeForTest().bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1129,6 +1180,42 @@ static void test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow(void)
 
     resetRTCStateForTests();
 }
+
+#if TMM_NODEINFO_REPLAY_SIGNED_GATE
+/**
+ * Replay gate (fallback path): a fresh NodeDB node that is NOT a known signer is withheld -
+ * the courtesy reply is suppressed and the genuine request propagates (CONTINUE, no TX).
+ */
+static void test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    setBootRelativeTimeForUnitTest(1000000);
+    const uint32_t now = getTime();
+
+    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->cachedNodeForTest().last_heard = now - 60UL; // fresh, passes staleness
+    // Deliberately NOT flagged as a signer -> the signed-only gate must withhold the reply.
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    ProcessMessage result = module.handleReceived(request);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(result));
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    resetRTCStateForTests();
+}
+#endif // TMM_NODEINFO_REPLAY_SIGNED_GATE
 #endif
 
 /**
@@ -2120,6 +2207,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackStaleEntryNotServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackFreshEntryServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow);
+#if TMM_NODEINFO_REPLAY_SIGNED_GATE
+    RUN_TEST(test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed);
+#endif
 #endif
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);
@@ -2131,6 +2221,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_missReturnsFalse);
+#if TMM_NODEINFO_REPLAY_SIGNED_GATE
+    RUN_TEST(test_tm_nodeinfo_directResponse_psramUnsignedNotServed);
+#endif
 #endif
 #endif
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
