@@ -4,7 +4,6 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "HM330XSensor.h"
-#include "../detect/reClockI2C.h"
 
 HM330XSensor::HM330XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_HM330X, "HM330X"){};
 
@@ -16,27 +15,26 @@ bool HM330XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _address = dev->address.address;
 
 #ifdef HM330X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(HM330X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(HM330X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    _port = dev->address.port;
+    reClockI2C.setup(_bus, _port);
+
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(HM330X_I2C_CLOCK_SPEED);
 #endif /* HM330X_I2C_CLOCK_SPEED */
 
     if (hm330x.init(_bus) != HM330XErrorCode::NO_ERROR) {
-        #if defined(HM330X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-            reClockI2C(currentClock, _bus, false);
-        #endif
+#ifdef HM330X_I2C_CLOCK_SPEED
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
+#endif /* HM330X_I2C_CLOCK_SPEED */
         LOG_WARN("%s error in sensor init", sensorName);
         return false;
     }
 
-#if defined(HM330X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef HM330X_I2C_CLOCK_SPEED
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
+#endif /* HM330X_I2C_CLOCK_SPEED */
 
     status = 1;
     LOG_INFO("%s Enabled", sensorName);
@@ -85,27 +83,23 @@ int32_t HM330XSensor::pendingForReadyMs()
 bool HM330XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
 #ifdef HM330X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(HM330X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(HM330X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(HM330X_I2C_CLOCK_SPEED);
 #endif /* HM330X_I2C_CLOCK_SPEED */
 
     if (hm330x.read_sensor_value(buffer, 29)) {
         LOG_WARN("%s: read result failed", sensorName);
-#if defined(HM330X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef HM330X_I2C_CLOCK_SPEED
+        LOG_INFO("%s: restoring clock speed", sensorName);
+        reClockI2C.restoreClock();
+#endif /* HM330X_I2C_CLOCK_SPEED */
         return false;
     }
 
-#if defined(HM330X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef HM330X_I2C_CLOCK_SPEED
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
+#endif /* HM330X_I2C_CLOCK_SPEED */
 
     if (hm330x.checksum_calc(buffer) != HM330XErrorCode::NO_ERROR) {
         LOG_ERROR("%s: Checksum error", sensorName);

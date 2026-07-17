@@ -2,7 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<Seeed_HM330X.h>)
 
-#include "../detect/reClockI2C.h"
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RTC.h"
 #include "TelemetrySensor.h"
@@ -22,6 +22,10 @@ class HM330XSensor : public TelemetrySensor
     uint8_t buffer[HM330X_FRAME_LENGTH]{};
     TwoWire *_bus{};
     uint8_t _address{};
+#ifdef HM330X_I2C_CLOCK_SPEED
+    ScanI2C::I2CPort _port = ScanI2C::I2CPort::NO_I2C;
+    ReClockI2C reClockI2C;
+#endif
 
     HM330X hm330x;
     HM330XErrorCode checksum(uint8_t* data);
