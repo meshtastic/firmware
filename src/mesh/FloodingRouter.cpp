@@ -51,8 +51,8 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Repeated reliable tx");
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
-                reprocessPacket(p);
-                perhapsRebroadcast(p);
+                if (reprocessPacket(p))
+                    perhapsRebroadcast(p);
             }
         } else {
             perhapsCancelDupe(p);
@@ -75,8 +75,8 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
-            reprocessPacket(p);
-            perhapsRebroadcast(p);
+            if (reprocessPacket(p))
+                perhapsRebroadcast(p);
 
             rxDupe++;
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
@@ -87,32 +87,39 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
     return false;
 }
 
-void FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
+bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
     if (nodeDB)
         nodeDB->updateFrom(*p);
 
-#if !MESHTASTIC_EXCLUDE_TRACEROUTE
-    if (traceRouteModule && p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        // If we got a packet that is not decoded, try to decode it so we can check for traceroute.
+    bool shouldDecode = false;
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    shouldDecode = true;
+#elif !MESHTASTIC_EXCLUDE_TRACEROUTE
+    shouldDecode = traceRouteModule != nullptr;
+#endif
+    if (shouldDecode && p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        // Duplicate handling can rebroadcast before the normal receive path. The
+        // event policy needs the portnum even when TraceRoute is excluded.
         auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
         if (decodedState == DecodeState::DECODE_SUCCESS) {
             // parsing was successful, print for debugging
             printPacket("reprocessPacket(DUP)", p);
         } else {
             // Fatal decoding error, we can't do anything with this packet
-            LOG_WARN(
-                "FloodingRouter::reprocessPacket: Fatal decode error (state=%d, id=0x%08x, from=%u), can't check for traceroute",
-                static_cast<int>(decodedState), p->id, getFrom(p));
-            return;
+            LOG_WARN("FloodingRouter::reprocessPacket: decode error (state=%d, id=0x%08x, from=%u)",
+                     static_cast<int>(decodedState), p->id, getFrom(p));
+            return true;
         }
     }
 
+#if !MESHTASTIC_EXCLUDE_TRACEROUTE
     if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
         traceRouteModule->processUpgradedPacket(*p);
     }
 #endif
+    return true;
 }
 
 bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)

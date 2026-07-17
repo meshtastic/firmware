@@ -65,16 +65,16 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_INFO("Fallback to flooding from relay_node=0x%x", p->relay_node);
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
-                reprocessPacket(p);
-                perhapsRebroadcast(p);
+                if (reprocessPacket(p))
+                    perhapsRebroadcast(p);
             }
         } else {
             bool isRepeated = getHopsAway(*p) == 0;
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
-                    reprocessPacket(p);
-                    if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
+                    if (reprocessPacket(p) && !isBlockedEventCoordinatePacket(p) && !perhapsRebroadcast(p) && isToUs(p) &&
+                        p->want_ack) {
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 }
@@ -151,6 +151,14 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 /* Check if we should be rebroadcasting this packet if so, do so. */
 bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    // Never relay coordinate-bearing packets on the event ("everyone") channel.
+    // Closes the reliable-retransmit-dupe path that runs before handleReceived().
+    if (isBlockedEventCoordinatePacket(p)) {
+        return false;
+    }
+#endif
+
     // Check if traffic management wants to exhaust this packet's hops
     bool exhaustHops = false;
 #if HAS_TRAFFIC_MANAGEMENT
