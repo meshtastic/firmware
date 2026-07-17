@@ -27,6 +27,19 @@
 #define TMM_NODEINFO_REPLAY_SIGNED_GATE 0
 #endif
 
+// NodeInfo cache availability (compile-time). The cache's production home is ESP32 boards
+// with PSRAM - at 2000 entries the flat array is far too large for MCU internal RAM - but
+// the code itself is portable. Native unit-test builds (ARCH_PORTDUINO + PIO_UNIT_TESTING)
+// enable it on the plain heap so the cache paths - key pinning, signer provenance,
+// staleness, throttle, retention - run in CI instead of only on hardware. Production
+// portduino (meshtasticd) and embedded test builds are unaffected. Tests that need the
+// NodeDB fallback path instead call dropNodeInfoCacheForTest().
+#if (defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)) || (defined(ARCH_PORTDUINO) && defined(PIO_UNIT_TESTING))
+#define TMM_HAS_NODEINFO_CACHE 1
+#else
+#define TMM_HAS_NODEINFO_CACHE 0
+#endif
+
 /**
  * TrafficManagementModule - Packet inspection and traffic shaping for mesh networks.
  *
@@ -138,8 +151,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // Test hook: force a cached NodeInfo entry's key to signer-proven, so replay-gate tests can
     // exercise the signed-only path without standing up a full XEdDSA verification. No-op if the
-    // node is not cached or the PSRAM NodeInfo cache is absent.
+    // node is not cached or the NodeInfo cache is absent.
     void markKeySignerProvenForTest(NodeNum node);
+
+    // Test hook: free and clear the NodeInfo cache so the NodeDB fallback direct-response
+    // path can be exercised in a build where the cache is compiled in (native test builds
+    // allocate it on the heap - see TMM_HAS_NODEINFO_CACHE). No-op when already absent.
+    void dropNodeInfoCacheForTest();
 
   private:
     // =========================================================================

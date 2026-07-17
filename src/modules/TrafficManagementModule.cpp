@@ -184,11 +184,14 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     memaudit::set("tmm", cache ? allocSize * sizeof(UnifiedCacheEntry) : 0);
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    TM_LOG_INFO("Allocating NodeInfo cache: %u entries, %u bytes (PSRAM flat array)",
+#if TMM_HAS_NODEINFO_CACHE
+    TM_LOG_INFO("Allocating NodeInfo cache: %u entries, %u bytes (flat array)",
                 static_cast<unsigned>(nodeInfoTargetEntries()),
                 static_cast<unsigned>(nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry)));
 
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    // Production home of this cache: ESP32 PSRAM. No heap fallback here - at 2000 entries the
+    // array is too large for MCU internal RAM, so a PSRAM failure disables the cache instead.
     nodeInfoPayload = static_cast<NodeInfoPayloadEntry *>(ps_calloc(nodeInfoTargetEntries(), sizeof(NodeInfoPayloadEntry)));
     if (nodeInfoPayload) {
         nodeInfoPayloadFromPsram = true;
@@ -196,9 +199,14 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     } else {
         TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
     }
+#else
+    // Native unit-test build (see TMM_HAS_NODEINFO_CACHE): plain heap, so the cache paths
+    // run in CI. nodeInfoPayloadFromPsram stays false and the destructor uses delete[].
+    nodeInfoPayload = new NodeInfoPayloadEntry[nodeInfoTargetEntries()]();
+#endif
     memaudit::set("tmm_ni", nodeInfoPayload ? nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry) : 0);
 #else
-    TM_LOG_DEBUG("NodeInfo PSRAM cache not available on this target");
+    TM_LOG_DEBUG("NodeInfo cache not available on this target");
 #endif
 
     setIntervalFromNow(kMaintenanceIntervalMs);
@@ -283,9 +291,25 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
 #endif
 }
 
+void TrafficManagementModule::dropNodeInfoCacheForTest()
+{
+#if TMM_HAS_NODEINFO_CACHE
+    concurrency::LockGuard guard(&cacheLock);
+    if (!nodeInfoPayload)
+        return;
+    if (nodeInfoPayloadFromPsram)
+        free(nodeInfoPayload);
+    else
+        delete[] nodeInfoPayload;
+    nodeInfoPayload = nullptr;
+    nodeInfoPayloadFromPsram = false;
+    memaudit::set("tmm_ni", 0);
+#endif
+}
+
 void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
 {
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     concurrency::LockGuard guard(&cacheLock);
     if (!nodeInfoPayload)
         return;
@@ -428,7 +452,7 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
 
 const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findNodeInfoEntry(NodeNum node) const
 {
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0)
         return nullptr;
 
@@ -459,7 +483,7 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
     if (usedEmptySlot)
         *usedEmptySlot = false;
 
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0)
         return nullptr;
 
@@ -506,7 +530,7 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
 
 uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 {
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload)
         return 0;
 
@@ -523,7 +547,7 @@ uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 
 bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven) const
 {
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0 || !out)
         return false;
 
@@ -546,7 +570,7 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
 
 bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *signerProven) const
 {
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0)
         return false;
 
@@ -567,7 +591,7 @@ bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool 
 #endif
 }
 
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && !(MESHTASTIC_EXCLUDE_PKI)
+#if TMM_HAS_NODEINFO_CACHE && !(MESHTASTIC_EXCLUDE_PKI)
 // True iff both are full 32-byte public keys with identical bytes. Single point of
 // truth for the NodeInfo-cache key-hygiene checks (owner impersonation + key pinning),
 // so the compare (and any future hardening, e.g. constant-time) lives in one place.
@@ -580,7 +604,7 @@ static bool pubKeysEqual(const uint8_t *a, size_t aSize, const uint8_t *b, size_
 
 void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &mp)
 {
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || mp.decoded.payload.size == 0)
         return;
 
@@ -1107,7 +1131,7 @@ int32_t TrafficManagementModule::runOnce()
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
                  static_cast<unsigned long>(TrafficManagementModule::clockMs() - sweepStartMs));
 
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (nodeInfoPayload) {
         // Evict stale NodeInfo payloads. Two windows: an entry carrying a 32-byte public key
         // is retained for kNodeInfoKeyRetentionMs (it is a last-resort encryption key source,
@@ -1246,7 +1270,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // shared throttle check/stamp below target the module-global fallback stamp instead of
     // a per-node PSRAM entry (which does not exist on this path).
     bool usedFallback = false;
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     // Slot index of the PSRAM cache hit, captured here so the post-send throttle stamp can
     // address the entry directly instead of rescanning the array (T5). -1 = no hit.
     int32_t cachedNodeInfoIndex = -1;
@@ -1265,7 +1289,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedLastObservedRxTime = entry->lastObservedRxTime;
             cachedLastResponseMs = entry->lastResponseMs;
             cachedKeySignerProven = entry->keySignerProven;
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
             cachedNodeInfoIndex = static_cast<int32_t>(entry - nodeInfoPayload);
 #endif
         }
@@ -1434,7 +1458,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // initial lookup rather than rescanning the array (T5). The cache lock was released in
     // between, so the slot could have been evicted or reused for a different node; re-validate
     // node == p->to under the lock and skip the stamp if it no longer matches.
-#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+#if TMM_HAS_NODEINFO_CACHE
     if (!usedFallback && nodeInfoPayload && cachedNodeInfoIndex >= 0) {
         concurrency::LockGuard guard(&cacheLock);
         NodeInfoPayloadEntry &e = nodeInfoPayload[cachedNodeInfoIndex];
