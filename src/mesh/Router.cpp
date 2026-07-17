@@ -622,21 +622,23 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier), else
-    // fall back to a not-yet-committed key held during an in-progress key-verification handshake.
-    meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
-    // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
-    // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
-    bool havePendingKey = false;
-    if (!haveRemoteKey) {
-        havePendingKey = crypto->getPendingPublicKey(p->from, remotePublic);
-        haveRemoteKey = havePendingKey;
-    }
-
     meshtastic_NodeInfoLite *ourNode = nullptr;
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
         (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
+        // Resolve the sender's public key only for actual PKI-decrypt candidates: prefer NodeDB
+        // (hot store or warm tier), else a not-yet-committed key held during an in-progress
+        // key-verification handshake. On a full NodeDB miss, copyPublicKey() falls through to a
+        // linear scan of TrafficManagement's large NodeInfo cache, so it must not run for every
+        // encrypted channel packet from an unknown sender - only for packets we might decrypt.
+        meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
+        bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
+        // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
+        // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
+        bool havePendingKey = false;
+        if (!haveRemoteKey) {
+            havePendingKey = crypto->getPendingPublicKey(p->from, remotePublic);
+            haveRemoteKey = havePendingKey;
+        }
         // Try the sender's known key first, then each configured admin key so an authorized admin can
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
