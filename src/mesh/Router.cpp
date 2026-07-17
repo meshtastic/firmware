@@ -5,7 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 
 #include "configuration.h"
 #include "main.h"
@@ -452,7 +452,7 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize)
+bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 {
     // Only a signature we verify below may mark this packet signed; never trust an inbound flag.
     p->xeddsa_signed = false;
@@ -483,17 +483,17 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize)
         return false;
     } else {
         // Truly unsigned (signature size 0) - only reject the class a signing node always signs: a
-        // non-PKI broadcast whose signed encoding would still fit the LoRa frame. encodedDataSize is
-        // the size of the encoded Data exactly as the sender built it (or 0 to size p->decoded
-        // canonically); with no signature field present it is the unsigned base, and adding
-        // XEDDSA_SIGNATURE_FIELD_BYTES mirrors the sender-side signedDataFits() gate per packet,
-        // whatever fields the Data carried. Unicast/PKI packets and broadcasts too big to carry a
-        // signature are never signed, so they must not be hard-failed here even for a known signer.
+        // non-PKI broadcast whose signed encoding would still fit the LoRa frame. Size p->decoded
+        // canonically so this counts the same fields the sender's signedDataFits() gate counted;
+        // adding XEDDSA_SIGNATURE_FIELD_BYTES to that unsigned base mirrors it exactly, whatever
+        // fields the Data carried. Unicast/PKI packets and broadcasts too big to carry a signature
+        // are never signed, so they must not be hard-failed here even for a known signer.
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
         if (node && nodeInfoLiteHasXeddsaSigned(node) && !p->pki_encrypted && isBroadcast(p->to)) {
-            if (encodedDataSize == 0 && !pb_get_encoded_size(&encodedDataSize, &meshtastic_Data_msg, &p->decoded))
+            size_t canonicalSize;
+            if (!pb_get_encoded_size(&canonicalSize, &meshtastic_Data_msg, &p->decoded))
                 return true; // can't size it; never drop on a sizing failure
-            if (encodedDataSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
+            if (canonicalSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
                 LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
                 return false;
             }
@@ -621,16 +621,16 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     if (decrypted) {
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash
-        if (p->decoded.has_bitfield)
-            p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-        // rawSize is the size of the encoded Data exactly as the sender built it (the PKI branch's
-        // MESHTASTIC_PKC_OVERHEAD subtraction preserves that, and PKI packets are unicast so the
-        // downgrade predicate ignores them anyway).
-        if (!checkXeddsaReceivePolicy(p, rawSize))
+        // Runs before the bitfield merge below: that merge can set want_response, adding wire bytes
+        // the sender never encoded and skewing the policy's sizing of p->decoded.
+        if (!checkXeddsaReceivePolicy(p))
             return DecodeState::DECODE_FAILURE;
 #endif
+
+        if (p->decoded.has_bitfield)
+            p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
         /* Not actually ever used.
         // Decompress if needed. jm
@@ -753,7 +753,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
             LOG_DEBUG("Original length - %d ", p->decoded.payload.size);
             LOG_DEBUG("Compressed length - %d ", compressed_len);
-            LOG_DEBUG("Original message - %s ", p->decoded.payload.bytes);
+            LOG_DEBUG("Original message - %.*s ", (int)p->decoded.payload.size, p->decoded.payload.bytes);
 
             // If the compressed length is greater than or equal to the original size, don't use the compressed form
             if (compressed_len >= p->decoded.payload.size) {

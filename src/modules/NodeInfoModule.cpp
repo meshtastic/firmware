@@ -3,10 +3,10 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeStatus.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <Throttle.h>
 #include <algorithm>

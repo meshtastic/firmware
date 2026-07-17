@@ -184,11 +184,9 @@ const RegionInfo regions[] = {
 
     /*
         433,05-434,7 Mhz 10 mW
-        868,0-868,6 Mhz 25 mW
-        https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
+        https://zakon.rada.gov.ua/laws/show/262-2026-п
     */
     RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
-    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Malaysia

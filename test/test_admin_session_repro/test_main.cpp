@@ -1,5 +1,6 @@
 // Deterministic reproduction of the admin session-key behavior discussed on PR #10669
-// (ndoo's "Admin message without session_key!" report).
+// (ndoo's "Admin message without session_key!" report), plus the remote-vs-local redaction of
+// secret material in admin GET responses.
 //
 // Drives the REAL incoming-admin path (AdminModule::handleReceivedProtobuf) with a remote
 // (from != 0) PKC-authorized set_owner, exercising the exact checkPassKey/setPassKey gate.
@@ -13,6 +14,7 @@
 
 #include "mesh/Channels.h"
 #include "mesh/NodeDB.h"
+#include "mesh/mesh-pb-constants.h"
 #include "modules/AdminModule.h"
 #include "support/AdminModuleTestShim.h"
 #include "support/MockMeshService.h"
@@ -135,6 +137,63 @@ void test_session_gate_accepts_key_from_a_get_response(void)
     TEST_ASSERT_FALSE(admin->checkPassKey(&bad));
 }
 
+// Decode the SecurityConfig out of the get_config response a handler queued in myReply.
+static bool decodeSecurityFromReply(meshtastic_MeshPacket *reply, meshtastic_Config_SecurityConfig &out)
+{
+    meshtastic_AdminMessage am = meshtastic_AdminMessage_init_zero;
+    if (!reply || reply->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return false;
+    if (!pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_AdminMessage_msg, &am))
+        return false;
+    if (am.which_payload_variant != meshtastic_AdminMessage_get_config_response_tag ||
+        am.get_config_response.which_payload_variant != meshtastic_Config_security_tag)
+        return false;
+    out = am.get_config_response.payload_variant.security;
+    return true;
+}
+
+static meshtastic_MeshPacket makeGetConfigRequest(NodeNum from)
+{
+    meshtastic_MeshPacket req = meshtastic_MeshPacket_init_zero;
+    req.from = from;
+    req.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    req.decoded.want_response = true;
+    return req;
+}
+
+// The device identity private key must never leave over the air: a SECURITY_CONFIG response to a
+// remote request (from != 0, even an authorized admin) carries an empty private_key.
+void test_remote_security_config_omits_private_key(void)
+{
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0xAB, 32);
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(ADMIN_NODE);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG);
+
+    meshtastic_Config_SecurityConfig sec;
+    TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+    TEST_ASSERT_EQUAL_MESSAGE(0, sec.private_key.size, "remote security config must not carry the private key");
+    admin->drainReply();
+}
+
+// Control: the local backup path (from == 0, BLE/USB/TCP) still receives the private key, so the
+// redaction above is remote-specific rather than a blanket wipe.
+void test_local_security_config_keeps_private_key(void)
+{
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0xAB, 32);
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(0);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG);
+
+    meshtastic_Config_SecurityConfig sec;
+    TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+    TEST_ASSERT_EQUAL_MESSAGE(32, sec.private_key.size, "local backup must still receive the private key");
+    TEST_ASSERT_EACH_EQUAL_HEX8(0xAB, sec.private_key.bytes, 32);
+    admin->drainReply();
+}
+
 #endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 void setup()
@@ -146,6 +205,8 @@ void setup()
     RUN_TEST(test_remote_setter_without_session_is_rejected);
     RUN_TEST(test_expected_session_key_is_zero_before_any_get);
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
+    RUN_TEST(test_remote_security_config_omits_private_key);
+    RUN_TEST(test_local_security_config_keeps_private_key);
 #endif
     exit(UNITY_END());
 }

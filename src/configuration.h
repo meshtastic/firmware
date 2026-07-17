@@ -424,6 +424,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_TFT
 #define HAS_TFT 0
 #endif
+// Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
+// -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).
+#ifndef BASEUI_HAS_GAMES
+#define BASEUI_HAS_GAMES 0
+#endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
 #endif
