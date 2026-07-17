@@ -1503,8 +1503,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(true); // using unPhone library
 #endif
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-#elif !defined(M5STACK) && !defined(ST7789_CS) &&                                                                                \
-    !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_RC32) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
+#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(HACKADAY_COMMUNICATOR) &&                                             \
+    !defined(HELTEC_RC32) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
         break;
@@ -1565,8 +1565,8 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1) && \
-    !defined(HELTEC_RC32)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) &&                                 \
+    !defined(HELTEC_MESH_NODE_T1) && !defined(HELTEC_RC32)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -1585,8 +1585,8 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1) && \
-    !defined(HELTEC_RC32)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) &&                                 \
+    !defined(HELTEC_MESH_NODE_T1) && !defined(HELTEC_RC32)
     return tft->getTouch(x, y);
 #else
     return false;

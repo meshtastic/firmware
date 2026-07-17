@@ -1,7 +1,7 @@
 #include "i2cButton.h"
 #include "Throttle.h"
-#include "meshUtils.h"
 #include "configuration.h"
+#include "meshUtils.h"
 #include <Wire.h>
 
 #if defined(M5STACK_UNITC6L) || defined(HELTEC_RC32)
@@ -57,8 +57,7 @@ i2cButtonThread *i2cButtonThread::instance = nullptr;
 
 i2cButtonThread::i2cButtonThread(const char *name)
 #if defined(HELTEC_RC32)
-    : concurrency::OSThread(name, TCA6408_POLL_MS), _originName(name),
-      inputState(TCA6408_ROTARY_A_MASK | TCA6408_ROTARY_B_MASK)
+    : concurrency::OSThread(name, TCA6408_POLL_MS), _originName(name), inputState(TCA6408_ROTARY_A_MASK | TCA6408_ROTARY_B_MASK)
 #else
     : OSThread(name)
 #endif
