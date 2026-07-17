@@ -7,12 +7,6 @@ on:
         required: false
         default: "2025"
         type: string
-  workflow_dispatch:
-    inputs:
-      windows_ver:
-        required: false
-        default: "2025"
-        type: string
 
 permissions:
   contents: read
