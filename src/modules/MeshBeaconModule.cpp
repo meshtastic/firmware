@@ -2,11 +2,11 @@
 #include "Default.h"
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <Throttle.h>
 #include <string.h>

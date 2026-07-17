@@ -1,5 +1,7 @@
 // Deterministic reproduction of the admin session-key behavior discussed on PR #10669
-// (ndoo's "Admin message without session_key!" report).
+// (ndoo's "Admin message without session_key!" report), plus the remote-vs-local redaction of
+// secret material in admin GET responses, plus the request/response pairing that decides which
+// admin responses are accepted at all.
 //
 // Drives the REAL incoming-admin path (AdminModule::handleReceivedProtobuf) with a remote
 // (from != 0) PKC-authorized set_owner, exercising the exact checkPassKey/setPassKey gate.
@@ -13,13 +15,16 @@
 
 #include "mesh/Channels.h"
 #include "mesh/NodeDB.h"
+#include "mesh/mesh-pb-constants.h"
 #include "modules/AdminModule.h"
 #include "support/AdminModuleTestShim.h"
 #include "support/MockMeshService.h"
 #include <cstring>
 
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
-static constexpr NodeNum ADMIN_NODE = 0x0B0B0B0B; // authorized admin, sends remote admin to us
+static constexpr NodeNum ADMIN_NODE = 0x0B0B0B0B;   // authorized admin, sends remote admin to us
+static constexpr NodeNum QUERIED_NODE = 0x0C0C0C0C; // a remote we send admin requests to
+static constexpr NodeNum STRANGER_NODE = 0x0D0D0D0D;
 static const uint8_t ADMIN_KEY[32] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb,
                                       0xcc, 0xdd, 0xee, 0xff, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x20};
@@ -47,6 +52,59 @@ static meshtastic_MeshPacket makeRemoteSetOwner(const char *newLongName, const u
     mp.public_key.size = 32;
     memcpy(mp.public_key.bytes, ADMIN_KEY, 32); // matches config.security.admin_key[0] -> authorized
     return mp;
+}
+
+// A get_module_config_response carrying a remote_hardware pin list, as a remote would answer.
+// This is the class of message that short-circuited auth: no session passkey, sender need not
+// hold an admin key. handleGetModuleConfigResponse() stamps mp.from into the pin table.
+static meshtastic_MeshPacket makeModuleConfigResponse(NodeNum from, meshtastic_AdminMessage &out)
+{
+    out = meshtastic_AdminMessage_init_zero;
+    out.which_payload_variant = meshtastic_AdminMessage_get_module_config_response_tag;
+    out.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
+    out.get_module_config_response.payload_variant.remote_hardware.enabled = true;
+    out.get_module_config_response.payload_variant.remote_hardware.available_pins_count = 1;
+    out.get_module_config_response.payload_variant.remote_hardware.available_pins[0].gpio_pin = 17;
+
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = from;
+    mp.to = LOCAL_NODE;
+    mp.channel = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    return mp;
+}
+
+// One known pin entry, so a response that reaches handleGetModuleConfigResponse rewrites its owner.
+static void seedRemoteHardwarePin(NodeNum owner)
+{
+    devicestate.node_remote_hardware_pins_count = 1;
+    devicestate.node_remote_hardware_pins[0] = meshtastic_NodeRemoteHardwarePin_init_zero;
+    devicestate.node_remote_hardware_pins[0].node_num = owner;
+    devicestate.node_remote_hardware_pins[0].has_pin = true;
+    devicestate.node_remote_hardware_pins[0].pin.gpio_pin = 4;
+}
+
+// The outgoing request `req` a local client would send to `to`, as MeshService sees it (from == 0,
+// ADMIN_APP, payload still plaintext).
+static meshtastic_MeshPacket makeOutgoingRequest(NodeNum to, const meshtastic_AdminMessage &req)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = 0;
+    p.to = to;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &req);
+    return p;
+}
+
+static meshtastic_MeshPacket makeOutgoingModuleConfigRequest(
+    NodeNum to, meshtastic_AdminMessage_ModuleConfigType type = meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG)
+{
+    meshtastic_AdminMessage req = meshtastic_AdminMessage_init_zero;
+    req.which_payload_variant = meshtastic_AdminMessage_get_module_config_request_tag;
+    req.get_module_config_request = type;
+    return makeOutgoingRequest(to, req);
 }
 
 void setUp(void)
@@ -135,6 +193,231 @@ void test_session_gate_accepts_key_from_a_get_response(void)
     TEST_ASSERT_FALSE(admin->checkPassKey(&bad));
 }
 
+// Decode the SecurityConfig out of the get_config response a handler queued in myReply.
+static bool decodeSecurityFromReply(meshtastic_MeshPacket *reply, meshtastic_Config_SecurityConfig &out)
+{
+    meshtastic_AdminMessage am = meshtastic_AdminMessage_init_zero;
+    if (!reply || reply->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return false;
+    if (!pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_AdminMessage_msg, &am))
+        return false;
+    if (am.which_payload_variant != meshtastic_AdminMessage_get_config_response_tag ||
+        am.get_config_response.which_payload_variant != meshtastic_Config_security_tag)
+        return false;
+    out = am.get_config_response.payload_variant.security;
+    return true;
+}
+
+static meshtastic_MeshPacket makeGetConfigRequest(NodeNum from)
+{
+    meshtastic_MeshPacket req = meshtastic_MeshPacket_init_zero;
+    req.from = from;
+    req.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    req.decoded.want_response = true;
+    return req;
+}
+
+// The device identity private key must never leave over the air: a SECURITY_CONFIG response to a
+// remote request (from != 0, even an authorized admin) carries an empty private_key.
+void test_remote_security_config_omits_private_key(void)
+{
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0xAB, 32);
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(ADMIN_NODE);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG);
+
+    meshtastic_Config_SecurityConfig sec;
+    TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+    TEST_ASSERT_EQUAL_MESSAGE(0, sec.private_key.size, "remote security config must not carry the private key");
+    admin->drainReply();
+}
+
+// Control: the local backup path (from == 0, BLE/USB/TCP) still receives the private key, so the
+// redaction above is remote-specific rather than a blanket wipe.
+void test_local_security_config_keeps_private_key(void)
+{
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0xAB, 32);
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(0);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG);
+
+    meshtastic_Config_SecurityConfig sec;
+    TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+    TEST_ASSERT_EQUAL_MESSAGE(32, sec.private_key.size, "local backup must still receive the private key");
+    TEST_ASSERT_EACH_EQUAL_HEX8(0xAB, sec.private_key.bytes, 32);
+    admin->drainReply();
+}
+
+// An admin response carries no session passkey and its sender is not an admin-key holder, so a
+// request we sent is the only thing vouching for it. A get_module_config_response from a node we
+// never queried is not.
+static constexpr pb_size_t MODULE_CONFIG_RESPONSE = meshtastic_AdminMessage_get_module_config_response_tag;
+static constexpr pb_size_t REMOTE_HW_TAG = meshtastic_ModuleConfig_remote_hardware_tag; // makeModuleConfigResponse subtype
+
+void test_unsolicited_response_is_not_solicited(void)
+{
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a response nobody asked for must not be accepted");
+}
+
+// Control: once the client has sent that node a request, its response is accepted. Without this,
+// the test above would also pass if responseIsSolicited() simply always said no.
+void test_response_after_our_request_is_solicited(void)
+{
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(STRANGER_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+
+    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                             "the answer to our own request must be accepted");
+}
+
+// A request to one remote does not vouch for a different remote's response.
+void test_request_to_one_node_does_not_admit_another(void)
+{
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(QUERIED_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // answered by someone else
+
+    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
+}
+
+// A response only answers its own request type: a get_owner_request does not admit a
+// get_module_config_response from the same node.
+void test_response_variant_must_match_request(void)
+{
+    meshtastic_AdminMessage owner_req = meshtastic_AdminMessage_init_zero;
+    owner_req.which_payload_variant = meshtastic_AdminMessage_get_owner_request_tag;
+    admin->noteOutgoingAdminRequest(makeOutgoingRequest(STRANGER_NODE, owner_req));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // wrong type for the request
+
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a get_owner request must not admit a get_module_config response");
+    // ...but the response it actually asked for is still accepted from the same slot.
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, meshtastic_AdminMessage_get_owner_response_tag, 0));
+}
+
+// Regression: each request keeps its own pinned key. A later unpinned request to the same node
+// must not relax the PKC pin of an earlier one (the old shared-slot model cleared it).
+void test_pinned_request_keeps_its_key_after_an_unpinned_request(void)
+{
+    uint8_t key[32];
+    memset(key, 0xC1, 32);
+
+    // A PKC-pinned get_config request to STRANGER (pins `key`).
+    meshtastic_AdminMessage cfg = meshtastic_AdminMessage_init_zero;
+    cfg.which_payload_variant = meshtastic_AdminMessage_get_config_request_tag;
+    meshtastic_MeshPacket pinned = makeOutgoingRequest(STRANGER_NODE, cfg);
+    pinned.pki_encrypted = true;
+    pinned.public_key.size = 32;
+    memcpy(pinned.public_key.bytes, key, 32);
+    admin->noteOutgoingAdminRequest(pinned);
+
+    // A later, unpinned get_owner request to the same node.
+    meshtastic_AdminMessage own = meshtastic_AdminMessage_init_zero;
+    own.which_payload_variant = meshtastic_AdminMessage_get_owner_request_tag;
+    admin->noteOutgoingAdminRequest(makeOutgoingRequest(STRANGER_NODE, own));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket resp = makeModuleConfigResponse(STRANGER_NODE, m); // from set; pki off by default
+
+    // A plaintext get_config_response is still rejected: the config request was pinned.
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag, 0),
+                              "an unpinned request must not relax an earlier request's key pin");
+    // Over PKC with the pinned key it is accepted.
+    resp.pki_encrypted = true;
+    resp.public_key.size = 32;
+    memcpy(resp.public_key.bytes, key, 32);
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag, 0));
+    // The unpinned get_owner_response is accepted in plaintext (its request carried no pin).
+    resp.pki_encrypted = false;
+    resp.public_key.size = 0;
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_owner_response_tag, 0));
+}
+
+// A remote_hardware response must answer a request for that exact subtype, not just any module
+// config - else an MQTT-config request could authorize a pin-table update.
+void test_module_config_subtype_must_match(void)
+{
+    admin->noteOutgoingAdminRequest(
+        makeOutgoingModuleConfigRequest(STRANGER_NODE, meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // remote_hardware subtype
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a non-remote-hardware request must not admit a remote_hardware response");
+
+    // Control: a request for the matching subtype does admit it.
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(STRANGER_NODE));
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
+}
+
+// A matched request is consumed, so a node cannot replay a state-mutating response within the window.
+void test_response_is_consumed_no_replay(void)
+{
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(STRANGER_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a second copy of an already-answered response must be rejected");
+}
+
+// Only requests arm the gate: sending a setter to a node must not make it a trusted responder.
+void test_outgoing_setter_does_not_admit_responses(void)
+{
+    meshtastic_AdminMessage setter = meshtastic_AdminMessage_init_zero;
+    setter.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
+    admin->noteOutgoingAdminRequest(makeOutgoingRequest(STRANGER_NODE, setter));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+
+    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
+}
+
+// End to end through the real handler: an unsolicited get_module_config_response must not reach
+// handleGetModuleConfigResponse, so the remote_hardware pin table keeps its owner.
+void test_unsolicited_response_does_not_poison_pins(void)
+{
+    seedRemoteHardwarePin(QUERIED_NODE);
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+    admin->handleReceivedProtobuf(mp, &m);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(QUERIED_NODE, devicestate.node_remote_hardware_pins[0].node_num,
+                                     "unsolicited response must not rewrite the pin owner");
+}
+
+// Control: once we have requested it, the same response is handled and updates the pin table. This
+// proves the assertion above is the auth gate firing, not the handler being dead. (It also exercises
+// the dispatch tag fixed in this change - without it, the handler never runs for either node.)
+void test_solicited_response_updates_pins(void)
+{
+    seedRemoteHardwarePin(QUERIED_NODE);
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(STRANGER_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+    admin->handleReceivedProtobuf(mp, &m);
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(STRANGER_NODE, devicestate.node_remote_hardware_pins[0].node_num,
+                                     "a response we asked for must reach the handler");
+}
+
 #endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 void setup()
@@ -146,6 +429,18 @@ void setup()
     RUN_TEST(test_remote_setter_without_session_is_rejected);
     RUN_TEST(test_expected_session_key_is_zero_before_any_get);
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
+    RUN_TEST(test_remote_security_config_omits_private_key);
+    RUN_TEST(test_local_security_config_keeps_private_key);
+    RUN_TEST(test_unsolicited_response_is_not_solicited);
+    RUN_TEST(test_response_after_our_request_is_solicited);
+    RUN_TEST(test_request_to_one_node_does_not_admit_another);
+    RUN_TEST(test_response_variant_must_match_request);
+    RUN_TEST(test_pinned_request_keeps_its_key_after_an_unpinned_request);
+    RUN_TEST(test_module_config_subtype_must_match);
+    RUN_TEST(test_response_is_consumed_no_replay);
+    RUN_TEST(test_outgoing_setter_does_not_admit_responses);
+    RUN_TEST(test_unsolicited_response_does_not_poison_pins);
+    RUN_TEST(test_solicited_response_updates_pins);
 #endif
     exit(UNITY_END());
 }
