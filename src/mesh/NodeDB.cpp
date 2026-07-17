@@ -31,6 +31,9 @@
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #include "xmodem.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -3723,6 +3726,16 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     }
 #if WARM_NODE_COUNT > 0
     if (warmStore.copyKey(n, out.bytes)) {
+        out.size = 32;
+        return true;
+    }
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // Last resort: a key the TrafficManagement NodeInfo cache learned from an observed frame
+    // for a node no longer in either NodeDB tier. This extends the pool of peers we can
+    // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's signerProven), the
+    // same first-contact trust NodeDB itself applies via updateUser().
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes)) {
         out.size = 32;
         return true;
     }

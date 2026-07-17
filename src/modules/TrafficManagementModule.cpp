@@ -486,6 +486,29 @@ uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 #endif
 }
 
+bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven) const
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload || node == 0 || !out)
+        return false;
+
+    concurrency::LockGuard guard(&cacheLock);
+    const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
+    if (!entry || entry->user.public_key.size != 32)
+        return false;
+
+    memcpy(out, entry->user.public_key.bytes, 32);
+    if (signerProven)
+        *signerProven = entry->keySignerProven;
+    return true;
+#else
+    (void)node;
+    (void)out;
+    (void)signerProven;
+    return false;
+#endif
+}
+
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && !(MESHTASTIC_EXCLUDE_PKI)
 // True iff both are full 32-byte public keys with identical bytes. Single point of
 // truth for the NodeInfo-cache key-hygiene checks (owner impersonation + key pinning),

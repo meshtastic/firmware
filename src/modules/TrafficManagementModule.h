@@ -57,6 +57,15 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     //   prerequisites (cache, nodeDB) weren't ready yet, so the caller should retry.
     bool preloadNextHopsFromNodeDB();
 
+    // Last-resort public-key source for NodeDB::copyPublicKey(). After the hot (NodeInfoLite)
+    // and warm (WarmNodeStore) tiers miss, the NodeInfo direct-response cache may still hold a
+    // key learned from an observed NODEINFO frame, extending the pool of keys the node can
+    // encrypt to. Copies the 32-byte key for `node` into out[32] and returns true if present;
+    // false otherwise (including builds without the PSRAM NodeInfo cache). If `signerProven`
+    // is non-null, reports whether that key was verified via an XEdDSA signature (true) or is
+    // trust-on-first-use (false), so callers can weigh its trust. Thread-safe (takes cacheLock).
+    bool copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven = nullptr) const;
+
     /**
      * Check if this packet should have its hops exhausted.
      * Called from perhapsRebroadcast() to force hop_limit = 0 regardless of
