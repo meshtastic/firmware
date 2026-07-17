@@ -1736,19 +1736,22 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     //       clients no longer reach AdminModule at all.
     // Gate on the connection, not the wire `from`, which a client can forge to a non-zero value to
     // bypass the check before MeshService normalizes it back to a local identity.
+    // Scope the decoded admin message: it holds the plaintext passphrase, so bound its lifetime.
     {
         meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
         switch (classifyLocalAdminPacket(p, getAdminAuthorized(), admin)) {
         case LocalAdminGate::LockdownAuth: {
             handleLockdownAuthInline(admin.lockdown_auth);
-            // Wipe both copies of the passphrase: the decoded scratch and the still-encoded bytes in
-            // the packet buffer (handleLockdownAuthInline only clears the decoded copy).
+            // The encoded wipe is the security-critical one: nothing else clears the passphrase from
+            // the packet buffer. handleLockdownAuthInline already zeroes the decoded copy up to its
+            // size; re-zero the full scratch capacity here as defense in depth.
             volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
             for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
                 adminVol[i] = 0;
             volatile uint8_t *encodedVol = const_cast<volatile uint8_t *>(p.decoded.payload.bytes);
             for (size_t i = 0; i < sizeof(p.decoded.payload.bytes); i++)
                 encodedVol[i] = 0;
+            p.decoded.payload.size = 0; // keep the length consistent with the wiped buffer
             return true;
         }
         case LocalAdminGate::DropUnauthorized:
