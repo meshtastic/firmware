@@ -408,6 +408,73 @@ void test_serial_console_suppresses_raw_output_in_protobuf_mode()
     TEST_ASSERT_TRUE(emptyAfterProtobuf);
 }
 
+// Build a phone->radio ADMIN_APP packet carrying `admin`, with an arbitrary wire `from`.
+static meshtastic_MeshPacket makeAdminPacket(NodeNum from, const meshtastic_AdminMessage &admin)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &admin);
+    return p;
+}
+
+// The lockdown admin gate must decide on the connection's authorization, not the wire `from`. A
+// client that sets from != 0 previously skipped the gate, so an unauthorized connection could run
+// admin. classifyLocalAdminPacket ignores `from`, so the same spoofed packet is still dropped.
+static void test_lockdown_admin_gate_ignores_wire_from(void)
+{
+    meshtastic_AdminMessage setter = meshtastic_AdminMessage_init_zero;
+    setter.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
+    meshtastic_MeshPacket spoofed = makeAdminPacket(0x12345678, setter); // from != 0, the bypass
+
+    meshtastic_AdminMessage out;
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::DropUnauthorized,
+                              (int)PhoneAPI::classifyLocalAdminPacket(spoofed, /*adminAuthorized=*/false, out),
+                              "unauthorized admin with from != 0 must still be dropped");
+    // Control: an authorized connection's identical packet passes through.
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::AuthorizedPassThrough,
+                              (int)PhoneAPI::classifyLocalAdminPacket(spoofed, /*adminAuthorized=*/true, out),
+                              "authorized admin must not be dropped");
+
+    // lockdown_auth is the authentication itself, so it is delivered inline regardless of from/auth.
+    meshtastic_AdminMessage la = meshtastic_AdminMessage_init_zero;
+    la.which_payload_variant = meshtastic_AdminMessage_lockdown_auth_tag;
+    meshtastic_MeshPacket authPkt = makeAdminPacket(0x99, la);
+    TEST_ASSERT_EQUAL((int)PhoneAPI::LocalAdminGate::LockdownAuth,
+                      (int)PhoneAPI::classifyLocalAdminPacket(authPkt, /*adminAuthorized=*/false, out));
+
+    // A non-admin packet is outside the gate entirely.
+    meshtastic_MeshPacket text = meshtastic_MeshPacket_init_zero;
+    text.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    text.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    TEST_ASSERT_EQUAL((int)PhoneAPI::LocalAdminGate::NotAdmin,
+                      (int)PhoneAPI::classifyLocalAdminPacket(text, /*adminAuthorized=*/false, out));
+}
+
+// An ADMIN_APP packet whose payload is not a decodable AdminMessage must fall through to the
+// normal reject path (NotAdmin), never be acted on as an admin command. The authorized control
+// proves the decode-failure check runs before the auth branch, so it can't pass for the wrong reason.
+static void test_lockdown_admin_gate_rejects_undecodable_admin(void)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    // Length-delimited field (tag 0x0A) claiming 16 bytes with none following: pb_decode fails.
+    p.decoded.payload.bytes[0] = 0x0A;
+    p.decoded.payload.bytes[1] = 0x10;
+    p.decoded.payload.size = 2;
+
+    meshtastic_AdminMessage out;
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::NotAdmin,
+                              (int)PhoneAPI::classifyLocalAdminPacket(p, /*adminAuthorized=*/false, out),
+                              "undecodable ADMIN_APP payload must fall through to the reject path");
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::NotAdmin,
+                              (int)PhoneAPI::classifyLocalAdminPacket(p, /*adminAuthorized=*/true, out),
+                              "undecodable ADMIN_APP payload must not pass through even when authorized");
+}
+
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
 /// Unity per-test teardown; fixtures clean themselves up.
@@ -427,6 +494,8 @@ void setup()
     RUN_TEST(test_stream_api_short_write_reports_failure_without_flush);
     RUN_TEST(test_stream_api_finishes_pending_before_advancing_phone_api);
     RUN_TEST(test_stream_api_gates_logs_and_marks_them_best_effort);
+    RUN_TEST(test_lockdown_admin_gate_ignores_wire_from);
+    RUN_TEST(test_lockdown_admin_gate_rejects_undecodable_admin);
     // usingProtobufs intentionally has no reset path, so this must run last.
     RUN_TEST(test_serial_console_suppresses_raw_output_in_protobuf_mode);
     exit(UNITY_END());
