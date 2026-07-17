@@ -36,9 +36,9 @@ static uint32_t computeExpectedMs(uint32_t defaultSeconds, uint32_t numOnlineNod
         sf = 12;
 
     float throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 100.0f);
-#if USERPREFS_EVENT_MODE
-    throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 25.0f);
-#endif
+// #if USERPREFS_EVENT_MODE
+//     throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 25.0f);
+// #endif
 
     int nodesOverForty = (numOnlineNodes - 40);
     float coeff = 1.0f + (nodesOverForty * throttlingFactor);

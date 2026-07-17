@@ -94,10 +94,11 @@ class Default
             // In SF7 and BW=250khz (shortfast), this gives 0.00512 rather than the original 0.01
             float throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 100.0f);
 
-#if USERPREFS_EVENT_MODE
-            // If we are in event mode, scale down the throttling factor by 4
-            throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 25.0f);
-#endif
+// Do not throttle fab26. We're playing with sensors!
+// #if USERPREFS_EVENT_MODE
+//             // If we are in event mode, scale down the throttling factor by 4
+//             throttlingFactor = static_cast<float>(pow_of_2(sf)) / (bwKHz * 25.0f);
+// #endif
 
             // Scaling up traffic based on number of nodes over 40
             int nodesOverForty = (numOnlineNodes - 40);
