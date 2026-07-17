@@ -1,0 +1,56 @@
+#pragma once
+
+#define _VARIANT_HELTEC_RCC6_
+
+#define BUTTON_PIN 9
+
+#define HAS_SCREEN 1
+#define HAS_SPI_TFT 1
+#define USE_TFTDISPLAY 1
+#define HAS_GPS 0
+#define HAS_WIRE 0
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+
+#define USE_SX1262
+#define LORA_SCK 21
+#define LORA_MISO 20
+#define LORA_MOSI 22
+#define LORA_CS 23
+#define LORA_RESET 8
+#define LORA_DIO1 19
+#define LORA_BUSY 10
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_BUSY
+#define SX126X_RESET LORA_RESET
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+
+#define BATTERY_PIN 6
+#define ADC_CHANNEL ADC_CHANNEL_6
+#define ADC_CTRL 5
+#define ADC_CTRL_ENABLED HIGH
+#define ADC_MULTIPLIER 4.95f
+
+#define TFT_SCL 4
+#define TFT_SDA 15
+#define TFT_CS 18
+#define TFT_RS 3
+#define TFT_DC TFT_RS
+#define TFT_RST 0
+#define TFT_EN 2
+#define TFT_EN_ON LOW
+#define TFT_EN_OFF HIGH
+#define VTFT_CTRL TFT_EN
+#define TFT_BL 1
+#define TFT_BLK TFT_BL
+#define TFT_BACKLIGHT_ON HIGH
+#define TFT_BACKLIGHT_OFF LOW
+#define TFT_WIDTH 128
+#define TFT_HEIGHT 220
+#define TFT_BLACK 0
+#define SPI_FREQUENCY 4000000
+#define SCREEN_ROTATE
+
+#define SERIAL_PRINT_PORT 1
