@@ -3407,6 +3407,16 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         }
     }
 
+#if HAS_TRAFFIC_MANAGEMENT
+    // Write-through to the TrafficManagement NodeInfo cache, so it reflects this commit
+    // immediately rather than at the next reconcile sweep. updateUser is the single
+    // chokepoint through which every remote identity/key write flows, which is what makes
+    // this one call sufficient. `p` is the post-hygiene payload (id normalized, key pin
+    // already enforced above); the signer bit transfers the node's verified-signer status.
+    if (trafficManagementModule)
+        trafficManagementModule->onNodeIdentityCommitted(nodeId, p, nodeInfoLiteHasXeddsaSigned(info));
+#endif
+
     return changed;
 }
 

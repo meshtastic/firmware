@@ -1089,6 +1089,56 @@ static void test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier(void)
 }
 
 /**
+ * Write-through hook: an identity committed through NodeDB::updateUser() lands in the
+ * NodeInfo cache immediately (name + key), without waiting for a maintenance sweep - and
+ * is still not servable, because the node was never actually heard.
+ */
+static void test_tm_nodeinfo_updateUserHook_writesThrough(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    mockNodeDB->warmStore.clear();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    trafficManagementModule = &module; // the NodeDB hook reaches the module via the global
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    strncpy(user.long_name, "committed", sizeof(user.long_name) - 1);
+    user.public_key.size = 32;
+    memset(user.public_key.bytes, 0x5A, 32);
+    mockNodeDB->updateUser(kTargetNode, user, 0);
+
+    // Immediately visible to the key pool and name rehydration (no sweep has run)...
+    uint8_t key[32] = {0};
+    bool proven = true;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_EQUAL_UINT8(0x5A, key[0]);
+    TEST_ASSERT_FALSE(proven); // committed TOFU key: no signer bit on the node yet
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
+    TEST_ASSERT_EQUAL_STRING("committed", out.long_name);
+
+    // ...but known-not-heard is never servable.
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    trafficManagementModule = nullptr;
+    mockNodeDB->rollHotStore(); // updateUser admitted the node to the hot store
+}
+
+/**
  * Membership keep-alive vs retention TTL: an entry whose node still lives in a NodeDB tier
  * is re-stamped by every sweep and outlives the 7-day retention window; a non-member entry
  * of the same age is evicted; and once membership lapses the survivor ages out too.
@@ -2446,6 +2496,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_cache_pinsAgainstWarmTierKey);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
+    RUN_TEST(test_tm_nodeinfo_updateUserHook_writesThrough);
     RUN_TEST(test_tm_nodeinfo_membership_keepAliveOutlivesRetention);
 #endif
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);

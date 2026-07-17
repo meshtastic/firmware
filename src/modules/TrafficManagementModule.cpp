@@ -678,6 +678,47 @@ void TrafficManagementModule::reconcileNodeInfoMembershipLocked()
 #endif
 }
 
+void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown)
+{
+#if TMM_HAS_NODEINFO_CACHE
+    if (node == 0 || (nodeDB && node == nodeDB->getNodeNum()))
+        return;
+    concurrency::LockGuard guard(&cacheLock);
+    if (!nodeInfoPayload)
+        return;
+    bool usedEmptySlot = false;
+    NodeInfoPayloadEntry *e = findOrCreateNodeInfoEntry(node, &usedEmptySlot, /*spareMembers=*/true);
+    if (!e)
+        return; // member-saturated cache: the reconcile sweep owns the tradeoff
+
+    // Merge: NodeDB's commit is authoritative for everything it carries, but a keyless
+    // commit (possible while the node is unpinned in NodeDB) must not cost this cache a
+    // TOFU key it already learned.
+    meshtastic_User merged = user;
+    if (merged.public_key.size != 32 && !usedEmptySlot && e->user.public_key.size == 32)
+        merged.public_key = e->user.public_key;
+
+    // Provenance survives only alongside an unchanged key; a replaced key (stale residue
+    // predating the authoritative pin) starts from scratch and may be re-proven by
+    // signerKnown below - which vouches for the COMMITTED key, never the kept TOFU one.
+    const bool sameKey = !usedEmptySlot && e->user.public_key.size == 32 && merged.public_key.size == 32 &&
+                         memcmp(e->user.public_key.bytes, merged.public_key.bytes, 32) == 0;
+    const bool provenBefore = !usedEmptySlot && e->keySignerProven && sameKey;
+
+    e->user = merged;
+    snprintf(e->user.id, sizeof(e->user.id), "!%08x", node);
+    e->hasFullUser = true;
+    e->keySignerProven = provenBefore || (signerKnown && user.public_key.size == 32);
+    e->isMember = true; // committed via updateUser => it sits in the hot store right now
+    e->retTick = nodeInfoRetTickNow();
+    // obsTick/hasObserved deliberately untouched: only a heard frame makes a node servable.
+#else
+    (void)node;
+    (void)user;
+    (void)signerKnown;
+#endif
+}
+
 bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven) const
 {
 #if TMM_HAS_NODEINFO_CACHE

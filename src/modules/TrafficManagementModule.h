@@ -105,6 +105,18 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // `signerProven` is non-null, reports the cached key's provenance. Thread-safe (takes cacheLock).
     bool copyUser(NodeNum node, meshtastic_User &out, bool *signerProven = nullptr) const;
 
+    // Write-through hook from NodeDB: called after updateUser() commits a remote node's
+    // identity, so this cache reflects NodeDB immediately instead of waiting for the next
+    // reconcile sweep (which remains the anti-entropy backstop). Upserts the full User;
+    // NodeDB's key is authoritative (updateUser's own pin already rejected conflicts
+    // upstream, so a differing cached key is stale residue and is replaced, dropping its
+    // provenance), while a keyless commit keeps a key this cache already holds. When
+    // signerKnown (the node's verified-signer bit) and the commit carries a key, the key
+    // is marked signer-proven. Never touches the observation stamp: knowledge is not
+    // observation, so a hook write can never make a node servable by the replay path.
+    // No-op without the cache. Thread-safe (takes cacheLock).
+    void onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown);
+
     /**
      * Check if this packet should have its hops exhausted.
      * Called from perhapsRebroadcast() to force hop_limit = 0 regardless of
