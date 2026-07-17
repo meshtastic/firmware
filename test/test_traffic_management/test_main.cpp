@@ -1005,6 +1005,56 @@ static void test_tm_nodeinfo_directResponse_fallbackFreshEntryServed(void)
 
     resetRTCStateForTests();
 }
+
+/**
+ * T3: verify the NodeDB-fallback path (non-PSRAM) is throttled too. A burst of requests
+ * for a fresh node must yield exactly one spoofed reply per throttle window - previously
+ * this path had no per-node slot to stamp and so emitted a reply for every request.
+ */
+static void test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+
+    setBootRelativeTimeForUnitTest(1000000);
+    const uint32_t now = getTime();
+    TrafficManagementModule::s_testNowMs = 3600000; // known base for the throttle clock
+
+    mockNodeDB->setCachedNode(kTargetNode);
+    mockNodeDB->cachedNodeForTest().last_heard = now - 60UL; // fresh, passes staleness gate
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    // First request: served from the NodeDB fallback.
+    request.id = 0xBBBB0001;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Second request within the throttle window: suppressed (STOP) but NOT transmitted again.
+    TrafficManagementModule::s_testNowMs += 5000; // 5 s < 30 s window
+    request.id = 0xBBBB0002;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_TRUE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Past the throttle window: served again.
+    TrafficManagementModule::s_testNowMs += 30000; // now > 30 s since first reply
+    request.id = 0xBBBB0003;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    resetRTCStateForTests();
+}
 #endif
 
 /**
@@ -1995,6 +2045,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_withoutNodeDbEntry_skips);
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackStaleEntryNotServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackFreshEntryServed);
+    RUN_TEST(test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow);
 #endif
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     RUN_TEST(test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfield);

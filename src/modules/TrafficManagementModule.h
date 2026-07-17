@@ -251,6 +251,16 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM (flat array, linear scan)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
 
+    // Throttle stamp for the NodeDB fallback direct-response path (non-PSRAM boards).
+    // The PSRAM path throttles per target via NodeInfoPayloadEntry::lastResponseMs, but
+    // the fallback path has no per-node slot to stamp, so it would otherwise emit spoofed
+    // replies with no rate limit at all. This single module-global stamp throttles that
+    // path to at most one spoofed reply per kNodeInfoResponseThrottleMs across all targets.
+    // Coarser than per-target, but the fallback path has nowhere to store per-node state,
+    // and a global cap still bounds spoofed transmissions - which is the point of the
+    // throttle. 0 = never responded. Guarded by cacheLock. Local uptime (millis).
+    uint32_t nodeInfoFallbackLastResponseMs = 0;
+
     meshtastic_TrafficManagementStats stats;
 
     // Flag set during alterReceived() when packet should be exhausted.

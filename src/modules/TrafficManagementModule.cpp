@@ -1121,6 +1121,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     uint32_t cachedLastObservedMs = 0;
     uint32_t cachedLastObservedRxTime = 0;
     uint32_t cachedLastResponseMs = 0;
+    // True once we commit to answering from the NodeDB fallback (non-PSRAM) path, so the
+    // shared throttle check/stamp below target the module-global fallback stamp instead of
+    // a per-node PSRAM entry (which does not exist on this path).
+    bool usedFallback = false;
 
     {
         concurrency::LockGuard guard(&cacheLock);
@@ -1163,6 +1167,14 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             return false;
         }
         cachedUser = TypeConversions::ConvertToUser(node);
+        // T3: the fallback path has no per-node cache entry, so it throttles against the
+        // module-global stamp. Load it here so the shared throttle check below covers this
+        // path too (previously only the PSRAM path was throttled).
+        usedFallback = true;
+        {
+            concurrency::LockGuard guard(&cacheLock);
+            cachedLastResponseMs = nodeInfoFallbackLastResponseMs;
+        }
     }
 
     // Staleness gate (PSRAM cache path): never spoof a reply on behalf of a node we have
@@ -1188,20 +1200,20 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         return false;
     }
 
-    // Response throttle: at most one spoofed reply per target node per throttle window.
-    // Direct responses bypass the per-sender rate limiter (they STOP the request first),
-    // and the reply target is attacker-controlled, so without this an attacker could drive
-    // unbounded local transmissions / reflected floods. Suppress the duplicate request
-    // (return true) rather than letting it propagate and generate more mesh traffic.
-    // Only the PSRAM path tracks lastResponseMs; the NodeDB fallback is left unthrottled.
-    // TODO(T1): keyed on p->to, so a DISTINCT legitimate requestor for the same target gets
-    // no reply for up to the window (returning true STOPs it). Consider returning false when
-    // throttled (let it propagate), or key the throttle on the requestor.
-    // TODO(T2): per-target key does not bound aggregate local TX - an attacker cycling N
-    // distinct cached targets still gets N spoofed transmits per window. A global/per-requestor
-    // rate cap would actually bound the flood this throttle targets.
-    // TODO(T3): throttle state lives only in the PSRAM cache entry, so non-PSRAM boards (NodeDB
-    // fallback path) are entirely unthrottled - the flood mitigation misses that path.
+    // Response throttle: bound how often we emit a spoofed reply. Direct responses bypass
+    // the per-sender rate limiter (they STOP the request first), and the reply target is
+    // attacker-controlled, so without this an attacker could drive unbounded local
+    // transmissions / reflected floods. Suppress the duplicate request (return true) rather
+    // than letting it propagate and generate more mesh traffic.
+    //   - PSRAM path: cachedLastResponseMs is per target node (NodeInfoPayloadEntry).
+    //   - Fallback path: cachedLastResponseMs is the module-global stamp (no per-node slot).
+    // TODO(T1): on the PSRAM path this is keyed on p->to, so a DISTINCT legitimate requestor
+    // for the same target gets no reply for up to the window (returning true STOPs it).
+    // Accepted: the mesh is redundant - the genuine node or another cache-holder answers.
+    // TODO(T2): the per-target PSRAM key does not bound aggregate local TX - an attacker
+    // cycling N distinct cached targets still gets N spoofed transmits per window. The
+    // fallback path's global stamp does bound aggregate; a global cap on the PSRAM path
+    // would too, at the cost of throughput on multi-target responders.
     if (cachedLastResponseMs != 0 && (clockMs() - cachedLastResponseMs) < kNodeInfoResponseThrottleMs) {
         TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x (%lu ms since last)", p->to,
                      static_cast<unsigned long>(clockMs() - cachedLastResponseMs));
@@ -1258,14 +1270,19 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     service->sendToMesh(reply);
 
-    // Record the send so the throttle can suppress a burst of requests for this same node.
-    // Only meaningful on the PSRAM cache path (the entry we just served from); the NodeDB
-    // fallback has no per-node entry to stamp.
-    // TODO(T5): this is a second full O(n) scan under a second lock, after findNodeInfoEntry()
-    // already located this slot at the top of the function. Capture the index in the first
-    // pass (re-validate node == p->to after re-locking) to avoid the redundant scan.
+    // Record the send so the throttle can suppress a burst of requests. The fallback path
+    // stamps the module-global marker; the PSRAM path stamps the per-node entry we served
+    // from. clockMs()==0 (the millis wrap instant) collides with the "never" sentinel and
+    // skips one window - the same negligible T9 edge as the staleness gate.
+    if (usedFallback) {
+        concurrency::LockGuard guard(&cacheLock);
+        nodeInfoFallbackLastResponseMs = clockMs();
+    }
+    // TODO(T5): the PSRAM stamp below is a second full O(n) scan under a second lock, after
+    // findNodeInfoEntry() already located this slot at the top of the function. Capture the
+    // index in the first pass (re-validate node == p->to after re-locking) to avoid the rescan.
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (nodeInfoPayload) {
+    if (!usedFallback && nodeInfoPayload) {
         concurrency::LockGuard guard(&cacheLock);
         for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
             if (nodeInfoPayload[i].node == p->to) {
