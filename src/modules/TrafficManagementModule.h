@@ -78,6 +78,18 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static uint32_t clockMs() { return millis(); }
 #endif
 
+    // Timestamp for the millis-based fields that use 0 as a "never" sentinel
+    // (NodeInfoPayloadEntry::lastObservedMs / lastResponseMs, nodeInfoFallbackLastResponseMs).
+    // clockMs() is 0 for exactly one millisecond every ~49.7-day wrap, which would collide
+    // with the sentinel and momentarily disable the staleness/throttle gate for a freshly
+    // stamped entry. Map that one instant to 1; the 1 ms skew is irrelevant to every window
+    // these fields feed. (T9)
+    static uint32_t nowStampMs()
+    {
+        const uint32_t t = clockMs();
+        return t == 0 ? 1u : t;
+    }
+
   protected:
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
     bool wantPacket(const meshtastic_MeshPacket *p) override { return true; }

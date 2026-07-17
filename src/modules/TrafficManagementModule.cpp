@@ -557,7 +557,7 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         // richer context than "just the user protobuf" when PSRAM is present.
         // This path is intentionally independent from NodeInfoModule/NodeDB.
         entry->user = user;
-        entry->lastObservedMs = clockMs();
+        entry->lastObservedMs = nowStampMs();
         entry->lastObservedRxTime = mp.rx_time;
         entry->sourceChannel = mp.channel;
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
@@ -1009,8 +1009,23 @@ int32_t TrafficManagementModule::runOnce()
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     if (nodeInfoPayload) {
-        TM_LOG_DEBUG("NodeInfo PSRAM cache: %u/%u", static_cast<unsigned>(countNodeInfoEntriesLocked()),
-                     static_cast<unsigned>(nodeInfoTargetEntries()));
+        // Evict NodeInfo payloads past the serve window. Beyond freeing slots, this bounds
+        // how long any entry can sit unrefreshed: the staleness gate's modular age compare
+        // (shouldRespondToNodeInfo) is only unambiguous while true age < 2^32 ms (~49.7 d),
+        // so removing stale entries here keeps them far from that wrap boundary (T4). Uses
+        // the same clock as the gate; entries stamped with nowStampMs() so 0 means "never".
+        uint16_t nodeInfoExpired = 0;
+        for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+            NodeInfoPayloadEntry &e = nodeInfoPayload[i];
+            if (e.node == 0 || e.lastObservedMs == 0)
+                continue;
+            if ((nowMs - e.lastObservedMs) > kNodeInfoMaxServeAgeMs) {
+                memset(&e, 0, sizeof(NodeInfoPayloadEntry));
+                nodeInfoExpired++;
+            }
+        }
+        TM_LOG_DEBUG("NodeInfo PSRAM cache: %u/%u (%u expired)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
+                     static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoExpired));
     }
 #endif
 
@@ -1180,10 +1195,11 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Staleness gate (PSRAM cache path): never spoof a reply on behalf of a node we have
     // not actually heard from within the serve window. cachedLastObservedMs is only set on
     // a PSRAM cache hit, so this leaves the NodeDB fallback (gated above) untouched.
-    // TODO(T4): this age uses millis(); at a ~49.7-day uptime wrap boundary an entry that
-    // is never LRU-evicted can wrap to a small age and read as fresh, defeating the gate.
-    // TODO(T9): 0 is the "never observed" sentinel, but clockMs()==0 is a real value at the
-    // millis wrap instant, which would skip this gate for that entry until re-observed.
+    // Wrap safety (T4): the modular age below is only correct while true age < 2^32 ms
+    // (~49.7 days); an entry that lingered that long could wrap to a small age and read as
+    // fresh. The maintenance sweep evicts NodeInfo entries once they exceed the serve window
+    // (see runOnce()), so an entry is gone long before its age can approach the wrap, keeping
+    // this compare unambiguous. The 0-sentinel instant (T9) is handled by nowStampMs().
     if (cachedLastObservedMs != 0 && (clockMs() - cachedLastObservedMs) > kNodeInfoMaxServeAgeMs) {
         TM_LOG_DEBUG("NodeInfo PSRAM entry for 0x%08x stale (age=%lu ms), not responding", p->to,
                      static_cast<unsigned long>(clockMs() - cachedLastObservedMs));
@@ -1272,11 +1288,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     // Record the send so the throttle can suppress a burst of requests. The fallback path
     // stamps the module-global marker; the PSRAM path stamps the per-node entry we served
-    // from. clockMs()==0 (the millis wrap instant) collides with the "never" sentinel and
-    // skips one window - the same negligible T9 edge as the staleness gate.
+    // from. nowStampMs() keeps the stamp off the 0 "never" sentinel at the millis wrap (T9).
     if (usedFallback) {
         concurrency::LockGuard guard(&cacheLock);
-        nodeInfoFallbackLastResponseMs = clockMs();
+        nodeInfoFallbackLastResponseMs = nowStampMs();
     }
     // TODO(T5): the PSRAM stamp below is a second full O(n) scan under a second lock, after
     // findNodeInfoEntry() already located this slot at the top of the function. Capture the
@@ -1286,7 +1301,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         concurrency::LockGuard guard(&cacheLock);
         for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
             if (nodeInfoPayload[i].node == p->to) {
-                nodeInfoPayload[i].lastResponseMs = clockMs();
+                nodeInfoPayload[i].lastResponseMs = nowStampMs();
                 break;
             }
         }
