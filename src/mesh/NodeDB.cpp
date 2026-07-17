@@ -3798,6 +3798,19 @@ bool NodeDB::isVerifiedSignerForKey(NodeNum n, const uint8_t *key32)
     return false;
 }
 
+bool NodeDB::isKnownXeddsaSigner(NodeNum n)
+{
+    // A node lives in the hot XOR warm tier, so the hot verdict is final when present.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (info)
+        return nodeInfoLiteHasXeddsaSigned(info);
+#if WARM_NODE_COUNT > 0
+    return warmStore.isVerifiedSigner(n);
+#else
+    return false;
+#endif
+}
+
 meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
 {
     const meshtastic_NodeInfoLite *info = getMeshNode(n);

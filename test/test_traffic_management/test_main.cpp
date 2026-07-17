@@ -1007,6 +1007,50 @@ static void test_tm_nodeinfo_cache_pinsAgainstWarmTierKey(void)
 }
 
 /**
+ * Unsigned-identity gate, warm tier: a verified signer evicted to the warm tier must not be
+ * impersonatable. An attacker can forge an unsigned NodeInfo carrying the signer's real
+ * (public!) key - it passes the key pin and would inherit warm signer provenance - so the
+ * gate must classify warm-tier signers, not only hot-store ones. A signature-verified frame
+ * (control) is still learned.
+ */
+static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore(); // hot store misses; only the warm tier knows the signer
+    uint8_t warmKey[32];
+    memset(warmKey, 0x5A, 32);
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*signer=*/true);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    // Forgery: unsigned NodeInfo with the REAL key (passes the pin) and an attacker name.
+    meshtastic_MeshPacket forged = makeNodeInfoPacketWithKey(kTargetNode, "attacker", 0x5A);
+    forged.xeddsa_signed = false;
+    module.handleReceived(forged);
+    TEST_ASSERT_EQUAL_INT(-1, module.peekNodeInfoFlagsForTest(kTargetNode)); // nothing cached
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr));
+
+    // Control: the same identity, signature-verified, is learned.
+    meshtastic_MeshPacket genuine = makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x5A);
+    genuine.xeddsa_signed = true;
+    module.handleReceived(genuine);
+    TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
+    TEST_ASSERT_EQUAL_STRING("genuine", out.long_name);
+
+    mockNodeDB->warmStore.clear();
+}
+
+/**
  * Reconcile seeding, serve-gate honesty: a hot-store identity is seeded into the cache by
  * the maintenance sweep (name + key + signer provenance usable via copyUser/copyPublicKey),
  * but is NEVER served as a spoofed reply until a genuine NODEINFO frame is heard - seeding
@@ -1094,6 +1138,51 @@ static void test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier(void)
     TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr)); // key-only record
 
     mockNodeDB->warmStore.clear();
+}
+
+/**
+ * Reconcile must not let a keyless hot-store identity erase a TOFU key this cache already
+ * learned (the same merge rule as onNodeIdentityCommitted): the hot name is adopted, the
+ * kept key survives for the copyPublicKey pool - and stays unproven, because the hot signer
+ * bit vouches only for a NodeDB-supplied key, never the kept TOFU one.
+ */
+static void test_tm_nodeinfo_reconcile_keepsTofuKeyOnKeylessHotIdentity(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    mockNodeDB->warmStore.clear();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    // TOFU learn while NodeDB knows nothing about the node.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "tofu-name", 0x33));
+    uint8_t key[32] = {0};
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, nullptr));
+
+    // NodeDB then learns the node with a User but NO key; its signed bit is even set, which
+    // must vouch for nothing here since NodeDB supplies no key to match it against.
+    mockNodeDB->setSignerHotNode(kTargetNode, "hot-name");
+    module.runOnce(); // maintenance sweep -> reconcile adopts the hot identity
+
+    bool proven = true;
+    memset(key, 0, sizeof(key));
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven)); // TOFU key survived
+    TEST_ASSERT_EQUAL_UINT8(0x33, key[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x33, key[31]);
+    TEST_ASSERT_FALSE(proven);
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
+    TEST_ASSERT_EQUAL_STRING("hot-name", out.long_name); // hot identity adopted
+
+    mockNodeDB->rollHotStore();
 }
 
 /**
@@ -2658,8 +2747,10 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_cache_rejectsMismatchedKey);
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_tm_nodeinfo_cache_pinsAgainstWarmTierKey);
+    RUN_TEST(test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
+    RUN_TEST(test_tm_nodeinfo_reconcile_keepsTofuKeyOnKeylessHotIdentity);
     RUN_TEST(test_tm_nodeinfo_updateUserHook_writesThrough);
     RUN_TEST(test_tm_nodeinfo_removeNode_purgesCaches);
     RUN_TEST(test_tm_nodeinfo_noTimedEviction_quietKeyedEntrySurvives);

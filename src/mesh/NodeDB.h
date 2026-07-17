@@ -376,6 +376,14 @@ class NodeDB
     // key signer-proven from what NodeDB already knows, without re-verifying a signature.
     bool isVerifiedSignerForKey(NodeNum n, const uint8_t *key32);
 
+    /// True when we have ever verified an XEdDSA signature from node `n`, per either NodeDB
+    /// tier: the hot store's signed bitfield, or the signer bit the warm tier cached at
+    /// eviction. Key-agnostic - answers "should this node's signable traffic arrive signed",
+    /// not "is this particular key proven" (that is isVerifiedSignerForKey). Gates that only
+    /// consult the hot store would let a warm-evicted signer be impersonated with unsigned
+    /// frames until it happens to be re-heard.
+    bool isKnownXeddsaSigner(NodeNum n);
+
     /// Resolve a node's device role - hot store (with user) first, then the role
     /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
     /// nodes that have aged out of the hot store.

@@ -32,67 +32,39 @@ namespace
 
 constexpr uint32_t kMaintenanceIntervalMs = 60 * 1000UL; // Cache cleanup interval
 
-// NodeInfo direct response: enforced maximum hops by device role
-// Both use maxHops logic (respond when hopsAway <= threshold)
-// Config value is clamped to these role-based limits
-// Note: nodeinfo_direct_response must also be enabled for this to take effect
+// NodeInfo direct response: role-enforced hop ceilings (respond when hopsAway <= threshold);
+// config can only tighten them. nodeinfo_direct_response must also be enabled.
 constexpr uint32_t kRouterDefaultMaxHops = 3; // Routers: max 3 hops (can set lower via config)
 constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot increase)
 
-// NodeInfo direct-response safety limits.
-//
-// The per-entry clocks live in the header (kNodeInfoObsTickMs / kNodeInfoRespTickMs and the
-// currentObsTick()/currentRespTick() helpers) beside the UnifiedCache tick idiom they share.
-//
-// Staleness: never spoof a NodeInfo reply on behalf of a node we have not actually
-// heard from within this window. Without it, a cached (or forged) entry is served
-// indefinitely for a long-gone node while the genuine request is suppressed - the
-// requestor sees a fresh-looking answer for a node that may no longer exist.
-// The cache path enforces this in ticks (kNodeInfoMaxServeAgeTicks x kNodeInfoObsTickMs
-// = 6 h, see the header); the NodeDB fallback path uses this seconds form of the same window.
+// Staleness window: never spoof a reply for a node not actually heard within it, or a cached
+// entry would be served indefinitely for a long-gone node while the genuine request is
+// suppressed. The cache path enforces the same 6 h in ticks (kNodeInfoMaxServeAgeTicks, header).
 constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL; // 6 h (NodeDB fallback path)
 
-// Entries are never evicted on a timer. Wrap-correctness of the tick stamps is guaranteed by
-// the sweep's presence-bit saturation (see runOnce), not by freeing slots, and a slot that
-// has gone quiet still holds value: its key remains a last-resort encryption source
-// (NodeDB::copyPublicKey) and its User payload rehydrates a re-admitted node's name. Slots
-// are reclaimed only by trust/membership-tiered LRU on insert, or by an explicit purge when
-// the user deliberately removes the node.
-
-// Throttle: emit at most one spoofed direct reply per target node per this interval.
-// Direct responses are otherwise un-throttled (they STOP the request before the
-// per-sender rate limiter runs) and the reply target is attacker-controlled, so an
-// attacker could otherwise drive unbounded local transmissions / reflected floods.
-// This ms form throttles the NodeDB fallback path (module-global uint32 stamp); the cache
-// path throttles per entry in ticks (kNodeInfoThrottleTicks, header).
+// Throttle: at most one spoofed reply per target per interval - the reply target is
+// attacker-controlled, so this bounds reflected floods. This ms form covers the NodeDB
+// fallback path; the cache path throttles per entry in ticks (kNodeInfoThrottleTicks, header).
 constexpr uint32_t kNodeInfoResponseThrottleMs = 30UL * 1000UL; // 30 s
 
-/**
- * Convert seconds to milliseconds with overflow protection.
- */
+/// Convert seconds to milliseconds with overflow protection.
 uint32_t secsToMs(uint32_t secs)
 {
-    uint64_t ms = static_cast<uint64_t>(secs) * 1000ULL;
-    if (ms > UINT32_MAX)
+    uint64_t milliseconds = static_cast<uint64_t>(secs) * 1000ULL;
+    if (milliseconds > UINT32_MAX)
         return UINT32_MAX;
-    return static_cast<uint32_t>(ms);
+    return static_cast<uint32_t>(milliseconds);
 }
 
-// Advertised role of the originating node (from NodeDB), or CLIENT (no exception) if unknown.
-// Position filtering grants two role exceptions: trackers may refresh duplicates hourly, and
-// lost-and-found is throttled only to the shortest dedup window. Both are still subject to
-// the channel-precision ceiling in alterReceived().
+/// Advertised role of the originating node, resolved hot store -> warm tier -> CLIENT, so the
+/// position dedup role exceptions keep firing for nodes aged out of the hot store.
 meshtastic_Config_DeviceConfig_Role originRole(NodeNum from)
 {
-    // Resolve via NodeDB: hot store (with user) → warm-tier cached role → CLIENT. The
-    // warm fallback keeps role exceptions firing for trackers/etc. aged out of the hot store.
     return nodeDB ? nodeDB->getNodeRole(from) : meshtastic_Config_DeviceConfig_Role_CLIENT;
 }
 
-/**
- * Clamp precision to a valid dedup range.
- * Invalid values use the module default precision.
- */
+/// Clamp precision to a valid dedup range.
+/// Invalid values use the module default precision.
 uint8_t sanitizePositionPrecision(uint8_t precision)
 {
     if (precision > 0 && precision <= 32)
@@ -106,10 +78,16 @@ uint8_t sanitizePositionPrecision(uint8_t precision)
     return 32;
 }
 
-/**
- * Return a short human-readable name for common port numbers.
- * Falls back to "port:<N>" for unknown ports.
- */
+/// Saturating increment for uint8_t counters.
+/// Prevents overflow by capping at UINT8_MAX (255).
+inline void saturatingIncrement(uint8_t &counter)
+{
+    if (counter < UINT8_MAX)
+        counter++;
+}
+
+/// Return a short human-readable name for common port numbers.
+/// Falls back to "port:<N>" for unknown ports.
 const char *portName(int portnum)
 {
     switch (portnum) {
@@ -150,6 +128,7 @@ TrafficManagementModule *trafficManagementModule;
 // Constructor
 // =============================================================================
 
+/// Allocate the unified cache (and, where available, the PSRAM NodeInfo cache) and start the sweep.
 TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManagement"), concurrency::OSThread("TrafficManagement")
 {
     // Module configuration
@@ -212,14 +191,12 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     setIntervalFromNow(kMaintenanceIntervalMs);
 }
 
-// Cache may have been allocated via ps_calloc (PSRAM, C allocator) or new[] (heap).
-// Must use the matching deallocator: free() for ps_calloc, delete[] for new[].
+/// Both caches may come from ps_calloc (PSRAM, C allocator) or new[] (heap);
+/// each must be released with the matching deallocator.
 TrafficManagementModule::~TrafficManagementModule()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     if (cache) {
-        // Cache may be from ps_calloc (PSRAM, C allocator) or new[] (heap).
-        // Use the matching deallocator for the allocation source.
         if (cacheFromPsram)
             free(cache);
         else
@@ -259,9 +236,7 @@ void TrafficManagementModule::incrementStat(uint32_t *field)
 // Flat Unified Cache Operations
 // =============================================================================
 
-/**
- * Find an existing entry for the given node (linear scan).
- */
+/// Find an existing entry for the given node (linear scan).
 TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findEntry(NodeNum node)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
@@ -291,15 +266,20 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
 #endif
 }
 
+// The two caches are compile-time independent (TMM_HAS_NODEINFO_CACHE keys on PSRAM, the
+// unified cache on a per-variant size that may be overridden to 0), so each is purged under
+// its own guard - a build with only one of them must still forget deleted nodes.
 void TrafficManagementModule::purgeNode(NodeNum node)
 {
-#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 || TMM_HAS_NODEINFO_CACHE
     if (node == 0)
         return;
     concurrency::LockGuard guard(&cacheLock);
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     UnifiedCacheEntry *entry = findEntry(node);
     if (entry)
         memset(entry, 0, sizeof(UnifiedCacheEntry));
+#endif
 #if TMM_HAS_NODEINFO_CACHE
     NodeInfoPayloadEntry *info = findNodeInfoEntryMutable(node);
     if (info)
@@ -313,10 +293,12 @@ void TrafficManagementModule::purgeNode(NodeNum node)
 
 void TrafficManagementModule::purgeAll()
 {
-#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 || TMM_HAS_NODEINFO_CACHE
     concurrency::LockGuard guard(&cacheLock);
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     if (cache)
         memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
+#endif
 #if TMM_HAS_NODEINFO_CACHE
     if (nodeInfoPayload)
         memset(nodeInfoPayload, 0, static_cast<size_t>(nodeInfoTargetEntries()) * sizeof(NodeInfoPayloadEntry));
@@ -373,25 +355,9 @@ void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
 #endif
 }
 
-/**
- * Find or create an entry for the given node.
- *
- * One linear pass tracks the match, the first empty slot, and the eviction
- * victim. When the cache is full, the victim is the stalest entry (largest
- * of its three relative timestamps is smallest), preferring entries without
- * a next_hop hint - those hints are the long-tail routing state the cache
- * exists to keep, and the maintenance sweep never ages them out.
- *
- * @param node  NodeNum to find or create
- * @param isNew Set to true if a new entry was created
- * @return      Pointer to entry, or nullptr if the cache is unavailable
- */
-// Sender-role resolution for the position hot path. The tier-3 cache is authoritative
-// here and is kept fresh by updateCachedRoleFromNodeInfo() - i.e. updated at the same
-// time NodeDB learns a role, not re-derived on every packet. We only fall back to a
-// NodeDB scan (tiers 1+2) the first time we start tracking a node, to seed the cache so
-// a resident special-role node is correct from its very first position. Thereafter the
-// read is O(1) and survives the node aging out of both NodeDB stores.
+/// Sender-role resolution for the position hot path. NodeDB is scanned only when a node is first
+/// tracked (seeding the tier-3 cache so a resident special-role node is correct from its first
+/// position); thereafter the cached role is authoritative, kept fresh by updateCachedRoleFromNodeInfo().
 meshtastic_Config_DeviceConfig_Role TrafficManagementModule::resolveSenderRole(NodeNum from, UnifiedCacheEntry *entry, bool isNew)
 {
     if (!entry)
@@ -407,12 +373,9 @@ meshtastic_Config_DeviceConfig_Role TrafficManagementModule::resolveSenderRole(N
     return static_cast<meshtastic_Config_DeviceConfig_Role>(entry->getCachedRole());
 }
 
-// Refresh the tier-3 role cache from an observed NodeInfo - the same event that updates
-// NodeDB's role - so role changes (including demotion back to CLIENT) are picked up
-// without scanning NodeDB on the position hot path. Role is read straight from the
-// packet's User payload (authoritative regardless of module ordering). Only updates nodes
-// we already track (findEntry, no create) so NodeInfo from non-position nodes can't pollute
-// the cache; the role rides along with the node's existing position/rate/unknown state.
+/// Refresh the tier-3 role cache from an observed NodeInfo (the same event that updates NodeDB's
+/// role), reading the role straight from the packet's User payload. Only updates nodes already
+/// tracked, so NodeInfo from non-position nodes can't pollute the cache.
 void TrafficManagementModule::updateCachedRoleFromNodeInfo(const meshtastic_MeshPacket &mp)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
@@ -431,6 +394,9 @@ void TrafficManagementModule::updateCachedRoleFromNodeInfo(const meshtastic_Mesh
 #endif
 }
 
+/// Find or create the unified-cache entry for `node`. One linear pass tracks the match, the
+/// first empty slot, and the eviction victim: when full, the stalest entry loses, preferring
+/// entries without a next-hop hint or special role (the long-tail state this cache retains).
 TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreateEntry(NodeNum node, bool *isNew)
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE == 0
@@ -450,37 +416,35 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
     uint8_t victimRecency = UINT8_MAX;
 
     for (uint16_t i = 0; i < cacheSize(); i++) {
-        UnifiedCacheEntry &e = cache[i];
-        if (e.node == node)
-            return &e;
-        if (e.node == 0) {
+        UnifiedCacheEntry &entry = cache[i];
+        if (entry.node == node)
+            return &entry;
+        if (entry.node == 0) {
             if (!empty)
-                empty = &e;
+                empty = &entry;
             continue;
         }
         if (empty)
             continue; // an empty slot beats any victim; stop scoring
-        // "Preferred" entries are evicted last: a confirmed next-hop hint (routing overflow
-        // store) or a cached special (non-CLIENT) role (tracker / lost-and-found / router).
-        // Both are the long-tail state this cache exists to retain.
-        const bool preferred = e.next_hop != 0 || e.getCachedRole() != meshtastic_Config_DeviceConfig_Role_CLIENT;
-        // Age in pos-ticks (8-bit modular, wraps correctly). Entries with no
-        // pos state (pos_time==0) score as maximally old (age=currentPosTick()).
+        // "Preferred" entries are evicted last: a confirmed next-hop hint or a cached
+        // special (non-CLIENT) role - the long-tail state this cache exists to retain.
+        const bool preferred = entry.next_hop != 0 || entry.getCachedRole() != meshtastic_Config_DeviceConfig_Role_CLIENT;
+        // Age in pos-ticks (8-bit modular). Entries with no pos state score as maximally old.
         const uint8_t nowPosTick = currentPosTick();
-        const uint8_t posAge = static_cast<uint8_t>(nowPosTick - e.pos_time);
+        const uint8_t posAge = static_cast<uint8_t>(nowPosTick - entry.pos_time);
         // Blend in rate/unknown ages scaled to pos-tick units (coarser = conservative).
         const uint8_t rateAgePosScale =
-            static_cast<uint8_t>(static_cast<uint8_t>((currentRateTick() - e.getRateTime()) & 0x0F) * 5 / 3);
+            static_cast<uint8_t>(static_cast<uint8_t>((currentRateTick() - entry.getRateTime()) & 0x0F) * 5 / 3);
         const uint8_t unknownAgePosScale =
-            static_cast<uint8_t>(static_cast<uint8_t>((currentUnknownTick() - e.getUnknownTime()) & 0x0F) / 6);
+            static_cast<uint8_t>(static_cast<uint8_t>((currentUnknownTick() - entry.getUnknownTime()) & 0x0F) / 6);
         uint8_t recencyAge = posAge;
-        if (e.getRateCount() != 0 && rateAgePosScale > recencyAge)
+        if (entry.getRateCount() != 0 && rateAgePosScale > recencyAge)
             recencyAge = rateAgePosScale;
-        if (e.getUnknownCount() != 0 && unknownAgePosScale > recencyAge)
+        if (entry.getUnknownCount() != 0 && unknownAgePosScale > recencyAge)
             recencyAge = unknownAgePosScale;
         const uint8_t recency = static_cast<uint8_t>(UINT8_MAX - recencyAge);
         if (!victim || (preferred == leastPreferredVictim ? recency < victimRecency : !preferred)) {
-            victim = &e;
+            victim = &entry;
             leastPreferredVictim = preferred;
             victimRecency = recency;
         }
@@ -516,18 +480,9 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
 #endif
 }
 
-/**
- * Find or create a NodeInfo payload entry (linear scan of the flat PSRAM
- * array). One pass tracks the match, the first empty slot, and the eviction
- * victim. Victim selection is trust-tiered so the cache doubles as a pubkey
- * pool (NodeDB::copyPublicKey): membership outranks key trust (a node still
- * present in NodeDB hot/warm loses last - evicting it just to reseed it via
- * reconciliation would churn), then keyless < TOFU key < signer-proven key;
- * within a tier the oldest observation loses (modular obsTick age; a
- * never-observed entry counts as oldest of all). Mirrors
- * WarmNodeStore's keyed-first admission. NodeInfo traffic is low-rate, so the
- * O(n) scan is negligible.
- */
+/// Find or create a NodeInfo payload entry. Victim selection is trust-tiered so the cache
+/// doubles as a pubkey pool: NodeDB membership outranks key trust, then keyless < TOFU key <
+/// signer-proven key; within a tier the oldest observation loses (never-observed = oldest).
 TrafficManagementModule::NodeInfoPayloadEntry *
 TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot, bool spareMembers)
 {
@@ -539,41 +494,40 @@ TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmpty
         return nullptr;
 
     NodeInfoPayloadEntry *empty = nullptr;
-    NodeInfoPayloadEntry *lru = nullptr;
-    uint8_t lruTier = 0xFF;
-    uint8_t lruAge = 0;
+    NodeInfoPayloadEntry *victim = nullptr;
+    uint8_t victimTier = 0xFF;
+    uint8_t victimAge = 0;
     const uint8_t nowObs = currentObsTick();
 
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
-        NodeInfoPayloadEntry &e = nodeInfoPayload[i];
-        if (e.node == node)
-            return &e;
-        if (e.node == 0) {
+        NodeInfoPayloadEntry &entry = nodeInfoPayload[i];
+        if (entry.node == node)
+            return &entry;
+        if (entry.node == 0) {
             if (!empty)
-                empty = &e;
+                empty = &entry;
             continue;
         }
         if (empty)
             continue; // an empty slot beats any victim; stop scoring
         // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key;
-        // +3 when the node is a NodeDB member - the cache must not shed a NodeDB-tier
-        // identity while it still holds opportunistic strangers.
-        const uint8_t tier =
-            static_cast<uint8_t>(((e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1)) + (e.isMember ? 3 : 0));
-        // Modular observation age; saturation keeps real ages far below 0xFF, so a
-        // never-observed entry scored at 0xFF is always the oldest in its tier.
-        const uint8_t age = e.hasObserved ? static_cast<uint8_t>(nowObs - e.obsTick) : 0xFF;
-        if (!lru || tier < lruTier || (tier == lruTier && age > lruAge)) {
-            lru = &e;
-            lruTier = tier;
-            lruAge = age;
+        // +3 for NodeDB members - never shed a NodeDB-tier identity over a stranger.
+        const uint8_t tier = static_cast<uint8_t>(((entry.user.public_key.size != 32) ? 0 : (entry.keySignerProven ? 2 : 1)) +
+                                                  (entry.isMember ? 3 : 0));
+        // Modular observation age; saturation keeps real ages far below the 0xFF a
+        // never-observed entry scores, so that entry is always the oldest in its tier.
+        const uint8_t age = entry.hasObserved ? static_cast<uint8_t>(nowObs - entry.obsTick) : 0xFF;
+        if (!victim || tier < victimTier || (tier == victimTier && age > victimAge)) {
+            victim = &entry;
+            victimTier = tier;
+            victimAge = age;
         }
     }
 
-    NodeInfoPayloadEntry *slot = empty ? empty : lru;
+    NodeInfoPayloadEntry *slot = empty ? empty : victim;
     if (!slot)
         return nullptr;
-    if (spareMembers && slot == lru && lru->isMember)
+    if (spareMembers && slot == victim && victim->isMember)
         return nullptr; // caller would rather skip than churn one member out for another
     memset(slot, 0, sizeof(NodeInfoPayloadEntry));
     slot->node = node;
@@ -612,62 +566,65 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
     const NodeNum self = nodeDB->getNodeNum();
     uint16_t seeded = 0;
 
-    // Upsert one NodeDB-tier node. `hot` non-null contributes the full identity; a warm
-    // record is key-only. Cost note: a miss in findOrCreateNodeInfoEntry scans the whole
-    // array, so this pass is O(members x entries) - which is why it runs hourly (plus one
-    // boot seed), not on every sweep; the write-through hooks carry the interim.
-    auto reconcileOne = [&](NodeNum n, const uint8_t *key32, bool signerKnown, const meshtastic_NodeInfoLite *hot) {
-        if (n == 0 || n == self)
+    // Upsert one NodeDB-tier node (`hot` non-null = full identity, warm record = key-only).
+    // A miss scans the whole array, so this pass is O(members x entries) - which is why it
+    // runs hourly plus one boot seed; the write-through hooks carry the interim.
+    auto reconcileOne = [&](NodeNum node, const uint8_t *key32, bool signerKnown, const meshtastic_NodeInfoLite *hot) {
+        if (node == 0 || node == self)
             return;
         if (!hot && !key32)
             return; // a warm record without a key has nothing worth seeding
 
-        NodeInfoPayloadEntry *e = findNodeInfoEntryMutable(n);
-        if (!e) {
+        NodeInfoPayloadEntry *entry = findNodeInfoEntryMutable(node);
+        if (!entry) {
             bool usedEmptySlot = false;
-            e = findOrCreateNodeInfoEntry(n, &usedEmptySlot, /*spareMembers=*/true);
-            if (!e)
+            entry = findOrCreateNodeInfoEntry(node, &usedEmptySlot, /*spareMembers=*/true);
+            if (!entry)
                 return; // cache is member-saturated; skip rather than churn a member out
             seeded++;
         }
 
         // NodeDB is the authority on identity content: adopt its User payload and key. A key
-        // change relative to a stale TMM TOFU pin resets provenance; the signer verdict then
-        // transfers only via the key-matched rule below. hasObserved/obsTick are deliberately
-        // untouched - seeding is knowledge, not an observation, and the replay serve-gate
-        // must stay keyed to genuinely heard frames.
-        const bool keyChanged = e->user.public_key.size == 32 && key32 && memcmp(e->user.public_key.bytes, key32, 32) != 0;
+        // change against a stale TMM TOFU pin resets provenance (the signer verdict transfers
+        // only key-matched, below). hasObserved/obsTick stay untouched: seeding is not observation.
+        const bool keyChanged =
+            entry->user.public_key.size == 32 && key32 && memcmp(entry->user.public_key.bytes, key32, 32) != 0;
         if (hot && nodeInfoLiteHasUser(hot)) {
-            e->user = TypeConversions::ConvertToUser(hot);
-            e->hasFullUser = true;
-            snprintf(e->user.id, sizeof(e->user.id), "!%08x", n);
+            meshtastic_User merged = TypeConversions::ConvertToUser(hot);
+            // Same rule as onNodeIdentityCommitted: a keyless hot identity must not cost this
+            // cache a TOFU key it already learned (the kept key stays unproven).
+            if (merged.public_key.size != 32 && entry->user.public_key.size == 32)
+                merged.public_key = entry->user.public_key;
+            entry->user = merged;
+            entry->hasFullUser = true;
+            snprintf(entry->user.id, sizeof(entry->user.id), "!%08x", node);
         } else if (key32) {
-            memcpy(e->user.public_key.bytes, key32, 32);
-            e->user.public_key.size = 32;
+            memcpy(entry->user.public_key.bytes, key32, 32);
+            entry->user.public_key.size = 32;
         }
         if (keyChanged)
-            e->keySignerProven = false;
-        if (signerKnown && key32 && e->user.public_key.size == 32 && memcmp(e->user.public_key.bytes, key32, 32) == 0)
-            e->keySignerProven = true;
-        e->isMember = true;
+            entry->keySignerProven = false;
+        if (signerKnown && key32 && entry->user.public_key.size == 32 && memcmp(entry->user.public_key.bytes, key32, 32) == 0)
+            entry->keySignerProven = true;
+        entry->isMember = true;
     };
 
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         const meshtastic_NodeInfoLite *info = nodeDB->getMeshNodeByIndex(i);
         if (!info || info->num == 0)
             continue;
-        const uint8_t *key = (info->public_key.size == 32) ? info->public_key.bytes : nullptr;
-        reconcileOne(info->num, key, nodeInfoLiteHasXeddsaSigned(info), info);
+        const uint8_t *hotKey = (info->public_key.size == 32) ? info->public_key.bytes : nullptr;
+        reconcileOne(info->num, hotKey, nodeInfoLiteHasXeddsaSigned(info), info);
     }
 #if WARM_NODE_COUNT > 0
     // Warm tier: key-only records (the warm tier keeps no names), so the cache holds a key
     // for every NodeDB identity - the superset the pubkey pool and the key pin rely on.
     for (size_t i = 0; i < nodeDB->warmStore.capacity(); i++) {
-        const WarmNodeEntry *w = nodeDB->warmStore.entryAt(i);
-        if (!w)
+        const WarmNodeEntry *warm = nodeDB->warmStore.entryAt(i);
+        if (!warm)
             continue;
-        const bool hasKey = !memfll(w->public_key, 0, sizeof(w->public_key));
-        reconcileOne(w->num, hasKey ? w->public_key : nullptr, warmSignerOf(*w), nullptr);
+        const bool hasKey = !memfll(warm->public_key, 0, sizeof(warm->public_key));
+        reconcileOne(warm->num, hasKey ? warm->public_key : nullptr, warmSignerOf(*warm), nullptr);
     }
 #endif
 
@@ -686,29 +643,28 @@ void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshta
     if (!nodeInfoPayload)
         return;
     bool usedEmptySlot = false;
-    NodeInfoPayloadEntry *e = findOrCreateNodeInfoEntry(node, &usedEmptySlot, /*spareMembers=*/true);
-    if (!e)
+    NodeInfoPayloadEntry *entry = findOrCreateNodeInfoEntry(node, &usedEmptySlot, /*spareMembers=*/true);
+    if (!entry)
         return; // member-saturated cache: the reconcile sweep owns the tradeoff
 
     // Merge: NodeDB's commit is authoritative for everything it carries, but a keyless
     // commit (possible while the node is unpinned in NodeDB) must not cost this cache a
     // TOFU key it already learned.
     meshtastic_User merged = user;
-    if (merged.public_key.size != 32 && !usedEmptySlot && e->user.public_key.size == 32)
-        merged.public_key = e->user.public_key;
+    if (merged.public_key.size != 32 && !usedEmptySlot && entry->user.public_key.size == 32)
+        merged.public_key = entry->user.public_key;
 
-    // Provenance survives only alongside an unchanged key; a replaced key (stale residue
-    // predating the authoritative pin) starts from scratch and may be re-proven by
-    // signerKnown below - which vouches for the COMMITTED key, never the kept TOFU one.
-    const bool sameKey = !usedEmptySlot && e->user.public_key.size == 32 && merged.public_key.size == 32 &&
-                         memcmp(e->user.public_key.bytes, merged.public_key.bytes, 32) == 0;
-    const bool provenBefore = !usedEmptySlot && e->keySignerProven && sameKey;
+    // Provenance survives only alongside an unchanged key; a replaced key starts from scratch
+    // and may be re-proven by signerKnown below - which vouches for the COMMITTED key only.
+    const bool sameKey = !usedEmptySlot && entry->user.public_key.size == 32 && merged.public_key.size == 32 &&
+                         memcmp(entry->user.public_key.bytes, merged.public_key.bytes, 32) == 0;
+    const bool provenBefore = !usedEmptySlot && entry->keySignerProven && sameKey;
 
-    e->user = merged;
-    snprintf(e->user.id, sizeof(e->user.id), "!%08x", node);
-    e->hasFullUser = true;
-    e->keySignerProven = provenBefore || (signerKnown && user.public_key.size == 32);
-    e->isMember = true; // committed via updateUser => it sits in the hot store right now
+    entry->user = merged;
+    snprintf(entry->user.id, sizeof(entry->user.id), "!%08x", node);
+    entry->hasFullUser = true;
+    entry->keySignerProven = provenBefore || (signerKnown && user.public_key.size == 32);
+    entry->isMember = true; // committed via updateUser => it sits in the hot store right now
     // obsTick/hasObserved deliberately untouched: only a heard frame makes a node servable.
 #else
     (void)node;
@@ -797,13 +753,11 @@ bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool 
 }
 
 #if TMM_HAS_NODEINFO_CACHE && !(MESHTASTIC_EXCLUDE_PKI)
-// True iff both are full 32-byte public keys with identical bytes. Single point of
-// truth for the NodeInfo-cache key-hygiene checks (owner impersonation + key pinning),
-// so the compare (and any future hardening, e.g. constant-time) lives in one place.
-// Takes raw ptr+size because the User and NodeInfoLite key fields are distinct types.
-static bool pubKeysEqual(const uint8_t *a, size_t aSize, const uint8_t *b, size_t bSize)
+/// True iff both are full 32-byte public keys with identical bytes. Single point of truth for
+/// the key-hygiene checks; raw ptr+size because User and NodeInfoLite key fields differ in type.
+static bool pubKeysEqual(const uint8_t *keyA, size_t sizeA, const uint8_t *keyB, size_t sizeB)
 {
-    return aSize == 32 && bSize == 32 && memcmp(a, b, 32) == 0;
+    return sizeA == 32 && sizeB == 32 && memcmp(keyA, keyB, 32) == 0;
 }
 #endif
 
@@ -827,34 +781,24 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
     bool dbSaysSigner = false;
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Mirror NodeDB::updateUser() key hygiene before we let an overheard NodeInfo into
-    // the direct-response cache. This cache is served back to requestors as a spoofed
-    // reply on the target's behalf, so poisoning it is materially worse than a plain
-    // NodeDB overwrite - apply the same protections NodeDB applies to itself.
-    // Someone advertising our own public key is impersonating this node - never cache it.
+    // This cache is served back as spoofed replies, so mirror NodeDB::updateUser()'s key
+    // hygiene. First: a frame advertising our own key is impersonating us - never cache it.
     if (pubKeysEqual(user.public_key.bytes, user.public_key.size, owner.public_key.bytes, owner.public_key.size)) {
         TM_LOG_WARN("NodeInfo cache: incoming key matches owner, dropping 0x%08x", from);
         return;
     }
-    // Key pinning against the authoritative NodeDB key - hot store, then warm tier: once a
-    // 32-byte key is known for a node, refuse to cache a NodeInfo carrying a different (or
-    // missing) key. This is the same rule as NodeDB::updateUser() ("Public Key mismatch,
-    // dropping NodeInfo") - and the same coverage: updateUser's pin sees warm-tier keys
-    // because getOrCreateMeshNode() rehydrates them before the check runs, so this pin must
-    // consult the warm tier too. Checking only the hot store would let an attacker seed this
-    // cache with a bogus key for a warm-evicted node, and the TOFU pin below would then lock
-    // the genuine node's frames out until the entry ages away.
+    // Key pin against the authoritative NodeDB key (hot store, then warm tier - the same
+    // coverage as updateUser's pin): a hot-only check would let an attacker seed a bogus key
+    // for a warm-evicted node, and the TOFU pin below would then lock the genuine node out.
     meshtastic_NodeInfoLite_public_key_t dbKey = {0, {0}};
     if (nodeDB && nodeDB->copyPublicKeyAuthoritative(from, dbKey) &&
         !pubKeysEqual(user.public_key.bytes, user.public_key.size, dbKey.bytes, dbKey.size)) {
         TM_LOG_WARN("NodeInfo cache: public key mismatch vs NodeDB, dropping 0x%08x", from);
         return;
     }
-    // Re-found in NodeDB as a known signer: inherit that verdict so the cached key is proven
-    // even when this particular frame was unsigned. isVerifiedSignerForKey consults both the
-    // hot store's signed bitfield and the warm tier's cached signer bit, and requires the key
-    // to match, so a warm-only signer is covered and a rotated key never inherits a stale
-    // verdict.
+    // Re-found in NodeDB as a known signer: inherit that verdict even off an unsigned frame.
+    // isVerifiedSignerForKey covers both tiers and requires the key to match, so a warm-only
+    // signer is included and a rotated key never inherits a stale verdict.
     dbSaysSigner = nodeDB && user.public_key.size == 32 && nodeDB->isVerifiedSignerForKey(from, user.public_key.bytes);
 #endif
 
@@ -878,9 +822,8 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         }
 #endif
 
-        // Cache both payload and response metadata so direct replies can use
-        // richer context than "just the user protobuf" when the cache is present.
-        // This path is intentionally independent from NodeInfoModule/NodeDB.
+        // Cache payload plus response metadata so direct replies carry richer context than
+        // just the User protobuf. Intentionally independent from NodeInfoModule/NodeDB.
         entry->user = user;
         entry->obsTick = currentObsTick(); // a genuine observation - the only place obsTick is stamped
         entry->hasObserved = true;
@@ -889,12 +832,9 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
         entry->decodedBitfield = mp.decoded.bitfield;
 
-        // Upgrade key provenance to "signer-proven" when either this frame's XEdDSA signature
-        // was verified (Router::checkXeddsaReceivePolicy sets mp.xeddsa_signed only after a
-        // successful verify against the node's key) or NodeDB already knows this node as a
-        // signer for this same key (dbSaysSigner). Never downgrade: a later unsigned frame for
-        // an already-proven key leaves the flag set. The key itself cannot change here - the
-        // key-pin checks above reject a mismatching key before we reach this point.
+        // Upgrade to signer-proven on a Router-verified signature or a NodeDB signer verdict
+        // for this same key. Never downgrade (a later unsigned frame leaves the flag set),
+        // and the key itself cannot change here - the pin checks above already rejected that.
         if ((mp.xeddsa_signed || dbSaysSigner) && user.public_key.size == 32)
             entry->keySignerProven = true;
 
@@ -914,13 +854,9 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
 // =============================================================================
 // Next-Hop Overflow Cache
 // =============================================================================
-//
-// A routing hint store. The byte is the last byte of the NodeNum to use as next
-// hop to reach `dest`. It is written ONLY from NextHopRouter's ACK-confirmed
-// decision (a bidirectionally-verified relay) - never inferred one-way from
-// relayed traffic. The TMM cache holds confirmed next-hops that have aged out of
-// the hot NodeDB (NodeInfoLite), and NextHopRouter::getNextHop() consults it as a
-// fallback after the hot store.
+// Routing hints (last byte of the next-hop NodeNum), written ONLY from NextHopRouter's
+// ACK-confirmed decisions - never inferred one-way. Holds confirmed hops that aged out of
+// the hot NodeDB; NextHopRouter::getNextHop() consults it as a fallback after the hot store.
 
 void TrafficManagementModule::setNextHop(NodeNum dest, uint8_t nextHopByte)
 {
@@ -1015,60 +951,34 @@ void TrafficManagementModule::flushCache()
 // Position Hash (Compact Mode)
 // =============================================================================
 
-/**
- * Compute 8-bit position fingerprint from truncated lat/lon coordinates.
- *
- * Unlike a hash, this is deterministic: adjacent grid cells have sequential
- * fingerprints, so nearby positions never collide. The fingerprint extracts
- * the lower 4 significant bits from each truncated coordinate.
- *
- * Example with precision=16:
- *   lat_truncated = 0x12340000 (top 16 bits significant)
- *   Significant portion = 0x1234, lower 4 bits = 0x4
- *
- * fingerprint = (lat_low4 << 4) | lon_low4 = 8 bits total
- *
- * Collision: Two positions collide only if they differ by a multiple of 16
- * grid cells in BOTH lat and lon dimensions simultaneously - very unlikely
- * for typical position update patterns.
- *
- * @param lat_truncated  Precision-truncated latitude
- * @param lon_truncated  Precision-truncated longitude
- * @param precision      Number of significant bits (1-32)
- * @return               8-bit fingerprint (4 bits lat + 4 bits lon)
- */
+/// 8-bit position fingerprint: (lat_low4 << 4) | lon_low4 from the truncated coordinates'
+/// lower significant bits. Deterministic, so adjacent grid cells never collide; two positions
+/// collide only when 16+ cells apart in BOTH dimensions.
 uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncated, int32_t lon_truncated, uint8_t precision)
 {
     precision = sanitizePositionPrecision(precision);
 
-    // Guard: if precision < 4, we have fewer bits to work with
-    // Take min(precision, 4) bits from each coordinate
+    // With precision < 4 there are fewer significant bits to take.
     uint8_t bitsToTake = (precision < 4) ? precision : 4;
 
-    // Shift to move significant bits to bottom, then mask lower bits
-    // For precision=16: shift by 16 to get the 16 significant bits at bottom
+    // Shift the significant bits to the bottom, then mask the low bits of each coordinate.
     uint8_t shift = 32 - precision;
     uint8_t latBits = (static_cast<uint32_t>(lat_truncated) >> shift) & ((1u << bitsToTake) - 1);
     uint8_t lonBits = (static_cast<uint32_t>(lon_truncated) >> shift) & ((1u << bitsToTake) - 1);
 
-    const uint8_t fp = static_cast<uint8_t>((latBits << 4) | lonBits);
-    // 0 is the "no position seen" sentinel for pos_fingerprint, so a real position that happens to
-    // hash to 0 must not collide with it (otherwise its duplicates would never dedup). Remap 0 -> 0xFF,
-    // mirroring NodeDB::getLastByteOfNodeNum()'s 0 -> 0xFF idiom. Cost: the 0x00 bucket merges into
-    // 0xFF (one extra collision in 256 - negligible; the fingerprint already collides every 16 cells).
-    return fp ? fp : 0xFF;
+    const uint8_t fingerprint = static_cast<uint8_t>((latBits << 4) | lonBits);
+    // 0 is the "no position seen" sentinel, so remap a computed 0 -> 0xFF (mirrors
+    // getLastByteOfNodeNum). Cost: one extra collision bucket in 256 - negligible.
+    return fingerprint ? fingerprint : 0xFF;
 }
 
 // =============================================================================
 // Packet Handling
 // =============================================================================
 
-// Processing order matters: this module runs BEFORE RoutingModule in the callModules() loop.
-// - STOP prevents RoutingModule from calling sniffReceived() → perhapsRebroadcast(),
-//   so the packet is fully consumed (not forwarded).
-// - ignoreRequest suppresses the default "no one responded" NAK for want_response packets.
-// - exhaustRequested is set by alterReceived() and checked by perhapsRebroadcast() to
-//   force hop_limit=0 on the rebroadcast copy, allowing one final relay hop.
+/// Runs BEFORE RoutingModule in callModules(): STOP fully consumes the packet (no rebroadcast),
+/// ignoreRequest suppresses the default NAK for want_response packets, and exhaustRequested
+/// (set by alterReceived) makes perhapsRebroadcast() force hop_limit=0 on the relayed copy.
 ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (!moduleConfig.has_traffic_management)
@@ -1101,12 +1011,11 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         return ProcessMessage::CONTINUE;
     }
 
-    // A known signer's NodeInfo arriving unsigned is unauthenticated (the sender is forgeable), so
-    // it must not drive any cache or identity write below. Computed once here (getMeshNode is O(N))
-    // and reused by both the cache-refresh and the direct-response identity path.
+    // A known signer's NodeInfo arriving unsigned is unauthenticated and must not drive any
+    // cache or identity write below. isKnownXeddsaSigner covers the warm tier too - a forged
+    // unsigned NodeInfo carrying a warm-evicted signer's real (public!) key passes the key pin.
     const bool isNodeInfo = mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
-    const meshtastic_NodeInfoLite *senderNode = isNodeInfo ? nodeDB->getMeshNode(getFrom(&mp)) : nullptr;
-    const bool unauthenticatedSigner = senderNode && nodeInfoLiteHasXeddsaSigned(senderNode) && !mp.xeddsa_signed;
+    const bool unauthenticatedSigner = isNodeInfo && !mp.xeddsa_signed && nodeDB && nodeDB->isKnownXeddsaSigner(getFrom(&mp));
 
     // Learn NodeInfo payloads into the dedicated PSRAM cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).
@@ -1118,17 +1027,14 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // -------------------------------------------------------------------------
     // NodeInfo Direct Response
     // -------------------------------------------------------------------------
-    // When we see a unicast NodeInfo request for a node we know about,
-    // respond directly from cache instead of forwarding the request.
-    // STOP prevents the request from being rebroadcast toward the target node,
-    // and our cached response is sent back to the requestor with hop_limit=0.
+    // Answer a unicast NodeInfo request for a known node straight from cache: STOP keeps the
+    // request from being rebroadcast, and the reply goes back to the requestor with hop_limit=0.
 
     if (cfg.nodeinfo_direct_response_max_hops > 0 && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
         mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
         if (shouldRespondToNodeInfo(&mp, true)) {
             // Unicast NodeInfo is never signed, so a known signer's identity claim here is
             // unauthenticated: don't overwrite its stored name. The cached response is unaffected.
-            // unauthenticatedSigner was computed above (this branch is NodeInfo-only).
             meshtastic_User requester = meshtastic_User_init_zero;
             if (!unauthenticatedSigner &&
                 pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
@@ -1196,24 +1102,17 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     if (isFromUs(&mp))
         return;
 
-    // exhaust_hop_telemetry / exhaust_hop_position / router_preserve_hops:
-    // not suitable right now - the right heuristics for when to exhaust or
-    // preserve hops need more field data before we expose them as config knobs.
-    // exhaustRequested stays false; perhapsRebroadcast() behaves normally.
+    // exhaust_hop_telemetry / exhaust_hop_position / router_preserve_hops: shelved until the
+    // right heuristics are clearer; exhaustRequested stays false and rebroadcast is normal.
 
     const bool isPosition = mp.decoded.portnum == meshtastic_PortNum_POSITION_APP;
 
     // -------------------------------------------------------------------------
     // Relayed Position Precision Clamp
     // -------------------------------------------------------------------------
-    // Clamp relayed position broadcasts to the channel's configured precision
-    // ceiling. Guards against forwarding more-precise coordinates than the
-    // channel is intended to carry (e.g. a LongFast channel set to 13-bit /
-    // ~1.5 km). chanPrec==0 means position sharing is disabled on the channel;
-    // skip - not our job to zero positions on relay.
-    // Ham mode (owner.is_licensed) is exempt. Lost-and-found is NOT exempt - its relayed
-    // positions get the same precision clamp as any node.
-    // Compile USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
+    // Never forward more-precise coordinates than the channel is configured to carry
+    // (chanPrec==0 = sharing disabled on channel: skip). Ham mode is exempt; lost-and-found
+    // is not. Compile USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
     if (!owner.is_licensed && isPosition && isBroadcast(mp.to)) {
 #ifdef USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS
         const bool shouldClamp = true;
@@ -1248,19 +1147,14 @@ int32_t TrafficManagementModule::runOnce()
         return INT32_MAX;
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    // Warm-start the next-hop cache from persisted NodeInfoLite hints once nodeDB
-    // is populated. Done here (not in the constructor) so nodeDB has finished
-    // loading. Takes its own lock, so call before acquiring the sweep guard below.
-    // Only latch the one-shot guard once the preload actually ran; if nodeDB wasn't
-    // ready yet, retry on the next maintenance pass instead of skipping it forever.
+    // Warm-start the next-hop cache once nodeDB has finished loading (hence here, not the
+    // constructor; it takes its own lock, so run before the sweep guard). Latch the one-shot
+    // guard only when the preload actually ran, so a not-ready nodeDB gets a retry.
     if (!nextHopPreloaded && preloadNextHopsFromNodeDB())
         nextHopPreloaded = true;
 
-    // Free-running tick counters (no epoch needed).
-    // TTL expressed in ticks:
-    // pos: 4× position_min_interval_secs (clamped to 255 ticks @ 6 min/tick)
-    // rate: 2× rate_limit_window_secs (clamped to 15 ticks @ 5 min/tick; only relevant when rate limits are configured)
-    // unknown: fixed 12 ticks @ 1 min/tick (only relevant when unknown_packet_threshold > 0)
+    // TTLs in free-running ticks: pos 4x position interval (<=255 @ 6 min/tick), rate 2x the
+    // configured window (<=15 @ 5 min/tick), unknown fixed 12 @ 1 min/tick.
     const uint32_t positionIntervalMs = secsToMs(Default::getConfiguredOrDefault(
         moduleConfig.traffic_management.position_min_interval_secs, default_traffic_mgmt_position_min_interval_secs));
     const uint8_t posTtlTicks =
@@ -1321,12 +1215,9 @@ int32_t TrafficManagementModule::runOnce()
             }
         }
 
-        // Two fields have no TTL of their own and pin the slot, so they outlive the
-        // dedup/rate/unknown state:
-        //   - a confirmed next-hop hint (the routing overflow store), and
-        //   - a cached special (non-CLIENT) role, so a tracker / lost-and-found / router
-        //     keeps its dedup-window exception across quiet periods rather than reverting
-        //     to CLIENT the moment its timed state expires.
+        // Confirmed next-hop hints and cached special roles have no TTL and pin the slot, so
+        // a tracker/router keeps its dedup exception across quiet periods instead of
+        // reverting to CLIENT the moment its timed state expires.
         if (cache[i].next_hop != 0 || cache[i].getCachedRole() != meshtastic_Config_DeviceConfig_Role_CLIENT)
             anyValid = true;
 
@@ -1345,36 +1236,30 @@ int32_t TrafficManagementModule::runOnce()
 
 #if TMM_HAS_NODEINFO_CACHE
     if (nodeInfoPayload) {
-        // Saturate expired tick stamps. Once a stamp's age exceeds its window, its presence
-        // bit is cleared here, so no stamp is ever read anywhere near its uint8 aliasing
-        // horizon (obs: 6 h window vs 12.8 h period; resp: 30 s vs 21.3 min) - this sweep,
-        // not slot eviction, is the wrap-safety guarantee. Entries themselves are never
-        // freed on a timer: a quiet entry's key and User payload keep their value (pubkey
-        // pool, name rehydration), and slots are reclaimed by tiered LRU on insert or by an
-        // explicit user-initiated purge.
+        // Saturate expired tick stamps: clearing the presence bit once a stamp's age exceeds
+        // its window is the wrap-safety guarantee (stamps never approach their uint8 aliasing
+        // horizon). Entries are never freed on a timer - slots die by tiered LRU or purge.
         uint16_t nodeInfoSaturated = 0;
         const uint8_t nowObs = currentObsTick();
         const uint8_t nowResp = currentRespTick();
         for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
-            NodeInfoPayloadEntry &e = nodeInfoPayload[i];
-            if (e.node == 0)
+            NodeInfoPayloadEntry &entry = nodeInfoPayload[i];
+            if (entry.node == 0)
                 continue;
-            if (e.hasObserved && static_cast<uint8_t>(nowObs - e.obsTick) > kNodeInfoMaxServeAgeTicks) {
-                e.hasObserved = false;
+            if (entry.hasObserved && static_cast<uint8_t>(nowObs - entry.obsTick) > kNodeInfoMaxServeAgeTicks) {
+                entry.hasObserved = false;
                 nodeInfoSaturated++;
             }
-            if (e.hasResponded && static_cast<uint8_t>(nowResp - e.respTick) >= kNodeInfoThrottleTicks)
-                e.hasResponded = false;
-            // Refresh membership: the bit is the keep-alive that makes a node still present
-            // in NodeDB (hot or warm) the stickiest under LRU eviction, and its clearing is
-            // what lets a node NodeDB has fully forgotten become evictable again. Read-only
-            // NodeDB lookups under cacheLock follow the resolveSenderRole precedent.
-            bool member = nodeDB && nodeDB->getMeshNode(e.node) != nullptr;
+            if (entry.hasResponded && static_cast<uint8_t>(nowResp - entry.respTick) >= kNodeInfoThrottleTicks)
+                entry.hasResponded = false;
+            // Refresh membership: the bit keeps NodeDB-present nodes stickiest under LRU, and
+            // its clearing is what lets a fully forgotten node become evictable again.
+            bool member = nodeDB && nodeDB->getMeshNode(entry.node) != nullptr;
 #if WARM_NODE_COUNT > 0
             if (!member && nodeDB)
-                member = nodeDB->warmStore.contains(e.node);
+                member = nodeDB->warmStore.contains(entry.node);
 #endif
-            e.isMember = member;
+            entry.isMember = member;
         }
         TM_LOG_DEBUG("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
                      static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoSaturated));
@@ -1422,10 +1307,8 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const int32_t lat_truncated = truncateCoordinate(pos->latitude_i, precision);
     const int32_t lon_truncated = truncateCoordinate(pos->longitude_i, precision);
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
-    // Drop gate uses the RAW configured interval: 0 means "dedup disabled" (the
-    // contract documented below). The 12h default is only for resolution/TTL
-    // sizing (constructor / runOnce), not for deciding whether to drop - feeding
-    // the default here would silently turn the 0-disables-dedup contract off.
+    // Drop gate uses the RAW configured interval: 0 means "dedup disabled". The 12 h default
+    // is only for TTL sizing - feeding it here would silently defeat that contract.
     uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
 
     bool isNew = false;
@@ -1434,11 +1317,8 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     if (!entry)
         return false;
 
-    // Role exceptions keyed on the originating node's advertised role, resolved across
-    // all three tiers (hot store → warm store → TMM live cache). The position path is
-    // the one place that needs sender-role, and it also keeps tier 3 warm so the
-    // exception survives the node aging out of both NodeDB stores - important in the
-    // common dedup-only config, where isRateLimited()'s role write never runs.
+    // Role exceptions keyed on the sender's advertised role, resolved hot -> warm -> tier-3
+    // cache; this path also keeps tier 3 warm so the exception survives NodeDB eviction.
     const meshtastic_Config_DeviceConfig_Role role = resolveSenderRole(p->from, entry, isNew);
     if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
         // Lost-and-found may refresh a duplicate position at most every ~15 min (cap, never
@@ -1550,11 +1430,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
         if (!nodeInfoLiteHasUser(node))
             return false;
-        // Staleness gate (fallback path): don't spoof a reply for a node NodeDB last
-        // heard more than kNodeInfoMaxServeAgeSecs ago. last_heard == 0 means recency is
-        // unknown (e.g. clock not yet set) - we can't prove it's stale, so we still answer,
-        // matching sinceLastSeen()'s own "clock not set" tolerance. Compute the age once so
-        // the tested value and the logged value can't diverge (sinceLastSeen calls getTime()).
+        // Staleness gate (fallback path): don't spoof a reply for a node last heard beyond the
+        // serve window. last_heard == 0 means recency is unknown (clock not set) - we can't
+        // prove staleness, so still answer. Age computed once so test and log can't diverge.
         const uint32_t nodeAgeSecs = sinceLastSeen(node);
         if (node->last_heard != 0 && nodeAgeSecs > kNodeInfoMaxServeAgeSecs) {
             TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x stale (%us ago), not responding", p->to,
@@ -1581,12 +1459,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         }
     }
 
-    // Staleness gate (cache path): never spoof a reply on behalf of a node we have not
-    // actually HEARD within the serve window. hasObserved carries the stamp's validity -
-    // it distinguishes a genuinely observed entry from one merely seeded or retained, and
-    // the maintenance sweep clears it once the window passes (saturation), so this modular
-    // tick compare can never see an aliased age. Only cache hits are gated here; the NodeDB
-    // fallback was gated above on last_heard.
+    // Staleness gate (cache path): never spoof a reply for a node not actually HEARD within
+    // the serve window. hasObserved distinguishes genuinely observed entries from seeded ones,
+    // and the sweep's saturation keeps this modular tick compare alias-free.
     if (hasCachedUser &&
         (!cachedHasObserved || static_cast<uint8_t>(currentObsTick() - cachedObsTick) > kNodeInfoMaxServeAgeTicks)) {
         TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not freshly observed, not responding", p->to);
@@ -1595,8 +1470,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
     // Replay provenance gate (PSRAM path): only spoof a reply for a signer-proven cached key.
-    // The fallback path is gated above; this covers the PSRAM cache hit. usedFallback entries
-    // were already gated, so skip them here. See TMM_NODEINFO_REPLAY_REQUIRE_SIGNED.
+    // usedFallback entries were already gated above. See TMM_NODEINFO_REPLAY_REQUIRE_SIGNED.
     if (!usedFallback && !cachedKeySignerProven) {
         TM_LOG_DEBUG("NodeInfo PSRAM entry for 0x%08x not signer-proven, not responding", p->to);
         return false;
@@ -1613,24 +1487,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         return false;
     }
 
-    // Response throttle: bound how often we emit a spoofed reply. Direct responses bypass
-    // the per-sender rate limiter (they STOP the request first), and the reply target is
-    // attacker-controlled, so without this an attacker could drive unbounded local
-    // transmissions / reflected floods. Suppress the duplicate request (return true) rather
-    // than letting it propagate and generate more mesh traffic.
-    //   - Cache path: respTick is per target node (NodeInfoPayloadEntry, 5-s tick clock;
-    //     hasResponded carries validity and the sweep clears it after the window).
-    //   - Fallback path: the module-global millis stamp (no per-node slot).
-    // NOTE (accepted design, not a defect):
-    //   - On the cache path this is keyed on p->to, so a DISTINCT legitimate requestor for the
-    //     same target gets no reply for up to one window (returning true STOPs it). That is
-    //     fine: the mesh is redundant - the genuine node or another cache-holder answers, and
-    //     a real node would rate-limit its own replies the same way.
-    //   - The per-target key does not bound aggregate local TX: an attacker cycling N
-    //     distinct cached targets still draws N spoofed transmits per window. The fallback
-    //     path's global stamp does bound aggregate; a global cap on the cache path would too,
-    //     but at the cost of throughput on legitimate multi-target responders, so it is left
-    //     per-target by choice.
+    // Response throttle: the reply target is attacker-controlled and direct responses bypass
+    // the rate limiter, so bound spoofed replies (cache path: per-target respTick; fallback:
+    // global stamp). Accepted: per-target keying doesn't bound aggregate TX across targets.
     const bool throttled =
         usedFallback ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
                      : (cachedHasResponded && static_cast<uint8_t>(currentRespTick() - cachedRespTick) < kNodeInfoThrottleTicks);
@@ -1688,25 +1547,22 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     service->sendToMesh(reply);
 
-    // Record the send so the throttle can suppress a burst of requests. The fallback path
-    // stamps the module-global millis marker (nowStampMs() keeps it off the 0 "never"
-    // sentinel at the wrap, T9); the cache path stamps the served entry's respTick, whose
-    // validity travels in hasResponded instead of a sentinel.
+    // Record the send so the throttle can suppress a burst: fallback path stamps the global
+    // marker (nowStampMs() keeps it off the 0 "never" sentinel at the wrap, T9); the cache
+    // path stamps the served entry's respTick below.
     if (usedFallback) {
         concurrency::LockGuard guard(&cacheLock);
         nodeInfoFallbackLastResponseMs = nowStampMs();
     }
-    // Stamp the cache entry we served from, addressing it by the index captured during the
-    // initial lookup rather than rescanning the array (T5). The cache lock was released in
-    // between, so the slot could have been evicted or reused for a different node; re-validate
-    // node == p->to under the lock and skip the stamp if it no longer matches.
+    // Stamp the served entry by the index captured at lookup instead of rescanning (T5). The
+    // lock was released in between, so re-validate node == p->to in case the slot was reused.
 #if TMM_HAS_NODEINFO_CACHE
     if (!usedFallback && nodeInfoPayload && cachedNodeInfoIndex >= 0) {
         concurrency::LockGuard guard(&cacheLock);
-        NodeInfoPayloadEntry &e = nodeInfoPayload[cachedNodeInfoIndex];
-        if (e.node == p->to) {
-            e.respTick = currentRespTick();
-            e.hasResponded = true;
+        NodeInfoPayloadEntry &entry = nodeInfoPayload[cachedNodeInfoIndex];
+        if (entry.node == p->to) {
+            entry.respTick = currentRespTick();
+            entry.hasResponded = true;
         }
     }
 #endif
@@ -1806,9 +1662,9 @@ bool TrafficManagementModule::isRateLimited(NodeNum from, uint32_t nowMs)
     }
 
     // Increment counter, saturating at 63 (6-bit field max).
-    const uint8_t cur = entry->getRateCount();
-    if (cur < 0x3F)
-        entry->setRateCount(static_cast<uint8_t>(cur + 1));
+    const uint8_t currentCount = entry->getRateCount();
+    if (currentCount < 0x3F)
+        entry->setRateCount(static_cast<uint8_t>(currentCount + 1));
 
     // Threshold capped at 60 so a saturated reading (63) always exceeds it.
     uint32_t threshold = moduleConfig.traffic_management.rate_limit_max_packets;
@@ -1852,12 +1708,11 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
         entry->setUnknownCount(0);
     }
 
-    // Increment counter, saturating at 63 (6-bit field max). With threshold
-    // capped at 60, a saturated reading always exceeds the limit - no special
-    // already-saturated edge case needed.
-    const uint8_t cur = entry->getUnknownCount();
-    if (cur < 0x3F)
-        entry->setUnknownCount(static_cast<uint8_t>(cur + 1));
+    // Increment counter, saturating at 63 (6-bit field max). With the threshold capped at
+    // 60, a saturated reading always exceeds the limit - no special edge case needed.
+    const uint8_t currentCount = entry->getUnknownCount();
+    if (currentCount < 0x3F)
+        entry->setUnknownCount(static_cast<uint8_t>(currentCount + 1));
 
     // Threshold capped at 60 so a saturated reading (63) always exceeds it.
     uint32_t threshold = moduleConfig.traffic_management.unknown_packet_threshold;

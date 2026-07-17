@@ -535,11 +535,11 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // non-PKI broadcast whose signed encoding would still fit the LoRa frame. Size p->decoded
         // canonically so this counts the same fields the sender's signedDataFits() gate counted;
         // adding XEDDSA_SIGNATURE_FIELD_BYTES to that unsigned base mirrors it exactly, whatever
-        // fields the Data carried, with padding hidden inside Data.payload stripped. Unicast/PKI
-        // packets and broadcasts too big to carry a signature are never signed, so they must not be
-        // hard-failed here even for a known signer.
-        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
-        if (node && nodeInfoLiteHasXeddsaSigned(node) && !p->pki_encrypted && isBroadcast(p->to)) {
+        // fields the Data carried. Unicast/PKI packets and broadcasts too big to carry a signature
+        // are never signed, so they must not be hard-failed here even for a known signer.
+        // isKnownXeddsaSigner consults the warm tier too: a signer evicted from the hot store
+        // must not become impersonatable via unsigned broadcasts until it is re-heard.
+        if (nodeDB->isKnownXeddsaSigner(p->from) && !p->pki_encrypted && isBroadcast(p->to)) {
             size_t canonicalSize;
             if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
