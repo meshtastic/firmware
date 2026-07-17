@@ -329,6 +329,53 @@ const meshtastic_MeshPacket encrypted = {
     .encrypted = {.size = 0},
     .id = 3,
 };
+
+void configureCoordinatePolicyChannels(bool eventChannelIsPrimary = true)
+{
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = 2;
+
+    auto &eventChannel = channelFile.channels[0];
+    eventChannel.index = 0;
+    eventChannel.has_settings = true;
+    strcpy(eventChannel.settings.name, "everyone");
+    eventChannel.settings.uplink_enabled = true;
+    eventChannel.settings.downlink_enabled = true;
+    eventChannel.role = eventChannelIsPrimary ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
+#ifdef USERPREFS_CHANNEL_0_PSK
+    static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    eventChannel.settings.psk.size = sizeof(configuredEventPsk);
+    memcpy(eventChannel.settings.psk.bytes, configuredEventPsk, sizeof(configuredEventPsk));
+#endif
+
+    auto &privateChannel = channelFile.channels[1];
+    privateChannel.index = 1;
+    privateChannel.has_settings = true;
+    strcpy(privateChannel.settings.name, "private");
+    privateChannel.settings.psk.size = 32;
+    memset(privateChannel.settings.psk.bytes, 0xab, privateChannel.settings.psk.size);
+    privateChannel.settings.uplink_enabled = true;
+    privateChannel.settings.downlink_enabled = true;
+    privateChannel.role = eventChannelIsPrimary ? meshtastic_Channel_Role_SECONDARY : meshtastic_Channel_Role_PRIMARY;
+
+    channels.onConfigChanged();
+}
+
+meshtastic_MeshPacket makePositionPacket(ChannelIndex channel)
+{
+    meshtastic_MeshPacket packet = decoded;
+    packet.to = NODENUM_BROADCAST;
+    packet.channel = channel;
+    packet.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    return packet;
+}
+
+void clearPublicationState()
+{
+    TEST_ASSERT_EQUAL(0, unitTest->queueSize());
+    pubsub->published_.clear();
+    mockMeshService->messages_.clear();
+}
 } // namespace
 
 // Initialize mocks and configuration before running each test.
@@ -338,6 +385,7 @@ void setUp(void)
         meshtastic_ModuleConfig_MQTTConfig{.enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true};
     moduleConfig.mqtt.map_report_settings = meshtastic_ModuleConfig_MapReportSettings{
         .publish_interval_secs = 0, .position_precision = 14, .should_report_location = true};
+    memset(&channelFile, 0, sizeof(channelFile));
     channelFile.channels[0] = meshtastic_Channel{
         .index = 0,
         .has_settings = true,
@@ -345,6 +393,7 @@ void setUp(void)
         .role = meshtastic_Channel_Role_PRIMARY,
     };
     channelFile.channels_count = 1;
+    channels.onConfigChanged();
     owner = meshtastic_User{.id = "!12345678"};
     myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 0x12345678}; // Match the expected gateway ID in topic
     localPosition =
@@ -400,6 +449,50 @@ void test_sendDirectlyConnectedEncrypted(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
     TEST_ASSERT_TRUE(env.validDecode);
     TEST_ASSERT_EQUAL(encrypted.id, env.packet->id);
+}
+
+void test_eventPositionPublicationFollowsCompileTimePolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+    const meshtastic_MeshPacket position = makePositionPacket(0);
+
+    mqtt->onSend(encrypted, position, 0);
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+    TEST_ASSERT_EQUAL(0, unitTest->queueSize());
+#else
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+#endif
+}
+
+void test_privatePositionStillPublishesWithEventPolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+    const meshtastic_MeshPacket position = makePositionPacket(1);
+
+    mqtt->onSend(encrypted, position, 1);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/private/!12345678", pubsub->published_.front().first.c_str());
+}
+
+void test_explicitPkiPositionStillPublishesWithEventPolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+    meshtastic_MeshPacket position = makePositionPacket(0);
+    meshtastic_MeshPacket encryptedPki = encrypted;
+    position.to = 2;
+    position.pki_encrypted = true;
+    encryptedPki.pki_encrypted = true;
+
+    mqtt->onSend(encryptedPki, position, 0);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/PKI/!12345678", pubsub->published_.front().first.c_str());
 }
 
 // Verify that the decoded MeshPacket is proxied through the MeshService when encryption_enabled = false.
@@ -822,6 +915,32 @@ void test_reportToMapDefaultImprecise(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", topic.c_str());
 }
 
+void test_eventPrimaryMapReportFollowsCompileTimePolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+
+    unitTest->reportToMap();
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+    TEST_ASSERT_EQUAL(0, unitTest->queueSize());
+#else
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+#endif
+}
+
+void test_privatePrimaryMapReportStillPublishesWithEventPolicy(void)
+{
+    configureCoordinatePolicyChannels(false);
+    clearPublicationState();
+
+    unitTest->reportToMap();
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    TEST_ASSERT_EQUAL_STRING("msh/2/map/", pubsub->published_.front().first.c_str());
+}
+
 // Location is sent over the phone proxy.
 void test_reportToMapImpreciseProxied(void)
 {
@@ -1039,6 +1158,9 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_sendDirectlyConnectedDecoded);
     RUN_TEST(test_sendDirectlyConnectedEncrypted);
+    RUN_TEST(test_eventPositionPublicationFollowsCompileTimePolicy);
+    RUN_TEST(test_privatePositionStillPublishesWithEventPolicy);
+    RUN_TEST(test_explicitPkiPositionStillPublishesWithEventPolicy);
     RUN_TEST(test_proxyToMeshServiceDecoded);
     RUN_TEST(test_proxyToMeshServiceEncrypted);
     RUN_TEST(test_dontMqttMeOnPublicServer);
@@ -1070,6 +1192,8 @@ void setup()
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
+    RUN_TEST(test_eventPrimaryMapReportFollowsCompileTimePolicy);
+    RUN_TEST(test_privatePrimaryMapReportStillPublishesWithEventPolicy);
     RUN_TEST(test_reportToMapImpreciseProxied);
     RUN_TEST(test_usingDefaultServer);
     RUN_TEST(test_usingDefaultServerWithPort);
