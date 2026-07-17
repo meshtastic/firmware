@@ -955,6 +955,9 @@ void Power::readPowerStatus()
                                              0, 100);
             }
         }
+    } else { // no batteryLevel implementation active - as a last resort try to detect VBUS using PowerHAL
+        if (powerHAL_isVBUSConnected())
+            usbPowered = isChargingNow = OptTrue;
     }
 
     // Notify any status instances that are observing us
