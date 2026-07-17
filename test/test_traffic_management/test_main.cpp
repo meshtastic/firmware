@@ -189,12 +189,12 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
 {
   public:
     using TrafficManagementModule::alterReceived;
+    using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
-    using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::markKeySignerProvenForTest;
-    using TrafficManagementModule::peekNodeInfoFlagsForTest;
     using TrafficManagementModule::peekCachedRole;
+    using TrafficManagementModule::peekNodeInfoFlagsForTest;
     using TrafficManagementModule::runOnce;
 
     bool ignoreRequestFlag() const { return ignoreRequest; }
@@ -1483,8 +1483,8 @@ static void test_tm_nodeinfo_sweepMembershipMarking(void)
     mockNodeDB->rollHotStore();
     module.runOnce();
     flags = module.peekNodeInfoFlagsForTest(kTargetNode);
-    TEST_ASSERT_TRUE(flags >= 0);            // entry persists (no TTL) ...
-    TEST_ASSERT_FALSE(flags & kFlagMember);  // ... but is no longer pinned as a member
+    TEST_ASSERT_TRUE(flags >= 0);           // entry persists (no TTL) ...
+    TEST_ASSERT_FALSE(flags & kFlagMember); // ... but is no longer pinned as a member
 }
 #endif
 

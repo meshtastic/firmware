@@ -186,8 +186,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
 #if TMM_HAS_NODEINFO_CACHE
-    TM_LOG_INFO("Allocating NodeInfo cache: %u entries, %u bytes (flat array)",
-                static_cast<unsigned>(nodeInfoTargetEntries()),
+    TM_LOG_INFO("Allocating NodeInfo cache: %u entries, %u bytes (flat array)", static_cast<unsigned>(nodeInfoTargetEntries()),
                 static_cast<unsigned>(nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry)));
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
@@ -529,9 +528,8 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
  * WarmNodeStore's keyed-first admission. NodeInfo traffic is low-rate, so the
  * O(n) scan is negligible.
  */
-TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node,
-                                                                                                  bool *usedEmptySlot,
-                                                                                                  bool spareMembers)
+TrafficManagementModule::NodeInfoPayloadEntry *
+TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot, bool spareMembers)
 {
     if (usedEmptySlot)
         *usedEmptySlot = false;
@@ -560,8 +558,8 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
         // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key;
         // +3 when the node is a NodeDB member - the cache must not shed a NodeDB-tier
         // identity while it still holds opportunistic strangers.
-        const uint8_t tier = static_cast<uint8_t>(((e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1)) +
-                                                  (e.isMember ? 3 : 0));
+        const uint8_t tier =
+            static_cast<uint8_t>(((e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1)) + (e.isMember ? 3 : 0));
         // Modular observation age; saturation keeps real ages far below 0xFF, so a
         // never-observed entry scored at 0xFF is always the oldest in its tier.
         const uint8_t age = e.hasObserved ? static_cast<uint8_t>(nowObs - e.obsTick) : 0xFF;
@@ -742,7 +740,7 @@ void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key
         entry->keySignerProven = false;
     if (proven)
         entry->keySignerProven = true;
-    // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
+        // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
 #else
     (void)node;
     (void)key32;
@@ -1589,8 +1587,8 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // the maintenance sweep clears it once the window passes (saturation), so this modular
     // tick compare can never see an aliased age. Only cache hits are gated here; the NodeDB
     // fallback was gated above on last_heard.
-    if (hasCachedUser && (!cachedHasObserved ||
-                          static_cast<uint8_t>(currentObsTick() - cachedObsTick) > kNodeInfoMaxServeAgeTicks)) {
+    if (hasCachedUser &&
+        (!cachedHasObserved || static_cast<uint8_t>(currentObsTick() - cachedObsTick) > kNodeInfoMaxServeAgeTicks)) {
         TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not freshly observed, not responding", p->to);
         return false;
     }
@@ -1634,10 +1632,8 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     //     but at the cost of throughput on legitimate multi-target responders, so it is left
     //     per-target by choice.
     const bool throttled =
-        usedFallback
-            ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
-            : (cachedHasResponded &&
-               static_cast<uint8_t>(currentRespTick() - cachedRespTick) < kNodeInfoThrottleTicks);
+        usedFallback ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
+                     : (cachedHasResponded && static_cast<uint8_t>(currentRespTick() - cachedRespTick) < kNodeInfoThrottleTicks);
     if (throttled) {
         TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x", p->to);
         return true;

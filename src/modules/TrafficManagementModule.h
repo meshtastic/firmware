@@ -300,8 +300,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // the 60 s maintenance sweep clears each bit once its window passes ("saturation"), so a
     // stamp is never read anywhere near its aliasing horizon. +-1 tick granularity error
     // (+-3 min on a 6 h gate, +-5 s on a 30 s throttle) is noise for these windows.
-    static constexpr uint32_t kNodeInfoObsTickMs = 180000UL; // 3 min/tick
-    static constexpr uint32_t kNodeInfoRespTickMs = 5000UL;  // 5 s/tick
+    static constexpr uint32_t kNodeInfoObsTickMs = 180000UL;  // 3 min/tick
+    static constexpr uint32_t kNodeInfoRespTickMs = 5000UL;   // 5 s/tick
     static constexpr uint8_t kNodeInfoMaxServeAgeTicks = 120; // 6 h serve window
     static constexpr uint8_t kNodeInfoThrottleTicks = 6;      // 30 s throttle window
 
