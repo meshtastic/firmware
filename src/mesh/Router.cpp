@@ -67,6 +67,72 @@ Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
+static ChannelIndex getEffectiveChannelIndex(const meshtastic_MeshPacket *p)
+{
+    ChannelIndex chIndex = p->channel;
+    if (nodeDB && isFromUs(p) && !chIndex && !p->pki_encrypted && !isBroadcast(p->to)) {
+        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        if (node)
+            chIndex = node->channel;
+    }
+    return chIndex;
+}
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+static bool willUsePki(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
+{
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag || !isFromUs(p))
+        return false;
+#if ARCH_PORTDUINO
+    if (portduino_config.force_simradio)
+        return false;
+#endif
+    bool eligible = !owner.is_licensed &&
+                    !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
+                                                   strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
+                    config.security.private_key.size == 32 && !isBroadcast(p->to) &&
+                    p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP &&
+                    p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
+                    p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP;
+    return eligible && (p->decoded.portnum != meshtastic_PortNum_KEY_VERIFICATION_APP || haveDestKey);
+}
+#endif
+
+bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (p->pki_encrypted || willUsePki(p)) {
+        return false;
+    }
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        return isCoordinatePortnum(p->decoded.portnum) && channels.isEventChannel(getEffectiveChannelIndex(p));
+    }
+    return false;
+#else
+    (void)p;
+    return false;
+#endif
+}
+
+bool willUsePki(const meshtastic_MeshPacket *p)
+{
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag || !isFromUs(p))
+        return false;
+    bool haveDestKey = false;
+    if (p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP) {
+        meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+        haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
+        if (!haveDestKey && p->pki_encrypted)
+            haveDestKey = crypto->getPendingPublicKey(p->to, destKey);
+    }
+    return willUsePki(p, getEffectiveChannelIndex(p), haveDestKey);
+#else
+    (void)p;
+    return false;
+#endif
+}
+
 /**
  * Constructor
  *
@@ -263,9 +329,9 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         // don't override if a channel was requested and no need to set it when PKI is enforced
         if (!p->channel && !p->pki_encrypted && !isBroadcast(p->to)) {
-            meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->to);
-            if (node) {
-                p->channel = node->channel;
+            ChannelIndex chIndex = getEffectiveChannelIndex(p);
+            if (chIndex) {
+                p->channel = chIndex;
                 LOG_DEBUG("localSend to channel %d", p->channel);
             }
         }
@@ -383,6 +449,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     fixPriority(p); // Before encryption, fix the priority if it's unset
     // Position precision is an originator-only privacy policy. Relays keep
     // p->from as the original sender, so do not rewrite their POSITION_APP payload.
+    if (isBlockedEventCoordinatePacket(p)) {
+        LOG_DEBUG("Suppress coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
     if (isFromUs(p)) {
         if (!applyPositionPrecisionForChannel(*p, p->channel)) {
             LOG_ERROR("Dropping malformed position packet before send");
@@ -622,6 +694,11 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash
 
+        if (isBlockedEventCoordinatePacket(p)) {
+            LOG_DEBUG("Decoded coordinate packet on event channel; suppress payload logging");
+            return DecodeState::DECODE_SUCCESS;
+        }
+
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         // Runs before the bitfield merge below: that merge can set want_response, adding wire bytes
         // the sender never encoded and skewing the policy's sizing of p->decoded.
@@ -796,27 +873,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
-        if (isFromUs(p) &&
-#if ARCH_PORTDUINO
-            // Sim radio via the cli flag skips PKC
-            !portduino_config.force_simradio &&
-#endif
-            // Don't use PKC with Ham mode
-            !owner.is_licensed &&
-            // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
-            !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
-                                           strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
-            // Check for valid keys and single node destination
-            config.security.private_key.size == 32 && !isBroadcast(p->to) &&
-            // Some portnums either make no sense to send with PKC
-            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
-            // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
-            // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
-            // uses the pending key resolved into haveDestKey/destKey above.
-            // Though possible the first packet each direction should go non-pkc
-            // to handle the case where the remote node has our key, but we don't have theirs.
-            !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey)) {
+        if (willUsePki(p, chIndex, haveDestKey)) {
             LOG_DEBUG("Use PKI!");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
@@ -966,6 +1023,16 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+        // Discard coordinate-bearing packets that arrive on the event ("everyone")
+        // channel: don't process, store in NodeDB, or rebroadcast them.
+        if (!skipHandle && isBlockedEventCoordinatePacket(p)) {
+            LOG_DEBUG("Drop coordinate packet on event (everyone) channel");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }

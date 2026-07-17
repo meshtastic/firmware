@@ -16,6 +16,10 @@ uint32_t getPositionPrecisionForChannel(const meshtastic_Channel &channel)
 
 uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
 {
+    // Event-channel privacy takes precedence over every stored precision and key policy.
+    if (channels.isEventChannel(channelIndex))
+        return 0;
+
     const meshtastic_Channel &ch = channels.getByIndex(channelIndex);
     if (ch.role == meshtastic_Channel_Role_DISABLED)
         return 0;
