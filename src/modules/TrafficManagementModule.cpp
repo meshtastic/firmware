@@ -563,6 +563,14 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
         entry->decodedBitfield = mp.decoded.bitfield;
 
+        // Upgrade key provenance to "signer-proven" if this frame's XEdDSA signature was
+        // verified (Router::checkXeddsaReceivePolicy sets mp.xeddsa_signed only after a
+        // successful verify against the node's key). Never downgrade: a later unsigned frame
+        // for an already-proven key leaves the flag set. The key itself cannot change here -
+        // the key-pin checks above reject a mismatching key before we reach this point.
+        if (mp.xeddsa_signed && user.public_key.size == 32)
+            entry->keySignerProven = true;
+
         if (usedEmptySlot)
             cachedCount = countNodeInfoEntriesLocked();
     }

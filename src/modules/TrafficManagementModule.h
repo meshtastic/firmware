@@ -258,6 +258,16 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // We preserve non-OK_TO_MQTT bits in direct replies when available.
         bool hasDecodedBitfield;
         uint8_t decodedBitfield;
+
+        // Provenance of user.public_key: true once we have observed a NODEINFO_APP frame for
+        // this node whose XEdDSA signature we verified (mp.xeddsa_signed) - i.e. the key is
+        // proven to belong to a signer, not merely trust-on-first-use. Monotonic: once proven
+        // it stays proven for the life of the slot (the key-pin checks forbid the key changing
+        // underneath it). Used as a trust tier: proven keys are the stickiest under LRU
+        // eviction and are reported to copyPublicKey() consumers. A signature can only be
+        // verified against a key we already held, so a first-contact key is always TOFU
+        // (false) until a later signed frame upgrades it.
+        bool keySignerProven;
     };
 
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM (flat array, linear scan)
