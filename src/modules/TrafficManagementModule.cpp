@@ -1140,6 +1140,11 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // shared throttle check/stamp below target the module-global fallback stamp instead of
     // a per-node PSRAM entry (which does not exist on this path).
     bool usedFallback = false;
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    // Slot index of the PSRAM cache hit, captured here so the post-send throttle stamp can
+    // address the entry directly instead of rescanning the array (T5). -1 = no hit.
+    int32_t cachedNodeInfoIndex = -1;
+#endif
 
     {
         concurrency::LockGuard guard(&cacheLock);
@@ -1153,6 +1158,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedLastObservedMs = entry->lastObservedMs;
             cachedLastObservedRxTime = entry->lastObservedRxTime;
             cachedLastResponseMs = entry->lastResponseMs;
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+            cachedNodeInfoIndex = static_cast<int32_t>(entry - nodeInfoPayload);
+#endif
         }
     }
 
@@ -1293,18 +1301,16 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         concurrency::LockGuard guard(&cacheLock);
         nodeInfoFallbackLastResponseMs = nowStampMs();
     }
-    // TODO(T5): the PSRAM stamp below is a second full O(n) scan under a second lock, after
-    // findNodeInfoEntry() already located this slot at the top of the function. Capture the
-    // index in the first pass (re-validate node == p->to after re-locking) to avoid the rescan.
+    // Stamp the PSRAM entry we served from, addressing it by the index captured during the
+    // initial lookup rather than rescanning the array (T5). The cache lock was released in
+    // between, so the slot could have been evicted or reused for a different node; re-validate
+    // node == p->to under the lock and skip the stamp if it no longer matches.
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
-    if (!usedFallback && nodeInfoPayload) {
+    if (!usedFallback && nodeInfoPayload && cachedNodeInfoIndex >= 0) {
         concurrency::LockGuard guard(&cacheLock);
-        for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
-            if (nodeInfoPayload[i].node == p->to) {
-                nodeInfoPayload[i].lastResponseMs = nowStampMs();
-                break;
-            }
-        }
+        NodeInfoPayloadEntry &e = nodeInfoPayload[cachedNodeInfoIndex];
+        if (e.node == p->to)
+            e.lastResponseMs = nowStampMs();
     }
 #endif
 
