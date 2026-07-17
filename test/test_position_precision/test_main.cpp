@@ -375,12 +375,14 @@ static void test_eventCoordinatePolicy_doesNotClassifyOpaquePacketsByHash()
 static void test_eventCoordinatePolicy_usesResolvedUnicastChannel()
 {
 #if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
-    constexpr NodeNum destination = 0x12345678;
     NodeDB *savedNodeDB = nodeDB;
     nodeDB = new NodeDB();
     configureEventChannels(false, false);
-    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(destination);
+    meshtastic_NodeInfoLite *node =
+        nodeDB->getNumMeshNodes() > 1 ? nodeDB->getMeshNodeByIndex(1) : nodeDB->getOrCreateMeshNode(0x12345678);
     TEST_ASSERT_NOT_NULL(node);
+    const NodeNum destination = node->num;
+    const uint8_t savedChannel = node->channel;
 
     auto position = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, 0);
     position.to = destination;
@@ -393,6 +395,7 @@ static void test_eventCoordinatePolicy_usesResolvedUnicastChannel()
     position.from = 0;
     node->channel = 0;
     TEST_ASSERT_TRUE(isBlockedEventCoordinatePacket(&position));
+    node->channel = savedChannel;
     delete nodeDB;
     nodeDB = savedNodeDB;
 #else
