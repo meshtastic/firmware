@@ -126,12 +126,12 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static uint32_t clockMs() { return millis(); }
 #endif
 
-    // Timestamp for the millis-based fields that use 0 as a "never" sentinel
-    // (NodeInfoPayloadEntry::lastObservedMs / lastResponseMs, nodeInfoFallbackLastResponseMs).
-    // clockMs() is 0 for exactly one millisecond every ~49.7-day wrap, which would collide
-    // with the sentinel and momentarily disable the staleness/throttle gate for a freshly
-    // stamped entry. Map that one instant to 1; the 1 ms skew is irrelevant to every window
-    // these fields feed. (T9)
+    // Timestamp for the one remaining millis-based field that uses 0 as a "never" sentinel
+    // (nodeInfoFallbackLastResponseMs - the cache entries use tick clocks with explicit
+    // validity bits instead). clockMs() is 0 for exactly one millisecond every ~49.7-day
+    // wrap, which would collide with the sentinel and momentarily disable the fallback
+    // throttle for a freshly stamped reply. Map that one instant to 1; the 1 ms skew is
+    // irrelevant to the throttle window. (T9)
     static uint32_t nowStampMs()
     {
         const uint32_t t = clockMs();
@@ -228,7 +228,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static constexpr uint16_t cacheSize() { return TRAFFIC_MANAGEMENT_CACHE_SIZE; }
 
     // NodeInfo cache configuration (PSRAM path): a flat PSRAM array of payload
-    // entries, linear scan keyed by `node`, LRU eviction by lastObservedMs.
+    // entries, linear scan keyed by `node`, tiered LRU eviction by retTick.
     // NodeInfo traffic is low-rate, so a full scan per lookup/insert is fine.
     static constexpr uint16_t kNodeInfoCacheEntries = 2000;
     static constexpr uint16_t nodeInfoTargetEntries() { return kNodeInfoCacheEntries; }
@@ -295,19 +295,25 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // packet for this node. shouldRespondToNodeInfo() uses this metadata when
         // building spoofed replies for requesting clients.
 
-        // Last local uptime tick (millis) when this entry was refreshed.
-        uint32_t lastObservedMs;
+        // Free-running tick stamps (uint8 modular clocks, see kNodeInfo*TickMs in the .cpp -
+        // same scheme as the UnifiedCache tick counters). Validity of obsTick/respTick is
+        // carried by the hasObserved/hasResponded flag bits below, not a 0 sentinel; the
+        // maintenance sweep clears a flag once its window passes, so no stamp can age far
+        // enough for its modular compare to alias.
 
-        // Local uptime (millis) of the most recent spoofed direct reply we emitted
-        // for this node. 0 = never. Used purely to throttle direct responses (at most
-        // one per node per kNodeInfoResponseThrottleMs); the modular/subtraction compare
-        // self-expires, so no sweep is needed to "clear" it. This is separate from
-        // lastObservedMs, which tracks when we last *heard* the node (LRU + staleness).
-        uint32_t lastResponseMs;
+        // When we last actually HEARD a NODEINFO_APP frame from this node (3-min ticks).
+        // Drives the replay staleness gate and nothing else - retention refresh never
+        // touches it, so a spoofed reply is only ever backed by genuine recent observation.
+        uint8_t obsTick;
 
-        // Last RTC/packet timestamp (seconds) observed for this NodeInfo frame.
-        // If unavailable in packet, remains 0.
-        uint32_t lastObservedRxTime;
+        // When we last emitted a spoofed direct reply for this node (5-s ticks).
+        // Drives the per-target response throttle.
+        uint8_t respTick;
+
+        // When this entry was last retained (1-h ticks): stamped on observation, and by the
+        // maintenance sweep for entries it keeps alive. Drives eviction (retention TTL)
+        // and the LRU age used by victim selection.
+        uint8_t retTick;
 
         // Channel where we most recently heard this node's NodeInfo.
         uint8_t sourceChannel;
@@ -332,12 +338,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // copyPublicKey() consumers. A signature can only be verified against a key we already
         // held, so a first-contact key is always TOFU (0) until a later signed frame upgrades it.
         uint8_t keySignerProven : 1;
+
+        // obsTick is valid: we have actually heard a NODEINFO_APP frame from this node
+        // within the observation clock's horizon. Cleared by the sweep once the serve
+        // window passes (saturation) - both states mean "do not serve a spoofed reply".
+        uint8_t hasObserved : 1;
+
+        // respTick is valid: we emitted a spoofed reply within the throttle clock's
+        // horizon. Cleared by the sweep once the throttle window passes.
+        uint8_t hasResponded : 1;
     };
-    // sourceChannel, decodedBitfield, and the two 1-bit flags (hasDecodedBitfield,
-    // keySignerProven) make up the entry's trailing metadata; the two bits share a single byte,
-    // leaving 6 spare bits. Add future booleans as more 1-bit fields here rather than new bytes -
-    // the array is 2000 entries in PSRAM, so a fresh byte can cost a whole aligned word. (No
-    // exact-size static_assert: sizeof(meshtastic_User) and its trailing padding vary by platform
+    // The tick stamps, sourceChannel, decodedBitfield, and the 1-bit flags make up the
+    // entry's trailing metadata; the flag bits share a single byte, leaving 4 spare bits.
+    // Add future booleans as more 1-bit fields here rather than new bytes - the array is
+    // 2000 entries in PSRAM, so a fresh byte can cost a whole aligned word. (No exact-size
+    // static_assert: sizeof(meshtastic_User) and its trailing padding vary by platform
     // - nanopb packs the generated struct differently on embedded targets - so any fixed byte
     // count is non-portable and would fail the build on some boards.)
 
@@ -345,7 +360,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
 
     // Throttle stamp for the NodeDB fallback direct-response path (non-PSRAM boards).
-    // The PSRAM path throttles per target via NodeInfoPayloadEntry::lastResponseMs, but
+    // The cache path throttles per target via NodeInfoPayloadEntry::respTick, but
     // the fallback path has no per-node slot to stamp, so it would otherwise emit spoofed
     // replies with no rate limit at all. This single module-global stamp throttles that
     // path to at most one spoofed reply per kNodeInfoResponseThrottleMs across all targets.

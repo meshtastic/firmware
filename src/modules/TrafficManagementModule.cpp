@@ -41,30 +41,65 @@ constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot in
 
 // NodeInfo direct-response safety limits.
 //
+// The per-entry clocks (observation, response throttle, retention) use the same
+// free-running modular tick scheme as the UnifiedCache counters (see "Free-Running Tick
+// Counters" in the header): a uint8_t holds clockMs()/tickMs, age is modular uint8
+// subtraction, and validity is an explicit flag bit (hasObserved / hasResponded) - no 0
+// sentinel. The maintenance sweep clears a stamp's flag once its window has passed
+// (saturation) and re-stamps retained entries, so no stamp ever survives toward its
+// ~256-tick aliasing horizon; every period below dwarfs the 60 s sweep interval. This
+// replaces the old uint32 millis stamps and their wrap/sentinel special cases (T4, T9).
+constexpr uint32_t kNodeInfoObsTickMs = 3UL * 60UL * 1000UL;  // observation clock: 3 min/tick, period 12.8 h
+constexpr uint32_t kNodeInfoRespTickMs = 5UL * 1000UL;        // response-throttle clock: 5 s/tick, period 21.3 min
+constexpr uint32_t kNodeInfoRetTickMs = 60UL * 60UL * 1000UL; // retention clock: 1 h/tick, period 10.67 d
+
 // Staleness: never spoof a NodeInfo reply on behalf of a node we have not actually
 // heard from within this window. Without it, a cached (or forged) entry is served
 // indefinitely for a long-gone node while the genuine request is suppressed - the
 // requestor sees a fresh-looking answer for a node that may no longer exist.
-// One source of truth for the 6 h window; the seconds form (NodeDB fallback path) is
-// derived from the millis form (PSRAM cache path) so the two paths cannot desync.
-constexpr uint32_t kNodeInfoMaxServeAgeMs = 6UL * 60UL * 60UL * 1000UL;        // 6 h (PSRAM cache path)
-constexpr uint32_t kNodeInfoMaxServeAgeSecs = kNodeInfoMaxServeAgeMs / 1000UL; // 6 h (NodeDB fallback path)
+// One source of truth for the 6 h window; the seconds form (NodeDB fallback path) and
+// the tick form (cache path) are both derived from it so the paths cannot desync.
+constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL; // 6 h (NodeDB fallback path)
+constexpr uint8_t kNodeInfoMaxServeAgeObsTicks =
+    static_cast<uint8_t>(kNodeInfoMaxServeAgeSecs * 1000UL / kNodeInfoObsTickMs); // 120 ticks (cache path)
+static_assert(kNodeInfoMaxServeAgeSecs * 1000UL / kNodeInfoObsTickMs < 200,
+              "serve window must sit well inside the 256-tick observation period");
 
-// Key-retention window: how long a NodeInfo cache entry that carries a 32-byte public key is
-// kept after we last heard the node. This is deliberately much longer than the serve window
-// (above): once a node ages past the serve window we stop spoofing NodeInfo replies for it,
-// but its key remains valuable as a last-resort encryption source (NodeDB::copyPublicKey),
-// so the entry is retained to widen the pool of peers we can encrypt to. Kept well under the
-// ~49.7-day millis wrap so the maintenance sweep always evicts a stale entry before its
-// modular age could wrap (the wrap-safety guarantee from T4). Keyless entries do not get this
-// grace - they expire at the serve window since they hold nothing worth retaining.
-constexpr uint32_t kNodeInfoKeyRetentionMs = 7UL * 24UL * 60UL * 60UL * 1000UL; // 7 d
+// Key-retention window: how long a NodeInfo cache entry that carries a 32-byte public key
+// is kept after it was last retained (heard, or membership-refreshed by the sweep). This is
+// deliberately much longer than the serve window: once a node ages past the serve window we
+// stop spoofing NodeInfo replies for it, but its key remains valuable as a last-resort
+// encryption source (NodeDB::copyPublicKey), so the entry is retained to widen the pool of
+// peers we can encrypt to. Keyless entries do not get this grace - they expire at the serve
+// window since they hold nothing worth retaining.
+constexpr uint8_t kNodeInfoKeyRetentionRetTicks = 7 * 24;                              // 7 d in 1-h ticks
+constexpr uint8_t kNodeInfoKeylessRetentionRetTicks = kNodeInfoMaxServeAgeSecs / 3600; // 6 h in 1-h ticks
+static_assert(kNodeInfoKeyRetentionRetTicks < 200, "retention must sit well inside the 256-tick period");
 
 // Throttle: emit at most one spoofed direct reply per target node per this interval.
 // Direct responses are otherwise un-throttled (they STOP the request before the
 // per-sender rate limiter runs) and the reply target is attacker-controlled, so an
 // attacker could otherwise drive unbounded local transmissions / reflected floods.
+// The ms form throttles the NodeDB fallback path (module-global uint32 stamp); the tick
+// form throttles the cache path (per-entry respTick).
 constexpr uint32_t kNodeInfoResponseThrottleMs = 30UL * 1000UL; // 30 s
+constexpr uint8_t kNodeInfoResponseThrottleRespTicks =
+    static_cast<uint8_t>(kNodeInfoResponseThrottleMs / kNodeInfoRespTickMs); // 6 ticks
+
+// Current value of each NodeInfo tick clock (free-running, from clockMs() so the unit-test
+// clock hook applies).
+static inline uint8_t nodeInfoObsTickNow()
+{
+    return static_cast<uint8_t>(TrafficManagementModule::clockMs() / kNodeInfoObsTickMs);
+}
+static inline uint8_t nodeInfoRespTickNow()
+{
+    return static_cast<uint8_t>(TrafficManagementModule::clockMs() / kNodeInfoRespTickMs);
+}
+static inline uint8_t nodeInfoRetTickNow()
+{
+    return static_cast<uint8_t>(TrafficManagementModule::clockMs() / kNodeInfoRetTickMs);
+}
 
 /**
  * Convert seconds to milliseconds with overflow protection.
@@ -473,7 +508,7 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
  * victim. Victim selection is trust-tiered so the cache doubles as a pubkey
  * pool (NodeDB::copyPublicKey): a keyless entry is sacrificed before any
  * keyed one, and a trust-on-first-use key before a signer-proven key; within
- * a tier the oldest (wrap-safe age by lastObservedMs) loses. Mirrors
+ * a tier the oldest (modular retention age by retTick) loses. Mirrors
  * WarmNodeStore's keyed-first admission. NodeInfo traffic is low-rate, so the
  * O(n) scan is negligible.
  */
@@ -490,8 +525,8 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
     NodeInfoPayloadEntry *empty = nullptr;
     NodeInfoPayloadEntry *lru = nullptr;
     uint8_t lruTier = 0xFF;
-    uint32_t lruAge = 0;
-    const uint32_t now = clockMs();
+    uint8_t lruAge = 0;
+    const uint8_t now = nodeInfoRetTickNow();
 
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
         NodeInfoPayloadEntry &e = nodeInfoPayload[i];
@@ -506,7 +541,9 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
             continue; // an empty slot beats any victim; stop scoring
         // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key.
         const uint8_t tier = (e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1);
-        const uint32_t age = now - e.lastObservedMs; // unsigned subtraction is wrap-safe
+        // Modular retention age: safe because the sweep evicts/re-stamps entries long
+        // before retTick could age past the 256-tick period.
+        const uint8_t age = static_cast<uint8_t>(now - e.retTick);
         if (!lru || tier < lruTier || (tier == lruTier && age > lruAge)) {
             lru = &e;
             lruTier = tier;
@@ -674,11 +711,12 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
 #endif
 
         // Cache both payload and response metadata so direct replies can use
-        // richer context than "just the user protobuf" when PSRAM is present.
+        // richer context than "just the user protobuf" when the cache is present.
         // This path is intentionally independent from NodeInfoModule/NodeDB.
         entry->user = user;
-        entry->lastObservedMs = nowStampMs();
-        entry->lastObservedRxTime = mp.rx_time;
+        entry->obsTick = nodeInfoObsTickNow(); // a genuine observation - the only place obsTick is stamped
+        entry->hasObserved = true;
+        entry->retTick = nodeInfoRetTickNow();
         entry->sourceChannel = mp.channel;
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
         entry->decodedBitfield = mp.decoded.bitfield;
@@ -1138,20 +1176,32 @@ int32_t TrafficManagementModule::runOnce()
 
 #if TMM_HAS_NODEINFO_CACHE
     if (nodeInfoPayload) {
-        // Evict stale NodeInfo payloads. Two windows: an entry carrying a 32-byte public key
-        // is retained for kNodeInfoKeyRetentionMs (it is a last-resort encryption key source,
-        // see NodeDB::copyPublicKey), while a keyless entry expires at the serve window since
-        // it holds nothing worth keeping past that point. Both windows sit well under the
-        // ~49.7-day millis wrap, so an entry is always removed before its modular age could
-        // wrap and read as fresh - the wrap-safety guarantee behind the staleness gate (T4).
-        // Entries are stamped with nowStampMs() so 0 reliably means "never observed".
+        // Saturate and evict NodeInfo entries. Saturation is what keeps every modular tick
+        // compare unambiguous: once a stamp's window has passed, its validity flag is cleared
+        // (the exact age no longer matters - both states mean "outside the window"), so a
+        // stamp can never survive toward its ~256-tick aliasing horizon. Every period
+        // (12.8 h observation / 21.3 min throttle / 10.67 d retention) dwarfs the 60 s sweep
+        // interval, so saturation always lands with huge margin.
+        //
+        // Eviction runs on the retention clock. Two windows: an entry carrying a 32-byte
+        // public key is retained for kNodeInfoKeyRetentionRetTicks (it is a last-resort
+        // encryption key source, see NodeDB::copyPublicKey), while a keyless entry expires
+        // at the serve window since it holds nothing worth keeping past that point.
+        const uint8_t obsNow = nodeInfoObsTickNow();
+        const uint8_t respNow = nodeInfoRespTickNow();
+        const uint8_t retNow = nodeInfoRetTickNow();
         uint16_t nodeInfoExpired = 0;
         for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
             NodeInfoPayloadEntry &e = nodeInfoPayload[i];
-            if (e.node == 0 || e.lastObservedMs == 0)
+            if (e.node == 0)
                 continue;
-            const uint32_t ttl = (e.user.public_key.size == 32) ? kNodeInfoKeyRetentionMs : kNodeInfoMaxServeAgeMs;
-            if ((nowMs - e.lastObservedMs) > ttl) {
+            if (e.hasObserved && static_cast<uint8_t>(obsNow - e.obsTick) > kNodeInfoMaxServeAgeObsTicks)
+                e.hasObserved = false;
+            if (e.hasResponded && static_cast<uint8_t>(respNow - e.respTick) >= kNodeInfoResponseThrottleRespTicks)
+                e.hasResponded = false;
+            const uint8_t ttlTicks =
+                (e.user.public_key.size == 32) ? kNodeInfoKeyRetentionRetTicks : kNodeInfoKeylessRetentionRetTicks;
+            if (static_cast<uint8_t>(retNow - e.retTick) > ttlTicks) {
                 memset(&e, 0, sizeof(NodeInfoPayloadEntry));
                 nodeInfoExpired++;
             }
@@ -1265,9 +1315,13 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     bool cachedHasDecodedBitfield = false;
     uint8_t cachedDecodedBitfield = 0;
     uint8_t cachedSourceChannel = 0;
-    uint32_t cachedLastObservedMs = 0;
-    uint32_t cachedLastObservedRxTime = 0;
-    uint32_t cachedLastResponseMs = 0;
+    bool cachedHasObserved = false;
+    uint8_t cachedObsTick = 0;
+    bool cachedHasResponded = false;
+    uint8_t cachedRespTick = 0;
+    // Fallback-path throttle stamp (module-global uint32 millis; the cache path throttles
+    // per entry via respTick instead).
+    uint32_t cachedFallbackResponseMs = 0;
     // Signer-proven provenance of the cached key, consumed by the replay gate below
     // (maybe_unused: read only when TMM_NODEINFO_REPLAY_SIGNED_GATE is compiled in).
     [[maybe_unused]] bool cachedKeySignerProven = false;
@@ -1290,9 +1344,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedHasDecodedBitfield = entry->hasDecodedBitfield;
             cachedDecodedBitfield = entry->decodedBitfield;
             cachedSourceChannel = entry->sourceChannel;
-            cachedLastObservedMs = entry->lastObservedMs;
-            cachedLastObservedRxTime = entry->lastObservedRxTime;
-            cachedLastResponseMs = entry->lastResponseMs;
+            cachedHasObserved = entry->hasObserved;
+            cachedObsTick = entry->obsTick;
+            cachedHasResponded = entry->hasResponded;
+            cachedRespTick = entry->respTick;
             cachedKeySignerProven = entry->keySignerProven;
 #if TMM_HAS_NODEINFO_CACHE
             cachedNodeInfoIndex = static_cast<int32_t>(entry - nodeInfoPayload);
@@ -1341,21 +1396,19 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         usedFallback = true;
         {
             concurrency::LockGuard guard(&cacheLock);
-            cachedLastResponseMs = nodeInfoFallbackLastResponseMs;
+            cachedFallbackResponseMs = nodeInfoFallbackLastResponseMs;
         }
     }
 
-    // Staleness gate (PSRAM cache path): never spoof a reply on behalf of a node we have
-    // not actually heard from within the serve window. cachedLastObservedMs is only set on
-    // a PSRAM cache hit, so this leaves the NodeDB fallback (gated above) untouched.
-    // Wrap safety (T4): the modular age below is only correct while true age < 2^32 ms
-    // (~49.7 days); an entry that lingered that long could wrap to a small age and read as
-    // fresh. The maintenance sweep evicts NodeInfo entries once they exceed the serve window
-    // (see runOnce()), so an entry is gone long before its age can approach the wrap, keeping
-    // this compare unambiguous. The 0-sentinel instant (T9) is handled by nowStampMs().
-    if (cachedLastObservedMs != 0 && (clockMs() - cachedLastObservedMs) > kNodeInfoMaxServeAgeMs) {
-        TM_LOG_DEBUG("NodeInfo PSRAM entry for 0x%08x stale (age=%lu ms), not responding", p->to,
-                     static_cast<unsigned long>(clockMs() - cachedLastObservedMs));
+    // Staleness gate (cache path): never spoof a reply on behalf of a node we have not
+    // actually HEARD within the serve window. hasObserved carries the stamp's validity -
+    // it distinguishes a genuinely observed entry from one merely seeded or retained, and
+    // the maintenance sweep clears it once the window passes (saturation), so this modular
+    // tick compare can never see an aliased age. Only cache hits are gated here; the NodeDB
+    // fallback was gated above on last_heard.
+    if (hasCachedUser && (!cachedHasObserved ||
+                          static_cast<uint8_t>(nodeInfoObsTickNow() - cachedObsTick) > kNodeInfoMaxServeAgeObsTicks)) {
+        TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not freshly observed, not responding", p->to);
         return false;
     }
 
@@ -1384,21 +1437,26 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // attacker-controlled, so without this an attacker could drive unbounded local
     // transmissions / reflected floods. Suppress the duplicate request (return true) rather
     // than letting it propagate and generate more mesh traffic.
-    //   - PSRAM path: cachedLastResponseMs is per target node (NodeInfoPayloadEntry).
-    //   - Fallback path: cachedLastResponseMs is the module-global stamp (no per-node slot).
+    //   - Cache path: respTick is per target node (NodeInfoPayloadEntry, 5-s tick clock;
+    //     hasResponded carries validity and the sweep clears it after the window).
+    //   - Fallback path: the module-global millis stamp (no per-node slot).
     // NOTE (accepted design, not a defect):
-    //   - On the PSRAM path this is keyed on p->to, so a DISTINCT legitimate requestor for the
+    //   - On the cache path this is keyed on p->to, so a DISTINCT legitimate requestor for the
     //     same target gets no reply for up to one window (returning true STOPs it). That is
     //     fine: the mesh is redundant - the genuine node or another cache-holder answers, and
     //     a real node would rate-limit its own replies the same way.
-    //   - The per-target PSRAM key does not bound aggregate local TX: an attacker cycling N
+    //   - The per-target key does not bound aggregate local TX: an attacker cycling N
     //     distinct cached targets still draws N spoofed transmits per window. The fallback
-    //     path's global stamp does bound aggregate; a global cap on the PSRAM path would too,
+    //     path's global stamp does bound aggregate; a global cap on the cache path would too,
     //     but at the cost of throughput on legitimate multi-target responders, so it is left
     //     per-target by choice.
-    if (cachedLastResponseMs != 0 && (clockMs() - cachedLastResponseMs) < kNodeInfoResponseThrottleMs) {
-        TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x (%lu ms since last)", p->to,
-                     static_cast<unsigned long>(clockMs() - cachedLastResponseMs));
+    const bool throttled =
+        usedFallback
+            ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
+            : (cachedHasResponded &&
+               static_cast<uint8_t>(nodeInfoRespTickNow() - cachedRespTick) < kNodeInfoResponseThrottleRespTicks);
+    if (throttled) {
+        TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x", p->to);
         return true;
     }
 
@@ -1430,11 +1488,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     if (config.lora.config_ok_to_mqtt)
         reply->decoded.bitfield |= BITFIELD_OK_TO_MQTT_MASK;
 
-    if (hasCachedUser && cachedLastObservedMs != 0) {
-        uint32_t ageMs = clockMs() - cachedLastObservedMs;
-        TM_LOG_DEBUG("NodeInfo PSRAM hit node=0x%08x age=%lu ms src_ch=%u req_ch=%u rx_time=%lu", p->to,
-                     static_cast<unsigned long>(ageMs), static_cast<unsigned>(cachedSourceChannel),
-                     static_cast<unsigned>(p->channel), static_cast<unsigned long>(cachedLastObservedRxTime));
+    if (hasCachedUser) {
+        TM_LOG_DEBUG("NodeInfo cache hit node=0x%08x age=%u obs-ticks src_ch=%u req_ch=%u", p->to,
+                     static_cast<unsigned>(static_cast<uint8_t>(nodeInfoObsTickNow() - cachedObsTick)),
+                     static_cast<unsigned>(cachedSourceChannel), static_cast<unsigned>(p->channel));
     }
 
     // Spoof the sender as the target node so the requestor sees a valid NodeInfo response.
@@ -1453,13 +1510,14 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     service->sendToMesh(reply);
 
     // Record the send so the throttle can suppress a burst of requests. The fallback path
-    // stamps the module-global marker; the PSRAM path stamps the per-node entry we served
-    // from. nowStampMs() keeps the stamp off the 0 "never" sentinel at the millis wrap (T9).
+    // stamps the module-global millis marker (nowStampMs() keeps it off the 0 "never"
+    // sentinel at the wrap, T9); the cache path stamps the served entry's respTick, whose
+    // validity travels in hasResponded instead of a sentinel.
     if (usedFallback) {
         concurrency::LockGuard guard(&cacheLock);
         nodeInfoFallbackLastResponseMs = nowStampMs();
     }
-    // Stamp the PSRAM entry we served from, addressing it by the index captured during the
+    // Stamp the cache entry we served from, addressing it by the index captured during the
     // initial lookup rather than rescanning the array (T5). The cache lock was released in
     // between, so the slot could have been evicted or reused for a different node; re-validate
     // node == p->to under the lock and skip the stamp if it no longer matches.
@@ -1467,8 +1525,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     if (!usedFallback && nodeInfoPayload && cachedNodeInfoIndex >= 0) {
         concurrency::LockGuard guard(&cacheLock);
         NodeInfoPayloadEntry &e = nodeInfoPayload[cachedNodeInfoIndex];
-        if (e.node == p->to)
-            e.lastResponseMs = nowStampMs();
+        if (e.node == p->to) {
+            e.respTick = nodeInfoRespTickNow();
+            e.hasResponded = true;
+        }
     }
 #endif
 

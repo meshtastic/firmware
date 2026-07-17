@@ -822,7 +822,9 @@ static void test_tm_nodeinfo_directResponse_psramStaleEntryNotServed(void)
     module.markKeySignerProvenForTest(kTargetNode);
 
     // Advance the virtual clock just past the 6 h serve window.
-    TrafficManagementModule::s_testNowMs += (6UL * 60UL * 60UL * 1000UL) + 1000UL;
+    // 6 h + two 3-min observation ticks: guarantees the modular obs-tick age exceeds the
+    // 120-tick serve window whatever the clock's offset within its current tick.
+    TrafficManagementModule::s_testNowMs += (6UL * 60UL * 60UL * 1000UL) + (2UL * 3UL * 60UL * 1000UL);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
