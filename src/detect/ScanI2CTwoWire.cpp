@@ -180,45 +180,6 @@ String readSEN5xProductName(TwoWire *i2cBus, uint8_t address)
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
-{
-
-    i2cBus->beginTransmission(address);
-    i2cBus->write(0xFA);
-    i2cBus->write(0x0F);
-
-    if (i2cBus->endTransmission() != 0)
-        return false;
-
-    if (i2cBus->requestFrom(address, (uint8_t)8) != 8)
-        return false;
-
-    // Just flush the data
-    while (i2cBus->available() < 8) {
-        i2cBus->read();
-    }
-
-    i2cBus->beginTransmission(address);
-    i2cBus->write(0xFC);
-    i2cBus->write(0xC9);
-
-    if (i2cBus->endTransmission() != 0)
-        return false;
-
-    if (i2cBus->requestFrom(address, (uint8_t)6) != 6)
-        return false;
-
-    // Just flush the data
-    while (i2cBus->available() < 6) {
-        i2cBus->read();
-    }
-
-    // Assume we detect the SHT21 if something came back from the request
-    return true;
-}
-#endif
-
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 static uint8_t crcSHT2X(const uint8_t *data, uint8_t len)
 {
     uint8_t crc = 0;
