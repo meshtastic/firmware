@@ -3743,6 +3743,23 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     return false;
 }
 
+bool NodeDB::isVerifiedSignerForKey(NodeNum n, const uint8_t *key32)
+{
+    if (!key32)
+        return false;
+    // Hot store is authoritative when present; a node lives in the hot XOR warm tier, so if the
+    // hot store holds it the warm tier does not, and we decide entirely from the hot entry.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (info)
+        return info->public_key.size == 32 && nodeInfoLiteHasXeddsaSigned(info) && memcmp(info->public_key.bytes, key32, 32) == 0;
+#if WARM_NODE_COUNT > 0
+    uint8_t warmKey[32];
+    if (warmStore.copyKey(n, warmKey) && memcmp(warmKey, key32, 32) == 0)
+        return warmStore.isVerifiedSigner(n);
+#endif
+    return false;
+}
+
 meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
 {
     const meshtastic_NodeInfoLite *info = getMeshNode(n);

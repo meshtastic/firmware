@@ -553,6 +553,10 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
     // Normalize user.id to the packet sender's node number.
     snprintf(user.id, sizeof(user.id), "!%08x", from);
 
+    // Whether NodeDB already knows this node as a verified signer for this key. Lets a
+    // re-found node inherit proven provenance even when THIS frame happens to be unsigned.
+    bool dbSaysSigner = false;
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Mirror NodeDB::updateUser() key hygiene before we let an overheard NodeInfo into
     // the direct-response cache. This cache is served back to requestors as a spoofed
@@ -572,6 +576,12 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         TM_LOG_WARN("NodeInfo cache: public key mismatch vs NodeDB, dropping 0x%08x", from);
         return;
     }
+    // Re-found in NodeDB as a known signer: inherit that verdict so the cached key is proven
+    // even when this particular frame was unsigned. isVerifiedSignerForKey consults both the
+    // hot store's signed bitfield and the warm tier's cached signer bit, and requires the key
+    // to match, so a warm-only signer is covered and a rotated key never inherits a stale
+    // verdict.
+    dbSaysSigner = nodeDB && user.public_key.size == 32 && nodeDB->isVerifiedSignerForKey(from, user.public_key.bytes);
 #endif
 
     bool usedEmptySlot = false;
@@ -604,12 +614,13 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
         entry->decodedBitfield = mp.decoded.bitfield;
 
-        // Upgrade key provenance to "signer-proven" if this frame's XEdDSA signature was
-        // verified (Router::checkXeddsaReceivePolicy sets mp.xeddsa_signed only after a
-        // successful verify against the node's key). Never downgrade: a later unsigned frame
-        // for an already-proven key leaves the flag set. The key itself cannot change here -
-        // the key-pin checks above reject a mismatching key before we reach this point.
-        if (mp.xeddsa_signed && user.public_key.size == 32)
+        // Upgrade key provenance to "signer-proven" when either this frame's XEdDSA signature
+        // was verified (Router::checkXeddsaReceivePolicy sets mp.xeddsa_signed only after a
+        // successful verify against the node's key) or NodeDB already knows this node as a
+        // signer for this same key (dbSaysSigner). Never downgrade: a later unsigned frame for
+        // an already-proven key leaves the flag set. The key itself cannot change here - the
+        // key-pin checks above reject a mismatching key before we reach this point.
+        if ((mp.xeddsa_signed || dbSaysSigner) && user.public_key.size == 32)
             entry->keySignerProven = true;
 
         if (usedEmptySlot)

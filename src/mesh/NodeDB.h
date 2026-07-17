@@ -360,6 +360,13 @@ class NodeDB
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
+    // True if node `n` is a known XEdDSA signer for exactly the 32-byte key `key32`, per either
+    // NodeDB tier: the hot store's signed bitfield or the warm tier's cached signer bit. The
+    // key must match so a rotated/mismatched key never inherits a stale signer verdict. Lets
+    // an opportunistic cache (e.g. TrafficManagement's NodeInfo cache) mark a re-found node's
+    // key signer-proven from what NodeDB already knows, without re-verifying a signature.
+    bool isVerifiedSignerForKey(NodeNum n, const uint8_t *key32);
+
     /// Resolve a node's device role - hot store (with user) first, then the role
     /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
     /// nodes that have aged out of the hot store.

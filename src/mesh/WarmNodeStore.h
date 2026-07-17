@@ -94,7 +94,7 @@ inline bool warmSignerOf(const WarmNodeEntry &e)
 #define WARM_FLASH_PAGE_SIZE 4096u
 #define WARM_FLASH_PAGES 3u
 #define WARM_FLASH_REGION_BASE (0xED000u - WARM_FLASH_PAGES * WARM_FLASH_PAGE_SIZE) // 0xEA000
-#define WARM_FLASH_PAGE_ADDR(i) (WARM_FLASH_REGION_BASE + (i)*WARM_FLASH_PAGE_SIZE)
+#define WARM_FLASH_PAGE_ADDR(i) (WARM_FLASH_REGION_BASE + (i) * WARM_FLASH_PAGE_SIZE)
 #endif
 
 class WarmNodeStore
@@ -118,6 +118,11 @@ class WarmNodeStore
     /// Look up the cached device role + protected category for a warm node.
     /// @return false if the node is not in the warm tier.
     bool lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat) const;
+
+    /// @return true if the warm tier holds this node AND its cached signer bit is set
+    /// (we verified an XEdDSA signature from it before it was evicted). False if absent
+    /// or not a known signer.
+    bool isVerifiedSigner(NodeNum num) const;
 
     /// Find and remove an entry (used when the node is re-admitted to the hot store).
     bool take(NodeNum num, WarmNodeEntry &out);
