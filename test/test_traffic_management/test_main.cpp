@@ -364,6 +364,14 @@ static void test_tm_moduleDisabled_doesNothing(void)
     TEST_ASSERT_EQUAL_UINT32(0, stats.packets_inspected);
     TEST_ASSERT_EQUAL_UINT32(0, stats.unknown_packet_drops);
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
+
+    // The write-through hooks share the disabled gate: with maintenance (sweep + reconcile)
+    // off, NodeDB commits must not fill the NodeInfo cache either.
+    uint8_t key[32];
+    memset(key, 0x42, sizeof(key));
+    module.onNodeKeyCommitted(kRemoteNode, key, false);
+    uint8_t out[32];
+    TEST_ASSERT_FALSE(module.copyPublicKey(kRemoteNode, out, nullptr));
 }
 
 /**
@@ -893,12 +901,16 @@ static void test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow(void)
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 
-    // Second request within the throttle window: suppressed (STOP) but NOT transmitted again.
+    // Second request within the throttle window: our spoofed TX is suppressed, but the request
+    // is NOT consumed - it CONTINUEs into normal relay handling so the genuine target can answer
+    // itself. (Previously it was black-holed: STOPped with nothing sent.) The cache-hit stat
+    // counts only replies actually sent.
     TrafficManagementModule::s_testNowMs += 5000; // 5 s < 30 s window
     request.id = 0xAAAA0002;
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
-    TEST_ASSERT_TRUE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+    TEST_ASSERT_EQUAL_UINT32(1, module.getStats().nodeinfo_cache_hits);
 
     // Past the throttle window: served again.
     TrafficManagementModule::s_testNowMs += 30000; // now > 30 s since first reply
@@ -1542,11 +1554,13 @@ static void test_tm_nodeinfo_tickSaturation_sweepClearsObserved(void)
 }
 
 /**
- * Membership marking (ported from tmm-fix-superset): the sweep marks entries whose node
- * exists in NodeDB and clears the mark when the node is gone; the entry itself persists
- * (no TTL) and reconciliation-seeded identities stay unservable.
+ * Membership marking: the hourly reconcile marks entries whose node exists in NodeDB and
+ * clears the mark when the node is gone. A plain 60 s sweep does NOT refresh membership
+ * (that per-entry NodeDB scan was moved into the reconcile), so a passive NodeDB eviction
+ * lags by up to an hour; the entry itself persists (no TTL) and reconciliation-seeded
+ * identities stay unservable.
  */
-static void test_tm_nodeinfo_sweepMembershipMarking(void)
+static void test_tm_nodeinfo_reconcileMembershipMarking(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
@@ -1568,9 +1582,18 @@ static void test_tm_nodeinfo_sweepMembershipMarking(void)
     TEST_ASSERT_TRUE(flags & kFlagFullUser);
     TEST_ASSERT_FALSE(flags & kFlagObserved);
 
-    // Node drops out of NodeDB entirely: the next sweep clears the membership mark.
+    // Node drops out of NodeDB entirely. Membership is refreshed by the hourly reconcile,
+    // not the per-minute sweep, so the very next sweep still shows the stale member bit -
+    // the documented up-to-an-hour lag for passive evictions.
     mockNodeDB->rollHotStore();
     module.runOnce();
+    flags = module.peekNodeInfoFlagsForTest(kTargetNode);
+    TEST_ASSERT_TRUE(flags >= 0);
+    TEST_ASSERT_TRUE(flags & kFlagMember); // stale by design between reconciles
+
+    // After a reconcile interval's worth of sweeps, the mark is cleared.
+    for (int i = 0; i < 60; i++)
+        module.runOnce();
     flags = module.peekNodeInfoFlagsForTest(kTargetNode);
     TEST_ASSERT_TRUE(flags >= 0);           // entry persists (no TTL) ...
     TEST_ASSERT_FALSE(flags & kFlagMember); // ... but is no longer pinned as a member
@@ -1694,11 +1717,12 @@ static void test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow(void)
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 
-    // Second request within the throttle window: suppressed (STOP) but NOT transmitted again.
+    // Second request within the throttle window: our spoofed TX is suppressed, but the request
+    // is NOT consumed - it CONTINUEs so the genuine target (or another cache-holder) can answer.
     TrafficManagementModule::s_testNowMs += 5000; // 5 s < 30 s window
     request.id = 0xBBBB0002;
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
-    TEST_ASSERT_TRUE(module.ignoreRequestFlag());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_FALSE(module.ignoreRequestFlag());
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 
     // Past the throttle window: served again.
@@ -2765,7 +2789,7 @@ TM_TEST_ENTRY void setup()
 #endif
     RUN_TEST(test_tm_nodeinfo_keyHook_upsertsAndGovernsProvenance);
     RUN_TEST(test_tm_nodeinfo_tickSaturation_sweepClearsObserved);
-    RUN_TEST(test_tm_nodeinfo_sweepMembershipMarking);
+    RUN_TEST(test_tm_nodeinfo_reconcileMembershipMarking);
 #endif
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
