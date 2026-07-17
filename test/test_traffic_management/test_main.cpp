@@ -1178,20 +1178,17 @@ static void test_tm_nodeinfo_removeNode_purgesCaches(void)
 }
 
 /**
- * Membership keep-alive vs retention TTL: an entry whose node still lives in a NodeDB tier
- * is re-stamped by every sweep and outlives the 7-day retention window; a non-member entry
- * of the same age is evicted; and once membership lapses the survivor ages out too.
+ * No timed eviction: a quiet keyed entry survives arbitrarily long (its key keeps feeding
+ * the pubkey pool via copyPublicKey), while tick saturation stops it being SERVED long
+ * before that. Slots are reclaimed only by LRU pressure on insert or an explicit purge.
  */
-static void test_tm_nodeinfo_membership_keepAliveOutlivesRetention(void)
+static void test_tm_nodeinfo_noTimedEviction_quietKeyedEntrySurvives(void)
 {
     moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     mockNodeDB->clearCachedNode();
     mockNodeDB->rollHotStore();
-    uint8_t warmKey[32];
-    memset(warmKey, 0x21, 32);
     mockNodeDB->warmStore.clear();
-    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey); // kTargetNode is a member
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1200,28 +1197,28 @@ static void test_tm_nodeinfo_membership_keepAliveOutlivesRetention(void)
     service = &mockService;
 
     TrafficManagementModuleTestShim module;
-    // Both keyed entries observed now; kRemoteNode is in no NodeDB tier (non-member).
-    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "member", 0x21));
-    module.handleReceived(makeNodeInfoPacketWithKey(kRemoteNode, "stranger", 0x22));
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "quiet", 0x21));
+    module.markKeySignerProvenForTest(kTargetNode); // isolate: staleness, not the signed gate
 
+    // Nine days of silence, swept every three days. The old design would have evicted the
+    // entry at the 7-day retention TTL; now nothing expires by timer.
+    for (int i = 0; i < 3; i++) {
+        TrafficManagementModule::s_testNowMs += 3UL * 24UL * 60UL * 60UL * 1000UL;
+        module.runOnce();
+    }
+
+    // The key still feeds the pool...
     uint8_t key[32] = {0};
-    // Two sweeps 4 days apart: the member is re-stamped each time; the stranger's age
-    // crosses the 7-day keyed retention TTL at the second sweep and is evicted.
-    TrafficManagementModule::s_testNowMs += 4UL * 24UL * 60UL * 60UL * 1000UL;
-    module.runOnce();
-    TrafficManagementModule::s_testNowMs += 4UL * 24UL * 60UL * 60UL * 1000UL;
-    module.runOnce();
     TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, nullptr));
-    TEST_ASSERT_FALSE(module.copyPublicKey(kRemoteNode, key, nullptr));
+    TEST_ASSERT_EQUAL_UINT8(0x21, key[0]);
 
-    // Membership lapses: the node leaves the warm tier, keep-alive stops, and the entry
-    // ages out on the normal keyed TTL (one sweep to notice, one past the window).
-    mockNodeDB->warmStore.clear();
-    TrafficManagementModule::s_testNowMs += 1000; // same tick; sweep just clears isMember
-    module.runOnce();
-    TrafficManagementModule::s_testNowMs += 8UL * 24UL * 60UL * 60UL * 1000UL;
-    module.runOnce();
-    TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
+    // ...but the serve gate saturated long ago: the request propagates unanswered.
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 }
 #endif // WARM_NODE_COUNT > 0
 
@@ -2537,7 +2534,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
     RUN_TEST(test_tm_nodeinfo_updateUserHook_writesThrough);
     RUN_TEST(test_tm_nodeinfo_removeNode_purgesCaches);
-    RUN_TEST(test_tm_nodeinfo_membership_keepAliveOutlivesRetention);
+    RUN_TEST(test_tm_nodeinfo_noTimedEviction_quietKeyedEntrySurvives);
 #endif
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven);

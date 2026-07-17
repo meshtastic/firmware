@@ -41,65 +41,31 @@ constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot in
 
 // NodeInfo direct-response safety limits.
 //
-// The per-entry clocks (observation, response throttle, retention) use the same
-// free-running modular tick scheme as the UnifiedCache counters (see "Free-Running Tick
-// Counters" in the header): a uint8_t holds clockMs()/tickMs, age is modular uint8
-// subtraction, and validity is an explicit flag bit (hasObserved / hasResponded) - no 0
-// sentinel. The maintenance sweep clears a stamp's flag once its window has passed
-// (saturation) and re-stamps retained entries, so no stamp ever survives toward its
-// ~256-tick aliasing horizon; every period below dwarfs the 60 s sweep interval. This
-// replaces the old uint32 millis stamps and their wrap/sentinel special cases (T4, T9).
-constexpr uint32_t kNodeInfoObsTickMs = 3UL * 60UL * 1000UL;  // observation clock: 3 min/tick, period 12.8 h
-constexpr uint32_t kNodeInfoRespTickMs = 5UL * 1000UL;        // response-throttle clock: 5 s/tick, period 21.3 min
-constexpr uint32_t kNodeInfoRetTickMs = 60UL * 60UL * 1000UL; // retention clock: 1 h/tick, period 10.67 d
-
+// The per-entry clocks live in the header (kNodeInfoObsTickMs / kNodeInfoRespTickMs and the
+// currentObsTick()/currentRespTick() helpers) beside the UnifiedCache tick idiom they share.
+//
 // Staleness: never spoof a NodeInfo reply on behalf of a node we have not actually
 // heard from within this window. Without it, a cached (or forged) entry is served
 // indefinitely for a long-gone node while the genuine request is suppressed - the
 // requestor sees a fresh-looking answer for a node that may no longer exist.
-// One source of truth for the 6 h window; the seconds form (NodeDB fallback path) and
-// the tick form (cache path) are both derived from it so the paths cannot desync.
+// The cache path enforces this in ticks (kNodeInfoMaxServeAgeTicks x kNodeInfoObsTickMs
+// = 6 h, see the header); the NodeDB fallback path uses this seconds form of the same window.
 constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL; // 6 h (NodeDB fallback path)
-constexpr uint8_t kNodeInfoMaxServeAgeObsTicks =
-    static_cast<uint8_t>(kNodeInfoMaxServeAgeSecs * 1000UL / kNodeInfoObsTickMs); // 120 ticks (cache path)
-static_assert(kNodeInfoMaxServeAgeSecs * 1000UL / kNodeInfoObsTickMs < 200,
-              "serve window must sit well inside the 256-tick observation period");
 
-// Key-retention window: how long a NodeInfo cache entry that carries a 32-byte public key
-// is kept after it was last retained (heard, or membership-refreshed by the sweep). This is
-// deliberately much longer than the serve window: once a node ages past the serve window we
-// stop spoofing NodeInfo replies for it, but its key remains valuable as a last-resort
-// encryption source (NodeDB::copyPublicKey), so the entry is retained to widen the pool of
-// peers we can encrypt to. Keyless entries do not get this grace - they expire at the serve
-// window since they hold nothing worth retaining.
-constexpr uint8_t kNodeInfoKeyRetentionRetTicks = 7 * 24;                              // 7 d in 1-h ticks
-constexpr uint8_t kNodeInfoKeylessRetentionRetTicks = kNodeInfoMaxServeAgeSecs / 3600; // 6 h in 1-h ticks
-static_assert(kNodeInfoKeyRetentionRetTicks < 200, "retention must sit well inside the 256-tick period");
+// Entries are never evicted on a timer. Wrap-correctness of the tick stamps is guaranteed by
+// the sweep's presence-bit saturation (see runOnce), not by freeing slots, and a slot that
+// has gone quiet still holds value: its key remains a last-resort encryption source
+// (NodeDB::copyPublicKey) and its User payload rehydrates a re-admitted node's name. Slots
+// are reclaimed only by trust/membership-tiered LRU on insert, or by an explicit purge when
+// the user deliberately removes the node.
 
 // Throttle: emit at most one spoofed direct reply per target node per this interval.
 // Direct responses are otherwise un-throttled (they STOP the request before the
 // per-sender rate limiter runs) and the reply target is attacker-controlled, so an
 // attacker could otherwise drive unbounded local transmissions / reflected floods.
-// The ms form throttles the NodeDB fallback path (module-global uint32 stamp); the tick
-// form throttles the cache path (per-entry respTick).
+// This ms form throttles the NodeDB fallback path (module-global uint32 stamp); the cache
+// path throttles per entry in ticks (kNodeInfoThrottleTicks, header).
 constexpr uint32_t kNodeInfoResponseThrottleMs = 30UL * 1000UL; // 30 s
-constexpr uint8_t kNodeInfoResponseThrottleRespTicks =
-    static_cast<uint8_t>(kNodeInfoResponseThrottleMs / kNodeInfoRespTickMs); // 6 ticks
-
-// Current value of each NodeInfo tick clock (free-running, from clockMs() so the unit-test
-// clock hook applies).
-static inline uint8_t nodeInfoObsTickNow()
-{
-    return static_cast<uint8_t>(TrafficManagementModule::clockMs() / kNodeInfoObsTickMs);
-}
-static inline uint8_t nodeInfoRespTickNow()
-{
-    return static_cast<uint8_t>(TrafficManagementModule::clockMs() / kNodeInfoRespTickMs);
-}
-static inline uint8_t nodeInfoRetTickNow()
-{
-    return static_cast<uint8_t>(TrafficManagementModule::clockMs() / kNodeInfoRetTickMs);
-}
 
 /**
  * Convert seconds to milliseconds with overflow protection.
@@ -533,9 +499,11 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
  * Find or create a NodeInfo payload entry (linear scan of the flat PSRAM
  * array). One pass tracks the match, the first empty slot, and the eviction
  * victim. Victim selection is trust-tiered so the cache doubles as a pubkey
- * pool (NodeDB::copyPublicKey): a keyless entry is sacrificed before any
- * keyed one, and a trust-on-first-use key before a signer-proven key; within
- * a tier the oldest (modular retention age by retTick) loses. Mirrors
+ * pool (NodeDB::copyPublicKey): membership outranks key trust (a node still
+ * present in NodeDB hot/warm loses last - evicting it just to reseed it via
+ * reconciliation would churn), then keyless < TOFU key < signer-proven key;
+ * within a tier the oldest observation loses (modular obsTick age; a
+ * never-observed entry counts as oldest of all). Mirrors
  * WarmNodeStore's keyed-first admission. NodeInfo traffic is low-rate, so the
  * O(n) scan is negligible.
  */
@@ -554,7 +522,7 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
     NodeInfoPayloadEntry *lru = nullptr;
     uint8_t lruTier = 0xFF;
     uint8_t lruAge = 0;
-    const uint8_t now = nodeInfoRetTickNow();
+    const uint8_t nowObs = currentObsTick();
 
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
         NodeInfoPayloadEntry &e = nodeInfoPayload[i];
@@ -572,9 +540,9 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
         // identity while it still holds opportunistic strangers.
         const uint8_t tier = static_cast<uint8_t>(((e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1)) +
                                                   (e.isMember ? 3 : 0));
-        // Modular retention age: safe because the sweep evicts/re-stamps entries long
-        // before retTick could age past the 256-tick period.
-        const uint8_t age = static_cast<uint8_t>(now - e.retTick);
+        // Modular observation age; saturation keeps real ages far below 0xFF, so a
+        // never-observed entry scored at 0xFF is always the oldest in its tier.
+        const uint8_t age = e.hasObserved ? static_cast<uint8_t>(nowObs - e.obsTick) : 0xFF;
         if (!lru || tier < lruTier || (tier == lruTier && age > lruAge)) {
             lru = &e;
             lruTier = tier;
@@ -615,68 +583,53 @@ uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 #endif
 }
 
-void TrafficManagementModule::reconcileNodeInfoMembershipLocked()
+void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
 {
 #if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || !nodeDB)
         return;
 
-    const uint8_t retNow = nodeInfoRetTickNow();
     const NodeNum self = nodeDB->getNodeNum();
+    uint16_t seeded = 0;
 
-    // Entries touched by this pass, so membership can be cleared exactly on the ones that
-    // were not (a departed node's entry then ages out on the normal retention TTL from its
-    // final member re-stamp). A retTick comparison can't do this - an entry observed within
-    // the current 1-h tick would be indistinguishable from one re-stamped by this pass.
-    // Static: 250 B of .bss beats a stack excursion under the cache lock.
-    static uint8_t marked[(kNodeInfoCacheEntries + 7) / 8];
-    memset(marked, 0, sizeof(marked));
-
-    // Upsert one NodeDB-tier node. Cost note: a miss in findOrCreateNodeInfoEntry scans the
-    // whole array, so this pass is O(members x entries) once per minute - tens of ms on a
-    // saturated ESP32, on the module thread, and accepted: the alternative is an index the
-    // entry format doesn't have room for.
+    // Upsert one NodeDB-tier node. `hot` non-null contributes the full identity; a warm
+    // record is key-only. Cost note: a miss in findOrCreateNodeInfoEntry scans the whole
+    // array, so this pass is O(members x entries) - which is why it runs hourly (plus one
+    // boot seed), not on every sweep; the write-through hooks carry the interim.
     auto reconcileOne = [&](NodeNum n, const uint8_t *key32, bool signerKnown, const meshtastic_NodeInfoLite *hot) {
         if (n == 0 || n == self)
             return;
-        bool usedEmptySlot = false;
-        NodeInfoPayloadEntry *e = findOrCreateNodeInfoEntry(n, &usedEmptySlot, /*spareMembers=*/true);
-        if (!e)
-            return; // cache is member-saturated; skip rather than churn a member out
+        if (!hot && !key32)
+            return; // a warm record without a key has nothing worth seeding
 
-        // Key conflict against the authoritative NodeDB key: NodeDB wins. Wipe and reseed
-        // rather than patch, so no name or provenance pinned to the old key survives onto
-        // the new one. (Possible for residue predating the warm pin, or a NodeDB re-key.)
-        if (!usedEmptySlot && key32 && e->user.public_key.size == 32 &&
-            memcmp(e->user.public_key.bytes, key32, 32) != 0) {
-            memset(e, 0, sizeof(*e));
-            e->node = n;
-            usedEmptySlot = true;
+        NodeInfoPayloadEntry *e = findNodeInfoEntryMutable(n);
+        if (!e) {
+            bool usedEmptySlot = false;
+            e = findOrCreateNodeInfoEntry(n, &usedEmptySlot, /*spareMembers=*/true);
+            if (!e)
+                return; // cache is member-saturated; skip rather than churn a member out
+            seeded++;
         }
 
-        if (usedEmptySlot) {
-            // Fresh slot: seed what the tier knows. A hot node with a User contributes the
-            // full identity; a warm node yields a key-only record (the warm tier keeps no
-            // names). Never touches hasObserved - seeding must not make a node servable.
-            if (hot && nodeInfoLiteHasUser(hot)) {
-                e->user = TypeConversions::ConvertToUser(hot);
-                e->hasFullUser = true;
-            }
+        // NodeDB is the authority on identity content: adopt its User payload and key. A key
+        // change relative to a stale TMM TOFU pin resets provenance; the signer verdict then
+        // transfers only via the key-matched rule below. hasObserved/obsTick are deliberately
+        // untouched - seeding is knowledge, not an observation, and the replay serve-gate
+        // must stay keyed to genuinely heard frames.
+        const bool keyChanged = e->user.public_key.size == 32 && key32 && memcmp(e->user.public_key.bytes, key32, 32) != 0;
+        if (hot && nodeInfoLiteHasUser(hot)) {
+            e->user = TypeConversions::ConvertToUser(hot);
+            e->hasFullUser = true;
             snprintf(e->user.id, sizeof(e->user.id), "!%08x", n);
-        }
-        // Backfill a missing key (fresh seed, or an entry cached from a keyless frame).
-        if (key32 && e->user.public_key.size != 32) {
+        } else if (key32) {
             memcpy(e->user.public_key.bytes, key32, 32);
             e->user.public_key.size = 32;
         }
-        // Signer provenance transfers only alongside a matching key (monotonic upgrade).
+        if (keyChanged)
+            e->keySignerProven = false;
         if (signerKnown && key32 && e->user.public_key.size == 32 && memcmp(e->user.public_key.bytes, key32, 32) == 0)
             e->keySignerProven = true;
-
         e->isMember = true;
-        e->retTick = retNow; // keep-alive: a member entry never ages toward the retention TTL
-        const size_t idx = static_cast<size_t>(e - nodeInfoPayload);
-        marked[idx / 8] |= static_cast<uint8_t>(1u << (idx % 8));
     };
 
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
@@ -687,6 +640,8 @@ void TrafficManagementModule::reconcileNodeInfoMembershipLocked()
         reconcileOne(info->num, key, nodeInfoLiteHasXeddsaSigned(info), info);
     }
 #if WARM_NODE_COUNT > 0
+    // Warm tier: key-only records (the warm tier keeps no names), so the cache holds a key
+    // for every NodeDB identity - the superset the pubkey pool and the key pin rely on.
     for (size_t i = 0; i < nodeDB->warmStore.capacity(); i++) {
         const WarmNodeEntry *w = nodeDB->warmStore.entryAt(i);
         if (!w)
@@ -696,12 +651,9 @@ void TrafficManagementModule::reconcileNodeInfoMembershipLocked()
     }
 #endif
 
-    // Clear membership on every entry this pass did not touch: its node has left both
-    // NodeDB tiers (or lost the spareMembers race), so it reverts to normal-tier aging.
-    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
-        if (nodeInfoPayload[i].node != 0 && !(marked[i / 8] & (1u << (i % 8))))
-            nodeInfoPayload[i].isMember = false;
-    }
+    if (seeded)
+        TM_LOG_INFO("NodeInfo cache reconciled: %u seeded from NodeDB, %u/%u total", static_cast<unsigned>(seeded),
+                    static_cast<unsigned>(countNodeInfoEntriesLocked()), static_cast<unsigned>(nodeInfoTargetEntries()));
 #endif
 }
 
@@ -737,7 +689,6 @@ void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshta
     e->hasFullUser = true;
     e->keySignerProven = provenBefore || (signerKnown && user.public_key.size == 32);
     e->isMember = true; // committed via updateUser => it sits in the hot store right now
-    e->retTick = nodeInfoRetTickNow();
     // obsTick/hasObserved deliberately untouched: only a heard frame makes a node servable.
 #else
     (void)node;
@@ -880,10 +831,9 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         // richer context than "just the user protobuf" when the cache is present.
         // This path is intentionally independent from NodeInfoModule/NodeDB.
         entry->user = user;
-        entry->obsTick = nodeInfoObsTickNow(); // a genuine observation - the only place obsTick is stamped
+        entry->obsTick = currentObsTick(); // a genuine observation - the only place obsTick is stamped
         entry->hasObserved = true;
         entry->hasFullUser = true; // an observed NODEINFO frame always carries the full User
-        entry->retTick = nodeInfoRetTickNow();
         entry->sourceChannel = mp.channel;
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
         entry->decodedBitfield = mp.decoded.bitfield;
@@ -1244,8 +1194,6 @@ int32_t TrafficManagementModule::runOnce()
         return INT32_MAX;
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    const uint32_t nowMs = TrafficManagementModule::clockMs();
-
     // Warm-start the next-hop cache from persisted NodeInfoLite hints once nodeDB
     // is populated. Done here (not in the constructor) so nodeDB has finished
     // loading. Takes its own lock, so call before acquiring the sweep guard below.
@@ -1343,44 +1291,50 @@ int32_t TrafficManagementModule::runOnce()
 
 #if TMM_HAS_NODEINFO_CACHE
     if (nodeInfoPayload) {
-        // Saturate and evict NodeInfo entries. Saturation is what keeps every modular tick
-        // compare unambiguous: once a stamp's window has passed, its validity flag is cleared
-        // (the exact age no longer matters - both states mean "outside the window"), so a
-        // stamp can never survive toward its ~256-tick aliasing horizon. Every period
-        // (12.8 h observation / 21.3 min throttle / 10.67 d retention) dwarfs the 60 s sweep
-        // interval, so saturation always lands with huge margin.
-        //
-        // Eviction runs on the retention clock. Two windows: an entry carrying a 32-byte
-        // public key is retained for kNodeInfoKeyRetentionRetTicks (it is a last-resort
-        // encryption key source, see NodeDB::copyPublicKey), while a keyless entry expires
-        // at the serve window since it holds nothing worth keeping past that point.
-        const uint8_t obsNow = nodeInfoObsTickNow();
-        const uint8_t respNow = nodeInfoRespTickNow();
-        const uint8_t retNow = nodeInfoRetTickNow();
-        uint16_t nodeInfoExpired = 0;
+        // Saturate expired tick stamps. Once a stamp's age exceeds its window, its presence
+        // bit is cleared here, so no stamp is ever read anywhere near its uint8 aliasing
+        // horizon (obs: 6 h window vs 12.8 h period; resp: 30 s vs 21.3 min) - this sweep,
+        // not slot eviction, is the wrap-safety guarantee. Entries themselves are never
+        // freed on a timer: a quiet entry's key and User payload keep their value (pubkey
+        // pool, name rehydration), and slots are reclaimed by tiered LRU on insert or by an
+        // explicit user-initiated purge.
+        uint16_t nodeInfoSaturated = 0;
+        const uint8_t nowObs = currentObsTick();
+        const uint8_t nowResp = currentRespTick();
         for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
             NodeInfoPayloadEntry &e = nodeInfoPayload[i];
             if (e.node == 0)
                 continue;
-            if (e.hasObserved && static_cast<uint8_t>(obsNow - e.obsTick) > kNodeInfoMaxServeAgeObsTicks)
+            if (e.hasObserved && static_cast<uint8_t>(nowObs - e.obsTick) > kNodeInfoMaxServeAgeTicks) {
                 e.hasObserved = false;
-            if (e.hasResponded && static_cast<uint8_t>(respNow - e.respTick) >= kNodeInfoResponseThrottleRespTicks)
+                nodeInfoSaturated++;
+            }
+            if (e.hasResponded && static_cast<uint8_t>(nowResp - e.respTick) >= kNodeInfoThrottleTicks)
                 e.hasResponded = false;
-            const uint8_t ttlTicks =
-                (e.user.public_key.size == 32) ? kNodeInfoKeyRetentionRetTicks : kNodeInfoKeylessRetentionRetTicks;
-            if (static_cast<uint8_t>(retNow - e.retTick) > ttlTicks) {
-                memset(&e, 0, sizeof(NodeInfoPayloadEntry));
-                nodeInfoExpired++;
+            // Refresh membership: the bit is the keep-alive that makes a node still present
+            // in NodeDB (hot or warm) the stickiest under LRU eviction, and its clearing is
+            // what lets a node NodeDB has fully forgotten become evictable again. Read-only
+            // NodeDB lookups under cacheLock follow the resolveSenderRole precedent.
+            bool member = nodeDB && nodeDB->getMeshNode(e.node) != nullptr;
+#if WARM_NODE_COUNT > 0
+            if (!member && nodeDB)
+                member = nodeDB->warmStore.contains(e.node);
+#endif
+            e.isMember = member;
+        }
+        TM_LOG_DEBUG("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
+                     static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoSaturated));
+
+        // Anti-entropy: seed identities NodeDB knows but this cache lacks - a full pass at
+        // boot (once nodeDB is ready), then hourly. The write-through hooks provide
+        // immediacy between passes.
+        if (!nodeInfoSeeded || ++sweepsSinceNodeInfoReconcile >= kNodeInfoReconcileSweeps) {
+            if (nodeDB) {
+                reconcileNodeInfoFromNodeDBLocked();
+                nodeInfoSeeded = true;
+                sweepsSinceNodeInfoReconcile = 0;
             }
         }
-
-        // Anti-entropy: reseed/refresh an entry for every NodeDB-tier node, so the cache
-        // stays a superset of NodeDB's identities (write-through hooks give immediacy;
-        // this pass self-heals whatever they miss, and is what keeps member entries'
-        // retTick from ever reaching the eviction TTL above).
-        reconcileNodeInfoMembershipLocked();
-        TM_LOG_DEBUG("NodeInfo PSRAM cache: %u/%u (%u expired)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
-                     static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoExpired));
     }
 #endif
 
@@ -1580,7 +1534,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // tick compare can never see an aliased age. Only cache hits are gated here; the NodeDB
     // fallback was gated above on last_heard.
     if (hasCachedUser && (!cachedHasObserved ||
-                          static_cast<uint8_t>(nodeInfoObsTickNow() - cachedObsTick) > kNodeInfoMaxServeAgeObsTicks)) {
+                          static_cast<uint8_t>(currentObsTick() - cachedObsTick) > kNodeInfoMaxServeAgeTicks)) {
         TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not freshly observed, not responding", p->to);
         return false;
     }
@@ -1627,7 +1581,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         usedFallback
             ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
             : (cachedHasResponded &&
-               static_cast<uint8_t>(nodeInfoRespTickNow() - cachedRespTick) < kNodeInfoResponseThrottleRespTicks);
+               static_cast<uint8_t>(currentRespTick() - cachedRespTick) < kNodeInfoThrottleTicks);
     if (throttled) {
         TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x", p->to);
         return true;
@@ -1663,7 +1617,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     if (hasCachedUser) {
         TM_LOG_DEBUG("NodeInfo cache hit node=0x%08x age=%u obs-ticks src_ch=%u req_ch=%u", p->to,
-                     static_cast<unsigned>(static_cast<uint8_t>(nodeInfoObsTickNow() - cachedObsTick)),
+                     static_cast<unsigned>(static_cast<uint8_t>(currentObsTick() - cachedObsTick)),
                      static_cast<unsigned>(cachedSourceChannel), static_cast<unsigned>(p->channel));
     }
 
@@ -1699,7 +1653,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         concurrency::LockGuard guard(&cacheLock);
         NodeInfoPayloadEntry &e = nodeInfoPayload[cachedNodeInfoIndex];
         if (e.node == p->to) {
-            e.respTick = nodeInfoRespTickNow();
+            e.respTick = currentRespTick();
             e.hasResponded = true;
         }
     }

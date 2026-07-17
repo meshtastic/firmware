@@ -248,7 +248,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static constexpr uint16_t cacheSize() { return TRAFFIC_MANAGEMENT_CACHE_SIZE; }
 
     // NodeInfo cache configuration (PSRAM path): a flat PSRAM array of payload
-    // entries, linear scan keyed by `node`, tiered LRU eviction by retTick.
+    // entries, linear scan keyed by `node`, trust/membership-tiered LRU eviction on insert.
     // NodeInfo traffic is low-rate, so a full scan per lookup/insert is fine.
     static constexpr uint16_t kNodeInfoCacheEntries = 2000;
     static constexpr uint16_t nodeInfoTargetEntries() { return kNodeInfoCacheEntries; }
@@ -277,6 +277,25 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static uint8_t currentPosTick() { return static_cast<uint8_t>(clockMs() / kPosTimeTickMs); }
     static uint8_t currentRateTick() { return static_cast<uint8_t>((clockMs() / kRateTimeTickMs) & 0x0F); }
     static uint8_t currentUnknownTick() { return static_cast<uint8_t>((clockMs() / kUnknownTimeTickMs) & 0x0F); }
+
+    // NodeInfo cache ticks (same idiom, applied to NodeInfoPayloadEntry):
+    //   obsTick : uint8 (256 ticks x 3 min = 12.8 h period; serve window 6 h = 120 ticks, 2.1x margin)
+    //   respTick: uint8 (256 ticks x 5 s = 21.3 min period; throttle window 30 s = 6 ticks, 42x margin)
+    // Presence is an explicit bit per stamp (hasObserved / hasResponded), not a 0-sentinel;
+    // the 60 s maintenance sweep clears each bit once its window passes ("saturation"), so a
+    // stamp is never read anywhere near its aliasing horizon. +-1 tick granularity error
+    // (+-3 min on a 6 h gate, +-5 s on a 30 s throttle) is noise for these windows.
+    static constexpr uint32_t kNodeInfoObsTickMs = 180000UL; // 3 min/tick
+    static constexpr uint32_t kNodeInfoRespTickMs = 5000UL;  // 5 s/tick
+    static constexpr uint8_t kNodeInfoMaxServeAgeTicks = 120; // 6 h serve window
+    static constexpr uint8_t kNodeInfoThrottleTicks = 6;      // 30 s throttle window
+
+    static uint8_t currentObsTick() { return static_cast<uint8_t>(clockMs() / kNodeInfoObsTickMs); }
+    static uint8_t currentRespTick() { return static_cast<uint8_t>(clockMs() / kNodeInfoRespTickMs); }
+    static_assert(kNodeInfoMaxServeAgeTicks * kNodeInfoObsTickMs == 6UL * 60UL * 60UL * 1000UL,
+                  "cache serve window must equal the fallback path's 6 h");
+    static_assert(kNodeInfoThrottleTicks * kNodeInfoRespTickMs == 30UL * 1000UL,
+                  "cache throttle window must equal the fallback path's 30 s");
     // =========================================================================
     // Position Fingerprint
     // =========================================================================
@@ -315,25 +334,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // packet for this node. shouldRespondToNodeInfo() uses this metadata when
         // building spoofed replies for requesting clients.
 
-        // Free-running tick stamps (uint8 modular clocks, see kNodeInfo*TickMs in the .cpp -
+        // Free-running tick stamps (uint8 modular clocks, kNodeInfo*TickMs in the header -
         // same scheme as the UnifiedCache tick counters). Validity of obsTick/respTick is
         // carried by the hasObserved/hasResponded flag bits below, not a 0 sentinel; the
-        // maintenance sweep clears a flag once its window passes, so no stamp can age far
-        // enough for its modular compare to alias.
+        // maintenance sweep clears a flag once its window passes (saturation), so no stamp
+        // can age far enough for its modular compare to alias.
 
-        // When we last actually HEARD a NODEINFO_APP frame from this node (3-min ticks).
-        // Drives the replay staleness gate and nothing else - retention refresh never
-        // touches it, so a spoofed reply is only ever backed by genuine recent observation.
+        // Free-running tick (kNodeInfoObsTickMs) of the last genuinely HEARD NODEINFO frame
+        // from this node. Drives the replay staleness gate and the LRU age - seeding and
+        // write-through hooks never touch it, so a spoofed reply is only ever backed by
+        // genuine recent observation.
         uint8_t obsTick;
 
-        // When we last emitted a spoofed direct reply for this node (5-s ticks).
-        // Drives the per-target response throttle.
+        // Free-running tick (kNodeInfoRespTickMs) of the most recent spoofed direct reply
+        // we emitted for this node. Drives the per-target response throttle.
         uint8_t respTick;
-
-        // When this entry was last retained (1-h ticks): stamped on observation, and by the
-        // maintenance sweep for entries it keeps alive. Drives eviction (retention TTL)
-        // and the LRU age used by victim selection.
-        uint8_t retTick;
 
         // Channel where we most recently heard this node's NodeInfo.
         uint8_t sourceChannel;
@@ -373,11 +388,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // tier. copyUser()/name-rehydration require it; copyPublicKey() does not.
         uint8_t hasFullUser : 1;
 
-        // The node existed in NodeDB (hot store or warm tier) at the last maintenance
-        // sweep. Member entries are kept alive (retTick refreshed) and are the stickiest
-        // under LRU eviction, so the cache stays a superset of NodeDB's identities; when
-        // membership lapses the entry starts aging toward the normal retention TTL from
-        // its final member re-stamp. May be up to one sweep (60 s) stale.
+        // The node currently exists in NodeDB (hot store or warm tier), per the last
+        // maintenance-sweep membership check (may be up to one sweep / 60 s stale). Member
+        // entries are the stickiest under LRU eviction, keeping the cache a superset of
+        // NodeDB's identities; the bit itself is the keep-alive - nothing expires by TTL.
         uint8_t isMember : 1;
     };
     // The tick stamps, sourceChannel, decodedBitfield, and the 1-bit flags make up the
@@ -413,6 +427,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // One-shot guard: warm-start next-hop cache from NodeDB on first maintenance pass.
     bool nextHopPreloaded = false;
 
+    // Anti-entropy cadence for reconcileNodeInfoFromNodeDBLocked(): a full boot seed on the
+    // first maintenance pass (once nodeDB is ready), then one reconciliation per hour of
+    // sweeps. The write-through hooks give immediacy; this periodic repair self-heals
+    // anything they miss (boot ordering, a write path without a hook, future NodeDB paths).
+    static constexpr uint8_t kNodeInfoReconcileSweeps = 60; // sweeps between reconciliations (60 x 60 s = 1 h)
+    bool nodeInfoSeeded = false;
+    uint8_t sweepsSinceNodeInfoReconcile = 0;
+
     // =========================================================================
     // Cache Operations
     // =========================================================================
@@ -440,20 +462,25 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // NodeInfo cache operations (flat PSRAM payload array, linear scan)
     const NodeInfoPayloadEntry *findNodeInfoEntry(NodeNum node) const;
+    NodeInfoPayloadEntry *findNodeInfoEntryMutable(NodeNum node)
+    {
+        return const_cast<NodeInfoPayloadEntry *>(findNodeInfoEntry(node));
+    }
     // spareMembers: when creating would evict an isMember entry, return nullptr instead.
-    // The reconcile pass uses it so seeding one NodeDB-tier node never churns out another
-    // when the cache is smaller than hot+warm; the packet path leaves it false (a freshly
+    // The seeding pass uses it so seeding one NodeDB-tier node never churns out another
+    // when hot+warm exceeds the cache; the packet path leaves it false (a freshly
     // observed stranger may displace the LRU member - observed freshness has value).
     NodeInfoPayloadEntry *findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot, bool spareMembers = false);
     uint16_t countNodeInfoEntriesLocked() const;
 
-    // Anti-entropy pass called from the maintenance sweep, under cacheLock. Keeps the
-    // NodeInfo cache a superset of NodeDB's identities: ensures every hot-store / warm-tier
-    // node has an entry (seeding name/key/signer-provenance from whichever tier holds
-    // them), refreshes member entries' retTick (keep-alive) and isMember, and adopts
-    // NodeDB's key when a cached key conflicts with the authoritative one. Seeding never
-    // sets hasObserved, so it can never make a silent node servable by the replay path.
-    void reconcileNodeInfoMembershipLocked();
+    // Anti-entropy seeding, under cacheLock: walk the NodeDB hot store (full identity) and
+    // warm tier (key-only records) and upsert whatever this cache lacks, marking members
+    // and adopting NodeDB's key when a cached key conflicts with the authoritative one.
+    // Runs at boot and then hourly (kNodeInfoReconcileSweeps); the write-through hooks give
+    // immediacy in between, and per-entry membership refresh happens every sweep. Never
+    // sets hasObserved - seeding is knowledge, not observation, so it can never make a
+    // silent node servable by the replay path.
+    void reconcileNodeInfoFromNodeDBLocked();
     void cacheNodeInfoPacket(const meshtastic_MeshPacket &mp);
 
     // =========================================================================
