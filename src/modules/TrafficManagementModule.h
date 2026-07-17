@@ -265,28 +265,33 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
         // Cached decoded bitfield metadata from the source packet.
         // We preserve non-OK_TO_MQTT bits in direct replies when available.
-        bool hasDecodedBitfield;
         uint8_t decodedBitfield;
 
-        // Provenance of user.public_key: true once we have observed a NODEINFO_APP frame for
-        // this node whose XEdDSA signature we verified (mp.xeddsa_signed) - i.e. the key is
-        // proven to belong to a signer, not merely trust-on-first-use. Monotonic: once proven
-        // it stays proven for the life of the slot (the key-pin checks forbid the key changing
-        // underneath it). Used as a trust tier: proven keys are the stickiest under LRU
-        // eviction and are reported to copyPublicKey() consumers. A signature can only be
-        // verified against a key we already held, so a first-contact key is always TOFU
-        // (false) until a later signed frame upgrades it.
-        bool keySignerProven;
+        // Boolean flags, declared adjacent as 1-bit fields so the compiler packs them into a
+        // single byte, leaving 6 spare bits for future flags without growing the 2000-entry
+        // PSRAM array. Access is by name, exactly like plain bools.
+
+        // The source packet carried a decoded bitfield (so decodedBitfield is meaningful).
+        uint8_t hasDecodedBitfield : 1;
+
+        // Provenance of user.public_key: 1 once we have observed a NODEINFO_APP frame for this
+        // node whose XEdDSA signature we verified (directly via mp.xeddsa_signed, or inherited
+        // from NodeDB via isVerifiedSignerForKey) - i.e. the key is proven to belong to a
+        // signer, not merely trust-on-first-use. Monotonic: once set it stays set for the life
+        // of the slot (the key-pin checks forbid the key changing underneath it). Used as a
+        // trust tier: proven keys are the stickiest under LRU eviction and are reported to
+        // copyPublicKey() consumers. A signature can only be verified against a key we already
+        // held, so a first-contact key is always TOFU (0) until a later signed frame upgrades it.
+        uint8_t keySignerProven : 1;
     };
-    // sourceChannel + the two bools + decodedBitfield are four 1-byte fields that pack into a
-    // single 4-byte tail word (struct alignment is 4), so keySignerProven cost zero bytes - it
-    // fills what was padding. This holds only while the metadata past `user` stays within
-    // node(4) + three uint32 timestamps(12) + one tail word(4) = 20 bytes. The array is 2000
-    // entries in PSRAM, so a 5th trailing byte would open a fresh word (~8 KB). If this fires,
-    // pack new flags into a bit of the existing bytes (e.g. fold the bools into a flags byte)
-    // rather than adding a field.
+    // Tail metadata past `user` is node(4) + three uint32 timestamps(12) + one 4-byte word
+    // holding sourceChannel + decodedBitfield + the packed flag byte (+1 pad) = 20 bytes; the
+    // struct's 4-byte alignment rounds the three trailing bytes up to that word. New boolean
+    // flags must go in the spare bits above (6 left), not new fields: the array is 2000 entries
+    // in PSRAM, so a 4th trailing byte would open a fresh word (~8 KB). This assert fires if
+    // that happens.
     static_assert(sizeof(NodeInfoPayloadEntry) == sizeof(meshtastic_User) + 20,
-                  "NodeInfoPayloadEntry grew past its packed tail word - pack new flags into existing bytes");
+                  "NodeInfoPayloadEntry grew past its packed tail word - pack new flags into the spare flag bits");
 
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM (flat array, linear scan)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
