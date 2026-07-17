@@ -326,6 +326,33 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
 #endif
 }
 
+void TrafficManagementModule::purgeNode(NodeNum node)
+{
+    if (node == 0)
+        return;
+    concurrency::LockGuard guard(&cacheLock);
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    if (cache) {
+        for (uint16_t i = 0; i < cacheSize(); i++) {
+            if (cache[i].node == node) {
+                memset(&cache[i], 0, sizeof(UnifiedCacheEntry));
+                break; // a node occupies at most one unified slot
+            }
+        }
+    }
+#endif
+#if TMM_HAS_NODEINFO_CACHE
+    if (nodeInfoPayload) {
+        for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+            if (nodeInfoPayload[i].node == node) {
+                memset(&nodeInfoPayload[i], 0, sizeof(NodeInfoPayloadEntry));
+                break; // likewise unique in the NodeInfo cache
+            }
+        }
+    }
+#endif
+}
+
 void TrafficManagementModule::dropNodeInfoCacheForTest()
 {
 #if TMM_HAS_NODEINFO_CACHE

@@ -117,6 +117,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // No-op without the cache. Thread-safe (takes cacheLock).
     void onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown);
 
+    // Full-removal hook from NodeDB::removeNodeByNum(): an explicit removal must forget the
+    // node here too - the unified cache slot (role, next-hop hint, dedup/rate state) and the
+    // NodeInfo cache entry (name/key/provenance) - or these caches would keep serving the
+    // deleted identity (key pool, rehydration) and resurrect it on next contact. Passive
+    // NodeDB eviction never calls this; the reconcile sweep will not re-seed a node that is
+    // gone from both NodeDB tiers. Thread-safe (takes cacheLock).
+    void purgeNode(NodeNum node);
+
     /**
      * Check if this packet should have its hops exhausted.
      * Called from perhapsRebroadcast() to force hop_limit = 0 regardless of

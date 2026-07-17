@@ -1139,6 +1139,45 @@ static void test_tm_nodeinfo_updateUserHook_writesThrough(void)
 }
 
 /**
+ * Full removal: NodeDB::removeNodeByNum() must purge this module's caches too - both the
+ * NodeInfo identity entry (name/key) and the unified slot (next-hop hint etc.) - or the
+ * deleted identity would keep feeding the key pool and resurrect on next contact.
+ */
+static void test_tm_nodeinfo_removeNode_purgesCaches(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    mockNodeDB->warmStore.clear();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    trafficManagementModule = &module; // the NodeDB purge hook reaches the module via the global
+
+    // Learn an identity (observed frame) and a routing hint for the node.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "victim", 0x37));
+    module.setNextHop(kTargetNode, 0x42);
+    uint8_t key[32] = {0};
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, nullptr));
+    TEST_ASSERT_EQUAL_UINT8(0x42, module.getNextHopHint(kTargetNode));
+
+    mockNodeDB->removeNodeByNum(kTargetNode);
+
+    TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr));
+    TEST_ASSERT_EQUAL_UINT8(0, module.getNextHopHint(kTargetNode));
+
+    trafficManagementModule = nullptr;
+}
+
+/**
  * Membership keep-alive vs retention TTL: an entry whose node still lives in a NodeDB tier
  * is re-stamped by every sweep and outlives the 7-day retention window; a non-member entry
  * of the same age is evicted; and once membership lapses the survivor ages out too.
@@ -2497,6 +2536,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes);
     RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
     RUN_TEST(test_tm_nodeinfo_updateUserHook_writesThrough);
+    RUN_TEST(test_tm_nodeinfo_removeNode_purgesCaches);
     RUN_TEST(test_tm_nodeinfo_membership_keepAliveOutlivesRetention);
 #endif
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);

@@ -1632,6 +1632,12 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     // Explicit user removal: don't let the warm tier resurrect the node
     warmStore.remove(nodeNum);
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // Explicit removal is full removal: the TrafficManagement caches (unified slot +
+    // NodeInfo identity cache) must not keep serving or resurrect the node either.
+    if (trafficManagementModule)
+        trafficManagementModule->purgeNode(nodeNum);
+#endif
 
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveNodeDatabaseToDisk();
