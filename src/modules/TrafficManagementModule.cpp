@@ -744,8 +744,13 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     if (cfg.nodeinfo_direct_response_max_hops > 0 && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
         mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
         if (shouldRespondToNodeInfo(&mp, true)) {
+            // Unicast NodeInfo is never signed, so a known signer's identity claim here is
+            // unauthenticated: don't overwrite its stored name. The cached response is unaffected.
+            const meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
+            const bool unauthenticatedSigner = senderNode && nodeInfoLiteHasXeddsaSigned(senderNode) && !mp.xeddsa_signed;
             meshtastic_User requester = meshtastic_User_init_zero;
-            if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
+            if (!unauthenticatedSigner &&
+                pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
                 nodeDB->updateUser(getFrom(&mp), requester, mp.channel);
             }
             logAction("respond", &mp, "nodeinfo-cache");

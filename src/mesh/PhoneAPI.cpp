@@ -1697,6 +1697,19 @@ bool PhoneAPI::wasSeenRecently(uint32_t id)
     return false;
 }
 
+PhoneAPI::LocalAdminGate PhoneAPI::classifyLocalAdminPacket(const meshtastic_MeshPacket &p, bool adminAuthorized,
+                                                            meshtastic_AdminMessage &outAdmin)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
+        return LocalAdminGate::NotAdmin;
+    outAdmin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &outAdmin))
+        return LocalAdminGate::NotAdmin; // undecodable: let the normal reject path respond
+    if (outAdmin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag)
+        return LocalAdminGate::LockdownAuth; // the passphrase itself; authenticate regardless of prior state
+    return adminAuthorized ? LocalAdminGate::AuthorizedPassThrough : LocalAdminGate::DropUnauthorized;
+}
+
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
  */
@@ -1721,26 +1734,33 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     //       the gate here closes that race and covers H6/H7 from the
     //       audit: get_config_request and set_config from unauthed
     //       clients no longer reach AdminModule at all.
-    if (p.from == 0 && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p.decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
+    // Gate on the connection, not the wire `from`, which a client can forge to a non-zero value to
+    // bypass the check before MeshService normalizes it back to a local identity.
+    // Scope the decoded admin message: it holds the plaintext passphrase, so bound its lifetime.
+    {
         meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
-        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin)) {
-            if (admin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag) {
-                handleLockdownAuthInline(admin.lockdown_auth);
-                // Wipe the decoded passphrase scratch - the byte array in
-                // p.decoded.payload.bytes is wiped by handleLockdownAuthInline.
-                volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
-                for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
-                    adminVol[i] = 0;
-                return true;
-            }
-            if (!getAdminAuthorized()) {
-                LOG_WARN("Lockdown: dropping admin payload variant=%d from unauthorized connection", admin.which_payload_variant);
-                return false;
-            }
+        switch (classifyLocalAdminPacket(p, getAdminAuthorized(), admin)) {
+        case LocalAdminGate::LockdownAuth: {
+            handleLockdownAuthInline(admin.lockdown_auth);
+            // The encoded wipe is the security-critical one: nothing else clears the passphrase from
+            // the packet buffer. handleLockdownAuthInline already zeroes the decoded copy up to its
+            // size; re-zero the full scratch capacity here as defense in depth.
+            volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
+            for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
+                adminVol[i] = 0;
+            volatile uint8_t *encodedVol = const_cast<volatile uint8_t *>(p.decoded.payload.bytes);
+            for (size_t i = 0; i < sizeof(p.decoded.payload.bytes); i++)
+                encodedVol[i] = 0;
+            p.decoded.payload.size = 0; // keep the length consistent with the wiped buffer
+            return true;
         }
-        // pb_decode failure: fall through to normal handling so the
-        // regular Router/AdminModule reject path can respond.
+        case LocalAdminGate::DropUnauthorized:
+            LOG_WARN("Lockdown: dropping admin payload variant=%d from unauthorized connection", admin.which_payload_variant);
+            return false;
+        case LocalAdminGate::NotAdmin:
+        case LocalAdminGate::AuthorizedPassThrough:
+            break; // normal handling
+        }
     }
 #endif
 
