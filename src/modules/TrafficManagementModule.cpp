@@ -631,12 +631,17 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         TM_LOG_WARN("NodeInfo cache: incoming key matches owner, dropping 0x%08x", from);
         return;
     }
-    // Key pinning against the authoritative NodeDB key: once a 32-byte key is known for a
-    // node, refuse to cache a NodeInfo carrying a different (or missing) key. This is the
-    // same rule as NodeDB::updateUser() ("Public Key mismatch, dropping NodeInfo").
-    const meshtastic_NodeInfoLite *dbNode = nodeDB ? nodeDB->getMeshNode(from) : nullptr;
-    if (dbNode && dbNode->public_key.size == 32 &&
-        !pubKeysEqual(user.public_key.bytes, user.public_key.size, dbNode->public_key.bytes, dbNode->public_key.size)) {
+    // Key pinning against the authoritative NodeDB key - hot store, then warm tier: once a
+    // 32-byte key is known for a node, refuse to cache a NodeInfo carrying a different (or
+    // missing) key. This is the same rule as NodeDB::updateUser() ("Public Key mismatch,
+    // dropping NodeInfo") - and the same coverage: updateUser's pin sees warm-tier keys
+    // because getOrCreateMeshNode() rehydrates them before the check runs, so this pin must
+    // consult the warm tier too. Checking only the hot store would let an attacker seed this
+    // cache with a bogus key for a warm-evicted node, and the TOFU pin below would then lock
+    // the genuine node's frames out until the entry ages away.
+    meshtastic_NodeInfoLite_public_key_t dbKey = {0, {0}};
+    if (nodeDB && nodeDB->copyPublicKeyAuthoritative(from, dbKey) &&
+        !pubKeysEqual(user.public_key.bytes, user.public_key.size, dbKey.bytes, dbKey.size)) {
         TM_LOG_WARN("NodeInfo cache: public key mismatch vs NodeDB, dropping 0x%08x", from);
         return;
     }

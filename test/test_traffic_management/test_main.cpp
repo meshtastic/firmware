@@ -944,6 +944,48 @@ static void test_tm_nodeinfo_cache_rejectsMismatchedKey(void)
     TEST_ASSERT_EQUAL_UINT8(0x11, served.public_key.bytes[31]);
 }
 
+#if WARM_NODE_COUNT > 0
+/**
+ * Verify the NodeInfo cache pin also covers the WARM tier: for a node evicted from the hot
+ * store whose key lives only in the warm tier (and whose cache slot is empty), a NodeInfo
+ * carrying a different key must be rejected, and one carrying the warm key accepted.
+ * Important: with a hot-store-only pin, an attacker could seed this cache with a bogus key
+ * for a warm-evicted node; the cache's own TOFU pin would then lock the genuine node's
+ * frames out until the poisoned entry aged away.
+ */
+static void test_tm_nodeinfo_cache_pinsAgainstWarmTierKey(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode(); // hot store misses...
+    uint8_t warmKey[32];
+    memset(warmKey, 0x55, 32);
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey); // ...but the warm tier holds the key
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    // Poisoning attempt with a key that mismatches the warm tier: must not be cached.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "attacker", 0x66));
+    uint8_t out[32] = {0};
+    TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, out, nullptr));
+
+    // The genuine key (matching the warm tier) is accepted.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x55));
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, out, nullptr));
+    TEST_ASSERT_EQUAL_UINT8(0x55, out[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x55, out[31]);
+
+    mockNodeDB->warmStore.clear();
+}
+#endif // WARM_NODE_COUNT > 0
+
 /**
  * Feature #2: a key learned from an (unsigned) NodeInfo is served by copyPublicKey() as a
  * trust-on-first-use key, so it can extend the encryption pool. signerProven must be false.
@@ -2250,6 +2292,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_tm_nodeinfo_cache_rejectsMismatchedKey);
+#if WARM_NODE_COUNT > 0
+    RUN_TEST(test_tm_nodeinfo_cache_pinsAgainstWarmTierKey);
+#endif
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_missReturnsFalse);

@@ -3717,7 +3717,7 @@ uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
     return 0;
 }
 
-bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+bool NodeDB::copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
 {
     const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (info && info->public_key.size == 32) {
@@ -3730,6 +3730,13 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
         return true;
     }
 #endif
+    return false;
+}
+
+bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    if (copyPublicKeyAuthoritative(n, out))
+        return true;
 #if HAS_TRAFFIC_MANAGEMENT
     // Last resort: a key the TrafficManagement NodeInfo cache learned from an observed frame
     // for a node no longer in either NodeDB tier. This extends the pool of peers we can

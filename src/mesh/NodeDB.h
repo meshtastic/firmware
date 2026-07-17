@@ -360,6 +360,15 @@ class NodeDB
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
+    /// Copy the 32-byte public key for node n from the AUTHORITATIVE NodeDB tiers only
+    /// (hot store, then warm tier) - never from opportunistic caches. This is the pin
+    /// reference for caches that mirror NodeDB's key hygiene (e.g. TrafficManagement's
+    /// NodeInfo cache): pinning against copyPublicKey() would compare such a cache
+    /// against its own contents. Matches the coverage of updateUser()'s own pin, which
+    /// sees warm keys because getOrCreateMeshNode() rehydrates them before the check.
+    /// Returns false if neither tier knows a key for n.
+    bool copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
     // True if node `n` is a known XEdDSA signer for exactly the 32-byte key `key32`, per either
     // NodeDB tier: the hot store's signed bitfield or the warm tier's cached signer bit. The
     // key must match so a rotated/mismatched key never inherits a stale signer verdict. Lets
