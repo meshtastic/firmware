@@ -129,7 +129,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (messageIsResponse(r)) {
         // Only accept a response from a remote we sent the matching request to. from == 0 is a
         // local client, which PhoneAPI has already gated.
-        if (mp.from != 0 && !responseIsSolicited(mp, r->which_payload_variant)) {
+        const pb_size_t moduleConfigTag = r->which_payload_variant == meshtastic_AdminMessage_get_module_config_response_tag
+                                              ? r->get_module_config_response.which_payload_variant
+                                              : 0;
+        if (mp.from != 0 && !responseIsSolicited(mp, r->which_payload_variant, moduleConfigTag)) {
             LOG_INFO("Ignore admin response from 0x%08x, no outstanding request", mp.from);
             return handled;
         }
@@ -1873,22 +1876,14 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
 
     const bool keyValid = p.pki_encrypted && p.public_key.size == 32;
 
-    // One entry per (node, response variant, pinning). Refresh an identical outstanding request
-    // rather than duplicate it (a client may fetch several config subtypes, all answered by one
-    // response variant); else take a free slot, else evict the oldest (rollover-safe elapsed).
+    // One entry per request (a client sends N indexed get_channel requests, each answered once, so
+    // entries must not merge). Free slot, else evict the oldest by rollover-safe elapsed time.
     OutstandingAdminRequest *slot = nullptr;
     for (auto &o : outstandingAdminRequests)
-        if (o.to == p.to && o.expectedResponse == responseVariant && o.keyValid == keyValid &&
-            (!keyValid || memcmp(o.key, p.public_key.bytes, 32) == 0)) {
+        if (o.to == 0) {
             slot = &o;
             break;
         }
-    if (!slot)
-        for (auto &o : outstandingAdminRequests)
-            if (o.to == 0) {
-                slot = &o;
-                break;
-            }
     if (!slot) {
         const uint32_t now = millis();
         slot = &outstandingAdminRequests[0];
@@ -1900,6 +1895,9 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     slot->to = p.to;
     slot->sentAtMs = millis();
     slot->expectedResponse = responseVariant;
+    slot->moduleConfigType = admin.which_payload_variant == meshtastic_AdminMessage_get_module_config_request_tag
+                                 ? (uint8_t)admin.get_module_config_request
+                                 : 0;
     slot->keyValid = keyValid;
     if (keyValid)
         memcpy(slot->key, p.public_key.bytes, 32);
@@ -1908,7 +1906,7 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     LOG_DEBUG("Admin request sent to 0x%08x, expecting its response", p.to);
 }
 
-bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant)
+bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant, pb_size_t moduleConfigTag)
 {
     // Scan every entry: several requests for the same variant may differ only in pinning, and an
     // unpinned one still authorizes the response even if a pinned one does not.
@@ -1922,6 +1920,12 @@ bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t
         // A request pinned to a PKC key must be answered over PKC by that same key.
         if (o.keyValid && (!mp.pki_encrypted || mp.public_key.size != 32 || memcmp(mp.public_key.bytes, o.key, 32) != 0))
             continue;
+        // remote_hardware is the only module config that mutates state (the pin table), so require
+        // it to answer a request for that exact subtype, not just any get_module_config_request.
+        if (moduleConfigTag == meshtastic_ModuleConfig_remote_hardware_tag &&
+            o.moduleConfigType != meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG)
+            continue;
+        o.to = 0; // consume: one request authorizes one response, no replay within the window
         return true;
     }
     return false;

@@ -98,11 +98,12 @@ static meshtastic_MeshPacket makeOutgoingRequest(NodeNum to, const meshtastic_Ad
     return p;
 }
 
-static meshtastic_MeshPacket makeOutgoingModuleConfigRequest(NodeNum to)
+static meshtastic_MeshPacket makeOutgoingModuleConfigRequest(
+    NodeNum to, meshtastic_AdminMessage_ModuleConfigType type = meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG)
 {
     meshtastic_AdminMessage req = meshtastic_AdminMessage_init_zero;
     req.which_payload_variant = meshtastic_AdminMessage_get_module_config_request_tag;
-    req.get_module_config_request = meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG;
+    req.get_module_config_request = type;
     return makeOutgoingRequest(to, req);
 }
 
@@ -253,13 +254,14 @@ void test_local_security_config_keeps_private_key(void)
 // request we sent is the only thing vouching for it. A get_module_config_response from a node we
 // never queried is not.
 static constexpr pb_size_t MODULE_CONFIG_RESPONSE = meshtastic_AdminMessage_get_module_config_response_tag;
+static constexpr pb_size_t REMOTE_HW_TAG = meshtastic_ModuleConfig_remote_hardware_tag; // makeModuleConfigResponse subtype
 
 void test_unsolicited_response_is_not_solicited(void)
 {
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
 
-    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE),
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
                               "a response nobody asked for must not be accepted");
 }
 
@@ -272,7 +274,7 @@ void test_response_after_our_request_is_solicited(void)
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
 
-    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE),
+    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
                              "the answer to our own request must be accepted");
 }
 
@@ -284,7 +286,7 @@ void test_request_to_one_node_does_not_admit_another(void)
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // answered by someone else
 
-    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE));
+    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
 }
 
 // A response only answers its own request type: a get_owner_request does not admit a
@@ -298,10 +300,10 @@ void test_response_variant_must_match_request(void)
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // wrong type for the request
 
-    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE),
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
                               "a get_owner request must not admit a get_module_config response");
     // ...but the response it actually asked for is still accepted from the same slot.
-    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, meshtastic_AdminMessage_get_owner_response_tag));
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, meshtastic_AdminMessage_get_owner_response_tag, 0));
 }
 
 // Regression: each request keeps its own pinned key. A later unpinned request to the same node
@@ -329,17 +331,46 @@ void test_pinned_request_keeps_its_key_after_an_unpinned_request(void)
     meshtastic_MeshPacket resp = makeModuleConfigResponse(STRANGER_NODE, m); // from set; pki off by default
 
     // A plaintext get_config_response is still rejected: the config request was pinned.
-    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag),
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag, 0),
                               "an unpinned request must not relax an earlier request's key pin");
     // Over PKC with the pinned key it is accepted.
     resp.pki_encrypted = true;
     resp.public_key.size = 32;
     memcpy(resp.public_key.bytes, key, 32);
-    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag));
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag, 0));
     // The unpinned get_owner_response is accepted in plaintext (its request carried no pin).
     resp.pki_encrypted = false;
     resp.public_key.size = 0;
-    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_owner_response_tag));
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_owner_response_tag, 0));
+}
+
+// A remote_hardware response must answer a request for that exact subtype, not just any module
+// config - else an MQTT-config request could authorize a pin-table update.
+void test_module_config_subtype_must_match(void)
+{
+    admin->noteOutgoingAdminRequest(
+        makeOutgoingModuleConfigRequest(STRANGER_NODE, meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m); // remote_hardware subtype
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a non-remote-hardware request must not admit a remote_hardware response");
+
+    // Control: a request for the matching subtype does admit it.
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(STRANGER_NODE));
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
+}
+
+// A matched request is consumed, so a node cannot replay a state-mutating response within the window.
+void test_response_is_consumed_no_replay(void)
+{
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(STRANGER_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+    TEST_ASSERT_TRUE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a second copy of an already-answered response must be rejected");
 }
 
 // Only requests arm the gate: sending a setter to a node must not make it a trusted responder.
@@ -352,7 +383,7 @@ void test_outgoing_setter_does_not_admit_responses(void)
     meshtastic_AdminMessage m;
     meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
 
-    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE));
+    TEST_ASSERT_FALSE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG));
 }
 
 // End to end through the real handler: an unsolicited get_module_config_response must not reach
@@ -405,6 +436,8 @@ void setup()
     RUN_TEST(test_request_to_one_node_does_not_admit_another);
     RUN_TEST(test_response_variant_must_match_request);
     RUN_TEST(test_pinned_request_keeps_its_key_after_an_unpinned_request);
+    RUN_TEST(test_module_config_subtype_must_match);
+    RUN_TEST(test_response_is_consumed_no_replay);
     RUN_TEST(test_outgoing_setter_does_not_admit_responses);
     RUN_TEST(test_unsolicited_response_does_not_poison_pins);
     RUN_TEST(test_solicited_response_updates_pins);

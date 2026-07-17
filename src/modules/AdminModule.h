@@ -82,23 +82,24 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void noteOutgoingAdminRequest(const meshtastic_MeshPacket &p);
 
   private:
-    // An admin response carries no session passkey and its sender is not an admin-key holder, so a
-    // request we sent is the only thing vouching for it. Track each request independently - its own
-    // expiry window and pinned key - so a later request to the same node can neither extend an
-    // earlier one's window nor relax its PKC pin.
+    // An admin response has no session passkey and its sender need not hold an admin key, so a
+    // request we sent is the only thing vouching for it. Track each request independently (its own
+    // expiry and pinned key) so a later one can't extend or relax an earlier one.
     static constexpr size_t kOutstandingAdminRequests = 8;
     static constexpr uint32_t kOutstandingAdminRequestMs = 300 * 1000; // same window as the session passkey
     struct OutstandingAdminRequest {
         NodeNum to;                 // 0 = free slot
         uint32_t sentAtMs;          // millis() when this request went out
         pb_size_t expectedResponse; // the one response variant this request authorizes
+        uint8_t moduleConfigType;   // for get_module_config_request: which ModuleConfigType we asked
         uint8_t key[32];            // pinned destination key when the request went out over PKC
         bool keyValid;
     };
     OutstandingAdminRequest outstandingAdminRequests[kOutstandingAdminRequests] = {};
 
-    /// Whether a response of variant responseVariant from mp.from answers a request we sent it.
-    bool responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant);
+    /// Whether a response (variant responseVariant, module-config subtype moduleConfigTag or 0)
+    /// from mp.from answers a request we sent; consumes the matched request so it can't be replayed.
+    bool responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant, pb_size_t moduleConfigTag);
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);
