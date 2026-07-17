@@ -1,6 +1,7 @@
 #include "AdminModule.h"
 #include "Channels.h"
 #include "DisplayFormatters.h"
+#include "HardwareRNG.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
@@ -47,6 +48,8 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+
+#include <RNG.h> // CryptRNG, the seeded CSPRNG used as fallback for the session passkey
 
 #if MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
@@ -1784,9 +1787,10 @@ AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_AP
 void AdminModule::setPassKey(meshtastic_AdminMessage *res)
 {
     if (session_time == 0 || millis() / 1000 > session_time + 150) {
-        for (int i = 0; i < 8; i++) {
-            session_passkey[i] = random();
-        }
+        // Session passkey authenticates admin replies, so it must be unpredictable: prefer the
+        // hardware RNG, falling back to the seeded CSPRNG only when no hardware source exists.
+        if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
+            CryptRNG.rand(session_passkey, sizeof(session_passkey));
         session_time = millis() / 1000;
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
