@@ -579,6 +579,34 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
     }
 #endif
 
+    // Membership refresh (owned by this hourly pass; per-minute per-entry NodeDB lookups in
+    // the sweep were O(entries x members) under cacheLock). Runs AFTER seeding so the upsert
+    // pass still sees last pass's bits for its spareMembers protection, then: clear all bits,
+    // re-mark from both tiers. Keyless warm records mark membership here even though they had
+    // nothing to seed. isMember may now lag a passive NodeDB eviction by up to an hour (the
+    // entry just stays LRU-sticky slightly longer); the write-through hooks keep additions
+    // immediate, and explicit removals stay immediate via purgeNode().
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++)
+        nodeInfoPayload[i].isMember = false;
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *info = nodeDB->getMeshNodeByIndex(i);
+        if (!info || info->num == 0)
+            continue;
+        NodeInfoPayloadEntry *entry = findNodeInfoEntryMutable(info->num);
+        if (entry)
+            entry->isMember = true;
+    }
+#if WARM_NODE_COUNT > 0
+    for (size_t i = 0; i < nodeDB->warmStore.capacity(); i++) {
+        const WarmNodeEntry *warm = nodeDB->warmStore.entryAt(i);
+        if (!warm)
+            continue;
+        NodeInfoPayloadEntry *entry = findNodeInfoEntryMutable(warm->num);
+        if (entry)
+            entry->isMember = true;
+    }
+#endif
+
     if (seeded)
         TM_LOG_INFO("NodeInfo cache reconciled: %u seeded from NodeDB, %u/%u total", static_cast<unsigned>(seeded),
                     static_cast<unsigned>(countNodeInfoEntriesLocked()), static_cast<unsigned>(nodeInfoTargetEntries()));
@@ -605,14 +633,9 @@ void TrafficManagementModule::maintainNodeInfoCacheLocked()
         }
         if (entry.hasResponded && static_cast<uint8_t>(nowResp - entry.respTick) >= kNodeInfoThrottleTicks)
             entry.hasResponded = false;
-        // Refresh membership: the bit keeps NodeDB-present nodes stickiest under LRU, and
-        // its clearing is what lets a fully forgotten node become evictable again.
-        bool member = nodeDB && nodeDB->getMeshNode(entry.node) != nullptr;
-#if WARM_NODE_COUNT > 0
-        if (!member && nodeDB)
-            member = nodeDB->warmStore.contains(entry.node);
-#endif
-        entry.isMember = member;
+        // Membership is NOT refreshed here: a per-entry NodeDB lookup would be
+        // O(entries x members) every 60 s under cacheLock. The hourly reconcile pass
+        // owns it (see reconcileNodeInfoFromNodeDBLocked).
     }
     TM_LOG_DEBUG("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
                  static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoSaturated));

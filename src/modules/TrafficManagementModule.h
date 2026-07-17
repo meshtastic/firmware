@@ -287,8 +287,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // than a key-only warm-tier record. copyUser()/name-rehydration require it.
         uint8_t hasFullUser : 1;
 
-        // Node currently exists in NodeDB (hot or warm), per the last sweep's membership check.
-        // Member entries are stickiest under LRU; the bit is the keep-alive (no TTL).
+        // Node currently exists in NodeDB (hot or warm), per the last hourly reconcile pass
+        // (write-through hooks set it immediately on commit; purgeNode clears immediately on
+        // removal; a passive NodeDB eviction may lag up to an hour). Member entries are
+        // stickiest under LRU; the bit is the keep-alive (no TTL).
         uint8_t isMember : 1;
     };
     // No exact-size static_assert: sizeof(meshtastic_User) and its padding vary by platform, so
@@ -353,15 +355,18 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     uint16_t countNodeInfoEntriesLocked() const;
 
     /// 60 s NodeInfo-cache maintenance under cacheLock: saturate expired tick stamps (the
-    /// wrap-safety guarantee for the modular obs/resp clocks), refresh NodeDB membership, and
-    /// run the boot/hourly reconcile. Guarded by TMM_HAS_NODEINFO_CACHE alone - never by the
-    /// unified cache size - so a build with only this cache still maintains it (the caches are
-    /// compile-time independent; see purgeAll()).
+    /// wrap-safety guarantee for the modular obs/resp clocks) and run the boot/hourly
+    /// reconcile. Guarded by TMM_HAS_NODEINFO_CACHE alone - never by the unified cache size -
+    /// so a build with only this cache still maintains it (the caches are compile-time
+    /// independent; see purgeAll()).
     void maintainNodeInfoCacheLocked();
 
     /// Anti-entropy seeding under cacheLock: upsert hot-store identities and warm-tier key-only
     /// records this cache lacks. Never sets hasObserved - seeding is knowledge, not observation,
-    /// so it can never make a silent node servable by the replay path.
+    /// so it can never make a silent node servable by the replay path. Also owns the isMember
+    /// refresh (clear-all, then re-mark from both NodeDB tiers) - membership therefore lags a
+    /// passive NodeDB eviction by up to an hour, while the write-through hooks and purgeNode()
+    /// keep additions and explicit removals immediate.
     void reconcileNodeInfoFromNodeDBLocked();
     /// Learn an observed NODEINFO frame into the cache (key hygiene + provenance rules apply).
     void cacheNodeInfoPacket(const meshtastic_MeshPacket &mp);
