@@ -26,6 +26,7 @@
 #endif
 
 #include "Default.h"
+#include "GpsProfile.h"
 #include "TypeConversions.h"
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -671,6 +672,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
         }
         config.position = c.payload_variant.position;
+        if (GpsProfile::apply(config.position)) {
+            LOG_INFO("Applied GPS profile %d", config.position.gps_profile);
+        }
 
         // Save nodedb as well in case we got a fixed position packet
         break;

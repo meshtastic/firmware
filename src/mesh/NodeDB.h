@@ -233,7 +233,7 @@ class NodeDB
      */
     size_t getNumOnlineMeshNodes(bool localOnly = false);
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
+    void initConfigIntervals(), initConfigGPS(), initModuleConfigIntervals(), resetNodes(bool keepFavorites = false),
         removeNodeByNum(NodeNum nodeNum);
 
     bool factoryReset(bool eraseBleBonds = false);
