@@ -10,6 +10,7 @@
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
+#include <Throttle.h>
 #include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "MeshtasticOTA.h"
@@ -125,9 +126,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 #endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
-    // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
-    // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
+        // Only accept a response from a remote we sent the matching request to. from == 0 is a
+        // local client, which PhoneAPI has already gated.
+        const pb_size_t moduleConfigTag = r->which_payload_variant == meshtastic_AdminMessage_get_module_config_response_tag
+                                              ? r->get_module_config_response.which_payload_variant
+                                              : 0;
+        if (mp.from != 0 && !responseIsSolicited(mp, r->which_payload_variant, moduleConfigTag)) {
+            LOG_INFO("Ignore admin response from 0x%08x, no outstanding request", mp.from);
+            return handled;
+        }
         LOG_DEBUG("Allow admin response message");
     } else if (mp.from == 0) {
         // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
@@ -472,8 +480,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_get_module_config_response_tag: {
         LOG_INFO("Client received a get_module_config response");
-        if (fromOthers && r->get_module_config_response.which_payload_variant ==
-                              meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
+        // which_payload_variant is the ModuleConfig oneof tag, so compare against that tag, not the
+        // AdminMessage ModuleConfigType enum (whose REMOTEHARDWARE value is a different number).
+        if (fromOthers && r->get_module_config_response.which_payload_variant == meshtastic_ModuleConfig_remote_hardware_tag) {
             handleGetModuleConfigResponse(mp, r);
         }
         break;
@@ -1819,6 +1828,107 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+// The response variant that answers a getter request, or 0 if the request has none.
+static pb_size_t adminResponseForRequest(pb_size_t requestVariant)
+{
+    switch (requestVariant) {
+    case meshtastic_AdminMessage_get_channel_request_tag:
+        return meshtastic_AdminMessage_get_channel_response_tag;
+    case meshtastic_AdminMessage_get_owner_request_tag:
+        return meshtastic_AdminMessage_get_owner_response_tag;
+    case meshtastic_AdminMessage_get_config_request_tag:
+        return meshtastic_AdminMessage_get_config_response_tag;
+    case meshtastic_AdminMessage_get_module_config_request_tag:
+        return meshtastic_AdminMessage_get_module_config_response_tag;
+    case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
+        return meshtastic_AdminMessage_get_canned_message_module_messages_response_tag;
+    case meshtastic_AdminMessage_get_device_metadata_request_tag:
+        return meshtastic_AdminMessage_get_device_metadata_response_tag;
+    case meshtastic_AdminMessage_get_ringtone_request_tag:
+        return meshtastic_AdminMessage_get_ringtone_response_tag;
+    case meshtastic_AdminMessage_get_device_connection_status_request_tag:
+        return meshtastic_AdminMessage_get_device_connection_status_response_tag;
+    case meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag:
+        return meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag;
+    case meshtastic_AdminMessage_get_ui_config_request_tag:
+        return meshtastic_AdminMessage_get_ui_config_response_tag;
+    default:
+        return 0;
+    }
+}
+
+void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
+        return;
+    // Local admin is answered in-process, and a broadcast is never a request to one remote.
+    if (p.to == 0 || isBroadcast(p.to) || p.to == nodeDB->getNodeNum())
+        return;
+
+    meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
+        return;
+    const pb_size_t responseVariant = adminResponseForRequest(admin.which_payload_variant);
+    if (!responseVariant)
+        return; // not a getter whose response we can pair
+
+    const bool keyValid = p.pki_encrypted && p.public_key.size == 32;
+
+    // One entry per request (a client sends N indexed get_channel requests, each answered once, so
+    // entries must not merge). Free slot, else evict the oldest by rollover-safe elapsed time.
+    OutstandingAdminRequest *slot = nullptr;
+    for (auto &o : outstandingAdminRequests)
+        if (o.to == 0) {
+            slot = &o;
+            break;
+        }
+    if (!slot) {
+        const uint32_t now = millis();
+        slot = &outstandingAdminRequests[0];
+        for (auto &o : outstandingAdminRequests)
+            if ((uint32_t)(now - o.sentAtMs) > (uint32_t)(now - slot->sentAtMs))
+                slot = &o;
+    }
+
+    slot->to = p.to;
+    slot->sentAtMs = millis();
+    slot->expectedResponse = responseVariant;
+    slot->moduleConfigType = admin.which_payload_variant == meshtastic_AdminMessage_get_module_config_request_tag
+                                 ? (uint8_t)admin.get_module_config_request
+                                 : 0;
+    slot->keyValid = keyValid;
+    if (keyValid)
+        memcpy(slot->key, p.public_key.bytes, 32);
+    else
+        memset(slot->key, 0, 32);
+    LOG_DEBUG("Admin request sent to 0x%08x, expecting its response", p.to);
+}
+
+bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant, pb_size_t moduleConfigTag)
+{
+    // Scan every entry: several requests for the same variant may differ only in pinning, and an
+    // unpinned one still authorizes the response even if a pinned one does not.
+    for (auto &o : outstandingAdminRequests) {
+        if (o.to != mp.from || o.expectedResponse != responseVariant)
+            continue;
+        if (!Throttle::isWithinTimespanMs(o.sentAtMs, kOutstandingAdminRequestMs)) {
+            o.to = 0; // lapsed; free the slot and keep looking for another live match
+            continue;
+        }
+        // A request pinned to a PKC key must be answered over PKC by that same key.
+        if (o.keyValid && (!mp.pki_encrypted || mp.public_key.size != 32 || memcmp(mp.public_key.bytes, o.key, 32) != 0))
+            continue;
+        // remote_hardware is the only module config that mutates state (the pin table), so require
+        // it to answer a request for that exact subtype, not just any get_module_config_request.
+        if (moduleConfigTag == meshtastic_ModuleConfig_remote_hardware_tag &&
+            o.moduleConfigType != meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG)
+            continue;
+        o.to = 0; // consume: one request authorizes one response, no replay within the window
+        return true;
+    }
+    return false;
 }
 
 bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)

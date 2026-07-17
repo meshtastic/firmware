@@ -17,6 +17,7 @@
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
@@ -259,6 +260,14 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                   const StoredMessage &sm = messageStore.addFromPacket(p);
                   graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
               })
+#if !MESHTASTIC_EXCLUDE_ADMIN
+    // Note admin requests on their way out: AdminModule only accepts a response from a remote we
+    // actually asked. Runs before encryption, while the payload is still readable.
+    if (adminModule && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        p.decoded.portnum == meshtastic_PortNum_ADMIN_APP)
+        adminModule->noteOutgoingAdminRequest(p);
+#endif
+
     // Send the packet into the mesh
     DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
