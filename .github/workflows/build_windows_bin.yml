@@ -35,12 +35,18 @@ jobs:
           persist-credentials: false
 
       - name: Setup MSYS2 / UCRT64
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
           update: true
           # argp is deliberately absent here - it is not packaged for MSYS2's
           # mingw environments and is built from source below.
+          #
+          # Python is deliberately absent too: MSYS2's interpreter reports a
+          # `mingw` platform tag, so no PyPI wheel matches it and pip builds
+          # every dependency from source. PlatformIO runs under the runner's
+          # CPython instead (see below); MSYS2 only supplies the toolchain.
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkgconf
@@ -51,9 +57,12 @@ jobs:
             mingw-w64-ucrt-x86_64-libusb
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-python
-            mingw-w64-ucrt-x86_64-python-pip
             git
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
 
       # framework-portduino's Arduino.h includes <argp.h> and its main.cpp calls
       # argp_parse(). glibc has argp built in and macOS gets it from
@@ -71,21 +80,25 @@ jobs:
           cp build/src/libargp-standalone.a /ucrt64/lib/libargp.a
 
       - name: Install PlatformIO
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
           pip install platformio
 
       - name: Get release version string
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        shell: pwsh
         id: version
+        run: echo "long=$(python ./bin/buildinfo.py long)" >> $env:GITHUB_OUTPUT
 
+      # Runs outside the MSYS2 shell so PlatformIO stays on the runner's
+      # CPython; the UCRT64 toolchain is reached through PATH instead.
       - name: Build for Windows
-        run: platformio run -e native-windows
+        shell: pwsh
+        run: |
+          $env:PATH = "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin;$env:PATH"
+          platformio run -e native-windows
         env:
           PKG_VERSION: ${{ steps.version.outputs.long }}
-        # Errors in this step should not fail the entire workflow while Windows
-        # support is in development (mirrors the macOS job).
-        continue-on-error: true
 
       - name: List output files
         run: ls -lah .pio/build/native-windows/
@@ -94,16 +107,24 @@ jobs:
       # DLLs. A third-party DLL appearing here means the static link regressed
       # and the artifact would need those DLLs shipped alongside it.
       - name: Verify the binary is self-contained
-        continue-on-error: true
         run: |
-          objdump -p .pio/build/native-windows/meshtasticd.exe \
-            | grep -i 'DLL Name' \
-            | grep -viE 'api-ms-win|KERNEL32|WS2_32|ADVAPI32|USER32|msvcrt|bcrypt|IPHLPAPI|SHELL32|ole32|CRYPT32|SETUPAPI|CFGMGR32|WINMM|dbghelp' \
-            && { echo "::error::meshtasticd.exe has non-system DLL dependencies (static link regressed)"; exit 1; } \
-            || echo "OK: no third-party DLL dependencies"
+          set -euo pipefail
+          bin=.pio/build/native-windows/meshtasticd.exe
+          test -f "$bin"
+          # `|| true` keeps grep's no-match exit out of `set -e`, so an empty
+          # import table is caught below rather than passing as "no deps".
+          deps=$(objdump -p "$bin" | grep -i 'DLL Name' || true)
+          test -n "$deps"
+          extra=$(printf '%s\n' "$deps" \
+            | grep -viE 'api-ms-win|KERNEL32|WS2_32|ADVAPI32|USER32|msvcrt|bcrypt|IPHLPAPI|SHELL32|ole32|CRYPT32|SETUPAPI|CFGMGR32|WINMM|dbghelp' || true)
+          if [ -n "$extra" ]; then
+            printf '%s\n' "$extra"
+            echo "::error::meshtasticd.exe has non-system DLL dependencies (static link regressed)"
+            exit 1
+          fi
+          echo "OK: no third-party DLL dependencies"
 
       - name: Smoke test the binary
-        continue-on-error: true
         run: |
           .pio/build/native-windows/meshtasticd.exe --version
 
