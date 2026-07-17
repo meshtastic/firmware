@@ -100,6 +100,7 @@ class ScanI2C
         SCD30,
         ADS1115,
         SPA06,
+        HM330X
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
