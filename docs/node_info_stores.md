@@ -2,13 +2,17 @@
 
 This document is an overview of the node-identity and traffic-state databases that the
 TrafficManagementModule (TMM) either owns or leans on. There are four stores in play,
-ordered here as a node's identity flows through them:
+but only three form the identity lookup chain:
 
-1. **NodeDB hot store** - the authoritative `NodeInfoLite` array.
-2. **Warm tier** (`WarmNodeStore`) - minimal persisted records for hot-store evictees.
-3. **TMM unified cache** (base) - TMM's own flat 10-byte-per-node traffic-shaping state.
-4. **TMM NodeInfo payload cache** (extended) - the ephemeral third identity tier: full
+1. **NodeDB hot store** - the authoritative `NodeInfoLite` array (identity tier 1).
+2. **Warm tier** (`WarmNodeStore`) - minimal persisted records for hot-store evictees
+   (identity tier 2).
+3. **TMM NodeInfo payload cache** (extended) - the ephemeral **third identity tier**: full
    `User` payloads plus direct-response metadata, in PSRAM.
+
+The fourth store, the **TMM unified cache** (base - flat 10-byte-per-node traffic-shaping
+state), is not part of that chain: it sits beside it, keyed by the same NodeNum, and only
+its 4-bit cached role acts as a final fallback when all three identity tiers miss.
 
 Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
 `src/modules/TrafficManagementModule.{h,cpp}`, sizing in `src/mesh/mesh-pb-constants.h`.
@@ -17,9 +21,10 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
 
 ## 1. NodeDB hot store (authoritative)
 
-- **What:** the classic `meshNodes` array of `meshtastic_NodeInfoLite` - full identity
-  (names, role, position, telemetry pointers, public key, bitfield flags such as
-  `HAS_XEDDSA_SIGNED`). Everything else in this document is a cache or a fallback for it.
+- **What:** the classic `meshNodes` array of `meshtastic_NodeInfoLite` - full identity as
+  flattened fields (names, role, public key, bitfield flags such as `HAS_XEDDSA_SIGNED`;
+  position/telemetry live in satellite stores reached via copy-out accessors, not nested
+  members). Everything else in this document is a cache or a fallback for it.
 - **Capacity:** `MAX_NUM_NODES`, per platform - 250 on native, 120 on nRF52840/generic
   ESP32, 10 on STM32WL (see `mesh-pb-constants.h`).
 - **Eviction:** oldest non-protected node when full (`getOrCreateMeshNode`). On eviction
@@ -120,16 +125,59 @@ pos_time(1) | rate_unknown_time(1) | next_hop(1)` = 10 bytes, all platforms.
 
 Three mechanisms keep this tier a superset of NodeDB's identities:
 
-| Mechanism                                                             | When                                | What                                                                                                                                                                |
-| --------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Write-through hooks (`onNodeIdentityCommitted`, `onNodeKeyCommitted`) | on every NodeDB identity/key commit | immediate upsert; merges rather than overwrites - a keyless commit never costs the cache a learned TOFU key                                                         |
-| Reconcile sweep (`reconcileNodeInfoFromNodeDBLocked`)                 | boot seed, then hourly              | walks hot store (full identity) + warm tier (key-only records); adopts NodeDB content under the same keyless-merge rule; transfers signer verdicts only key-matched |
-| Membership refresh                                                    | every 60 s sweep                    | re-checks hot+warm membership per entry; `isMember` is the keep-alive                                                                                               |
-| Purge hooks (`purgeNode`, `purgeAll`)                                 | NodeDB node removal / reset         | clear both the unified cache and the NodeInfo cache, each under its own compile guard                                                                               |
+| Mechanism                                                             | When                                | What                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Write-through hooks (`onNodeIdentityCommitted`, `onNodeKeyCommitted`) | on every NodeDB identity/key commit | immediate upsert; merges rather than overwrites - a keyless commit never costs the cache a learned TOFU key                                                                                                                                                   |
+| Reconcile sweep (`reconcileNodeInfoFromNodeDBLocked`)                 | boot seed, then hourly              | walks hot store (full identity) + warm tier (key-only records); adopts NodeDB content under the same keyless-merge rule; transfers signer verdicts only key-matched                                                                                           |
+| Membership refresh                                                    | inside the hourly reconcile         | clear-all then re-mark from both tiers (a per-entry NodeDB lookup every sweep would be O(entries x members) under the lock); additions stay immediate via the hooks, explicit removals via `purgeNode()`; a **passive** NodeDB eviction may lag up to an hour |
+| Purge hooks (`purgeNode`, `purgeAll`)                                 | NodeDB node removal / reset         | clear both the unified cache and the NodeInfo cache, each under its own compile guard                                                                                                                                                                         |
 
 **Retention:** no timed eviction. Slots die only by LRU displacement on insert, ranked by
 trust tiers - members and signer-proven keys are stickiest; the seeding pass additionally
 refuses to churn one member out for another (`spareMembers`).
+
+**Key-commit funnel:** every path that writes a remote key into the hot store must route the
+write-through. Full-identity commits funnel through `NodeDB::updateUser()`; bare-key commits
+(admin-channel learn in `Router::perhapsDecode`, manual verification in
+`KeyVerificationModule`) funnel through `NodeDB::commitRemoteKey()`, which carries an explicit
+`KeyCommitTrust` provenance (`ManuallyVerified` maps to `proven=true` in this cache). Never
+assign `info->public_key` directly - the cache would silently diverge until the next reconcile.
+
+**Enable gate:** the write-through hooks, like the sweep and the packet path, no-op while
+`moduleConfig.has_traffic_management` is off, so cache content and cache maintenance are keyed
+to the same condition. Corollary: the pubkey-pool superset property only holds while the
+module is enabled.
+
+### Tick clocks and wrap safety
+
+All TMM timestamps are free-running modular ticks (uint8 or nibble) derived from `clockMs()`;
+modular subtraction gives a correct age only while the true age stays below the counter
+period. What keeps each clock honest differs, and matters when touching the sweep:
+
+| Clock                        | Period   | Window/TTL      | Wrap safety                                                                                                                                   |
+| ---------------------------- | -------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| pos (uint8, 6 min/tick)      | 25.6 h   | <=255 ticks     | 60 s sweep clears expired state; margin as low as 1 tick (6 min) at the clamp                                                                 |
+| rate (nibble, 5 min/tick)    | 80 min   | <=15 ticks      | sweep, **plus** read-time window reset in `isRateLimited()`                                                                                   |
+| unknown (nibble, 1 min/tick) | 16 min   | 12 ticks        | sweep, plus read-time window reset                                                                                                            |
+| NodeInfo `obsTick` (3 min)   | 12.8 h   | 120 ticks (6 h) | **sweep only** - `maintainNodeInfoCacheLocked()` clearing `hasObserved` is the sole guarantee the 6 h serve gate never reads an aliased stamp |
+| NodeInfo `respTick` (5 s)    | 21.3 min | 6 ticks (30 s)  | sweep only (worst case of a missed clear: one spurious 30 s throttle)                                                                         |
+
+The warm tier is different by design: `WarmNodeStore.last_heard` is an **absolute**
+unix-seconds timestamp (quantised to 128 s by the metadata steal), so it cannot wrap until
+2106 and needs no sweep - affordable at 100 x 40 B, where the TMM caches chose 1-byte ticks
+to stay at 10 B/entry x up to 2048.
+
+Because the NodeInfo clocks are sweep-dependent, the maintenance invariant is compile-time:
+`maintainNodeInfoCacheLocked()` is guarded by `TMM_HAS_NODEINFO_CACHE` **alone** (never by
+`TRAFFIC_MANAGEMENT_CACHE_SIZE`, which a variant may zero independently), mirroring
+`purgeAll()` - a build that has the cache always has its sweep.
+
+### Direct-response behavior under throttle
+
+The per-target response throttle bounds only **our spoofed TX**. A request that arrives inside
+the throttle window is **not consumed**: `shouldRespondToNodeInfo()` returns false and the
+request forwards through normal relay handling toward the genuine target, which can answer
+itself. `nodeinfo_cache_hits` counts only replies actually sent.
 
 ---
 

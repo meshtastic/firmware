@@ -33,7 +33,7 @@
 
 /// Packet inspection and traffic shaping: position dedup, per-node rate limiting, unknown-packet
 /// filtering, NodeInfo direct response, and the next-hop/role overflow caches. One flat 10-byte
-/// unified cache backs all per-node features; see docs/tmm_node_stores.md for the store overview.
+/// unified cache backs all per-node features; see docs/node_info_stores.md for the store overview.
 class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 {
   public:
@@ -148,7 +148,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
   private:
     // 10-byte packed entry, all platforms. Tick stamps are free-running modular counters with
     // non-zero presence sentinels; the 4-bit cached role rides the top bits of the two count
-    // bytes (tier-3 role fallback). Full layout and rationale: docs/tmm_node_stores.md.
+    // bytes (tier-3 role fallback). Full layout and rationale: docs/node_info_stores.md.
 #if _meshtastic_Config_DeviceConfig_Role_MAX > 15
 #warning "Device role enum max exceeds 15 - TMM 4-bit role cache (rate_count[7:6]/unknown_count[7:6]) will truncate new values"
 #endif
