@@ -634,9 +634,61 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
 #endif
 }
 
+void TrafficManagementModule::maintainNodeInfoCacheLocked()
+{
+#if TMM_HAS_NODEINFO_CACHE
+    if (!nodeInfoPayload)
+        return;
+
+    // Saturate expired tick stamps: clearing the presence bit once a stamp's age exceeds
+    // its window is the wrap-safety guarantee (stamps never approach their uint8 aliasing
+    // horizon). Entries are never freed on a timer - slots die by tiered LRU or purge.
+    uint16_t nodeInfoSaturated = 0;
+    const uint8_t nowObs = currentObsTick();
+    const uint8_t nowResp = currentRespTick();
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+        NodeInfoPayloadEntry &entry = nodeInfoPayload[i];
+        if (entry.node == 0)
+            continue;
+        if (entry.hasObserved && static_cast<uint8_t>(nowObs - entry.obsTick) > kNodeInfoMaxServeAgeTicks) {
+            entry.hasObserved = false;
+            nodeInfoSaturated++;
+        }
+        if (entry.hasResponded && static_cast<uint8_t>(nowResp - entry.respTick) >= kNodeInfoThrottleTicks)
+            entry.hasResponded = false;
+        // Refresh membership: the bit keeps NodeDB-present nodes stickiest under LRU, and
+        // its clearing is what lets a fully forgotten node become evictable again.
+        bool member = nodeDB && nodeDB->getMeshNode(entry.node) != nullptr;
+#if WARM_NODE_COUNT > 0
+        if (!member && nodeDB)
+            member = nodeDB->warmStore.contains(entry.node);
+#endif
+        entry.isMember = member;
+    }
+    TM_LOG_DEBUG("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
+                 static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoSaturated));
+
+    // Anti-entropy: seed identities NodeDB knows but this cache lacks - a full pass at
+    // boot (once nodeDB is ready), then hourly. The write-through hooks provide
+    // immediacy between passes.
+    if (!nodeInfoSeeded || ++sweepsSinceNodeInfoReconcile >= kNodeInfoReconcileSweeps) {
+        if (nodeDB) {
+            reconcileNodeInfoFromNodeDBLocked();
+            nodeInfoSeeded = true;
+            sweepsSinceNodeInfoReconcile = 0;
+        }
+    }
+#endif
+}
+
 void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown)
 {
 #if TMM_HAS_NODEINFO_CACHE
+    // Same gate as handleReceived()/runOnce(): with the module disabled, maintenance
+    // (sweep + reconcile) never runs, so the hooks must not fill the cache either -
+    // content and maintenance stay keyed to the same condition.
+    if (!moduleConfig.has_traffic_management)
+        return;
     if (node == 0 || (nodeDB && node == nodeDB->getNodeNum()))
         return;
     concurrency::LockGuard guard(&cacheLock);
@@ -676,6 +728,9 @@ void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshta
 void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key32[32], bool proven)
 {
 #if TMM_HAS_NODEINFO_CACHE
+    // Same module-disabled gate as onNodeIdentityCommitted (see there for rationale).
+    if (!moduleConfig.has_traffic_management)
+        return;
     if (node == 0 || !key32 || (nodeDB && node == nodeDB->getNodeNum()))
         return;
     concurrency::LockGuard guard(&cacheLock);
@@ -1152,7 +1207,16 @@ int32_t TrafficManagementModule::runOnce()
     // guard only when the preload actually ran, so a not-ready nodeDB gets a retry.
     if (!nextHopPreloaded && preloadNextHopsFromNodeDB())
         nextHopPreloaded = true;
+#endif
 
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0 || TMM_HAS_NODEINFO_CACHE
+    // Mirrors purgeAll(): the two caches are compile-time independent (a variant may zero the
+    // unified cache while the NodeInfo cache exists, or vice versa), so each is maintained
+    // under its own guard below - a build with only one of them must still sweep it.
+    concurrency::LockGuard guard(&cacheLock);
+#endif
+
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     // TTLs in free-running ticks: pos 4x position interval (<=255 @ 6 min/tick), rate 2x the
     // configured window (<=15 @ 5 min/tick), unknown fixed 12 @ 1 min/tick.
     const uint32_t positionIntervalMs = secsToMs(Default::getConfiguredOrDefault(
@@ -1175,9 +1239,6 @@ int32_t TrafficManagementModule::runOnce()
     uint16_t activeEntries = 0;
     uint16_t expiredEntries = 0;
     const uint32_t sweepStartMs = TrafficManagementModule::clockMs();
-
-    const auto &cfg = moduleConfig.traffic_management;
-    concurrency::LockGuard guard(&cacheLock);
 
     for (uint16_t i = 0; i < cacheSize(); i++) {
         if (cache[i].node == 0)
@@ -1234,50 +1295,11 @@ int32_t TrafficManagementModule::runOnce()
                  static_cast<unsigned>(activeEntries), static_cast<unsigned>(cacheSize()),
                  static_cast<unsigned long>(TrafficManagementModule::clockMs() - sweepStartMs));
 
-#if TMM_HAS_NODEINFO_CACHE
-    if (nodeInfoPayload) {
-        // Saturate expired tick stamps: clearing the presence bit once a stamp's age exceeds
-        // its window is the wrap-safety guarantee (stamps never approach their uint8 aliasing
-        // horizon). Entries are never freed on a timer - slots die by tiered LRU or purge.
-        uint16_t nodeInfoSaturated = 0;
-        const uint8_t nowObs = currentObsTick();
-        const uint8_t nowResp = currentRespTick();
-        for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
-            NodeInfoPayloadEntry &entry = nodeInfoPayload[i];
-            if (entry.node == 0)
-                continue;
-            if (entry.hasObserved && static_cast<uint8_t>(nowObs - entry.obsTick) > kNodeInfoMaxServeAgeTicks) {
-                entry.hasObserved = false;
-                nodeInfoSaturated++;
-            }
-            if (entry.hasResponded && static_cast<uint8_t>(nowResp - entry.respTick) >= kNodeInfoThrottleTicks)
-                entry.hasResponded = false;
-            // Refresh membership: the bit keeps NodeDB-present nodes stickiest under LRU, and
-            // its clearing is what lets a fully forgotten node become evictable again.
-            bool member = nodeDB && nodeDB->getMeshNode(entry.node) != nullptr;
-#if WARM_NODE_COUNT > 0
-            if (!member && nodeDB)
-                member = nodeDB->warmStore.contains(entry.node);
-#endif
-            entry.isMember = member;
-        }
-        TM_LOG_DEBUG("NodeInfo cache: %u/%u (%u went stale)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
-                     static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoSaturated));
-
-        // Anti-entropy: seed identities NodeDB knows but this cache lacks - a full pass at
-        // boot (once nodeDB is ready), then hourly. The write-through hooks provide
-        // immediacy between passes.
-        if (!nodeInfoSeeded || ++sweepsSinceNodeInfoReconcile >= kNodeInfoReconcileSweeps) {
-            if (nodeDB) {
-                reconcileNodeInfoFromNodeDBLocked();
-                nodeInfoSeeded = true;
-                sweepsSinceNodeInfoReconcile = 0;
-            }
-        }
-    }
-#endif
-
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+
+#if TMM_HAS_NODEINFO_CACHE
+    maintainNodeInfoCacheLocked();
+#endif
 
     return kMaintenanceIntervalMs;
 }

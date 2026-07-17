@@ -77,11 +77,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Write-through hook from NodeDB::updateUser(): upsert the committed identity immediately
     /// (the reconcile sweep remains the backstop). NodeDB's key is authoritative, but a keyless
     /// commit keeps a TOFU key this cache already holds; never touches the observation stamp.
+    /// No-op while the module is disabled in moduleConfig (maintenance is gated the same way).
     void onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown);
 
     /// Key-only commit hook for key writes that bypass updateUser (admin-key learn, manual key
     /// verification). A changed key resets provenance; pass proven=true only when the commit
     /// itself established possession. Never touches the observation stamp. Thread-safe.
+    /// No-op while the module is disabled in moduleConfig (maintenance is gated the same way).
     void onNodeKeyCommitted(NodeNum node, const uint8_t key32[32], bool proven);
 
     /// Zero one node's slots in both caches (identity, key, provenance, role, next-hop, dedup
@@ -349,6 +351,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     NodeInfoPayloadEntry *findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot, bool spareMembers = false);
     /// Number of occupied NodeInfo cache slots. Caller must hold cacheLock.
     uint16_t countNodeInfoEntriesLocked() const;
+
+    /// 60 s NodeInfo-cache maintenance under cacheLock: saturate expired tick stamps (the
+    /// wrap-safety guarantee for the modular obs/resp clocks), refresh NodeDB membership, and
+    /// run the boot/hourly reconcile. Guarded by TMM_HAS_NODEINFO_CACHE alone - never by the
+    /// unified cache size - so a build with only this cache still maintains it (the caches are
+    /// compile-time independent; see purgeAll()).
+    void maintainNodeInfoCacheLocked();
 
     /// Anti-entropy seeding under cacheLock: upsert hot-store identities and warm-tier key-only
     /// records this cache lacks. Never sets hasObserved - seeding is knowledge, not observation,
