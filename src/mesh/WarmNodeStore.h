@@ -136,6 +136,16 @@ class WarmNodeStore
     size_t count() const;
     size_t capacity() const { return entries ? WARM_NODE_COUNT : 0; }
 
+    /// Slot-indexed read access for consumers that reconcile against the whole warm tier
+    /// (e.g. TrafficManagement's NodeInfo cache seeding). @return the entry in slot i, or
+    /// nullptr when the slot is empty or i >= capacity(). Iterate i in [0, capacity()).
+    const WarmNodeEntry *entryAt(size_t i) const
+    {
+        if (!entries || i >= WARM_NODE_COUNT || entries[i].num == 0)
+            return nullptr;
+        return &entries[i];
+    }
+
 #if MESHTASTIC_NODEDB_MIGRATION_VERBOSE
     /// Debug: dump every live warm entry (num / last_heard / has-key) to the
     /// console. Compiled out unless MESHTASTIC_NODEDB_MIGRATION_VERBOSE.

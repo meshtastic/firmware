@@ -347,9 +347,21 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // respTick is valid: we emitted a spoofed reply within the throttle clock's
         // horizon. Cleared by the sweep once the throttle window passes.
         uint8_t hasResponded : 1;
+
+        // `user` carries a real User payload (name etc.) - from an observed NODEINFO frame
+        // or a hot-store seed - rather than being a key-only record seeded from the warm
+        // tier. copyUser()/name-rehydration require it; copyPublicKey() does not.
+        uint8_t hasFullUser : 1;
+
+        // The node existed in NodeDB (hot store or warm tier) at the last maintenance
+        // sweep. Member entries are kept alive (retTick refreshed) and are the stickiest
+        // under LRU eviction, so the cache stays a superset of NodeDB's identities; when
+        // membership lapses the entry starts aging toward the normal retention TTL from
+        // its final member re-stamp. May be up to one sweep (60 s) stale.
+        uint8_t isMember : 1;
     };
     // The tick stamps, sourceChannel, decodedBitfield, and the 1-bit flags make up the
-    // entry's trailing metadata; the flag bits share a single byte, leaving 4 spare bits.
+    // entry's trailing metadata; the flag bits share a single byte, leaving 2 spare bits.
     // Add future booleans as more 1-bit fields here rather than new bytes - the array is
     // 2000 entries in PSRAM, so a fresh byte can cost a whole aligned word. (No exact-size
     // static_assert: sizeof(meshtastic_User) and its trailing padding vary by platform
@@ -408,8 +420,20 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     // NodeInfo cache operations (flat PSRAM payload array, linear scan)
     const NodeInfoPayloadEntry *findNodeInfoEntry(NodeNum node) const;
-    NodeInfoPayloadEntry *findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot);
+    // spareMembers: when creating would evict an isMember entry, return nullptr instead.
+    // The reconcile pass uses it so seeding one NodeDB-tier node never churns out another
+    // when the cache is smaller than hot+warm; the packet path leaves it false (a freshly
+    // observed stranger may displace the LRU member - observed freshness has value).
+    NodeInfoPayloadEntry *findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot, bool spareMembers = false);
     uint16_t countNodeInfoEntriesLocked() const;
+
+    // Anti-entropy pass called from the maintenance sweep, under cacheLock. Keeps the
+    // NodeInfo cache a superset of NodeDB's identities: ensures every hot-store / warm-tier
+    // node has an entry (seeding name/key/signer-provenance from whichever tier holds
+    // them), refreshes member entries' retTick (keep-alive) and isMember, and adopts
+    // NodeDB's key when a cached key conflicts with the authoritative one. Seeding never
+    // sets hasObserved, so it can never make a silent node servable by the replay path.
+    void reconcileNodeInfoMembershipLocked();
     void cacheNodeInfoPacket(const meshtastic_MeshPacket &mp);
 
     // =========================================================================

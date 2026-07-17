@@ -103,6 +103,21 @@ class MockNodeDB : public NodeDB
         numMeshNodes = 2;
     }
 
+    // Seed a full identity (name, 32-byte key of `keyByte`, optional signer bit) into the
+    // hot-store buffer at index 1, for reconcile/seeding tests that iterate
+    // getMeshNodeByIndex().
+    void setHotNodeIdentity(NodeNum n, const char *longName, uint8_t keyByte, bool signer)
+    {
+        setHotNode(n, 0);
+        meshtastic_NodeInfoLite &info = (*meshNodes)[1];
+        strncpy(info.long_name, longName, sizeof(info.long_name) - 1);
+        info.public_key.size = 32;
+        memset(info.public_key.bytes, keyByte, 32);
+        info.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
+        if (signer)
+            info.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+    }
+
     // Evict everything but "self" - simulates the hot DB rolling over. Logical
     // count only; the buffer is left intact so the invariant holds.
     void rollHotStore()
@@ -985,6 +1000,139 @@ static void test_tm_nodeinfo_cache_pinsAgainstWarmTierKey(void)
     TEST_ASSERT_EQUAL_UINT8(0x55, out[31]);
 
     mockNodeDB->warmStore.clear();
+}
+
+/**
+ * Reconcile seeding, serve-gate honesty: a hot-store identity is seeded into the cache by
+ * the maintenance sweep (name + key + signer provenance usable via copyUser/copyPublicKey),
+ * but is NEVER served as a spoofed reply until a genuine NODEINFO frame is heard - seeding
+ * and retention must not make a silent node look alive.
+ */
+static void test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->setHotNodeIdentity(kTargetNode, "hot-name", 0x77, /*signer=*/true);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.runOnce(); // maintenance sweep -> reconcile seeds the hot identity
+
+    // Seeded identity is available to the key pool and name rehydration...
+    uint8_t key[32] = {0};
+    bool proven = false;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_EQUAL_UINT8(0x77, key[0]);
+    TEST_ASSERT_TRUE(proven); // inherited from the hot store's signer bit, key-matched
+    meshtastic_User seeded = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(module.copyUser(kTargetNode, seeded, nullptr));
+    TEST_ASSERT_EQUAL_STRING("hot-name", seeded.long_name);
+
+    // ...but a request for it is NOT answered: never observed, so never servable.
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // A genuinely observed frame (key matches the NodeDB pin) makes it servable.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "hot-name", 0x77));
+    request.id = 0xCCCC0002;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    mockNodeDB->rollHotStore();
+}
+
+/**
+ * Reconcile seeding from the warm tier yields a key-only record: usable by copyPublicKey
+ * (with the warm signer bit inherited), but never by copyUser - the warm tier keeps no
+ * names, and a nameless User must not reach name-rehydration.
+ */
+static void test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    uint8_t warmKey[32];
+    memset(warmKey, 0x44, 32);
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*signer=*/true);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.runOnce();
+
+    uint8_t key[32] = {0};
+    bool proven = false;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_EQUAL_UINT8(0x44, key[31]);
+    TEST_ASSERT_TRUE(proven);
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr)); // key-only record
+
+    mockNodeDB->warmStore.clear();
+}
+
+/**
+ * Membership keep-alive vs retention TTL: an entry whose node still lives in a NodeDB tier
+ * is re-stamped by every sweep and outlives the 7-day retention window; a non-member entry
+ * of the same age is evicted; and once membership lapses the survivor ages out too.
+ */
+static void test_tm_nodeinfo_membership_keepAliveOutlivesRetention(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->rollHotStore();
+    uint8_t warmKey[32];
+    memset(warmKey, 0x21, 32);
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey); // kTargetNode is a member
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    // Both keyed entries observed now; kRemoteNode is in no NodeDB tier (non-member).
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "member", 0x21));
+    module.handleReceived(makeNodeInfoPacketWithKey(kRemoteNode, "stranger", 0x22));
+
+    uint8_t key[32] = {0};
+    // Two sweeps 4 days apart: the member is re-stamped each time; the stranger's age
+    // crosses the 7-day keyed retention TTL at the second sweep and is evicted.
+    TrafficManagementModule::s_testNowMs += 4UL * 24UL * 60UL * 60UL * 1000UL;
+    module.runOnce();
+    TrafficManagementModule::s_testNowMs += 4UL * 24UL * 60UL * 60UL * 1000UL;
+    module.runOnce();
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, nullptr));
+    TEST_ASSERT_FALSE(module.copyPublicKey(kRemoteNode, key, nullptr));
+
+    // Membership lapses: the node leaves the warm tier, keep-alive stops, and the entry
+    // ages out on the normal keyed TTL (one sweep to notice, one past the window).
+    mockNodeDB->warmStore.clear();
+    TrafficManagementModule::s_testNowMs += 1000; // same tick; sweep just clears isMember
+    module.runOnce();
+    TrafficManagementModule::s_testNowMs += 8UL * 24UL * 60UL * 60UL * 1000UL;
+    module.runOnce();
+    TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
 }
 #endif // WARM_NODE_COUNT > 0
 
@@ -2296,6 +2444,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_cache_rejectsMismatchedKey);
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_tm_nodeinfo_cache_pinsAgainstWarmTierKey);
+    RUN_TEST(test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes);
+    RUN_TEST(test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier);
+    RUN_TEST(test_tm_nodeinfo_membership_keepAliveOutlivesRetention);
 #endif
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven);

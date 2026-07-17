@@ -513,7 +513,8 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
  * O(n) scan is negligible.
  */
 TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node,
-                                                                                                  bool *usedEmptySlot)
+                                                                                                  bool *usedEmptySlot,
+                                                                                                  bool spareMembers)
 {
     if (usedEmptySlot)
         *usedEmptySlot = false;
@@ -539,8 +540,11 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
         }
         if (empty)
             continue; // an empty slot beats any victim; stop scoring
-        // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key.
-        const uint8_t tier = (e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1);
+        // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key;
+        // +3 when the node is a NodeDB member - the cache must not shed a NodeDB-tier
+        // identity while it still holds opportunistic strangers.
+        const uint8_t tier = static_cast<uint8_t>(((e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1)) +
+                                                  (e.isMember ? 3 : 0));
         // Modular retention age: safe because the sweep evicts/re-stamps entries long
         // before retTick could age past the 256-tick period.
         const uint8_t age = static_cast<uint8_t>(now - e.retTick);
@@ -554,6 +558,8 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
     NodeInfoPayloadEntry *slot = empty ? empty : lru;
     if (!slot)
         return nullptr;
+    if (spareMembers && slot == lru && lru->isMember)
+        return nullptr; // caller would rather skip than churn one member out for another
     memset(slot, 0, sizeof(NodeInfoPayloadEntry));
     slot->node = node;
     if (usedEmptySlot)
@@ -579,6 +585,96 @@ uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
     return count;
 #else
     return 0;
+#endif
+}
+
+void TrafficManagementModule::reconcileNodeInfoMembershipLocked()
+{
+#if TMM_HAS_NODEINFO_CACHE
+    if (!nodeInfoPayload || !nodeDB)
+        return;
+
+    const uint8_t retNow = nodeInfoRetTickNow();
+    const NodeNum self = nodeDB->getNodeNum();
+
+    // Entries touched by this pass, so membership can be cleared exactly on the ones that
+    // were not (a departed node's entry then ages out on the normal retention TTL from its
+    // final member re-stamp). A retTick comparison can't do this - an entry observed within
+    // the current 1-h tick would be indistinguishable from one re-stamped by this pass.
+    // Static: 250 B of .bss beats a stack excursion under the cache lock.
+    static uint8_t marked[(kNodeInfoCacheEntries + 7) / 8];
+    memset(marked, 0, sizeof(marked));
+
+    // Upsert one NodeDB-tier node. Cost note: a miss in findOrCreateNodeInfoEntry scans the
+    // whole array, so this pass is O(members x entries) once per minute - tens of ms on a
+    // saturated ESP32, on the module thread, and accepted: the alternative is an index the
+    // entry format doesn't have room for.
+    auto reconcileOne = [&](NodeNum n, const uint8_t *key32, bool signerKnown, const meshtastic_NodeInfoLite *hot) {
+        if (n == 0 || n == self)
+            return;
+        bool usedEmptySlot = false;
+        NodeInfoPayloadEntry *e = findOrCreateNodeInfoEntry(n, &usedEmptySlot, /*spareMembers=*/true);
+        if (!e)
+            return; // cache is member-saturated; skip rather than churn a member out
+
+        // Key conflict against the authoritative NodeDB key: NodeDB wins. Wipe and reseed
+        // rather than patch, so no name or provenance pinned to the old key survives onto
+        // the new one. (Possible for residue predating the warm pin, or a NodeDB re-key.)
+        if (!usedEmptySlot && key32 && e->user.public_key.size == 32 &&
+            memcmp(e->user.public_key.bytes, key32, 32) != 0) {
+            memset(e, 0, sizeof(*e));
+            e->node = n;
+            usedEmptySlot = true;
+        }
+
+        if (usedEmptySlot) {
+            // Fresh slot: seed what the tier knows. A hot node with a User contributes the
+            // full identity; a warm node yields a key-only record (the warm tier keeps no
+            // names). Never touches hasObserved - seeding must not make a node servable.
+            if (hot && nodeInfoLiteHasUser(hot)) {
+                e->user = TypeConversions::ConvertToUser(hot);
+                e->hasFullUser = true;
+            }
+            snprintf(e->user.id, sizeof(e->user.id), "!%08x", n);
+        }
+        // Backfill a missing key (fresh seed, or an entry cached from a keyless frame).
+        if (key32 && e->user.public_key.size != 32) {
+            memcpy(e->user.public_key.bytes, key32, 32);
+            e->user.public_key.size = 32;
+        }
+        // Signer provenance transfers only alongside a matching key (monotonic upgrade).
+        if (signerKnown && key32 && e->user.public_key.size == 32 && memcmp(e->user.public_key.bytes, key32, 32) == 0)
+            e->keySignerProven = true;
+
+        e->isMember = true;
+        e->retTick = retNow; // keep-alive: a member entry never ages toward the retention TTL
+        const size_t idx = static_cast<size_t>(e - nodeInfoPayload);
+        marked[idx / 8] |= static_cast<uint8_t>(1u << (idx % 8));
+    };
+
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *info = nodeDB->getMeshNodeByIndex(i);
+        if (!info || info->num == 0)
+            continue;
+        const uint8_t *key = (info->public_key.size == 32) ? info->public_key.bytes : nullptr;
+        reconcileOne(info->num, key, nodeInfoLiteHasXeddsaSigned(info), info);
+    }
+#if WARM_NODE_COUNT > 0
+    for (size_t i = 0; i < nodeDB->warmStore.capacity(); i++) {
+        const WarmNodeEntry *w = nodeDB->warmStore.entryAt(i);
+        if (!w)
+            continue;
+        const bool hasKey = !memfll(w->public_key, 0, sizeof(w->public_key));
+        reconcileOne(w->num, hasKey ? w->public_key : nullptr, warmSignerOf(*w), nullptr);
+    }
+#endif
+
+    // Clear membership on every entry this pass did not touch: its node has left both
+    // NodeDB tiers (or lost the spareMembers race), so it reverts to normal-tier aging.
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+        if (nodeInfoPayload[i].node != 0 && !(marked[i / 8] & (1u << (i % 8))))
+            nodeInfoPayload[i].isMember = false;
+    }
 #endif
 }
 
@@ -613,7 +709,9 @@ bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool 
 
     concurrency::LockGuard guard(&cacheLock);
     const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
-    if (!entry)
+    // Key-only records (seeded from the warm tier, which keeps no names) are not a User:
+    // handing one to name-rehydration would stamp HAS_USER onto a nameless node.
+    if (!entry || !entry->hasFullUser)
         return false;
 
     out = entry->user;
@@ -716,6 +814,7 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         entry->user = user;
         entry->obsTick = nodeInfoObsTickNow(); // a genuine observation - the only place obsTick is stamped
         entry->hasObserved = true;
+        entry->hasFullUser = true; // an observed NODEINFO frame always carries the full User
         entry->retTick = nodeInfoRetTickNow();
         entry->sourceChannel = mp.channel;
         entry->hasDecodedBitfield = mp.decoded.has_bitfield;
@@ -1206,6 +1305,12 @@ int32_t TrafficManagementModule::runOnce()
                 nodeInfoExpired++;
             }
         }
+
+        // Anti-entropy: reseed/refresh an entry for every NodeDB-tier node, so the cache
+        // stays a superset of NodeDB's identities (write-through hooks give immediacy;
+        // this pass self-heals whatever they miss, and is what keeps member entries'
+        // retTick from ever reaching the eviction TTL above).
+        reconcileNodeInfoMembershipLocked();
         TM_LOG_DEBUG("NodeInfo PSRAM cache: %u/%u (%u expired)", static_cast<unsigned>(countNodeInfoEntriesLocked()),
                      static_cast<unsigned>(nodeInfoTargetEntries()), static_cast<unsigned>(nodeInfoExpired));
     }
