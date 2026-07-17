@@ -114,13 +114,16 @@ jobs:
           # the test artifact is unaffected.
           platformio test -e coverage -v --junit-output-path testreport.xml 2>&1 | grep -v "[[:space:]]SKIPPED$"
 
+      - name: Event channel policy tests
+        run: platformio test -e coverage-event-policy -v --junit-output-path event-policy-testreport.xml
+
       - name: Save test results
         if: always() # run this step even if previous step failed
         uses: actions/upload-artifact@v7
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./testreport.xml
+          path: ./*testreport.xml
 
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
