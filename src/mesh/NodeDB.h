@@ -384,6 +384,21 @@ class NodeDB
     /// frames until it happens to be re-heard.
     bool isKnownXeddsaSigner(NodeNum n);
 
+    /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
+    /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:
+    /// only ManuallyVerified vouches for possession of exactly this key.
+    enum class KeyCommitTrust : uint8_t {
+        AdminChannelProven, // possession shown to the admin channel (AEAD) - TOFU-grade for signing
+        ManuallyVerified,   // the user confirmed possession of exactly this key
+    };
+
+    /// THE primitive for key writes that bypass updateUser() (no User payload; provenance
+    /// differs from a received NodeInfo): writes the 32-byte key to the hot store and
+    /// write-through to the TrafficManagement NodeInfo cache. Any future direct key-write
+    /// site must call this rather than assigning info->public_key, or the TrafficManagement
+    /// cache silently diverges until the next hourly reconcile.
+    void commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust);
+
     /// Resolve a node's device role - hot store (with user) first, then the role
     /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
     /// nodes that have aged out of the hot store.

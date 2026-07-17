@@ -14,7 +14,6 @@
 #include "modules/RoutingModule.h"
 #include <pb_encode.h>
 #if HAS_TRAFFIC_MANAGEMENT
-#include "modules/TrafficManagementModule.h"
 #endif
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -686,17 +685,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
                 if (viaAdminKey) {
                     // Persist the admin key for the sender so future packets take the fast path and we can
-                    // PKI-reply; p->from is bound into the AEAD nonce, so the trusted admin authenticated it.
-                    meshtastic_NodeInfoLite *fromNode = nodeDB->getOrCreateMeshNode(p->from);
-                    if (fromNode != nullptr)
-                        fromNode->public_key = remotePublic;
-#if HAS_TRAFFIC_MANAGEMENT
-                    // This learn bypasses NodeDB::updateUser, so write the key through to TMM's
-                    // NodeInfo cache too. proven=false: possession was shown to the admin channel,
-                    // not via an XEdDSA NodeInfo signature, so it stays TOFU-grade there.
-                    if (fromNode != nullptr && trafficManagementModule)
-                        trafficManagementModule->onNodeKeyCommitted(p->from, remotePublic.bytes, false);
-#endif
+                    // PKI-reply; p->from is bound into the AEAD nonce, so the trusted admin authenticated
+                    // it. commitRemoteKey is the bare-key commit primitive: it bypasses updateUser's
+                    // User-payload path deliberately and handles the TrafficManagement write-through.
+                    // AdminChannelProven = possession shown to the admin channel, not via an XEdDSA
+                    // NodeInfo signature, so the key stays TOFU-grade for signing purposes.
+                    nodeDB->commitRemoteKey(p->from, remotePublic.bytes, NodeDB::KeyCommitTrust::AdminChannelProven);
                 }
             } else {
                 // AEAD already authenticated this ciphertext, so no other candidate could decode it -

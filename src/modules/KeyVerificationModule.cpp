@@ -10,7 +10,6 @@
 #include "meshUtils.h"
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
-#include "modules/TrafficManagementModule.h"
 #include <RNG.h>
 #include <SHA256.h>
 
@@ -422,13 +421,11 @@ void KeyVerificationModule::commitVerifiedRemoteNode()
     if (node->public_key.size != 32 && crypto->getPendingPublicKey(currentRemoteNode, pending))
         node->public_key = pending;
     node->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
-#if HAS_TRAFFIC_MANAGEMENT
-    // This commit bypasses NodeDB::updateUser (it writes node->public_key directly), so push
-    // the key into TMM's NodeInfo cache here. proven=true: the user just confirmed possession
-    // of this exact key - the strongest provenance any key in that cache can carry.
-    if (node->public_key.size == 32 && trafficManagementModule)
-        trafficManagementModule->onNodeKeyCommitted(currentRemoteNode, node->public_key.bytes, true);
-#endif
+    // Re-commit via the bare-key primitive: writing the same bytes back is a no-op for the hot
+    // store, but it routes the TrafficManagement write-through. ManuallyVerified: the user just
+    // confirmed possession of exactly this key - the strongest provenance that cache can carry.
+    if (node->public_key.size == 32)
+        nodeDB->commitRemoteKey(currentRemoteNode, node->public_key.bytes, NodeDB::KeyCommitTrust::ManuallyVerified);
     LOG_INFO("Node 0x%08x manually verified with security number %u", currentRemoteNode, currentSecurityNumber);
     if (nodeInfoModule)
         nodeInfoModule->sendOurNodeInfo(currentRemoteNode, false, node->channel, true);

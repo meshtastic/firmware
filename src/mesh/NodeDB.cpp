@@ -3811,6 +3811,29 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
 #endif
 }
 
+void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)
+{
+    if (!key32 || n == 0)
+        return;
+    // Local copy first: callers may pass the node's own key bytes back in (e.g. manual
+    // verification re-committing an already-stored key), and memcpy forbids overlap.
+    uint8_t key[32];
+    memcpy(key, key32, 32);
+
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(n);
+    if (!info)
+        return;
+    memcpy(info->public_key.bytes, key, 32);
+    info->public_key.size = 32;
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Write-through, mirroring updateUser()'s identity hook: without it the TrafficManagement
+    // NodeInfo cache diverges until the next hourly reconcile.
+    if (trafficManagementModule)
+        trafficManagementModule->onNodeKeyCommitted(n, key, trust == KeyCommitTrust::ManuallyVerified);
+#endif
+}
+
 meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
 {
     const meshtastic_NodeInfoLite *info = getMeshNode(n);
