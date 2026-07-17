@@ -275,17 +275,25 @@ void TrafficManagementModule::purgeNode(NodeNum node)
     if (node == 0)
         return;
     concurrency::LockGuard guard(&cacheLock);
+    bool purged = false;
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     UnifiedCacheEntry *entry = findEntry(node);
-    if (entry)
+    if (entry) {
         memset(entry, 0, sizeof(UnifiedCacheEntry));
+        purged = true;
+    }
 #endif
 #if TMM_HAS_NODEINFO_CACHE
     NodeInfoPayloadEntry *info = findNodeInfoEntryMutable(node);
-    if (info)
+    if (info) {
         memset(info, 0, sizeof(NodeInfoPayloadEntry));
+        purged = true;
+    }
 #endif
-    TM_LOG_INFO("Purged node 0x%08x from traffic caches", node);
+    // Log only real purges: removeNodeByNum() calls this for every deletion, including
+    // nodes these caches never tracked.
+    if (purged)
+        TM_LOG_INFO("Purged node 0x%08x from traffic caches", node);
 #else
     (void)node;
 #endif
@@ -1516,8 +1524,13 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         usedFallback ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
                      : (cachedHasResponded && static_cast<uint8_t>(currentRespTick() - cachedRespTick) < kNodeInfoThrottleTicks);
     if (throttled) {
-        TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x", p->to);
-        return true;
+        // Bound only OUR spoofed TX - never black-hole the request. Returning false lets
+        // handleReceived() CONTINUE, so the request forwards toward the genuine target (which
+        // can answer), instead of being consumed with no reply. A requester whose first reply
+        // was lost on a noisy link would otherwise get silence for the whole window. Repeats
+        // of the same packet id are already absorbed by the router's duplicate detection.
+        TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x; forwarding request instead", p->to);
+        return false;
     }
 
     meshtastic_MeshPacket *reply = router->allocForSending();
