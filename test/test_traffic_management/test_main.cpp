@@ -193,6 +193,7 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
     using TrafficManagementModule::handleReceived;
     using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::markKeySignerProvenForTest;
+    using TrafficManagementModule::peekNodeInfoFlagsForTest;
     using TrafficManagementModule::peekCachedRole;
     using TrafficManagementModule::runOnce;
 
@@ -1173,6 +1174,7 @@ static void test_tm_nodeinfo_removeNode_purgesCaches(void)
     meshtastic_User out = meshtastic_User_init_zero;
     TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr));
     TEST_ASSERT_EQUAL_UINT8(0, module.getNextHopHint(kTargetNode));
+    TEST_ASSERT_EQUAL_INT(-1, module.peekNodeInfoFlagsForTest(kTargetNode));
 
     trafficManagementModule = nullptr;
 }
@@ -1358,6 +1360,125 @@ static void test_tm_nodeinfo_directResponse_psramUnsignedNotServed(void)
 }
 #endif // TMM_NODEINFO_REPLAY_SIGNED_GATE
 #endif // !MESHTASTIC_EXCLUDE_PKI
+
+// Bit positions returned by peekNodeInfoFlagsForTest().
+constexpr int kFlagObserved = 1;
+constexpr int kFlagMember = 4;
+constexpr int kFlagFullUser = 8;
+
+/**
+ * Key-commit hook (ported from tmm-fix-superset): a TOFU learn lands the key in the pool
+ * without a User payload; manual verification upgrades provenance; a NodeDB-senior rotation
+ * replaces the key and never inherits the old key's verdict.
+ */
+static void test_tm_nodeinfo_keyHook_upsertsAndGovernsProvenance(void)
+{
+    mockNodeDB->clearCachedNode();
+    TrafficManagementModuleTestShim module;
+
+    uint8_t k[32];
+    memset(k, 0x99, sizeof(k));
+    module.onNodeKeyCommitted(kTargetNode, k, false); // TOFU-grade learn
+    uint8_t key[32] = {0};
+    bool proven = true;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_EQUAL_UINT8(0x99, key[0]);
+    TEST_ASSERT_FALSE(proven);
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr)); // key-only: nothing to rehydrate
+
+    module.onNodeKeyCommitted(kTargetNode, k, true); // manual verification of the same key
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_TRUE(proven);
+
+    uint8_t rotated[32];
+    memset(rotated, 0xAA, sizeof(rotated));
+    module.onNodeKeyCommitted(kTargetNode, rotated, false); // NodeDB-senior rotation
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_EQUAL_UINT8(0xAA, key[0]);
+    TEST_ASSERT_FALSE(proven); // rotated key must not inherit the old key's verdict
+}
+
+/**
+ * Tick saturation (ported from tmm-fix-superset): the sweep clears hasObserved once the
+ * serve window passes, the entry itself persists (no TTL eviction), and a full 256-tick
+ * wrap of the clock cannot alias a saturated stamp back to "fresh".
+ */
+static void test_tm_nodeinfo_tickSaturation_sweepClearsObserved(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->rollHotStore();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
+    module.markKeySignerProvenForTest(kTargetNode);
+    const uint32_t stampMs = TrafficManagementModule::s_testNowMs;
+    int flags = module.peekNodeInfoFlagsForTest(kTargetNode);
+    TEST_ASSERT_TRUE(flags >= 0 && (flags & kFlagObserved));
+
+    // Past the serve window (plus one tick for granularity): the sweep saturates the stamp
+    // but keeps the entry.
+    TrafficManagementModule::s_testNowMs += (6UL * 60UL * 60UL * 1000UL) + 180000UL + 1000UL;
+    module.runOnce();
+    flags = module.peekNodeInfoFlagsForTest(kTargetNode);
+    TEST_ASSERT_TRUE(flags >= 0);
+    TEST_ASSERT_FALSE(flags & kFlagObserved);
+
+    // Advance to exactly one full uint8 tick period after the original stamp: the raw tick
+    // age would read ~0 (fresh) if the bit were still trusted. It isn't - the cleared bit,
+    // not the tick value, is authoritative.
+    TrafficManagementModule::s_testNowMs = stampMs + 256UL * 180000UL;
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+}
+
+/**
+ * Membership marking (ported from tmm-fix-superset): the sweep marks entries whose node
+ * exists in NodeDB and clears the mark when the node is gone; the entry itself persists
+ * (no TTL) and reconciliation-seeded identities stay unservable.
+ */
+static void test_tm_nodeinfo_sweepMembershipMarking(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+    mockNodeDB->warmStore.clear();
+    mockNodeDB->setHotNodeIdentity(kTargetNode, "seeded-name", 0x5C, /*signer=*/false);
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.runOnce(); // boot reconciliation pass seeds the hot identity
+    int flags = module.peekNodeInfoFlagsForTest(kTargetNode);
+    TEST_ASSERT_TRUE(flags >= 0);
+    TEST_ASSERT_TRUE(flags & kFlagMember);
+    TEST_ASSERT_TRUE(flags & kFlagFullUser);
+    TEST_ASSERT_FALSE(flags & kFlagObserved);
+
+    // Node drops out of NodeDB entirely: the next sweep clears the membership mark.
+    mockNodeDB->rollHotStore();
+    module.runOnce();
+    flags = module.peekNodeInfoFlagsForTest(kTargetNode);
+    TEST_ASSERT_TRUE(flags >= 0);            // entry persists (no TTL) ...
+    TEST_ASSERT_FALSE(flags & kFlagMember);  // ... but is no longer pinned as a member
+}
 #endif
 
 /**
@@ -2544,6 +2665,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_psramUnsignedNotServed);
 #endif
 #endif
+    RUN_TEST(test_tm_nodeinfo_keyHook_upsertsAndGovernsProvenance);
+    RUN_TEST(test_tm_nodeinfo_tickSaturation_sweepClearsObserved);
+    RUN_TEST(test_tm_nodeinfo_sweepMembershipMarking);
 #endif
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
     RUN_TEST(test_tm_alterReceived_skipsLocalAndUnicast);
