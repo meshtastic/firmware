@@ -928,6 +928,80 @@ static void test_tm_nodeinfo_cache_rejectsMismatchedKey(void)
     TEST_ASSERT_EQUAL_UINT8(0x11, served.public_key.bytes[0]);
     TEST_ASSERT_EQUAL_UINT8(0x11, served.public_key.bytes[31]);
 }
+
+/**
+ * Feature #2: a key learned from an (unsigned) NodeInfo is served by copyPublicKey() as a
+ * trust-on-first-use key, so it can extend the encryption pool. signerProven must be false.
+ */
+static void test_tm_nodeinfo_copyPublicKey_servesTofuKey(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x33));
+
+    uint8_t key[32] = {0};
+    bool proven = true; // must be overwritten to false
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_EQUAL_UINT8(0x33, key[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x33, key[31]);
+    TEST_ASSERT_FALSE(proven);
+}
+
+/**
+ * Feature #1: a later signature-verified NodeInfo upgrades the cached key's provenance to
+ * signer-proven (monotonic), while the key bytes stay pinned.
+ */
+static void test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    // First contact is unsigned -> TOFU.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x44));
+    uint8_t key[32] = {0};
+    bool proven = true;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_FALSE(proven);
+
+    // A later frame whose signature we verified upgrades provenance.
+    meshtastic_MeshPacket signed_ni = makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x44);
+    signed_ni.xeddsa_signed = true;
+    module.handleReceived(signed_ni);
+
+    proven = false;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, &proven));
+    TEST_ASSERT_TRUE(proven);
+    TEST_ASSERT_EQUAL_UINT8(0x44, key[0]); // key unchanged
+}
+
+/**
+ * copyPublicKey() reports a miss (false) for a node we have never cached.
+ */
+static void test_tm_nodeinfo_copyPublicKey_missReturnsFalse(void)
+{
+    mockNodeDB->clearCachedNode();
+    TrafficManagementModuleTestShim module;
+    uint8_t key[32] = {0};
+    TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
+}
 #endif // !MESHTASTIC_EXCLUDE_PKI
 #endif
 
@@ -2054,6 +2128,9 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_tm_nodeinfo_cache_rejectsMismatchedKey);
+    RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);
+    RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven);
+    RUN_TEST(test_tm_nodeinfo_copyPublicKey_missReturnsFalse);
 #endif
 #endif
     RUN_TEST(test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged);
