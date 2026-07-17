@@ -5,10 +5,10 @@
 // Common includes - available for all platform implementations
 #include "EncryptedStorage.h"
 #include "FSCommon.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "SecureZero.h"
+#include "gps/RTC.h"
 #include <algorithm>
 
 #ifdef ARCH_NRF52

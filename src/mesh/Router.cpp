@@ -5,7 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 
 #include "configuration.h"
 #include "main.h"
@@ -753,7 +753,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
             LOG_DEBUG("Original length - %d ", p->decoded.payload.size);
             LOG_DEBUG("Compressed length - %d ", compressed_len);
-            LOG_DEBUG("Original message - %s ", p->decoded.payload.bytes);
+            LOG_DEBUG("Original message - %.*s ", (int)p->decoded.payload.size, p->decoded.payload.bytes);
 
             // If the compressed length is greater than or equal to the original size, don't use the compressed form
             if (compressed_len >= p->decoded.payload.size) {
