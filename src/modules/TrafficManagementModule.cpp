@@ -283,13 +283,12 @@ void TrafficManagementModule::purgeNode(NodeNum node)
         purged = true;
     }
 #endif
-#if TMM_HAS_NODEINFO_CACHE
+    // No NodeInfo-cache guard needed: without the cache this is a no-op stub returning null.
     NodeInfoPayloadEntry *info = findNodeInfoEntryMutable(node);
     if (info) {
         memset(info, 0, sizeof(NodeInfoPayloadEntry));
         purged = true;
     }
-#endif
     // Log only real purges: removeNodeByNum() calls this for every deletion, including
     // nodes these caches never tracked.
     if (purged)
@@ -307,59 +306,10 @@ void TrafficManagementModule::purgeAll()
     if (cache)
         memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
 #endif
-#if TMM_HAS_NODEINFO_CACHE
+    // nodeInfoPayload stays nullptr on builds without the NodeInfo cache; no guard needed.
     if (nodeInfoPayload)
         memset(nodeInfoPayload, 0, static_cast<size_t>(nodeInfoTargetEntries()) * sizeof(NodeInfoPayloadEntry));
-#endif
     TM_LOG_INFO("Purged all traffic caches");
-#endif
-}
-
-void TrafficManagementModule::dropNodeInfoCacheForTest()
-{
-#if TMM_HAS_NODEINFO_CACHE
-    concurrency::LockGuard guard(&cacheLock);
-    if (!nodeInfoPayload)
-        return;
-    if (nodeInfoPayloadFromPsram)
-        free(nodeInfoPayload);
-    else
-        delete[] nodeInfoPayload;
-    nodeInfoPayload = nullptr;
-    nodeInfoPayloadFromPsram = false;
-    memaudit::set("tmm_ni", 0);
-#endif
-}
-
-int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum node)
-{
-#if TMM_HAS_NODEINFO_CACHE
-    concurrency::LockGuard guard(&cacheLock);
-    const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
-    if (!entry)
-        return -1;
-    return (entry->hasObserved ? 1 : 0) | (entry->hasResponded ? 2 : 0) | (entry->isMember ? 4 : 0) |
-           (entry->hasFullUser ? 8 : 0) | (entry->keySignerProven ? 16 : 0);
-#else
-    (void)node;
-    return -1;
-#endif
-}
-
-void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
-{
-#if TMM_HAS_NODEINFO_CACHE
-    concurrency::LockGuard guard(&cacheLock);
-    if (!nodeInfoPayload)
-        return;
-    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
-        if (nodeInfoPayload[i].node == node) {
-            nodeInfoPayload[i].keySignerProven = true;
-            return;
-        }
-    }
-#else
-    (void)node;
 #endif
 }
 
@@ -471,9 +421,16 @@ TrafficManagementModule::UnifiedCacheEntry *TrafficManagementModule::findOrCreat
 #endif
 }
 
+// =============================================================================
+// NodeInfo Payload Cache
+// =============================================================================
+// One region for every NodeInfo-cache-only function; the #else block at the end
+// provides the no-op stubs, so call sites need no guards of their own. Inner
+// guards below are only for orthogonal features (PKI, warm tier).
+#if TMM_HAS_NODEINFO_CACHE
+
 const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findNodeInfoEntry(NodeNum node) const
 {
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0)
         return nullptr;
 
@@ -482,10 +439,6 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
             return &nodeInfoPayload[i];
     }
     return nullptr;
-#else
-    (void)node;
-    return nullptr;
-#endif
 }
 
 /// Find or create a NodeInfo payload entry. Victim selection is trust-tiered so the cache
@@ -497,7 +450,6 @@ TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmpty
     if (usedEmptySlot)
         *usedEmptySlot = false;
 
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0)
         return nullptr;
 
@@ -542,15 +494,10 @@ TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmpty
     if (usedEmptySlot)
         *usedEmptySlot = (slot == empty);
     return slot;
-#else
-    (void)node;
-    return nullptr;
-#endif
 }
 
 uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
 {
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload)
         return 0;
 
@@ -560,14 +507,10 @@ uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
             count++;
     }
     return count;
-#else
-    return 0;
-#endif
 }
 
 void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
 {
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || !nodeDB)
         return;
 
@@ -639,12 +582,10 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
     if (seeded)
         TM_LOG_INFO("NodeInfo cache reconciled: %u seeded from NodeDB, %u/%u total", static_cast<unsigned>(seeded),
                     static_cast<unsigned>(countNodeInfoEntriesLocked()), static_cast<unsigned>(nodeInfoTargetEntries()));
-#endif
 }
 
 void TrafficManagementModule::maintainNodeInfoCacheLocked()
 {
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload)
         return;
 
@@ -686,12 +627,10 @@ void TrafficManagementModule::maintainNodeInfoCacheLocked()
             sweepsSinceNodeInfoReconcile = 0;
         }
     }
-#endif
 }
 
 void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown)
 {
-#if TMM_HAS_NODEINFO_CACHE
     // Same gate as handleReceived()/runOnce(): with the module disabled, maintenance
     // (sweep + reconcile) never runs, so the hooks must not fill the cache either -
     // content and maintenance stay keyed to the same condition.
@@ -726,16 +665,10 @@ void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshta
     entry->keySignerProven = provenBefore || (signerKnown && user.public_key.size == 32);
     entry->isMember = true; // committed via updateUser => it sits in the hot store right now
     // obsTick/hasObserved deliberately untouched: only a heard frame makes a node servable.
-#else
-    (void)node;
-    (void)user;
-    (void)signerKnown;
-#endif
 }
 
 void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key32[32], bool proven)
 {
-#if TMM_HAS_NODEINFO_CACHE
     // Same module-disabled gate as onNodeIdentityCommitted (see there for rationale).
     if (!moduleConfig.has_traffic_management)
         return;
@@ -759,17 +692,11 @@ void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key
         entry->keySignerProven = false;
     if (proven)
         entry->keySignerProven = true;
-        // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
-#else
-    (void)node;
-    (void)key32;
-    (void)proven;
-#endif
+    // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
 }
 
 bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven) const
 {
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0 || !out)
         return false;
 
@@ -782,17 +709,10 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
     if (signerProven)
         *signerProven = entry->keySignerProven;
     return true;
-#else
-    (void)node;
-    (void)out;
-    (void)signerProven;
-    return false;
-#endif
 }
 
 bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *signerProven) const
 {
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || node == 0)
         return false;
 
@@ -807,15 +727,9 @@ bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool 
     if (signerProven)
         *signerProven = entry->keySignerProven;
     return true;
-#else
-    (void)node;
-    (void)out;
-    (void)signerProven;
-    return false;
-#endif
 }
 
-#if TMM_HAS_NODEINFO_CACHE && !(MESHTASTIC_EXCLUDE_PKI)
+#if !(MESHTASTIC_EXCLUDE_PKI)
 /// True iff both are full 32-byte public keys with identical bytes. Single point of truth for
 /// the key-hygiene checks; raw ptr+size because User and NodeInfoLite key fields differ in type.
 static bool pubKeysEqual(const uint8_t *keyA, size_t sizeA, const uint8_t *keyB, size_t sizeB)
@@ -826,7 +740,6 @@ static bool pubKeysEqual(const uint8_t *keyA, size_t sizeA, const uint8_t *keyB,
 
 void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &mp)
 {
-#if TMM_HAS_NODEINFO_CACHE
     if (!nodeInfoPayload || mp.decoded.payload.size == 0)
         return;
 
@@ -909,10 +822,83 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
         TM_LOG_INFO("NodeInfo PSRAM cache entries: %u/%u", static_cast<unsigned>(cachedCount),
                     static_cast<unsigned>(nodeInfoTargetEntries()));
     }
-#else
-    (void)mp;
-#endif
 }
+
+void TrafficManagementModule::dropNodeInfoCacheForTest()
+{
+    concurrency::LockGuard guard(&cacheLock);
+    if (!nodeInfoPayload)
+        return;
+    if (nodeInfoPayloadFromPsram)
+        free(nodeInfoPayload);
+    else
+        delete[] nodeInfoPayload;
+    nodeInfoPayload = nullptr;
+    nodeInfoPayloadFromPsram = false;
+    memaudit::set("tmm_ni", 0);
+}
+
+int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum node)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
+    if (!entry)
+        return -1;
+    return (entry->hasObserved ? 1 : 0) | (entry->hasResponded ? 2 : 0) | (entry->isMember ? 4 : 0) |
+           (entry->hasFullUser ? 8 : 0) | (entry->keySignerProven ? 16 : 0);
+}
+
+void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
+{
+    concurrency::LockGuard guard(&cacheLock);
+    if (!nodeInfoPayload)
+        return;
+    for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
+        if (nodeInfoPayload[i].node == node) {
+            nodeInfoPayload[i].keySignerProven = true;
+            return;
+        }
+    }
+}
+
+#else // !TMM_HAS_NODEINFO_CACHE: no-op stubs so call sites need no guards of their own
+
+const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findNodeInfoEntry(NodeNum) const
+{
+    return nullptr;
+}
+TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum, bool *usedEmptySlot,
+                                                                                                  bool)
+{
+    if (usedEmptySlot)
+        *usedEmptySlot = false;
+    return nullptr;
+}
+uint16_t TrafficManagementModule::countNodeInfoEntriesLocked() const
+{
+    return 0;
+}
+void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked() {}
+void TrafficManagementModule::maintainNodeInfoCacheLocked() {}
+void TrafficManagementModule::onNodeIdentityCommitted(NodeNum, const meshtastic_User &, bool) {}
+void TrafficManagementModule::onNodeKeyCommitted(NodeNum, const uint8_t[32], bool) {}
+bool TrafficManagementModule::copyPublicKey(NodeNum, uint8_t[32], bool *) const
+{
+    return false;
+}
+bool TrafficManagementModule::copyUser(NodeNum, meshtastic_User &, bool *) const
+{
+    return false;
+}
+void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &) {}
+void TrafficManagementModule::dropNodeInfoCacheForTest() {}
+int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum)
+{
+    return -1;
+}
+void TrafficManagementModule::markKeySignerProvenForTest(NodeNum) {}
+
+#endif // TMM_HAS_NODEINFO_CACHE
 
 // =============================================================================
 // Next-Hop Overflow Cache
@@ -1305,9 +1291,7 @@ int32_t TrafficManagementModule::runOnce()
 
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
-#if TMM_HAS_NODEINFO_CACHE
-    maintainNodeInfoCacheLocked();
-#endif
+    maintainNodeInfoCacheLocked(); // no-op stub on builds without the NodeInfo cache
 
     return kMaintenanceIntervalMs;
 }
