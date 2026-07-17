@@ -770,6 +770,12 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     warmStore.clear();
     warmStore.saveIfDirty();
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // Factory reset forgets everything; TMM's RAM caches must not survive to resurrect
+    // identities (the device usually reboots after this, but don't rely on it).
+    if (trafficManagementModule)
+        trafficManagementModule->purgeAll();
+#endif
 
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
@@ -1599,6 +1605,11 @@ void NodeDB::resetNodes(bool keepFavorites)
     (void)ourNum;
 #if WARM_NODE_COUNT > 0
     warmStore.clear(); // warm entries are never favorites; a DB reset clears them too
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // A user-initiated DB reset forgets everything; TMM's caches must not resurrect it.
+    if (trafficManagementModule)
+        trafficManagementModule->purgeAll();
 #endif
 
     devicestate.has_rx_waypoint = false;
@@ -3414,13 +3425,17 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
 
 #if HAS_TRAFFIC_MANAGEMENT
-    // Write-through to the TrafficManagement NodeInfo cache, so it reflects this commit
-    // immediately rather than at the next reconcile sweep. updateUser is the single
-    // chokepoint through which every remote identity/key write flows, which is what makes
-    // this one call sufficient. `p` is the post-hygiene payload (id normalized, key pin
-    // already enforced above); the signer bit transfers the node's verified-signer status.
-    if (trafficManagementModule)
-        trafficManagementModule->onNodeIdentityCommitted(nodeId, p, nodeInfoLiteHasXeddsaSigned(info));
+    // Write-through: every accepted remote-identity commit lands here (NodeInfoModule,
+    // MeshService, and TMM's requester learning all funnel through updateUser; the two
+    // key-write sites that bypass it call onNodeKeyCommitted instead), so TMM's NodeInfo
+    // cache reflects the commit immediately rather than at the next reconcile pass. Runs on
+    // acceptance, not on `changed`: an identical update still proves the identity is
+    // current. `p` is the post-hygiene payload; signerKnown transfers only key-matched
+    // verified-signer status (isVerifiedSignerForKey semantics), never a bare node flag.
+    if (nodeId != getNodeNum() && trafficManagementModule) {
+        const bool signerKnown = p.public_key.size == 32 && isVerifiedSignerForKey(nodeId, p.public_key.bytes);
+        trafficManagementModule->onNodeIdentityCommitted(nodeId, p, signerKnown);
+    }
 #endif
 
     return changed;

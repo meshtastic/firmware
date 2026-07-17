@@ -294,28 +294,35 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
 
 void TrafficManagementModule::purgeNode(NodeNum node)
 {
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     if (node == 0)
         return;
     concurrency::LockGuard guard(&cacheLock);
-#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    if (cache) {
-        for (uint16_t i = 0; i < cacheSize(); i++) {
-            if (cache[i].node == node) {
-                memset(&cache[i], 0, sizeof(UnifiedCacheEntry));
-                break; // a node occupies at most one unified slot
-            }
-        }
-    }
-#endif
+    UnifiedCacheEntry *entry = findEntry(node);
+    if (entry)
+        memset(entry, 0, sizeof(UnifiedCacheEntry));
 #if TMM_HAS_NODEINFO_CACHE
-    if (nodeInfoPayload) {
-        for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
-            if (nodeInfoPayload[i].node == node) {
-                memset(&nodeInfoPayload[i], 0, sizeof(NodeInfoPayloadEntry));
-                break; // likewise unique in the NodeInfo cache
-            }
-        }
-    }
+    NodeInfoPayloadEntry *info = findNodeInfoEntryMutable(node);
+    if (info)
+        memset(info, 0, sizeof(NodeInfoPayloadEntry));
+#endif
+    TM_LOG_INFO("Purged node 0x%08x from traffic caches", node);
+#else
+    (void)node;
+#endif
+}
+
+void TrafficManagementModule::purgeAll()
+{
+#if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
+    concurrency::LockGuard guard(&cacheLock);
+    if (cache)
+        memset(cache, 0, static_cast<size_t>(cacheSize()) * sizeof(UnifiedCacheEntry));
+#if TMM_HAS_NODEINFO_CACHE
+    if (nodeInfoPayload)
+        memset(nodeInfoPayload, 0, static_cast<size_t>(nodeInfoTargetEntries()) * sizeof(NodeInfoPayloadEntry));
+#endif
+    TM_LOG_INFO("Purged all traffic caches");
 #endif
 }
 
@@ -332,6 +339,21 @@ void TrafficManagementModule::dropNodeInfoCacheForTest()
     nodeInfoPayload = nullptr;
     nodeInfoPayloadFromPsram = false;
     memaudit::set("tmm_ni", 0);
+#endif
+}
+
+int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum node)
+{
+#if TMM_HAS_NODEINFO_CACHE
+    concurrency::LockGuard guard(&cacheLock);
+    const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
+    if (!entry)
+        return -1;
+    return (entry->hasObserved ? 1 : 0) | (entry->hasResponded ? 2 : 0) | (entry->isMember ? 4 : 0) |
+           (entry->hasFullUser ? 8 : 0) | (entry->keySignerProven ? 16 : 0);
+#else
+    (void)node;
+    return -1;
 #endif
 }
 
@@ -694,6 +716,37 @@ void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshta
     (void)node;
     (void)user;
     (void)signerKnown;
+#endif
+}
+
+void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key32[32], bool proven)
+{
+#if TMM_HAS_NODEINFO_CACHE
+    if (node == 0 || !key32 || (nodeDB && node == nodeDB->getNodeNum()))
+        return;
+    concurrency::LockGuard guard(&cacheLock);
+    if (!nodeInfoPayload)
+        return;
+    bool usedEmptySlot = false;
+    NodeInfoPayloadEntry *entry = findOrCreateNodeInfoEntry(node, &usedEmptySlot, /*spareMembers=*/true);
+    if (!entry)
+        return;
+
+    const bool keyChanged = entry->user.public_key.size == 32 && memcmp(entry->user.public_key.bytes, key32, 32) != 0;
+    memcpy(entry->user.public_key.bytes, key32, 32);
+    entry->user.public_key.size = 32;
+    entry->isMember = true; // the caller just committed it to the hot store
+    // A rotated key never inherits the old key's verdict; `proven` (manual verification of
+    // exactly this key) is the strongest provenance this cache can carry.
+    if (keyChanged)
+        entry->keySignerProven = false;
+    if (proven)
+        entry->keySignerProven = true;
+    // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
+#else
+    (void)node;
+    (void)key32;
+    (void)proven;
 #endif
 }
 
@@ -1081,6 +1134,9 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             meshtastic_User requester = meshtastic_User_init_zero;
             if (!unauthenticatedSigner &&
                 pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
+                // Re-enters this module: updateUser's write-through hook calls back into
+                // onNodeIdentityCommitted, which takes cacheLock - safe here because this
+                // call site never holds cacheLock.
                 nodeDB->updateUser(getFrom(&mp), requester, mp.channel, mp.xeddsa_signed);
             }
             logAction("respond", &mp, "nodeinfo-cache");

@@ -117,13 +117,22 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // No-op without the cache. Thread-safe (takes cacheLock).
     void onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown);
 
-    // Full-removal hook from NodeDB::removeNodeByNum(): an explicit removal must forget the
-    // node here too - the unified cache slot (role, next-hop hint, dedup/rate state) and the
-    // NodeInfo cache entry (name/key/provenance) - or these caches would keep serving the
-    // deleted identity (key pool, rehydration) and resurrect it on next contact. Passive
-    // NodeDB eviction never calls this; the reconcile sweep will not re-seed a node that is
-    // gone from both NodeDB tiers. Thread-safe (takes cacheLock).
+    // Key-only commit hook, for the key-write sites that bypass NodeDB::updateUser (the
+    // Router's admin-key learn, KeyVerificationModule's manual-verification commit). Same
+    // rules as onNodeIdentityCommitted: NodeDB is senior on key content, a changed key
+    // resets provenance, and the observation stamp is never touched. `proven` marks the key
+    // signer-proven: pass true only when the commit itself established possession (a
+    // completed manual key verification), not for a TOFU-grade learn. Thread-safe.
+    void onNodeKeyCommitted(NodeNum node, const uint8_t key32[32], bool proven);
+
+    // User-initiated removal is total: NodeDB's removal paths call these so no TMM tier can
+    // resurrect an identity the user deliberately deleted. purgeNode zeroes the node's
+    // NodeInfo cache slot (identity, key, provenance) AND its unified-cache slot (cached
+    // role, next-hop hint, dedup state); purgeAll clears both tables outright (resetNodes /
+    // factory reset). Passive eviction is unaffected - a node that merely ages out of NodeDB
+    // keeps its cache entries and can be re-recognized on next contact. Thread-safe.
     void purgeNode(NodeNum node);
+    void purgeAll();
 
     /**
      * Check if this packet should have its hops exhausted.
@@ -178,6 +187,12 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // path can be exercised in a build where the cache is compiled in (native test builds
     // allocate it on the heap - see TMM_HAS_NODEINFO_CACHE). No-op when already absent.
     void dropNodeInfoCacheForTest();
+
+    // Test introspection: the NodeInfo entry's flag bits for `node`, or -1 if absent (or no
+    // cache). bit0 hasObserved, bit1 hasResponded, bit2 isMember, bit3 hasFullUser,
+    // bit4 keySignerProven. Lets saturation/membership tests assert sweep effects directly
+    // instead of inferring them from response behavior.
+    int peekNodeInfoFlagsForTest(NodeNum node);
 
   private:
     // =========================================================================

@@ -688,6 +688,13 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                     meshtastic_NodeInfoLite *fromNode = nodeDB->getOrCreateMeshNode(p->from);
                     if (fromNode != nullptr)
                         fromNode->public_key = remotePublic;
+#if HAS_TRAFFIC_MANAGEMENT
+                    // This learn bypasses NodeDB::updateUser, so write the key through to TMM's
+                    // NodeInfo cache too. proven=false: possession was shown to the admin channel,
+                    // not via an XEdDSA NodeInfo signature, so it stays TOFU-grade there.
+                    if (fromNode != nullptr && trafficManagementModule)
+                        trafficManagementModule->onNodeKeyCommitted(p->from, remotePublic.bytes, false);
+#endif
                 }
             } else {
                 // AEAD already authenticated this ciphertext, so no other candidate could decode it -
