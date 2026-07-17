@@ -1029,6 +1029,10 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.environment_update_interval = 0;
 #endif
 
+#ifdef USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED
+    moduleConfig.telemetry.environment_screen_enabled = USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED;
+#endif
+
 #ifdef USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL
     moduleConfig.telemetry.air_quality_interval = USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL;
 #else
@@ -1037,6 +1041,10 @@ void NodeDB::initModuleConfigIntervals()
 
 #ifdef USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED
     moduleConfig.telemetry.air_quality_enabled = USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_SCREEN_ENABLED
+    moduleConfig.telemetry.air_quality_screen_enabled = USERPREFS_CONFIG_AQ_SCREEN_ENABLED;
 #endif
 
     moduleConfig.telemetry.power_update_interval = 0;
