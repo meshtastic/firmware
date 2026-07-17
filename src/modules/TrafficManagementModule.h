@@ -278,6 +278,15 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // (false) until a later signed frame upgrades it.
         bool keySignerProven;
     };
+    // sourceChannel + the two bools + decodedBitfield are four 1-byte fields that pack into a
+    // single 4-byte tail word (struct alignment is 4), so keySignerProven cost zero bytes - it
+    // fills what was padding. This holds only while the metadata past `user` stays within
+    // node(4) + three uint32 timestamps(12) + one tail word(4) = 20 bytes. The array is 2000
+    // entries in PSRAM, so a 5th trailing byte would open a fresh word (~8 KB). If this fires,
+    // pack new flags into a bit of the existing bytes (e.g. fold the bools into a flags byte)
+    // rather than adding a field.
+    static_assert(sizeof(NodeInfoPayloadEntry) == sizeof(meshtastic_User) + 20,
+                  "NodeInfoPayloadEntry grew past its packed tail word - pack new flags into existing bytes");
 
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM (flat array, linear scan)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
