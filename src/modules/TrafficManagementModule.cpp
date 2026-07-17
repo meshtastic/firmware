@@ -729,8 +729,15 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     // Learn NodeInfo payloads into the dedicated PSRAM cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).
     if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
-        cacheNodeInfoPacket(mp);
-        updateCachedRoleFromNodeInfo(mp);
+        // A known signer's NodeInfo arriving unsigned is unauthenticated (the sender is forgeable),
+        // so don't let it drive the role cache or the direct-response NodeInfo cache. Same gate the
+        // identity-update path below uses.
+        const meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
+        const bool unauthenticatedSigner = senderNode && nodeInfoLiteHasXeddsaSigned(senderNode) && !mp.xeddsa_signed;
+        if (!unauthenticatedSigner) {
+            cacheNodeInfoPacket(mp);
+            updateCachedRoleFromNodeInfo(mp);
+        }
     }
 
     // -------------------------------------------------------------------------
