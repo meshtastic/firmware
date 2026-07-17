@@ -116,7 +116,7 @@ jobs:
           deps=$(objdump -p "$bin" | grep -i 'DLL Name' || true)
           test -n "$deps"
           extra=$(printf '%s\n' "$deps" \
-            | grep -viE 'api-ms-win|KERNEL32|WS2_32|ADVAPI32|USER32|msvcrt|bcrypt|IPHLPAPI|SHELL32|ole32|CRYPT32|SETUPAPI|CFGMGR32|WINMM|dbghelp' || true)
+            | grep -viE 'api-ms-win|KERNEL32|WS2_32|ADVAPI32|USER32|msvcrt|ucrtbase|bcrypt|IPHLPAPI|SHELL32|ole32|CRYPT32|SETUPAPI|CFGMGR32|WINMM|dbghelp' || true)
           if [ -n "$extra" ]; then
             printf '%s\n' "$extra"
             echo "::error::meshtasticd.exe has non-system DLL dependencies (static link regressed)"
