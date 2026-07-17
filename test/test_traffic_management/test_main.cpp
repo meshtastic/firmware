@@ -1016,6 +1016,36 @@ static void test_tm_nodeinfo_copyPublicKey_missReturnsFalse(void)
     TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
 }
 
+/**
+ * copyUser() returns the full cached identity (name + key) for name rehydration, and reports a
+ * miss for an uncached node.
+ */
+static void test_tm_nodeinfo_copyUser_returnsCachedIdentity(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "target-long", 0x77));
+
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
+    TEST_ASSERT_EQUAL_STRING("target-long", out.long_name);
+    TEST_ASSERT_EQUAL_UINT32(32, out.public_key.size);
+    TEST_ASSERT_EQUAL_UINT8(0x77, out.public_key.bytes[0]);
+
+    // Uncached node -> miss.
+    meshtastic_User miss = meshtastic_User_init_zero;
+    TEST_ASSERT_FALSE(module.copyUser(kRemoteNode, miss, nullptr));
+}
+
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
 /**
  * Replay gate (PSRAM path): a fresh but trust-on-first-use (never signer-proven) cached entry
@@ -2221,6 +2251,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_servesTofuKey);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_upgradesToSignerProven);
     RUN_TEST(test_tm_nodeinfo_copyPublicKey_missReturnsFalse);
+    RUN_TEST(test_tm_nodeinfo_copyUser_returnsCachedIdentity);
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
     RUN_TEST(test_tm_nodeinfo_directResponse_psramUnsignedNotServed);
 #endif

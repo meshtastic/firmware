@@ -3858,6 +3858,23 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
         }
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+        // Name rehydration: the warm tier keeps a node's key but not its name, so a re-admitted
+        // long-tail node is nameless until its next NodeInfo. The TrafficManagement NodeInfo
+        // cache is much larger and often still holds the full User. Restore it - but only when
+        // its cached key matches the key we just restored from warm, so a name never attaches to
+        // a different identity than the one we encrypt to. No-op without the PSRAM NodeInfo cache
+        // or when no key is present (key-matched by design). CopyUserToNodeInfoLite sets only the
+        // user-related bits, so the warm-restored signer bit survives.
+        if (lite->public_key.size == 32 && !nodeInfoLiteHasUser(lite) && trafficManagementModule) {
+            meshtastic_User tmmUser = meshtastic_User_init_zero;
+            if (trafficManagementModule->copyUser(n, tmmUser) && tmmUser.public_key.size == 32 &&
+                memcmp(tmmUser.public_key.bytes, lite->public_key.bytes, 32) == 0) {
+                TypeConversions::CopyUserToNodeInfoLite(lite, tmmUser);
+                LOG_INFO("Rehydrated node 0x%08x identity from TMM NodeInfo cache", n);
+            }
+        }
+#endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 

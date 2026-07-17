@@ -85,6 +85,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // trust-on-first-use (false), so callers can weigh its trust. Thread-safe (takes cacheLock).
     bool copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven = nullptr) const;
 
+    // Copy the full cached User (name, short name, hw model, role, key, flags) for `node`, if the
+    // NodeInfo direct-response cache holds one. Used by NodeDB to rehydrate a re-admitted node's
+    // identity - the warm tier keeps a node's key but not its name, and this cache (much larger)
+    // often still has it. Returns false on miss or on builds without the PSRAM cache. If
+    // `signerProven` is non-null, reports the cached key's provenance. Thread-safe (takes cacheLock).
+    bool copyUser(NodeNum node, meshtastic_User &out, bool *signerProven = nullptr) const;
+
     /**
      * Check if this packet should have its hops exhausted.
      * Called from perhapsRebroadcast() to force hop_limit = 0 regardless of

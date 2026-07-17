@@ -544,6 +544,29 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
 #endif
 }
 
+bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *signerProven) const
+{
+#if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+    if (!nodeInfoPayload || node == 0)
+        return false;
+
+    concurrency::LockGuard guard(&cacheLock);
+    const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
+    if (!entry)
+        return false;
+
+    out = entry->user;
+    if (signerProven)
+        *signerProven = entry->keySignerProven;
+    return true;
+#else
+    (void)node;
+    (void)out;
+    (void)signerProven;
+    return false;
+#endif
+}
+
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM) && !(MESHTASTIC_EXCLUDE_PKI)
 // True iff both are full 32-byte public keys with identical bytes. Single point of
 // truth for the NodeInfo-cache key-hygiene checks (owner impersonation + key pinning),
