@@ -50,6 +50,16 @@ constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot in
 constexpr uint32_t kNodeInfoMaxServeAgeMs = 6UL * 60UL * 60UL * 1000UL;        // 6 h (PSRAM cache path)
 constexpr uint32_t kNodeInfoMaxServeAgeSecs = kNodeInfoMaxServeAgeMs / 1000UL; // 6 h (NodeDB fallback path)
 
+// Key-retention window: how long a NodeInfo cache entry that carries a 32-byte public key is
+// kept after we last heard the node. This is deliberately much longer than the serve window
+// (above): once a node ages past the serve window we stop spoofing NodeInfo replies for it,
+// but its key remains valuable as a last-resort encryption source (NodeDB::copyPublicKey),
+// so the entry is retained to widen the pool of peers we can encrypt to. Kept well under the
+// ~49.7-day millis wrap so the maintenance sweep always evicts a stale entry before its
+// modular age could wrap (the wrap-safety guarantee from T4). Keyless entries do not get this
+// grace - they expire at the serve window since they hold nothing worth retaining.
+constexpr uint32_t kNodeInfoKeyRetentionMs = 7UL * 24UL * 60UL * 60UL * 1000UL; // 7 d
+
 // Throttle: emit at most one spoofed direct reply per target node per this interval.
 // Direct responses are otherwise un-throttled (they STOP the request before the
 // per-sender rate limiter runs) and the reply target is attacker-controlled, so an
@@ -418,9 +428,13 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
 
 /**
  * Find or create a NodeInfo payload entry (linear scan of the flat PSRAM
- * array). One pass tracks the match, the first empty slot, and the LRU
- * victim by lastObservedMs (wrap-safe age). NodeInfo traffic is low-rate,
- * so the O(n) scan is negligible.
+ * array). One pass tracks the match, the first empty slot, and the eviction
+ * victim. Victim selection is trust-tiered so the cache doubles as a pubkey
+ * pool (NodeDB::copyPublicKey): a keyless entry is sacrificed before any
+ * keyed one, and a trust-on-first-use key before a signer-proven key; within
+ * a tier the oldest (wrap-safe age by lastObservedMs) loses. Mirrors
+ * WarmNodeStore's keyed-first admission. NodeInfo traffic is low-rate, so the
+ * O(n) scan is negligible.
  */
 TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node,
                                                                                                   bool *usedEmptySlot)
@@ -434,6 +448,7 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
 
     NodeInfoPayloadEntry *empty = nullptr;
     NodeInfoPayloadEntry *lru = nullptr;
+    uint8_t lruTier = 0xFF;
     uint32_t lruAge = 0;
     const uint32_t now = clockMs();
 
@@ -447,10 +462,13 @@ TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::findOrCr
             continue;
         }
         if (empty)
-            continue;                                // an empty slot beats any victim; stop scoring
+            continue; // an empty slot beats any victim; stop scoring
+        // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key.
+        const uint8_t tier = (e.user.public_key.size != 32) ? 0 : (e.keySignerProven ? 2 : 1);
         const uint32_t age = now - e.lastObservedMs; // unsigned subtraction is wrap-safe
-        if (!lru || age > lruAge) {
+        if (!lru || tier < lruTier || (tier == lruTier && age > lruAge)) {
             lru = &e;
+            lruTier = tier;
             lruAge = age;
         }
     }
@@ -1040,17 +1058,20 @@ int32_t TrafficManagementModule::runOnce()
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
     if (nodeInfoPayload) {
-        // Evict NodeInfo payloads past the serve window. Beyond freeing slots, this bounds
-        // how long any entry can sit unrefreshed: the staleness gate's modular age compare
-        // (shouldRespondToNodeInfo) is only unambiguous while true age < 2^32 ms (~49.7 d),
-        // so removing stale entries here keeps them far from that wrap boundary (T4). Uses
-        // the same clock as the gate; entries stamped with nowStampMs() so 0 means "never".
+        // Evict stale NodeInfo payloads. Two windows: an entry carrying a 32-byte public key
+        // is retained for kNodeInfoKeyRetentionMs (it is a last-resort encryption key source,
+        // see NodeDB::copyPublicKey), while a keyless entry expires at the serve window since
+        // it holds nothing worth keeping past that point. Both windows sit well under the
+        // ~49.7-day millis wrap, so an entry is always removed before its modular age could
+        // wrap and read as fresh - the wrap-safety guarantee behind the staleness gate (T4).
+        // Entries are stamped with nowStampMs() so 0 reliably means "never observed".
         uint16_t nodeInfoExpired = 0;
         for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
             NodeInfoPayloadEntry &e = nodeInfoPayload[i];
             if (e.node == 0 || e.lastObservedMs == 0)
                 continue;
-            if ((nowMs - e.lastObservedMs) > kNodeInfoMaxServeAgeMs) {
+            const uint32_t ttl = (e.user.public_key.size == 32) ? kNodeInfoKeyRetentionMs : kNodeInfoMaxServeAgeMs;
+            if ((nowMs - e.lastObservedMs) > ttl) {
                 memset(&e, 0, sizeof(NodeInfoPayloadEntry));
                 nodeInfoExpired++;
             }
