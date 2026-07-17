@@ -24,8 +24,8 @@
 #include "main.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
-#include <RTC.h>
 #include <cstring>
+#include <gps/RTC.h>
 
 // External variables
 extern graphics::Screen *screen;

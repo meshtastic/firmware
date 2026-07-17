@@ -5,8 +5,8 @@
 #include "NodeDB.h"
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "SPILock.h"
+#include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
