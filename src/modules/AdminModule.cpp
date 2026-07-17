@@ -788,20 +788,24 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
-            accelerometerThread->enabled == false) {
-            config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
-        // Turning double-tap off: stop the accelerometer thread, but only if wake-on-motion doesn't still need it.
-        // disable() clears enabled so a later re-enable can restart it.
-        // Skip the disable when the sensor also drives the compass (e.g. BMX160, ICM20948, BMM150),
-        // otherwise halting the thread would freeze the heading until the next reboot.
-        else if (config.device.double_tap_as_button_press == true &&
-                 c.payload_variant.device.double_tap_as_button_press == false && config.display.wake_on_tap_or_motion == false &&
-                 accelerometerThread->enabled == true && !accelerometerThread->providesHeading()) {
-            accelerometerThread->disable();
+        // Only allocated when an accelerometer was actually detected at boot, so it may be null here.
+        if (accelerometerThread) {
+            if (config.device.double_tap_as_button_press == false &&
+                c.payload_variant.device.double_tap_as_button_press == true && accelerometerThread->enabled == false) {
+                config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
+                accelerometerThread->enabled = true;
+                accelerometerThread->start();
+            }
+            // Turning double-tap off: stop the accelerometer thread, but only if wake-on-motion doesn't still need it.
+            // disable() clears enabled so a later re-enable can restart it.
+            // Skip the disable when the sensor also drives the compass (e.g. BMX160, ICM20948, BMM150),
+            // otherwise halting the thread would freeze the heading until the next reboot.
+            else if (config.device.double_tap_as_button_press == true &&
+                     c.payload_variant.device.double_tap_as_button_press == false &&
+                     config.display.wake_on_tap_or_motion == false && accelerometerThread->enabled == true &&
+                     !accelerometerThread->providesHeading()) {
+                accelerometerThread->disable();
+            }
         }
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
@@ -901,20 +905,23 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
-            accelerometerThread->enabled == false) {
-            config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
-        // Turning wake-on-motion off: stop the accelerometer thread, but only if double-tap doesn't still need it.
-        // disable() clears enabled so a later re-enable can restart it.
-        // Skip the disable when the sensor also drives the compass (e.g. BMX160, ICM20948, BMM150),
-        // otherwise halting the thread would freeze the heading until the next reboot.
-        else if (config.display.wake_on_tap_or_motion == true && c.payload_variant.display.wake_on_tap_or_motion == false &&
-                 config.device.double_tap_as_button_press == false && accelerometerThread->enabled == true &&
-                 !accelerometerThread->providesHeading()) {
-            accelerometerThread->disable();
+        // Only allocated when an accelerometer was actually detected at boot, so it may be null here.
+        if (accelerometerThread) {
+            if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
+                accelerometerThread->enabled == false) {
+                config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
+                accelerometerThread->enabled = true;
+                accelerometerThread->start();
+            }
+            // Turning wake-on-motion off: stop the accelerometer thread, but only if double-tap doesn't still need it.
+            // disable() clears enabled so a later re-enable can restart it.
+            // Skip the disable when the sensor also drives the compass (e.g. BMX160, ICM20948, BMM150),
+            // otherwise halting the thread would freeze the heading until the next reboot.
+            else if (config.display.wake_on_tap_or_motion == true && c.payload_variant.display.wake_on_tap_or_motion == false &&
+                     config.device.double_tap_as_button_press == false && accelerometerThread->enabled == true &&
+                     !accelerometerThread->providesHeading()) {
+                accelerometerThread->disable();
+            }
         }
 #endif
         config.display = c.payload_variant.display;
