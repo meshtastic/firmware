@@ -41,8 +41,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool hasOpenEditTransaction = false;
 
     uint8_t session_passkey[8] = {0};
-    uint32_t session_time = 0;          // millis() when the current session passkey was issued
-    bool session_passkey_valid = false; // separate flag: millis() 0 at boot is a valid issue time
+    uint32_t session_time = 0;        // millis() when the current session passkey was issued
+    bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
 
