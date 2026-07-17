@@ -956,8 +956,16 @@ void Power::readPowerStatus()
             }
         }
     } else { // no batteryLevel implementation active - as a last resort try to detect VBUS using PowerHAL
-        if (powerHAL_isVBUSConnected())
+        if (powerHAL_isVBUSConnected()) {
             usbPowered = isChargingNow = OptTrue;
+        } else {
+// PowerHAL is supported so far only on NRF52 so if it returns
+// false we know for sure VBUS is not connected. For other platforms
+// it will return false as a placeholder
+#ifdef NRF_APM
+            usbPowered = isChargingNow = OptFalse;
+#endif
+        }
     }
 
     // Notify any status instances that are observing us
