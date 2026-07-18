@@ -54,6 +54,7 @@ class SSD1306Wire : public OLEDDisplay {
       bool                _doI2cAutoInit = false;
       TwoWire*            _wire = NULL;
       long                _frequency;
+      uint8_t             _y_offset = 0;
 
   public:
 
@@ -101,6 +102,10 @@ class SSD1306Wire : public OLEDDisplay {
       return true;
     }
 
+    void setYOffset(uint8_t y_offset_pages) {
+      _y_offset = y_offset_pages;
+    }
+
     void display(void) {
       initI2cIfNeccesary();
       const int x_offset = (128 - this->width()) / 2;
@@ -139,8 +144,8 @@ class SSD1306Wire : public OLEDDisplay {
         sendCommand(x_offset + maxBoundX);
 
         sendCommand(PAGEADDR);
-        sendCommand(minBoundY);
-        sendCommand(maxBoundY);
+        sendCommand(minBoundY + _y_offset);
+        sendCommand(maxBoundY + _y_offset);
 
         uint8_t k = 0;
         for (y = minBoundY; y <= maxBoundY; y++) {
@@ -170,7 +175,9 @@ class SSD1306Wire : public OLEDDisplay {
         sendCommand(x_offset + (this->width() - 1));
 
         sendCommand(PAGEADDR);
-        sendCommand(0x0);
+        sendCommand(_y_offset);
+        // PAGEADDR requires both start and end page parameters.
+        sendCommand(_y_offset + (this->height() / 8) - 1);
 
         for (uint16_t i=0; i < displayBufferSize; i++) {
           _wire->beginTransmission(this->_address);
