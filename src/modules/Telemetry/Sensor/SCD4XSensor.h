@@ -11,6 +11,7 @@
 // Max speed 400kHz
 #define SCD4X_I2C_CLOCK_SPEED 400000
 #define SCD4X_WARMUP_MS 5000
+#define SCD4X_MAX_RETRIES 3
 
 class SCD4XSensor : public TelemetrySensor
 {
