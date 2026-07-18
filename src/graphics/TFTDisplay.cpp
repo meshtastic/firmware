@@ -1613,8 +1613,8 @@ bool TFTDisplay::connect()
                                  12 /* col offset 1 */, 0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */,
                                  nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
 #elif defined(HELTEC_RCC6)
-    Arduino_DataBus *bus  = new Arduino_SWSPI(TFT_RS, TFT_CS, TFT_SCL, TFT_SDA, GFX_NOT_DEFINED);
-    tft = new Arduino_NV3001B(bus, TFT_RST, 3, true, TFT_WIDTH, TFT_HEIGHT, 0, 0, 0, 0);
+        Arduino_DataBus *bus = new Arduino_SWSPI(TFT_RS, TFT_CS, TFT_SCL, TFT_SDA, GFX_NOT_DEFINED);
+        tft = new Arduino_NV3001B(bus, TFT_RST, 3, true, TFT_WIDTH, TFT_HEIGHT, 0, 0, 0, 0);
 #else
         tft = new LGFX;
 #endif
@@ -1627,11 +1627,7 @@ bool TFTDisplay::connect()
     unphone.backlight(true); // using unPhone library
 #endif
 #if defined(HACKADAY_COMMUNICATOR) || defined(HELTEC_RCC6)
-#ifdef HELTEC_RCC6
-    bool beginStatus = tft->begin(SPI_FREQUENCY);
-#else
     bool beginStatus = tft->begin();
-#endif
     if (beginStatus)
         LOG_DEBUG("TFT Success!");
     else
