@@ -1243,9 +1243,7 @@ static void test_tm_nodeinfo_updateUserHook_writesThrough(void)
     request.hop_limit = 3;
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(0, static_cast<uint32_t>(mockRouter.sentPackets.size()));
-
-    trafficManagementModule = nullptr;
-    mockNodeDB->rollHotStore(); // updateUser admitted the node to the hot store
+    // trafficManagementModule and the hot store are reset in tearDown()/setUp().
 }
 
 /**
@@ -1284,8 +1282,7 @@ static void test_tm_nodeinfo_removeNode_purgesCaches(void)
     TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr));
     TEST_ASSERT_EQUAL_UINT8(0, module.getNextHopHint(kTargetNode));
     TEST_ASSERT_EQUAL_INT(-1, module.peekNodeInfoFlagsForTest(kTargetNode));
-
-    trafficManagementModule = nullptr;
+    // trafficManagementModule is reset in tearDown().
 }
 
 /**
@@ -1980,8 +1977,7 @@ static void test_tm_nodeinfo_resetNodes_purgesAllCaches(void)
     TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr));
     TEST_ASSERT_EQUAL_INT(-1, module.peekNodeInfoFlagsForTest(kTargetNode));
     TEST_ASSERT_EQUAL_UINT8(0, module.getNextHopHint(kTargetNode));
-
-    trafficManagementModule = nullptr;
+    // trafficManagementModule is reset in tearDown().
 }
 
 /**
@@ -2001,9 +1997,7 @@ static void test_tm_nodeinfo_cache_dropsFrameCarryingOwnerKey(void)
     TEST_ASSERT_EQUAL_INT(-1, module.peekNodeInfoFlagsForTest(kTargetNode));
     uint8_t key[32] = {0};
     TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
-
-    owner.public_key.size = 0; // restore for later tests
-    memset(owner.public_key.bytes, 0, sizeof(owner.public_key.bytes));
+    // owner.public_key is reset in tearDown() (guaranteed even if an assertion above aborts).
 }
 #endif // !MESHTASTIC_EXCLUDE_PKI
 #endif
@@ -3139,7 +3133,20 @@ void setUp(void)
 {
     resetTrafficConfig();
 }
-void tearDown(void) {}
+void tearDown(void)
+{
+    // Runs even when a TEST_ASSERT_* aborts a test mid-way (Unity longjmps out, skipping any
+    // cleanup the test itself does after the assertion), so per-test global state can never
+    // dangle into later cases. The dangling-pointer path is concrete: a test points the global
+    // at its stack `module`, and the next setUp()'s resetNodes() would then call
+    // trafficManagementModule->purgeAll() on a destroyed object.
+    trafficManagementModule = nullptr;
+    owner.public_key.size = 0;
+    memset(owner.public_key.bytes, 0, sizeof(owner.public_key.bytes));
+    // Neutralize the RTC fake clock a fallback test may have set (the virtual s_testNowMs is
+    // already reset by setUp via resetTrafficConfig).
+    setBootRelativeTimeForUnitTest(0);
+}
 
 TM_TEST_ENTRY void setup()
 {
