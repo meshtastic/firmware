@@ -9,6 +9,7 @@
  */
 #include "PowerFSM.h"
 #include "Default.h"
+#include "input/ButtonHelper.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
@@ -177,15 +178,7 @@ static void lsIdle()
                 // We woke for some other reason (button press, device IRQ interrupt)
 
 #if HAS_BUTTON
-                uint32_t _btnPin = 0xFF;
-#if defined(USERPREFS_BUTTON_PIN)
-                _btnPin = USERPREFS_BUTTON_PIN;
-#elif defined(BUTTON_PIN)
-                _btnPin = BUTTON_PIN;
-#endif
-                if (config.device.button_gpio != 0) {
-                    _btnPin = config.device.button_gpio;
-                }
+                uint32_t _btnPin = getResolvedButtonPin();
                 bool pressed = (_btnPin != 0xFF) ? !digitalRead(_btnPin) : false;
 #else
                 bool pressed = false;

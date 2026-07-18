@@ -1,4 +1,5 @@
 #include "InputBroker.h"
+#include "input/ButtonHelper.h"
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
@@ -164,18 +165,9 @@ void InputBroker::pollSoonWorker(void *p)
 
 void InputBroker::Init()
 {
-
 #if HAS_BUTTON
 #ifdef ARCH_ESP32
-    uint32_t _btnPin = 0xFF;
-#if defined(USERPREFS_BUTTON_PIN)
-    _btnPin = USERPREFS_BUTTON_PIN;
-#elif defined(BUTTON_PIN)
-    _btnPin = BUTTON_PIN;
-#endif
-    if (config.device.button_gpio != 0) {
-        _btnPin = config.device.button_gpio;
-    }
+    uint32_t _btnPin = getResolvedButtonPin();
 
     if (_btnPin != 0xFF) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -326,15 +318,7 @@ void InputBroker::Init()
 #endif
 
 #if HAS_BUTTON
-    uint32_t _pinNum = 0xFF;
-#if defined(USERPREFS_BUTTON_PIN)
-    _pinNum = USERPREFS_BUTTON_PIN;
-#elif defined(BUTTON_PIN)
-    _pinNum = BUTTON_PIN;
-#endif
-    if (config.device.button_gpio != 0) {
-        _pinNum = config.device.button_gpio;
-    }
+    uint32_t _pinNum = getResolvedButtonPin();
 
 #ifndef BUTTON_ACTIVE_LOW
 #define BUTTON_ACTIVE_LOW true

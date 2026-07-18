@@ -1,5 +1,5 @@
 #include "configuration.h"
-
+#include "input/ButtonHelper.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
@@ -310,15 +310,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
         enableLoraInterrupt();
     }
 #if HAS_BUTTON
-    uint32_t _btnPin = 0xFF;
-#if defined(USERPREFS_BUTTON_PIN)
-    _btnPin = USERPREFS_BUTTON_PIN;
-#elif defined(BUTTON_PIN)
-    _btnPin = BUTTON_PIN;
-#endif
-    if (config.device.button_gpio != 0) {
-        _btnPin = config.device.button_gpio;
-    }
+    uint32_t _btnPin = getResolvedButtonPin();
     if (_btnPin != 0xFF) {
         // Avoid leakage through button pin
         if (GPIO_IS_VALID_OUTPUT_GPIO(_btnPin)) {
@@ -437,15 +429,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
 
 #if HAS_BUTTON && defined(BUTTON_NEED_PULLUP)
-    uint32_t _btnPin_pullup = 0xFF;
-#if defined(USERPREFS_BUTTON_PIN)
-    _btnPin_pullup = USERPREFS_BUTTON_PIN;
-#elif defined(BUTTON_PIN)
-    _btnPin_pullup = BUTTON_PIN;
-#endif
-    if (config.device.button_gpio != 0) {
-        _btnPin_pullup = config.device.button_gpio;
-    }
+    uint32_t _btnPin_pullup = getResolvedButtonPin();
     if (_btnPin_pullup != 0xFF) {
         gpio_pullup_en((gpio_num_t)_btnPin_pullup);
     }
@@ -482,15 +466,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)BOARD_PCA9535_INT, GPIO_INTR_LOW_LEVEL);
 #endif
 #if HAS_BUTTON
-    uint32_t _btnPin_wake = 0xFF;
-#if defined(USERPREFS_BUTTON_PIN)
-    _btnPin_wake = USERPREFS_BUTTON_PIN;
-#elif defined(BUTTON_PIN)
-    _btnPin_wake = BUTTON_PIN;
-#endif
-    if (config.device.button_gpio != 0) {
-        _btnPin_wake = config.device.button_gpio;
-    }
+    uint32_t _btnPin_wake = getResolvedButtonPin();
     if (_btnPin_wake != 0xFF) {
         gpio_wakeup_enable((gpio_num_t)_btnPin_wake, GPIO_INTR_LOW_LEVEL);
     }

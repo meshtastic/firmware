@@ -3,7 +3,7 @@
 #include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
-
+#include "input/ButtonHelper.h"
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 #endif
@@ -352,16 +352,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
         // to detect wake and in normal operation the external part drives them hard.
 #if HAS_BUTTON
-    uint32_t _btnPin = 0xFF;
-#if defined(USERPREFS_BUTTON_PIN)
-    _btnPin = USERPREFS_BUTTON_PIN;
-#elif defined(BUTTON_PIN)
-    _btnPin = BUTTON_PIN;
-#endif
-    if (config.device.button_gpio != 0) {
-        _btnPin = config.device.button_gpio;
-    }
-
+    uint32_t _btnPin = getResolvedButtonPin();
     uint64_t gpioMask = 0;
 #if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
     if (_btnPin != 0xFF) {
