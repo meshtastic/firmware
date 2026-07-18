@@ -1269,7 +1269,9 @@ void optInDisableTelemetryBroadcast(meshtastic_LocalModuleConfig &mc)
 {
     // Every mesh-broadcast telemetry enable flag (each gates its module's sendTelemetry() to the mesh).
     mc.telemetry.device_telemetry_enabled = false;
+#if !defined(GAT562)
     mc.telemetry.environment_measurement_enabled = false;
+#endif
     mc.telemetry.air_quality_enabled = false;
     mc.telemetry.power_measurement_enabled = false;
     mc.telemetry.health_measurement_enabled = false;
@@ -2696,6 +2698,18 @@ void NodeDB::loadFromDisk()
         moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+#if defined(GAT562)
+    // Migrate installations created before the on-board BME280 defaults were
+    // added. The explicit interval is also the one-time migration marker, so a
+    // later user disable remains disabled across reboots.
+    if (!moduleConfig.telemetry.environment_measurement_enabled && !moduleConfig.telemetry.environment_screen_enabled &&
+        moduleConfig.telemetry.environment_update_interval == 0) {
+        moduleConfig.telemetry.environment_measurement_enabled = true;
+        moduleConfig.telemetry.environment_screen_enabled = true;
+        moduleConfig.telemetry.environment_update_interval = default_telemetry_broadcast_interval_secs;
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
+#endif
 #if ARCH_PORTDUINO
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {

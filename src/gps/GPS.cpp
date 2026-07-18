@@ -1916,6 +1916,11 @@ std::unique_ptr<GPS> GPS::createGps()
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
+#ifdef GPS_FORCE_GENERIC_NMEA
+    // GAT562 GNSS provides standard NMEA at a fixed baud but does not reliably
+    // identify itself to the active 2.8 probe sequence.
+    new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
+#endif
 #ifdef ARCH_PORTDUINO
     // Skip chip-specific probing for gpsd - it's a generic NMEA stream.
     if (!portduino_config.gpsd_host.empty())
