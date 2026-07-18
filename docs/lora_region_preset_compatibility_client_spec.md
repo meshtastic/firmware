@@ -262,7 +262,9 @@ The **EU 86x superset** advertised by groups 1, 2 and 3 is the union of the trio
 band presets, because the firmware auto-swaps region within the trio on preset selection
 (§5), so any of these is a legal pick from any of the three regions:
 
-    LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, LITE_FAST, LITE_SLOW, NARROW_FAST, NARROW_SLOW
+```text
+LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, LITE_FAST, LITE_SLOW, NARROW_FAST, NARROW_SLOW
+```
 
 The three groups still differ by `default_preset` (`LONG_FAST` / `LITE_FAST` / `NARROW_SLOW`),
 which is why they remain distinct groups despite sharing this preset list.
