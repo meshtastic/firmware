@@ -186,6 +186,11 @@ extern void tftSetup(void);
 UdpMulticastHandler *udpHandler = nullptr;
 #endif
 
+#ifdef ARCH_PORTDUINO
+#include "mesh/udp/UdpUnicastConnector.h"
+UdpUnicastConnector *udpUnicastConnector = nullptr;
+#endif
+
 #if defined(TCXO_OPTIONAL)
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
 #endif
@@ -1041,6 +1046,20 @@ void setup()
     }
 #endif
 #endif
+
+#ifdef ARCH_PORTDUINO
+    // Native unicast-UDP connector to the meshswitch routing daemon, enabled by setting a peer
+    // address in config.yaml (General -> UDPUnicastPeer). Independent of UDP multicast.
+    if (!portduino_config.udp_unicast_peer.empty()) {
+        LOG_DEBUG("Start UDP unicast connector");
+        udpUnicastConnector = new UdpUnicastConnector();
+        if (!udpUnicastConnector->start(portduino_config.udp_unicast_peer)) {
+            delete udpUnicastConnector;
+            udpUnicastConnector = nullptr;
+        }
+    }
+#endif
+
     service = new MeshService();
     service->init();
 
