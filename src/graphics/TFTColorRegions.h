@@ -16,8 +16,9 @@ struct TFTColorRegion {
     // Required by ST7789 driver: it scans until the first disabled entry.
     bool enabled = false;
 };
-
+#ifndef MAX_TFT_COLOR_REGIONS
 static constexpr size_t MAX_TFT_COLOR_REGIONS = 48;
+#endif
 extern TFTColorRegion colorRegions[MAX_TFT_COLOR_REGIONS];
 
 enum class TFTColorRole : uint8_t {
@@ -39,7 +40,7 @@ enum class TFTColorRole : uint8_t {
     Count
 };
 
-#if HAS_TFT || defined(HAS_SPI_TFT)
+#if HAS_TFT || defined(HAS_SPI_TFT) || defined(HAS_HUB75_NATIVE)
 #define GRAPHICS_TFT_COLORING_ENABLED 1
 #else
 #define GRAPHICS_TFT_COLORING_ENABLED 0

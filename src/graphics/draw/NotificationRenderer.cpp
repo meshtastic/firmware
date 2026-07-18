@@ -54,6 +54,7 @@ bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
+char NotificationRenderer::alphanumericValue[16] = {0};
 VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
 std::function<void(const std::string &)> NotificationRenderer::textInputCallback = nullptr;
 
@@ -277,6 +278,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     case notificationTypeEnum::hex_picker:
         drawHexPicker(display, state);
         break;
+    case notificationTypeEnum::alphanumeric_picker:
+        drawAlphanumericPicker(display, state);
+        break;
     }
 }
 
@@ -457,6 +461,96 @@ void NotificationRenderer::drawHexPicker(OLEDDisplay *display, OLEDDisplayUiStat
     }
 
     linePointers[lineCount++] = digits.c_str();
+    linePointers[lineCount++] = arrowPointer.c_str();
+
+    drawNotificationBox(display, state, linePointers, totalLines, 0);
+}
+
+// Arcade-style initials entry. Mirrors drawHexPicker's cursor/confirm flow, but each position
+// holds a character from ALPHANUMERIC_CHARS (cycled with UP/DOWN) instead of a packed digit, and
+// the assembled string is returned through textInputCallback.
+void NotificationRenderer::drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    static const char ALPHANUMERIC_CHARS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    constexpr int ALPHANUMERIC_COUNT = sizeof(ALPHANUMERIC_CHARS) - 1; // exclude the NUL
+
+    const char *lineStarts[MAX_LINES + 1] = {0};
+    uint16_t lineCount = 0;
+
+    // Parse lines (identical to the number/hex pickers)
+    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+    lineStarts[lineCount] = alertBannerMessage;
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
+        lineCount++;
+    }
+
+    auto alphaIndex = [&](char c) -> int {
+        for (int i = 0; i < ALPHANUMERIC_COUNT; i++)
+            if (ALPHANUMERIC_CHARS[i] == c)
+                return i;
+        return 0;
+    };
+
+    // Handle input
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
+        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
+        int idx = (alphaIndex(alphanumericValue[curSelected]) + 1) % ALPHANUMERIC_COUNT;
+        alphanumericValue[curSelected] = ALPHANUMERIC_CHARS[idx];
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
+               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
+        int idx = (alphaIndex(alphanumericValue[curSelected]) + ALPHANUMERIC_COUNT - 1) % ALPHANUMERIC_COUNT;
+        alphanumericValue[curSelected] = ALPHANUMERIC_CHARS[idx];
+    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
+        char k = inEvent.kbchar;
+        if (k >= 'a' && k <= 'z')
+            k = static_cast<char>(k - 'a' + 'A');
+        if ((k >= 'A' && k <= 'Z') || (k >= '0' && k <= '9')) { // direct keyboard entry
+            alphanumericValue[curSelected] = k;
+            curSelected++;
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+        curSelected++;
+    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+        curSelected--;
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
+        resetBanner();
+        return;
+    }
+
+    if (curSelected < 0)
+        curSelected = 0;
+    if (curSelected == static_cast<int8_t>(numDigits)) {
+        auto callback = textInputCallback; // capture before clearing to avoid re-entrancy surprises
+        std::string result(alphanumericValue, numDigits);
+        textInputCallback = nullptr;
+        resetBanner();
+        if (callback)
+            callback(result);
+        return;
+    }
+
+    inEvent.inputEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
+
+    uint16_t totalLines = lineCount + 2;
+    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
+
+    for (uint16_t i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
+    std::string chars = " ";
+    std::string arrowPointer = " ";
+    for (uint16_t i = 0; i < numDigits; i++) {
+        chars += std::string(1, alphanumericValue[i]) + " ";
+        arrowPointer += (curSelected == static_cast<int8_t>(i)) ? "^ " : "_ ";
+    }
+
+    linePointers[lineCount++] = chars.c_str();
     linePointers[lineCount++] = arrowPointer.c_str();
 
     drawNotificationBox(display, state, linePointers, totalLines, 0);
