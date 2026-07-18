@@ -154,9 +154,14 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_QSPI_IO2 28
 #define PIN_QSPI_IO3 2
 
-// On-board QSPI Flash
+// Some early GAT562 definitions inherited a RAK QSPI flash footprint. The
+// production GAT562 Family has no external flash, and P0.29 is reserved by the
+// product hardware, so the official protocol/configuration stays on internal
+// nRF52840 storage.
+#if !defined(GAT562_DISABLE_EXTERNAL_FLASH)
 #define EXTERNAL_FLASH_DEVICES IS25LP080D
 #define EXTERNAL_FLASH_USE_QSPI
+#endif
 
 /* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
    RAK5005-O <->  nRF52840
@@ -231,7 +236,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Therefore must be 1 to keep peripherals powered
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
-// #define PIN_GPS_EN PIN_3V3_EN
+#define PIN_GPS_EN PIN_3V3_EN
+#define GPS_EN_ACTIVE 1
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_BAUDRATE 9600

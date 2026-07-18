@@ -412,11 +412,19 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         modeStr[sizeof(modeStr) - 1] = '\0';
     }
 
-    char regionradiopreset[25];
+    char regionradiopreset[32];
     const char *region = myRegion ? myRegion->name : NULL;
     if (region != nullptr) {
         if (currentResolution == ScreenResolution::UltraLow) {
             snprintf(regionradiopreset, sizeof(regionradiopreset), "%s", region);
+#if defined(GAT562)
+        } else if (RadioLibInterface::instance) {
+            RadioLibInterface::instance->updateNoiseFloor();
+            const int32_t noise = RadioLibInterface::instance->hasNoiseFloorSamples()
+                                      ? RadioLibInterface::instance->getNoiseFloor()
+                                      : RadioLibInterface::instance->getDisplayRSSI();
+            snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s Noise:%d", region, modeStr, noise);
+#endif
         } else {
             snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, modeStr);
         }
@@ -651,6 +659,44 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         line += 1;
         drawUsageRow("SD:", sdUsed, sdTotal);
     }
+
+#if defined(GAT562)
+    line += 1;
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    char rssiSnrStr[32];
+    if (RadioLibInterface::instance) {
+        snprintf(rssiSnrStr, sizeof(rssiSnrStr), "RSSI:%d SNR:%.2f", RadioLibInterface::instance->getDisplayRSSI(),
+                 RadioLibInterface::instance->getDisplaySNR());
+    } else {
+        snprintf(rssiSnrStr, sizeof(rssiSnrStr), "RSSI:- SNR:-");
+    }
+    display->drawString((SCREEN_WIDTH - display->getStringWidth(rssiSnrStr)) / 2, getTextPositions(display)[line++], rssiSnrStr);
+
+    char uptimeStr[16] = "";
+    getUptimeStr(millis(), "", uptimeStr, sizeof(uptimeStr));
+    char verStr[36];
+    snprintf(verStr, sizeof(verStr), "Uptime:%s Ver:%s", uptimeStr, xstr(APP_VERSION_SHORT));
+    display->drawString((SCREEN_WIDTH - display->getStringWidth(verStr)) / 2, getTextPositions(display)[line++], verStr);
+
+    const char *apiState = "No Apps Connected";
+    if (service->api_state == service->STATE_BLE)
+        apiState = "App Connected (BLE)";
+    else if (service->api_state == service->STATE_WIFI)
+        apiState = "App Connected (WiFi)";
+    else if (service->api_state == service->STATE_SERIAL)
+        apiState = "App Connected (Serial)";
+    else if (service->api_state == service->STATE_PACKET)
+        apiState = "App Connected (Internal)";
+    else if (service->api_state == service->STATE_HTTP)
+        apiState = "App Connected (HTTP)";
+    else if (service->api_state == service->STATE_ETH)
+        apiState = "App Connected (Ethernet)";
+    display->drawString((SCREEN_WIDTH - display->getStringWidth(apiState)) / 2, getTextPositions(display)[line++], apiState);
+
+    graphics::drawCommonFooter(display, x, y);
+    return;
+#endif
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // System Uptime

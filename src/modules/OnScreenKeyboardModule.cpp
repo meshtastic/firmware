@@ -87,6 +87,20 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
     if (!targetKeyboard)
         return false;
 
+    if (event.kbchar == 0x08) {
+        targetKeyboard->handleBackspace();
+        return true;
+    }
+    if (event.kbchar >= 0x20 && event.kbchar <= 0x7e) {
+#if defined(GAT562_T9_KEYBOARD)
+        if (event.source && strcmp(event.source, "cardKB") == 0)
+            targetKeyboard->handleT9Character(static_cast<char>(event.kbchar));
+        else
+#endif
+            targetKeyboard->handleCharacter(static_cast<char>(event.kbchar));
+        return true;
+    }
+
     switch (event.inputEvent) {
     case INPUT_BROKER_UP:
     case INPUT_BROKER_UP_LONG:
@@ -101,14 +115,29 @@ bool OnScreenKeyboardModule::processVirtualKeyboardInput(const InputEvent &event
         targetKeyboard->moveCursorLeft();
         return true;
     case INPUT_BROKER_RIGHT:
-    case INPUT_BROKER_USER_PRESS:
         targetKeyboard->moveCursorRight();
+        return true;
+    case INPUT_BROKER_USER_PRESS:
+#if defined(GAT562_T9_KEYBOARD)
+        targetKeyboard->toggleIME();
+#elif defined(GAT562)
+        targetKeyboard->moveCursorNext();
+#else
+        targetKeyboard->moveCursorRight();
+#endif
         return true;
     case INPUT_BROKER_SELECT:
         targetKeyboard->handlePress();
         return true;
     case INPUT_BROKER_SELECT_LONG:
+#if defined(GAT562_T9_KEYBOARD)
+        targetKeyboard->submitText();
+#else
         targetKeyboard->handleLongPress();
+#endif
+        return true;
+    case INPUT_BROKER_BACK:
+        targetKeyboard->handleBackspace();
         return true;
     default:
         return false;

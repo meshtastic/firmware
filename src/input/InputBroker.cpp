@@ -53,6 +53,10 @@ ButtonThread *UserButtonThread = nullptr;
 ButtonThread *BackButtonThread = nullptr;
 #endif
 
+#if defined(GAT562_DEL_PIN)
+ButtonThread *GAT562DelButtonThread = nullptr;
+#endif
+
 #if defined(CANCEL_BUTTON_PIN)
 ButtonThread *CancelButtonThread = nullptr;
 #endif
@@ -314,11 +318,34 @@ void InputBroker::Init()
     BackButtonThread->initButton(backConfig);
 #endif
 
+#if defined(GAT562_DEL_PIN)
+    GAT562DelButtonThread = new ButtonThread("GAT562DelButton");
+    ButtonConfig delConfig;
+    delConfig.pinNumber = GAT562_DEL_PIN;
+    delConfig.activeLow = true;
+    delConfig.activePullup = true;
+    delConfig.pullupSense = pullup_sense;
+    delConfig.intRoutine = []() {
+        GAT562DelButtonThread->userButton.tick();
+        GAT562DelButtonThread->setIntervalFromNow(0);
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        concurrency::mainDelay.interruptFromISR(&higherWake);
+    };
+    delConfig.singlePress = INPUT_BROKER_BACK;
+    delConfig.longPress = INPUT_BROKER_CANCEL;
+    delConfig.longPressTime = 2000;
+    GAT562DelButtonThread->initButton(delConfig);
+#endif
+
 #if defined(BUTTON_PIN)
 #if defined(USERPREFS_BUTTON_PIN)
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
 #else
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#endif
+#if defined(GAT562)
+    _pinNum = BUTTON_PIN;
 #endif
 #ifndef BUTTON_ACTIVE_LOW
 #define BUTTON_ACTIVE_LOW true
@@ -345,7 +372,11 @@ void InputBroker::Init()
             concurrency::mainDelay.interruptFromISR(&higherWake);
         };
         userConfig.singlePress = INPUT_BROKER_USER_PRESS;
+#if defined(GAT562_T9_KEYBOARD)
+        userConfig.longPress = INPUT_BROKER_USER_PRESS;
+#else
         userConfig.longPress = INPUT_BROKER_SELECT;
+#endif
         userConfig.longPressTime = 500;
         userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
         UserButtonThread->initButton(userConfig);

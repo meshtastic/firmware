@@ -12,6 +12,16 @@ void CardKbI2cImpl::init()
 #if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(I2C_NO_RESCAN)
     if (cardkb_found.address == 0x00) {
         LOG_DEBUG("Rescan for I2C keyboard");
+#if defined(GAT562_T9_RST_PIN)
+        pinMode(GAT562_T9_RST_PIN, OUTPUT);
+        digitalWrite(GAT562_T9_RST_PIN, LOW);
+        delay(5);
+        digitalWrite(GAT562_T9_RST_PIN, HIGH);
+        delay(20);
+#endif
+#if defined(GAT562_T9_INT_PIN)
+        pinMode(GAT562_T9_INT_PIN, INPUT_PULLUP);
+#endif
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR, MPR121_KB_ADDR, TCA8418_KB_ADDR};
 #if defined(T_LORA_PAGER)
         uint8_t i2caddr_asize = sizeof(i2caddr_scan) / sizeof(i2caddr_scan[0]);

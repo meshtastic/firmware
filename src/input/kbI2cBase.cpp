@@ -3,7 +3,9 @@
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
 
-#if defined(T_DECK_PRO)
+#if defined(GAT562_T9_KEYBOARD)
+#include "GAT562T9Keyboard.h"
+#elif defined(T_DECK_PRO)
 #include "TDeckProKeyboard.h"
 #elif defined(T_LORA_PAGER)
 #include "TLoraPagerKeyboard.h"
@@ -20,7 +22,9 @@ extern uint8_t kb_model;
 
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
-#if defined(T_DECK_PRO)
+#if defined(GAT562_T9_KEYBOARD)
+      TCAKeyboard(*(new GAT562T9Keyboard()))
+#elif defined(T_DECK_PRO)
       TCAKeyboard(*(new TDeckProKeyboard()))
 #elif defined(T_LORA_PAGER)
       TCAKeyboard(*(new TLoraPagerKeyboard()))

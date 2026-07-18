@@ -137,6 +137,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     int32_t getNoiseFloor();
 
+    // Read-only display accessors. They do not alter radio state, scheduling,
+    // packet handling, or protocol behavior.
+    int16_t getDisplayRSSI() { return iface ? static_cast<int16_t>(iface->getRSSI()) : getCurrentRSSI(); }
+    float getDisplaySNR() { return iface ? iface->getSNR() : 0.0f; }
+
     /**
      * Calculate the average noise floor from collected samples
      */

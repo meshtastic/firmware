@@ -21,6 +21,9 @@
 #include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
+#if defined(GAT562)
+#include "gat_iot_logo.h"
+#endif
 #include "main.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
@@ -1524,6 +1527,41 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 #else
+#if defined(GAT562)
+    display->drawXbm(x + (SCREEN_WIDTH - gat_iot_logo_width) / 2, y + 8, gat_iot_logo_width, gat_iot_logo_height,
+                     gat_iot_logo_bits);
+
+    display->setFont(FONT_MEDIUM);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *title = "GAT-IoT";
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 1, title);
+    if (gBootSplashBoldPass)
+        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 1, title);
+
+    display->setFont(FONT_SMALL);
+    if (upperMsg) {
+        display->drawString(x, y, upperMsg);
+        if (gBootSplashBoldPass)
+            display->drawString(x + 1, y, upperMsg);
+    }
+
+    const char *version = xstr(APP_VERSION_SHORT);
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH - 1, y, version);
+    if (gBootSplashBoldPass)
+        display->drawString(x + SCREEN_WIDTH, y, version);
+    if (owner.short_name && owner.short_name[0]) {
+        const char *shortName = owner.short_name;
+        display->drawString(x + SCREEN_WIDTH - 1, y + FONT_HEIGHT_SMALL, shortName);
+        if (gBootSplashBoldPass)
+            display->drawString(x + SCREEN_WIDTH, y + FONT_HEIGHT_SMALL, shortName);
+        const int shortNameW = display->getStringWidth(shortName);
+        display->drawLine(x + SCREEN_WIDTH - shortNameW - 1, y + FONT_HEIGHT_SMALL * 2 - 1, x + SCREEN_WIDTH - 1,
+                          y + FONT_HEIGHT_SMALL * 2 - 1);
+    }
+    screen->forceDisplay();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+#else
     display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
                      icon_width, icon_height, icon_bits);
 
@@ -1563,6 +1601,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     screen->forceDisplay();
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
+#endif
 #endif
 }
 

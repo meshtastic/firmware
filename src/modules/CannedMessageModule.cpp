@@ -27,6 +27,7 @@
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h" // for buzzer control
+#include "modules/OnScreenKeyboardModule.h"
 extern MessageStore messageStore;
 #if HAS_TRACKBALL
 #include "input/TrackballInterruptImpl1.h"
@@ -822,6 +823,51 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     if (runState != CANNED_MESSAGE_RUN_STATE_FREETEXT)
         return false;
 
+#if defined(GAT562_T9_KEYBOARD)
+    if (graphics::NotificationRenderer::current_notification_type == graphics::notificationTypeEnum::text_input)
+        return false;
+
+    const bool isT9Printable =
+        event->source && strcmp(event->source, "cardKB") == 0 && event->kbchar >= 32 && event->kbchar <= 126;
+    if (isT9Printable && screen) {
+        char headerBuffer[64];
+        if (dest == NODENUM_BROADCAST)
+            snprintf(headerBuffer, sizeof(headerBuffer), "To: #%s", channels.getName(channel));
+        else
+            snprintf(headerBuffer, sizeof(headerBuffer), "To: @%s", getNodeName(dest));
+
+        screen->showTextInput(headerBuffer, freetext.c_str(), 300000, [this](const std::string &text) {
+            if (!text.empty()) {
+                this->freetext = text.c_str();
+                this->cursor = this->freetext.length();
+                this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+                this->currentMessageIndex = -1;
+                this->updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
+
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                this->notifyObservers(&e);
+                screen->forceDisplay();
+                this->setIntervalFromNow(500);
+            } else {
+                this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+                this->currentMessageIndex = -1;
+                this->freetext = "";
+                this->cursor = 0;
+                this->payload = 0;
+
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                this->notifyObservers(&e);
+                screen->forceDisplay();
+            }
+        });
+
+        // The first key only opens the editor; input starts after the keyboard is visible.
+        return true;
+    }
+#endif
+
 #if defined(USE_VIRTUAL_KEYBOARD)
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
@@ -1131,7 +1177,13 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         graphics::MessageRenderer::setThreadMode(graphics::MessageRenderer::ThreadMode::DIRECT, -1, sm.dest);
     }
 
+#if defined(GAT562)
+    if (externalNotificationModule) {
+        externalNotificationModule->playSendConfirmTone();
+    }
+#else
     playComboTune();
+#endif
 
     this->updateState(CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE);
     this->payload = wantReplies ? 1 : 0;

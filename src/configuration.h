@@ -500,7 +500,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // default mapping of pins
-#if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
+#if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN) && !defined(GAT562_DISABLE_DEFAULT_ALT_BUTTON)
 #define ALT_BUTTON_PIN PIN_BUTTON2
 #endif
 #if defined ALT_BUTTON_PIN

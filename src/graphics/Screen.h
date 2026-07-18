@@ -270,10 +270,16 @@ class Screen : public concurrency::OSThread
     // Return I2C Speed, or 0 if none
     uint32_t getI2cFrequency() const
     {
-        if (getIsI2cScreen())
+        if (getIsI2cScreen()) {
+#if defined(OLED_CJK)
+            // OLEDDisplayCJK predates this accessor; its wire displays use 700 kHz by default.
+            return 700000;
+#else
             return dispdev->getI2cFrequency();
-        else
+#endif
+        } else {
             return 0;
+        }
     }
     ScanI2C::I2CPort getI2CPort() const
     {

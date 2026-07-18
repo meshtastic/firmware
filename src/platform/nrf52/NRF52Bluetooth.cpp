@@ -5,6 +5,9 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "error.h"
+#if defined(GAT562)
+#include "graphics/GAT562Identity.h"
+#endif
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -314,7 +317,11 @@ void NRF52Bluetooth::setup()
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
     // Set the advertised device name (keep it short!)
+#if defined(GAT562)
+    Bluefruit.setName(graphics::getGAT562BleName());
+#else
     Bluefruit.setName(getDeviceName());
+#endif
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);

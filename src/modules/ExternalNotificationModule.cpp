@@ -67,12 +67,46 @@ uint32_t externalTurnedOn[3] = {};
 
 static const char *rtttlConfigFile = "/prefs/ringtone.proto";
 
+#if defined(GAT562)
+static constexpr uint8_t gat562RingtoneRepeatTarget = 2;
+static uint8_t gat562RingtoneStarts = 0;
+static bool gat562LimitRingtoneRepeats = false;
+
+struct Gat562ToneStep {
+    uint16_t frequency;
+    uint16_t durationMs;
+};
+
+static constexpr Gat562ToneStep gat562SendTone[] = {
+    {196, 80}, {247, 60}, {277, 80}, {196, 60}, {277, 60}, {247, 120},
+};
+static uint8_t gat562SendToneIndex = 0;
+static uint32_t gat562SendToneNextMs = 0;
+static bool gat562SendToneActive = false;
+#endif
+
 int32_t ExternalNotificationModule::runOnce()
 {
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
+#if defined(GAT562)
+        if (gat562SendToneActive && millis() >= gat562SendToneNextMs) {
+            if (gat562SendToneIndex >= sizeof(gat562SendTone) / sizeof(gat562SendTone[0])) {
+                gat562SendToneActive = false;
+                gat562SendToneIndex = 0;
+            } else if (config.device.buzzer_gpio) {
+                const auto &step = gat562SendTone[gat562SendToneIndex++];
+                tone(config.device.buzzer_gpio, step.frequency, step.durationMs);
+                gat562SendToneNextMs = millis() + ((uint32_t)step.durationMs * 13U) / 10U;
+            }
+        }
+        if (gat562SendToneActive) {
+            uint32_t sendToneDelay = gat562SendToneNextMs > millis() ? gat562SendToneNextMs - millis() : 1;
+            delay = std::min(delay, sendToneDelay);
+        }
+#endif
         bool isRtttlPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
@@ -151,6 +185,13 @@ int32_t ExternalNotificationModule::runOnce()
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
+#if defined(GAT562)
+                if (gat562LimitRingtoneRepeats && gat562RingtoneStarts >= gat562RingtoneRepeatTarget) {
+                    ExternalNotificationModule::stopNow();
+                    return INT32_MAX;
+                }
+                gat562RingtoneStarts++;
+#endif
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
@@ -281,6 +322,11 @@ void ExternalNotificationModule::stopNow()
     buzzerShouldAlert = false;
     nagCycleCutoff = UINT32_MAX;
 
+#if defined(GAT562)
+    gat562SendToneActive = false;
+    gat562SendToneIndex = 0;
+#endif
+
 #ifdef HAS_I2S
     // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
     // T-Deck uses GPIO0 as trackball button, so restore the mode
@@ -289,6 +335,21 @@ void ExternalNotificationModule::stopNow()
 #endif
 #endif
 }
+
+#if defined(GAT562)
+void ExternalNotificationModule::playSendConfirmTone()
+{
+    if (!moduleConfig.external_notification.enabled || !moduleConfig.external_notification.use_pwm || !config.device.buzzer_gpio ||
+        !canBuzz() || rtttl::isPlaying()) {
+        return;
+    }
+
+    gat562SendToneIndex = 0;
+    gat562SendToneNextMs = 0;
+    gat562SendToneActive = true;
+    setIntervalFromNow(0);
+}
+#endif
 
 ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
@@ -330,6 +391,16 @@ ExternalNotificationModule::ExternalNotificationModule()
             // The default ringtone is always loaded from userPrefs.jsonc
             strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL, sizeof(rtttlConfig.ringtone));
         }
+#if defined(GAT562)
+        static constexpr const char *gat562NokiaMessageTone =
+            "NokiaTune:d=4,o=5,b=120:8e6,8d6,16f#,16g#,8c#6,8b,16d,16e,8b,8a,16c#,16e,2a";
+        static constexpr const char *gat562PreviousDefaultTone = "24:d=32,o=5,b=565";
+        if (rtttlConfig.ringtone[0] == '\0' || strcmp(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL) == 0 ||
+            strstr(rtttlConfig.ringtone, gat562PreviousDefaultTone) == rtttlConfig.ringtone) {
+            strncpy(rtttlConfig.ringtone, gat562NokiaMessageTone, sizeof(rtttlConfig.ringtone) - 1);
+            rtttlConfig.ringtone[sizeof(rtttlConfig.ringtone) - 1] = '\0';
+        }
+#endif
 
         LOG_INFO("Init External Notification Module");
 
@@ -423,9 +494,15 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                                                     (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
+#if defined(GAT562)
+                nagCycleCutoff = millis() + 9000;
+                gat562RingtoneStarts = 0;
+                gat562LimitRingtoneRepeats = buzzerShouldAlert;
+#else
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
                                                  ? (moduleConfig.external_notification.nag_timeout * 1000)
                                                  : moduleConfig.external_notification.output_ms);
+#endif
                 LOG_INFO("Toggling nagCycleCutoff to %lu", nagCycleCutoff);
                 isNagging = true;
             }
@@ -463,6 +540,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
 #endif
                     } else if (moduleConfig.external_notification.use_pwm) {
+#if defined(GAT562)
+                        gat562RingtoneStarts++;
+#endif
                         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
                     } else {
                         setExternalState(2, true);

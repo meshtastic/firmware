@@ -627,6 +627,16 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
+#if defined(GAT562_T9_RST_PIN)
+    pinMode(GAT562_T9_RST_PIN, OUTPUT);
+    digitalWrite(GAT562_T9_RST_PIN, LOW);
+    delay(5);
+    digitalWrite(GAT562_T9_RST_PIN, HIGH);
+    delay(20);
+#endif
+#if defined(GAT562_T9_INT_PIN)
+    pinMode(GAT562_T9_INT_PIN, INPUT_PULLUP);
+#endif
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 #if HAS_WIRE
     LOG_INFO("Scan for i2c devices");

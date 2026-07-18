@@ -61,6 +61,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
+#if defined(GAT562)
+#include "graphics/GAT562Arcade.h"
+#if defined(OLED_CJK)
+#include "gat562_utf8_10x10.h"
+#endif
+#endif
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTPalette.h"
@@ -854,6 +860,10 @@ void Screen::setup()
     ui->init();
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
+
+#if defined(GAT562) && defined(OLED_CJK)
+    dispdev->setUtf8Font(&utf8_10x10_font);
+#endif
 
     ui->setTimePerTransition(0);           // Disable animation delays
     ui->setIndicatorPosition(BOTTOM);      // Not used (indicators disabled below)
@@ -2080,6 +2090,11 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (!screenOn)
         return 0;
 
+#if defined(GAT562)
+    if (graphics::GAT562Arcade::instance().isActive())
+        return graphics::GAT562Arcade::instance().handleInputEvent(event);
+#endif
+
     // Handle text input notifications specially - pass input to virtual keyboard
     if (NotificationRenderer::current_notification_type == notificationTypeEnum::text_input) {
         NotificationRenderer::inEvent = *event;
@@ -2089,6 +2104,20 @@ int Screen::handleInputEvent(const InputEvent *event)
         updateUiFrame(ui);
         return 0;
     }
+
+#if defined(GAT562)
+    if (event->inputEvent == INPUT_BROKER_SELECT_LONG) {
+        const bool canStartArcade = !NotificationRenderer::isOverlayBannerShowing() &&
+                                    NotificationRenderer::current_notification_type == notificationTypeEnum::none &&
+                                    menuHandler::menuQueue == menuHandler::MenuNone &&
+                                    !(cannedMessageModule && cannedMessageModule->shouldDraw());
+        if (canStartArcade) {
+            graphics::GAT562Arcade::instance().start();
+            setFastFramerate();
+            return 1;
+        }
+    }
+#endif
 
 #ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
@@ -2189,8 +2218,16 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
             if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
                 showFrame(FrameDirection::PREVIOUS);
-            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
+            } else if (event->inputEvent == INPUT_BROKER_RIGHT) {
                 showFrame(FrameDirection::NEXT);
+#if defined(GAT562_T9_KEYBOARD)
+            } else if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
+                handleSetOn(false);
+                return 1;
+#else
+            } else if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
+                showFrame(FrameDirection::NEXT);
+#endif
             } else if (event->inputEvent == INPUT_BROKER_FN_F1) {
                 this->ui->switchToFrame(0);
 #ifdef USERPREFS_UI_TEST_LOG
@@ -2279,7 +2316,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::wifiBaseMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
+#if !defined(GAT562_T9_KEYBOARD)
                 showFrame(FrameDirection::PREVIOUS);
+#endif
             } else if (event->inputEvent == INPUT_BROKER_CANCEL) {
                 setOn(false);
             }
