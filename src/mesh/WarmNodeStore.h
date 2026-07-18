@@ -119,9 +119,8 @@ class WarmNodeStore
     /// @return false if the node is not in the warm tier.
     bool lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat) const;
 
-    /// @return true if the warm tier holds this node AND its cached signer bit is set
-    /// (we verified an XEdDSA signature from it before it was evicted). False if absent
-    /// or not a known signer.
+    /// True if the warm tier holds this node with its signer bit set (an XEdDSA signature
+    /// was verified from it before eviction).
     bool isVerifiedSigner(NodeNum num) const;
 
     /// Find and remove an entry (used when the node is re-admitted to the hot store).
@@ -136,9 +135,8 @@ class WarmNodeStore
     size_t count() const;
     size_t capacity() const { return entries ? WARM_NODE_COUNT : 0; }
 
-    /// Slot-indexed read access for consumers that reconcile against the whole warm tier
-    /// (e.g. TrafficManagement's NodeInfo cache seeding). @return the entry in slot i, or
-    /// nullptr when the slot is empty or i >= capacity(). Iterate i in [0, capacity()).
+    /// Slot-indexed read for whole-tier reconciliation: the entry in slot i, or nullptr
+    /// when the slot is empty or i >= capacity().
     const WarmNodeEntry *entryAt(size_t i) const
     {
         if (!entries || i >= WARM_NODE_COUNT || entries[i].num == 0)

@@ -360,28 +360,16 @@ class NodeDB
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
-    /// Copy the 32-byte public key for node n from the AUTHORITATIVE NodeDB tiers only
-    /// (hot store, then warm tier) - never from opportunistic caches. This is the pin
-    /// reference for caches that mirror NodeDB's key hygiene (e.g. TrafficManagement's
-    /// NodeInfo cache): pinning against copyPublicKey() would compare such a cache
-    /// against its own contents. Matches the coverage of updateUser()'s own pin, which
-    /// sees warm keys because getOrCreateMeshNode() rehydrates them before the check.
-    /// Returns false if neither tier knows a key for n.
+    /// Copy the 32-byte key for n from the AUTHORITATIVE tiers only (hot, then warm; never
+    /// opportunistic caches) - the pin reference for caches that mirror NodeDB's key hygiene.
     bool copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
-    // True if node `n` is a known XEdDSA signer for exactly the 32-byte key `key32`, per either
-    // NodeDB tier: the hot store's signed bitfield or the warm tier's cached signer bit. The
-    // key must match so a rotated/mismatched key never inherits a stale signer verdict. Lets
-    // an opportunistic cache (e.g. TrafficManagement's NodeInfo cache) mark a re-found node's
-    // key signer-proven from what NodeDB already knows, without re-verifying a signature.
+    /// True if n is a known XEdDSA signer for exactly `key32` (hot signed bitfield or warm
+    /// signer bit); the key match stops a rotated key inheriting a stale signer verdict.
     bool isVerifiedSignerForKey(NodeNum n, const uint8_t *key32);
 
-    /// True when we have ever verified an XEdDSA signature from node `n`, per either NodeDB
-    /// tier: the hot store's signed bitfield, or the signer bit the warm tier cached at
-    /// eviction. Key-agnostic - answers "should this node's signable traffic arrive signed",
-    /// not "is this particular key proven" (that is isVerifiedSignerForKey). Gates that only
-    /// consult the hot store would let a warm-evicted signer be impersonated with unsigned
-    /// frames until it happens to be re-heard.
+    /// Key-agnostic "should n's signable traffic arrive signed", per hot bitfield or warm signer
+    /// bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
     bool isKnownXeddsaSigner(NodeNum n);
 
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
