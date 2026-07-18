@@ -22,7 +22,7 @@
   "USERPREFS_CONFIG_LORA_REGION": "meshtastic_Config_LoRaConfig_RegionCode_US",
   // "USERPREFS_CONFIG_OWNER_LONG_NAME": "My Long Name",
   // "USERPREFS_CONFIG_OWNER_SHORT_NAME": "MLN",
-  // "USERPREFS_CONFIG_DEVICE_ROLE": "meshtastic_Config_DeviceConfig_Role_CLIENT", // Defaults to CLIENT. ROUTER*, and LOST AND FOUND roles are restricted.
+  "USERPREFS_CONFIG_DEVICE_ROLE": "meshtastic_Config_DeviceConfig_Role_SENSOR", // Defaults to CLIENT. ROUTER*, and LOST AND FOUND roles are restricted.
   "USERPREFS_EVENT_MODE": "1",
   "USERPREFS_FIRMWARE_EDITION": "meshtastic_FirmwareEdition_DIY_EDITION", // FAB doesn't have an 'edition', resort to DIY_EDITION
   // "USERPREFS_FIXED_BLUETOOTH": "121212",
@@ -34,10 +34,10 @@
   // "USERPREFS_CONFIG_GPS_UPDATE_INTERVAL": "600",
   // "USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL": "1800",
   // "USERPREFS_CONFIG_DEVICE_TELEM_UPDATE_INTERVAL": "900", // Device telemetry update interval in seconds
-  "USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL": "900",     // Environment telemetry update interval in seconds
+  "USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL": "300",     // Environment telemetry update interval in seconds
   "USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED": "1", // Force BMP280/sensor reads + LoRa broadcast on first boot
   "USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED": "1",       // Environment telemetry enable on screen
-  "USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL": "900",     // AQ telemetry update interval in seconds
+  "USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL": "300",     // AQ telemetry update interval in seconds
   "USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED": "1",         // AQ telemetry enable
   "USERPREFS_CONFIG_AQ_SCREEN_ENABLED": "1",              // AQ telemetry enable on screen
   // "USERPREFS_LORACONFIG_TX_POWER": "0",
