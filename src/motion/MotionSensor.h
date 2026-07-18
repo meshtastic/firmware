@@ -42,6 +42,8 @@ class MotionSensor
 
     virtual void calibrate(uint16_t forSeconds){};
 
+    static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
+
   protected:
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
@@ -68,7 +70,6 @@ class MotionSensor
                                          float &lowestY, float &highestZ, float &lowestZ);
     static float applyCompassOrientation(float heading);
     static void publishCompassAccelSample(float x, float y, float z);
-    static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
 
     ScanI2C::FoundDevice device;
 
