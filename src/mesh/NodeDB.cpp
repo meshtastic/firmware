@@ -601,6 +601,36 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#if defined(GAT562)
+    // GAT562 has fixed GNSS wiring. Discard stale GPIO overrides left by older
+    // firmware while preserving an explicit user-selected DISABLED mode.
+#if defined(GPS_RX_PIN)
+    if (config.position.rx_gpio != GPS_RX_PIN) {
+        config.position.rx_gpio = GPS_RX_PIN;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
+#if defined(GPS_TX_PIN)
+    if (config.position.tx_gpio != GPS_TX_PIN) {
+        config.position.tx_gpio = GPS_TX_PIN;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
+#if defined(PIN_GPS_EN)
+    if (config.position.gps_en_gpio != PIN_GPS_EN) {
+        config.position.gps_en_gpio = PIN_GPS_EN;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        if (!configDecodeFailed)
+            saveWhat |= SEGMENT_CONFIG;
+    }
+#endif
 #ifdef USERPREFS_FIRMWARE_EDITION
     myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
 #endif
