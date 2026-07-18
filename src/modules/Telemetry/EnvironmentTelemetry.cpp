@@ -347,7 +347,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
 bool EnvironmentTelemetryModule::wantUIFrame()
 {
-    return moduleConfig.telemetry.environment_screen_enabled;
+    return moduleConfig.telemetry.environment_screen_enabled || ENVIRONMENTAL_TELEMETRY_SCREEN_ENABLE;
 }
 
 #if HAS_SCREEN
@@ -667,6 +667,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        nodeDB->updateTelemetry(nodeDB->getNodeNum(), m, RX_SRC_LOCAL);
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
             packetPool.release(lastMeasurementPacket);

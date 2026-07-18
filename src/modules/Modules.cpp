@@ -222,7 +222,8 @@ void setupModules()
 #endif
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
     if (moduleConfig.has_telemetry &&
-        (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
+        (moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
+         ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE || ENVIRONMENTAL_TELEMETRY_SCREEN_ENABLE)) {
         new EnvironmentTelemetryModule();
     }
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR

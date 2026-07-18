@@ -213,7 +213,7 @@ bool EInkDisplay::connect()
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) ||                 \
     defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) ||         \
-    defined(MINI_EPAPER_S3)
+    defined(MINI_EPAPER_S3) || defined(NM_EPD_420)
     {
 #if defined(TLORA_T3S3_EPAPER)
         // T3-S3 shares HSPI with the SD card; preconfigure the panel control pins.
@@ -245,7 +245,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(3);
 #else
         adafruitDisplay->setRotation(3);
-#if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER)
+#if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(NM_EPD_420)
         adafruitDisplay->setRotation(0);
 #endif
 #endif
