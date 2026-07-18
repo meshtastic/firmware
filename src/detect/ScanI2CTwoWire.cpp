@@ -463,9 +463,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         logFoundDevice("INA260", (uint8_t)addr.address);
                         type = INA260;
                     }
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && HAS_TELEMETRY
                 } else if (probeHM330x(i2cBus, addr.address)){
                     logFoundDevice("HM330X", (uint8_t)addr.address);
                     type = HM330X;
+#endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
                 } else if (detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
                     logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
