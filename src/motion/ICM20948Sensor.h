@@ -100,6 +100,7 @@ class ICM20948Sensor : public MotionSensor
     // Called each time our sensor gets a chance to run
     virtual int32_t runOnce() override;
     virtual void calibrate(uint16_t forSeconds) override;
+    virtual bool providesHeading() const override { return true; }
 };
 
 #endif
