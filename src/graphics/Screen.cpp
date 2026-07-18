@@ -692,7 +692,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
 #ifdef PIN_EINK_EN
-            if (uiconfig.screen_brightness == 1)
+            if (uiconfig.screen_brightness > 0)
                 digitalWrite(PIN_EINK_EN, HIGH);
 #elif defined(PCA_PIN_EINK_EN)
             if (uiconfig.screen_brightness > 0)

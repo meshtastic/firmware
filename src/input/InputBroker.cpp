@@ -246,7 +246,7 @@ void InputBroker::Init()
     touchConfig.longPress = INPUT_BROKER_NONE;
     touchConfig.suppressLeadUpSound = true;
     touchConfig.onPress = []() {
-        touchBacklightWasOn = uiconfig.screen_brightness == 1;
+        touchBacklightWasOn = uiconfig.screen_brightness > 0;
         if (!touchBacklightWasOn) {
             digitalWrite(PIN_EINK_EN, HIGH);
         }
