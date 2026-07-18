@@ -38,7 +38,7 @@
 #include <machine/endian.h>
 #define ntohl __ntohl
 #endif
-#include <RTC.h>
+#include <gps/RTC.h>
 
 MQTT *mqtt;
 

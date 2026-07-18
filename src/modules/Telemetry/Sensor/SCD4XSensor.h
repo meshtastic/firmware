@@ -4,8 +4,8 @@
 
 #include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "RTC.h"
 #include "TelemetrySensor.h"
+#include "gps/RTC.h"
 #include <SensirionI2cScd4x.h>
 
 // Max speed 400kHz
