@@ -721,6 +721,11 @@ void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key
 
 bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven) const
 {
+    // Same enable gate as the write-through hooks and maintenance: a disabled module stops
+    // updating and sweeping the cache, so its frozen contents must not keep feeding PKI key
+    // resolution either. Enforces the "superset only while enabled" corollary (node_info_stores.md).
+    if (!moduleConfig.has_traffic_management)
+        return false;
     if (!nodeInfoPayload || node == 0 || !out)
         return false;
 
@@ -737,6 +742,10 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
 
 bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *signerProven) const
 {
+    // Enable gate, as in copyPublicKey(): a disabled module must not feed name rehydration
+    // from frozen cache contents once its maintenance/write-through have stopped.
+    if (!moduleConfig.has_traffic_management)
+        return false;
     if (!nodeInfoPayload || node == 0)
         return false;
 

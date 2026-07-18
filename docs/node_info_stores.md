@@ -145,10 +145,12 @@ explicit `KeyCommitTrust` provenance (`ManuallyVerified` maps to `proven=true` i
 cache). Never assign `info->public_key` directly - the cache would silently diverge until
 the next reconcile.
 
-**Enable gate:** the write-through hooks, like the sweep and the packet path, no-op while
-`moduleConfig.has_traffic_management` is off, so cache content and cache maintenance are
-keyed to the same condition. Corollary: the pubkey-pool superset property only holds while
-the module is enabled.
+**Enable gate:** the write-through hooks, the sweep, the packet path, **and the
+`copyPublicKey()`/`copyUser()` accessors** all no-op while `moduleConfig.has_traffic_management`
+is off, so cache content, maintenance, and reads are keyed to the same condition. This enforces
+(not just documents) the corollary that the pubkey-pool superset property holds only while the
+module is enabled: a disabled module's frozen cache never feeds PKI resolution or name
+rehydration.
 
 ### Tick clocks and wrap safety
 

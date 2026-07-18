@@ -3823,6 +3823,11 @@ void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(n);
     if (!info)
         return;
+    // Unconditional overwrite - deliberately NOT updateUser()'s "don't replace a known key" pin.
+    // That pin protects against unauthenticated NodeInfo broadcasts; the only callers here are
+    // possession/authority-proven (ManuallyVerified = user confirmed the key; AdminChannelProven =
+    // decrypted via the admin key with p->from bound into the AEAD nonce), i.e. exactly the paths
+    // meant to establish or rotate a key. Keep new call sites to that same trust bar.
     memcpy(info->public_key.bytes, key, 32);
     info->public_key.size = 32;
 

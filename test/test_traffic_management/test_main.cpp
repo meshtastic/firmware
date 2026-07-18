@@ -1757,6 +1757,36 @@ static void test_tm_nodeinfo_identityHook_keySemantics(void)
     TEST_ASSERT_FALSE(proven);
 }
 
+/**
+ * Read gate: copyPublicKey()/copyUser() share the module-enabled gate with the writers, so a
+ * cache populated while enabled stops feeding PKI resolution and name rehydration the moment
+ * the module is disabled - and resumes when re-enabled (the entry itself is never freed).
+ */
+static void test_tm_nodeinfo_reads_gatedWhileModuleDisabled(void)
+{
+    mockNodeDB->clearCachedNode();
+    TrafficManagementModuleTestShim module;
+
+    // Populate while enabled (setUp left has_traffic_management = true).
+    module.onNodeIdentityCommitted(kTargetNode, makeCommittedUser("present", 0x7C), false);
+    uint8_t key[32] = {0};
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, nullptr));
+    meshtastic_User out = meshtastic_User_init_zero;
+    TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
+
+    // Disabled: the frozen entry persists but the accessors refuse to serve it.
+    moduleConfig.has_traffic_management = false;
+    TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, key, nullptr));
+    TEST_ASSERT_FALSE(module.copyUser(kTargetNode, out, nullptr));
+
+    // Re-enabled: same entry served again (nothing was purged).
+    moduleConfig.has_traffic_management = true;
+    TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, key, nullptr));
+    TEST_ASSERT_EQUAL_UINT8(0x7C, key[0]);
+    TEST_ASSERT_TRUE(module.copyUser(kTargetNode, out, nullptr));
+    TEST_ASSERT_EQUAL_STRING("present", out.long_name);
+}
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
 // Fill `count` NodeInfo cache slots with keyless observed strangers (eviction tier 0),
 // numbered from `baseNode`.
@@ -3172,6 +3202,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_sweepClearsResponseThrottleFlag);
     RUN_TEST(test_tm_nodeinfo_hooks_noopWhileModuleDisabled);
     RUN_TEST(test_tm_nodeinfo_identityHook_keySemantics);
+    RUN_TEST(test_tm_nodeinfo_reads_gatedWhileModuleDisabled);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_tm_nodeinfo_eviction_keyedTiersOutrankKeyless);
     RUN_TEST(test_tm_nodeinfo_eviction_tofuLosesBeforeProvenAndMember);
