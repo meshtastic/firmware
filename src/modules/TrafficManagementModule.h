@@ -145,6 +145,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// bit1 hasResponded, bit2 isMember, bit3 hasFullUser, bit4 keySignerProven.
     int peekNodeInfoFlagsForTest(NodeNum node);
 
+    /// Test introspection: NodeInfo cache capacity (kNodeInfoCacheEntries), so tests can
+    /// fill the cache exactly and force the tiered-LRU eviction paths.
+    static constexpr uint16_t nodeInfoCacheCapacityForTest() { return kNodeInfoCacheEntries; }
+
   private:
     // 10-byte packed entry, all platforms. Tick stamps are free-running modular counters with
     // non-zero presence sentinels; the 4-bit cached role rides the top bits of the two count
