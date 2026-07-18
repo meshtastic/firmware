@@ -108,10 +108,10 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     uint8_t dataReadyTries = 0;
 
     while (!dataReady && (dataReadyTries < SCD4X_MAX_RETRIES)) {
-        delay(100);
         error = scd4x.getDataReadyStatus(dataReady);
         if (error != SCD4X_NO_ERROR || !dataReady) {
-            LOG_WARN("SCD4X: Error collecting data. Retrying");
+            LOG_WARN("%s: Error collecting data. Retrying", sensorName);
+            delay(100);
             dataReadyTries++;
         }
     }
