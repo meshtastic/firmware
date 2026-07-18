@@ -355,6 +355,14 @@ ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
       concurrency::OSThread("ExternalNotification")
 {
+#if defined(GAT562) && defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
+    // The GAT562 notification pixel is a product feature, not an optional
+    // user-wired output. Keep it enabled across upgrades as well as resets.
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 9000;
+#endif
+
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
