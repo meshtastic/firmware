@@ -128,7 +128,7 @@ TrafficManagementModule *trafficManagementModule;
 // Constructor
 // =============================================================================
 
-/// Allocate the unified cache (and, where available, the PSRAM NodeInfo cache) and start the sweep.
+/// Allocate the unified cache (and, where available, the NodeInfo cache) and start the sweep.
 TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManagement"), concurrency::OSThread("TrafficManagement")
 {
     // Module configuration
@@ -266,7 +266,8 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
 #endif
 }
 
-// The two caches are compile-time independent (TMM_HAS_NODEINFO_CACHE keys on PSRAM, the
+// The two caches are compile-time independent (TMM_HAS_NODEINFO_CACHE keys on PSRAM or
+// native tests, the
 // unified cache on a per-variant size that may be overridden to 0), so each is purged under
 // its own guard - a build with only one of them must still forget deleted nodes.
 void TrafficManagementModule::purgeNode(NodeNum node)
@@ -842,7 +843,7 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
     }
 
     if (usedEmptySlot) {
-        TM_LOG_INFO("NodeInfo PSRAM cache entries: %u/%u", static_cast<unsigned>(cachedCount),
+        TM_LOG_INFO("NodeInfo cache entries: %u/%u", static_cast<unsigned>(cachedCount),
                     static_cast<unsigned>(nodeInfoTargetEntries()));
     }
 }
@@ -1089,7 +1090,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     const bool isNodeInfo = mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
     const bool unauthenticatedSigner = isNodeInfo && !mp.xeddsa_signed && nodeDB && nodeDB->isKnownXeddsaSigner(getFrom(&mp));
 
-    // Learn NodeInfo payloads into the dedicated PSRAM cache, and refresh the tier-3
+    // Learn NodeInfo payloads into the dedicated NodeInfo cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).
     if (isNodeInfo && !unauthenticatedSigner) {
         cacheNodeInfoPacket(mp);
@@ -1408,7 +1409,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     meshtastic_User cachedUser = meshtastic_User_init_zero;
     bool hasCachedUser = false;
 
-    // Extra metadata consumed only by the PSRAM-backed cache path.
+    // Extra metadata consumed only by the NodeInfo-cache path.
     // Defaults preserve previous behavior when cache metadata is unavailable.
     bool cachedHasDecodedBitfield = false;
     uint8_t cachedDecodedBitfield = 0;
@@ -1423,12 +1424,12 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // Signer-proven provenance of the cached key, consumed by the replay gate below
     // (maybe_unused: read only when TMM_NODEINFO_REPLAY_SIGNED_GATE is compiled in).
     [[maybe_unused]] bool cachedKeySignerProven = false;
-    // True once we commit to answering from the NodeDB fallback (non-PSRAM) path, so the
-    // shared throttle check/stamp below target the module-global fallback stamp instead of
-    // a per-node PSRAM entry (which does not exist on this path).
+    // True once we commit to answering from the NodeDB fallback (no NodeInfo cache) path, so
+    // the shared throttle check/stamp below target the module-global fallback stamp instead
+    // of a per-node cache entry (which does not exist on this path).
     bool usedFallback = false;
 #if TMM_HAS_NODEINFO_CACHE
-    // Slot index of the PSRAM cache hit, captured here so the post-send throttle stamp can
+    // Slot index of the NodeInfo cache hit, captured here so the post-send throttle stamp can
     // address the entry directly instead of rescanning the array (T5). -1 = no hit.
     int32_t cachedNodeInfoIndex = -1;
 #endif
@@ -1454,15 +1455,15 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     }
 
     if (!hasCachedUser) {
-        // If the PSRAM cache exists but misses, we intentionally do not fall back
-        // to the node-wide table. This keeps the PSRAM direct-reply path separate
-        // from NodeInfoModule/NodeDB behavior when PSRAM is available.
+        // If the NodeInfo cache exists but misses, we intentionally do not fall back
+        // to the node-wide table. This keeps the cache-backed direct-reply path separate
+        // from NodeInfoModule/NodeDB behavior when the cache is available.
         if (nodeInfoPayload) {
-            TM_LOG_DEBUG("NodeInfo PSRAM cache miss for node=0x%08x", p->to);
+            TM_LOG_DEBUG("NodeInfo cache miss for node=0x%08x", p->to);
             return false;
         }
 
-        // Fallback only when PSRAM cache is unavailable on this target.
+        // Fallback only when the NodeInfo cache is unavailable on this target.
         // In this mode we use the node-wide table maintained by NodeInfoModule.
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
         if (!nodeInfoLiteHasUser(node))
@@ -1488,7 +1489,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         cachedUser = TypeConversions::ConvertToUser(node);
         // T3: the fallback path has no per-node cache entry, so it throttles against the
         // module-global stamp. Load it here so the shared throttle check below covers this
-        // path too (previously only the PSRAM path was throttled).
+        // path too (previously only the cache path was throttled).
         usedFallback = true;
         {
             concurrency::LockGuard guard(&cacheLock);
@@ -1506,10 +1507,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     }
 
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
-    // Replay provenance gate (PSRAM path): only spoof a reply for a signer-proven cached key.
+    // Replay provenance gate (cache path): only spoof a reply for a signer-proven cached key.
     // usedFallback entries were already gated above. See TMM_NODEINFO_REPLAY_REQUIRE_SIGNED.
     if (!usedFallback && !cachedKeySignerProven) {
-        TM_LOG_DEBUG("NodeInfo PSRAM entry for 0x%08x not signer-proven, not responding", p->to);
+        TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not signer-proven, not responding", p->to);
         return false;
     }
 #endif
@@ -1552,7 +1553,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->decoded.want_response = false;
 
     // Start from cached bitfield metadata when available. This lets direct
-    // responses preserve more of the original packet semantics (PSRAM path),
+    // responses preserve more of the original packet semantics (cache path),
     // while still enforcing local policy for OK_TO_MQTT below.
     if (cachedHasDecodedBitfield)
         reply->decoded.bitfield = cachedDecodedBitfield;

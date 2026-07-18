@@ -196,8 +196,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// on a full cache evicts the stalest entry, preferring ones without a next_hop hint.
     static constexpr uint16_t cacheSize() { return TRAFFIC_MANAGEMENT_CACHE_SIZE; }
 
-    // NodeInfo cache (PSRAM path): flat payload array, linear scan, trust/membership-tiered
-    // LRU eviction on insert. NodeInfo traffic is low-rate, so full scans are fine.
+    // NodeInfo cache (PSRAM-backed on hardware, heap in native tests): flat payload array,
+    // linear scan, trust/membership-tiered LRU eviction on insert. NodeInfo traffic is
+    // low-rate, so full scans are fine.
     static constexpr uint16_t kNodeInfoCacheEntries = 2000;
     /// NodeInfo cache capacity.
     static constexpr uint16_t nodeInfoTargetEntries() { return kNodeInfoCacheEntries; }
@@ -269,7 +270,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         uint8_t decodedBitfield;
 
         // 1-bit flags, packed into one byte (6 spare bits; add future booleans here rather
-        // than new bytes - the array is 2000 entries in PSRAM).
+        // than new bytes - the array is 2000 entries).
 
         // The source packet carried a decoded bitfield (so decodedBitfield is meaningful).
         uint8_t hasDecodedBitfield : 1;
@@ -300,12 +301,12 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     // No exact-size static_assert: sizeof(meshtastic_User) and its padding vary by platform, so
     // any fixed byte count would fail the build on some boards.
 
-    NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads in PSRAM (flat array, linear scan)
+    NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads (flat array; PSRAM on hardware, heap in tests)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
 
     // Fallback-path response throttle stamp (module-global; the cache path throttles per entry
     // via respTick). Bounds spoofed replies to one per kNodeInfoResponseThrottleMs across all
-    // targets on non-PSRAM boards. 0 = never responded. Guarded by cacheLock. Local uptime (ms).
+    // targets without the NodeInfo cache. 0 = never responded. Guarded by cacheLock. Local uptime (ms).
     uint32_t nodeInfoFallbackLastResponseMs = 0;
 
     meshtastic_TrafficManagementStats stats;

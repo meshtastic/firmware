@@ -793,9 +793,9 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
 }
 
 /**
- * Verify PSRAM cache misses do not fall back to NodeDB.
- * Important so the dedicated PSRAM index stays logically separate from
- * NodeInfoModule/NodeDB when PSRAM is available.
+ * Verify NodeInfo cache misses do not fall back to NodeDB.
+ * Important so the dedicated cache index stays logically separate from
+ * NodeInfoModule/NodeDB when the cache is available.
  */
 static void test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb(void)
 {
@@ -825,7 +825,7 @@ static void test_tm_nodeinfo_directResponse_psramMissDoesNotFallbackToNodeDb(voi
 }
 
 /**
- * Verify a PSRAM-cached NodeInfo is NOT served once it ages past the serve window.
+ * Verify a cached NodeInfo is NOT served once it ages past the serve window.
  * Important: without this gate a long-gone (or forged) node's cached NodeInfo would be
  * spoofed back to requestors indefinitely while the genuine request is suppressed.
  */
@@ -843,7 +843,7 @@ static void test_tm_nodeinfo_directResponse_psramStaleEntryNotServed(void)
 
     TrafficManagementModuleTestShim module;
 
-    // Learn a NodeInfo for the target into the PSRAM cache (broadcast, so it is only cached).
+    // Learn a NodeInfo for the target into the NodeInfo cache (broadcast, so it is only cached).
     meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
     module.handleReceived(observed);
     // Signer-proven so staleness is the sole reason it is not served (isolates the gate under test).
@@ -1439,7 +1439,7 @@ static void test_tm_nodeinfo_copyUser_returnsCachedIdentity(void)
 
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
 /**
- * Replay gate (PSRAM path): a fresh but trust-on-first-use (never signer-proven) cached entry
+ * Replay gate (cache path): a fresh but trust-on-first-use (never signer-proven) cached entry
  * is withheld - the reply is suppressed though the entry is fresh.
  */
 static void test_tm_nodeinfo_directResponse_psramUnsignedNotServed(void)
@@ -2059,7 +2059,7 @@ static void test_tm_nodeinfo_directResponse_fallbackFreshEntryServed(void)
 }
 
 /**
- * T3: verify the NodeDB-fallback path (non-PSRAM) is throttled too. A burst of requests
+ * T3: verify the NodeDB-fallback path (no NodeInfo cache) is throttled too. A burst of requests
  * for a fresh node must yield exactly one spoofed reply per throttle window - previously
  * this path had no per-node slot to stamp and so emitted a reply for every request.
  */

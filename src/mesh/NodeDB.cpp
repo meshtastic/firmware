@@ -3937,7 +3937,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // long-tail node is nameless until its next NodeInfo. The TrafficManagement NodeInfo
         // cache is much larger and often still holds the full User. Restore it - but only when
         // its cached key matches the key we just restored from warm, so a name never attaches to
-        // a different identity than the one we encrypt to. No-op without the PSRAM NodeInfo cache
+        // a different identity than the one we encrypt to. No-op without the TMM NodeInfo cache
         // or when no key is present (key-matched by design). CopyUserToNodeInfoLite sets only the
         // user-related bits, so the warm-restored signer bit survives.
         if (lite->public_key.size == 32 && !nodeInfoLiteHasUser(lite) && trafficManagementModule) {
