@@ -394,6 +394,74 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
+#if defined(GAT562)
+static bool isHexDigit(char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static bool isDefaultShortName(const char *name)
+{
+    return !name || name[0] == '\0' ||
+           (isHexDigit(name[0]) && isHexDigit(name[1]) && isHexDigit(name[2]) && isHexDigit(name[3]) && name[4] == '\0');
+}
+
+static bool isDefaultLongName(const char *name)
+{
+    if (!name || name[0] == '\0')
+        return true;
+
+    return strncmp(name, "Meshtastic ", 11) == 0 && isHexDigit(name[11]) && isHexDigit(name[12]) &&
+           isHexDigit(name[13]) && isHexDigit(name[14]) && name[15] == '\0';
+}
+
+static bool isGat562DefaultLongName(const char *name, const char *suffix)
+{
+    if (!name || !name[0])
+        return true;
+
+    char defaultName[20];
+    snprintf(defaultName, sizeof(defaultName), "GAT562_%s", suffix);
+    if (strcasecmp(name, defaultName) == 0)
+        return true;
+
+    snprintf(defaultName, sizeof(defaultName), "GAT562 %s", suffix);
+    return strcasecmp(name, defaultName) == 0;
+}
+
+static void syncGat562DefaultOwnerName(NodeDB *db, int &saveWhat)
+{
+    char suffix[5];
+    snprintf(suffix, sizeof(suffix), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+
+    char defaultLong[20];
+    snprintf(defaultLong, sizeof(defaultLong), "GAT562_%s", suffix);
+
+    const bool longNameIsDefault = isDefaultLongName(owner.long_name) || isGat562DefaultLongName(owner.long_name, suffix);
+    const bool shortNameIsDefault = isDefaultShortName(owner.short_name);
+    bool changed = false;
+
+    if (longNameIsDefault && strcmp(owner.long_name, defaultLong) != 0) {
+        snprintf(owner.long_name, sizeof(owner.long_name), "%s", defaultLong);
+        changed = true;
+    }
+
+    if (longNameIsDefault && shortNameIsDefault && strcmp(owner.short_name, suffix) != 0) {
+        snprintf(owner.short_name, sizeof(owner.short_name), "%s", suffix);
+        changed = true;
+    }
+
+    if (changed) {
+        saveWhat |= SEGMENT_DEVICESTATE;
+        meshtastic_NodeInfoLite *self = db ? db->getMeshNode(db->getNodeNum()) : nullptr;
+        if (self) {
+            TypeConversions::CopyUserToNodeInfoLite(self, owner);
+            saveWhat |= SEGMENT_NODEDATABASE;
+        }
+    }
+}
+#endif
+
 NodeDB::NodeDB()
 {
     LOG_INFO("Init NodeDB");
@@ -455,6 +523,10 @@ NodeDB::NodeDB()
     // loadFromDisk() deliberately left untrimmed: confirm self, trim/demote only
     // non-self overflow, pin self to index 0, rewrite once if healed.
     nodeDBSelfCare();
+
+#if defined(GAT562)
+    syncGat562DefaultOwnerName(this, saveWhat);
+#endif
 
     // If we migrated from legacy during loadFromDisk(), persist the migrated DB
     // only after identity and self-care are established.
@@ -1946,7 +2018,11 @@ void NodeDB::installDefaultDeviceState()
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
     snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
+#if defined(GAT562)
+    snprintf(owner.long_name, sizeof(owner.long_name), "GAT562_%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
+#endif
 #endif
 
     clampLongName(owner.long_name); // vendor userprefs may exceed the local cap
@@ -1954,7 +2030,11 @@ void NodeDB::installDefaultDeviceState()
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
+#if defined(GAT562)
+    snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#else
     snprintf(owner.short_name, sizeof(owner.short_name), "%04x", getNodeNum() & 0x0ffff);
+#endif
 #endif
 
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
