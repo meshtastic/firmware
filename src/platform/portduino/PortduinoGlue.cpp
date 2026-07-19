@@ -21,8 +21,12 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
-#include <sys/ioctl.h>
 #include <unistd.h>
+#ifndef _WIN32
+// Only the PORTDUINO_LINUX_HARDWARE block below calls ioctl() (HCIGETDEVINFO,
+// for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
+#include <sys/ioctl.h>
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -32,6 +36,12 @@
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
+#endif
+
+#ifdef _WIN32
+// Defined in WindowsMacAddr.cpp, which keeps <iphlpapi.h> out of this TU: it
+// pulls in RPC/OLE headers that collide with the Arduino API.
+bool portduinoWindowsPrimaryMac(uint8_t *dmac);
 #endif
 
 #ifdef __APPLE__
@@ -193,12 +203,26 @@ void getMacAddr(uint8_t *dmac)
             }
             freeifaddrs(ifap);
         }
+#elif defined(_WIN32)
+        // No BlueZ on Windows; the host's primary adapter MAC is the equivalent
+        // stable identifier. On failure dmac is untouched and the blank-MAC check fires.
+        portduinoWindowsPrimaryMac(dmac);
 #else
         // No platform-specific MAC source; leave dmac at its default. Caller
         // can override via the --hwid CLI flag or the YAML config.
         (void)dmac;
 #endif
     }
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+    if (portduino_config.has_device_id) {
+        memcpy(deviceId, portduino_config.device_id, sizeof(portduino_config.device_id));
+        return true;
+    }
+    // Config-supplied id stays preferred: host NIC/BT MACs can be unstable (docker, multi-NIC).
+    return getMacAddrDeviceId(deviceId);
 }
 
 std::string cleanupNameForAutoconf(std::string name)
@@ -282,7 +306,9 @@ void portduinoSetup()
              std::filesystem::directory_iterator{portduino_config.config_directory}) {
             if (ends_with(entry.path().string(), ".yaml")) {
                 std::cout << "Also using " << entry << " as additional config file" << std::endl;
-                loadConfig(entry.path().c_str());
+                // .string() rather than .c_str(): path::value_type is wchar_t on
+                // Windows, and loadConfig() takes a const char *.
+                loadConfig(entry.path().string().c_str());
             }
         }
     }
@@ -1007,6 +1033,39 @@ bool loadConfig(const char *configPath)
                     }
                 }
             }
+#if !defined(HAS_HUB75_NATIVE)
+            if (portduino_config.displayPanel == hub75) {
+                std::cerr << "HUB75 display panel selected, but this build does not support HUB75" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+#endif
+            // HUB75 RGB matrix (Raspberry Pi). Options map onto rgb_matrix::RGBMatrix::Options +
+            // RuntimeOptions; the library owns its GPIO pins so nothing is read via readGPIOFromYaml.
+            if (portduino_config.displayPanel == hub75 && yamlConfig["Display"]["HUB75"]) {
+                YAML::Node hub75 = yamlConfig["Display"]["HUB75"];
+                portduino_config.hub75_hardware_mapping = hub75["HardwareMapping"].as<std::string>("regular");
+                portduino_config.hub75_rows = hub75["Rows"].as<int>(64);
+                portduino_config.hub75_cols = hub75["Cols"].as<int>(64);
+                portduino_config.hub75_chain_length = hub75["ChainLength"].as<int>(1);
+                portduino_config.hub75_parallel = hub75["Parallel"].as<int>(1);
+                portduino_config.hub75_pwm_bits = hub75["PWMBits"].as<int>(11);
+                portduino_config.hub75_pwm_lsb_nanoseconds = hub75["PWMLSBNanoseconds"].as<int>(130);
+                portduino_config.hub75_brightness = hub75["Brightness"].as<int>(100);
+                portduino_config.hub75_scan_mode = hub75["ScanMode"].as<int>(0);
+                portduino_config.hub75_row_address_type = hub75["RowAddressType"].as<int>(0);
+                portduino_config.hub75_multiplexing = hub75["Multiplexing"].as<int>(0);
+                portduino_config.hub75_disable_hardware_pulsing = hub75["DisableHardwarePulsing"].as<bool>(false);
+                portduino_config.hub75_show_refresh_rate = hub75["ShowRefreshRate"].as<bool>(false);
+                portduino_config.hub75_inverse_colors = hub75["InverseColors"].as<bool>(false);
+                portduino_config.hub75_led_rgb_sequence = hub75["RGBSequence"].as<std::string>("RGB");
+                portduino_config.hub75_pixel_mapper_config = hub75["PixelMapper"].as<std::string>("");
+                portduino_config.hub75_panel_type = hub75["PanelType"].as<std::string>("");
+                portduino_config.hub75_limit_refresh_rate_hz = hub75["LimitRefreshRateHz"].as<int>(0);
+                portduino_config.hub75_gpio_slowdown = hub75["GPIOSlowdown"].as<int>(1);
+                // The BaseUI framebuffer geometry is the full panel size in pixels.
+                portduino_config.displayWidth = portduino_config.hub75_cols * portduino_config.hub75_chain_length;
+                portduino_config.displayHeight = portduino_config.hub75_rows * portduino_config.hub75_parallel;
+            }
         }
         if (yamlConfig["Touchscreen"]) {
             if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "XPT2046")
@@ -1038,6 +1097,25 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Input"]) {
             portduino_config.keyboardDevice = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
+            portduino_config.joystickDevice = (yamlConfig["Input"]["JoystickDevice"]).as<std::string>("");
+            if (yamlConfig["Input"]["JoystickButtons"]) {
+                // action name -> evdev button code (hex like 0x122 or decimal); stored inverted
+                // as code -> lowercase action name for the driver to look up per keypress.
+                for (const auto &button : yamlConfig["Input"]["JoystickButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    int code = 0;
+                    try {
+                        // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
+                        code = std::stoi(button.second.as<std::string>(""), nullptr, 0);
+                    } catch (const std::exception &) {
+                        code = 0;
+                    }
+                    if (code != 0 && action != "")
+                        portduino_config.joystickButtons[code] = action;
+                }
+            }
 
             readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.userButtonPin);
             readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.tbUpPin);

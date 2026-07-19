@@ -291,6 +291,58 @@ static bool signedEncodingFits(const meshtastic_Data *d)
     return encodedDataSize(&copy) + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN;
 }
 
+// Append a length-delimited field whose tag this build's Data schema does not define, as a sender
+// on a newer schema would emit. nanopb skips unknown fields at decode, so these bytes count toward
+// the raw wire size but not the decoded struct. Returns the number of bytes appended.
+static size_t appendUnknownField(uint8_t *dst, size_t dstLen, size_t contentLen)
+{
+    constexpr uint32_t UNKNOWN_FIELD_NUMBER = 100; // not a field of meshtastic_Data
+    std::vector<uint8_t> content(contentLen, 0x77);
+    pb_ostream_t stream = pb_ostream_from_buffer(dst, dstLen);
+    TEST_ASSERT_TRUE(pb_encode_tag(&stream, PB_WT_STRING, UNKNOWN_FIELD_NUMBER));
+    TEST_ASSERT_TRUE(pb_encode_string(&stream, content.data(), content.size()));
+    return stream.bytes_written;
+}
+
+// Channel-encrypt raw Data bytes into a packet, exactly as perhapsEncode's non-PKI path does.
+// Used to inject wire bytes perhapsEncode would never produce (it only encodes p->decoded).
+static void encryptAsChannelPacket(meshtastic_MeshPacket *p, uint8_t *wire, size_t size)
+{
+    const int16_t hash = channels.setActiveByIndex(0);
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(0, hash, "no usable primary channel");
+    crypto->encryptPacket(getFrom(p), p->id, size, wire);
+    memcpy(p->encrypted.bytes, wire, size);
+    p->encrypted.size = size;
+    p->channel = hash; // on the wire the channel field carries the hash, not the index
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+}
+
+// Build A10's frame: an unsigned broadcast carrying a POSITION payload plus unknown fields, sized
+// so the raw wire length exceeds the signature-fit threshold while the decoded fields stay under
+// it. Channel-encrypted like a normal sender. The asserts pin that split, which is what makes A10
+// and A11 meaningful.
+static meshtastic_MeshPacket makeBroadcastWithUnknownFields()
+{
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD);
+
+    uint8_t wire[MAX_LORA_PAYLOAD_LEN + 1];
+    const size_t base = pb_encode_to_bytes(wire, sizeof(wire), &meshtastic_Data_msg, &p.decoded);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, base, "failed to encode the base Data");
+    const size_t raw = base + appendUnknownField(wire + base, sizeof(wire) - base, 160);
+
+    // The decoded fields fit a signature, so a sender that signs would have signed this Data.
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, base + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH,
+                                      "decoded fields must fit a signature, else the test is vacuous");
+    // The unknown fields put the raw size over that threshold, so the two sizings disagree here.
+    TEST_ASSERT_GREATER_THAN_MESSAGE(MAX_LORA_PAYLOAD_LEN, raw + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH,
+                                     "unknown fields must push the raw size past the fit threshold");
+    // The frame is still one a radio could actually send.
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, raw + MESHTASTIC_HEADER_LENGTH, "frame must still fit a LoRa frame");
+
+    encryptAsChannelPacket(&p, wire, raw);
+    return p;
+}
+
 // ---------------------------------------------------------------------------
 // Unity lifecycle
 // ---------------------------------------------------------------------------
@@ -311,6 +363,10 @@ void setUp(void)
     config = meshtastic_LocalConfig_init_zero;
     moduleConfig = meshtastic_LocalModuleConfig_init_zero;
     owner = meshtastic_User_init_zero;
+    // Exercise the downgrade-protection matrix by default. Production defaults to
+    // COMPATIBLE so existing meshes remain interoperable; tests that cover that
+    // mode opt in explicitly.
+    setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
     myNodeInfo.my_node_num = LOCAL_NODE; // drives isFromUs()/getFrom()/isToUs()
 
     // Working primary channel with the default PSK so encrypt/decrypt round-trips.
@@ -667,7 +723,6 @@ void test_A17_strict_verifies_signer_from_warm_key_store(void)
                               "Balanced downgrade memory must survive repeated hot-store eviction");
 }
 #endif
-
 // ===========================================================================
 // Group B - send-side signing policy (perhapsEncode)
 // ===========================================================================
@@ -760,7 +815,7 @@ void test_B5_preset_signature_on_local_packet_cleared(void)
 // B6: the exact-fit gate tracks Data *shape*, not just payload size. A tapback-style broadcast
 // (want_response + reply_id + emoji) carries extra wire bytes that shift the fit boundary; the
 // sweep proves no dead band exists for that shape either, and - once the signer bit is learned -
-// that the receiver's rawSize-driven downgrade predicate stays symmetric for it too. Window
+// that the receiver's downgrade predicate stays symmetric for it too. Window
 // straddles this shape's boundary; capped at 200 so even the unsigned rich encoding stays well
 // inside the frame (at n=221 it first hits the pre-existing, signing-unrelated TOO_LARGE).
 void test_B6_rich_shape_sweep_no_deadband(void)
@@ -1164,7 +1219,7 @@ void test_D1_signature_field_overhead_exact(void)
 // ===========================================================================
 // Already-decoded packets never reach perhapsDecode's crypto path (it early-returns), so
 // plaintext-MQTT downlink applies this policy function directly at ingress (MQTT.cpp). These
-// tests drive it the same way: decoded packets, encodedDataSize = 0 (canonical sizing).
+// tests drive it the same way: decoded packets, sized from p->decoded exactly as the RF path is.
 // End-to-end MQTT wiring is covered in test_mqtt.
 
 // E1: unsigned small broadcast from a known signer -> dropped (downgrade protection holds on
@@ -1222,8 +1277,8 @@ void test_E4_decoded_bad_signature_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
-// E5: unsigned oversized broadcast from a signer -> accepted (canonical sizing exempts packets
-// whose signed encoding wouldn't fit, mirroring the RF-path rawSize rule).
+// E5: unsigned oversized broadcast from a signer -> accepted (packets whose signed encoding
+// wouldn't fit are exempt, identically to the RF path: both size p->decoded).
 void test_E5_decoded_unsigned_oversized_broadcast_from_signer_accepted(void)
 {
     mockNodeDB->addNode(REMOTE_NODE);

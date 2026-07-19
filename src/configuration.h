@@ -88,6 +88,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_PREHOP_DROP 1
 #endif
 
+// Debug/test only: let a wired client (serial/TCP) inject frames into the RX pipeline as if they had
+// arrived over LoRa - a SIMULATOR_APP ToRadio packet is delivered through the real receive path on real
+// hardware (see MeshService::injectAsReceived). This forges over-the-air traffic, so it MUST stay 0 in
+// any shipping build; enable per-build with -D MESHTASTIC_ENABLE_FRAME_INJECTION=1.
+#ifndef MESHTASTIC_ENABLE_FRAME_INJECTION
+#define MESHTASTIC_ENABLE_FRAME_INJECTION 0
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
@@ -415,6 +423,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_TFT
 #define HAS_TFT 0
+#endif
+// Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
+// -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).
+#ifndef BASEUI_HAS_GAMES
+#define BASEUI_HAS_GAMES 0
 #endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0

@@ -13,7 +13,6 @@
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
 #include "SPILock.h"
@@ -21,12 +20,14 @@
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "error.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/deviceonly_legacy.pb.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+#include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
@@ -50,11 +51,7 @@
 #include "SPILock.h"
 #include "modules/StoreForwardModule.h"
 #include <Preferences.h>
-#include <esp_efuse.h>
-#include <esp_efuse_table.h>
 #include <nvs_flash.h>
-#include <soc/efuse_reg.h>
-#include <soc/soc.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -372,8 +369,7 @@ void NodeDB::disarmNodeDatabaseDecodeTargets()
  */
 uint32_t radioGeneration;
 
-// FIXME - move this somewhere else
-extern void getMacAddr(uint8_t *dmac);
+// getMacAddr() and getDeviceId() are the per-architecture hooks declared in target_specific.h.
 
 /**
  *
@@ -410,53 +406,13 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    // Get device unique id
-#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
-    uint32_t unique_id[4];
-    // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
-    // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
-    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
-    if (err == ESP_OK) {
-        memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
-        myNodeInfo.device_id.size = 16;
-    } else {
-        LOG_WARN("Failed to read unique id from efuse");
+    // Re-read the device id from silicon each boot via the per-arch getDeviceId(); clear the
+    // disk-loaded value first so a failed/empty derivation leaves it unset rather than stale.
+    myNodeInfo.device_id.size = 0;
+    memset(myNodeInfo.device_id.bytes, 0, sizeof(myNodeInfo.device_id.bytes));
+    if (getDeviceId(myNodeInfo.device_id.bytes)) {
+        myNodeInfo.device_id.size = sizeof(myNodeInfo.device_id.bytes);
     }
-#elif defined(ARCH_NRF54L15)
-    // nRF54L15: DEVICEID is under FICR->INFO sub-struct (not top-level as on nRF52)
-    uint64_t device_id_start = ((uint64_t)NRF_FICR->INFO.DEVICEID[1] << 32) | NRF_FICR->INFO.DEVICEID[0];
-    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
-    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
-    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
-    myNodeInfo.device_id.size = 16;
-#elif defined(ARCH_NRF52)
-    // Nordic applies a FIPS compliant Random ID to each chip at the factory
-    // We concatenate the device address to the Random ID to create a unique ID for now
-    // This will likely utilize a crypto module in the future
-    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
-    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
-    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
-    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
-    myNodeInfo.device_id.size = 16;
-    // Uncomment below to print the device id
-#elif ARCH_PORTDUINO
-    if (portduino_config.has_device_id) {
-        memcpy(myNodeInfo.device_id.bytes, portduino_config.device_id, 16);
-        myNodeInfo.device_id.size = 16;
-    }
-#else
-    // FIXME - implement for other platforms
-#endif
-
-    // if (myNodeInfo.device_id.size == 16) {
-    //     std::string deviceIdHex;
-    //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
-    //         char buf[3];
-    //         snprintf(buf, sizeof(buf), "%02X", myNodeInfo.device_id.bytes[i]);
-    //         deviceIdHex += buf;
-    //     }
-    //     LOG_DEBUG("Device ID (HEX): %s", deviceIdHex.c_str());
-    // }
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
@@ -521,6 +477,12 @@ NodeDB::NodeDB()
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d", myNodeInfo.reboot_count);
 #endif
+
+    // UA_868 is obsolete; migrate to EU_868 before resetRadioConfig() below validates the region.
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UA_868) {
+        LOG_INFO("UA_868 region is obsolete, migrating saved config to EU_868");
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    }
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
@@ -1564,16 +1526,34 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
 
+#ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
+#endif
+
 #ifdef USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL
     moduleConfig.telemetry.environment_update_interval = USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL;
 #else
     moduleConfig.telemetry.environment_update_interval = 0;
 #endif
 
-#ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
-    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
+#ifdef USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED
+    moduleConfig.telemetry.environment_screen_enabled = USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED;
 #endif
+
+#ifdef USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL
+    moduleConfig.telemetry.air_quality_interval = USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL;
+#else
     moduleConfig.telemetry.air_quality_interval = 0;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.air_quality_enabled = USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_SCREEN_ENABLED
+    moduleConfig.telemetry.air_quality_screen_enabled = USERPREFS_CONFIG_AQ_SCREEN_ENABLED;
+#endif
+
     moduleConfig.telemetry.power_update_interval = 0;
     moduleConfig.telemetry.health_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
@@ -1635,10 +1615,16 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
             removed++;
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
-              meshtastic_NodeInfoLite());
-    if (removed)
-        eraseNodeSatellites(nodeNum);
+    if (removed) {
+        // Clear exactly the slots compaction vacated. Sizing this from `removed` (rather than a
+        // fixed one) keeps it inside the vector when nothing matched and the store is full.
+        const size_t first = numMeshNodes;
+        const size_t last = std::min(first + removed, nodeDatabase.nodes.size());
+        std::fill(nodeDatabase.nodes.begin() + first, nodeDatabase.nodes.begin() + last, meshtastic_NodeInfoLite());
+    }
+    // Drop the node's satellite stores and warm-tier copy regardless of which tier it lived in, so
+    // an explicit removal fully forgets it.
+    eraseNodeSatellites(nodeNum);
 #if WARM_NODE_COUNT > 0
     // Explicit user removal: don't let the warm tier resurrect the node
     warmStore.remove(nodeNum);
@@ -1898,7 +1884,8 @@ void NodeDB::cleanupMeshDB()
                 // Keep any key we learned (e.g. via a DM before the NodeInfo
                 // exchange completed) rather than losing it with the purge.
                 if (n.public_key.size == 32)
-                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes, n.role, warmProtectedCategory(n));
+                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes, n.role, warmProtectedCategory(n),
+                                     nodeInfoLiteHasXeddsaSigned(&n));
 #endif
 
                 eraseNodeSatellites(gone);
@@ -2082,7 +2069,7 @@ void NodeDB::demoteOldestHotNodesToWarm()
         // Keep the public key if we have one (40 B warm record); keyless nodes
         // still get a placeholder so re-admission restores last_heard.
         warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
-                         warmProtectedCategory(n));
+                         warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) - they'd otherwise orphan until the next
         // enforceSatelliteCaps pass.
@@ -3084,14 +3071,12 @@ HopStartStatus classifyHopStart(const meshtastic_MeshPacket &p)
         return HopStartStatus::INVALID;
 
     if (p.hop_start == 0) {
-        // hop_start == hop_limit == 0: intentional zero-hop broadcast (e.g. beacon). Valid by definition -
-        // the packet was never meant to travel any hops, so no hop_start ambiguity applies.
-        if (p.hop_limit == 0)
-            return HopStartStatus::VALID;
-        // Firmware prior to 2.3.0 (585805c) lacked a hop_start field. Firmware version 2.5.0 (bf34329) introduced a
-        // bitfield that is always present. Use the presence of the bitfield to determine if the origin's firmware
-        // version is guaranteed to have hop_start populated. Note that this can only be done for decoded packets as
-        // the bitfield is encrypted under the channel encryption key.
+        // hop_start == 0 is either a modern zero-hop broadcast (e.g. beacon) or pre-2.3.0 firmware (585805c)
+        // that never populated hop_start. Firmware 2.5.0 (bf34329) introduced a bitfield that is always
+        // present; use it to tell the two apart. The bitfield is encrypted under the channel key, so this can
+        // only be resolved for decoded packets - until then the status stays MISSING_OR_UNKNOWN. Callers
+        // acting before decode must therefore not treat UNKNOWN as a drop (the bitfield isn't readable yet);
+        // the verdict is re-checked post-decode in Router::handleReceived.
         if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.has_bitfield)
             return HopStartStatus::VALID;
         return HopStartStatus::MISSING_OR_UNKNOWN;
@@ -3285,6 +3270,9 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+        messageStore.deleteAllMessagesFromNode(contact.node_num);
+#endif
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
@@ -3788,7 +3776,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 // Demote to the warm tier so the identity (and crucially the
                 // PKI key) outlives the hot-store slot.
                 warmStore.absorb(evicted.num, evicted.last_heard, evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL,
-                                 evicted.role, warmProtectedCategory(evicted));
+                                 evicted.role, warmProtectedCategory(evicted), nodeInfoLiteHasXeddsaSigned(&evicted));
 #endif
                 eraseNodeSatellites(evicted.num);
                 // Shove the remaining nodes down the chain
@@ -3817,10 +3805,13 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // Re-admission: restore what the warm tier kept for this node
         WarmNodeEntry warm;
         if (warmStore.take(n, warm)) {
-            lite->last_heard = warmTimeOf(warm); // mask off the stolen role/protected metadata bits
+            lite->last_heard = warmTimeOf(warm); // mask off the stolen metadata bits
             // Restore the role the warm tier cached, so re-admission isn't stuck at CLIENT
             // until the next NodeInfo arrives.
             lite->role = static_cast<meshtastic_Config_DeviceConfig_Role>(warmRoleOf(warm));
+            // Restore the signer bit too: it is learned from verified traffic, not from
+            // NodeInfo, so a round trip through the warm tier must not relearn it from zero.
+            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, warmSignerOf(warm));
             if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
