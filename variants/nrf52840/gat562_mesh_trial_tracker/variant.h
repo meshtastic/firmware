@@ -245,7 +245,15 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // #define RV3028_RTC (uint8_t)0b1010010
 
 // RAK18001 Buzzer in Slot C
-// #define PIN_BUZZER 21 // IO3 is PWM2
+// Buzzer and WS2812 RGB pins verified against the vendor's MeshCore variant
+// for this board (meshcore-dev/MeshCore variants/gat562_30s_mesh_kit); the
+// previously commented pin 21 here was wrong for the 30s Kit.
+#define PIN_BUZZER 33
+
+#define HAS_NEOPIXEL                         // Enable the use of neopixels
+#define NEOPIXEL_COUNT 1                     // How many neopixels are connected
+#define NEOPIXEL_DATA 29                     // gpio pin used to send data to the neopixels
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 // NEW: set this via protobuf instead!
 
 // Battery
