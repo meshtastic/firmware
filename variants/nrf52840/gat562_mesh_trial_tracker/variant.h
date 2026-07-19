@@ -146,6 +146,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SDA (13)
 #define PIN_WIRE_SCL (14)
 
+// On-board BME280. SDO is pulled high on GAT562, selecting address 0x77.
+#define GAT562_BME280_ADDRESS 0x77
+
 // QSPI Pins
 #define PIN_QSPI_SCK 3
 #define PIN_QSPI_CS 26
