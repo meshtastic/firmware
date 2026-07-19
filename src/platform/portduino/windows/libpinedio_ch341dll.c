@@ -1,18 +1,5 @@
-// libpinedio API implemented over WCH's CH341DLL, replacing the libusb backend
-// on Windows. Mirrors what wasm/libpinedio_webusb.c does for the browser.
-//
-// WHY NOT LIBUSB: libusb on Windows can only talk to a device bound to
-// WinUSB/libusbK/libusb0, so it needs Zadig to replace the driver by hand on
-// every machine, and Zadig installs a self-signed CA into the trust store.
-// CH341DLL ships with WCH's signed CH341PAR driver and a normal installer.
-//
-// The DLL is closed-source and not redistributable, so it is resolved at
-// runtime: with no CH341PAR installed, pinedio_init() fails and the caller
-// (Ch341Hal's constructor) throws, which is the same path a missing device
-// takes. Nothing else in the build depends on it.
-//
-// Pin numbering is the CH341's D0-D7, as upstream. For the PineDio adapter the
-// YAML gives CS: 0, IRQ: 6, Reset: 2 against D3=SCK, D5=MOSI, D7=MISO.
+// libpinedio API over WCH's CH341DLL, replacing the libusb backend on Windows:
+// libusb would need Zadig to rebind the driver, CH341DLL ships with CH341PAR.
 
 #if defined(ARCH_PORTDUINO) && defined(_WIN32)
 
@@ -24,8 +11,8 @@
 #include <string.h>
 #include <windows.h>
 
-// CH341Set_D5_D0 only reaches D0-D5. That covers every output the adapter uses
-// (CS/Reset/SCK/MOSI); D6 (IRQ) and D7 (MISO) are inputs, read via CH341GetInput.
+// Pins are the CH341's D0-D7: CS 0, Reset 2, SCK 3, MOSI 5, IRQ 6, MISO 7.
+// CH341Set_D5_D0 reaches only the outputs; D6/D7 are read via CH341GetInput.
 #define CH341_MAX_OUTPUT_PIN 5
 
 // iMode bit 7: SPI bit order, 1 = MSB first. The SX1262 is MSB-first, and doing
@@ -68,10 +55,8 @@ static pthread_t poll_thread;
 static volatile bool poll_thread_exit = false;
 static int int_running_cnt = 0;
 
-// CH341PAR installs the 64-bit library as CH341DLLA64.DLL in System32 and the
-// 32-bit one as CH341DLL.DLL in SysWOW64, so a 64-bit process must ask for the
-// A64 name; plain CH341DLL.DLL would either not be found or be the wrong
-// architecture. Try the matching name first and fall back to the other.
+// CH341PAR installs the 64-bit library as CH341DLLA64.DLL and the 32-bit one as
+// CH341DLL.DLL, so try the name matching this process first.
 static const char *const ch341_dll_names[] = {
 #ifdef _WIN64
     "CH341DLLA64.DLL",
@@ -82,6 +67,8 @@ static const char *const ch341_dll_names[] = {
 #endif
 };
 
+// The DLL is not redistributable, so it is resolved at runtime: without it
+// pinedio_init() fails and Ch341Hal throws, as it does for a missing device.
 static bool load_dll(void)
 {
     if (ch341.dll)
@@ -151,10 +138,8 @@ int32_t pinedio_init(struct pinedio_inst *inst, void *driver)
     pin_dir_out = 0;
     pin_state = 0;
 
-    // CH341DLL exposes no USB serial string. Ch341Hal only uses serial_number to
-    // pick between multiple adapters and to derive a MAC; on Windows getMacAddr()
-    // falls back to the host adapter, so leaving it empty is safe. The device name
-    // is the closest stand-in for the product string.
+    // CH341DLL exposes no USB serial string. Leaving it empty is safe: on Windows
+    // getMacAddr() uses the host adapter, and the device name stands in for the product.
     inst->serial_number[0] = '\0';
     inst->product_string[0] = '\0';
     if (ch341.get_device_name) {
@@ -288,9 +273,8 @@ int32_t pinedio_write_read(struct pinedio_inst *inst, uint8_t *writearr, uint32_
     return ret;
 }
 
-// The CH341's own interrupt (CH341SetIntRoutine) only fires on its INT# pin, but
-// the adapter wires the radio's DIO1 to D6, so it can't be used here. Poll D6
-// instead, at upstream's rate and with upstream's edge semantics.
+// CH341SetIntRoutine only fires on the INT# pin, but the adapter wires DIO1 to
+// D6, so poll D6 instead, at upstream's rate and edge semantics.
 static void *pin_poll_thread_fn(void *arg)
 {
     struct pinedio_inst *inst = (struct pinedio_inst *)arg;
@@ -311,9 +295,8 @@ static void *pin_poll_thread_fn(void *arg)
         pthread_mutex_lock(&usb_mutex);
         for (uint8_t int_pin = 0; int_pin < PINEDIO_INT_PIN_MAX; int_pin++) {
             struct pinedio_inst_int *inst_int = &inst->interrupts[int_pin];
-            // Copy the pointer while holding the lock: a concurrent
-            // pinedio_deattach_interrupt() could NULL it once we drop the lock
-            // to make the call.
+            // Copy under the lock: pinedio_deattach_interrupt() could NULL it
+            // once we drop the lock to make the call.
             void (*cb)(void) = inst_int->callback;
             if (cb == NULL)
                 continue;
@@ -350,9 +333,8 @@ int32_t pinedio_attach_interrupt(struct pinedio_inst *inst, enum pinedio_int_pin
     inst->interrupts[int_pin].mode = int_mode;
     inst->interrupts[int_pin].callback = callback;
 
-    // Only a new attachment changes the refcount. Re-attaching an already-armed
-    // pin (RadioLib does this) must not drop the count to 0 and spawn a second
-    // poll thread alongside the running one.
+    // Only a new attachment changes the refcount. Re-attaching an armed pin
+    // (RadioLib does this) must not reach 0 and spawn a second poll thread.
     if (!was_attached) {
         if (int_running_cnt == 0) {
             poll_thread_exit = false;

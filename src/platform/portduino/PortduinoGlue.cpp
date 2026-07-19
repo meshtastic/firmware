@@ -204,11 +204,8 @@ void getMacAddr(uint8_t *dmac)
             freeifaddrs(ifap);
         }
 #elif defined(_WIN32)
-        // No BlueZ on Windows, so fall back to the host's primary adapter MAC,
-        // the same stable host-derived identifier BlueZ gives on Linux and en0
-        // gives on macOS. Otherwise the MAC stays all-zero, device_id is left
-        // unset, and every user has to pass --hwid. On failure dmac is untouched
-        // and the caller's "Blank MAC Address not allowed!" check still fires.
+        // No BlueZ on Windows; the host's primary adapter MAC is the equivalent
+        // stable identifier. On failure dmac is untouched and the blank-MAC check fires.
         portduinoWindowsPrimaryMac(dmac);
 #else
         // No platform-specific MAC source; leave dmac at its default. Caller
@@ -310,8 +307,7 @@ void portduinoSetup()
             if (ends_with(entry.path().string(), ".yaml")) {
                 std::cout << "Also using " << entry << " as additional config file" << std::endl;
                 // .string() rather than .c_str(): path::value_type is wchar_t on
-                // Windows, and loadConfig() takes a const char *. The temporary
-                // outlives the call.
+                // Windows, and loadConfig() takes a const char *.
                 loadConfig(entry.path().string().c_str());
             }
         }

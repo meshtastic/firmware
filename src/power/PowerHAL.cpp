@@ -1,10 +1,8 @@
 
 #include "PowerHAL.h"
 
-// PE/COFF has no ELF-style weak definitions: GNU as lowers __attribute__((weak))
-// to a COFF weak external, which the linker treats as an undefined reference
-// rather than a fallback, so these defaults would not link on Windows. Only
-// nrf52 and nrf54l15 override them, so define them strongly there.
+// PE/COFF has no ELF-style weak definitions, so a weak default is an undefined
+// reference on Windows. Only nrf52 and nrf54l15 override these; define them strongly.
 #ifdef _WIN32
 #define POWERHAL_WEAK_DEFAULT __attribute__((noinline))
 #else

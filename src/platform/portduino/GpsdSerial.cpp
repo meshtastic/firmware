@@ -20,13 +20,8 @@
 
 namespace
 {
-// Winsock needs explicit initialization, closes with closesocket(), sets
-// non-blocking via ioctlsocket() rather than fcntl(), and reports errors through
-// WSAGetLastError() rather than errno.
-//
-// GpsdSerial.h stores the descriptor in an `int`. That is safe on Win64 even
-// though SOCKET is a UINT_PTR: Windows documents socket handles as fitting in 32
-// bits, and INVALID_SOCKET narrows to -1, so the `_sockfd >= 0` checks hold.
+// Winsock needs explicit init, closesocket(), ioctlsocket() and WSAGetLastError().
+// SOCKET fits the header's `int` on Win64, and INVALID_SOCKET narrows to -1.
 #ifdef _WIN32
 // Done lazily to keep the dependency local to the one file that needs it.
 void initSocketsOnce()

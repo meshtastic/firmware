@@ -1,9 +1,5 @@
-// Windows drop-in for libch341-spi-userspace's public header.
-//
-// Same API surface as the upstream libpinedio-usb.h that Ch341Hal
-// (src/platform/portduino/USBHal.h) compiles against, but without libusb: the
-// implementation (libpinedio_ch341dll.c) drives WCH's CH341DLL instead. See the
-// .c for why. Mirrors the wasm drop-in in ../../wasm/include/.
+// Windows drop-in for libch341-spi-userspace's public header, mirroring the wasm
+// one in ../../wasm/include/. Same API as upstream, but backed by CH341DLL, not libusb.
 #ifndef PINEDIO_USB_CH341DLL_H
 #define PINEDIO_USB_CH341DLL_H
 #ifdef __cplusplus

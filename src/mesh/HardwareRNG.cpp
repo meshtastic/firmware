@@ -135,11 +135,8 @@ bool fill(uint8_t *buffer, size_t length, bool useRadioEntropy)
         filled = true;
     }
 #elif defined(_WIN32)
-    // No getrandom/arc4random on Windows. BCryptGenRandom with the
-    // system-preferred RNG is the documented CSPRNG, preferred over the
-    // std::random_device fallback below because libstdc++'s Windows backend
-    // reports entropy() == 0, promising no cryptographic source, and this
-    // buffer seeds key material.
+    // No getrandom/arc4random on Windows; BCryptGenRandom is the documented CSPRNG.
+    // Preferred over std::random_device, whose libstdc++ Windows backend reports entropy() == 0.
     if (BCryptGenRandom(NULL, buffer, static_cast<ULONG>(length), BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0) { // STATUS_SUCCESS
         filled = true;
     }
