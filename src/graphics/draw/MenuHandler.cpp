@@ -286,14 +286,13 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             }
 
             const RegionInfo *selectedRegionInfo = getRegion(selectedRegion);
-            bool hamMode = selectedRegionInfo->profile->licensedOnly;
+            bool hamMode = selectedRegionInfo->code == selectedRegion && selectedRegionInfo->profile &&
+                           selectedRegionInfo->profile->licensedOnly;
 
-            // Guard: without a reboot, reconfigure() applies the region directly. A Ham choice
-            // becomes licensed only after its confirmation, so validate its radio compatibility
-            // against that prospective owner state without bypassing hardware checks.
+            // Validate radio compatibility for a prospective Ham region before confirmation.
             auto candidateLora = config.lora;
             candidateLora.region = selectedRegion;
-            char regionErr[160];
+            char regionErr[160] = {};
             if (!RadioInterface::checkConfigRegion(candidateLora, regionErr, sizeof(regionErr), hamMode)) {
                 LOG_WARN("Ignoring region selection: %s", regionErr);
                 return;
