@@ -2101,9 +2101,16 @@ int Screen::handleInputEvent(const InputEvent *event)
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, 2);
         setFastFramerate(); // Draw ASAP
+        // Let selection callbacks queue the next menu before this frame redraws.
+        const bool handledBannerInput = NotificationRenderer::handleAlertBannerInput();
+        if (handledBannerInput) {
+            menuHandler::handleMenuSwitch(dispdev);
+            setFastFramerate();
+        }
         updateUiFrame(ui);
 
-        menuHandler::handleMenuSwitch(dispdev);
+        if (!handledBannerInput)
+            menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
     // UP/DOWN in message screen scrolls through message threads
