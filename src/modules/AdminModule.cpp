@@ -786,6 +786,27 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 }
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+// Shared by double-tap-as-button (device) and wake-on-motion (display). Start on either flag's
+// off->on edge; stop on the on->off edge once neither needs it (disable() clears `enabled` so a
+// later re-enable restarts). Skip the stop if the sensor also drives the compass, else the heading
+// freezes until reboot. wasOn/nowOn = old/new of the changed flag; otherFeatureOn = the other flag.
+static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatureOn)
+{
+    if (!accelerometerThread) // null unless a sensor was detected at boot
+        return;
+
+    if (!wasOn && nowOn && accelerometerThread->enabled == false) {
+        accelerometerThread->enabled = true;
+        accelerometerThread->start();
+    } else if (wasOn && !nowOn && !otherFeatureOn && accelerometerThread->enabled == true &&
+               !accelerometerThread->providesHeading()) {
+        accelerometerThread->disable();
+    }
+}
+#endif
+
 void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
@@ -801,12 +822,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
-            accelerometerThread->enabled == false) {
-            config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
+        reconcileAccelerometerThread(config.device.double_tap_as_button_press,
+                                     c.payload_variant.device.double_tap_as_button_press, config.display.wake_on_tap_or_motion);
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
@@ -905,12 +922,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
-            accelerometerThread->enabled == false) {
-            config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
+        reconcileAccelerometerThread(config.display.wake_on_tap_or_motion, c.payload_variant.display.wake_on_tap_or_motion,
+                                     config.device.double_tap_as_button_press);
 #endif
         config.display = c.payload_variant.display;
         break;
