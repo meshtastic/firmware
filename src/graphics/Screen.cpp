@@ -2110,7 +2110,7 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
 
         if (event->inputEvent == INPUT_BROKER_UP) {
-            if (messageStore.getMessages().empty()) {
+            if (!messageStore.hasVisibleMessages()) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
             } else {
                 graphics::MessageRenderer::scrollUp();
@@ -2120,7 +2120,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         }
 
         if (event->inputEvent == INPUT_BROKER_DOWN) {
-            if (messageStore.getMessages().empty()) {
+            if (!messageStore.hasVisibleMessages()) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
             } else {
                 graphics::MessageRenderer::scrollDown();
@@ -2169,9 +2169,9 @@ int Screen::handleInputEvent(const InputEvent *event)
         if (!inputIntercepted) {
 #if defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2
             bool handledEncoderScroll = false;
-            const bool isTextMessageFrame = (framesetInfo.positions.textMessage != 255 &&
-                                             this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
-                                             !messageStore.getMessages().empty());
+            const bool isTextMessageFrame =
+                (framesetInfo.positions.textMessage != 255 &&
+                 this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage && messageStore.hasVisibleMessages());
             if (isTextMessageFrame) {
                 if (event->inputEvent == INPUT_BROKER_UP_LONG) {
                     graphics::MessageRenderer::nudgeScroll(-1);
@@ -2254,7 +2254,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::loraMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
-                    if (!messageStore.getMessages().empty()) {
+                    if (messageStore.hasVisibleMessages()) {
                         menuHandler::messageResponseMenu();
                     } else {
                         if (currentResolution == ScreenResolution::UltraLow) {
