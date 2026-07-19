@@ -184,6 +184,88 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
     NVIC_SystemReset();
 }
 
+#if defined(PWRMGT_VOLTAGE_BOOTLOCK) && defined(BATTERY_PIN)
+/**
+ * Low-voltage boot protection, derived from MeshCore's nRF52 power management
+ * implementation (https://github.com/meshcore-dev/MeshCore,
+ * src/helpers/NRF52Board.cpp):
+ *
+ *   Copyright (c) 2025 Scott Powell / rippleradios.com
+ *   Released under the MIT License (see that project's license.txt).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software, to deal in the Software without restriction; the
+ * above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software. This adaptation is
+ * distributed as part of Meshtastic under GPL-3.0, as permitted by the MIT
+ * license, with this notice preserved per its terms.
+ *
+ * If the battery is below
+ * PWRMGT_VOLTAGE_BOOTLOCK millivolts at boot and we are not on USB power,
+ * enter SYSTEM_OFF with the LPCOMP comparator armed on the battery-sense
+ * input, so the chip sleeps at microamps until the voltage recovers (or USB
+ * power appears) instead of brownout-looping on a dying cell.
+ *
+ * Runs before the SoftDevice is enabled, so registers are accessed directly.
+ */
+static uint16_t bootBatteryMillivolts()
+{
+    pinMode(BATTERY_PIN, INPUT);
+    analogReadResolution(12);
+    uint32_t raw = 0;
+    for (int i = 0; i < 8; i++)
+        raw += analogRead(BATTERY_PIN);
+    raw /= 8;
+    // Default Adafruit core reference: 0.6V internal with 1/6 gain = 3.6V full scale
+    return (uint16_t)((raw * 3600.0f / 4096.0f) * ADC_MULTIPLIER);
+}
+
+static void nrf52CheckBootVoltage()
+{
+    // USB power means we can boot (and charge) no matter how low the cell is
+    if (NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk)
+        return;
+
+    uint16_t mv = bootBatteryMillivolts();
+    LOG_INFO("Boot voltage %u mV (bootlock threshold %u mV)", mv, PWRMGT_VOLTAGE_BOOTLOCK);
+    // Readings under 1000mV are ADC glitches or boards without the divider
+    // fitted; don't lock out on those.
+    if (mv <= 1000 || mv >= PWRMGT_VOLTAGE_BOOTLOCK)
+        return;
+
+    LOG_WARN("Battery too low to boot, entering protective SYSTEM_OFF");
+
+    // Arm the LPCOMP to wake when the battery-sense input rises above the
+    // configured fraction of VDD. LPCOMP is not managed by the SoftDevice.
+    NRF_LPCOMP->TASKS_STOP = 1;
+    NRF_LPCOMP->ENABLE = LPCOMP_ENABLE_ENABLE_Disabled;
+    NRF_LPCOMP->PSEL = ((uint32_t)PWRMGT_LPCOMP_AIN << LPCOMP_PSEL_PSEL_Pos) & LPCOMP_PSEL_PSEL_Msk;
+    NRF_LPCOMP->REFSEL = ((uint32_t)PWRMGT_LPCOMP_REFSEL << LPCOMP_REFSEL_REFSEL_Pos) & LPCOMP_REFSEL_REFSEL_Msk;
+    NRF_LPCOMP->ANADETECT = LPCOMP_ANADETECT_ANADETECT_Up; // wake on recovery
+    NRF_LPCOMP->HYST = LPCOMP_HYST_HYST_Hyst50mV;
+    NRF_LPCOMP->EVENTS_READY = 0;
+    NRF_LPCOMP->EVENTS_DOWN = 0;
+    NRF_LPCOMP->EVENTS_UP = 0;
+    NRF_LPCOMP->EVENTS_CROSS = 0;
+    NRF_LPCOMP->INTENCLR = 0xFFFFFFFF;
+    NRF_LPCOMP->INTENSET = LPCOMP_INTENSET_UP_Msk;
+    NRF_LPCOMP->ENABLE = LPCOMP_ENABLE_ENABLE_Enabled;
+    NRF_LPCOMP->TASKS_START = 1;
+    for (uint8_t i = 0; i < 20 && !NRF_LPCOMP->EVENTS_READY; i++)
+        delayMicroseconds(50);
+
+    // Also wake if USB power shows up
+    NRF_POWER->EVENTS_USBDETECTED = 0;
+    NRF_POWER->INTENSET = POWER_INTENSET_USBDETECTED_Msk;
+
+    Serial.flush();
+    delay(100);
+    NRF_POWER->SYSTEMOFF = POWER_SYSTEMOFF_SYSTEMOFF_Enter;
+    // Should never get here; reset to recover if we somehow do
+    NVIC_SystemReset();
+}
+#endif
+
 void getMacAddr(uint8_t *dmac)
 {
     const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
@@ -394,6 +476,10 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
+#if defined(PWRMGT_VOLTAGE_BOOTLOCK) && defined(BATTERY_PIN)
+    nrf52CheckBootVoltage();
+#endif
+
 #ifdef ADC_V
     pinMode(ADC_V, INPUT);
 #endif

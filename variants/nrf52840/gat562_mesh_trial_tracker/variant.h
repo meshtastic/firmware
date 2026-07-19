@@ -217,6 +217,14 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Low-voltage boot protection (thresholds from the vendor's MeshCore BSP):
+// below this battery voltage, refuse to boot and sleep in SYSTEM_OFF until
+// the LPCOMP sees the cell recover or USB power appears. Undefine to disable.
+#define PWRMGT_VOLTAGE_BOOTLOCK 3300 // mV
+// Battery sense is P0.05 = AIN3; wake when it rises above 5/8 of VDD
+#define PWRMGT_LPCOMP_AIN 3
+#define PWRMGT_LPCOMP_REFSEL 4
+
 // Testing USB detection
 #define NRF_APM
 
