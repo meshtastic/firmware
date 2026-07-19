@@ -108,9 +108,6 @@ bool HM330XSensor::getMetrics(meshtastic_Telemetry *measurement)
 
     auto read16 = [](const uint8_t *data, uint8_t idx) -> uint16_t { return (data[idx] << 8) | data[idx + 1]; };
 
-    // TODO - This is suspiciously not in terms of PM1, PM2.5 and PM10.0 relationship
-    // Normally, PM1.0 > PM2.5 > PM10, but in this case it's not. Are the buckets cumulative?
-    // It's not documented in the datasheet, so safely assuming that it's correct as in the datasheet
     measurement->variant.air_quality_metrics.has_pm10_standard = true;
     measurement->variant.air_quality_metrics.has_pm25_standard = true;
     measurement->variant.air_quality_metrics.has_pm100_standard = true;

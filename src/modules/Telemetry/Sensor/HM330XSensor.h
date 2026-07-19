@@ -28,7 +28,6 @@ class HM330XSensor : public TelemetrySensor
 #endif
 
     HM330X hm330x;
-    HM330XErrorCode checksum(uint8_t *data);
 
   public:
     HM330XSensor();
