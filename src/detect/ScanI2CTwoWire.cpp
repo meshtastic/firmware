@@ -457,7 +457,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L)
-            case INA_ADDR: // same as HMM330X_ADDR and SHT2X
+            case INA_ADDR: // same as HM330X_ADDR and SHT2X
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS: {
                 uint16_t mfg = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
@@ -485,17 +485,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         logFoundDevice("INA260", (uint8_t)addr.address);
                         type = INA260;
                     }
-#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && HAS_TELEMETRY
-                } else if (probeHM330x(i2cBus, addr.address)) {
-                    logFoundDevice("HM330X", (uint8_t)addr.address);
-                    type = HM330X;
-#endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
                 } else if (type == NONE && detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
                     logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
                     type = SHTXX;
 #endif
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && HAS_TELEMETRY
+                } else if (probeHM330x(i2cBus, addr.address)) {
+                    logFoundDevice("HM330X", (uint8_t)addr.address);
+                    type = HM330X;
+#endif
                 } else { // Assume INA219 if none of the above ones are found
+                    // TODO - add more robust detection method for INA219 (separate branch)
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                 }
