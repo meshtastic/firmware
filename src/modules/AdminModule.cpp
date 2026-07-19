@@ -538,10 +538,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (node != NULL) {
             if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 nodeDB->eraseNodeSatellites(node->num);
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
                 messageStore.deleteAllMessagesFromNode(node->num);
+#endif
                 saveChanges(SEGMENT_NODEDATABASE, false);
+#if HAS_SCREEN
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+#endif
             } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
                 sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
             } else {
