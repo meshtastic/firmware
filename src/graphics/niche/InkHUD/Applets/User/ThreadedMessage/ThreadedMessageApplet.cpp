@@ -2,7 +2,7 @@
 
 #include "./ThreadedMessageApplet.h"
 
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 
 using namespace NicheGraphics;
@@ -191,7 +191,8 @@ ProcessMessage InkHUD::ThreadedMessageApplet::handleReceived(const meshtastic_Me
         return ProcessMessage::CONTINUE;
 
     // Store in the global messageStore - this handles sender, timestamp, channel, text, and ack status
-    messageStore.addFromPacket(mp);
+    if (!messageStore.tryAddFromPacket(mp))
+        return ProcessMessage::CONTINUE;
 
     // If this was an incoming message, suggest that our applet becomes foreground, if permitted
     if (getFrom(&mp) != nodeDB->getNodeNum())

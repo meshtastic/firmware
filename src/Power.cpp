@@ -906,7 +906,7 @@ void Power::shutdown()
 #if HAS_SCREEN
     messageStore.saveToFlash();
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
 #endif
