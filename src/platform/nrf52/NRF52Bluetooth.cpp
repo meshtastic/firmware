@@ -287,6 +287,15 @@ void NRF52Bluetooth::setup()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
+
+#ifdef NRF52_USE_DCDC
+    // Re-assert DC/DC mode now that the SoftDevice owns the POWER peripheral.
+    // nrf52Setup() already enabled it pre-SoftDevice and the setting persists
+    // across enablement, but this call is the unambiguously supported one in
+    // this regime, and it is idempotent.
+    sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+#endif
+
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();

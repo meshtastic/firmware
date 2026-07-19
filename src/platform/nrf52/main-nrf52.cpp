@@ -184,6 +184,25 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
     NVIC_SystemReset();
 }
 
+#ifdef NRF52_USE_DCDC
+#include <nrf_sdm.h>
+
+// Enable the REG1 buck converter on boards with the DC/DC inductors fitted.
+// Same stage and SoftDevice-aware pattern as the vendor's MeshCore
+// NRF52BoardDCDC::begin(); REG0 (DCDCEN0) is deliberately left on its LDO to
+// match. The POWER peripheral belongs to the SoftDevice once that is enabled,
+// so pick the access method accordingly.
+static void nrf52EnableDCDC()
+{
+    uint8_t sdEnabled = 0;
+    sd_softdevice_is_enabled(&sdEnabled);
+    if (sdEnabled)
+        sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+    else
+        NRF_POWER->DCDCEN = 1;
+}
+#endif
+
 void getMacAddr(uint8_t *dmac)
 {
     const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
@@ -394,6 +413,12 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
+#ifdef NRF52_USE_DCDC
+    // First thing, so the whole boot (GPS, screen, I2C scan, radio init) runs
+    // on the buck converter, including builds where Bluetooth never comes up
+    nrf52EnableDCDC();
+#endif
+
 #ifdef ADC_V
     pinMode(ADC_V, INPUT);
 #endif
