@@ -50,7 +50,6 @@ void GAT562Arcade::start()
     buttons = 0;
     heldButtons = 0;
     holdFrames = 0;
-    nextDisplayRefresh = 0;
     active = true;
     if (screen) {
         screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
@@ -71,7 +70,6 @@ void GAT562Arcade::stop()
     buttons = 0;
     heldButtons = 0;
     holdFrames = 0;
-    nextDisplayRefresh = 0;
     if (screen) {
         screen->endAlert();
         screen->runNow();
@@ -199,10 +197,6 @@ int32_t GAT562Arcade::runOnce()
         polledButtons |= CastleBoyApp::B;
 #endif
     CastleBoyApp::step(polledButtons);
-    if (screen && millis() >= nextDisplayRefresh) {
-        screen->runNow();
-        nextDisplayRefresh = millis() + 33;
-    }
     return 16;
 #else
     if (holdFrames > 0) {
@@ -214,8 +208,6 @@ int32_t GAT562Arcade::runOnce()
 
     CastleBoyApp::step(buttons);
     buttons = 0;
-    if (screen)
-        screen->runNow();
 
     return 33;
 #endif

@@ -32,7 +32,6 @@ class GAT562Arcade : public concurrency::OSThread
     uint8_t buttons = 0;
     uint8_t heldButtons = 0;
     uint8_t holdFrames = 0;
-    uint32_t nextDisplayRefresh = 0;
 };
 
 } // namespace graphics

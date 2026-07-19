@@ -112,6 +112,9 @@ namespace graphics
 // This means the *visible* area (sh1106 can address 132, but shows 128 for example)
 #define IDLE_FRAMERATE 1 // in fps
 #define COMPASS_ACTIVE_FRAMERATE 20
+#if defined(GAT562)
+#define GAT562_ARCADE_FRAMERATE 30
+#endif
 
 // DEBUG
 #if BASEUI_HAS_GAMES
@@ -1224,6 +1227,10 @@ int32_t Screen::runOnce()
     // otherwise that breaks animations.
 
     uint32_t desiredFramerate = IDLE_FRAMERATE;
+#if defined(GAT562)
+    if (GAT562Arcade::instance().isActive())
+        desiredFramerate = GAT562_ARCADE_FRAMERATE;
+#endif
 #if HAS_GPS && !defined(USE_EINK)
     if (showingNormalScreen && hasCompass) {
         const uint8_t currentFrame = ui->getUiState()->currentFrame;

@@ -65,10 +65,88 @@ meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
 CannedMessageModule *cannedMessageModule;
 
+#if defined(GAT562)
+static constexpr uint8_t GAT562_CANNED_PRESET_COUNT = 20;
+
+static std::vector<String> splitCannedPresetSlots(const char *raw)
+{
+    std::vector<String> slots;
+    if (!raw || raw[0] == '\0')
+        return slots;
+
+    String current;
+    for (const char *p = raw; *p; ++p) {
+        if (*p == '|') {
+            slots.push_back(current);
+            current = "";
+        } else {
+            current += *p;
+        }
+    }
+    slots.push_back(current);
+    return slots;
+}
+
+static String joinCannedPresetSlots(const std::vector<String> &slots)
+{
+    String merged;
+    for (size_t i = 0; i < slots.size(); ++i) {
+        if (i > 0)
+            merged += '|';
+        merged += slots[i];
+    }
+    return merged;
+}
+
+static std::vector<String> normalizeGat562CannedPresetSlots(const char *raw)
+{
+    std::vector<String> source = splitCannedPresetSlots(raw);
+    std::vector<String> normalized;
+    normalized.reserve(GAT562_CANNED_PRESET_COUNT);
+
+    uint8_t fillerIndex = 0;
+    for (const auto &slot : source) {
+        if (normalized.size() >= GAT562_CANNED_PRESET_COUNT)
+            break;
+        if (slot.length() > 0) {
+            normalized.push_back(slot);
+        } else {
+            char filler[] = {static_cast<char>('A' + (fillerIndex++ % 26)), '\0'};
+            normalized.push_back(String(filler));
+        }
+    }
+
+    while (normalized.size() < GAT562_CANNED_PRESET_COUNT) {
+        char filler[] = {static_cast<char>('A' + (fillerIndex++ % 26)), '\0'};
+        normalized.push_back(String(filler));
+    }
+    return normalized;
+}
+
+static bool setCannedPresetMessageString(const String &messages)
+{
+    if (strncmp(cannedMessageModuleConfig.messages, messages.c_str(), sizeof(cannedMessageModuleConfig.messages)) == 0)
+        return false;
+
+    strncpy(cannedMessageModuleConfig.messages, messages.c_str(), sizeof(cannedMessageModuleConfig.messages) - 1);
+    cannedMessageModuleConfig.messages[sizeof(cannedMessageModuleConfig.messages) - 1] = '\0';
+    return true;
+}
+
+static bool normalizeGat562CannedPresetConfig()
+{
+    return setCannedPresetMessageString(joinCannedPresetSlots(normalizeGat562CannedPresetSlots(cannedMessageModuleConfig.messages)));
+}
+#endif
+
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
     this->loadProtoForModule();
+#if defined(GAT562)
+    if (normalizeGat562CannedPresetConfig())
+        this->saveProtoForModule();
+#endif
     if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE) {
         LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
         this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
@@ -209,6 +287,52 @@ int CannedMessageModule::splitConfiguredMessages()
 
     return this->messagesCount;
 }
+
+int CannedMessageModule::getPresetSlotForMessageIndex(int messageIndex) const
+{
+    if (messageIndex < 0 || messageIndex >= messagesCount)
+        return -1;
+
+    int slot = -1;
+    for (int i = 0; i <= messageIndex; ++i) {
+        const char *message = messages[i];
+        if (!message || strcmp(message, "[Select Destination]") == 0 || strcmp(message, "[-- Free Text --]") == 0 ||
+            strcmp(message, "[Exit]") == 0)
+            continue;
+        ++slot;
+    }
+    return slot;
+}
+
+bool CannedMessageModule::savePresetSlot(int presetSlot, const String &text)
+{
+#if defined(GAT562)
+    if (presetSlot < 0 || presetSlot >= GAT562_CANNED_PRESET_COUNT)
+        return false;
+
+    std::vector<String> slots = normalizeGat562CannedPresetSlots(cannedMessageModuleConfig.messages);
+    size_t fixedBytes = slots.size() - 1; // Separators.
+    for (size_t i = 0; i < slots.size(); ++i) {
+        if (static_cast<int>(i) != presetSlot)
+            fixedBytes += slots[i].length();
+    }
+
+    const size_t capacity = sizeof(cannedMessageModuleConfig.messages) - 1;
+    size_t textBytes = (fixedBytes < capacity) ? std::min(text.length(), capacity - fixedBytes) : 0;
+    while (textBytes > 0 && textBytes < text.length() && (static_cast<uint8_t>(text[textBytes]) & 0xc0) == 0x80)
+        --textBytes;
+    slots[presetSlot] = text.substring(0, textBytes);
+    const bool changed = setCannedPresetMessageString(joinCannedPresetSlots(slots));
+    if (changed) {
+        this->saveProtoForModule();
+        this->splitConfiguredMessages();
+    }
+    return changed;
+#else
+    return false;
+#endif
+}
+
 void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
 {
     (void)buffer;
@@ -672,14 +796,63 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         return false;
 
+#if defined(GAT562)
+    if (runState == CANNED_MESSAGE_RUN_STATE_ACTIVE && event->inputEvent == INPUT_BROKER_SELECT_LONG) {
+        const int presetSlot = getPresetSlotForMessageIndex(currentMessageIndex);
+        if (presetSlot >= 0 && presetSlot < GAT562_CANNED_PRESET_COUNT) {
+            editingPreset = true;
+            editingPresetSlot = presetSlot;
+#if defined(USE_VIRTUAL_KEYBOARD)
+            freetext = messages[currentMessageIndex];
+            cursor = freetext.length();
+            payload = 0;
+            updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            notifyObservers(&e);
+            screen->forceDisplay();
+            return true;
+#else
+            if (osk_found && screen) {
+                char headerBuffer[32];
+                snprintf(headerBuffer, sizeof(headerBuffer), "Edit Preset %d", presetSlot + 1);
+                screen->showTextInput(headerBuffer, messages[currentMessageIndex], 300000, [this, presetSlot](const std::string &text) {
+                    if (!text.empty())
+                        this->savePresetSlot(presetSlot, text.c_str());
+
+                    this->editingPreset = false;
+                    this->editingPresetSlot = -1;
+                    this->freetext = "";
+                    this->cursor = 0;
+                    this->payload = 0;
+                    this->updateState(CANNED_MESSAGE_RUN_STATE_ACTIVE, true);
+
+                    UIFrameEvent e;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                    this->notifyObservers(&e);
+                    screen->forceDisplay();
+                });
+                return true;
+            }
+#endif
+            editingPreset = false;
+            editingPresetSlot = -1;
+        }
+    }
+#endif
+
     // Handle Cancel key: go inactive, clear UI state
     if (runState != CANNED_MESSAGE_RUN_STATE_INACTIVE &&
         (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG)) {
-        updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
+        updateState(editingPreset ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_INACTIVE);
         freetext = "";
         cursor = 0;
         payload = 0;
-        currentMessageIndex = -1;
+        if (!editingPreset)
+            currentMessageIndex = -1;
+        editingPreset = false;
+        editingPresetSlot = -1;
 
         // Notify UI that we want to redraw/close this screen
         UIFrameEvent e;

@@ -182,6 +182,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool shift = false;
     int charSet = 0; // 0=ABC, 1=123
 #endif
+    bool editingPreset = false;
+    int editingPresetSlot = -1;
 
     void updateState(cannedMessageModuleRunState, bool shouldRequestFocus = false);
 
@@ -192,6 +194,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
+    int getPresetSlotForMessageIndex(int messageIndex) const;
+    bool savePresetSlot(int presetSlot, const String &text);
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
