@@ -153,6 +153,30 @@ Display:
 ### You can also specify the spi device for the display to use
 # spidev: spidev0.0
 
+### HUB75 RGB LED matrix panel (Raspberry Pi only, via hzeller/rpi-rgb-led-matrix).
+### Requires the librgbmatrix library to be installed (so `pkg-config rgbmatrix` resolves) and
+### the firmware built with it present. meshtasticd must run as root (or with /dev/gpiomem
+### access) and on-board audio disabled (dtparam=audio=off) so it doesn't fight the PWM timing.
+### The library owns the GPIO pins - they are chosen by HardwareMapping, not set individually.
+#  Panel: HUB75
+#  HUB75:
+#    HardwareMapping: adafruit-hat-pwm  # regular | adafruit-hat | adafruit-hat-pwm | regular-pi1 ...
+#    Rows: 64                # pixel rows per panel (e.g. 32 or 64)
+#    Cols: 64                # pixel columns per panel
+#    ChainLength: 1          # panels daisy-chained (width = Cols * ChainLength)
+#    Parallel: 1             # parallel chains (height = Rows * Parallel)
+#    Brightness: 80          # percent, 1..100
+#    PWMBits: 11             # lower = higher refresh, fewer colors
+#    GPIOSlowdown: 4         # raise for faster Pis / long cables if the panel ghosts or flickers
+#    RGBSequence: RGB        # reorder if your panel's colors are swapped (e.g. RBG, BGR)
+#    ScanMode: 0             # 0=progressive, 1=interlaced
+#    RowAddressType: 0       # 0=default, 1=AB-addressed (some 64x64 panels)
+#    Multiplexing: 0         # 0=direct, 1=stripe, 2=checker, ...
+#    PanelType: ""           # e.g. FM6126A for panels needing a special init
+#    PixelMapper: ""         # e.g. "U-mapper;Rotate:90"
+#    LimitRefreshRateHz: 0   # 0 = no limit
+#    DisableHardwarePulsing: false
+
 Touchscreen:
 ### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
 
@@ -167,11 +191,20 @@ Touchscreen:
 ### You can also specify the spi device for the touchscreen to use
 # spidev: spidev0.0
 
-
 Input:
 ### Configure device for direct keyboard input
 
 #  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
+
+### Configure device for USB gamepad/joystick input (evdev). The D-pad drives
+### Up/Down/Left/Right; buttons are mapped below. Find button codes with `evtest`.
+#  JoystickDevice: /dev/input/by-id/usb-0079_USB_Gamepad-event-joystick
+### Map evdev button codes (hex or decimal) to actions. Omit to use built-in
+### defaults (select=0x121, cancel=0x122). Actions: select, cancel, back, up,
+### down, left, right, user.
+#  JoystickButtons:
+#    select: 0x122
+#    cancel: 0x121
 
 ### Standard User Button Config
 #  UserButton: 6
@@ -199,12 +232,10 @@ Webserver:
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
 
-
 HostMetrics:
 #  ReportInterval: 30 # Interval in minutes between HostMetrics report packets, or 0 for disabled
 #  Channel: 0 # channel to send Host Metrics over. Defaults to the primary channel.
 #  UserStringCommand: cat /sys/firmware/devicetree/base/serial-number # Command to execute, to send the results as the userString
-
 
 Config:
 #  DisplayMode: TWOCOLOR # uncomment to force BaseUI

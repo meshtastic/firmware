@@ -22,13 +22,13 @@
 
 #include "FSCommon.h"
 #include "Power.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
+#include "gps/RTC.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
@@ -196,7 +196,15 @@ void setupNicheGraphics();
 #endif
 
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+#if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
+// Reuse FSCommon's SPI_HSPI instance to avoid double-initializing SPI2_HOST in arduino-esp32 3.x.
+// Two SPIClass(HSPI) objects on the same bus cause the second spi_bus_initialize() to return
+// ESP_ERR_INVALID_STATE, leaving the LoRa device handle invalid and blocking SPI transfers.
+extern SPIClass SPI_HSPI;
+SPIClass &SPI1 = SPI_HSPI;
+#else
 SPIClass SPI1(HSPI);
+#endif
 #endif
 
 using namespace concurrency;
@@ -420,10 +428,14 @@ void setup()
 #if ARCH_PORTDUINO
     RTCQuality ourQuality = RTCQualityDevice;
 
+#ifdef __linux__
+    // timedatectl is systemd-only, so macOS, Windows and WASM stay at
+    // RTCQualityDevice rather than claim NTP quality we have not verified.
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
         ourQuality = RTCQualityNTP;
     }
+#endif
 
     struct timeval tv;
     tv.tv_sec = time(NULL);
@@ -806,6 +818,10 @@ void setup()
 
 #ifdef ARCH_RP2040
     rp2040Setup();
+#endif
+
+#ifdef ARCH_STM32WL
+    stm32wlSetup();
 #endif
 
     // We do this as early as possible because this loads preferences from flash

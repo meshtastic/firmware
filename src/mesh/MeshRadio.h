@@ -229,6 +229,11 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
         cr = 5;
         sf = 10;
         break;
+    case PRESET(MEDIUM_TURBO):
+        bwKHz = wideLora ? 1625.0f : 500.0f;
+        cr = 5;
+        sf = 9;
+        break;
     case PRESET(LONG_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;
         cr = 8;
