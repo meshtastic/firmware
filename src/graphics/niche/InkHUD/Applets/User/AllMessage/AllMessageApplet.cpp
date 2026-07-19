@@ -46,7 +46,7 @@ void InkHUD::AllMessageApplet::onRender(bool full)
         message = &latestMessage->dm;
 
     // Short circuit: no text message
-    if (!message->sender) {
+    if (!message->sender || !messageStore.isMessageVisible(*message)) {
         printAt(X(0.5), Y(0.5), "No Message", CENTER, MIDDLE);
         return;
     }
