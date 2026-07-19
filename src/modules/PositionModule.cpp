@@ -149,12 +149,19 @@ bool PositionModule::hasQualityTimesource()
 {
     bool setFromPhoneOrNtpToday =
         lastSetFromPhoneNtpOrGps == 0 ? false : Throttle::isWithinTimespanMs(lastSetFromPhoneNtpOrGps, SEC_PER_DAY * 1000UL);
+#if defined(GAT562)
+    // GPS presence only confirms the UART module, not a valid time fix.
+    bool hasRtcQuality = getRTCQuality() >= RTCQualityFromNet;
+    bool hasHardwareRtc = (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+    return hasRtcQuality || hasHardwareRtc || setFromPhoneOrNtpToday;
+#else
 #if MESHTASTIC_EXCLUDE_GPS
     bool hasGpsOrRtc = (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
 #else
     bool hasGpsOrRtc = hasGPS() || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
 #endif
     return hasGpsOrRtc || setFromPhoneOrNtpToday;
+#endif
 }
 
 bool PositionModule::hasGPS()
