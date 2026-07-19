@@ -70,7 +70,7 @@ IF "__!FILENAME!__"=="____" (
         CALL :LOG_MESSAGE ERROR "Filename containing spaces are not supported."
         GOTO help
     )
-    IF NOT "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
+    IF "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
         CALL :LOG_MESSAGE ERROR "Filename must be a firmware-*.factory.bin file."
         GOTO help
     )
