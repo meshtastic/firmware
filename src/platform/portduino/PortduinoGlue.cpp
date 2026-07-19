@@ -21,8 +21,12 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
-#include <sys/ioctl.h>
 #include <unistd.h>
+#ifndef _WIN32
+// Only the PORTDUINO_LINUX_HARDWARE block below calls ioctl() (HCIGETDEVINFO,
+// for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
+#include <sys/ioctl.h>
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -32,6 +36,12 @@
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
+#endif
+
+#ifdef _WIN32
+// Defined in WindowsMacAddr.cpp, which keeps <iphlpapi.h> out of this TU: it
+// pulls in RPC/OLE headers that collide with the Arduino API.
+bool portduinoWindowsPrimaryMac(uint8_t *dmac);
 #endif
 
 #ifdef __APPLE__
@@ -193,6 +203,10 @@ void getMacAddr(uint8_t *dmac)
             }
             freeifaddrs(ifap);
         }
+#elif defined(_WIN32)
+        // No BlueZ on Windows; the host's primary adapter MAC is the equivalent
+        // stable identifier. On failure dmac is untouched and the blank-MAC check fires.
+        portduinoWindowsPrimaryMac(dmac);
 #else
         // No platform-specific MAC source; leave dmac at its default. Caller
         // can override via the --hwid CLI flag or the YAML config.
@@ -292,7 +306,9 @@ void portduinoSetup()
              std::filesystem::directory_iterator{portduino_config.config_directory}) {
             if (ends_with(entry.path().string(), ".yaml")) {
                 std::cout << "Also using " << entry << " as additional config file" << std::endl;
-                loadConfig(entry.path().c_str());
+                // .string() rather than .c_str(): path::value_type is wchar_t on
+                // Windows, and loadConfig() takes a const char *.
+                loadConfig(entry.path().string().c_str());
             }
         }
     }

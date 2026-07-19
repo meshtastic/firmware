@@ -33,7 +33,11 @@
 
 #include "IPAddress.h"
 #if defined(ARCH_PORTDUINO)
+#if defined(_WIN32)
+#include <winsock2.h> // ntohl()
+#else
 #include <netinet/in.h>
+#endif
 #elif !defined(ntohl)
 #include <machine/endian.h>
 #define ntohl __ntohl
