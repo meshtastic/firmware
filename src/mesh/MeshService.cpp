@@ -257,8 +257,8 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only
               {
                   perhapsDecode(&p);
-                  const StoredMessage &sm = messageStore.addFromPacket(p);
-                  graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+                  if (const StoredMessage *sm = messageStore.tryAddFromPacket(p))
+                      graphics::MessageRenderer::handleNewMessage(nullptr, *sm, p); // notify UI
               })
 #if !MESHTASTIC_EXCLUDE_ADMIN
     // Note admin requests on their way out: AdminModule only accepts a response from a remote we
