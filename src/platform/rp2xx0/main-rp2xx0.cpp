@@ -1,4 +1,5 @@
 #include "HardwareRNG.h"
+#include "PersistedRandomDeviceId.h"
 #include "configuration.h"
 #include "hardware/xosc.h"
 #include <cstring>
@@ -89,6 +90,9 @@ void updateBatteryLevel(uint8_t level)
 
 void getMacAddr(uint8_t *dmac)
 {
+    if (persistedRandomDeviceIdGet(dmac))
+        return;
+
     pico_unique_board_id_t src;
     pico_get_unique_board_id(&src);
     dmac[5] = src.id[7];

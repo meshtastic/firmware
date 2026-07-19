@@ -7,6 +7,7 @@
 #include "CryptoEngine.h"
 #include "Default.h"
 #include "FSCommon.h"
+#include "PersistedRandomDeviceId.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
@@ -777,6 +778,13 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         trafficManagementModule->purgeAll();
 #endif
 
+#if USERPREFS_RANDOM_DEVICE_ID
+    // Mint a fresh random identity: rmDir above deleted the persisted random
+    // device id, so generate and save a new one, and clear the node number so
+    // pickNewNodeNum() below re-derives it from the new MAC.
+    persistedRandomDeviceIdRegenerate();
+    myNodeInfo.my_node_num = 0;
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultNodeDatabase();
     installDefaultDeviceState();

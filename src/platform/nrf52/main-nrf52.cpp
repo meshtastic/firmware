@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "PersistedRandomDeviceId.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <InternalFileSystem.h>
@@ -186,6 +187,9 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
 
 void getMacAddr(uint8_t *dmac)
 {
+    if (persistedRandomDeviceIdGet(dmac))
+        return;
+
     const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
     dmac[5] = src[0];
     dmac[4] = src[1];

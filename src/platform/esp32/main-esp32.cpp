@@ -1,3 +1,4 @@
+#include "PersistedRandomDeviceId.h"
 #include "PowerFSM.h"
 #include "PowerMon.h"
 #include "configuration.h"
@@ -151,6 +152,9 @@ void esp32ReleaseBluetoothMemoryIfUnused()
 
 void getMacAddr(uint8_t *dmac)
 {
+    if (persistedRandomDeviceIdGet(dmac))
+        return;
+
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && defined(CONFIG_SOC_IEEE802154_SUPPORTED)
     auto res = esp_base_mac_addr_get(dmac);
     assert(res == ESP_OK);
@@ -220,6 +224,16 @@ void enableSlowCLK()
 
 void esp32Setup()
 {
+    // Install our persisted random device id as the base MAC before any radio
+    // interface initializes, so the BLE (and WiFi) addresses derive from it
+    // rather than the factory eFuse address.
+    uint8_t rmac[6];
+    if (persistedRandomDeviceIdGet(rmac)) {
+        auto macres = esp_base_mac_addr_set(rmac);
+        if (macres != ESP_OK)
+            LOG_ERROR("Failed to set random base MAC (%d)", macres);
+    }
+
     /* We explicitly don't want to do call randomSeed,
     // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();

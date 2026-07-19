@@ -2,6 +2,7 @@
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
 #include "HardwareRNG.h"
+#include "PersistedRandomDeviceId.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "error.h"
@@ -286,6 +287,22 @@ void NRF52Bluetooth::setup()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
+
+    // Advertise our persisted random device id instead of the factory FICR address.
+    // getMacAddr() returns it most-significant byte first; ble_gap_addr_t wants
+    // least-significant first. The generator already sets the two high bits
+    // required of a random static address.
+    uint8_t rmac[6];
+    if (persistedRandomDeviceIdGet(rmac)) {
+        ble_gap_addr_t addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.addr_type = BLE_GAP_ADDR_TYPE_RANDOM_STATIC;
+        for (int i = 0; i < 6; i++)
+            addr.addr[i] = rmac[5 - i];
+        if (!Bluefruit.setAddr(&addr))
+            LOG_ERROR("Failed to set random BLE address");
+    }
+
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
