@@ -1379,6 +1379,16 @@ static void test_checkConfigRegion_quietCheckReportsReason()
     TEST_ASSERT_TRUE_MESSAGE(strlen(err) > 0, "Expected a failure reason in errBuf");
 }
 
+static void test_checkConfigRegion_allowsProspectiveLicensedOwner()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M;
+    devicestate.owner.is_licensed = false;
+
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg));
+    TEST_ASSERT_TRUE(RadioInterface::checkConfigRegion(cfg, nullptr, 0, true));
+}
+
 static void test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion()
 {
     // Baseline: EU_866 (LITE profile)
@@ -1705,6 +1715,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_acceptsSuppliedKeypair);
     RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
+    RUN_TEST(test_checkConfigRegion_allowsProspectiveLicensedOwner);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
 
