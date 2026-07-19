@@ -822,7 +822,7 @@ void NodeDB::installDefaultNodeDatabase()
 void NodeDB::installDefaultConfig(bool preserveKey = false)
 {
     uint8_t private_key_temp[32];
-    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size > 0;
+    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size == 32;
     if (shouldPreserveKey) {
         memcpy(private_key_temp, config.security.private_key.bytes, config.security.private_key.size);
     }
@@ -2586,6 +2586,11 @@ void NodeDB::loadFromDisk()
         moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+
+    if (channels.ensureLicensedOperation()) {
+        LOG_WARN("Licensed operation removed persisted channel encryption/admin access");
+        saveToDisk(SEGMENT_CHANNELS);
+    }
 #if ARCH_PORTDUINO
     // set any config overrides
     if (portduino_config.has_configDisplayMode) {
@@ -3854,15 +3859,14 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    // Only generate keys for non-licensed users and if the LoRa region is set. The native simulator
-    // boots region-UNSET but still needs a keypair so PKI-encrypted DMs work between sim nodes, so
-    // allow keygen there regardless of region.
+    // Generate identity keys once a LoRa region is set. Licensed operation still needs the identity
+    // key for plaintext signatures, even though the key is never used for PKI encryption.
     bool regionBlocksKeygen = config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #if ARCH_PORTDUINO
     if (portduino_config.lora_module == use_simradio)
         regionBlocksKeygen = false;
 #endif
-    if (owner.is_licensed || regionBlocksKeygen) {
+    if (regionBlocksKeygen) {
         return false;
     }
 
@@ -3912,13 +3916,28 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         LOG_DEBUG("Set DH private key for crypto operations");
         crypto->setDHPrivateKey(config.security.private_key.bytes);
 
-        // Conditionally create new identity based on parameter
-        createNewIdentity();
+        if (createNewIdentity() && owner.is_licensed)
+            licensedIdentityMigrationPending = true;
     }
     return keygenSuccess;
 #else
     return false;
 #endif
+}
+
+bool NodeDB::notifyPendingLicensedIdentityMigration()
+{
+    if (!licensedIdentityMigrationPending || !service)
+        return false;
+    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+    if (!notification)
+        return false;
+    notification->level = meshtastic_LogRecord_Level_WARNING;
+    notification->time = getValidTime(RTCQualityFromNet);
+    snprintf(notification->message, sizeof(notification->message), "%s", LICENSED_IDENTITY_MIGRATION_WARNING);
+    service->sendClientNotification(notification);
+    licensedIdentityMigrationPending = false;
+    return true;
 }
 
 bool NodeDB::createNewIdentity()
@@ -4023,6 +4042,13 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                 channelFile = backup.channels;
                 LOG_DEBUG("Restored channels");
             }
+
+            if (owner.is_licensed && channels.ensureLicensedOperation()) {
+                restoreWhat |= SEGMENT_CHANNELS;
+                LOG_WARN("Licensed operation sanitized restored channel encryption/admin access");
+            }
+            if (restoreWhat & SEGMENT_CHANNELS)
+                channels.onConfigChanged();
 
             success = saveToDisk(restoreWhat);
             if (success) {

@@ -74,6 +74,8 @@ static const uint8_t LOW_ENTROPY_HASHES[][32] = {
      0x37, 0x82, 0x8d, 0xb2, 0xcc, 0xd8, 0x97, 0x40, 0x9a, 0x5c, 0x8f, 0x40, 0x55, 0xcb, 0x4c, 0x3e}};
 static const char LOW_ENTROPY_WARNING[] = "Compromised keys were detected and regenerated.";
 #endif
+static const char LICENSED_IDENTITY_MIGRATION_WARNING[] =
+    "Licensed signing generated a new identity key; this node identity changed.";
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
 #define here.
@@ -221,6 +223,7 @@ class NodeDB
 
     bool keyIsLowEntropy = false;
     bool hasWarned = false;
+    bool licensedIdentityMigrationPending = false;
 
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
@@ -474,6 +477,8 @@ class NodeDB
     /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
     bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr);
 
+    bool notifyPendingLicensedIdentityMigration();
+
     bool createNewIdentity();
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
@@ -548,6 +553,7 @@ class NodeDB
     // Grant the unit-test shim access to the private maintenance paths below
     // (migration / cleanup / eviction) without relaxing production access.
     friend class NodeDBTestShim;
+    friend class MockNodeDB;
 #endif
 
     /// purge db entries without user info

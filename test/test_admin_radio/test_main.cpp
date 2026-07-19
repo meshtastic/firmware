@@ -11,7 +11,9 @@
  *  6. Channel spacing calculation (placeholder for future protobuf changes)
  */
 
+#include "Channels.h"
 #include "DisplayFormatters.h"
+#include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -19,6 +21,9 @@
 #include "TestUtil.h"
 #include "mesh/Channels.h"
 #include "modules/AdminModule.h"
+#include "modules/NodeInfoModule.h"
+#include <pb_decode.h>
+#include <pb_encode.h>
 #include <string>
 #include <unity.h>
 #include <vector>
@@ -949,6 +954,138 @@ static void test_channelSpacingCalculation_placeholder()
 
 // AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
+static bool adminRadioGlobalsActive;
+static NodeDB *savedNodeDB;
+static NodeDB *replacementNodeDB;
+static NodeInfoModule *savedNodeInfoModule;
+static meshtastic_DeviceState savedDeviceState;
+static meshtastic_User savedOwner;
+static meshtastic_LocalConfig savedConfig;
+static meshtastic_ChannelFile savedChannelFile;
+
+static void replaceAdminRadioGlobals()
+{
+    savedNodeDB = nodeDB;
+    savedNodeInfoModule = nodeInfoModule;
+    savedDeviceState = devicestate;
+    savedOwner = owner;
+    savedConfig = config;
+    savedChannelFile = channelFile;
+    replacementNodeDB = new NodeDB();
+    nodeDB = replacementNodeDB;
+    adminRadioGlobalsActive = true;
+}
+
+static void restoreAdminRadioGlobals()
+{
+    if (!adminRadioGlobalsActive)
+        return;
+    nodeInfoModule = savedNodeInfoModule;
+    nodeDB = savedNodeDB;
+    delete replacementNodeDB;
+    replacementNodeDB = nullptr;
+    devicestate = savedDeviceState;
+    owner = savedOwner;
+    config = savedConfig;
+    channelFile = savedChannelFile;
+    initRegion();
+    adminRadioGlobalsActive = false;
+}
+
+static void installEncryptedAndAdminChannels()
+{
+    channels.initDefaults();
+    meshtastic_Channel admin = meshtastic_Channel_init_zero;
+    admin.index = 1;
+    admin.role = meshtastic_Channel_Role_SECONDARY;
+    admin.has_settings = true;
+    strncpy(admin.settings.name, Channels::adminChannel, sizeof(admin.settings.name));
+    admin.settings.psk.size = 16;
+    memset(admin.settings.psk.bytes, 0xA5, admin.settings.psk.size);
+    channels.setChannel(admin);
+
+    meshtastic_Channel secondary = meshtastic_Channel_init_zero;
+    secondary.index = 2;
+    secondary.role = meshtastic_Channel_Role_SECONDARY;
+    secondary.has_settings = true;
+    strncpy(secondary.settings.name, "private", sizeof(secondary.settings.name));
+    secondary.settings.psk.size = 32;
+    memset(secondary.settings.psk.bytes, 0x5A, secondary.settings.psk.size);
+    channels.setChannel(secondary);
+}
+
+static void assertLicensedChannelsSanitized()
+{
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(0).settings.psk.size);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(1).settings.psk.size);
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(2).settings.psk.size);
+}
+
+static void test_handleSetOwner_persistsLicensedChannelSanitation()
+{
+    replaceAdminRadioGlobals();
+    owner = meshtastic_User_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    installEncryptedAndAdminChannels();
+
+    meshtastic_User licensed = meshtastic_User_init_zero;
+    licensed.is_licensed = true;
+    testAdmin->deferSaves();
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1); // reloadOwner(false) only checks presence
+    testAdmin->handleSetOwner(licensed);
+
+    TEST_ASSERT_TRUE(testAdmin->savedSegments() & SEGMENT_CHANNELS);
+    assertLicensedChannelsSanitized();
+
+    uint8_t encoded[meshtastic_ChannelFile_size];
+    const size_t encodedSize = pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_ChannelFile_msg, &channelFile);
+    TEST_ASSERT_GREATER_THAN(0, encodedSize);
+    meshtastic_ChannelFile reloaded = meshtastic_ChannelFile_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(encoded, encodedSize, &meshtastic_ChannelFile_msg, &reloaded));
+    channelFile = reloaded;
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "sanitized reload must not trigger another persistence write");
+}
+
+static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
+{
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    installEncryptedAndAdminChannels();
+
+    TEST_ASSERT_TRUE(channels.ensureLicensedOperation());
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "boot sanitation must be idempotent");
+}
+
+static void test_restorePreferences_sanitizesLicensedBackupBeforeReturn()
+{
+    NodeDB *savedNodeDB = nodeDB;
+    nodeDB = new NodeDB();
+    const meshtastic_DeviceState savedDeviceState = devicestate;
+    const meshtastic_ChannelFile savedChannelFile = channelFile;
+
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    installEncryptedAndAdminChannels();
+    TEST_ASSERT_TRUE(nodeDB->backupPreferences(meshtastic_AdminMessage_BackupLocation_FLASH));
+
+    owner.is_licensed = false;
+    channels.initDefaults();
+    TEST_ASSERT_TRUE(
+        nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_DEVICESTATE | SEGMENT_CHANNELS));
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "restored licensed channels must remain sanitized");
+
+    devicestate = savedDeviceState;
+    channelFile = savedChannelFile;
+    nodeDB->saveToDisk(SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    FSCom.remove(backupFileName);
+    delete nodeDB;
+    nodeDB = savedNodeDB;
+}
 
 static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
                                            meshtastic_Config_LoRaConfig_ModemPreset preset)
@@ -959,6 +1096,27 @@ static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCo
     c.payload_variant.lora.use_preset = usePreset;
     c.payload_variant.lora.modem_preset = preset;
     return c;
+}
+
+static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
+{
+    replaceAdminRadioGlobals();
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    initRegion();
+
+    testAdmin->deferSaves();
+    const meshtastic_Config c =
+        makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    testAdmin->handleSetConfig(c, false);
+
+    const int expectedSegments = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+    TEST_ASSERT_EQUAL_INT(expectedSegments, testAdmin->savedSegments());
+    TEST_ASSERT_EQUAL(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL(32, owner.public_key.size);
 }
 
 static void test_handleSetConfig_fromOthers_invalidPresetRejected()
@@ -1221,6 +1379,16 @@ static void test_checkConfigRegion_quietCheckReportsReason()
     TEST_ASSERT_TRUE_MESSAGE(strlen(err) > 0, "Expected a failure reason in errBuf");
 }
 
+static void test_checkConfigRegion_allowsProspectiveLicensedOwner()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M;
+    devicestate.owner.is_licensed = false;
+
+    TEST_ASSERT_FALSE(RadioInterface::checkConfigRegion(cfg));
+    TEST_ASSERT_TRUE(RadioInterface::checkConfigRegion(cfg, nullptr, 0, true));
+}
+
 static void test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion()
 {
     // Baseline: EU_866 (LITE profile)
@@ -1441,6 +1609,7 @@ void setUp(void)
 }
 void tearDown(void)
 {
+    restoreAdminRadioGlobals();
     service = nullptr;
     delete mockMeshService;
     mockMeshService = nullptr;
@@ -1458,6 +1627,10 @@ void setup()
     UNITY_BEGIN();
 
     // getRegion()
+    RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
+    RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
+    RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
+    RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);
     RUN_TEST(test_getRegion_returnsCorrectRegion_EU868);
     RUN_TEST(test_getRegion_returnsCorrectRegion_LORA24);
@@ -1542,6 +1715,7 @@ void setup()
     RUN_TEST(test_handleSetConfig_security_acceptsSuppliedKeypair);
     RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
+    RUN_TEST(test_checkConfigRegion_allowsProspectiveLicensedOwner);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
 

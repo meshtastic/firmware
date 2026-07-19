@@ -1022,7 +1022,8 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
  * receives the human-readable failure reason.
  * Returns false if not compatible.
  */
-bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen)
+bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen,
+                                       bool prospectiveLicensedOwner)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1034,7 +1035,7 @@ bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraC
     }
 
     // If you are not licensed, you can't use ham regions.
-    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
+    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed && !prospectiveLicensedOwner) {
         if (errBuf)
             snprintf(errBuf, errLen, "Region %s requires licensed mode", newRegion->name);
         return false;

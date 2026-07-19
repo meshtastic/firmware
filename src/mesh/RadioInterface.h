@@ -256,8 +256,10 @@ class RadioInterface
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
-    // speculative UI checks). errBuf, if given, receives the failure reason.
-    static bool checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf = nullptr, size_t errLen = 0);
+    // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
+    // confirmation before it sets the owner licensed. errBuf, if given, receives the failure reason.
+    static bool checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf = nullptr, size_t errLen = 0,
+                                  bool prospectiveLicensedOwner = false);
 
     // Check if a candidate region is compatible and valid. On failure, logs at ERROR,
     // records a critical error, and sends a client notification.
