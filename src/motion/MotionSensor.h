@@ -2,18 +2,18 @@
 #ifndef _MOTION_SENSOR_H_
 #define _MOTION_SENSOR_H_
 
-#define MOTION_SENSOR_CHECK_INTERVAL_MS 100
+#define MOTION_SENSOR_CHECK_INTERVAL_MS 50
 #define MOTION_SENSOR_CLICK_THRESHOLD 40
 
 #include "../configuration.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
+#include "../Power.h"
 #include "../PowerFSM.h"
 #include "../detect/ScanI2C.h"
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
-#include "../power.h"
 #include "Wire.h"
 
 // Base class for motion processing
@@ -42,6 +42,12 @@ class MotionSensor
 
     virtual void calibrate(uint16_t forSeconds){};
 
+    // True if this sensor produces the compass heading (screen->setHeading()) in runOnce().
+    // Combined accel+magnetometer parts (e.g. BMX160, ICM20948) and standalone magnetometers
+    // handled by the accelerometer thread (e.g. BMM150) override this. Used to avoid halting
+    // the thread - and freezing the compass - when motion-only features are disabled at runtime.
+    inline virtual bool providesHeading() const { return false; };
+
   protected:
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
@@ -54,38 +60,28 @@ class MotionSensor
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif
 
+    bool saveMagnetometerCalibration(const char *filePath, float highestX, float lowestX, float highestY, float lowestY,
+                                     float highestZ, float lowestZ);
+    bool loadMagnetometerCalibration(const char *filePath, float &highestX, float &lowestX, float &highestY, float &lowestY,
+                                     float &highestZ, float &lowestZ);
+    void beginCalibrationDisplay(bool &showingScreen);
+    void finishCalibrationIfExpired(bool &showingScreen, const char *filePath, float highestX, float lowestX, float highestY,
+                                    float lowestY, float highestZ, float lowestZ);
+    void startCalibrationWindow(uint16_t forSeconds);
+    static void seedCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                       float &lowestY, float &highestZ, float &lowestZ);
+    static void updateCalibrationExtrema(float x, float y, float z, float &highestX, float &lowestX, float &highestY,
+                                         float &lowestY, float &highestZ, float &lowestZ);
+    static float applyCompassOrientation(float heading);
+    static void publishCompassAccelSample(float x, float y, float z);
+    static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
+
     ScanI2C::FoundDevice device;
 
     // Do calibration if true
     bool doCalibration = false;
     uint32_t endCalibrationAt = 0;
 };
-
-namespace MotionSensorI2C
-{
-
-static inline int readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
-{
-    Wire.beginTransmission(address);
-    Wire.write(reg);
-    Wire.endTransmission();
-    Wire.requestFrom((uint8_t)address, (uint8_t)len);
-    uint8_t i = 0;
-    while (Wire.available()) {
-        data[i++] = Wire.read();
-    }
-    return 0; // Pass
-}
-
-static inline int writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
-{
-    Wire.beginTransmission(address);
-    Wire.write(reg);
-    Wire.write(data, len);
-    return (0 != Wire.endTransmission());
-}
-
-} // namespace MotionSensorI2C
 
 #endif
 

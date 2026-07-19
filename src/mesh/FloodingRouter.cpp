@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
 #endif
@@ -33,6 +34,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     // Handle hop_limit upgrade scenario for rebroadcasters
     if (wasUpgraded && perhapsHandleUpgradedPacket(p)) {
         return true; // we handled it, so stop processing
+    }
+
+    if (!seenRecently && !wasUpgraded && textMessageModule) {
+        seenRecently = textMessageModule->recentlySeen(p->id);
     }
 
     if (seenRecently) {
@@ -86,10 +91,27 @@ void FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
     if (nodeDB)
         nodeDB->updateFrom(*p);
+
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
+    if (traceRouteModule && p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        // If we got a packet that is not decoded, try to decode it so we can check for traceroute.
+        auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
+        if (decodedState == DecodeState::DECODE_SUCCESS) {
+            // parsing was successful, print for debugging
+            printPacket("reprocessPacket(DUP)", p);
+        } else {
+            // Fatal decoding error, we can't do anything with this packet
+            LOG_WARN(
+                "FloodingRouter::reprocessPacket: Fatal decode error (state=%d, id=0x%08x, from=%u), can't check for traceroute",
+                static_cast<int>(decodedState), p->id, getFrom(p));
+            return;
+        }
+    }
+
     if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP)
+        p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
         traceRouteModule->processUpgradedPacket(*p);
+    }
 #endif
 }
 
@@ -122,6 +144,10 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
             txRelayCanceled++;
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+        iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+    }
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE && iface && nodeDB &&
+        nodeDB->isFromOrToFavoritedNode(*p)) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
 }

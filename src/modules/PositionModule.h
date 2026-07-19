@@ -38,6 +38,14 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     void handleNewPosition();
 
+    // Pure broadcast-policy helpers, split out so they're unit-testable without the module.
+    // True when two coordinates truncate to the same precision cell (so a re-broadcast would be a
+    // duplicate). precision 0 or >=32 returns false: no coarse cell to hold within, never suppress.
+    static bool positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int32_t bLat, int32_t bLon, uint32_t precision);
+    // Effective min interval: stationary positions are held to stationaryFloorMs (when that is the
+    // longer of the two); otherwise the normal configured interval.
+    static uint32_t effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs);
+
   protected:
     /** Called to handle a particular incoming message
 
@@ -57,6 +65,12 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
   private:
     meshtastic_MeshPacket *allocPositionPacket();
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
+    // True when our position is unchanged since the last broadcast: it truncates to the same
+    // precision grid cell, so re-sending would be a duplicate that traffic management dedups
+    // downstream anyway. Used to hold stationary broadcasts to a 12h floor. useConfiguredPrecision
+    // gauges movement at our own configured (unclamped) precision rather than the on-wire
+    // (public-clamped) precision - trackers report finer movement.
+    bool positionUnchangedSinceLastSend(const meshtastic_PositionLite &selfPos, bool useConfiguredPrecision);
     meshtastic_MeshPacket *allocAtakPli();
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
@@ -69,10 +83,11 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // In event mode we want to prevent excessive position broadcasts
     // we set the minimum interval to 5m
     const uint32_t minimumTimeThreshold =
-        max(300000, Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30));
+        max(uint32_t(300000), Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs,
+                                                                default_broadcast_smart_minimum_interval_secs));
 #else
-    const uint32_t minimumTimeThreshold =
-        Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
+    const uint32_t minimumTimeThreshold = Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs,
+                                                                            default_broadcast_smart_minimum_interval_secs);
 #endif
 };
 

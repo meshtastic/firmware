@@ -10,10 +10,10 @@
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // ratio of voltage divider (100k, 220k)
 #define ADC_MULTIPLIER 1.6 // 1.45 + 10% for correction of display undervoltage.
-#define ADC_CHANNEL ADC1_GPIO4_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_3
 
 // LED
-#define LED_PIN 21
+#define LED_POWER 21
 
 // Button
 #define BUTTON_PIN 0
@@ -55,5 +55,6 @@
 #define SX126X_RESET 14
 #define SX126X_RXEN 47
 #define SX126X_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 #endif

@@ -52,9 +52,6 @@ extern "C" {
 
 #define LED_BLUE PIN_LED1
 
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED3
-
 #define LED_STATE_ON 0 // State when LED is lit
 
 /*
@@ -103,7 +100,7 @@ static const uint8_t A0 = PIN_A0;
 #define EXTERNAL_FLASH_USE_QSPI
 
 // Add a delay on startup to allow LoRa and GPS to power up
-#define PIN_PWR_DELAY_MS 100
+#define PERIPHERAL_WARMUP_MS 100
 
 /*
  * Lora radio
@@ -128,13 +125,13 @@ static const uint8_t A0 = PIN_A0;
 // #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 #define PIN_GPS_PPS (GPIO_PORT1 + 4) // Pulse per second input from the GPS
-#define GPS_TX_PIN (GPIO_PORT1 + 9)  // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (GPIO_PORT1 + 8)  // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (GPIO_PORT1 + 8)  // This is for bits going TOWARDS the GPS
+#define GPS_RX_PIN (GPIO_PORT1 + 9)  // This is for bits going TOWARDS the CPU
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
 #define GPS_RESET_PIN (GPIO_PORT1 + 5) // GPS reset pin
 
@@ -169,6 +166,8 @@ static const uint8_t A0 = PIN_A0;
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
+
+#define SERIAL_PRINT_PORT 0
 
 #ifdef __cplusplus
 }

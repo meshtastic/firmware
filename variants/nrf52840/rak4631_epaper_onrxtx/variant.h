@@ -27,13 +27,10 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
-
-#define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
+#define LED_BLUE (36)
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define LED_NOTIFICATION LED_BLUE
 
 #define LED_STATE_ON 1 // State when LED is litted
 
@@ -194,8 +191,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define AREF_VOLTAGE 3.0
 // #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 // #define ADC_MULTIPLIER 1.73
-
-// #define HAS_RTC 1
 
 #ifdef __cplusplus
 }

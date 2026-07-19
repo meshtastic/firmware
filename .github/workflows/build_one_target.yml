@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       # trunk-ignore(checkov/CKV_GHA_7)
+      target:
+        type: string
+        required: false
+        description: Choose the target board, e.g. nrf52_promicro_diy_tcxo. If blank, will find available targets.
       arch:
         type: choice
         options:
+          - all
           - esp32
           - esp32s3
           - esp32c3
@@ -15,37 +20,21 @@ on:
           - rp2040
           - rp2350
           - stm32
-          - native
-      target:
-        type: string
-        required: false
-        description: Choose the target board, e.g. nrf52_promicro_diy_tcxo. If blank, will find available targets.
-      # find-target:
-      #   type: boolean
-      #   default: true
-      #   description: 'Find the available targets'
+        description: Choose an arch to limit the search, or 'all' to search all architectures.
+        default: all
 
 permissions: read-all
 
 jobs:
   find-targets:
-    if: ${{ inputs.target == '' }}
     strategy:
       fail-fast: false
       matrix:
         arch:
-          - esp32
-          - esp32s3
-          - esp32c3
-          - esp32c6
-          - nrf52840
-          - rp2040
-          - rp2350
-          - stm32
-
+          - all
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -53,20 +42,43 @@ jobs:
       - run: pip install -U platformio
       - name: Generate matrix
         id: jsonStep
+        env:
+          BUILDTARGET: ${{ inputs.target }}
+          MATRIXARCH: ${{ inputs.arch }}
         run: |
           TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level extra)
-          echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
-          echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
-          echo "Arch: ${{matrix.arch}}" >> $GITHUB_STEP_SUMMARY
-          echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
-          echo "Targets:" >> $GITHUB_STEP_SUMMARY
-          echo $TARGETS >> $GITHUB_STEP_SUMMARY
+          if [ "$BUILDTARGET" = "" ]; then
+            echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
+            echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
+            echo "Arch: $MATRIXARCH" >> $GITHUB_STEP_SUMMARY
+            echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
+            echo "## 🎯 The following target boards are available to build:" >> $GITHUB_STEP_SUMMARY
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            echo $TARGETS | jq -r 'sort_by(.board) | sort_by(.platform) |.[] | "| " + .platform + " | " + .board + " |" ' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "We build this one:" >> $GITHUB_STEP_SUMMARY
+            ARCH=$(echo "$TARGETS" | jq --arg BUILDTARGET "$BUILDTARGET" -r '.[] | select(.board==$BUILDTARGET) | .platform')
+            echo "| Platform | Board |" >> $GITHUB_STEP_SUMMARY
+            echo "| -------- | ----- |" >> $GITHUB_STEP_SUMMARY
+            echo "| $ARCH | "$BUILDTARGET" |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [[ "$ARCH" == "" ]]; then
+              echo "## ❌ Error: Target "$BUILDTARGET" not found!" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "## ✅ Target "$BUILDTARGET" found, proceeding to build." >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "You may need to refresh this page to make the built firmware appear below." >> $GITHUB_STEP_SUMMARY
+            echo "arch=$ARCH" >> $GITHUB_OUTPUT
+          fi
+    outputs:
+      arch: ${{ steps.jsonStep.outputs.arch }}
 
   version:
     if: ${{ inputs.target != '' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Get release version string
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
@@ -80,46 +92,27 @@ jobs:
 
   build:
     if: ${{ inputs.target != '' && inputs.arch != 'native' }}
-    needs: [version]
+    needs: [version, find-targets]
     uses: ./.github/workflows/build_firmware.yml
     with:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ inputs.target }}
-      platform: ${{ inputs.arch }}
-
-  build-debian-src:
-    if: ${{ github.repository == 'meshtastic/firmware' && inputs.arch == 'native' }}
-    uses: ./.github/workflows/build_debian_src.yml
-    with:
-      series: UNRELEASED
-      build_location: local
-    secrets: inherit
-
-  package-pio-deps-native-tft:
-    if: ${{ inputs.arch == 'native' }}
-    uses: ./.github/workflows/package_pio_deps.yml
-    with:
-      pio_env: native-tft
-    secrets: inherit
-
-  test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'workflow_dispatch' ||  !contains(github.ref_name, 'event/') && inputs.arch == 'native' && inputs.target != '' }}
-    uses: ./.github/workflows/test_native.yml
+      platform: ${{ needs.find-targets.outputs.arch }}
 
   gather-artifacts:
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
     runs-on: ubuntu-latest
     needs: [version, build]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           path: ./
           pattern: firmware-*-*
@@ -132,7 +125,7 @@ jobs:
         run: mv -b -t ./ ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-${{inputs.target}}-${{ needs.version.outputs.long }}
           overwrite: true
@@ -140,7 +133,7 @@ jobs:
             ./firmware-*.bin
             ./firmware-*.uf2
             ./firmware-*.hex
-            ./firmware-*-ota.zip
+            ./firmware-*.zip
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
@@ -148,7 +141,7 @@ jobs:
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           pattern: firmware-*-${{ needs.version.outputs.long }}
           merge-multiple: true
@@ -160,14 +153,14 @@ jobs:
 
       - name: Device scripts permissions
         run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-install.sh || true
+          chmod +x ./output/device-update.sh || true
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{inputs.target}}-${{ needs.version.outputs.long }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: debug-elfs-${{inputs.target}}-${{ needs.version.outputs.long }}.zip
           overwrite: true

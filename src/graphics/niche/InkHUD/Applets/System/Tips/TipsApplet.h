@@ -23,6 +23,7 @@ class TipsApplet : public SystemApplet
     enum class Tip {
         WELCOME,
         FINISH_SETUP,
+        PICK_REGION,
         SAFE_SHUTDOWN,
         CUSTOMIZATION,
         BUTTONS,
@@ -32,13 +33,17 @@ class TipsApplet : public SystemApplet
   public:
     TipsApplet();
 
-    void onRender() override;
+    void onRender(bool full) override;
     void onForeground() override;
     void onBackground() override;
     void onButtonShortPress() override;
+    void onExitShort() override;
 
   protected:
     void renderWelcome(); // Very first screen of tutorial
+#if defined(T5_S3_EPAPER_PRO)
+    void renderT5S3ButtonsTip();
+#endif
 
     std::deque<Tip> tipQueue; // List of tips to show, one after another
 

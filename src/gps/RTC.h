@@ -8,6 +8,11 @@
 #include <ArtronShop_RX8130CE.h>
 #endif
 
+#if HAS_LSE
+// True once the STM32WL LSE crystal has locked and the hardware RTC is running (see stm32wlSetup()).
+bool stm32wlRtcAvailable();
+#endif
+
 enum RTCQuality {
 
     /// We haven't had our RTC set yet
@@ -41,7 +46,7 @@ extern uint32_t lastSetFromPhoneNtpOrGps;
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate = false);
-RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t);
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t);
 
 /// Return a string name for the quality
 const char *RtcName(RTCQuality quality);
@@ -54,7 +59,15 @@ uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
 RTCSetResult readFromRTC();
 
-time_t gm_mktime(struct tm *tm);
+#ifdef PIO_UNIT_TESTING
+void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot);
+void resetRTCStateForTests();
+void setRTCSystemTimeForTests(const struct timeval *tv);
+void clearRTCSystemTimeForTests();
+void setReadFromRTCUseSystemTimeForTests(bool enabled);
+#endif
+
+time_t gm_mktime(const struct tm *tm);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600

@@ -42,3 +42,13 @@ void initVariant()
     pinMode(PIN_LED3, OUTPUT);
     ledOff(PIN_LED3);
 }
+
+void variant_shutdown()
+{
+    // To power off the T-Echo, the display must be set
+    // as an input pin; otherwise, there will be leakage current.
+    pinMode(PIN_EINK_CS, INPUT);
+    pinMode(PIN_EINK_DC, INPUT);
+    pinMode(PIN_EINK_RES, INPUT);
+    pinMode(PIN_EINK_BUSY, INPUT);
+}

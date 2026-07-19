@@ -91,7 +91,7 @@ MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(null
 {
     // LOG_DEBUG("MPR121 @ %02x", m_addr);
     state = Init;
-    last_key = -1;
+    last_key = UINT8_MAX;
     last_tap = 0L;
     char_idx = 0;
     queue = "";
@@ -177,7 +177,7 @@ void MPR121Keyboard::reset()
     delay(20);
     writeRegister(_MPR121_REG_CONFIG2, 0x21);
     delay(20);
-    // Enter run mode by Seting partial filter calibration tracking, disable proximity detection, enable 12 channels
+    // Enter run mode by setting partial filter calibration tracking, disable proximity detection, enable 12 channels
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG,
                   ECR_CALIBRATION_TRACK_FROM_FULL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
     delay(100);
@@ -359,8 +359,8 @@ void MPR121Keyboard::released()
         return;
     }
     // would clear longpress callback... later.
-    if (last_key < 0 || last_key > _NUM_KEYS) { // reset to idle if last_key out of bounds
-        last_key = -1;
+    if (last_key >= _NUM_KEYS) { // reset to idle if last_key out of bounds
+        last_key = UINT8_MAX;
         state = Idle;
         return;
     }

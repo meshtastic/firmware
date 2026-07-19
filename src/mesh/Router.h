@@ -8,6 +8,7 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
+#include <memory>
 
 /**
  * A mesh aware router that supports multiple interfaces.
@@ -20,7 +21,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
 
   protected:
-    RadioInterface *iface = NULL;
+    std::unique_ptr<RadioInterface> iface = nullptr;
 
   public:
     /**
@@ -32,7 +33,15 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /**
      * Currently we only allow one interface, that may change in the future
      */
-    void addInterface(RadioInterface *_iface) { iface = _iface; }
+    void addInterface(std::unique_ptr<RadioInterface> _iface) { iface = std::move(_iface); }
+
+    /**
+     * Borrowed (non-owning) access to the radio interface - used by NodeDB
+     * after a lockdown unlock so it can push the freshly-loaded config to
+     * the SX12xx via reconfigure(). Returns nullptr when no radio has been
+     * attached (e.g. ARCH_PORTDUINO simulator before SimRadio bind).
+     */
+    RadioInterface *getRadioIface() { return iface.get(); }
 
     /**
      * do idle processing
@@ -57,14 +66,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
      */
-    meshtastic_MeshPacket *allocForSending();
+    [[nodiscard]] meshtastic_MeshPacket *allocForSending();
 
     /** Return Underlying interface's TX queue status */
-    meshtastic_QueueStatus getQueueStatus();
+    [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
     /**
      * @return our local nodenum */
-    NodeNum getNodeNum();
+    [[nodiscard]] NodeNum getNodeNum();
 
     /** Wake up the router thread ASAP, because we just queued a message for it.
      * FIXME, this is kinda a hack because we don't have a nice way yet to say 'wake us because we are 'blocked on this queue'
@@ -165,6 +174,25 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 /** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
+
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+/** XEdDSA receive-side signature policy. When the packet carries a 64-byte signature *and* the
+ * sender's public key is known, verify it: on success learn the sender's signer bit, on failure
+ * drop. If the key is unknown the signature is left unverified and the packet passes. A signature
+ * of any other non-zero length is treated as malformed and dropped. For unsigned packets, enforce
+ * downgrade protection: drop a non-PKI broadcast from a known signer whose signed encoding would
+ * still fit a LoRa frame (unicast, PKI, and oversized broadcasts always pass).
+ *
+ * The fit test sizes p->decoded with the real encoder, so it measures the fields the sender
+ * encoded rather than any raw wire length.
+ *
+ * The caller MUST hold cryptLock: verification runs through the shared CryptoEngine key cache.
+ * (perhapsDecode already holds it; other call sites must take it themselves.)
+ *
+ * @return false if the packet must be dropped.
+ */
+bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p);
+#endif
 
 extern Router *router;
 

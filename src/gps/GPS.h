@@ -2,6 +2,8 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 
+#include <memory>
+
 #include "GPSStatus.h"
 #include "GpioLogic.h"
 #include "Observer.h"
@@ -14,6 +16,11 @@
 // Allow defining the polarity of the ENABLE output.  default is active high
 #ifndef GPS_EN_ACTIVE
 #define GPS_EN_ACTIVE 1
+#endif
+
+// Allow defining the polarity of the STANDBY output.  default is LOW for standby
+#ifndef GPS_STANDBY_ACTIVE
+#define GPS_STANDBY_ACTIVE LOW
 #endif
 
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
@@ -35,7 +42,8 @@ typedef enum {
     GNSS_MODEL_AG3335,
     GNSS_MODEL_AG3352,
     GNSS_MODEL_LS20031,
-    GNSS_MODEL_CM121
+    GNSS_MODEL_CM121,
+    GNSS_MODEL_GENERIC_NMEA // generic NMEA source (e.g. gpsd); skips chip-specific probe and init
 } GnssModel_t;
 
 typedef enum {
@@ -91,6 +99,9 @@ class GPS : private concurrency::OSThread
     // Disable the thread
     int32_t disable() override;
 
+    // Returns if the thread is enabled
+    bool isEnabled();
+
     // toggle between enabled/disabled
     void toggleGpsMode();
 
@@ -113,7 +124,7 @@ class GPS : private concurrency::OSThread
 
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.
-    static GPS *createGps();
+    static std::unique_ptr<GPS> createGps();
 
     // Wake the GPS hardware - ready for an update
     void up();
@@ -148,14 +159,26 @@ class GPS : private concurrency::OSThread
      * @return true if we've acquired a new location
      */
     virtual bool lookForLocation();
+    // Load persisted GPS model+baud from /prefs.
+    bool loadProbeCache();
+    // Clear persisted GPS model+baud cache.
+    void clearProbeCache();
+    // Persist the currently detected GPS model+baud.
+    bool saveProbeCache() const;
+    // Verify the cached model+baud still maps to a live GPS device.
+    bool verifyCachedProbePresence();
 
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
+    int32_t detectedBaud = GPS_BAUDRATE;
+    int32_t cachedProbeBaud = 0;
+    GnssModel_t cachedProbeModel = GNSS_MODEL_UNKNOWN;
 
     TinyGPSPlus reader;
     uint8_t fixQual = 0; // fix quality from GPGGA
     uint32_t lastChecksumFailCount = 0;
     uint8_t currentStep = 0;
     int32_t currentDelay = 2000;
+    bool gotTime = false;
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
@@ -171,6 +194,10 @@ class GPS : private concurrency::OSThread
 
     uint8_t speedSelect = 0;
     uint8_t probeTries = 0;
+    // Cache file is successfully loaded.
+    bool hasProbeCache = false;
+    // Ensures cached probe is attempted once per boot.
+    bool triedProbeCache = false;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
@@ -194,6 +221,8 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
 #if defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
+#elif defined(ARCH_NRF52)
+    static Uart *_serial_gps;
 #else
     static HardwareSerial *_serial_gps;
 #endif
@@ -249,5 +278,5 @@ class GPS : private concurrency::OSThread
     uint8_t fixeddelayCtr = 0;
 };
 
-extern GPS *gps;
+extern std::unique_ptr<GPS> gps;
 #endif // Exclude GPS

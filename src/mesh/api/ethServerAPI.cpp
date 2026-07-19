@@ -1,7 +1,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 
 #include "ethServerAPI.h"
 
@@ -14,6 +14,15 @@ void initApiServer(int port)
         apiPort = new ethServerPort(port);
         LOG_INFO("API server listening on TCP port %d", port);
         apiPort->init();
+    }
+}
+
+void deInitApiServer()
+{
+    if (apiPort) {
+        LOG_INFO("Deinit API server");
+        delete apiPort;
+        apiPort = nullptr;
     }
 }
 

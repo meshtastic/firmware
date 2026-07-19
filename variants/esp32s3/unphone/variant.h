@@ -18,6 +18,7 @@
 #define LORA_DIO2 RADIOLIB_NC // Not really used
 
 // HX8357 TFT LCD
+#define HAS_SPI_TFT 1
 #define HX8357_CS 48
 #define HX8357_RS 47 // AKA DC
 #define HX8357_RESET 46
@@ -35,7 +36,8 @@
 #define TFT_OFFSET_ROTATION 6 // unPhone's screen wired unusually, 0 typical
 #define TFT_INVERT false
 #define SCREEN_ROTATE true
-#define SCREEN_TRANSITION_FRAMERATE 5
+#define SCREEN_TRANSITION_FRAMERATE 30
+#define USE_TFTDISPLAY 1
 
 #define HAS_TOUCHSCREEN 1
 #define USE_XPT2046 1
@@ -53,7 +55,7 @@
 
 #define SD_SPI_FREQUENCY 25000000
 
-#define LED_PIN 13     // the red part of the RGB LED
+#define LED_POWER 13   // the red part of the RGB LED
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define ALT_BUTTON_PIN 21    // Button 3 - square - top button in landscape mode

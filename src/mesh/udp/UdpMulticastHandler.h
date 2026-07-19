@@ -12,9 +12,8 @@
 
 #include <AsyncUDP.h>
 
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET && defined(ARCH_ESP32)
+#include <ETH.h>
 #endif // HAS_ETHERNET
 
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
@@ -22,25 +21,47 @@
 class UdpMulticastHandler final
 {
   public:
-    UdpMulticastHandler() { udpIpAddress = IPAddress(239, 0, 0, 69); }
+    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(239, 0, 0, 69); }
 
     void start()
     {
+        if (isRunning) {
+            LOG_DEBUG("UDP multicast already running");
+            return;
+        }
         if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT, 64)) {
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
             LOG_DEBUG("UDP Listening on IP: %u.%u.%u.%u:%u", udpIpAddress[0], udpIpAddress[1], udpIpAddress[2], udpIpAddress[3],
                       UDP_MULTICAST_DEFAUL_PORT);
+#elif defined(USE_WS5500) || defined(USE_CH390D)
+            LOG_DEBUG("UDP Listening on IP: %s", ETH.localIP().toString().c_str());
 #else
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
 #endif
             udp.onPacket([this](AsyncUDPPacket packet) { onReceive(packet); });
+            isRunning = true;
         } else {
             LOG_DEBUG("Failed to listen on UDP");
         }
     }
 
-    void onReceive(AsyncUDPPacket packet)
+    void stop()
     {
+        if (!isRunning) {
+            return;
+        }
+        LOG_DEBUG("Stopping UDP multicast");
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+        udp.close();
+#endif
+        isRunning = false;
+    }
+
+    void onReceive(AsyncUDPPacket &packet)
+    {
+        if (!isRunning) {
+            return;
+        }
         size_t packetLength = packet.length();
 #if defined(ARCH_NRF52)
         IPAddress ip = packet.remoteIP();
@@ -49,14 +70,19 @@ class UdpMulticastHandler final
         // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
 #endif
-        meshtastic_MeshPacket mp;
+        meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+            // Drop packets with spoofed local origin - no legitimate LAN node should send from=0 or our own nodeNum
+            if (isFromUs(&mp)) {
+                LOG_WARN("UDP packet with spoofed local from=0x%08x, dropping", mp.from);
+                return;
+            }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
-            mp.pki_encrypted = false;
-            mp.public_key.size = 0;
-            memset(mp.public_key.bytes, 0, sizeof(mp.public_key.bytes));
+            // Preserve the whole MeshPacket as received: while payload_variant is encrypted, `channel` is a hash (and is 0 for
+            // PKI DMs), so it must be copied verbatim for the router to attempt PKI/channel decryption. Keep
+            // pki_encrypted/public_key too so downstream auth/metadata can reflect PKI usage correctly.
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
             p->rx_snr = 0;
@@ -67,11 +93,15 @@ class UdpMulticastHandler final
 
     bool onSend(const meshtastic_MeshPacket *mp)
     {
-        if (!mp || !udp) {
+        if (!isRunning || !mp || !udp) {
             return false;
         }
 #if defined(ARCH_NRF52)
         if (!isEthernetAvailable()) {
+            return false;
+        }
+#elif defined(USE_WS5500) || defined(USE_CH390D)
+        if (!ETH.connected()) {
             return false;
         }
 #elif !defined(ARCH_PORTDUINO)
@@ -85,12 +115,12 @@ class UdpMulticastHandler final
         LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
-        udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
-        return true;
+        return udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
     }
 
   private:
     IPAddress udpIpAddress;
     AsyncUDP udp;
+    bool isRunning;
 };
 #endif // HAS_UDP_MULTICAST

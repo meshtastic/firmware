@@ -22,12 +22,19 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
 
     // Handle different input events with appropriate buzzer feedback
     switch (event->inputEvent) {
+#ifdef INPUTDRIVER_ENCODER_TYPE
+    case INPUT_BROKER_SELECT:
+    case INPUT_BROKER_SELECT_LONG:
+        playClick();
+        break;
+#else
     case INPUT_BROKER_USER_PRESS:
     case INPUT_BROKER_ALT_PRESS:
     case INPUT_BROKER_SELECT:
     case INPUT_BROKER_SELECT_LONG:
-        playBeep(); // Confirmation feedback
+        playBeep();
         break;
+#endif
 
     case INPUT_BROKER_UP:
     case INPUT_BROKER_UP_LONG:

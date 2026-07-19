@@ -30,7 +30,6 @@ extern "C" {
 #define PIN_LED1 (32 + 3) // green (confirmed on 1.0 board)
 #define LED_BLUE PIN_LED1 // fake for bluefruit library
 #define LED_GREEN PIN_LED1
-#define LED_BUILTIN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
@@ -116,16 +115,13 @@ No longer populated on PCB
 #define PIN_GPS_PPS (32 + 4)
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define GPS_TX_PIN (32 + 5) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (32 + 7) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (32 + 7) // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (32 + 5) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
-
-// PCF8563 RTC Module
-#define PCF8563_RTC 0x51
+#define PIN_SERIAL1_RX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
 
 /*
  * SPI Interfaces
@@ -140,8 +136,6 @@ No longer populated on PCB
 #define PIN_SPI1_MISO -1
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
 #define PIN_SPI1_SCK PIN_EINK_SCLK
-
-// #define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
@@ -163,7 +157,6 @@ No longer populated on PCB
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.90F)
 
-#define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif

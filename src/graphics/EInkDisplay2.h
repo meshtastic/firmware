@@ -1,12 +1,21 @@
 #pragma once
 
-#ifdef USE_EINK
+#if defined(USE_EINK) && !defined(USE_EINK_PARALLELDISPLAY)
 
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
 #ifdef GXEPD2_DRIVER_0 // If variant has multiple possible display models
 #include "GxEPD2Multi.h"
+#endif
+
+// Limit how often we push a full E-Ink refresh. T-Deck Pro needs faster updates for typing.
+#ifndef EINK_FORCE_DISPLAY_THROTTLE_MS
+#if defined(T_DECK_PRO)
+#define EINK_FORCE_DISPLAY_THROTTLE_MS 200
+#else
+#define EINK_FORCE_DISPLAY_THROTTLE_MS 1000
+#endif
 #endif
 
 /**
@@ -42,7 +51,7 @@ class EInkDisplay : public OLEDDisplay
      *
      * @return true if we did draw the screen
      */
-    virtual bool forceDisplay(uint32_t msecLimit = 1000);
+    virtual bool forceDisplay(uint32_t msecLimit = EINK_FORCE_DISPLAY_THROTTLE_MS);
 
     /**
      * Run any code needed to complete an update, after the physical refresh has completed.
@@ -80,7 +89,8 @@ class EInkDisplay : public OLEDDisplay
     // If display uses HSPI
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
     defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
-    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) || defined(ELECROW_ThinkNode_M5)
+    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) || defined(ELECROW_ThinkNode_M5) ||               \
+    defined(MINI_EPAPER_S3)
     SPIClass *hspi = NULL;
 #endif
 

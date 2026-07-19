@@ -5,7 +5,7 @@
 #define BUTTON_PIN 2
 #define BUTTON_NEED_PULLUP
 
-#define LED_PIN PIN_LED
+#define LED_POWER PIN_LED1
 #define ledOff(pin) pinMode(pin, INPUT)
 
 #undef BATTERY_PIN

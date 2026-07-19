@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
+#include <memory>
 
 extern concurrency::Lock *cryptLock;
 
@@ -22,6 +23,10 @@ struct CryptoKey {
 
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
+#define XEDDSA_SIGNATURE_SIZE 64
+// Encoded size the signature adds to the Data protobuf: 1 tag byte (field 10 < 16) +
+// 1 length byte (64 < 128) + 64 signature bytes. test_packet_signing asserts this stays exact.
+#define XEDDSA_SIGNATURE_FIELD_BYTES (XEDDSA_SIGNATURE_SIZE + 2)
 
 class CryptoEngine
 {
@@ -35,21 +40,40 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
-
+    virtual bool ensurePkiKeys(meshtastic_Config_SecurityConfig &security, meshtastic_User &user);
 #endif
-    void clearKeys();
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    bool xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
+                     uint8_t *signature);
+    bool xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload,
+                       size_t payloadLen, const uint8_t *signature);
+#endif
     void setDHPrivateKey(uint8_t *_private_key);
-    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
+    // The remotePublic key parameter takes the public_key bytes container from
+    // a stored node header. NodeInfoLite is the on-device storage type since
+    // the slim refactor flattened UserLite into it.
+    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic,
                                    uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_NodeInfoLite_public_key_t remotePublic, uint64_t packetNum,
                                    size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 
+    // Temporary holder for a peer's not-yet-verified public key, learned in-band during an
+    // in-progress key-verification handshake before it is committed to NodeDB. Lets the Router
+    // run the DH handshake to encode/decode the follow-on PKI packet. Single slot is enough:
+    // only one verification runs at a time. Discarded when the handshake ends (resetToIdle).
+    // Internally guarded by pendingKeyLock, not cryptLock: the Router calls the getter while
+    // already holding the non-recursive cryptLock; KeyVerificationModule writes from elsewhere.
+    void setPendingPublicKey(uint32_t node, const uint8_t *key);
+    void clearPendingPublicKey();
+    // Fills `out` (size set to 32) and returns true iff a pending key is held for `node`.
+    bool getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out);
+
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
 
     virtual void aesEncrypt(uint8_t *in, uint8_t *out);
-    AESSmall256 *aes = NULL;
+    std::unique_ptr<AESSmall256> aes = nullptr;
 
 #endif
 
@@ -78,10 +102,21 @@ class CryptoEngine
     /** Our per packet nonce */
     uint8_t nonce[16] = {0};
     CryptoKey key = {};
-    CTRCommon *ctr = NULL;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};
+    uint32_t pendingKeyVerificationNode = 0;
+    uint8_t pendingKeyVerificationPublicKey[32] = {0};
+    bool hasPendingKeyVerificationKey = false;
+    concurrency::Lock pendingKeyLock;
+#if !(MESHTASTIC_EXCLUDE_XEDDSA)
+    uint8_t xeddsa_public_key[32] = {0};
+    uint8_t xeddsa_private_key[32] = {0};
+    void curve_to_ed_pub(const uint8_t *curve_pubkey, uint8_t *ed_pubkey);
+    // Single-entry cache for curve_to_ed_pub conversion (avoids expensive field inversion per packet)
+    uint8_t cached_curve_pubkey[32] = {0};
+    uint8_t cached_ed_pubkey[32] = {0};
+#endif
 #endif
     /**
      * Init our 128 bit nonce for a new packet

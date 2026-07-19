@@ -24,3 +24,10 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
  * @param maxLength Maximum length of the resulting string buffer
  */
 void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
+
+/**
+ * Get a compact human-readable string that only shows the largest non-zero time components.
+ * For example, 0 days 1 hour 2 minutes will display as "1h 2m" but 1 day 2 hours 3 minutes
+ * will display as "1d 2h".
+ */
+void getUptimeStr(uint32_t uptimeMillis, const char *prefix, char *uptimeStr, uint8_t maxLength, bool includeSecs = false);

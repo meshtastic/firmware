@@ -26,14 +26,15 @@
 #undef GPS_TX_PIN
 #define NO_GPS 1
 #define HAS_GPS 0
-#define NO_SCREEN
 #define HAS_SCREEN 0
 
 // Default SPI1 will be mapped to the display
+#define HAS_SPI_TFT 1
 #define ST7789_SDA 23
 #define ST7789_SCK 18
 #define ST7789_CS 5
 #define ST7789_RS 26
+#define USE_TFTDISPLAY 1
 // I don't have a 'wiphone' but this I think should not be defined this way (don't set TFT_BL if we don't have a hw way to control
 // it)
 // #define ST7789_BL -1 // EXTENDER_PIN(9)

@@ -27,11 +27,17 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+#ifdef LR11X0_AGC_RESET
+    void resetAGC() override;
+#endif
+
   protected:
     /**
      * Specific module instance
      */
     T lora;
+
+    int16_t getCurrentRSSI() override;
 
     /**
      * Glue functions called from ISR land

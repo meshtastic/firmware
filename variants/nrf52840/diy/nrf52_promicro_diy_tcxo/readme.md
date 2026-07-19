@@ -2,9 +2,11 @@
 
 # Notes
 
+News 2025-12-04 - The GPS pin definitions have been changed!!! This has no material effect on current builds, but future builders may wish to review how they are using the wires.
+
 ## General
 
-The pinout is contained in the variant.h file, and a [generic schematic](./Schematic_Pro-Micro_Pinouts.pdf) is located in this directory.
+The pinout is contained in the variant.h file, and a [generic schematic](./Schematic_Pro-Micro_Pinouts_2025-12-04.pdf) is located in this directory.
 
 This variant is suitable for both TCXO and XTAL types of modules. The old XTAL variant has been removed to reduce confusion.
 
@@ -51,7 +53,7 @@ Making your own node based on this design is straightforward. There are various 
 
 The E80 from CDEbyte is the most obtainable module at present, and has been selected as the default option.
 
-Naturally, CDEbyte have chosen to ignore the generic Semtech impelementation of the RF switching logic and have supplied confusing and contradictory documentation, which is explained below.
+Naturally, CDEbyte have chosen to ignore the generic Semtech implementation of the RF switching logic and have supplied confusing and contradictory documentation, which is explained below.
 
 tl;dr: The E80 is chosen as the default. **If you wish to use another module, the table in `rfswitch.h` must be adjusted accordingly.**
 

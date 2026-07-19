@@ -1,5 +1,6 @@
 // ST7796 TFT LCD
 #define TFT_CS 38
+#define HAS_SPI_TFT 1
 #define ST7796_CS TFT_CS
 #define ST7796_RS 37    // DC
 #define ST7796_SDA MOSI // MOSI
@@ -18,11 +19,15 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 3
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 5
+#define SCREEN_TRANSITION_FRAMERATE 30
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+#define USE_TFTDISPLAY 1
+#define HAS_PHYSICAL_KEYBOARD 1
 
 #define I2C_SDA SDA
 #define I2C_SCL SCL
+
+#define HAS_DRV2605 1
 
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
@@ -34,12 +39,8 @@
 #define GPS_TX_PIN 12
 #define PIN_GPS_PPS 13
 
-// PCF8563 RTC Module
-#if __has_include("pcf8563.h")
-#include "pcf8563.h"
-#endif
-#define PCF8563_RTC 0x51
-#define HAS_RTC 1
+// PCF85063 RTC Module
+#define PCF85063_RTC 0x51
 
 // Rotary
 #define ROTARY_A (40)
@@ -60,7 +61,6 @@
 #define I2C_NO_RESCAN
 #define KB_BL_PIN 46
 #define KB_INT 6
-#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 // audio codec ES8311
 #define HAS_I2S
@@ -92,6 +92,8 @@
 #define EXPANDS_DRV_EN (0)
 #define EXPANDS_AMP_EN (1)
 #define EXPANDS_KB_RST (2)
+// AudioThread powers the amp on/off around playback via this (opt-in) hook.
+#define AUDIO_AMP_ENABLE(on) io.digitalWrite(EXPANDS_AMP_EN, (on) ? HIGH : LOW)
 #define EXPANDS_LORA_EN (3)
 #define EXPANDS_GPS_EN (4)
 #define EXPANDS_NFC_EN (5)

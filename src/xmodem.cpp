@@ -50,12 +50,31 @@
 
 #include "xmodem.h"
 #include "SPILock.h"
+#include <cstring>
 
 #ifdef FSCom
 
 XModemAdapter xModem;
 
 XModemAdapter::XModemAdapter() {}
+
+bool XModemAdapter::isValidFilename(const char *name)
+{
+    if (!name || name[0] == '\0')
+        return false;
+    // Reject any ".." path component. Absolute paths and subdirectories are fine; they stay within
+    // the filesystem root, so only traversal out of it needs blocking.
+    for (const char *seg = name; *seg;) {
+        const char *slash = strchr(seg, '/');
+        const size_t len = slash ? (size_t)(slash - seg) : strlen(seg);
+        if (len == 2 && seg[0] == '.' && seg[1] == '.')
+            return false;
+        if (!slash)
+            break;
+        seg = slash + 1;
+    }
+    return true;
+}
 
 /**
  * Calculates the CRC-16 CCITT checksum of the given buffer.
@@ -119,18 +138,32 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     case meshtastic_XModem_Control_STX:
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
-            memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+            strncpy(filename, (const char *)xmodemPacket.buffer.bytes, sizeof(filename) - 1);
+            filename[sizeof(filename) - 1] = '\0';
+
+            // The filename is attacker-controlled; refuse a ".." that could write/read/delete
+            // outside the filesystem root (real host paths on the posix daemon).
+            if (!isValidFilename(filename)) {
+                LOG_WARN("XModem: rejecting unsafe filename");
+                sendControl(meshtastic_XModem_Control_NAK);
+                break;
+            }
 
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
+                // FILE_O_WRITE on Adafruit_LittleFS is append, not truncate - remove first.
                 spiLock->lock();
+                if (FSCom.exists(filename))
+                    FSCom.remove(filename);
                 file = FSCom.open(filename, FILE_O_WRITE);
                 spiLock->unlock();
                 if (file) {
+                    LOG_INFO("XModem: receiving %s", filename);
                     sendControl(meshtastic_XModem_Control_ACK);
                     isReceiving = true;
                     packetno = 1;
                     break;
                 }
+                LOG_WARN("XModem: open(%s, WRITE) failed", filename);
                 sendControl(meshtastic_XModem_Control_NAK);
                 isReceiving = false;
                 break;
@@ -168,8 +201,12 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                     check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
                     // valid packet
                     spiLock->lock();
-                    file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+                    size_t written = file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
                     spiLock->unlock();
+                    if (written != xmodemPacket.buffer.size) {
+                        LOG_WARN("XModem: short write seq=%d expected=%d wrote=%d (LittleFS partition full?)",
+                                 (int)xmodemPacket.seq, (int)xmodemPacket.buffer.size, (int)written);
+                    }
                     sendControl(meshtastic_XModem_Control_ACK);
                     packetno++;
                     break;
