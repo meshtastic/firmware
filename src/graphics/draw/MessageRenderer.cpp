@@ -403,6 +403,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Filter messages based on thread mode
     std::deque<StoredMessage> filtered;
     for (const auto &m : messageStore.getLiveMessages()) {
+        if (!messageStore.isMessageVisible(m))
+            continue;
         bool include = false;
         switch (currentMode) {
         case ThreadMode::ALL:

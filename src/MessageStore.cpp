@@ -7,6 +7,7 @@
 #include "SafeFile.h"
 #include "gps/RTC.h"
 #include "memory/MemAudit.h"
+#include <cassert>
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
@@ -63,6 +64,15 @@ static inline const char *getTextFromPool(uint16_t offset)
     if (!g_messagePool || offset >= MESSAGE_TEXT_POOL_SIZE)
         return "";
     return &g_messagePool[offset];
+}
+
+static inline bool isIgnoredNodeNum(uint32_t nodeNum)
+{
+    if (nodeNum == 0 || nodeNum == NODENUM_BROADCAST)
+        return false;
+
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+    return nodeInfoLiteIsIgnored(node);
 }
 
 // Helper: assign a timestamp (RTC if available, else boot-relative)
@@ -163,9 +173,44 @@ static inline void autosaveTick(MessageStore *store)
 }
 #endif
 
-// Add from incoming/outgoing packet
-const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
+bool MessageStore::shouldStorePacket(const meshtastic_MeshPacket &packet) const
 {
+    const uint32_t localNode = nodeDB->getNodeNum();
+    const bool isDM = packet.to != 0 && packet.to != NODENUM_BROADCAST;
+    if (isDM) {
+        const bool outgoing = packet.from == 0 || packet.from == localNode;
+        const uint32_t peer = outgoing ? packet.to : packet.from;
+        return !isIgnoredNodeNum(peer);
+    }
+
+    if (packet.from != 0 && packet.from != localNode)
+        return !isIgnoredNodeNum(packet.from);
+
+    return true;
+}
+
+bool MessageStore::isMessageVisible(const StoredMessage &msg) const
+{
+    const uint32_t localNode = nodeDB->getNodeNum();
+    if (msg.type == MessageType::DM_TO_US) {
+        const uint32_t peer = (msg.sender == localNode) ? msg.dest : msg.sender;
+        return !isIgnoredNodeNum(peer);
+    }
+
+    if (msg.sender != 0 && msg.sender != localNode)
+        return !isIgnoredNodeNum(msg.sender);
+
+    return true;
+}
+
+// Add from incoming/outgoing packet
+const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket &packet)
+{
+    if (!shouldStorePacket(packet)) {
+        LOG_DEBUG("Drop store 0x%08x", packet.from);
+        return nullptr;
+    }
+
     StoredMessage sm;
     assignTimestamp(sm);
     sm.channelIndex = packet.channel;
@@ -196,7 +241,14 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     markMessageStoreUnsaved();
 #endif
 
-    return liveMessages.back();
+    return &liveMessages.back();
+}
+
+const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
+{
+    const StoredMessage *stored = tryAddFromPacket(packet);
+    assert(stored);
+    return *stored;
 }
 
 // Outgoing/manual message
@@ -323,28 +375,33 @@ void MessageStore::loadFromFlash()
     resetMessagePool(); // reset pool when loading
 
 #ifdef FSCom
-    concurrency::LockGuard guard(spiLock);
+    {
+        concurrency::LockGuard guard(spiLock);
 
-    if (!FSCom.exists(filename.c_str()))
-        return;
+        if (!FSCom.exists(filename.c_str()))
+            return;
 
-    auto f = FSCom.open(filename.c_str(), FILE_O_READ);
-    if (!f)
-        return;
+        auto f = FSCom.open(filename.c_str(), FILE_O_READ);
+        if (!f)
+            return;
 
-    uint8_t count = 0;
-    f.readBytes(reinterpret_cast<char *>(&count), 1);
-    if (count > MAX_MESSAGES_SAVED)
-        count = MAX_MESSAGES_SAVED;
+        uint8_t count = 0;
+        f.readBytes(reinterpret_cast<char *>(&count), 1);
+        if (count > MAX_MESSAGES_SAVED)
+            count = MAX_MESSAGES_SAVED;
 
-    for (uint8_t i = 0; i < count; ++i) {
-        StoredMessage m;
-        if (!readMessageRecord(f, m))
-            break;
-        liveMessages.push_back(m);
+        for (uint8_t i = 0; i < count; ++i) {
+            StoredMessage m;
+            if (!readMessageRecord(f, m))
+                break;
+            liveMessages.push_back(m);
+        }
+
+        f.close();
     }
 
-    f.close();
+    if (pruneHiddenMessages())
+        saveToFlash();
 #endif
     // Loading messages does not trigger an autosave
     g_messageStoreHasUnsavedChanges = false;
@@ -406,6 +463,13 @@ template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessa
     }
 }
 
+bool MessageStore::pruneHiddenMessages()
+{
+    const size_t before = liveMessages.size();
+    eraseAllMatches(liveMessages, [&](const StoredMessage &m) { return !isMessageVisible(m); });
+    return liveMessages.size() != before;
+}
+
 // Delete oldest message (RAM + persisted queue)
 void MessageStore::deleteOldestMessage()
 {
@@ -443,6 +507,20 @@ void MessageStore::deleteAllMessagesWithPeer(uint32_t peer)
     saveToFlash();
 }
 
+void MessageStore::deleteAllMessagesFromNode(uint32_t nodeNum)
+{
+    const uint32_t local = nodeDB->getNodeNum();
+    auto pred = [&](const StoredMessage &m) {
+        if (m.sender == nodeNum)
+            return true;
+        if (m.type != MessageType::DM_TO_US)
+            return false;
+        return m.sender == local ? m.dest == nodeNum : m.sender == nodeNum;
+    };
+    eraseAllMatches(liveMessages, pred);
+    saveToFlash();
+}
+
 // Delete oldest message in a direct chat with a node
 void MessageStore::deleteOldestMessageWithPeer(uint32_t peer)
 {
@@ -460,7 +538,7 @@ std::deque<StoredMessage> MessageStore::getChannelMessages(uint8_t channel) cons
 {
     std::deque<StoredMessage> result;
     for (const auto &m : liveMessages) {
-        if (m.type == MessageType::BROADCAST && m.channelIndex == channel) {
+        if (isMessageVisible(m) && m.type == MessageType::BROADCAST && m.channelIndex == channel) {
             result.push_back(m);
         }
     }
@@ -471,11 +549,20 @@ std::deque<StoredMessage> MessageStore::getDirectMessages() const
 {
     std::deque<StoredMessage> result;
     for (const auto &m : liveMessages) {
-        if (m.type == MessageType::DM_TO_US) {
+        if (isMessageVisible(m) && m.type == MessageType::DM_TO_US) {
             result.push_back(m);
         }
     }
     return result;
+}
+
+bool MessageStore::hasVisibleMessages() const
+{
+    for (const auto &m : liveMessages) {
+        if (isMessageVisible(m))
+            return true;
+    }
+    return false;
 }
 
 // Upgrade boot-relative timestamps once RTC is valid

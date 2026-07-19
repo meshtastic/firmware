@@ -234,7 +234,8 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         // Pick source of message
         const StoredMessage *message =
             msgIsBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
-
+        if (!message->sender || !messageStore.isMessageVisible(*message))
+            return parse(text);
         // Find info about the sender
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(message->sender);
 
