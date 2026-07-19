@@ -6,6 +6,7 @@
 #include "main.h"
 #include <Arduino.h>
 #include <CastleBoyApp.h>
+#include <cstring>
 
 namespace graphics
 {
@@ -154,13 +155,22 @@ void GAT562Arcade::draw(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     if (!display)
         return;
 
-    display->setColor(BLACK);
-    display->fillRect(0, 0, display->getWidth(), display->getHeight());
-    display->setColor(WHITE);
-
     const int16_t drawX = x + (display->getWidth() - 128) / 2;
     const int16_t drawY = y + (display->getHeight() - 64) / 2;
-    display->drawXbm(drawX, drawY, 128, 64, CastleBoyApp::xbmBuffer());
+    const uint8_t *frame = CastleBoyApp::buffer();
+
+    // Arduboy and OLEDDisplay use the same vertical page-buffer layout. The
+    // normal GAT562 path can therefore copy one 1024-byte frame directly,
+    // avoiding an XBM conversion plus two full 8192-pixel scans per refresh.
+    if (drawX == 0 && drawY == 0 && display->getWidth() == 128 && display->getHeight() == 64 && display->buffer) {
+        memcpy(display->buffer, frame, 128 * 64 / 8);
+        return;
+    }
+
+    // Retain a geometry/transition-safe path for non-native offsets.
+    display->clear();
+    display->setColor(WHITE);
+    display->drawFastImage(drawX, drawY, 128, 64, frame);
 }
 
 int32_t GAT562Arcade::runOnce()
