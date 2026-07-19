@@ -89,7 +89,7 @@ const RegionInfo regions[] = {
         https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.02.01_60/en_30022002v030201p.pdf
         FIXME: https://github.com/meshtastic/firmware/issues/3371
      */
-    RDEF(EU_433, 433.0f, 434.0f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(EU_433, 433.0f, 434.0f, 10, 22, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
     /*
         https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
         https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
@@ -119,7 +119,7 @@ const RegionInfo regions[] = {
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
      */
-    RDEF(CN, 470.0f, 510.0f, 100, 19, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
+    RDEF(CN, 470.0f, 510.0f, 100, 22, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
