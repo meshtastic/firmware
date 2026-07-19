@@ -2,6 +2,9 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
+#if defined(GAT562_T9_KEYBOARD) && HAS_SCREEN
+#include "graphics/GAT562Arcade.h"
+#endif
 
 #if defined(GAT562_T9_KEYBOARD)
 #include "GAT562T9Keyboard.h"
@@ -58,6 +61,14 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
+#if defined(GAT562_T9_KEYBOARD) && HAS_SCREEN
+    // The TCA8418 and OLED share the GAT562 I2C bus. Game controls are read
+    // directly from GPIO, so avoid periodic keyboard transactions while an
+    // arcade frame is being streamed to the display.
+    if (graphics::GAT562Arcade::instance().isActive())
+        return 300;
+#endif
+
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
