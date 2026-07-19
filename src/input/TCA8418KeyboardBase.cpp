@@ -41,7 +41,11 @@ void TCA8418KeyboardBase::begin(uint8_t addr, TwoWire *wire)
 {
     m_addr = addr;
     m_wire = wire;
+#if defined(GAT562_T9_KEYBOARD)
+    // Main already owns this shared bus; begin() would reset the OLED clock to 100 kHz on nRF52.
+#else
     m_wire->begin();
+#endif
     reset();
 }
 
