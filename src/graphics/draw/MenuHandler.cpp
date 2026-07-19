@@ -228,7 +228,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
 #ifdef HAS_HAM_2M_ONLY
-    // Hardware is restricted to the amateur 2m band — offer only the 2m regions
+    // Hardware is restricted to the amateur 2m band - offer only the 2m regions
     // so the user cannot pick a sub-GHz region the RF path cannot emit or receive.
     static const LoraRegionOption regionOptions[] = {
         {"Back", OptionsAction::Back},

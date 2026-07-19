@@ -1934,7 +1934,7 @@ void NodeDB::installDefaultDeviceState()
 
 #ifdef HAS_HAM_2M_ONLY
     // Ham-band-only hardware defaults to licensed operation. The user can still flip this off later
-    // (e.g. a commercial operator on an adjacent allocation who wants to keep encryption on) — we
+    // (e.g. a commercial operator on an adjacent allocation who wants to keep encryption on) - we
     // only set the default here, not on every boot.
     owner.is_licensed = true;
 #endif
