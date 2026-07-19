@@ -726,9 +726,16 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         return ProcessMessage::CONTINUE;
     }
 
+    // A known signer's NodeInfo arriving unsigned is unauthenticated (the sender is forgeable), so
+    // it must not drive any cache or identity write below. Computed once here (getMeshNode is O(N))
+    // and reused by both the cache-refresh and the direct-response identity path.
+    const bool isNodeInfo = mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
+    const meshtastic_NodeInfoLite *senderNode = isNodeInfo ? nodeDB->getMeshNode(getFrom(&mp)) : nullptr;
+    const bool unauthenticatedSigner = senderNode && nodeInfoLiteHasXeddsaSigned(senderNode) && !mp.xeddsa_signed;
+
     // Learn NodeInfo payloads into the dedicated PSRAM cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).
-    if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
+    if (isNodeInfo && !unauthenticatedSigner) {
         cacheNodeInfoPacket(mp);
         updateCachedRoleFromNodeInfo(mp);
     }
@@ -746,8 +753,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         if (shouldRespondToNodeInfo(&mp, true)) {
             // Unicast NodeInfo is never signed, so a known signer's identity claim here is
             // unauthenticated: don't overwrite its stored name. The cached response is unaffected.
-            const meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(getFrom(&mp));
-            const bool unauthenticatedSigner = senderNode && nodeInfoLiteHasXeddsaSigned(senderNode) && !mp.xeddsa_signed;
+            // unauthenticatedSigner was computed above (this branch is NodeInfo-only).
             meshtastic_User requester = meshtastic_User_init_zero;
             if (!unauthenticatedSigner &&
                 pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {

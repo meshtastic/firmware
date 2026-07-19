@@ -1526,14 +1526,18 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
 
+#ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
+#endif
+
 #ifdef USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL
     moduleConfig.telemetry.environment_update_interval = USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL;
 #else
     moduleConfig.telemetry.environment_update_interval = 0;
 #endif
 
-#ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
-    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
+#ifdef USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED
+    moduleConfig.telemetry.environment_screen_enabled = USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED;
 #endif
 
 #ifdef USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL
@@ -1544,6 +1548,10 @@ void NodeDB::initModuleConfigIntervals()
 
 #ifdef USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED
     moduleConfig.telemetry.air_quality_enabled = USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_SCREEN_ENABLED
+    moduleConfig.telemetry.air_quality_screen_enabled = USERPREFS_CONFIG_AQ_SCREEN_ENABLED;
 #endif
 
     moduleConfig.telemetry.power_update_interval = 0;
@@ -3260,6 +3268,9 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+        messageStore.deleteAllMessagesFromNode(contact.node_num);
+#endif
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!

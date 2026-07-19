@@ -1,6 +1,7 @@
 #include "AdminModule.h"
 #include "Channels.h"
 #include "DisplayFormatters.h"
+#include "HardwareRNG.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
@@ -28,6 +29,7 @@
 
 #include "Default.h"
 #include "MeshRadio.h"
+#include "MessageStore.h"
 #include "RadioInterface.h"
 #include "TypeConversions.h"
 #include "mesh/RadioLibInterface.h"
@@ -48,6 +50,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+
+#include <RNG.h>      // CryptRNG, the seeded CSPRNG used as fallback for the session passkey
+#include <Throttle.h> // rollover-safe elapsed-time checks for the session passkey
 
 #if MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
@@ -533,7 +538,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (node != NULL) {
             if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
                 nodeDB->eraseNodeSatellites(node->num);
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+                messageStore.deleteAllMessagesFromNode(node->num);
+#endif
                 saveChanges(SEGMENT_NODEDATABASE, false);
+#if HAS_SCREEN
+                if (screen)
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+#endif
             } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
                 sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
             } else {
@@ -782,6 +794,27 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 }
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+// Shared by double-tap-as-button (device) and wake-on-motion (display). Start on either flag's
+// off->on edge; stop on the on->off edge once neither needs it (disable() clears `enabled` so a
+// later re-enable restarts). Skip the stop if the sensor also drives the compass, else the heading
+// freezes until reboot. wasOn/nowOn = old/new of the changed flag; otherFeatureOn = the other flag.
+static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatureOn)
+{
+    if (!accelerometerThread) // null unless a sensor was detected at boot
+        return;
+
+    if (!wasOn && nowOn && accelerometerThread->enabled == false) {
+        accelerometerThread->enabled = true;
+        accelerometerThread->start();
+    } else if (wasOn && !nowOn && !otherFeatureOn && accelerometerThread->enabled == true &&
+               !accelerometerThread->providesHeading()) {
+        accelerometerThread->disable();
+    }
+}
+#endif
+
 void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
@@ -797,12 +830,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
-            accelerometerThread->enabled == false) {
-            config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
+        reconcileAccelerometerThread(config.device.double_tap_as_button_press,
+                                     c.payload_variant.device.double_tap_as_button_press, config.display.wake_on_tap_or_motion);
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
@@ -901,12 +930,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
-            accelerometerThread->enabled == false) {
-            config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
+        reconcileAccelerometerThread(config.display.wake_on_tap_or_motion, c.payload_variant.display.wake_on_tap_or_motion,
+                                     config.device.double_tap_as_button_press);
 #endif
         config.display = c.payload_variant.display;
         break;
@@ -1792,11 +1817,15 @@ AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_AP
 
 void AdminModule::setPassKey(meshtastic_AdminMessage *res)
 {
-    if (session_time == 0 || millis() / 1000 > session_time + 150) {
-        for (int i = 0; i < 8; i++) {
-            session_passkey[i] = random();
-        }
-        session_time = millis() / 1000;
+    // Regenerate once there is no session yet or the current key is older than 150s. session_time
+    // holds millis(); the Throttle check is rollover-safe, unlike the previous seconds comparison.
+    if (!sessionPasskeyValid || !Throttle::isWithinTimespanMs(session_time, 150 * 1000UL)) {
+        // Session passkey authenticates admin replies, so it must be unpredictable: prefer the
+        // hardware RNG, falling back to the seeded CSPRNG only when no hardware source exists.
+        if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
+            CryptRNG.rand(session_passkey, sizeof(session_passkey));
+        session_time = millis();
+        sessionPasskeyValid = true;
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
     res->session_passkey.size = 8;
@@ -1809,7 +1838,8 @@ bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
 { // check that the key in the packet is still valid
     printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
     printBytes("Expected session key: ", session_passkey, 8);
-    return (session_time + 300 > millis() / 1000 && res->session_passkey.size == 8 &&
+    // Key is valid for 300s from issue; sessionPasskeyValid guards an unissued session.
+    return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, 300 * 1000UL) && res->session_passkey.size == 8 &&
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
 }
 
