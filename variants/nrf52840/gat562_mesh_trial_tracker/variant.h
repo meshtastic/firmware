@@ -61,6 +61,20 @@ extern "C" {
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
 
+// 5-way joystick (pins from the vendor's MeshCore gat562_30s_mesh_kit variant),
+// mapped through the trackball driver so all five directions reach the input
+// broker: canned messages, UI navigation, and the on-screen keyboard work from
+// the device without a phone. Switches short to ground (internal pullups).
+// TB_THRESHOLD stays undefined: that pulse accumulator is for rollers, not
+// clicky switches.
+#define HAS_TRACKBALL 1
+#define TB_UP 28
+#define TB_DOWN 4
+#define TB_LEFT 30
+#define TB_RIGHT 31
+#define TB_PRESS 26
+#define TB_DIRECTION FALLING
+
 /*
  * Analog pins
  */
