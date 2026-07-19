@@ -457,7 +457,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L)
-            case INA_ADDR: // same as HMM330X_ADDR
+            case INA_ADDR: // same as HMM330X_ADDR and SHT2X
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS: {
                 uint16_t mfg = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
@@ -491,7 +491,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = HM330X;
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-                } else if (detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
+                } else if (type == NONE && detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
                     logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
                     type = SHTXX;
 #endif
