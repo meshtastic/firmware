@@ -21,6 +21,10 @@
 
 PositionModule *positionModule;
 
+#if defined(GAT562)
+static constexpr uint32_t GAT562_TIME_SYNC_INTERVAL_MS = 30UL * 60UL * 1000UL;
+#endif
+
 PositionModule::PositionModule()
     : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg), concurrency::OSThread("Position")
 {
@@ -172,6 +176,31 @@ bool PositionModule::hasGPS()
     return gps && gps->isConnected();
 #endif
 }
+
+#if defined(GAT562)
+void PositionModule::sendTimeSyncIfDue(uint32_t now)
+{
+    const uint32_t authoritativeTime = getValidTime(RTCQualityNTP);
+    if (authoritativeTime == 0 ||
+        (lastTimeSyncSend != 0 && (now - lastTimeSyncSend) < GAT562_TIME_SYNC_INTERVAL_MS)) {
+        return;
+    }
+
+    meshtastic_Position timeSync = meshtastic_Position_init_default;
+    timeSync.time = authoritativeTime;
+    timeSync.location_source =
+        getRTCQuality() >= RTCQualityGPS ? meshtastic_Position_LocSource_LOC_INTERNAL
+                                        : meshtastic_Position_LocSource_LOC_EXTERNAL;
+
+    meshtastic_MeshPacket *packet = allocDataProtobuf(timeSync);
+    packet->to = NODENUM_BROADCAST;
+    packet->channel = channels.getPrimaryIndex();
+    packet->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    packet->decoded.want_response = false;
+    service->sendToMesh(packet, RX_SRC_LOCAL, true);
+    lastTimeSyncSend = now;
+}
+#endif
 
 // Allocate a packet with our position data if we have one
 meshtastic_MeshPacket *PositionModule::allocPositionPacket()
@@ -500,6 +529,10 @@ int32_t PositionModule::runOnce()
                                          config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
         return RUNONCE_INTERVAL;
     }
+
+#if defined(GAT562)
+    sendTimeSyncIfDue(now);
+#endif
 
     bool waitingForFreshPosition = (lastGpsSend == 0) && !config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot();
 

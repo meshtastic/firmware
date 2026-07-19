@@ -17,6 +17,11 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     /// We limit our GPS broadcasts to a max rate
     uint32_t lastGpsSend = 0;
 
+#if defined(GAT562)
+    /// Last authoritative time-only broadcast; network-derived time is never relayed.
+    uint32_t lastTimeSyncSend = 0;
+#endif
+
     // Store the latest good lat / long
     int32_t lastGpsLatitude = 0;
     int32_t lastGpsLongitude = 0;
@@ -77,6 +82,9 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     void sendLostAndFoundText();
     bool hasQualityTimesource();
     bool hasGPS();
+#if defined(GAT562)
+    void sendTimeSyncIfDue(uint32_t now);
+#endif
     uint32_t lastSentReply = 0; // Last time we sent a position reply (used for reply throttling only)
 
 #if USERPREFS_EVENT_MODE
