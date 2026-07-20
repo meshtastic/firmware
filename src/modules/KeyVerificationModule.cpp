@@ -151,7 +151,14 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
         return false;
     }
     updateState(true);
-    currentNonce = random();
+    // The nonce binds the handshake, so draw it from the hardware RNG (falling back to the CSPRNG)
+    // under cryptLock, as allocReply does for the security number. random() is both predictable and
+    // only 32 bits wide, leaving half of this nonce zero.
+    {
+        concurrency::LockGuard g(cryptLock);
+        if (!HardwareRNG::fill((uint8_t *)&currentNonce, sizeof(currentNonce)))
+            CryptRNG.rand((uint8_t *)&currentNonce, sizeof(currentNonce));
+    }
     currentNonceTimestamp = getTime();
     currentRemoteNode = remoteNode;
     meshtastic_KeyVerification KeyVerification = meshtastic_KeyVerification_init_zero;
@@ -162,6 +169,8 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
     KeyVerification.hash1.size = 32;
     memcpy(KeyVerification.hash1.bytes, owner.public_key.bytes, 32);
     meshtastic_MeshPacket *p = allocDataProtobuf(KeyVerification);
+    if (!p)
+        return false;
     p->to = remoteNode;
     p->channel = 0;
     // Only request PKI when we already hold the destination's key. Otherwise this first message goes out
@@ -318,6 +327,8 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     KeyVerification.hash1.size = 32;
     memcpy(KeyVerification.hash1.bytes, hash1, 32);
     meshtastic_MeshPacket *p = allocDataProtobuf(KeyVerification);
+    if (!p)
+        return;
     p->to = currentRemoteNode;
     p->channel = 0;
     p->pki_encrypted = true;
