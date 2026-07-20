@@ -112,11 +112,47 @@ extern meshtastic_Position localPosition;
 static constexpr const char *deviceStateFileName = "/prefs/device.proto";
 static constexpr const char *legacyPrefFileName = "/prefs/db.proto";
 static constexpr const char *nodeDatabaseFileName = "/prefs/nodes.proto";
-static constexpr const char *configFileName = "/prefs/config.proto";
+// Event builds keep their radio profile in separate files.  A normal firmware
+// image therefore resumes the user's ordinary config and channel table without
+// a client-mediated restore after an event OTA.
+static constexpr const char *standardConfigFileName = "/prefs/config.proto";
+static constexpr const char *standardChannelFileName = "/prefs/channels.proto";
+static constexpr const char *eventConfigFileName = "/prefs/event-config.proto";
+static constexpr const char *eventChannelFileName = "/prefs/event-channels.proto";
+static constexpr const char *standardBackupFileName = "/backups/backup.proto";
+static constexpr const char *eventBackupFileName = "/backups/event-backup.proto";
+
+struct RadioProfileStoragePaths {
+    const char *config;
+    const char *channels;
+    const char *backup;
+};
+
+constexpr RadioProfileStoragePaths radioProfileStoragePaths(bool eventMode)
+{
+    return eventMode ? RadioProfileStoragePaths{eventConfigFileName, eventChannelFileName, eventBackupFileName}
+                     : RadioProfileStoragePaths{standardConfigFileName, standardChannelFileName, standardBackupFileName};
+}
+
+inline meshtastic_LocalConfig eventConfigFromStandard(const meshtastic_LocalConfig &standard,
+                                                      const meshtastic_Config_LoRaConfig &eventLora)
+{
+    meshtastic_LocalConfig eventConfig = standard;
+    eventConfig.has_lora = true;
+    eventConfig.lora = eventLora;
+    return eventConfig;
+}
+
+#if USERPREFS_EVENT_MODE
+static constexpr auto radioProfileStorage = radioProfileStoragePaths(true);
+#else
+static constexpr auto radioProfileStorage = radioProfileStoragePaths(false);
+#endif
+static constexpr const char *configFileName = radioProfileStorage.config;
+static constexpr const char *channelFileName = radioProfileStorage.channels;
+static constexpr const char *backupFileName = radioProfileStorage.backup;
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
-static constexpr const char *channelFileName = "/prefs/channels.proto";
-static constexpr const char *backupFileName = "/backups/backup.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
