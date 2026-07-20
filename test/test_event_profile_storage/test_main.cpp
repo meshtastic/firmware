@@ -62,6 +62,12 @@ void test_event_profile_requires_room_for_atomic_profile_writes()
     TEST_ASSERT_FALSE(hasEventProfileStorageSpace(1, 2));
 }
 
+void test_normal_boot_discards_event_profile()
+{
+    TEST_ASSERT_TRUE(shouldDiscardEventProfile(false));
+    TEST_ASSERT_FALSE(shouldDiscardEventProfile(true));
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -76,6 +82,7 @@ void setup()
     RUN_TEST(test_event_config_preserves_identity_but_replaces_lora);
     RUN_TEST(test_boot_defers_persistence_until_config_is_verified);
     RUN_TEST(test_event_profile_requires_room_for_atomic_profile_writes);
+    RUN_TEST(test_normal_boot_discards_event_profile);
     exit(UNITY_END());
 }
 

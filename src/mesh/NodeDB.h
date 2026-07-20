@@ -140,6 +140,11 @@ constexpr bool hasEventProfileStorageSpace(size_t totalBytes, size_t usedBytes)
     return usedBytes <= totalBytes && totalBytes - usedBytes >= EVENT_PROFILE_STORAGE_RESERVATION_BYTES;
 }
 
+constexpr bool shouldDiscardEventProfile(bool eventMode)
+{
+    return !eventMode;
+}
+
 inline meshtastic_LocalConfig eventConfigFromStandard(const meshtastic_LocalConfig &standard,
                                                       const meshtastic_Config_LoRaConfig &eventLora)
 {
@@ -155,8 +160,10 @@ constexpr bool shouldDeferBootPersistence(bool bootInitializationInProgress, boo
 }
 
 #if USERPREFS_EVENT_MODE
+static constexpr bool RUNNING_EVENT_FIRMWARE = true;
 static constexpr auto RADIO_PROFILE_STORAGE = radioProfileStoragePaths(true);
 #else
+static constexpr bool RUNNING_EVENT_FIRMWARE = false;
 static constexpr auto RADIO_PROFILE_STORAGE = radioProfileStoragePaths(false);
 #endif
 static constexpr const char *configFileName = RADIO_PROFILE_STORAGE.config;
