@@ -1,8 +1,8 @@
 #include "RedirectablePrint.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
@@ -51,7 +51,7 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#if ARCH_PORTDUINO
     static char printBuf[512];
 #else
     static char printBuf[160];

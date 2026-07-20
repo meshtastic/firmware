@@ -1,0 +1,61 @@
+name: Build PortDuino WASM
+
+# Reusable workflow - called as the `build-wasm` job of the main CI workflow
+# (main_matrix.yml), so the WebAssembly portduino node is built like every other
+# platform. Builds the [env:native-wasm] target (src/platform/portduino/wasm/) with
+# `pio run -e native-wasm` so it can't silently bit-rot. Software/CI only - asserts the
+# full mesh stack + RadioLib + Crypto compile and link to meshnode.{mjs,wasm}
+# via the meshtastic/platform-wasm PlatformIO platform (emcc/Asyncify). It does
+# NOT exercise the radio (that's CH341/WebUSB, hardware).
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build-wasm:
+    name: Build PortDuino WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # Python + PlatformIO. (`pio run -e native-wasm` installs its own libdeps and the
+      # platform-wasm/framework-portduino packages; it needs no native apt libs.)
+      - name: Setup native build
+        uses: ./.github/actions/setup-native
+
+      - name: Setup Emscripten SDK
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 6.0.1
+          actions-cache-folder: emsdk-cache
+
+      - name: Build PortDuino WASM
+        run: platformio run -e native-wasm
+
+      - name: Assert WASM artifacts
+        run: |
+          OUT=.pio/build/native-wasm
+          if [ ! -s "$OUT/meshnode.mjs" ] || [ ! -s "$OUT/meshnode.wasm" ]; then
+            echo "::error::wasm artifacts missing"; exit 1
+          fi
+          # The emcc link succeeds even if embedded EM_ASM JS is malformed, so
+          # parse the generated ES-module loader to catch runtime-JS breakage
+          # (e.g. a formatter splitting !== inside EM_ASM).
+          node --check "$OUT/meshnode.mjs" || { echo "::error::meshnode.mjs failed JS parse"; exit 1; }
+          ls -lah "$OUT"/meshnode.*
+
+      - name: Upload WASM artifacts
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: portduino-wasm
+          overwrite: true
+          path: |
+            .pio/build/native-wasm/meshnode.mjs
+            .pio/build/native-wasm/meshnode.wasm
+          retention-days: 14

@@ -3,9 +3,9 @@
 #include "MeshService.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -94,12 +94,14 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
         const char *warning =
             "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
         LOG_ERROR(warning);
-#if !IS_RUNNING_TESTS
+#ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        snprintf(cn->message, sizeof(cn->message), "%s", warning);
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message), "%s", warning);
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
     }
@@ -377,7 +379,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         }
 
         auto &p = mp.decoded;
-        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
+        // LOG_DEBUG("Received text msg self=0x%08x, from=0x%08x, to=0x%08x, id=%d, msg=%.*s",
         //          nodeDB->getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
         if (isFromUs(&mp)) {
@@ -394,7 +396,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                     lastRxID = mp.id;
                     // LOG_DEBUG("* * Message came this device");
                     // serialPrint->println("* * Message came this device");
-                    serialPrint->printf("%s", p.payload.bytes);
+                    serialPrint->printf("%.*s", (int)p.payload.size, p.payload.bytes);
                 }
             }
         } else {
@@ -406,7 +408,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
                 const char *sender = nodeInfoLiteHasUser(node) ? node->short_name : "???";
                 serialPrint->println();
-                serialPrint->printf("%s: %s", sender, p.payload.bytes);
+                serialPrint->printf("%s: %.*s", sender, (int)p.payload.size, p.payload.bytes);
                 serialPrint->println();
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
                         moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) &&

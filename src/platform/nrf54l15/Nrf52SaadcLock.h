@@ -1,4 +1,4 @@
-// Nrf52SaadcLock.h — stub for nRF54L15/Zephyr
+// Nrf52SaadcLock.h - stub for nRF54L15/Zephyr
 // Power.cpp includes this when ARCH_NRF52 is defined.
 // Phase 2: compile-only stub.
 #pragma once

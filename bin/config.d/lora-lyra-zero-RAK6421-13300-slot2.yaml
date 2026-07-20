@@ -29,6 +29,8 @@ Lora:
     - pin: 13 # GPIO0_B5
       gpiochip: 0
       line: 13
+  DIO3_TCXO_VOLTAGE: true
+  DIO2_AS_RF_SWITCH: true
   spidev: spidev0.1
   # CS: # GPIO0_B1
   #   pin: 9

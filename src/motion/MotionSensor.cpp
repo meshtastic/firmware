@@ -2,6 +2,7 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "SafeFile.h"
+#include "concurrency/LockGuard.h"
 #include "graphics/draw/CompassRenderer.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
@@ -30,6 +31,17 @@ bool isRangeValid(float highest, float lowest)
     // NaN/Inf guard without pulling in extra math helpers.
     return (highest == highest) && (lowest == lowest) && (highest > lowest);
 }
+
+struct CompassAccelSample {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    uint32_t sampledAtMs = 0;
+    bool valid = false;
+};
+
+concurrency::Lock latestCompassAccelLock;
+CompassAccelSample latestCompassAccelSample;
 } // namespace
 
 // screen is defined in main.cpp
@@ -202,6 +214,35 @@ float MotionSensor::applyCompassOrientation(float heading)
     default:
         return heading;
     }
+}
+
+void MotionSensor::publishCompassAccelSample(float x, float y, float z)
+{
+    concurrency::LockGuard guard(&latestCompassAccelLock);
+    latestCompassAccelSample.x = x;
+    latestCompassAccelSample.y = y;
+    latestCompassAccelSample.z = z;
+    latestCompassAccelSample.sampledAtMs = millis();
+    latestCompassAccelSample.valid = true;
+}
+
+bool MotionSensor::getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs)
+{
+    uint32_t sampledAtMs = 0;
+    {
+        concurrency::LockGuard guard(&latestCompassAccelLock);
+        if (!latestCompassAccelSample.valid) {
+            return false;
+        }
+
+        x = latestCompassAccelSample.x;
+        y = latestCompassAccelSample.y;
+        z = latestCompassAccelSample.z;
+        sampledAtMs = latestCompassAccelSample.sampledAtMs;
+    }
+
+    ageMs = millis() - sampledAtMs;
+    return true;
 }
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN

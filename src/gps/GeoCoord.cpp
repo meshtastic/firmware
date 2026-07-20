@@ -1,4 +1,14 @@
 #include "GeoCoord.h"
+#include <cmath>
+
+// Narrow a UTM meter value to its unsigned field, clamping non-finite/negative/oversized inputs: an
+// extreme (crafted) lat/lon can drive these out of range, and an overflowing double->unsigned cast is UB.
+static uint32_t clampMeters(double m)
+{
+    if (!std::isfinite(m) || m < 0.0)
+        return 0;
+    return m > 4.0e9 ? 4000000000u : (uint32_t)m;
+}
 
 GeoCoord::GeoCoord()
 {
@@ -26,17 +36,50 @@ GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
     GeoCoord::setCoords();
 }
 
-// Initialize all the coordinate systems
+// Initialize DMS eagerly (cheap, most commonly used); UTM/MGRS/OSGR/OLC are computed lazily on
+// first access via their getters (see ensure*() below), since most callers never touch them.
 void GeoCoord::setCoords()
 {
     double lat = _latitude * 1e-7;
     double lon = _longitude * 1e-7;
     GeoCoord::latLongToDMS(lat, lon, _dms);
-    GeoCoord::latLongToUTM(lat, lon, _utm);
-    GeoCoord::latLongToMGRS(lat, lon, _mgrs);
-    GeoCoord::latLongToOSGR(lat, lon, _osgr);
-    GeoCoord::latLongToOLC(lat, lon, _olc);
+    _utmValid = false;
+    _mgrsValid = false;
+    _osgrValid = false;
+    _olcValid = false;
     _dirty = false;
+}
+
+void GeoCoord::ensureUTM() const
+{
+    if (!_utmValid) {
+        GeoCoord::latLongToUTM(_latitude * 1e-7, _longitude * 1e-7, _utm);
+        _utmValid = true;
+    }
+}
+
+void GeoCoord::ensureMGRS() const
+{
+    if (!_mgrsValid) {
+        GeoCoord::latLongToMGRS(_latitude * 1e-7, _longitude * 1e-7, _mgrs);
+        _mgrsValid = true;
+    }
+}
+
+void GeoCoord::ensureOSGR() const
+{
+    if (!_osgrValid) {
+        GeoCoord::latLongToOSGR(_latitude * 1e-7, _longitude * 1e-7, _osgr);
+        _osgrValid = true;
+    }
+}
+
+void GeoCoord::ensureOLC() const
+{
+    if (!_olcValid) {
+        GeoCoord::latLongToOLC(_latitude * 1e-7, _longitude * 1e-7, _olc);
+        _olcValid = true;
+    }
 }
 
 void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt)
@@ -124,8 +167,13 @@ void GeoCoord::latLongToUTM(const double lat, const double lon, UTM &utm)
 {
 
     const std::string latBands = "CDEFGHJKLMNPQRSTUVWXX";
-    utm.zone = int((lon + 180) / 6 + 1);
-    utm.band = latBands[int(lat / 8 + 10)];
+    // A received Position carries raw int32 latitude_i/longitude_i with no range validation, so lat/lon
+    // here can be far outside real geographic bounds. Clamp the derived UTM zone (valid 1..60) and the
+    // latitude-band index so the lookups below cannot read out of bounds (GeoCoord.cpp:128 stack over/
+    // under-read on e.g. latitude_i = INT32_MAX/INT32_MIN).
+    utm.zone = std::min(std::max(int((lon + 180) / 6 + 1), 1), 60);
+    int bandIdx = std::min(std::max(int(lat / 8 + 10), 0), int(latBands.length()) - 1);
+    utm.band = latBands[bandIdx];
     double a = 6378137;                                                // WGS84 - equatorial radius
     double k0 = 0.9996;                                                // UTM point scale on the central meridian
     double eccSquared = 0.00669438;                                    // eccentricity squared
@@ -160,17 +208,22 @@ void GeoCoord::latLongToUTM(const double lat, const double lon, UTM &utm)
                  sin(2 * latRad) +
              (15 * eccSquared * eccSquared / 256 + 45 * eccSquared * eccSquared * eccSquared / 1024) * sin(4 * latRad) -
              (35 * eccSquared * eccSquared * eccSquared / 3072) * sin(6 * latRad));
-    utm.easting = (double)(k0 * N *
-                               (A + (1 - T + C) * pow(A, 3) / 6 +
-                                (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A / 120) +
-                           500000.0);
-    utm.northing =
-        (double)(k0 * (M + N * tan(latRad) *
-                               (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 +
-                                (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A / 720)));
+    double eastingMeters =
+        k0 * N *
+            (A + (1 - T + C) * pow(A, 3) / 6 + (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * A * A * A * A * A / 120) +
+        500000.0;
+    double northingMeters =
+        k0 * (M + N * tan(latRad) *
+                      (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 +
+                       (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * A * A * A * A * A * A / 720));
 
     if (lat < 0)
-        utm.northing += 10000000.0; // 10000000 meter offset for southern hemisphere
+        northingMeters += 10000000.0; // 10000000 meter offset for southern hemisphere
+
+    // Clamp before narrowing to the unsigned UTM fields (see clampMeters): extreme lat/lon can drive
+    // these negative or past UINT32, and the raw double->unsigned cast would be UB.
+    utm.easting = clampMeters(eastingMeters);
+    utm.northing = clampMeters(northingMeters);
 }
 
 // Converts lat long coordinates to an MGRS.
@@ -182,10 +235,15 @@ void GeoCoord::latLongToMGRS(const double lat, const double lon, MGRS &mgrs)
     latLongToUTM(lat, lon, utm);
     mgrs.zone = utm.zone;
     mgrs.band = utm.band;
-    double col = floor(utm.easting / 100000);
-    mgrs.east100k = e100kLetters[(mgrs.zone - 1) % 3][col - 1];
-    double row = (int32_t)floor(utm.northing / 100000.0) % 20;
-    mgrs.north100k = n100kLetters[(mgrs.zone - 1) % 2][row];
+    // utm.zone is clamped to 1..60 above, but guard every index defensively: the column/row derived
+    // from easting/northing can fall outside the 100km-grid letter tables when lat/lon are extreme.
+    int zoneIdx3 = ((mgrs.zone - 1) % 3 + 3) % 3;
+    int zoneIdx2 = ((mgrs.zone - 1) % 2 + 2) % 2;
+    int colIdx = std::min(std::max(int(floor(utm.easting / 100000)) - 1, 0), int(e100kLetters[zoneIdx3].length()) - 1);
+    mgrs.east100k = e100kLetters[zoneIdx3][colIdx];
+    int rowIdx = ((int32_t)floor(utm.northing / 100000.0) % 20 + 20) % 20;
+    rowIdx = std::min(std::max(rowIdx, 0), int(n100kLetters[zoneIdx2].length()) - 1);
+    mgrs.north100k = n100kLetters[zoneIdx2][rowIdx];
     mgrs.easting = (int32_t)utm.easting % 100000;
     mgrs.northing = (int32_t)utm.northing % 100000;
 }

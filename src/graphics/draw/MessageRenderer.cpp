@@ -403,6 +403,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Filter messages based on thread mode
     std::deque<StoredMessage> filtered;
     for (const auto &m : messageStore.getLiveMessages()) {
+        if (!messageStore.isMessageVisible(m))
+            continue;
         bool include = false;
         switch (currentMode) {
         case ThreadMode::ALL:
@@ -615,11 +617,21 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // Shrink Sender name if needed
         int availWidth = (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
-                         display->getStringWidth(chanType) - graphics::UIRenderer::measureStringWithEmotes(display, "   @...");
+                         display->getStringWidth(chanType) - graphics::UIRenderer::measureStringWithEmotes(display, "  *@...");
         if (availWidth < 0)
             availWidth = 0;
         char truncatedSender[64];
         graphics::UIRenderer::truncateStringWithEmotes(display, senderName, truncatedSender, sizeof(truncatedSender), availWidth);
+
+        // Determine signed-message prefix before building the header line, since it needs to go
+        // at the front of headerStr rather than appended after (strncat only appends at the end).
+        const char *signPrefix = "";
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        bool is_xeddsa_signed = m.xeddsaSigned;
+        if (is_xeddsa_signed) {
+            signPrefix = "*";
+        }
+#endif
 
         // Final header line
         char headerStr[128];
@@ -634,7 +646,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 snprintf(headerStr, sizeof(headerStr), "%s", timeBuf);
             }
         } else {
-            snprintf(headerStr, sizeof(headerStr), chanType[0] ? "%s @%s %s" : "%s @%s", timeBuf, truncatedSender, chanType);
+            snprintf(headerStr, sizeof(headerStr), chanType[0] ? "%s %s@%s %s" : "%s %s@%s", timeBuf, signPrefix, truncatedSender,
+                     chanType);
         }
 
         // Push header line

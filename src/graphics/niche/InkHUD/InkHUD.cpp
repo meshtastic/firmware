@@ -9,6 +9,10 @@
 #include "./SystemApplet.h"
 #include "./Tile.h"
 #include "./WindowManager.h"
+#include "FSCommon.h"
+#include "MessageStore.h"
+#include "SPILock.h"
+#include "concurrency/LockGuard.h"
 
 using namespace NicheGraphics;
 
@@ -60,11 +64,102 @@ void InkHUD::InkHUD::notifyApplyingChanges()
     }
 }
 
+// One-time migration from the old per-channel InkHUD message files (/NicheGraphics/ch*.msgs)
+// to the firmware-wide MessageStore format (/Messages_default.msgs).
+// Only runs when the new store loaded empty, meaning this is the first boot after the format change.
+// Old files are deleted once migrated.
+static void migrateOldInkHUDMessages()
+{
+#ifdef FSCom
+    bool migrated = false;
+    constexpr uint8_t MAX_CHANNELS = 8;
+    constexpr uint32_t OLD_MAX_MSG_SIZE = 250;
+
+    for (uint8_t ch = 0; ch < MAX_CHANNELS; ch++) {
+        std::string path = "/NicheGraphics/ch";
+        path += std::to_string(ch);
+        path += ".msgs";
+
+        spiLock->lock();
+        bool exists = FSCom.exists(path.c_str());
+        spiLock->unlock();
+        if (!exists)
+            continue;
+
+        concurrency::LockGuard guard(spiLock);
+
+        auto f = FSCom.open(path.c_str(), FILE_O_READ);
+        if (!f || f.size() == 0) {
+            if (f)
+                f.close();
+            FSCom.remove(path.c_str());
+            continue;
+        }
+
+        uint8_t count = 0;
+        f.readBytes(reinterpret_cast<char *>(&count), 1);
+
+        std::vector<StoredMessage> channelMsgs;
+        for (uint8_t i = 0; i < count; i++) {
+            StoredMessage sm;
+            f.readBytes(reinterpret_cast<char *>(&sm.timestamp), sizeof(sm.timestamp));
+            f.readBytes(reinterpret_cast<char *>(&sm.sender), sizeof(sm.sender));
+            f.readBytes(reinterpret_cast<char *>(&sm.channelIndex), sizeof(sm.channelIndex));
+
+            char textBuf[OLD_MAX_MSG_SIZE + 1] = {};
+            uint32_t textLen = 0;
+            char c;
+            while (textLen < OLD_MAX_MSG_SIZE) {
+                if (f.readBytes(&c, 1) != 1)
+                    break;
+                if (c == '\0')
+                    break;
+                textBuf[textLen++] = c;
+            }
+
+            sm.dest = NODENUM_BROADCAST;
+            sm.type = MessageType::BROADCAST;
+            sm.isBootRelative = false;
+            sm.ackStatus = AckStatus::ACKED;
+            size_t storedLen = (textLen >= MAX_MESSAGE_SIZE) ? MAX_MESSAGE_SIZE - 1 : textLen;
+            sm.textOffset = MessageStore::storeText(textBuf, storedLen);
+            sm.textLength = static_cast<uint16_t>(storedLen);
+
+            channelMsgs.push_back(sm);
+        }
+
+        // Old format stored newest-first (push_front); insert oldest-first for correct chronological order
+        for (int i = static_cast<int>(channelMsgs.size()) - 1; i >= 0; i--)
+            messageStore.addLiveMessage(channelMsgs[i]);
+        if (!channelMsgs.empty())
+            migrated = true;
+
+        f.close();
+        FSCom.remove(path.c_str());
+        LOG_INFO("Migrated %u messages from %s", static_cast<uint32_t>(count), path.c_str());
+    }
+
+    // Delete the old latest.msgs; the latestMessage cache will be re-derived from migrated channel messages
+    spiLock->lock();
+    if (FSCom.exists("/NicheGraphics/latest.msgs"))
+        FSCom.remove("/NicheGraphics/latest.msgs");
+    spiLock->unlock();
+
+    if (migrated) {
+        LOG_INFO("InkHUD message migration complete, saving to new format");
+        messageStore.saveToFlash();
+    }
+#endif
+}
+
 // Start InkHUD!
 // Call this only after you have configured InkHUD
 void InkHUD::InkHUD::begin()
 {
     persistence->loadSettings();
+    messageStore.loadFromFlash(); // Load persisted messages before deriving latestMessage cache
+    if (messageStore.getLiveMessages().empty())
+        migrateOldInkHUDMessages(); // First boot after format change: import old per-channel files
     persistence->loadLatestMessage();
 
     windowManager->begin();

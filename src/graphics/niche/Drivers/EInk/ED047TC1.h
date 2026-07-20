@@ -10,7 +10,7 @@
     Unlike the other NicheGraphics EInk drivers, this one drives a parallel e-paper
     panel via the FastEPD library. SPI parameters passed to begin() are ignored.
 
-    The ED047TC1 panel has an inactive pixel border on all four edges (~4–8 physical
+    The ED047TC1 panel has an inactive pixel border on all four edges (~4-8 physical
     pixels). DISPLAY_WIDTH / DISPLAY_HEIGHT expose a reduced "safe area" to InkHUD so
     that content is never drawn into this dead zone. The update() method copies the
     InkHUD frame buffer into the centre of the larger physical 960×540 buffer, using
@@ -18,9 +18,9 @@
     V_OFFSET_TOP and V_OFFSET_BOTTOM (vertical, pixel rows) to position it.
 
     Changing these constants shifts content inward from each physical edge:
-        H_OFFSET_BYTES = 1  →  8px left margin, 8px right margin   (960 – 8 – 8   = 944)
-        V_OFFSET_TOP   = 9  →  9px top margin  (asymmetric: top ≠ bottom)
-        V_OFFSET_BOTTOM = 8 →  8px bottom margin                    (540 – 9 – 8   = 523)
+        H_OFFSET_BYTES = 2   →  16px left margin, 16px right margin  (960 - 16 - 16 = 928)
+        V_OFFSET_TOP   = 16  →  16px top margin
+        V_OFFSET_BOTTOM = 16 →  16px bottom margin                   (540 - 16 - 16 = 508)
 
 */
 
@@ -61,20 +61,20 @@ class ED047TC1 : public EInk
     //
     // Calibrated by flashing a 1px border box and adjusting until all 4 sides are visible.
 
-    static constexpr uint16_t DISPLAY_WIDTH = 944;  // 960 − H_OFFSET_BYTES×8 − right_margin (8+8 = 16px)
-    static constexpr uint16_t DISPLAY_HEIGHT = 523; // 540 − V_OFFSET_TOP − V_OFFSET_BOTTOM (9+8 = 17px)
+    static constexpr uint16_t DISPLAY_WIDTH = 928;  // 960 − H_OFFSET_BYTES×8 − right_margin (16+16 = 32px)
+    static constexpr uint16_t DISPLAY_HEIGHT = 508; // 540 − V_OFFSET_TOP − V_OFFSET_BOTTOM (16+16 = 32px)
 
-    static constexpr uint8_t H_OFFSET_BYTES = 1;  // visual TOP  : 8px physical left margin
-                                                  // visual BOTTOM: 960−8−944=8px physical right margin
-    static constexpr uint8_t V_OFFSET_TOP = 9;    // visual RIGHT : CONFIRMED OK
-    static constexpr uint8_t V_OFFSET_BOTTOM = 8; // visual LEFT  : 8px physical bottom margin
+    static constexpr uint8_t H_OFFSET_BYTES = 2;   // visual TOP  : 16px physical left margin
+                                                   // visual BOTTOM: 960−16−928=16px physical right margin
+    static constexpr uint8_t V_OFFSET_TOP = 16;    // visual RIGHT : 16px physical top margin
+    static constexpr uint8_t V_OFFSET_BOTTOM = 16; // visual LEFT  : 16px physical bottom margin
 
     static constexpr UpdateTypes supported = static_cast<UpdateTypes>(FULL | FAST);
 
   public:
     ED047TC1() : EInk(DISPLAY_WIDTH, DISPLAY_HEIGHT, supported) {}
 
-    // EInk interface — SPI params are not used for this parallel display
+    // EInk interface - SPI params are not used for this parallel display
     void begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst = 0xFF) override;
     void update(uint8_t *imageData, UpdateTypes type) override;
 

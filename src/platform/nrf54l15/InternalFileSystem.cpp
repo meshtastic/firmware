@@ -1,4 +1,4 @@
-// InternalFileSystem.cpp — Zephyr LittleFS backend for nRF54L15
+// InternalFileSystem.cpp - Zephyr LittleFS backend for nRF54L15
 //
 // Implements Adafruit_LittleFS_Namespace used by FSCommon.h/cpp.
 // Storage: 36 KB storage_partition in nRF54L15 internal RRAM (defined in
@@ -124,7 +124,7 @@ File InternalFileSystem::open(const char *path, const char *mode)
     // Open as a regular file
     fs_mode_t flags;
     if (strcmp(mode, FILE_O_WRITE) == 0) {
-        // Truncate on write — unlink first to ensure a clean start
+        // Truncate on write - unlink first to ensure a clean start
         fs_unlink(abs);
         flags = FS_O_WRITE | FS_O_CREATE;
     } else {
@@ -198,7 +198,7 @@ bool InternalFileSystem::rmdir_r(const char *path)
     struct fs_dir_t dir;
     fs_dir_t_init(&dir);
     if (fs_opendir(&dir, abs) != 0) {
-        // Not a directory — try to delete as file
+        // Not a directory - try to delete as file
         return fs_unlink(abs) == 0;
     }
 

@@ -16,6 +16,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libssl-dev \
     libulfius-dev \
     libyaml-cpp-dev \
+    libjsoncpp-dev \
     pipx \
     pkg-config \
     python3 \

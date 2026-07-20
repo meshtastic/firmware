@@ -43,6 +43,28 @@ struct PendingPacket {
     explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };
 
+/**
+ * RAM-only per-destination route health. Tracks how fresh a learned next_hop is and how many
+ * consecutive directed deliveries to it have failed, so getNextHop() can proactively decay a stale or
+ * repeatedly-failing route back to flooding instead of trusting a dead hop on the next (and on dense
+ * meshes, slowest) attempt. Not persisted: the learned next_hop itself lives in NodeInfoLite; this is
+ * just freshness/failure metadata.
+ */
+struct RouteHealth {
+    NodeNum dest = 0;                             ///< destination this record describes; 0 == empty slot
+    uint32_t learnedAtMsec = 0;                   ///< millis() when next_hop was last (re)learned (rollover-aware)
+    uint8_t consecutiveFailures = 0;              ///< directed deliveries to `dest` that went un-ACKed
+    uint8_t lastNextHop = NO_NEXT_HOP_PREFERENCE; ///< the relay byte this health refers to
+};
+
+// M4 (optional, off by default): when a route is not proven healthy, fall back to flooding one retry
+// earlier instead of spending a second directed attempt. Trades airtime for recovery latency on dense
+// meshes; leaves the sparse-mesh happy path (fresh, verified routes) unchanged. Measure on the
+// simulator before enabling broadly.
+#ifndef NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
+#define NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED 0
+#endif
+
 class GlobalPacketIdHashFunction
 {
   public:
@@ -92,11 +114,21 @@ class NextHopRouter : public FloodingRouter
     // The number of retransmissions the original sender will do
     constexpr static uint8_t NUM_RELIABLE_RETX = 3;
 
+    // M3: bounded RAM route-health table (reuse-oldest eviction, like PacketHistory)
+    constexpr static uint8_t ROUTE_HEALTH_MAX = 32;              // ~12B/slot -> ~384B
+    constexpr static uint32_t ROUTE_TTL_MSEC = 30UL * 60 * 1000; // re-discover a route unconfirmed for 30 min
+    constexpr static uint8_t ROUTE_FAILURE_THRESHOLD = 3;        // consecutive un-ACKed directed deliveries -> dead
+
   protected:
     /**
      * Pending retransmissions
      */
     std::unordered_map<GlobalPacketId, PendingPacket, GlobalPacketIdHashFunction> pending;
+
+    /**
+     * Per-destination route health (M3). Bounded array, reuse-oldest eviction. RAM-only.
+     */
+    RouteHealth routeHealth[ROUTE_HEALTH_MAX] = {};
 
     /**
      * Should this incoming filter be dropped?
@@ -142,13 +174,38 @@ class NextHopRouter : public FloodingRouter
 
     void setNextTx(PendingPacket *pending);
 
+    // --- M3 route-health helpers (RAM-only). Protected so ReliableRouter (a subclass) can record
+    // delivery success, and so the unit-test shim can reach them via `using`. All take `now` where
+    // time matters so the decay logic is pure and testable without a clock mock. ---
+
+    /// @return the health record for `dest`, or nullptr if we hold none.
+    RouteHealth *findRouteHealth(NodeNum dest);
+    /// @return an existing record for `dest`, else a freshly claimed slot (reuse-oldest on overflow).
+    RouteHealth *getOrAllocRouteHealth(NodeNum dest, uint32_t now);
+    /// Record that we (re)learned `nextHop` for `dest`. Resets the failure count only when the hop
+    /// changed (so a flapping reverse-path re-learn of the same dead hop still ages out).
+    void noteRouteLearned(NodeNum dest, uint8_t nextHop, uint32_t now);
+    /// Record an end-to-end delivery success to `dest` (clears failures, refreshes freshness).
+    void noteRouteSuccess(NodeNum dest, uint32_t now);
+    /// Record that a directed delivery to `dest` went un-ACKed (no-op if we hold no record).
+    void noteRouteFailure(NodeNum dest);
+    /// @return true if the route is too old (TTL) or has failed too many times in a row.
+    bool isRouteStale(const RouteHealth &h, uint32_t now) const;
+    /// Forget any health record for `dest`.
+    void clearRouteHealth(NodeNum dest);
+
+#ifdef PIO_UNIT_TESTING
+  public: // expose getNextHop to the test shim without widening production visibility
+#else
   private:
+#endif
     /**
      * Get the next hop for a destination, given the relay node
      * @return the node number of the next hop, 0 if no preference (fallback to FloodingRouter)
      */
     std::optional<uint8_t> getNextHop(NodeNum to, uint8_t relay_node);
 
+  private:
     /** Check if we should be rebroadcasting this packet if so, do so.
      *  @return true if we did rebroadcast */
     bool perhapsRebroadcast(const meshtastic_MeshPacket *p) override;

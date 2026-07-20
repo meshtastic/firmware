@@ -16,11 +16,23 @@ uint32_t getPositionPrecisionForChannel(const meshtastic_Channel &channel)
 
 uint32_t getPositionPrecisionForChannel(uint8_t channelIndex)
 {
-    return getPositionPrecisionForChannel(channels.getByIndex(channelIndex));
+    const meshtastic_Channel &ch = channels.getByIndex(channelIndex);
+    if (ch.role == meshtastic_Channel_Role_DISABLED)
+        return 0;
+    uint32_t precision = getPositionPrecisionForChannel(ch);
+
+    // Never send a precise position on a publicly-decryptable channel (key check is gated on > ceiling).
+    if (precision > MAX_POSITION_PRECISION_PUBLIC_KEY && channels.usesPublicKey(channelIndex)) {
+        precision = MAX_POSITION_PRECISION_PUBLIC_KEY;
+    }
+    return precision;
 }
 
-static int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
+int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
 {
+    if (precision == 0 || precision >= 32)
+        return coordinate;
+
     uint32_t coordinateBits = static_cast<uint32_t>(coordinate);
     uint32_t truncated = coordinateBits & (UINT32_MAX << (32 - precision));
 
@@ -28,6 +40,11 @@ static int32_t truncateCoordinate(int32_t coordinate, uint32_t precision)
     truncated += (1UL << (31 - precision));
 
     return static_cast<int32_t>(truncated);
+}
+
+int32_t truncateCoordinate(int32_t coordinate, uint8_t precision)
+{
+    return truncateCoordinate(coordinate, static_cast<uint32_t>(precision));
 }
 
 void applyPositionPrecision(meshtastic_Position &position, uint32_t precision)

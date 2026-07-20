@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit config - see https://docs.coderabbit.ai/getting-started/yaml-configuration
+language: en-US
+
+reviews:
+  # chill = fewer nitpicks.
+  profile: chill
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    # Don't burn reviews on WIP. This repo opens lots of draft PRs; review on "ready".
+    drafts: false
+    # Review PRs regardless of target branch.
+    base_branches:
+      - ".*"
+    # Skip Renovate dependency updates - CI gates dependencies; we review for substance, not every bump.
+    ignore_usernames:
+      - renovate
+      - renovate[bot]
+  # Stop reviewing once a PR is closed.
+  abort_on_close: true
+
+  path_filters:
+    # Generated - don't review, just noise + token burn.
+    - "!src/mesh/generated/**"
+    - "!protobufs/**"
+
+  path_instructions:
+    - path: "bin/config.d/**"
+      instructions: >
+        meshtasticd configuration files. Bundled with meshtasticd Linux/MacOS packaging.
+        Ensure configurations include metadata found in other configs.
