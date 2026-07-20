@@ -436,6 +436,22 @@ void test_response_with_wrong_request_id_is_rejected(void)
                              "the matching request id must still be accepted");
 }
 
+// A request we could not bind to an id must not be answerable by a response that simply omits
+// request_id, which decodes to 0.
+void test_request_without_an_id_admits_nothing(void)
+{
+    meshtastic_MeshPacket req = makeOutgoingModuleConfigRequest(STRANGER_NODE);
+    req.id = 0;
+    admin->noteOutgoingAdminRequest(req);
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+    mp.decoded.request_id = 0;
+
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a zero request id must not act as a matching token");
+}
+
 // A remote_hardware response must answer a request for that exact subtype, not just any module
 // config - else an MQTT-config request could authorize a pin-table update.
 void test_module_config_subtype_must_match(void)
@@ -531,6 +547,7 @@ void setup()
     RUN_TEST(test_request_to_keyed_node_pins_the_stored_key);
     RUN_TEST(test_ham_mode_request_is_not_pinned);
     RUN_TEST(test_response_with_wrong_request_id_is_rejected);
+    RUN_TEST(test_request_without_an_id_admits_nothing);
     RUN_TEST(test_module_config_subtype_must_match);
     RUN_TEST(test_response_is_consumed_no_replay);
     RUN_TEST(test_outgoing_setter_does_not_admit_responses);

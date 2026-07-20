@@ -1953,8 +1953,9 @@ bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t
         if (o.to != mp.from || o.expectedResponse != responseVariant)
             continue;
         // mp.from is unauthenticated, so also require the response to echo our request's packet id
-        // (setReplyTo puts it in decoded.request_id). A blind injector must now guess it.
-        if (mp.decoded.request_id != o.requestId)
+        // (setReplyTo puts it in decoded.request_id). A blind injector must now guess it. Id 0 is
+        // no token at all - an omitted request_id decodes to 0 - so such a slot never matches.
+        if (o.requestId == 0 || mp.decoded.request_id != o.requestId)
             continue;
         if (!Throttle::isWithinTimespanMs(o.sentAtMs, kOutstandingAdminRequestMs)) {
             o.to = 0; // lapsed; free the slot and keep looking for another live match
