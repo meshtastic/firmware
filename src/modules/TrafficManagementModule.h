@@ -334,19 +334,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Number of occupied NodeInfo cache slots. Caller must hold cacheLock.
     uint16_t countNodeInfoEntriesLocked() const;
 
-    /// 60 s NodeInfo-cache maintenance under cacheLock: saturate expired tick stamps (the
-    /// wrap-safety guarantee for the modular obs/resp clocks) and run the boot/hourly
-    /// reconcile. Guarded by TMM_HAS_NODEINFO_CACHE alone - never by the unified cache size -
-    /// so a build with only this cache still maintains it (the caches are compile-time
-    /// independent; see purgeAll()).
+    /// 60 s NodeInfo-cache maintenance under cacheLock: saturate the expired obsTick stamp (wrap-safety
+    /// for the modular clock) and run the boot/hourly reconcile. Guarded by TMM_HAS_NODEINFO_CACHE alone
+    /// (never the unified cache size); see docs/node_info_stores.md "Tick clocks and wrap safety".
     void maintainNodeInfoCacheLocked();
 
-    /// Anti-entropy seeding under cacheLock: upsert hot-store identities and warm-tier key-only
-    /// records this cache lacks. Never sets hasObserved - seeding is knowledge, not observation,
-    /// so it can never make a silent node servable by the replay path. Also owns the isMember
-    /// refresh (clear-all, then re-mark from both NodeDB tiers) - membership therefore lags a
-    /// passive NodeDB eviction by up to an hour, while the write-through hooks and purgeNode()
-    /// keep additions and explicit removals immediate.
+    /// Anti-entropy under cacheLock: upsert hot-store + warm-tier records this cache lacks (never sets
+    /// hasObserved - seeding is knowledge, not observation), and refresh isMember from both NodeDB
+    /// tiers. Cost/lag: docs/node_info_stores.md "Consistency with NodeDB (anti-entropy)".
     void reconcileNodeInfoFromNodeDBLocked();
     /// Learn an observed NODEINFO frame into the cache (key hygiene + provenance rules apply).
     void cacheNodeInfoPacket(const meshtastic_MeshPacket &mp);
@@ -360,16 +355,9 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Decide (and with sendResponse, emit) a spoofed direct NodeInfo reply for a unicast request.
     bool shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse);
 
-    // Direct-response throttles. A reply is addressed FROM the requesting packet's unauthenticated
-    // `from` and spoofs the requested target, so one request can make every neighbour holding that
-    // target transmit at an address the attacker chose. Three fixed bounds, all in internal RAM (not
-    // the PSRAM NodeInfo cache) so they behave identically with and without PSRAM, all under cacheLock:
-    //   - per requester: how much any single node can be made to receive;
-    //   - per target: how often we vouch for the same identity (defence in depth; the requester and
-    //     target axes are both attacker-controlled, so neither alone is a hard bound);
-    //   - a global floor on total airtime, the backstop once an attacker cycles keys past the tables.
-    // Both tables are 8-slot LRU. Timestamps are full uint32 ms compared by wrap-safe subtraction, so
-    // there is no tick clock and no sweep to maintain (unlike the retired per-entry respTick throttle).
+    // Direct-response throttles bounding the reflector risk of spoofed replies: three fixed bounds
+    // (per requester, per target, 1 s global airtime floor) via 8-slot LRU RAM tables, wrap-safe and
+    // PSRAM-agnostic. Design & rationale: docs/traffic_management_module.md "Throttling direct responses".
     static constexpr uint32_t kDirectResponsePerRequesterMs = 60'000UL;
     static constexpr uint32_t kDirectResponsePerTargetMs = 60'000UL;
     static constexpr uint32_t kDirectResponseGlobalMs = 1'000UL;

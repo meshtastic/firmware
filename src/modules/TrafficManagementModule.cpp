@@ -575,13 +575,9 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
     }
 #endif
 
-    // Membership refresh (owned by this hourly pass; per-minute per-entry NodeDB lookups in
-    // the sweep were O(entries x members) under cacheLock). Runs AFTER seeding so the upsert
-    // pass still sees last pass's bits for its spareMembers protection, then: clear all bits,
-    // re-mark from both tiers. Keyless warm records mark membership here even though they had
-    // nothing to seed. isMember may now lag a passive NodeDB eviction by up to an hour (the
-    // entry just stays LRU-sticky slightly longer); the write-through hooks keep additions
-    // immediate, and explicit removals stay immediate via purgeNode().
+    // Membership refresh (this hourly pass owns it): clear every isMember bit, then re-mark from
+    // both NodeDB tiers. Runs AFTER seeding so the upsert still sees last pass's bits (spareMembers).
+    // Cost/lag rationale in docs/node_info_stores.md "Consistency with NodeDB (anti-entropy)".
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++)
         nodeInfoPayload[i].isMember = false;
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
@@ -1498,15 +1494,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     if (!sendResponse)
         return true;
 
-    // Direct-response throttle: the reply is addressed to the requesting packet's unauthenticated
-    // `from` and spoofs the requested target, and direct responses bypass the rate limiter - so bound
-    // them per requester, per target, and by a global airtime floor (see directResponseAllowed). One
-    // check covers both the cache and NodeDB-fallback paths, since the throttle state is RAM tables,
-    // not per-cache-entry. Checked here, once a reply would actually go out, so requests declined for
-    // other reasons do not consume the budget. Returning false lets handleReceived() CONTINUE, so the
-    // request forwards toward the genuine target (which can answer) instead of being consumed with no
-    // reply; a requester whose first reply was lost on a noisy link would otherwise get silence for
-    // the whole window. Repeats of the same packet id are already absorbed by the router's dup detect.
+    // Throttle the spoofed reply (per requester + per target + 1 s global floor; checked here so a
+    // request declined above never spends the budget). false forwards the request instead of consuming
+    // it. Rationale in docs/traffic_management_module.md "Throttling direct responses".
     if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request instead", getFrom(p));
         return false;

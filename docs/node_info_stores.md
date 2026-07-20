@@ -142,9 +142,11 @@ overwrite**, so a keyless commit never costs the cache a learned TOFU key.
 
 Two details that bite: the reconcile sweep transfers signer verdicts only when **key-matched**;
 and membership refresh clears-then-re-marks from both tiers rather than a per-entry NodeDB lookup
-each sweep (which would be O(entries x members) under the lock), so while hook-driven additions
-and `purgeNode()` removals are immediate, a **passive** NodeDB eviction may lag membership by up
-to an hour.
+each sweep (which would be O(entries x members) under the lock). A keyless warm-tier record still
+marks membership (`isMember`) even though it has no `User` to seed - `isMember` is a keep-alive,
+independent of `hasFullUser`. Because the re-mark is only hourly, hook-driven additions and
+`purgeNode()` removals are immediate, but a **passive** NodeDB eviction may lag membership by up to
+an hour.
 
 **Retention:** no timed eviction. Slots die only by LRU displacement on insert, ranked by
 trust tiers - members and signer-proven keys are stickiest; the seeding pass additionally
