@@ -734,7 +734,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
             meshtastic_User requester = meshtastic_User_init_zero;
             if (!unauthenticatedSigner &&
                 pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
-                nodeDB->updateUser(getFrom(&mp), requester, mp.channel);
+                nodeDB->updateUser(getFrom(&mp), requester, mp.channel, mp.xeddsa_signed);
             }
             logAction("respond", &mp, "nodeinfo-cache");
             incrementStat(&stats.nodeinfo_cache_hits);

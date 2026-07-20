@@ -81,6 +81,21 @@ class MockNodeDB : public NodeDB
         nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, value);
     }
 
+    void setLongName(NodeNum num, const char *name)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        strncpy(n->long_name, name, sizeof(n->long_name) - 1);
+        n->long_name[sizeof(n->long_name) - 1] = '\0';
+    }
+
+    const char *longName(NodeNum num)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        return n->long_name;
+    }
+
     std::vector<meshtastic_NodeInfoLite> testNodes;
 };
 
@@ -543,7 +558,8 @@ void test_B6_rich_shape_sweep_no_deadband(void)
 
 // ===========================================================================
 // Group C - NodeInfoModule downgrade drop (broadcast-only backstop for ingress paths that skip
-// Router's check; unicast NodeInfo is never signed by senders, so it is exempt - see C4)
+// Router's check; unicast NodeInfo is never signed by senders, so it is exempt - see C4), plus the
+// identity-learning gate in NodeDB::updateUser that keeps that exemption from being a spoofing hole
 // ===========================================================================
 class NodeInfoTestShim : public NodeInfoModule
 {
@@ -616,6 +632,67 @@ void test_C4_unsigned_unicast_nodeinfo_from_signer_accepted(void)
 
     TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user),
                               "unsigned unicast NodeInfo from a signer must not be dropped");
+}
+
+// C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
+// can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
+void test_C5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = false;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Spoofed");
+    strcpy(user.short_name, "SPF");
+
+    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user), "the packet itself must still be accepted");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Genuine", mockNodeDB->longName(REMOTE_NODE),
+                                     "unsigned unicast NodeInfo from a signer must not rewrite its stored name");
+}
+
+// C6: the same exchange signed - the update is authenticated and must land, pinning C5 as a
+// targeted refusal rather than a blanket block on unicast NodeInfo from signers.
+void test_C6_signed_unicast_nodeinfo_from_signer_changes_name(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = true;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Renamed");
+    strcpy(user.short_name, "RNM");
+
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE),
+                                     "a signed update from a signer must still be learned");
+}
+
+// C7: a node that has never signed is unaffected - the ordinary case for most of the mesh.
+void test_C7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE); // signer bit clear
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = false;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Renamed");
+    strcpy(user.short_name, "RNM");
+
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE),
+                                     "non-signer identity learning must be unaffected");
 }
 
 // ===========================================================================
@@ -900,6 +977,9 @@ void setup()
     RUN_TEST(test_C2_signed_nodeinfo_from_signer_not_dropped);
     RUN_TEST(test_C3_unsigned_nodeinfo_from_nonsigner_not_dropped);
     RUN_TEST(test_C4_unsigned_unicast_nodeinfo_from_signer_accepted);
+    RUN_TEST(test_C5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
+    RUN_TEST(test_C6_signed_unicast_nodeinfo_from_signer_changes_name);
+    RUN_TEST(test_C7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name);
 
     printf("\n=== Group D: encoding invariants ===\n");
     RUN_TEST(test_D1_signature_field_overhead_exact);
