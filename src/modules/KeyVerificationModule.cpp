@@ -151,7 +151,14 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
         return false;
     }
     updateState(true);
-    currentNonce = random();
+    // The nonce binds the handshake, so draw it from the hardware RNG (falling back to the CSPRNG)
+    // under cryptLock, as allocReply does for the security number. random() is both predictable and
+    // only 32 bits wide, leaving half of this nonce zero.
+    {
+        concurrency::LockGuard g(cryptLock);
+        if (!HardwareRNG::fill((uint8_t *)&currentNonce, sizeof(currentNonce)))
+            CryptRNG.rand((uint8_t *)&currentNonce, sizeof(currentNonce));
+    }
     currentNonceTimestamp = getTime();
     currentRemoteNode = remoteNode;
     meshtastic_KeyVerification KeyVerification = meshtastic_KeyVerification_init_zero;
