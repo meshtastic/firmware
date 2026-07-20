@@ -1386,30 +1386,6 @@ int UIRenderer::formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLED
     return display->getStringWidth(buf);
 }
 
-// Check if the display can render a string (detect special chars; emoji)
-bool UIRenderer::haveGlyphs(const char *str)
-{
-#if defined(OLED_PL) || defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CS)
-    // Don't want to make any assumptions about custom language support
-    return true;
-#endif
-
-    // Check each character with the lookup function for the OLED library
-    // We're not really meant to use this directly..
-    bool have = true;
-    for (uint16_t i = 0; i < strlen(str); i++) {
-        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
-        // If font doesn't support a character, it is substituted for ¿
-        if (result == 191 && (uint8_t)str[i] != 191) {
-            have = false;
-            break;
-        }
-    }
-
-    // LOG_DEBUG("haveGlyphs=%d", have);
-    return have;
-}
-
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 void UIRenderer::drawDeepSleepFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)

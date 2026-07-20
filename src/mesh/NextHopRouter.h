@@ -206,7 +206,11 @@ class NextHopRouter : public FloodingRouter
      */
     std::optional<uint8_t> getNextHop(NodeNum to, uint8_t relay_node);
 
+#ifdef PIO_UNIT_TESTING
+  public: // expose perhapsRebroadcast to the test shim
+#else
   private:
+#endif
     /** Check if we should be rebroadcasting this packet if so, do so.
      *  @return true if we did rebroadcast */
     bool perhapsRebroadcast(const meshtastic_MeshPacket *p) override;

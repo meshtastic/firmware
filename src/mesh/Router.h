@@ -94,7 +94,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
-    virtual ErrorCode rawSend(meshtastic_MeshPacket *p);
 
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
@@ -187,9 +186,9 @@ void resetRoutingAuthEvaluationCount();
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-/** Enforce the configured XEdDSA receive policy; zero encodedDataSize derives it canonically.
- * The caller must hold cryptLock. Returns false when the packet must be dropped. */
-bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize = 0);
+/** Enforce the configured XEdDSA receive policy. The caller must hold cryptLock.
+ * Returns false when the packet must be dropped. */
+bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p);
 #endif
 
 extern Router *router;

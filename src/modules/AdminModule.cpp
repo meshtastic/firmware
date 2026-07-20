@@ -815,6 +815,23 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
 }
 #endif
 
+// A "regenerate keys" client sends a blank SecurityConfig holding only the new private key, rather than the
+// config it read from us. Detect that shape - new private key, every other field at its proto default - so it
+// isn't mistaken for "and clear everything else".
+static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incoming,
+                                  const meshtastic_Config_SecurityConfig &current)
+{
+    if (incoming.private_key.size != 32)
+        return false;
+    if (current.private_key.size == 32 && memcmp(incoming.private_key.bytes, current.private_key.bytes, 32) == 0)
+        return false;
+
+    return incoming.admin_key_count == 0 && !incoming.is_managed && !incoming.serial_enabled && !incoming.debug_log_api_enabled &&
+           !incoming.admin_channel_enabled &&
+           incoming.packet_signature_policy ==
+               meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+}
+
 void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
@@ -1103,6 +1120,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             LOG_WARN("Security set omitted private key; preserving existing identity keypair");
             incoming.private_key = config.security.private_key;
             incoming.public_key = config.security.public_key;
+        }
+        // Rotating the keypair must not drop the admin keys - that locks the owner out of remote admin with no
+        // recourse but a physical connection. Clearing admin keys still works via a SET that leaves the private
+        // key alone and sends an empty list.
+        if (isBareKeypairRotation(incoming, config.security)) {
+            LOG_INFO("Security set is a bare keypair rotation; preserving remaining security config");
+            meshtastic_Config_SecurityConfig rotated = config.security;
+            rotated.public_key = incoming.public_key; // usually empty; derived from the private key below
+            rotated.private_key = incoming.private_key;
+            incoming = rotated;
         }
 #if MESHTASTIC_EXCLUDE_PKI || MESHTASTIC_EXCLUDE_XEDDSA
         if (incoming.packet_signature_policy !=

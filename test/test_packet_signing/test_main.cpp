@@ -27,6 +27,7 @@
 #include "mesh/ReliableRouter.h"
 #include "mesh/Router.h"
 #include "mesh/SinglePortModule.h"
+#include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
 #include "mqtt/MQTT.h"
 #include <ErriezCRC32.h>
@@ -85,6 +86,21 @@ class MockNodeDB : public NodeDB
         meshtastic_NodeInfoLite *n = getMeshNode(num);
         TEST_ASSERT_NOT_NULL(n);
         nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, value);
+    }
+
+    void setLongName(NodeNum num, const char *name)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        strncpy(n->long_name, name, sizeof(n->long_name) - 1);
+        n->long_name[sizeof(n->long_name) - 1] = '\0';
+    }
+
+    const char *longName(NodeNum num)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        return n->long_name;
     }
 
     std::vector<meshtastic_NodeInfoLite> testNodes;
@@ -723,6 +739,33 @@ void test_A17_strict_verifies_signer_from_warm_key_store(void)
                               "Balanced downgrade memory must survive repeated hot-store eviction");
 }
 #endif
+
+void test_A18_unsigned_broadcast_from_signer_with_unknown_fields_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_MeshPacket p = makeBroadcastWithUnknownFields();
+
+    TEST_ASSERT_EQUAL_MESSAGE(DECODE_POLICY_REJECT, perhapsDecode(&p),
+                              "unsigned broadcast from a signer must be dropped despite unknown fields");
+}
+
+void test_A19_unsigned_broadcast_from_nonsigner_with_unknown_fields_accepted(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+
+    meshtastic_MeshPacket p = makeBroadcastWithUnknownFields();
+    const size_t rawSize = p.encrypted.size;
+
+    TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&p), "frame from a non-signer must still decode");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_PortNum_POSITION_APP, p.decoded.portnum, "unknown fields must not disturb the portnum");
+    TEST_ASSERT_EQUAL_MESSAGE(SMALL_PAYLOAD, p.decoded.payload.size, "payload must survive the unknown fields");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+    TEST_ASSERT_LESS_THAN_MESSAGE(rawSize, encodedDataSize(&p.decoded),
+                                  "unknown fields must drop at decode, leaving decoded size < raw");
+}
+
 // ===========================================================================
 // Group B - send-side signing policy (perhapsEncode)
 // ===========================================================================
@@ -878,8 +921,74 @@ void test_B7_infrastructure_port_signing_matrix(void)
 }
 
 // ===========================================================================
-// Group C - routing pipeline authentication ordering
+// Group C - routing pipeline and NodeInfo authentication ordering
 // ===========================================================================
+
+class NodeInfoTestShim : public NodeInfoModule
+{
+  public:
+    using NodeInfoModule::handleReceivedProtobuf;
+};
+
+static meshtastic_MeshPacket makeNodeInfoPacket(bool signed_)
+{
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = signed_;
+    return mp;
+}
+
+void test_N1_unsigned_nodeinfo_from_signer_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeNodeInfoPacket(false);
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+
+    TEST_ASSERT_TRUE_MESSAGE(shim.handleReceivedProtobuf(mp, &user), "unsigned NodeInfo from signer must be dropped");
+}
+
+void test_N2_signed_nodeinfo_from_signer_not_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeNodeInfoPacket(true);
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
+}
+
+void test_N3_unsigned_nodeinfo_from_nonsigner_not_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeNodeInfoPacket(false);
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
+}
+
+void test_N4_unsigned_unicast_nodeinfo_from_signer_accepted(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = false;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+
+    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user),
+                              "unsigned unicast NodeInfo from signer must not be dropped");
+}
 
 static void preparePipelineSigner(NodeNum sender)
 {
@@ -1192,6 +1301,67 @@ void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass
     TEST_ASSERT_EQUAL_MESSAGE(3, routingAuthEvaluationCount(), "same packet ID with different bytes must be reevaluated");
 }
 
+// C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
+// can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
+void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = false;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Spoofed");
+    strcpy(user.short_name, "SPF");
+
+    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user), "the packet itself must still be accepted");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Genuine", mockNodeDB->longName(REMOTE_NODE),
+                                     "unsigned unicast NodeInfo from a signer must not rewrite its stored name");
+}
+
+// C6: the same exchange signed - the update is authenticated and must land, pinning C5 as a
+// targeted refusal rather than a blanket block on unicast NodeInfo from signers.
+void test_N6_signed_unicast_nodeinfo_from_signer_changes_name(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = true;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Renamed");
+    strcpy(user.short_name, "RNM");
+
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE),
+                                     "a signed update from a signer must still be learned");
+}
+
+// C7: a node that has never signed is unaffected - the ordinary case for most of the mesh.
+void test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE); // signer bit clear
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = false;
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Renamed");
+    strcpy(user.short_name, "RNM");
+
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Renamed", mockNodeDB->longName(REMOTE_NODE),
+                                     "non-signer identity learning must be unaffected");
+}
+
 // ===========================================================================
 // Group D - encoding invariants the routing gates depend on
 // ===========================================================================
@@ -1332,6 +1502,103 @@ void test_E9_decoded_partial_signature_from_nonsigner_dropped(void)
     TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "partial signature must be dropped as malformed");
 }
 
+// Build an unsigned broadcast whose inner message is padded with an unknown field, and pin that the
+// padding pushes the RAW size past the fit threshold - the exemption the attacker is buying - while
+// the frame stays sendable. Without canonical inner sizing these packets are wrongly accepted.
+static meshtastic_MeshPacket makePayloadPaddedBroadcast(meshtastic_PortNum port, const pb_msgdesc_t *fields, const void *inner,
+                                                        size_t padLen)
+{
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, port, 0);
+    const size_t innerLen = pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), fields, inner);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, innerLen, "failed to encode the spoofed inner message");
+    p.decoded.payload.size =
+        innerLen + appendUnknownField(p.decoded.payload.bytes + innerLen, sizeof(p.decoded.payload.bytes) - innerLen, padLen);
+
+    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "padding must push the raw size past the fit threshold");
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, encodedDataSize(&p.decoded) + MESHTASTIC_HEADER_LENGTH,
+                                      "padded frame must still be one a radio could send");
+    return p;
+}
+
+// E10: unknown fields buried inside Data.payload are discarded by the module's own pb_decode, so
+// they must not sway the downgrade decision the way A10 already pins for Data-level unknown fields.
+void test_E10_decoded_unsigned_position_padded_inside_payload_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Position pos = meshtastic_Position_init_zero;
+    pos.has_latitude_i = pos.has_longitude_i = true;
+    pos.latitude_i = 371234567;
+    pos.longitude_i = -1221234567;
+
+    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg, &pos, 163);
+
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned Position from a signer must be dropped");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E11: over-correction guard. Telemetry (272 bytes max) and Waypoint (199) can legitimately exceed
+// the signable budget, so canonical sizing must not shrink an honest one into the drop range.
+void test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    t.which_variant = meshtastic_Telemetry_host_metrics_tag;
+    t.variant.host_metrics.uptime_seconds = 123456;
+    t.variant.host_metrics.has_user_string = true;
+    memset(t.variant.host_metrics.user_string, 'x', sizeof(t.variant.host_metrics.user_string) - 1);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TELEMETRY_APP, 0);
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Telemetry_msg, &t);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, p.decoded.payload.size, "failed to encode the oversized Telemetry");
+
+    // Every byte here is a field this build understands, so canonical sizing must leave it alone.
+    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "telemetry must be too big to sign, else the test is vacuous");
+
+    TEST_ASSERT_TRUE_MESSAGE(checkXeddsaReceivePolicy(&p), "honest oversized telemetry from a signer must not be dropped");
+}
+
+// E12: E10 for the Waypoint branch of the canonical-sizing switch.
+void test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Waypoint w = meshtastic_Waypoint_init_zero;
+    w.id = 42;
+    w.has_latitude_i = w.has_longitude_i = true;
+    w.latitude_i = 371234567;
+    w.longitude_i = -1221234567;
+    strcpy(w.name, "spoofed");
+
+    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_WAYPOINT_APP, &meshtastic_Waypoint_msg, &w, 150);
+
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned Waypoint from a signer must be dropped");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E13: E10 for the NodeInfo/User branch. Router drops it before rebroadcast; NodeInfoModule's own
+// check (Group C) is receiver-local and would not stop the packet propagating.
+void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_User u = meshtastic_User_init_zero;
+    strcpy(u.id, "!0b0b0b0b");
+    strcpy(u.long_name, "spoofed node");
+    strcpy(u.short_name, "SPF");
+
+    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_NODEINFO_APP, &meshtastic_User_msg, &u, 150);
+
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned NodeInfo from a signer must be dropped");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -1371,6 +1638,8 @@ void setup()
 #if WARM_NODE_COUNT > 0
     RUN_TEST(test_A17_strict_verifies_signer_from_warm_key_store);
 #endif
+    RUN_TEST(test_A18_unsigned_broadcast_from_signer_with_unknown_fields_dropped);
+    RUN_TEST(test_A19_unsigned_broadcast_from_nonsigner_with_unknown_fields_accepted);
 
     printf("\n=== Group B: send-side signing policy ===\n");
     RUN_TEST(test_B1_local_broadcast_is_signed);
@@ -1394,6 +1663,14 @@ void setup()
     RUN_TEST(test_C10_legacy_channel_dm_failure_has_no_pipeline_effects);
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
+    printf("\n=== Group N: NodeInfoModule authentication ===\n");
+    RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
+    RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
+    RUN_TEST(test_N3_unsigned_nodeinfo_from_nonsigner_not_dropped);
+    RUN_TEST(test_N4_unsigned_unicast_nodeinfo_from_signer_accepted);
+    RUN_TEST(test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
+    RUN_TEST(test_N6_signed_unicast_nodeinfo_from_signer_changes_name);
+    RUN_TEST(test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name);
 
     printf("\n=== Group D: encoding invariants ===\n");
     RUN_TEST(test_D1_signature_field_overhead_exact);
@@ -1407,6 +1684,10 @@ void setup()
     RUN_TEST(test_E6_decoded_unsigned_unicast_from_signer_accepted);
     RUN_TEST(test_E8_decoded_partial_signature_from_signer_dropped);
     RUN_TEST(test_E9_decoded_partial_signature_from_nonsigner_dropped);
+    RUN_TEST(test_E10_decoded_unsigned_position_padded_inside_payload_dropped);
+    RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
+    RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
+    RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
 
     exit(UNITY_END());
 }

@@ -122,7 +122,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         if (isFromUs(e.packet)) {
             auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
             pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
-            router->sendLocal(pAck);
+            if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
+                packetPool.release(pAck);
         } else {
             LOG_INFO("Ignore downlink message we originally sent");
         }

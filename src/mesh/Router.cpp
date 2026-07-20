@@ -360,15 +360,6 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
     }
 }
 /**
- * Send a packet on a suitable interface.
- */
-ErrorCode Router::rawSend(meshtastic_MeshPacket *p)
-{
-    assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
-    return iface->send(p);
-}
-
-/**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
  * If the txmit queue is full it might return an error.
@@ -531,6 +522,62 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+/** Size a decoded Data as the sender's signedDataFits() gate would have, with padding stripped:
+ * unknown fields inside Data.payload survive in payload.size and would otherwise let a forger
+ * inflate an unsigned broadcast past the signable budget. Returns false only if sizing failed.
+ * Sizing only what this build's schema decodes, so a signable type that later grows needs its
+ * legitimate maximum re-checked against the budget or honest unsigned broadcasts get dropped. */
+static bool canonicalSignableSize(meshtastic_Data *d, size_t *size)
+{
+    const pb_msgdesc_t *fields = nullptr;
+    switch (d->portnum) {
+    case meshtastic_PortNum_POSITION_APP:
+        fields = &meshtastic_Position_msg;
+        break;
+    case meshtastic_PortNum_TELEMETRY_APP:
+        fields = &meshtastic_Telemetry_msg;
+        break;
+    case meshtastic_PortNum_WAYPOINT_APP:
+        fields = &meshtastic_Waypoint_msg;
+        break;
+    case meshtastic_PortNum_NODEINFO_APP:
+        fields = &meshtastic_User_msg;
+        break;
+    default:
+        break;
+    }
+
+    if (fields) {
+        // Scratch kept off the stack: these decoded structs are large for the smaller MCU targets.
+        // Safe as file-static state because both callers of checkXeddsaReceivePolicy hold cryptLock.
+        static union {
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_Position position;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_Telemetry telemetry;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_Waypoint waypoint;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_User user;
+        } inner;
+
+        memset(&inner, 0, sizeof(inner));
+        size_t canonicalPayload;
+        if (pb_decode_from_bytes(d->payload.bytes, d->payload.size, fields, &inner) &&
+            pb_get_encoded_size(&canonicalPayload, fields, &inner) && canonicalPayload <= d->payload.size) {
+            // Only the length matters when sizing a bytes field, so swap it in place instead of
+            // copying the whole Data; restored below because modules still need the real payload.
+            const pb_size_t prevSize = d->payload.size;
+            d->payload.size = (pb_size_t)canonicalPayload;
+            const bool sized = pb_get_encoded_size(size, &meshtastic_Data_msg, d);
+            d->payload.size = prevSize;
+            return sized;
+        }
+    }
+
+    return pb_get_encoded_size(size, &meshtastic_Data_msg, d);
+}
+
 enum class NodeInfoBootstrapResult { NOT_APPLICABLE, VERIFIED, INVALID };
 
 static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket *p)
@@ -557,7 +604,7 @@ static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket 
     return NodeInfoBootstrapResult::VERIFIED;
 }
 
-bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize)
+bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 {
     const auto policy = config.security.packet_signature_policy;
     const bool strict = policy == meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
@@ -617,15 +664,14 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p, size_t encodedDataSize)
             return true;
 
         // In Balanced, preserve legacy unsigned-unicast compatibility and only reject a signable
-        // unsigned broadcast from a known signer. encodedDataSize is
-        // the size of the encoded Data exactly as the sender built it (or 0 to size p->decoded
-        // canonically); with no signature field present it is the unsigned base, and adding
-        // XEDDSA_SIGNATURE_FIELD_BYTES mirrors the sender-side signedDataFits() gate per packet,
-        // whatever fields the Data carried. Oversized broadcasts remain compatible.
+        // unsigned broadcast from a known signer. Canonical sizing removes unknown protobuf
+        // fields before mirroring the sender-side signedDataFits() gate. Oversized broadcasts
+        // remain compatible.
         if (nodeDB->hasSeenXeddsaSigner(p->from) && isBroadcast(p->to)) {
-            if (encodedDataSize == 0 && !pb_get_encoded_size(&encodedDataSize, &meshtastic_Data_msg, &p->decoded))
+            size_t canonicalSize;
+            if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
-            if (encodedDataSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
+            if (canonicalSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
                 LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
                 return false;
             }
@@ -813,8 +859,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         p->channel = chIndex; // change to store the index instead of the hash
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-        // Use the encoded Data size before merging local-only bitfield state.
-        if (!checkXeddsaReceivePolicy(p, rawSize))
+        // Run before merging local-only bitfield state into the decoded Data.
+        if (!checkXeddsaReceivePolicy(p))
             return DecodeState::DECODE_POLICY_REJECT;
 #endif
 
