@@ -52,6 +52,9 @@ void test_xmodem_allows_legit_paths(void)
     // ".." only inside a name (not a whole component) is a valid filename, not traversal.
     TEST_ASSERT_TRUE(XModemAdapter::isValidFilename("my..file"));
     TEST_ASSERT_TRUE(XModemAdapter::isValidFilename("..."));
+    // A colon that cannot form a drive qualifier is a legal filename on the POSIX daemon.
+    TEST_ASSERT_TRUE(XModemAdapter::isValidFilename("1:30pm.txt"));
+    TEST_ASSERT_TRUE(XModemAdapter::isValidFilename("dir/1:30pm.txt"));
 }
 
 #endif // FSCom
