@@ -222,11 +222,15 @@ meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
     return qs;
 }
 
-bool RadioLibInterface::canSleep()
+bool RadioLibInterface::canSleep(bool deepSleep)
 {
-    bool res = txQueue.empty();
+    // A packet being actively transmitted has already left the TX queue (sendingPacket), so
+    // check it separately. It only vetoes deep sleep: light sleep keeps the radio powered and
+    // the TX finishes on its own, but deep sleep powers the radio down and would truncate the
+    // packet on air.
+    bool res = txQueue.empty() && !(deepSleep && isSending());
     if (!res) { // only print debug messages if we are vetoing sleep
-        LOG_DEBUG("Radio wait to sleep, txEmpty=%d", res);
+        LOG_DEBUG("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
     }
     return res;
 }
@@ -363,6 +367,40 @@ The CW size is determined by setTransmitDelay() and depends either on the curren
 of a flooding message. After this, we perform channel activity detection (CAD) and reset the transmit delay if it is
 currently active.
 */
+// In software-IRQ-poll mode (LORA_DIO1_SOFTWARE_POLL) a 1ms poll tick is almost always pending, so
+// TX timers must be allowed to overwrite the pending notification or TX scheduling starves. On all
+// other targets keep the historical non-overwriting behavior.
+#ifdef LORA_DIO1_SOFTWARE_POLL
+static constexpr bool txTimerOverwrite = true;
+#else
+static constexpr bool txTimerOverwrite = false;
+#endif
+
+// cppcheck-suppress constParameterPointer ; a function pointer can't meaningfully point to const
+bool RadioLibInterface::isIsrTxCallback(void (*callback)())
+{
+    return callback == isrTxLevel0;
+}
+
+void RadioLibInterface::scheduleIrqPollTick()
+{
+    // Never overwrite a pending notification (especially TRANSMIT_DELAY_COMPLETED),
+    // otherwise poll ticks would starve TX scheduling.
+    //
+    // There is a single notification slot, so while a TX is queued and the radio is busy receiving,
+    // the self-rescheduling TRANSMIT_DELAY_COMPLETED timer (which does overwrite, see txTimerOverwrite)
+    // can keep the slot and prevent a poll tick from being scheduled. In that window a completing
+    // RX/TX is not seen by the poll; RadioInterface's pollMissedIrqs() (~1s) is the backup that
+    // recovers it, so the effect is bounded added latency under heavy contention, not a lost event.
+    notifyLater(1, ISR_POLL_TICK, false);
+}
+
+void RadioLibInterface::deliverPendingIrqFromPoll(PendingISR cause)
+{
+    disableInterrupt(); // stop polling; this is the poll-path equivalent of isrLevel0Common()
+    notify(cause, true);
+}
+
 void RadioLibInterface::onNotify(uint32_t notification)
 {
 
@@ -371,10 +409,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
         handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
 #if !MESHTASTIC_EXCLUDE_BEACON
         // Pre-switch the radio to the NEXT queued packet's beacon config (no-op for normal traffic).
-        // Not required for correctness — TRANSMIT_DELAY_COMPLETED would switch before CAD anyway — but
+        // Not required for correctness - TRANSMIT_DELAY_COMPLETED would switch before CAD anyway - but
         // doing it here lets the next beacon skip the switch-only delay cycle and, more importantly,
         // keeps the post-TX listen window (and the CAD/LBT that follows) on the channel we're about to
-        // transmit on. Only engages when the next packet is itself a beacon — exactly when we want it.
+        // transmit on. Only engages when the next packet is itself a beacon - exactly when we want it.
         MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
 #endif
         startReceive();
@@ -384,6 +422,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
         handleReceiveInterrupt();
         startReceive();
         setTransmitDelay();
+        break;
+    case ISR_POLL_TICK:
+        handleSoftwareLoraIrqPoll();
         break;
     case TRANSMIT_DELAY_COMPLETED:
 
@@ -398,12 +439,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 long delay_remaining = txp->tx_after ? txp->tx_after - millis() : 0;
                 if (delay_remaining > 0) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
-                    notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
+                    notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
 #if !MESHTASTIC_EXCLUDE_BEACON
                 } else if (MeshBeaconModule::beaconTxConfigInvalid(txp)) {
                     // The beacon's target radio config is invalid (bad preset/region, or an
-                    // unlicensed node keying up on a ham-only region). Drop the packet — never
-                    // transmit it on the current (home) config — and move on to the next queued packet.
+                    // unlicensed node keying up on a ham-only region). Drop the packet - never
+                    // transmit it on the current (home) config - and move on to the next queued packet.
                     LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", txp->id);
                     meshtastic_MeshPacket *bad = txQueue.dequeue();
                     MeshBeaconModule::clearTargetRadioSettings(bad);
@@ -455,7 +496,7 @@ void RadioLibInterface::setTransmitDelay()
         unsigned long add_delay = p->rx_rssi ? getTxDelayMsecWeighted(p) : getTxDelayMsec();
         unsigned long now = millis();
         p->tx_after = min(max(p->tx_after + add_delay, now + add_delay), now + 2 * getTxDelayMsecWeightedWorst(p->rx_snr));
-        notifyLater(p->tx_after - now, TRANSMIT_DELAY_COMPLETED, false);
+        notifyLater(p->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
     } else if (p->rx_snr == 0 && p->rx_rssi == 0) {
         /* We assume if rx_snr = 0 and rx_rssi = 0, the packet was generated locally.
          *   This assumption is valid because of the offset generated by the radio to account for the noise
@@ -474,7 +515,7 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
-        notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
+        notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite); // This will implicitly enable
     }
 }
 
@@ -483,7 +524,7 @@ void RadioLibInterface::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = getTxDelayMsecWeighted(p);
-        notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
+        notifyLater(delay, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite); // This will implicitly enable
     }
 }
 
@@ -622,6 +663,10 @@ void RadioLibInterface::handleReceiveInterrupt()
             // This allows the router and other apps on our node to sniff packets (usually routing) between other
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+            if (!mp) {
+                airTime->logAirtime(RX_LOG, rxMsec);
+                return;
+            }
 
             // Keep the assigned fields in sync with src/mqtt/MQTT.cpp:onReceiveProto
             mp->from = radioBuffer.header.from;

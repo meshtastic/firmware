@@ -21,17 +21,19 @@
 // How many messages are stored (RAM + flash).
 // Define -DMESSAGE_HISTORY_LIMIT=N in build_flags to control memory usage.
 #ifndef MESSAGE_HISTORY_LIMIT
-#if defined(ARCH_ESP32) &&                                                                                                       \
-    !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32S2))
-// Baseline ESP32 (non-PSRAM variants) has limited heap; reduce message history on resource-constrained builds.
-// Override with -DMESSAGE_HISTORY_LIMIT=N if needed.
+#if (defined(ARCH_ESP32) &&                                                                                                      \
+     !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32S2))) ||       \
+    defined(NRF52840_XXAA)
+// Baseline ESP32 (non-PSRAM variants) and nRF52840 (~115 KB heap arena shared with SoftDevice +
+// FreeRTOS stacks; 2.8.0 field reports hit 99% use) have limited heap; reduce message history on
+// resource-constrained builds. Override with -DMESSAGE_HISTORY_LIMIT=N if needed.
 #define MESSAGE_HISTORY_LIMIT 10
 #else
 #define MESSAGE_HISTORY_LIMIT 20
 #endif
 #endif
 
-// Internal alias used everywhere in code – do NOT redefine elsewhere.
+// Internal alias used everywhere in code - do NOT redefine elsewhere.
 #define MAX_MESSAGES_SAVED MESSAGE_HISTORY_LIMIT
 
 // Maximum text payload size per message in bytes.
@@ -68,14 +70,16 @@ struct StoredMessage {
     bool isBootRelative;  // true = millis()/1000 fallback; false = epoch/RTC absolute
     AckStatus ackStatus;  // Delivery status (only meaningful for our own sent messages)
 
-    // Text storage metadata — rebuilt from flash at boot
+    // Text storage metadata - rebuilt from flash at boot
     uint16_t textOffset; // Offset into global text pool (valid only after loadFromFlash())
     uint16_t textLength; // Length of text in bytes
+
+    bool xeddsaSigned; // true if packet carried a verified XEdDSA signature
 
     // Default constructor initializes all fields safely
     StoredMessage()
         : timestamp(0), sender(0), channelIndex(0), dest(0xffffffff), type(MessageType::BROADCAST), isBootRelative(false),
-          ackStatus(AckStatus::NONE), textOffset(0), textLength(0)
+          ackStatus(AckStatus::NONE), textOffset(0), textLength(0), xeddsaSigned(false)
     {
     }
 };
@@ -89,7 +93,7 @@ class MessageStore
     void addLiveMessage(StoredMessage &&msg);
     void addLiveMessage(const StoredMessage &msg); // convenience overload
     const std::deque<StoredMessage> &getLiveMessages() const { return liveMessages; }
-
+    const StoredMessage *tryAddFromPacket(const meshtastic_MeshPacket &mp); // Incoming/outgoing -> RAM only
     // Add new messages from packets or manual input
     const StoredMessage &addFromPacket(const meshtastic_MeshPacket &mp);                // Incoming/outgoing → RAM only
     void addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text); // Manual add
@@ -107,13 +111,16 @@ class MessageStore
     void deleteOldestMessageWithPeer(uint32_t peer);
     void deleteAllMessagesInChannel(uint8_t channel);
     void deleteAllMessagesWithPeer(uint32_t peer);
-
+    void deleteAllMessagesFromNode(uint32_t nodeNum);
     // Unified accessor (for UI code, defaults to RAM buffer)
     const std::deque<StoredMessage> &getMessages() const { return liveMessages; }
+    bool hasVisibleMessages() const;
 
     // Helper filters for future use
     std::deque<StoredMessage> getChannelMessages(uint8_t channel) const; // Only broadcast messages on a channel
     std::deque<StoredMessage> getDirectMessages() const;                 // Only direct messages
+    bool shouldStorePacket(const meshtastic_MeshPacket &mp) const;
+    bool isMessageVisible(const StoredMessage &msg) const;
 
     // Upgrade boot-relative timestamps once RTC is valid
     void upgradeBootRelativeTimestamps();
@@ -125,6 +132,7 @@ class MessageStore
     static uint16_t storeText(const char *src, size_t len);
 
   private:
+    bool pruneHiddenMessages();
     std::deque<StoredMessage> liveMessages; // Single in-RAM message buffer (also used for persistence)
     std::string filename;                   // Flash filename for persistence
 };

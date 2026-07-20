@@ -8,10 +8,10 @@
 #include "GpioLogic.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
-#include "RTC.h"
 #include "Throttle.h"
 #include "buzz.h"
 #include "concurrency/Periodic.h"
+#include "gps/RTC.h"
 #include "meshUtils.h"
 
 #include "main.h" // pmu_found
@@ -1917,7 +1917,7 @@ std::unique_ptr<GPS> GPS::createGps()
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
 #ifdef ARCH_PORTDUINO
-    // Skip chip-specific probing for gpsd — it's a generic NMEA stream.
+    // Skip chip-specific probing for gpsd - it's a generic NMEA stream.
     if (!portduino_config.gpsd_host.empty())
         new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
 #endif

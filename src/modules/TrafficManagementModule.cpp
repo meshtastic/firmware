@@ -12,6 +12,7 @@
 #include "airtime.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
+#include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include <Arduino.h>
@@ -163,6 +164,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     cache = new UnifiedCacheEntry[allocSize]();
 #endif
 
+    memaudit::set("tmm", cache ? allocSize * sizeof(UnifiedCacheEntry) : 0);
 #endif // TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
@@ -177,6 +179,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     } else {
         TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
     }
+    memaudit::set("tmm_ni", nodeInfoPayload ? nodeInfoTargetEntries() * sizeof(NodeInfoPayloadEntry) : 0);
 #else
     TM_LOG_DEBUG("NodeInfo PSRAM cache not available on this target");
 #endif
@@ -198,6 +201,7 @@ TrafficManagementModule::~TrafficManagementModule()
             delete[] cache;
         cache = nullptr;
     }
+    memaudit::set("tmm", 0);
 #endif
 
     if (nodeInfoPayload) {
@@ -207,6 +211,7 @@ TrafficManagementModule::~TrafficManagementModule()
             delete[] nodeInfoPayload;
         nodeInfoPayload = nullptr;
     }
+    memaudit::set("tmm_ni", 0);
 }
 
 // =============================================================================
@@ -227,7 +232,7 @@ void TrafficManagementModule::resetStats()
 
 void TrafficManagementModule::recordRouterHopPreserved()
 {
-    // router_preserve_hops: not suitable right now — removed from config until
+    // router_preserve_hops: not suitable right now - removed from config until
     // the right heuristic for when to preserve vs. exhaust is clearer.
     (void)stats.router_hops_preserved;
 }
@@ -280,7 +285,7 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
  * One linear pass tracks the match, the first empty slot, and the eviction
  * victim. When the cache is full, the victim is the stalest entry (largest
  * of its three relative timestamps is smallest), preferring entries without
- * a next_hop hint — those hints are the long-tail routing state the cache
+ * a next_hop hint - those hints are the long-tail routing state the cache
  * exists to keep, and the maintenance sweep never ages them out.
  *
  * @param node  NodeNum to find or create
@@ -288,7 +293,7 @@ int TrafficManagementModule::peekCachedRole(NodeNum node)
  * @return      Pointer to entry, or nullptr if the cache is unavailable
  */
 // Sender-role resolution for the position hot path. The tier-3 cache is authoritative
-// here and is kept fresh by updateCachedRoleFromNodeInfo() — i.e. updated at the same
+// here and is kept fresh by updateCachedRoleFromNodeInfo() - i.e. updated at the same
 // time NodeDB learns a role, not re-derived on every packet. We only fall back to a
 // NodeDB scan (tiers 1+2) the first time we start tracking a node, to seed the cache so
 // a resident special-role node is correct from its very first position. Thereafter the
@@ -308,8 +313,8 @@ meshtastic_Config_DeviceConfig_Role TrafficManagementModule::resolveSenderRole(N
     return static_cast<meshtastic_Config_DeviceConfig_Role>(entry->getCachedRole());
 }
 
-// Refresh the tier-3 role cache from an observed NodeInfo — the same event that updates
-// NodeDB's role — so role changes (including demotion back to CLIENT) are picked up
+// Refresh the tier-3 role cache from an observed NodeInfo - the same event that updates
+// NodeDB's role - so role changes (including demotion back to CLIENT) are picked up
 // without scanning NodeDB on the position hot path. Role is read straight from the
 // packet's User payload (authoritative regardless of module ordering). Only updates nodes
 // we already track (findEntry, no create) so NodeInfo from non-position nodes can't pollute
@@ -537,7 +542,7 @@ void TrafficManagementModule::cacheNodeInfoPacket(const meshtastic_MeshPacket &m
 //
 // A routing hint store. The byte is the last byte of the NodeNum to use as next
 // hop to reach `dest`. It is written ONLY from NextHopRouter's ACK-confirmed
-// decision (a bidirectionally-verified relay) — never inferred one-way from
+// decision (a bidirectionally-verified relay) - never inferred one-way from
 // relayed traffic. The TMM cache holds confirmed next-hops that have aged out of
 // the hot NodeDB (NodeInfoLite), and NextHopRouter::getNextHop() consults it as a
 // fallback after the hot store.
@@ -593,7 +598,7 @@ bool TrafficManagementModule::preloadNextHopsFromNodeDB()
 {
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
     if (!cache || !nodeDB)
-        return false; // prerequisites not ready yet — caller should retry on a later pass
+        return false; // prerequisites not ready yet - caller should retry on a later pass
 
     uint16_t seeded = 0;
     concurrency::LockGuard guard(&cacheLock);
@@ -675,7 +680,7 @@ uint8_t TrafficManagementModule::computePositionFingerprint(int32_t lat_truncate
     // 0 is the "no position seen" sentinel for pos_fingerprint, so a real position that happens to
     // hash to 0 must not collide with it (otherwise its duplicates would never dedup). Remap 0 -> 0xFF,
     // mirroring NodeDB::getLastByteOfNodeNum()'s 0 -> 0xFF idiom. Cost: the 0x00 bucket merges into
-    // 0xFF (one extra collision in 256 — negligible; the fingerprint already collides every 16 cells).
+    // 0xFF (one extra collision in 256 - negligible; the fingerprint already collides every 16 cells).
     return fp ? fp : 0xFF;
 }
 
@@ -715,15 +720,22 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
                 logAction("drop", &mp, "unknown");
                 incrementStat(&stats.unknown_packet_drops);
                 ignoreRequest = true;        // Suppress NAK for want_response packets
-                return ProcessMessage::STOP; // Consumed — will not be rebroadcast
+                return ProcessMessage::STOP; // Consumed - will not be rebroadcast
             }
         }
         return ProcessMessage::CONTINUE;
     }
 
+    // A known signer's NodeInfo arriving unsigned is unauthenticated (the sender is forgeable), so
+    // it must not drive any cache or identity write below. Computed once here (getMeshNode is O(N))
+    // and reused by both the cache-refresh and the direct-response identity path.
+    const bool isNodeInfo = mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
+    const meshtastic_NodeInfoLite *senderNode = isNodeInfo ? nodeDB->getMeshNode(getFrom(&mp)) : nullptr;
+    const bool unauthenticatedSigner = senderNode && nodeInfoLiteHasXeddsaSigned(senderNode) && !mp.xeddsa_signed;
+
     // Learn NodeInfo payloads into the dedicated PSRAM cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).
-    if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
+    if (isNodeInfo && !unauthenticatedSigner) {
         cacheNodeInfoPacket(mp);
         updateCachedRoleFromNodeInfo(mp);
     }
@@ -739,14 +751,18 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     if (cfg.nodeinfo_direct_response_max_hops > 0 && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
         mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
         if (shouldRespondToNodeInfo(&mp, true)) {
+            // Unicast NodeInfo is never signed, so a known signer's identity claim here is
+            // unauthenticated: don't overwrite its stored name. The cached response is unaffected.
+            // unauthenticatedSigner was computed above (this branch is NodeInfo-only).
             meshtastic_User requester = meshtastic_User_init_zero;
-            if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
+            if (!unauthenticatedSigner &&
+                pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
                 nodeDB->updateUser(getFrom(&mp), requester, mp.channel);
             }
             logAction("respond", &mp, "nodeinfo-cache");
             incrementStat(&stats.nodeinfo_cache_hits);
             ignoreRequest = true;        // We responded; suppress default NAK
-            return ProcessMessage::STOP; // Consumed — request will not be forwarded
+            return ProcessMessage::STOP; // Consumed - request will not be forwarded
         }
     }
 
@@ -765,7 +781,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
                     logAction("drop", &mp, "position-dedup");
                     incrementStat(&stats.position_dedup_drops);
                     ignoreRequest = true;        // Suppress NAK
-                    return ProcessMessage::STOP; // Consumed — duplicate will not be rebroadcast
+                    return ProcessMessage::STOP; // Consumed - duplicate will not be rebroadcast
                 }
             }
         }
@@ -782,7 +798,7 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
                     logAction("drop", &mp, "rate-limit");
                     incrementStat(&stats.rate_limit_drops);
                     ignoreRequest = true;        // Suppress NAK
-                    return ProcessMessage::STOP; // Consumed — throttled packet will not be rebroadcast
+                    return ProcessMessage::STOP; // Consumed - throttled packet will not be rebroadcast
                 }
             }
         }
@@ -803,7 +819,7 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
         return;
 
     // exhaust_hop_telemetry / exhaust_hop_position / router_preserve_hops:
-    // not suitable right now — the right heuristics for when to exhaust or
+    // not suitable right now - the right heuristics for when to exhaust or
     // preserve hops need more field data before we expose them as config knobs.
     // exhaustRequested stays false; perhapsRebroadcast() behaves normally.
 
@@ -816,8 +832,8 @@ void TrafficManagementModule::alterReceived(meshtastic_MeshPacket &mp)
     // ceiling. Guards against forwarding more-precise coordinates than the
     // channel is intended to carry (e.g. a LongFast channel set to 13-bit /
     // ~1.5 km). chanPrec==0 means position sharing is disabled on the channel;
-    // skip — not our job to zero positions on relay.
-    // Ham mode (owner.is_licensed) is exempt. Lost-and-found is NOT exempt — its relayed
+    // skip - not our job to zero positions on relay.
+    // Ham mode (owner.is_licensed) is exempt. Lost-and-found is NOT exempt - its relayed
     // positions get the same precision clamp as any node.
     // Compile USERPREFS_TMM_APPLY_TO_PRIVATE_CHANNELS to extend to private channels.
     if (!owner.is_licensed && isPosition && isBroadcast(mp.to)) {
@@ -878,7 +894,7 @@ int32_t TrafficManagementModule::runOnce()
     const uint8_t rateTtlTicks = static_cast<uint8_t>(
         std::min(static_cast<uint32_t>(15), (rateWindowMs > 0 ? rateWindowMs * 2 : 24 * kRateTimeTickMs) / kRateTimeTickMs));
 
-    // unknown: fixed 12-tick TTL (12 min — 4 ticks past the 5-min default window)
+    // unknown: fixed 12-tick TTL (12 min - 4 ticks past the 5-min default window)
     const uint8_t unknownTtlTicks = 12;
 
     const uint8_t nowPosTick = currentPosTick();
@@ -978,7 +994,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     if (!pos->has_latitude_i || !pos->has_longitude_i)
         return false;
 
-    // Precision is driven by the channel's own position_precision ceiling — the same
+    // Precision is driven by the channel's own position_precision ceiling - the same
     // grid the channel uses for broadcast. Falls back to the firmware default (19-bit,
     // ~90m cells) when the channel has no precision configured (chanPrec == 0).
     const uint32_t chanPrec = getPositionPrecisionForChannel(p->channel);
@@ -990,7 +1006,7 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     const uint8_t fingerprint = computePositionFingerprint(lat_truncated, lon_truncated, precision);
     // Drop gate uses the RAW configured interval: 0 means "dedup disabled" (the
     // contract documented below). The 12h default is only for resolution/TTL
-    // sizing (constructor / runOnce), not for deciding whether to drop — feeding
+    // sizing (constructor / runOnce), not for deciding whether to drop - feeding
     // the default here would silently turn the 0-disables-dedup contract off.
     uint32_t minIntervalMs = secsToMs(moduleConfig.traffic_management.position_min_interval_secs);
 
@@ -1003,12 +1019,12 @@ bool TrafficManagementModule::shouldDropPosition(const meshtastic_MeshPacket *p,
     // Role exceptions keyed on the originating node's advertised role, resolved across
     // all three tiers (hot store → warm store → TMM live cache). The position path is
     // the one place that needs sender-role, and it also keeps tier 3 warm so the
-    // exception survives the node aging out of both NodeDB stores — important in the
+    // exception survives the node aging out of both NodeDB stores - important in the
     // common dedup-only config, where isRateLimited()'s role write never runs.
     const meshtastic_Config_DeviceConfig_Role role = resolveSenderRole(p->from, entry, isNew);
     if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
         // Lost-and-found may refresh a duplicate position at most every ~15 min (cap, never
-        // lengthens; quantised to ~2 dedup ticks). Only when dedup is active — never tighten
+        // lengthens; quantised to ~2 dedup ticks). Only when dedup is active - never tighten
         // past an operator who disabled it (0).
         const uint32_t lostFoundCapMs = secsToMs(default_traffic_mgmt_lost_and_found_position_min_interval_secs);
         if (minIntervalMs != 0 && minIntervalMs > lostFoundCapMs)
@@ -1253,7 +1269,7 @@ bool TrafficManagementModule::shouldDropUnknown(const meshtastic_MeshPacket *p, 
     }
 
     // Increment counter, saturating at 63 (6-bit field max). With threshold
-    // capped at 60, a saturated reading always exceeds the limit — no special
+    // capped at 60, a saturated reading always exceeds the limit - no special
     // already-saturated edge case needed.
     const uint8_t cur = entry->getUnknownCount();
     if (cur < 0x3F)

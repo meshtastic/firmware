@@ -38,7 +38,7 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Throttle.h"
-#include <RTC.h>
+#include "gps/RTC.h"
 
 namespace
 {
@@ -64,12 +64,12 @@ static constexpr size_t MAX_AUTH_SLOTS = 6;
 // status produced for connection A (e.g. UNLOCKED with the active TTL,
 // or UNLOCK_FAILED with a backoff) cannot be drained by connection B,
 // which would otherwise learn that A just authenticated or just failed
-// — a real information leak across local clients.
+// - a real information leak across local clients.
 //
 // File-scope rather than a per-PhoneAPI member because adding any
 // non-trivial state directly to PhoneAPI broke USB-CDC enumeration on
 // the current nRF52 framework; the auth-slot table next door uses the
-// same workaround. Lifecycle is tied to the auth slot table — both are
+// same workaround. Lifecycle is tied to the auth slot table - both are
 // keyed by PhoneAPI*, both are cleared together in clearAuthSlot_LH,
 // and both share g_authSlotsMutex.
 struct PendingStatusSlot {
@@ -78,7 +78,7 @@ struct PendingStatusSlot {
     bool hasPending = false;
     // True between a successful passphrase verify and the main-loop
     // reloadFromDisk that follows. While set, the connection is NOT
-    // yet authorized and no UNLOCKED status has been emitted — the
+    // yet authorized and no UNLOCKED status has been emitted - the
     // client still sees LOCKED, and any admin op it tries is dropped
     // by the existing unauth gates. Cleared either way by
     // completePendingUnlocks once reload finishes.
@@ -107,7 +107,7 @@ static PendingStatusSlot *findOrAllocStatusSlot_LH(PhoneAPI *p)
     // Mirror the auth-slot eviction policy: stale slots can be reused.
     // A connection that lost its auth slot has nothing meaningful to be
     // told via a pending status anyway. Never evict a slot mid-unlock
-    // (pendingUnlockAfterReload set) — completing that flow on the
+    // (pendingUnlockAfterReload set) - completing that flow on the
     // wrong PhoneAPI would authorize the wrong connection.
     for (auto &s : g_statusSlots) {
         if (!s.hasPending && !s.pendingUnlockAfterReload) {
@@ -143,7 +143,7 @@ static void buildStatus_LH(meshtastic_LockdownStatus &out, meshtastic_LockdownSt
     memset(&out, 0, sizeof(out));
     out.state = state;
     // Collapse the specific token_* reasons to a generic "locked" over
-    // the wire — full detail still goes to local logs. An unauth client
+    // the wire - full detail still goes to local logs. An unauth client
     // does not need to know whether HMAC failed vs the boot count
     // hit zero vs the file was the wrong size; all of those mean the
     // same thing to the client ("locked, ask for passphrase") but
@@ -171,7 +171,7 @@ struct PhoneAuthSlot {
 static PhoneAuthSlot g_authSlots[MAX_AUTH_SLOTS];
 
 // Global auth epoch. Lock Now bumps it; per-slot `epoch` compared against
-// this. Wraps at 2^32 revocations — practically unreachable; on wrap the
+// this. Wraps at 2^32 revocations - practically unreachable; on wrap the
 // only behavioral effect is that any slot whose epoch happens to match the
 // new low value would be treated as authorized again, which requires a
 // pre-existing authorized slot to survive 2^32 lockNow events on the same
@@ -179,7 +179,7 @@ static PhoneAuthSlot g_authSlots[MAX_AUTH_SLOTS];
 static uint32_t g_authEpoch = 1;
 
 // Single mutex guarding g_authSlots and g_authEpoch. All readers and
-// writers — including const getters like getAdminAuthorized — must take
+// writers - including const getters like getAdminAuthorized - must take
 // it. Granularity is fine because the critical sections are short (a
 // fixed-size linear scan over 6 entries) and contention is dominated by
 // getFromRadio's per-call redaction checks, which tolerate brief
@@ -191,7 +191,7 @@ static concurrency::Lock g_authSlotsMutex;
 // evicts the first unauthorized slot found. Refuses to evict an authorized
 // slot (those represent a live operator session and must outlive the table
 // pressure of reconnect churn). Returns nullptr only if every slot is
-// occupied by a different live, authorized PhoneAPI — practically only
+// occupied by a different live, authorized PhoneAPI - practically only
 // reachable as a DoS via 7+ simultaneous authed connections, in which
 // case fail-closed and log.
 static PhoneAuthSlot *findOrAllocSlot_LH(PhoneAPI *p)
@@ -211,7 +211,7 @@ static PhoneAuthSlot *findOrAllocSlot_LH(PhoneAPI *p)
         }
     }
     // Second pass: evict an unauthorized stale slot. Don't touch authorized
-    // ones — those still represent an operator-authenticated session.
+    // ones - those still represent an operator-authenticated session.
     for (auto &s : g_authSlots) {
         if (!s.authorized) {
             s.who = p;
@@ -312,7 +312,7 @@ void PhoneAPI::handleStartConfig()
 #if defined(MESHTASTIC_EXCLUDE_FILES_MANIFEST)
     // Skip the recursive FS walk. Used by platforms whose Zephyr LittleFS
     // backend can't safely traverse a deep tree (e.g. nRF54L15) and platforms
-    // that don't support OTA browsing — the manifest is only consumed by
+    // that don't support OTA browsing - the manifest is only consumed by
     // companion apps for those flows.
     releaseFilesManifest(filesManifest);
 #else
@@ -444,12 +444,12 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case meshtastic_ToRadio_packet_tag:
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!getAdminAuthorized()) {
-                // Allow admin messages addressed to this device — passphrase delivery must get through.
+                // Allow admin messages addressed to this device - passphrase delivery must get through.
                 // AdminModule handles its own is_managed gate for those.
-                // Block everything else — unauthorized clients cannot inject mesh traffic.
+                // Block everything else - unauthorized clients cannot inject mesh traffic.
                 // Require the packet to carry a decoded (not encrypted) payload so portnum is valid.
                 // Refuse to match when our own node number is still 0 (NodeDB
-                // not yet loaded — happens during the locked-default boot path
+                // not yet loaded - happens during the locked-default boot path
                 // before reloadFromDisk). Otherwise a packet with to==0 would
                 // satisfy the equality and bypass the gate.
                 NodeNum ourNum = nodeDB->getNodeNum();
@@ -584,12 +584,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.my_info = myNodeInfo;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         if (!getAdminAuthorized()) {
-            // device_id is a stable hardware identifier — useful for an attacker
+            // device_id is a stable hardware identifier - useful for an attacker
             // to fingerprint / correlate the device across observations. Strip it
             // for unauthenticated clients. my_node_num is kept (it's broadcast
             // on the mesh anyway). pio_env / min_app_version reveal the exact
             // build flavour, useful only for picking which known-CVE to try.
-            // nodedb_count stays — clients need it to decide whether to pull
+            // nodedb_count stays - clients need it to decide whether to pull
             // the node DB after unlocking.
             fromRadioScratch.my_info.device_id.size = 0;
             memset(fromRadioScratch.my_info.device_id.bytes, 0, sizeof(fromRadioScratch.my_info.device_id.bytes));
@@ -657,7 +657,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // position_flags, excluded_modules, optionsCount. None of it
             // is needed to drive lockdown_auth, and most of it tells an
             // attacker which CVE / behavior quirks to probe. Wipe the
-            // whole struct — clients re-fetch once authenticated.
+            // whole struct - clients re-fetch once authenticated.
             memset(&fromRadioScratch.metadata, 0, sizeof(fromRadioScratch.metadata));
         }
 #endif
@@ -668,7 +668,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Tell the client which modem presets are legal in each region so its UI
         // can block illegal region+preset combinations. This is public RF /
         // regulatory information (region and modem_preset are already in the
-        // unauthenticated LoRa whitelist below), so it is sent unconditionally —
+        // unauthenticated LoRa whitelist below), so it is sent unconditionally -
         // even an unauthorized/locked-down client can render a correct picker.
         LOG_DEBUG("Send region preset map");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_region_presets_tag;
@@ -683,7 +683,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (!getAdminAuthorized()) {
             // Unauthenticated: emit a zero-initialized Channel. fromRadioScratch
             // was memset(0) at the top of getFromRadio(), so leaving .channel
-            // untouched gives the client an empty entry — no name, no PSK, no
+            // untouched gives the client an empty entry - no name, no PSK, no
             // role. Advances the state machine normally so config_complete_id
             // still fires.
         } else
@@ -748,7 +748,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 // private knobs (ignore_incoming list, override_duty_cycle,
                 // override_frequency, sx126x_rx_boosted_gain, tx_power,
                 // ignore_mqtt, fem_lna_mode, config_ok_to_mqtt, ...) stay
-                // hidden — they tell an attacker how the operator has tuned
+                // hidden - they tell an attacker how the operator has tuned
                 // the device but are not needed by an unauth client.
                 meshtastic_Config_LoRaConfig whitelist = {};
                 whitelist.use_preset = config.lora.use_preset;
@@ -775,7 +775,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             if (!getAdminAuthorized()) {
                 // Unauthenticated: emit an empty SecurityConfig (zero-init from
                 // the top-of-loop memset). No private_key, no admin_keys, no
-                // public_key — nothing for an attacker to inspect.
+                // public_key - nothing for an attacker to inspect.
                 //
                 // Provisioning state (NEEDS_PROVISION vs LOCKED) is conveyed via
                 // the FromRadio.lockdown_status proto sent post-config; clients
@@ -897,6 +897,23 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
             fromRadioScratch.moduleConfig.payload_variant.tak = moduleConfig.tak;
             break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        case meshtastic_ModuleConfig_mesh_beacon_tag:
+            LOG_DEBUG("Send module config: mesh beacon");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!getAdminAuthorized()) {
+                // Unauthenticated: emit an empty MeshBeaconConfig (zero-init from
+                // the top-of-loop memset). The embedded ChannelSettings
+                // (broadcast_offer_channel / broadcast_on_channel) carry PSKs that
+                // must not be visible to an unauth client.
+            } else
+#endif
+            {
+                fromRadioScratch.moduleConfig.payload_variant.mesh_beacon = moduleConfig.mesh_beacon;
+            }
+            break;
+#endif
         default:
             LOG_DEBUG("Unhandled module config type %d", config_state);
         }
@@ -906,7 +923,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!getAdminAuthorized()) {
-                // Unauthorized client: skip node DB and file manifest — only send config complete
+                // Unauthorized client: skip node DB and file manifest - only send config complete
                 state = STATE_SEND_COMPLETE_ID;
             } else
 #endif
@@ -993,7 +1010,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else if (mqttClientProxyMessageForPhone) {
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!getAdminAuthorized()) {
-                releaseMqttClientProxyPhonePacket(); // Discard — unauthorized client
+                releaseMqttClientProxyPhonePacket(); // Discard - unauthorized client
             } else
 #endif
             {
@@ -1004,7 +1021,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!getAdminAuthorized()) {
-                xmodemPacketForPhone = meshtastic_XModem_init_zero; // Discard — unauthorized client
+                xmodemPacketForPhone = meshtastic_XModem_init_zero; // Discard - unauthorized client
             } else
 #endif
             {
@@ -1015,7 +1032,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         } else if (hasPendingLockdownStatus()) {
             concurrency::LockGuard guard(&g_authSlotsMutex);
-            // Look up our own slot only — never another connection's. Re-check
+            // Look up our own slot only - never another connection's. Re-check
             // hasPending under the lock since a concurrent drain on the same
             // connection (unlikely but possible if multiple transport
             // callbacks race against one PhoneAPI) may have grabbed it.
@@ -1033,7 +1050,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         } else if (packetForPhone) {
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
             if (!getAdminAuthorized()) {
-                releasePhonePacket(); // Discard mesh traffic — unauthorized client
+                releasePhonePacket(); // Discard mesh traffic - unauthorized client
             } else
 #endif
             {
@@ -1044,7 +1061,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
                 releasePhonePacket();
             }
         } else if (replayPending()) {
-            // No live packet pending — feed the phone one cached satellite-DB packet.
+            // No live packet pending - feed the phone one cached satellite-DB packet.
             // popReplayPacket advances through positions->telemetry->environment->status,
             // and flips replayPhase back to IDLE when everything has been drained.
             meshtastic_MeshPacket replayPkt;
@@ -1184,19 +1201,49 @@ void PhoneAPI::prefetchNodeInfos()
         onNowHasData(0);
 }
 
+namespace
+{
+/// Derive a stable id for a replayed satellite-DB record. Unchanged history replayed on
+/// every reconnect must not look like a new packet to the phone's history/dedup - the id
+/// only changes when the underlying data (its timestamp) actually changes.
+// `kind` only needs to distinguish the record types that can otherwise collide (e.g. device
+// vs. environment metrics both replay as TELEMETRY_APP with the same node/last_heard) - pass
+// the payload's own variant/port constant.
+uint32_t makeReplayPacketId(NodeNum num, uint32_t timestamp, uint32_t kind)
+{
+    uint32_t h = num;
+    h = h * 2654435761u + timestamp;
+    h = h * 2654435761u + kind;
+    return h ? h : 1; // some clients treat id 0 as "unset"
+}
+
+/// Populate hop_start/hop_limit from the node's real last-known hop count (if any) so a
+/// replayed packet doesn't read as "heard directly" when it wasn't.
+void setReplayHopFields(meshtastic_MeshPacket &pkt, const meshtastic_NodeInfoLite *header)
+{
+    uint8_t hopLimit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+    uint8_t hopsAway = (header && header->has_hops_away) ? header->hops_away : 0;
+    pkt.hop_start = hopLimit;
+    pkt.hop_limit = hopsAway < hopLimit ? (uint8_t)(hopLimit - hopsAway) : 0;
+}
+} // namespace
+
 meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const meshtastic_PositionLite &pos)
 {
     // Shape this exactly like a fresh live broadcast Position from the peer so the
     // phone runs it through its normal "live position broadcast" handler path.
     // to=ourNum would read as a DM-from-peer and never lands in node detail UI.
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
+    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     pkt.rx_time = pos.time;
+    // Stable per-node/per-fix id: replaying the same unchanged history on every
+    // reconnect must not look like a brand new packet to the phone's history/dedup.
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated
     pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
@@ -1214,15 +1261,15 @@ meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const mes
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     // No native timestamp on telemetry packets here; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    // Mark as if heard over the air, not internally generated — iOS client filters
+    // Mark as if heard over the air, not internally generated - iOS client filters
     // TRANSPORT_INTERNAL packets out of broadcast peer state updates.
     pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
@@ -1320,14 +1367,14 @@ meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const 
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    // Mark as if heard over the air, not internally generated — iOS client filters
+    // Mark as if heard over the air, not internally generated - iOS client filters
     // TRANSPORT_INTERNAL packets out of broadcast peer state updates.
     pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
@@ -1383,15 +1430,15 @@ meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const mesht
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     // StatusMessage has no native timestamp; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    // Mark as if heard over the air, not internally generated — client filters
+    // Mark as if heard over the air, not internally generated - client filters
     pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pkt.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     pkt.decoded.portnum = meshtastic_PortNum_NODE_STATUS_APP;
@@ -1483,7 +1530,7 @@ bool PhoneAPI::popReplayPacket(meshtastic_MeshPacket &out)
             }
         }
 
-        // Queue empty AND no more entries to feed it — phase is exhausted.
+        // Queue empty AND no more entries to feed it - phase is exhausted.
         advanceReplayPhase();
     }
     return false;
@@ -1609,7 +1656,7 @@ bool PhoneAPI::available()
         hasPacket = !!packetForPhone;
         if (hasPacket)
             return true;
-        // Trailing replay drain — feeds cached satellite-DB packets alongside
+        // Trailing replay drain - feeds cached satellite-DB packets alongside
         // (lower priority than) live traffic.
         return replayPending();
     }
@@ -1623,6 +1670,8 @@ bool PhoneAPI::available()
 void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
     cn->has_reply_id = true;
     cn->reply_id = replyId;
     cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -1648,6 +1697,19 @@ bool PhoneAPI::wasSeenRecently(uint32_t id)
     return false;
 }
 
+PhoneAPI::LocalAdminGate PhoneAPI::classifyLocalAdminPacket(const meshtastic_MeshPacket &p, bool adminAuthorized,
+                                                            meshtastic_AdminMessage &outAdmin)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
+        return LocalAdminGate::NotAdmin;
+    outAdmin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &outAdmin))
+        return LocalAdminGate::NotAdmin; // undecodable: let the normal reject path respond
+    if (outAdmin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag)
+        return LocalAdminGate::LockdownAuth; // the passphrase itself; authenticate regardless of prior state
+    return adminAuthorized ? LocalAdminGate::AuthorizedPassThrough : LocalAdminGate::DropUnauthorized;
+}
+
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
  */
@@ -1666,32 +1728,39 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     //   (b) Any other admin payload from an unauthorized connection:
     //       dropped here. The previous design relied on AdminModule
     //       to apply isLocalAdminAuthorized() during dispatch, but
-    //       AdminModule runs on the Router task — by then the
+    //       AdminModule runs on the Router task - by then the
     //       PhoneAPI dispatching task has already exited and the
     //       per-connection auth context is unrecoverable. Putting
     //       the gate here closes that race and covers H6/H7 from the
     //       audit: get_config_request and set_config from unauthed
     //       clients no longer reach AdminModule at all.
-    if (p.from == 0 && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p.decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
+    // Gate on the connection, not the wire `from`, which a client can forge to a non-zero value to
+    // bypass the check before MeshService normalizes it back to a local identity.
+    // Scope the decoded admin message: it holds the plaintext passphrase, so bound its lifetime.
+    {
         meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
-        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin)) {
-            if (admin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag) {
-                handleLockdownAuthInline(admin.lockdown_auth);
-                // Wipe the decoded passphrase scratch — the byte array in
-                // p.decoded.payload.bytes is wiped by handleLockdownAuthInline.
-                volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
-                for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
-                    adminVol[i] = 0;
-                return true;
-            }
-            if (!getAdminAuthorized()) {
-                LOG_WARN("Lockdown: dropping admin payload variant=%d from unauthorized connection", admin.which_payload_variant);
-                return false;
-            }
+        switch (classifyLocalAdminPacket(p, getAdminAuthorized(), admin)) {
+        case LocalAdminGate::LockdownAuth: {
+            handleLockdownAuthInline(admin.lockdown_auth);
+            // The encoded wipe is the security-critical one: nothing else clears the passphrase from
+            // the packet buffer. handleLockdownAuthInline already zeroes the decoded copy up to its
+            // size; re-zero the full scratch capacity here as defense in depth.
+            volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
+            for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
+                adminVol[i] = 0;
+            volatile uint8_t *encodedVol = const_cast<volatile uint8_t *>(p.decoded.payload.bytes);
+            for (size_t i = 0; i < sizeof(p.decoded.payload.bytes); i++)
+                encodedVol[i] = 0;
+            p.decoded.payload.size = 0; // keep the length consistent with the wiped buffer
+            return true;
         }
-        // pb_decode failure: fall through to normal handling so the
-        // regular Router/AdminModule reject path can respond.
+        case LocalAdminGate::DropUnauthorized:
+            LOG_WARN("Lockdown: dropping admin payload variant=%d from unauthorized connection", admin.which_payload_variant);
+            return false;
+        case LocalAdminGate::NotAdmin:
+        case LocalAdminGate::AuthorizedPassThrough:
+            break; // normal handling
+        }
     }
 #endif
 
@@ -1769,7 +1838,7 @@ bool PhoneAPI::getAdminAuthorized() const
 {
     // Runtime-toggle model: when lockdown is NOT active (a lockdown-capable
     // build that hasn't been provisioned, or that was disabled), there is
-    // nothing to protect — every connection is implicitly authorized, so
+    // nothing to protect - every connection is implicitly authorized, so
     // all the `if (!getAdminAuthorized())` redaction gates throughout
     // getFromRadio() / handleToRadio() become no-ops and the device serves
     // config exactly like stock firmware. Only once provisioned (lockdown
@@ -1779,7 +1848,7 @@ bool PhoneAPI::getAdminAuthorized() const
         return true;
 #endif
     concurrency::LockGuard g(&g_authSlotsMutex);
-    // const_cast is safe — findOrAllocSlot_LH only mutates the slot table,
+    // const_cast is safe - findOrAllocSlot_LH only mutates the slot table,
     // not the PhoneAPI itself, and the table key is just the pointer.
     const auto *slot = findOrAllocSlot_LH(const_cast<PhoneAPI *>(this));
     return slot && slot->authorized && slot->epoch == g_authEpoch;
@@ -1790,7 +1859,7 @@ void PhoneAPI::setAdminAuthorized(bool authorized)
     concurrency::LockGuard g(&g_authSlotsMutex);
     auto *slot = findOrAllocSlot_LH(this);
     if (!slot)
-        return; // slot table full — fail-closed
+        return; // slot table full - fail-closed
     if (authorized) {
         slot->epoch = g_authEpoch;
         slot->authorized = true;
@@ -1813,7 +1882,7 @@ void PhoneAPI::completePendingUnlocks(bool reloadOk)
 {
     // Snapshot fields that we'll need outside the lock (we cannot call
     // EncryptedStorage / setAdminAuthorized / unlockScreen while holding
-    // g_authSlotsMutex without risking re-entry — setAdminAuthorized
+    // g_authSlotsMutex without risking re-entry - setAdminAuthorized
     // itself takes the same lock).
     constexpr size_t kMaxSnapshots = MAX_AUTH_SLOTS;
     PhoneAPI *targets[kMaxSnapshots] = {};
@@ -1825,7 +1894,7 @@ void PhoneAPI::completePendingUnlocks(bool reloadOk)
                 continue;
             if (targetCount < kMaxSnapshots)
                 targets[targetCount++] = s.who;
-            // Clear the pending flag either way — failure path must not
+            // Clear the pending flag either way - failure path must not
             // leave it set so a subsequent successful reload retries
             // against the wrong PhoneAPI.
             s.pendingUnlockAfterReload = false;
@@ -1841,13 +1910,13 @@ void PhoneAPI::completePendingUnlocks(bool reloadOk)
             p->queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCKED, "", boots, until, 0);
         }
         // Screen-lock latch is cleared once any client successfully
-        // unlocks — the operator has proven the passphrase. Matches the
+        // unlocks - the operator has proven the passphrase. Matches the
         // re-verify path's behavior.
         if (targetCount > 0)
             meshtastic_security::unlockScreen();
         LOG_INFO("Lockdown: post-reload completion: authorized %u connection(s)", (unsigned)targetCount);
     } else {
-        // Storage corrupt — emit LOCKED(storage_corrupt) to every slot
+        // Storage corrupt - emit LOCKED(storage_corrupt) to every slot
         // that was awaiting the unlock. setAdminAuthorized is NOT called
         // so the connection stays redacted and any set_config it sends
         // is dropped at the existing unauth gates. Caller (main.cpp) has
@@ -1866,7 +1935,7 @@ void PhoneAPI::queueLockdownStatus(meshtastic_LockdownStatus_State state, const 
         concurrency::LockGuard guard(&g_authSlotsMutex);
         auto *slot = findOrAllocStatusSlot_LH(this);
         if (!slot)
-            return; // slot table exhausted — fail-closed, no status delivered
+            return; // slot table exhausted - fail-closed, no status delivered
         buildStatus_LH(slot->status, state, lock_reason, boots_remaining, valid_until_epoch, backoff_seconds);
         slot->hasPending = true;
     }
@@ -1914,14 +1983,14 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
             ppVol[zi] = 0;
     };
 
-    // Lock Now — only honored from a connection that has already proven
+    // Lock Now - only honored from a connection that has already proven
     // the passphrase. Unauthenticated clients used to be able to trigger
     // a reboot, which was a trivial local-presence DoS (any BLE/USB
     // attacker could brick-loop the device). Now lock_now requires
     // prior auth on this connection.
     if (la.lock_now) {
         if (!getAdminAuthorized()) {
-            LOG_WARN("Lockdown: LOCK NOW from unauthorized connection — denied");
+            LOG_WARN("Lockdown: LOCK NOW from unauthorized connection - denied");
             queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, 0);
             zeroPassphrase();
             return true;
@@ -1938,18 +2007,18 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
     // Disable lockdown entirely. Requires the passphrase (must prove
     // ownership before reverting at-rest encryption). We verify it here to
     // load the DEK, then hand the heavy decrypt-revert work to the main
-    // loop via lockdownDisablePending — exactly like the unlock reload
+    // loop via lockdownDisablePending - exactly like the unlock reload
     // path, because decrypting + rewriting nodes.proto is too heavy for
     // this transport-callback stack. APPROTECT is NOT reversed.
     if (la.disable) {
         if (la.passphrase.size < 1) {
-            LOG_WARN("Lockdown: disable with empty passphrase — rejecting");
+            LOG_WARN("Lockdown: disable with empty passphrase - rejecting");
             queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, 0);
             zeroPassphrase();
             return true;
         }
         if (!EncryptedStorage::isLockdownActive()) {
-            // Already off — nothing to do; report DISABLED so the client UI settles.
+            // Already off - nothing to do; report DISABLED so the client UI settles.
             LOG_INFO("Lockdown: disable requested but lockdown is not active");
             queueLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
             zeroPassphrase();
@@ -1972,13 +2041,13 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         return true;
     }
 
-    // Empty-passphrase auth was previously a silent success — clients
+    // Empty-passphrase auth was previously a silent success - clients
     // got no feedback and the device looked the same as it would after
     // an actual no-op. Emit UNLOCK_FAILED with no backoff so honest
     // clients can detect their own bug and an attacker still learns
     // nothing they wouldn't from any other failed attempt.
     if (la.passphrase.size < 1) {
-        LOG_WARN("Lockdown: lockdown_auth with empty passphrase and lock_now=false — rejecting");
+        LOG_WARN("Lockdown: lockdown_auth with empty passphrase and lock_now=false - rejecting");
         queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, 0);
         zeroPassphrase();
         return true;
@@ -2017,7 +2086,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         if (ok) {
             needsReload = true;
             // Mark this slot for the main-loop completion handler. Don't
-            // authorize or emit UNLOCKED yet — `config` / `channelFile`
+            // authorize or emit UNLOCKED yet - `config` / `channelFile`
             // / `nodeDatabase` still hold the locked-default placeholders
             // installed by loadFromDisk()'s !isUnlocked() branch. If we
             // flipped the connection to authorized here, the client could
@@ -2040,7 +2109,7 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         ok = EncryptedStorage::unlockWithPassphrase(la.passphrase.bytes, la.passphrase.size, boots, validUntilEpoch,
                                                     sessionMaxSeconds);
         if (ok) {
-            // Storage was already unlocked — no reload needed. Authorize
+            // Storage was already unlocked - no reload needed. Authorize
             // and surface UNLOCKED to the client immediately.
             setAdminAuthorized(true);
             LOG_INFO("Lockdown: passphrase verified, this connection authorized");
@@ -2055,13 +2124,13 @@ bool PhoneAPI::handleLockdownAuthInline(const meshtastic_LockdownAuth &la)
         queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCKED, "", EncryptedStorage::getBootsRemaining(),
                             EncryptedStorage::getValidUntilEpoch(), 0);
     } else if (ok && needsReload) {
-        // Cold-unlock path: deliberately no status emission yet — the
+        // Cold-unlock path: deliberately no status emission yet - the
         // client keeps seeing LOCKED until completePendingUnlocks()
         // runs after a successful reload.
     } else {
         uint32_t backoff = EncryptedStorage::getBackoffSecondsRemaining();
         queueLockdownStatus(meshtastic_LockdownStatus_State_UNLOCK_FAILED, "", 0, 0, backoff);
-        // Don't log backoff seconds — the client receives it in the
+        // Don't log backoff seconds - the client receives it in the
         // UNLOCK_FAILED status anyway, and in non-DEBUG_MUTE builds the
         // numeric value would otherwise spill onto a USB-attached
         // attacker's serial terminal alongside other diagnostic noise.

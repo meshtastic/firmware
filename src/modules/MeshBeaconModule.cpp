@@ -2,11 +2,11 @@
 #include "Default.h"
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <Throttle.h>
 #include <string.h>
@@ -109,13 +109,13 @@ bool MeshBeaconModule::beaconTxConfigInvalid(const meshtastic_MeshPacket *p)
     meshtastic_Config_LoRaConfig_ModemPreset preset;
     meshtastic_Config_LoRaConfig_RegionCode sidecarRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     if (!getTargetRadioSettings(p, &preset, nullptr, nullptr, &sidecarRegion))
-        return false; // not a beacon-switch packet — nothing to validate, normal traffic unaffected
+        return false; // not a beacon-switch packet - nothing to validate, normal traffic unaffected
 
     const meshtastic_Config_LoRaConfig_RegionCode region =
         (sidecarRegion != meshtastic_Config_LoRaConfig_RegionCode_UNSET) ? sidecarRegion : config.lora.region;
 
     // An unlicensed node must never key up on a ham-only (licensed-only) region. The reverse is
-    // allowed: a licensed (ham) node may operate in a non-ham region — and the switch only touches
+    // allowed: a licensed (ham) node may operate in a non-ham region - and the switch only touches
     // preset/region/channel, never owner.is_licensed, so it cannot deactivate licensed mode.
     const RegionInfo *r = getRegion(region);
     if (r && r->profile->licensedOnly && !owner.is_licensed)
@@ -156,7 +156,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
     // heuristic both missed cases (a channel name/PSK swap that left preset/slot/region unchanged would
     // never be restored) and fired falsely (a legitimate non-beacon channel edit would be reverted on
     // the next TX). With the flag the restore fires for ANY field we changed and only when we changed
-    // it — including on TX-failure paths, which route through this same restore call.
+    // it - including on TX-failure paths, which route through this same restore call.
     static bool radioSwitched = false;
 
     meshtastic_ChannelSettings *primaryCh = &channels.getByIndex(channels.getPrimaryIndex()).settings;
@@ -193,7 +193,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
             targetRegion == config.lora.region && !channelDiffers(targetChannel))
             return false;
 
-        // Guard: never key up on an invalid target config — bad preset for the region, or an
+        // Guard: never key up on an invalid target config - bad preset for the region, or an
         // unlicensed node keying up on a ham-only region. Refuse the switch here so we never
         // transmit on it; the radio driver drops the packet outright (see RadioLibInterface,
         // beaconTxConfigInvalid) rather than letting it fall through onto the current config.
@@ -265,7 +265,7 @@ void MeshBeaconBroadcastModule::rebuildCache()
         beacon.has_offer_channel = true;
         beacon.offer_channel = bcfg.broadcast_offer_channel;
         // PSK is included intentionally: this beacon is a public join-invitation.
-        // The offered channel is not secret — the PSK here is a convenience token,
+        // The offered channel is not secret - the PSK here is a convenience token,
         // not a security boundary.  Operators who want a private channel must
         // distribute the PSK out-of-band and leave offer_channel unset.
     }
@@ -273,7 +273,7 @@ void MeshBeaconBroadcastModule::rebuildCache()
     beacon.offer_preset = bcfg.broadcast_offer_preset;
     beacon.offer_region = bcfg.broadcast_offer_region;
     // Note: an empty config legitimately encodes to 0 bytes, and pb_encode_to_bytes can't distinguish
-    // that from a (here effectively impossible — buffer is max-sized) failure, so we always clear the
+    // that from a (here effectively impossible - buffer is max-sized) failure, so we always clear the
     // dirty flag. The combined send is gated on payloadCacheSize > 0, so an empty payload is never TX'd.
     payloadCacheSize = (pb_size_t)pb_encode_to_bytes(payloadCache, sizeof(payloadCache), &meshtastic_MeshBeacon_msg, &beacon);
     payloadCacheDirty = false;
@@ -291,7 +291,7 @@ void MeshBeaconBroadcastModule::sendBeaconPacket(meshtastic_MeshPacket *p, mesht
     }
 
     // perhapsEncode() keys encryption (and the channel-hash hint) off the PRIMARY channel slot, and
-    // the radio-thread channel switch only happens AFTER encryption — so a beacon on an override
+    // the radio-thread channel switch only happens AFTER encryption - so a beacon on an override
     // channel would otherwise be encrypted with the PRIMARY PSK, not the beacon channel's. Install the
     // beacon channel into the primary slot for the synchronous duration of send(), then restore.
     // Meshtastic threading is cooperative (no preemption between the swap and restore).
@@ -326,13 +326,13 @@ void MeshBeaconBroadcastModule::sendBeacon()
         // broadcast_send_as_node: commented out pending further review.
         // Spoof notes preserved for when this is re-enabled:
         //   broadcast_send_as_node overrides the source NodeNum. NOTE: this is a *node-ID* spoof
-        //   only — it rewrites the 'from' field but does NOT forge any signature. Once 'from' is
+        //   only - it rewrites the 'from' field but does NOT forge any signature. Once 'from' is
         //   not us, the packet is no longer isFromUs(), so Router::perhapsEncode() skips XEdDSA
         //   signing and receivers get an unsigned packet attributed to another node.
         //   When broadcast_send_as_node == 0 the beacon is genuinely from us and Router::perhapsEncode()
         //   signs it under the same XEdDSA broadcast policy as normal channel messages.
         //   When broadcast_send_as_node rewrites p->from, perhapsEncode() sees isFromUs()=false and
-        //   skips setting has_bitfield — must be set explicitly so receivers can classify hop_start
+        //   skips setting has_bitfield - must be set explicitly so receivers can classify hop_start
         //   correctly and so ok_to_mqtt is honoured on the spoofed packet.
         // if (bcfg.broadcast_send_as_node != 0) {
         //     p->from = bcfg.broadcast_send_as_node;
@@ -347,8 +347,8 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
     // ── Packet type decisions ────────────────────────────────────────────────
     //
-    // FLAG_LEGACY_SPLIT: when both text and offer are present, send TWO packets — A)
-    //   MESH_BEACON_APP (offer only) and B) TEXT_MESSAGE_APP (text only) — both on the SAME beacon
+    // FLAG_LEGACY_SPLIT: when both text and offer are present, send TWO packets - A)
+    //   MESH_BEACON_APP (offer only) and B) TEXT_MESSAGE_APP (text only) - both on the SAME beacon
     // radio settings, so nodes that only decode TEXT_MESSAGE_APP still receive the text. Otherwise a
     // single packet is sent (offer-only, text-only, or the combined offer+text path).
     //
@@ -361,7 +361,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
     const bool sendTextOnly = splitBoth || (!hasRadioContent && hasText);
     const bool sendCombined = !legacySplit && hasRadioContent && hasText;
 
-    // Build offer payload once — shared across all targets.
+    // Build offer payload once - shared across all targets.
     uint8_t offerBuf[meshtastic_MeshBeacon_size] = {};
     pb_size_t offerSize = 0;
     if (sendOfferOnly) {
@@ -399,7 +399,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
 
     // Dedup state: the beacon payload is identical across targets, so two targets that resolve to
     // the same effective radio config (preset + resolved region + channel) would just re-broadcast
-    // the same packet — wasted airtime and a redundant radio switch each. We skip the later one.
+    // the same packet - wasted airtime and a redundant radio switch each. We skip the later one.
     // Keyed on the *resolved* values so an explicit "current region" dedups against an UNSET one.
     EffTarget sent[4];
     meshtastic_Config_LoRaConfig_RegionCode sentRegion[4];
@@ -422,7 +422,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             tgt.preset = bt.has_preset ? bt.preset : config.lora.modem_preset;
             tgt.region = bt.region;
             // Resolve the channel from the device's channel table by index. A slot is only usable
-            // if it is actually configured (has a name or PSK — its key is needed to encrypt). An
+            // if it is actually configured (has a name or PSK - its key is needed to encrypt). An
             // out-of-range index, or a blank slot, falls back to the default channel for the target
             // preset (see beaconChannelSettings), exactly as an unset channel_index would.
             tgt.has_channel = false;
@@ -585,14 +585,14 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
 
     // NOTE: we deliberately do NOT unwrap the text into a synthesized TEXT_MESSAGE_APP for the
     // phone. The original MESH_BEACON_APP packet already flows to the client (we return CONTINUE),
-    // so a beacon-aware client renders `message` directly — injecting a copy would only duplicate
+    // so a beacon-aware client renders `message` directly - injecting a copy would only duplicate
     // it. Broadcasters that need non-beacon-aware clients to see the text use FLAG_LEGACY_SPLIT,
     // which sends a real TEXT_MESSAGE_APP over RF. We also do not fire EVENT_RECEIVED_MSG: a beacon
     // is an advisory broadcast, not a personal message, and must not wake the device from sleep.
     if (hasText)
         LOG_INFO("Beacon: received from 0x%08x: '%.40s'", mp.from, b->message);
 
-    // Cache any offer for the client app — never auto-applied.
+    // Cache any offer for the client app - never auto-applied.
     if (hasOfferContent) {
         lastReceivedOffer.valid = true;
         lastReceivedOffer.sender = mp.from;
@@ -602,7 +602,7 @@ bool MeshBeaconListenerModule::handleReceivedProtobuf(const meshtastic_MeshPacke
         lastReceivedOffer.region = b->offer_region;
         lastReceivedOffer.preset = b->offer_preset;
         lastReceivedOffer.received_at =
-            getValidTime(RTCQualityFromNet); // 0 if no RTC fix yet — consumers must not treat 0 as valid
+            getValidTime(RTCQualityFromNet); // 0 if no RTC fix yet - consumers must not treat 0 as valid
         LOG_INFO("Beacon: stored offer from 0x%08x (preset=%d)", mp.from, b->offer_preset);
     }
 

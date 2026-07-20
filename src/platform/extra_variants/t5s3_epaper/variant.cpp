@@ -418,19 +418,20 @@ void t5BacklightHandleUserInput()
 
 void t5TouchSetForcedByTimeout(bool forced)
 {
+    if (touchForcedByTimeout == forced) {
+        return;
+    }
+
     touchForcedByTimeout = forced;
     touchStateEpoch++;
     touchIndicatorRefreshPending = true;
 
     if (forced) {
-        // While timeout-forced, keep controller asleep to avoid stale IRQ chatter.
+        // Timeout only gates touch input in software. Avoid GT911 I2C here because
+        // PowerFSM same-state transitions can fire from phone contact and screen timeout.
         touchNeedsWake = false;
-        if (touchControllerReady && !touchLightSleepActive) {
-            touch.sleep();
-        }
     } else if (touchInputEnabled && touchControllerReady && !touchLightSleepActive) {
-        // Defer wake until readTouch() so I2C settles post-state transition.
-        touchNeedsWake = true;
+        touchNeedsWake = false;
     }
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS

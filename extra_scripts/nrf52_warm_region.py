@@ -8,7 +8,7 @@
 # LTO) are reserved for the WarmNodeStore record-ring (see WarmNodeStore.h). Our
 # linker scripts (nrf52840_s140_v6.ld and nrf52840_s140_v7.ld) cap the image at
 # 0xEA000, but boards on the framework-default script (FLASH ending at 0xED000) could
-# silently place code in those pages — the first warm-store save would then brick the
+# silently place code in those pages - the first warm-store save would then brick the
 # device. This turns that into a build failure.
 #
 # Image flash end = __etext + sizeof(.data) (loaded at LMA __etext); symbols from

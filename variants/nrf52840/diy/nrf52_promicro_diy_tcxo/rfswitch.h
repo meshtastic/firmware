@@ -14,7 +14,7 @@
 // DIO5 -> RFSW0_V1
 // DIO6 -> RFSW1_V2
 // DIO7 -> not connected on E80 module - note that GNSS and Wifi scanning are not possible.
-
+#ifdef USE_LR1121
 static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7, RADIOLIB_NC,
                                              RADIOLIB_NC};
 
@@ -44,6 +44,8 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 #ifndef RFSWITCH_NRF52TCXO_LR20X0_DEFINED
 #define RFSWITCH_NRF52TCXO_LR20X0_DEFINED
 #define LR20X0_RFSWITCH_NATIVE
+
+#ifdef USE_LR2021
 static const uint32_t lr20x0_rfswitch_dio_pins[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
                                                     RADIOLIB_LR2021_DIO8, RADIOLIB_NC};
 

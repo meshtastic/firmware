@@ -13,14 +13,14 @@
 // transports without recompiling the handlers.
 //
 // Inherits Print so all `print(int)`, `print(const char *)`, `print(char)`
-// helpers are available for free — the only thing implementations have to
+// helpers are available for free - the only thing implementations have to
 // supply on the write side is `write(uint8_t)` + the bulk `write(buf, len)`.
 class IStreamReadWrite : public Print
 {
   public:
     virtual ~IStreamReadWrite() = default;
 
-    // Write side — Print pure virtual + bulk override
+    // Write side - Print pure virtual + bulk override
     size_t write(uint8_t b) override = 0;
     size_t write(const uint8_t *buf, size_t len) override = 0;
     using Print::write; // bring in write(const char *str) and friends
@@ -34,7 +34,7 @@ class IStreamReadWrite : public Print
     virtual bool connected() = 0;
     void flush() override = 0; // Print::flush is virtual void with empty default
 
-    // Logging helper — used by request log line
+    // Logging helper - used by request log line
     virtual IPAddress remoteIP() = 0;
 };
 
