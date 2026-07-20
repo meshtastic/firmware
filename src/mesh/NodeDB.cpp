@@ -2176,6 +2176,16 @@ void NodeDB::loadFromDisk()
 #ifdef FSCom
     spiLock->lock();
     eventConfigMissing = !FSCom.exists(configFileName);
+    if (eventConfigMissing) {
+        const size_t totalBytes = FSCom.totalBytes();
+        const size_t usedBytes = FSCom.usedBytes();
+        eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
+        if (eventProfileStorageUnavailable) {
+            LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",
+                      static_cast<unsigned>(eventProfileStorageReservationBytes),
+                      static_cast<unsigned>(totalBytes >= usedBytes ? totalBytes - usedBytes : 0));
+        }
+    }
     spiLock->unlock();
 #endif
     bool initializedEventConfig = false;
@@ -3024,6 +3034,19 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
+#endif
+
+#if USERPREFS_EVENT_MODE
+    if (eventProfileStorageUnavailable) {
+        if (saveWhat & SEGMENT_CONFIG) {
+            LOG_WARN("Skipping event config write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CONFIG;
+        }
+        if (saveWhat & SEGMENT_CHANNELS) {
+            LOG_WARN("Skipping event channel write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CHANNELS;
+        }
+    }
 #endif
 
     if (saveWhat & SEGMENT_CONFIG) {

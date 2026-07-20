@@ -134,6 +134,16 @@ constexpr RadioProfileStoragePaths radioProfileStoragePaths(bool eventMode)
                      : RadioProfileStoragePaths{standardConfigFileName, standardChannelFileName, standardBackupFileName};
 }
 
+// Config and channel files use full-atomic writes. Reserve both complete event
+// files and their temporary copies before seeding an event profile so a full
+// filesystem cannot enter saveToDisk()'s format-and-retry path.
+static constexpr size_t eventProfileStorageReservationBytes = 2 * (meshtastic_LocalConfig_size + meshtastic_ChannelFile_size);
+
+constexpr bool hasEventProfileStorageSpace(size_t totalBytes, size_t usedBytes)
+{
+    return usedBytes <= totalBytes && totalBytes - usedBytes >= eventProfileStorageReservationBytes;
+}
+
 inline meshtastic_LocalConfig eventConfigFromStandard(const meshtastic_LocalConfig &standard,
                                                       const meshtastic_Config_LoRaConfig &eventLora)
 {
@@ -575,6 +585,11 @@ class NodeDB
     // node data during the same boot.
     bool bootInitializationInProgress = true;
     bool configLoadComplete = false;
+#if USERPREFS_EVENT_MODE
+    // The active event profile is intentionally non-durable when there was not
+    // enough room to create it safely at boot. A later boot retries the check.
+    bool eventProfileStorageUnavailable = false;
+#endif
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
