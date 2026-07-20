@@ -14,6 +14,218 @@
 #include <thread>
 #endif
 
+#ifdef SENSECAP_INDICATOR
+#include "graphics/map/RemoteSDService.h"
+#include "input/I2CKeyboardScanner.h"
+#include "mesh/IndicatorSerial.h"
+#include "mesh/comms/I2CProxy.h"
+#include "mesh/comms/LinkSpiLock.h"
+
+// Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
+// over the interdevice link.
+//
+// Retry policy: a lost frame (timeout) and a co-processor busy with card
+// maintenance (FILE_BUSY) are transient, so they are retried; a request the
+// co-processor refused (nack) or answered definitively (missing file, IO
+// error) is not. Correlation ids make retrying safe, a late response to the
+// first attempt is dropped as stale.
+class IndicatorRemoteFS : public IRemoteFS
+{
+    // A lost frame is retried a couple of times. A co-processor busy with
+    // card maintenance is a different story: mounting a card takes seconds,
+    // and the free space scan of a large card walks its whole FAT, so wait
+    // that out rather than reporting a missing tile.
+    static const int LINK_ATTEMPTS = 3;
+    static const int BUSY_ATTEMPTS = 20;
+    // card state is answered from a cache, so it is only ever busy across a
+    // mount: a much shorter wait than a file operation has to sit out
+    static const int INFO_BUSY_ATTEMPTS = 10;
+    static const uint32_t BUSY_BACKOFF_MS = 250;
+
+    // Both budgets are separate and only ever count down: a co-processor that
+    // stays busy must not be able to keep a caller here for ever. This runs on
+    // the UI task, an unbounded wait is a frozen screen.
+    struct Budget {
+        int attempts = LINK_ATTEMPTS;
+        int busy = BUSY_ATTEMPTS;
+    };
+
+    // Returns true when the request should be sent again. `answered` is
+    // false when the link itself failed (timeout), true when the
+    // co-processor replied.
+    static bool retryable(bool answered, meshtastic_FileStatus status, Budget &budget)
+    {
+        if (!answered) {
+            if (--budget.attempts <= 0)
+                return false;
+            return !sensecapIndicator->last_request_nacked(); // refused, not lost
+        }
+        if (status == meshtastic_FileStatus_FILE_BUSY) {
+            if (--budget.busy <= 0)
+                return false;
+            delay(BUSY_BACKOFF_MS);
+            return true;
+        }
+        return false;
+    }
+
+  public:
+    bool readChunk(const char *path, uint32_t offset, uint8_t *buf, uint32_t len, uint32_t *bytesRead,
+                   uint32_t *fileSize) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        SpiLockBreak spiFree;
+        Budget budget;
+        do {
+            memset(&result, 0, sizeof(result));
+            bool answered = sensecapIndicator->file_read(path, offset, len, &result);
+            if (answered && result.status == meshtastic_FileStatus_FILE_OK) {
+                uint32_t n = result.filedata.size;
+                if (n > len)
+                    n = len;
+                memcpy(buf, result.filedata.bytes, n);
+                *bytesRead = n;
+                // lv_fs positions are 32 bit, map tiles never come close
+                *fileSize = (uint32_t)result.file_size;
+                return true;
+            }
+            if (!retryable(answered, result.status, budget))
+                return false;
+        } while (true);
+    }
+
+    bool writeChunk(const char *path, uint32_t offset, const uint8_t *buf, uint32_t len, bool create) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        SpiLockBreak spiFree;
+        Budget budget;
+        bool retried = false;
+        do {
+            memset(&result, 0, sizeof(result));
+            bool answered = sensecapIndicator->file_write(path, offset, buf, len, create, &result);
+            if (answered) {
+                if (result.status == meshtastic_FileStatus_FILE_OK)
+                    return true;
+                // An append whose first attempt landed but whose response was
+                // lost is refused as an offset conflict, and the file already
+                // holds this chunk: that is the outcome we wanted
+                if (retried && !create && result.status == meshtastic_FileStatus_FILE_OFFSET_CONFLICT &&
+                    result.file_size == (uint64_t)offset + len)
+                    return true;
+            }
+            if (!retryable(answered, result.status, budget))
+                return false;
+            retried = true;
+        } while (true);
+    }
+
+    bool sdInfo(RemoteSdInfo &info) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        SpiLockBreak spiFree;
+        meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
+        // A mount takes up to two seconds. Waiting it out here is worth it (an
+        // empty slot reported once sticks in the UI), but this runs on the UI
+        // task, so the wait is bounded well below what a user would call a
+        // hang, and a card that stays busy longer is simply asked again later.
+        Budget budget;
+        budget.busy = INFO_BUSY_ATTEMPTS; // a mount, not a whole FAT scan
+        while (true) {
+            result = meshtastic_SdCardInfo_init_zero;
+            bool answered = sensecapIndicator->sd_info(&result);
+            if (answered && !result.busy)
+                break;
+            meshtastic_FileStatus status = answered ? meshtastic_FileStatus_FILE_BUSY : meshtastic_FileStatus_FILE_UNSPECIFIED;
+            if (!retryable(answered, status, budget))
+                return false;
+        }
+        info.present = result.present;
+        info.cardType = (uint8_t)result.card_type;
+        info.fatType = (uint8_t)result.fat_type;
+        info.cardSize = result.card_size;
+        info.usedBytes = result.used_bytes;
+        info.freeBytes = result.free_bytes;
+        info.statsValid = result.stats_valid;
+        info.unformatted = result.unformatted;
+        return true;
+    }
+
+    bool sdEject(void) override { return sdCommand(meshtastic_SdCommand_SD_EJECT); }
+    bool sdMount(void) override { return sdCommand(meshtastic_SdCommand_SD_MOUNT); }
+    bool sdFormat(void) override
+    {
+        // wiping the card takes seconds; the co-processor answers right away
+        // and mounts the fresh filesystem afterwards
+        return sdCommand(meshtastic_SdCommand_SD_FORMAT);
+    }
+
+    bool remove(const char *path) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        SpiLockBreak spiFree;
+        Budget budget;
+        do {
+            memset(&result, 0, sizeof(result));
+            bool answered = sensecapIndicator->file_remove(path, &result);
+            // delete is idempotent on the co-processor: a file that is
+            // already gone reports OK, so a retry after a lost response does
+            // not have to be guessed at here
+            if (answered && result.status == meshtastic_FileStatus_FILE_OK)
+                return true;
+            if (!retryable(answered, result.status, budget))
+                return false;
+        } while (true);
+    }
+
+    bool listDir(const char *path, std::set<std::string> &entries) override
+    {
+        if (!sensecapIndicator)
+            return false;
+        SpiLockBreak spiFree;
+        uint32_t offset = 0;
+        while (true) {
+            bool got_page = false;
+            Budget budget;
+            while (!got_page) {
+                memset(&listing, 0, sizeof(listing));
+                bool answered = sensecapIndicator->list_directory(path, offset, &listing);
+                if (answered && listing.status == meshtastic_FileStatus_FILE_OK)
+                    got_page = true;
+                else if (!retryable(answered, listing.status, budget))
+                    return false;
+            }
+            if (!got_page)
+                return false;
+            for (pb_size_t i = 0; i < listing.filenames_count; i++)
+                entries.insert(listing.filenames[i]);
+            offset += listing.filenames_count;
+            if (listing.filenames_count == 0 || offset >= listing.total_count)
+                break;
+        }
+        return true;
+    }
+
+  private:
+    bool sdCommand(meshtastic_SdCommand command)
+    {
+        if (!sensecapIndicator)
+            return false;
+        SpiLockBreak spiFree;
+        meshtastic_SdCardInfo state = meshtastic_SdCardInfo_init_zero;
+        return sensecapIndicator->sd_command(command, &state);
+    }
+
+    // Several KB each, kept off the UI task stack. All file operations
+    // originate from the single UI task.
+    meshtastic_FileTransfer result;
+    meshtastic_DirectoryListing listing;
+};
+#endif
+
 DeviceScreen *deviceScreen = nullptr;
 
 #ifndef TFT_TASK_STACK_SIZE
@@ -32,7 +244,14 @@ void tft_task_handler(void *param = nullptr)
 {
     while (true) {
         spiLock->lock();
+#ifdef SENSECAP_INDICATOR
+        // lets the remote FS hand the bus back while it waits on the link
+        spiLockHolder = xTaskGetCurrentTaskHandle();
+#endif
         deviceScreen->task_handler();
+#ifdef SENSECAP_INDICATOR
+        spiLockHolder = nullptr;
+#endif
         spiLock->unlock();
         deviceScreen->sleep();
     }
@@ -40,6 +259,12 @@ void tft_task_handler(void *param = nullptr)
 
 void tftSetup(void)
 {
+#ifdef SENSECAP_INDICATOR
+    RemoteSDService::setBackend(new IndicatorRemoteFS());
+    // the second bus is bridged to the RP2040, keep the keyboard scan off the
+    // uninitialized local Wire1
+    I2CKeyboardScanner::setSecondaryBus(i2cProxy);
+#endif
 #ifndef ARCH_PORTDUINO
     deviceScreen = &DeviceScreen::create();
     PacketAPI::create(PacketServer::init());

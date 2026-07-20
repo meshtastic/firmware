@@ -1,6 +1,7 @@
 #include "gps/RTC.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
+#include "detect/ScanI2CTwoWire.h"
 #include "main.h"
 #include "modules/NodeInfoModule.h"
 #include <Throttle.h>
@@ -97,7 +98,7 @@ RTCSetResult readFromRTC()
         uint32_t now = millis();
         Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
-        rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+        rtc.initI2C(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
 #else
         rtc.initI2C();
 #endif
@@ -146,7 +147,7 @@ RTCSetResult readFromRTC()
         uint32_t now = millis();
 
 #if WIRE_INTERFACES_COUNT == 2
-        rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+        rtc.begin(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
 #else
         rtc.begin(Wire);
 #endif
@@ -315,7 +316,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         if (rtc_found.address == RV3028_RTC) {
             Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
-            rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+            rtc.initI2C(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
 #else
             rtc.initI2C();
 #endif
@@ -340,7 +341,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #endif
 
 #if WIRE_INTERFACES_COUNT == 2
-            rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+            rtc.begin(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
 #else
             rtc.begin(Wire);
 #endif

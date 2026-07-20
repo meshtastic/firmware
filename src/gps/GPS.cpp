@@ -46,7 +46,9 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 #define GPS_SERIAL_PORT Serial1
 #endif
 
-#if defined(ARCH_NRF52)
+#if defined(SENSECAP_INDICATOR)
+UARTProxy *GPS::_serial_gps = nullptr; // assigned in createGps(), see there
+#elif defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
 HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
@@ -1428,6 +1430,21 @@ void GPS::publishUpdate()
 
 int32_t GPS::runOnce()
 {
+#if defined(SENSECAP_INDICATOR)
+    // No model probe on the bridged fake UART (the module only streams
+    // NMEA), but the user's GPS mode setting must still be honored
+    if (!GPSInitFinished) {
+        if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            LOG_INFO("GPS set to not-present. Skip probe");
+            return disable();
+        }
+        if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+            return disable();
+        }
+        GPSInitFinished = true;
+        publishUpdate();
+    }
+#else
     if (!GPSInitFinished) {
         if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
             LOG_INFO("GPS set to not-present. Skip probe");
@@ -1448,6 +1465,7 @@ int32_t GPS::runOnce()
         GPSInitFinished = true;
         publishUpdate();
     }
+#endif
 
     // ======================== GPS_ACTIVE state ========================
     // In GPS_ACTIVE state, GPS is powered on and we're receiving NMEA messages.
@@ -1910,8 +1928,16 @@ std::unique_ptr<GPS> GPS::createGps()
     } else
         return nullptr;
 #endif
+#if defined(SENSECAP_INDICATOR)
+    // assigned at runtime, static initialization order across translation
+    // units is undefined
+    _serial_gps = uartProxy;
+    if (!_serial_gps)
+        return nullptr;
+#else
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
+#endif
 
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
@@ -1972,8 +1998,12 @@ std::unique_ptr<GPS> GPS::createGps()
         _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
+#if defined(SENSECAP_INDICATOR)
+        LOG_DEBUG("Use the RP2040 tunnel for GPS, no local pins");
+#else
         LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
         LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
+#endif
 
 //  ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
