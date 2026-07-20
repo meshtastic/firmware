@@ -2622,7 +2622,7 @@ void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
     // Tack on a bell character if requested
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Append Null Terminator
         p->decoded.payload.size++;
