@@ -772,6 +772,103 @@ void test_E9_decoded_partial_signature_from_nonsigner_dropped(void)
     TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "partial signature must be dropped as malformed");
 }
 
+// Build an unsigned broadcast whose inner message is padded with an unknown field, and pin that the
+// padding pushes the RAW size past the fit threshold - the exemption the attacker is buying - while
+// the frame stays sendable. Without canonical inner sizing these packets are wrongly accepted.
+static meshtastic_MeshPacket makePayloadPaddedBroadcast(meshtastic_PortNum port, const pb_msgdesc_t *fields, const void *inner,
+                                                        size_t padLen)
+{
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, port, 0);
+    const size_t innerLen = pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), fields, inner);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, innerLen, "failed to encode the spoofed inner message");
+    p.decoded.payload.size =
+        innerLen + appendUnknownField(p.decoded.payload.bytes + innerLen, sizeof(p.decoded.payload.bytes) - innerLen, padLen);
+
+    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "padding must push the raw size past the fit threshold");
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, encodedDataSize(&p.decoded) + MESHTASTIC_HEADER_LENGTH,
+                                      "padded frame must still be one a radio could send");
+    return p;
+}
+
+// E10: unknown fields buried inside Data.payload are discarded by the module's own pb_decode, so
+// they must not sway the downgrade decision the way A10 already pins for Data-level unknown fields.
+void test_E10_decoded_unsigned_position_padded_inside_payload_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Position pos = meshtastic_Position_init_zero;
+    pos.has_latitude_i = pos.has_longitude_i = true;
+    pos.latitude_i = 371234567;
+    pos.longitude_i = -1221234567;
+
+    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg, &pos, 163);
+
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned Position from a signer must be dropped");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E11: over-correction guard. Telemetry (272 bytes max) and Waypoint (199) can legitimately exceed
+// the signable budget, so canonical sizing must not shrink an honest one into the drop range.
+void test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    t.which_variant = meshtastic_Telemetry_host_metrics_tag;
+    t.variant.host_metrics.uptime_seconds = 123456;
+    t.variant.host_metrics.has_user_string = true;
+    memset(t.variant.host_metrics.user_string, 'x', sizeof(t.variant.host_metrics.user_string) - 1);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TELEMETRY_APP, 0);
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Telemetry_msg, &t);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, p.decoded.payload.size, "failed to encode the oversized Telemetry");
+
+    // Every byte here is a field this build understands, so canonical sizing must leave it alone.
+    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "telemetry must be too big to sign, else the test is vacuous");
+
+    TEST_ASSERT_TRUE_MESSAGE(checkXeddsaReceivePolicy(&p), "honest oversized telemetry from a signer must not be dropped");
+}
+
+// E12: E10 for the Waypoint branch of the canonical-sizing switch.
+void test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Waypoint w = meshtastic_Waypoint_init_zero;
+    w.id = 42;
+    w.has_latitude_i = w.has_longitude_i = true;
+    w.latitude_i = 371234567;
+    w.longitude_i = -1221234567;
+    strcpy(w.name, "spoofed");
+
+    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_WAYPOINT_APP, &meshtastic_Waypoint_msg, &w, 150);
+
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned Waypoint from a signer must be dropped");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E13: E10 for the NodeInfo/User branch. Router drops it before rebroadcast; NodeInfoModule's own
+// check (Group C) is receiver-local and would not stop the packet propagating.
+void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_User u = meshtastic_User_init_zero;
+    strcpy(u.id, "!0b0b0b0b");
+    strcpy(u.long_name, "spoofed node");
+    strcpy(u.short_name, "SPF");
+
+    meshtastic_MeshPacket p = makePayloadPaddedBroadcast(meshtastic_PortNum_NODEINFO_APP, &meshtastic_User_msg, &u, 150);
+
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned NodeInfo from a signer must be dropped");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -817,6 +914,10 @@ void setup()
     RUN_TEST(test_E7_decoded_unsigned_pki_from_signer_accepted);
     RUN_TEST(test_E8_decoded_partial_signature_from_signer_dropped);
     RUN_TEST(test_E9_decoded_partial_signature_from_nonsigner_dropped);
+    RUN_TEST(test_E10_decoded_unsigned_position_padded_inside_payload_dropped);
+    RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
+    RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
+    RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
 
     exit(UNITY_END());
 }
