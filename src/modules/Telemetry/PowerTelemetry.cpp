@@ -275,25 +275,27 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        if (!p)
-            return false;
-        p->to = dest;
-        p->decoded.want_response = false;
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-        else
-            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
-
-        lastMeasurementPacket = packetPool.allocCopy(*p);
-        if (phoneOnly) {
-            LOG_INFO("Send packet to phone");
-            service->sendToPhone(p);
+        if (!p) {
+            validTelemetry = false;
         } else {
-            LOG_INFO("Send packet to mesh");
-            service->sendToMesh(p, RX_SRC_LOCAL, true);
+            p->to = dest;
+            p->decoded.want_response = false;
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            else
+                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+            // release previous packet before occupying a new spot
+            if (lastMeasurementPacket != nullptr)
+                packetPool.release(lastMeasurementPacket);
+
+            lastMeasurementPacket = packetPool.allocCopy(*p);
+            if (phoneOnly) {
+                LOG_INFO("Send packet to phone");
+                service->sendToPhone(p);
+            } else {
+                LOG_INFO("Send packet to mesh");
+                service->sendToMesh(p, RX_SRC_LOCAL, true);
+            }
         }
     }
 
