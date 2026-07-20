@@ -315,9 +315,14 @@ for pref in userPrefs:
         pref_flags.append("-D" + pref + "=" + env.StringifyMacro(userPrefs[pref]) + "")
 
 # General options that are passed to the C and C++ compilers
-# Calculate unix epoch for current day (midnight)
-current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-build_epoch = int(current_date.timestamp())
+# Calculate unix epoch for current day (midnight), unless a target pins it for
+# reproducible local and CI artifacts.
+configured_build_epoch = env.GetProjectOption("custom_build_epoch", None)
+if configured_build_epoch is not None:
+    build_epoch = int(configured_build_epoch)
+else:
+    current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    build_epoch = int(current_date.timestamp())
 
 flags = [
         "-DAPP_VERSION=" + verObj["long"],

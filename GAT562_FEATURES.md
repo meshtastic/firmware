@@ -54,3 +54,8 @@ platformio run -e gat562_t9
 Actions uses PlatformIO 6.1.19, the same version used for the local stable build.
 The Nordic platform, framework commit, libraries, board definition, build flags, and
 source commit are shared by local and Actions builds.
+
+Both GAT562 targets pin `custom_build_epoch` to `1784476800`, matching the stable
+2026-07-20 test build. This prevents the official date-based build flag from changing
+between local and Actions builds. Other Meshtastic targets retain the official dynamic
+build epoch behavior.
