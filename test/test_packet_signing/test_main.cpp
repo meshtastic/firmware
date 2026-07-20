@@ -772,6 +772,64 @@ void test_E9_decoded_partial_signature_from_nonsigner_dropped(void)
     TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "partial signature must be dropped as malformed");
 }
 
+// E10: padding hidden INSIDE Data.payload must not buy an exemption. A10 closed Data-level unknown
+// fields, but payload is an opaque bytes field: unknown fields within the Position ride along in
+// payload.size, are discarded by PositionModule's own pb_decode, and would otherwise inflate the
+// size past the signable budget while the spoofed coordinates still land. Sizing the canonical
+// re-encoding of the inner message strips the padding, so the downgrade drop still fires.
+void test_E10_decoded_unsigned_position_padded_inside_payload_dropped(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Position pos = meshtastic_Position_init_zero;
+    pos.has_latitude_i = pos.has_longitude_i = true;
+    pos.latitude_i = 371234567;
+    pos.longitude_i = -1221234567;
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_POSITION_APP, 0);
+    const size_t posLen =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Position_msg, &pos);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, posLen, "failed to encode the spoofed Position");
+    p.decoded.payload.size =
+        posLen + appendUnknownField(p.decoded.payload.bytes + posLen, sizeof(p.decoded.payload.bytes) - posLen, 163);
+
+    // Without canonical inner sizing the padded Data looks too big to have been signed, which is
+    // exactly the exemption the attacker is buying. Pin that, else the test passes vacuously.
+    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "padding must push the raw size past the fit threshold");
+    TEST_ASSERT_LESS_OR_EQUAL_MESSAGE(MAX_LORA_PAYLOAD_LEN, encodedDataSize(&p.decoded) + MESHTASTIC_HEADER_LENGTH,
+                                      "padded frame must still be one a radio could send");
+
+    TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), "payload-padded unsigned Position from a signer must be dropped");
+    TEST_ASSERT_FALSE(p.xeddsa_signed);
+}
+
+// E11: E10's over-correction guard. Some signable types are legitimately too big to sign
+// (Telemetry maxes at 272 bytes, Waypoint at 199), and their senders correctly leave them
+// unsigned. Canonical sizing must not shrink such a message into the drop range: an honest
+// oversized HostMetrics from a signer stays accepted.
+void test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted(void)
+{
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
+    t.which_variant = meshtastic_Telemetry_host_metrics_tag;
+    t.variant.host_metrics.uptime_seconds = 123456;
+    t.variant.host_metrics.has_user_string = true;
+    memset(t.variant.host_metrics.user_string, 'x', sizeof(t.variant.host_metrics.user_string) - 1);
+
+    meshtastic_MeshPacket p = makeDecoded(REMOTE_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TELEMETRY_APP, 0);
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_Telemetry_msg, &t);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, p.decoded.payload.size, "failed to encode the oversized Telemetry");
+
+    // Every byte here is a field this build understands, so canonical sizing must leave it alone.
+    TEST_ASSERT_FALSE_MESSAGE(signedEncodingFits(&p.decoded), "telemetry must be too big to sign, else the test is vacuous");
+
+    TEST_ASSERT_TRUE_MESSAGE(checkXeddsaReceivePolicy(&p), "honest oversized telemetry from a signer must not be dropped");
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -817,6 +875,8 @@ void setup()
     RUN_TEST(test_E7_decoded_unsigned_pki_from_signer_accepted);
     RUN_TEST(test_E8_decoded_partial_signature_from_signer_dropped);
     RUN_TEST(test_E9_decoded_partial_signature_from_nonsigner_dropped);
+    RUN_TEST(test_E10_decoded_unsigned_position_padded_inside_payload_dropped);
+    RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
 
     exit(UNITY_END());
 }
