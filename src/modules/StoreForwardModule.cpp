@@ -306,6 +306,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForward &payload)
 {
     meshtastic_MeshPacket *p = allocDataProtobuf(payload);
+    if (!p)
+        return;
 
     p->to = dest;
 

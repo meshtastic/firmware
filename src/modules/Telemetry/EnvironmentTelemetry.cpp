@@ -661,6 +661,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.soil_moisture);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
+        if (!p)
+            return false;
         p->to = dest;
         p->decoded.want_response = false;
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)

@@ -275,6 +275,8 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
+        if (!p)
+            return false;
         p->to = dest;
         p->decoded.want_response = false;
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
