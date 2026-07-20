@@ -80,7 +80,9 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   native), 500 (medium), 400 (small), 250 (nRF52840 - deliberately class-deviant for heap
   headroom), 0 when `HAS_TRAFFIC_MANAGEMENT=0`. Variant-overridable.
 - **Eviction:** linear scan; insertion on a full cache evicts the stalest entry,
-  preferring entries without a `next_hop` hint.
+  preferring to keep entries with a `next_hop` hint **or** a cached special (non-`CLIENT`)
+  role - the long-tail state this cache exists to retain (`findOrCreateEntry`'s `preferred`
+  test covers both, not just `next_hop`).
 - **Persistence:** none - RAM/PSRAM only, rebuilt from traffic.
 
 ## 4. TMM NodeInfo payload cache (extended, the ephemeral third tier)
@@ -142,8 +144,11 @@ the write-through. Full-identity commits funnel through `NodeDB::updateUser()`; 
 commits (admin-channel learn in `Router::perhapsDecode`, manual verification in
 `KeyVerificationModule`) funnel through `NodeDB::commitRemoteKey()`, which carries an
 explicit `KeyCommitTrust` provenance (`ManuallyVerified` maps to `proven=true` in this
-cache). Never assign `info->public_key` directly - the cache would silently diverge until
-the next reconcile.
+cache). Never assign `info->public_key` directly when **learning or rotating a remote
+key** - the cache would silently diverge until the next reconcile. (The lone direct write
+in `getOrCreateMeshNode()`'s warm-tier re-admission is exempt: it restores a key the warm
+tier already holds, which this cache already tracks as a member, so nothing new is learned
+and the hourly reconcile re-seeds it even if the packet path had LRU-evicted that slot.)
 
 **Enable gate:** the write-through hooks, the sweep, the packet path, **and the
 `copyPublicKey()`/`copyUser()` accessors** all no-op while `moduleConfig.has_traffic_management`

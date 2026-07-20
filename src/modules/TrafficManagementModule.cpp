@@ -655,9 +655,10 @@ void TrafficManagementModule::maintainNodeInfoCacheLocked()
 
 void TrafficManagementModule::onNodeIdentityCommitted(NodeNum node, const meshtastic_User &user, bool signerKnown)
 {
-    // Same gate as handleReceived()/runOnce(): with the module disabled, maintenance
-    // (sweep + reconcile) never runs, so the hooks must not fill the cache either -
-    // content and maintenance stay keyed to the same condition.
+    // Same gate as handleReceived()/runOnce(): content and maintenance stay keyed to the
+    // same condition. Defensive - the object is only constructed while the flag is set
+    // (Modules.cpp) and no live path clears it (AdminModule only writes it true; config
+    // changes reboot), so a disabled module never reaches these hooks with a live cache.
     if (!moduleConfig.has_traffic_management)
         return;
     if (node == 0 || (nodeDB && node == nodeDB->getNodeNum()))
