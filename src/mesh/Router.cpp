@@ -575,7 +575,14 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier), else
     // fall back to a not-yet-committed key held during an in-progress key-verification handshake.
     meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic) || crypto->getPendingPublicKey(p->from, remotePublic);
+    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
+    // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
+    // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
+    bool havePendingKey = false;
+    if (!haveRemoteKey) {
+        havePendingKey = crypto->getPendingPublicKey(p->from, remotePublic);
+        haveRemoteKey = havePendingKey;
+    }
 
     meshtastic_NodeInfoLite *ourNode = nullptr;
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
@@ -583,8 +590,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // Try the sender's known key first, then each configured admin key so an authorized admin can
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
+        bool viaPendingKey = false;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
+            viaPendingKey = havePendingKey;
         }
         for (int i = 0; i < 3 && !decrypted; i++) {
             if (config.security.admin_key[i].size != 32)
@@ -605,6 +614,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
             if (pb_decode_from_bytes(bytes, payloadSize, &meshtastic_Data_msg, &decodedtmp) &&
                 decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                if (viaPendingKey && decodedtmp.portnum != meshtastic_PortNum_KEY_VERIFICATION_APP) {
+                    // The pending key only proves the handshake initiator holds it, not that they are
+                    // p->from. Beyond the exchange it would let them send DMs that look authenticated.
+                    LOG_WARN("Refusing pending-key decrypt of port %u from 0x%08x", (unsigned)decodedtmp.portnum, p->from);
+                    return DecodeState::DECODE_FAILURE;
+                }
                 decrypted = true;
                 rawSize = payloadSize; // commit the overhead subtraction only on full success
                 LOG_INFO("Packet decrypted using PKI!");
