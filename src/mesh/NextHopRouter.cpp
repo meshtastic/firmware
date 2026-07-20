@@ -403,8 +403,10 @@ int32_t NextHopRouter::doRetransmissions()
                             trafficManagementModule->clearNextHop(p.packet->to);
                         }
 #endif
-                        if (auto *copy = packetPool.allocCopy(*p.packet))
-                            FloodingRouter::send(copy);
+                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                packetPool.release(copy);
+                        }
                     } else {
 #if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
                         // M4 (gated): if the route isn't proven healthy, don't spend a second directed
@@ -418,15 +420,21 @@ int32_t NextHopRouter::doRetransmissions()
                             meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                             if (sentTo)
                                 sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
-                            if (auto *copy = packetPool.allocCopy(*p.packet))
-                                FloodingRouter::send(copy);
+                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                                if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                    packetPool.release(copy);
+                            }
                         } else {
-                            if (auto *copy = packetPool.allocCopy(*p.packet))
-                                NextHopRouter::send(copy);
+                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                                if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                    packetPool.release(copy);
+                            }
                         }
 #else
-                        if (auto *copy = packetPool.allocCopy(*p.packet))
-                            NextHopRouter::send(copy);
+                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                packetPool.release(copy);
+                        }
 #endif
                     }
                 } else {
