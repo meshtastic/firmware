@@ -385,8 +385,12 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Decide (and with sendResponse, emit) a spoofed direct NodeInfo reply for a unicast request.
     bool shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse);
 
-    // Replies go to the requesting packet's unauthenticated `from`, so space them per requester to bound
-    // what any one node can be made to receive, plus a global floor on airtime.
+    // A direct NodeInfo response is addressed from the requesting packet's `from`, which is
+    // unauthenticated. One request therefore makes every neighbour holding the target in cache transmit
+    // at an address the requester chose. Spacing replies per requester bounds how much any single node
+    // can be made to receive; a global floor bounds the airtime this feature can consume overall. This
+    // throttle is a fixed 8-slot table in internal RAM (not the PSRAM NodeInfo cache), so it protects
+    // the fallback path on non-PSRAM builds identically to the cache path. Guarded by cacheLock.
     static constexpr uint32_t kDirectResponsePerRequestorMs = 60'000UL;
     static constexpr uint32_t kDirectResponseGlobalMs = 1'000UL;
     static constexpr size_t kDirectResponseTrackedRequestors = 8;

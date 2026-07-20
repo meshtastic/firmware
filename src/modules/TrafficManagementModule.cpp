@@ -1535,9 +1535,11 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         return false;
     }
 
-    // Response throttle: the reply target is attacker-controlled and direct responses bypass
+    // Per-target throttle: the reply target is attacker-controlled and direct responses bypass
     // the rate limiter, so bound spoofed replies (cache path: per-target respTick; fallback:
-    // global stamp). Accepted: per-target keying doesn't bound aggregate TX across targets.
+    // global stamp). Accepted: per-target keying doesn't bound aggregate TX across targets - the
+    // per-requestor + global-floor throttle below closes that gap and covers the non-PSRAM
+    // fallback path too.
     const bool throttled =
         usedFallback ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
                      : (cachedHasResponded && static_cast<uint8_t>(currentRespTick() - cachedRespTick) < kNodeInfoThrottleTicks);
@@ -1548,6 +1550,18 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         // was lost on a noisy link would otherwise get silence for the whole window. Repeats
         // of the same packet id are already absorbed by the router's duplicate detection.
         TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x; forwarding request instead", p->to);
+        return false;
+    }
+
+    // Per-requestor + global-floor throttle: the reply is addressed to the requesting packet's
+    // unauthenticated `from`, so bound how much any single node can be made to receive and cap the
+    // total airtime this feature consumes - the aggregate-TX gap the per-target throttle above
+    // leaves open. This 8-slot table lives in internal RAM (not the PSRAM NodeInfo cache), so it
+    // throttles the non-PSRAM fallback path identically. Checked here, once a reply would actually
+    // go out, so requests declined for other reasons do not consume the budget; returning false
+    // forwards the request rather than black-holing it, as above.
+    if (!directResponseAllowed(getFrom(p), clockMs())) {
+        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request instead", getFrom(p));
         return false;
     }
 
