@@ -344,7 +344,7 @@ void InputBroker::Init()
 #else
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
 #endif
-#if defined(GAT562)
+#if defined(GAT562_T9_KEYBOARD)
     _pinNum = BUTTON_PIN;
 #endif
 #ifndef BUTTON_ACTIVE_LOW

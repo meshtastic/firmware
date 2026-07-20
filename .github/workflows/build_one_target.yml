@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: 3.x
           cache: pip
-      - run: pip install -U platformio
+      - run: pip install "platformio==6.1.19"
       - name: Generate matrix
         id: jsonStep
         env:

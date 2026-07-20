@@ -13,7 +13,7 @@
       ["0x239A", "0x002A"],
       ["0x239A", "0x802A"]
     ],
-    "usb_product": "GAT562 Mesh Trial Tracker",
+    "usb_product": "GAT562 Family",
     "mcu": "nrf52840",
     "variant": "gat562_mesh_trial_tracker",
     "bsp": {
@@ -36,7 +36,7 @@
     "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino", "freertos"],
-  "name": "GAT562 Mesh Trial Tracker",
+  "name": "GAT562 Family",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,

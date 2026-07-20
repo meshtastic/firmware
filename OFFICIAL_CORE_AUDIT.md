@@ -1,37 +1,69 @@
 # Official core audit
 
-This branch keeps Meshtastic communication, persistence, PKI, Bluetooth
-security, and protobuf behavior at official commit
-d4aa7760ccffd100ddc7dacd6875e6eee5df4f11.
+## Locked official base
 
-## Protected files
+- Repository: `meshtastic/firmware`
+- Commit: `d4aa7760ccffd100ddc7dacd6875e6eee5df4f11`
+- Custom release branch: `gat-iot`
 
-The following paths have no branch diff:
+The GAT562 branch keeps the following communication and security paths byte-for-byte
+identical to the locked official base:
 
-- src/mesh/NodeDB.cpp
-- src/MessageStore.cpp
-- src/modules/TextMessageModule.cpp
-- src/modules/RoutingModule.cpp
-- src/modules/AdminModule.cpp
-- src/mesh/PhoneAPI.cpp
-- src/mesh/CryptoEngine.cpp
-- protobufs/
+- `src/MessageStore.cpp`
+- `src/modules/TextMessageModule.cpp`
+- `src/modules/RoutingModule.cpp`
+- `src/modules/AdminModule.cpp`
+- `src/mesh/PhoneAPI.cpp`
+- `src/mesh/CryptoEngine.cpp`
+- `src/mesh/Router.cpp`
+- `src/mesh/ReliableRouter.cpp`
+- `src/mesh/FloodingRouter.cpp`
+- `src/mesh/NextHopRouter.cpp`
+- `src/mesh/MeshService.cpp`
+- `src/mesh/Channels.cpp`
+- `src/security/`
+- `protobufs/`
 
-No node limits, warm-node storage counts, message persistence settings, packet
-formats, channel rules, PKI keys, or BLE bonding/security callbacks are
-overridden.
+## Explicit GAT562 exceptions
 
-## Narrow integration points
+These files intentionally differ and must be reviewed after every official rebase:
 
-- NRF52Bluetooth.cpp changes only the advertised local name passed to
-  Bluefruit.setName(). Pairing, bonding, GATT, connect, and disconnect logic are
-  unchanged.
-- RadioLibInterface.h adds read-only RSSI/SNR display accessors.
-- CannedMessageModule.cpp opens the local T9 editor and later returns text to
-  the official canned-message send state. It does not replace packet creation,
-  PKI lookup, routing, sendToMesh(), or message persistence.
-- ExternalNotificationModule.cpp changes only GAT562 audio presentation.
+- `src/mesh/NodeDB.cpp`: default GAT562 owner identity, fixed GPS pins, and the
+  one-time onboard telemetry migration. It must not alter keys, favorites, node
+  removal, Bluetooth bonds, or factory-reset behavior.
+- `src/modules/PositionModule.cpp` and `src/mesh/PositionPrecision.cpp`: an
+  authoritative time-only `POSITION_APP` broadcast every 30 minutes and preservation
+  of its trusted source marker. Packet schema, encryption, routing, and PKI remain
+  official.
+- `src/mesh/RadioInterface.cpp`: CN and EU433 maximum power are set to 22 dBm.
+- `src/platform/nrf52/NRF52Bluetooth.cpp`: the fixed `GAT562_XXXX` advertising name
+  and full-screen PIN presentation. Pairing, bonding, GATT, security callbacks,
+  connect, and disconnect behavior remain official.
+- `src/modules/CannedMessageModule.cpp`: local preset editing and a non-blocking
+  post-send confirmation tone. Official packet construction and send path remain in use.
+- `src/modules/ExternalNotificationModule.cpp`: GAT562 buzzer and WS2812 presentation.
+- `src/mesh/RadioLibInterface.h`: read-only RSSI and SNR display accessors.
 
-Run this audit after every official rebase:
+## Rebase guard
 
-    git diff --name-status d4aa7760 -- src/mesh/NodeDB.cpp src/MessageStore.cpp src/modules/TextMessageModule.cpp src/modules/RoutingModule.cpp src/modules/AdminModule.cpp src/mesh/PhoneAPI.cpp src/mesh/CryptoEngine.cpp protobufs
+Run before every release and compare the output with this allowlist:
+
+```sh
+git diff --name-status d4aa7760..HEAD -- \
+  src/MessageStore.cpp \
+  src/modules/TextMessageModule.cpp \
+  src/modules/RoutingModule.cpp \
+  src/modules/AdminModule.cpp \
+  src/mesh/PhoneAPI.cpp \
+  src/mesh/CryptoEngine.cpp \
+  src/mesh/Router.cpp \
+  src/mesh/ReliableRouter.cpp \
+  src/mesh/FloodingRouter.cpp \
+  src/mesh/NextHopRouter.cpp \
+  src/mesh/MeshService.cpp \
+  src/mesh/Channels.cpp \
+  src/security protobufs
+```
+
+The command must produce no output. Any output blocks firmware publication until it
+has been separately reviewed and tested.
