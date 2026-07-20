@@ -121,8 +121,11 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // receives it when we get our own packet back. Then we'll stop our retransmissions.
         if (isFromUs(e.packet)) {
             auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+            if (!pAck)
+                return;
             pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
-            router->sendLocal(pAck);
+            if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
+                packetPool.release(pAck);
         } else {
             LOG_INFO("Ignore downlink message we originally sent");
         }
