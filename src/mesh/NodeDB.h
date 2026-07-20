@@ -112,15 +112,13 @@ extern meshtastic_Position localPosition;
 static constexpr const char *deviceStateFileName = "/prefs/device.proto";
 static constexpr const char *legacyPrefFileName = "/prefs/db.proto";
 static constexpr const char *nodeDatabaseFileName = "/prefs/nodes.proto";
-// Event builds keep their radio profile in separate files.  A normal firmware
-// image therefore resumes the user's ordinary config and channel table without
-// a client-mediated restore after an event OTA.
-static constexpr const char *standardConfigFileName = "/prefs/config.proto";
-static constexpr const char *standardChannelFileName = "/prefs/channels.proto";
-static constexpr const char *eventConfigFileName = "/prefs/event-config.proto";
-static constexpr const char *eventChannelFileName = "/prefs/event-channels.proto";
-static constexpr const char *standardBackupFileName = "/backups/backup.proto";
-static constexpr const char *eventBackupFileName = "/backups/event-backup.proto";
+// Event builds isolate radio profiles so normal firmware resumes its config and channels after OTA.
+static constexpr const char *STANDARD_CONFIG_FILE_NAME = "/prefs/config.proto";
+static constexpr const char *STANDARD_CHANNEL_FILE_NAME = "/prefs/channels.proto";
+static constexpr const char *EVENT_CONFIG_FILE_NAME = "/prefs/event-config.proto";
+static constexpr const char *EVENT_CHANNEL_FILE_NAME = "/prefs/event-channels.proto";
+static constexpr const char *STANDARD_BACKUP_FILE_NAME = "/backups/backup.proto";
+static constexpr const char *EVENT_BACKUP_FILE_NAME = "/backups/event-backup.proto";
 
 struct RadioProfileStoragePaths {
     const char *config;
@@ -130,18 +128,16 @@ struct RadioProfileStoragePaths {
 
 constexpr RadioProfileStoragePaths radioProfileStoragePaths(bool eventMode)
 {
-    return eventMode ? RadioProfileStoragePaths{eventConfigFileName, eventChannelFileName, eventBackupFileName}
-                     : RadioProfileStoragePaths{standardConfigFileName, standardChannelFileName, standardBackupFileName};
+    return eventMode ? RadioProfileStoragePaths{EVENT_CONFIG_FILE_NAME, EVENT_CHANNEL_FILE_NAME, EVENT_BACKUP_FILE_NAME}
+                     : RadioProfileStoragePaths{STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME};
 }
 
-// Config and channel files use full-atomic writes. Reserve both complete event
-// files and their temporary copies before seeding an event profile so a full
-// filesystem cannot enter saveToDisk()'s format-and-retry path.
-static constexpr size_t eventProfileStorageReservationBytes = 2 * (meshtastic_LocalConfig_size + meshtastic_ChannelFile_size);
+// Reserve event files and their atomic temporaries before seeding, preventing retry formatting on full storage.
+static constexpr size_t EVENT_PROFILE_STORAGE_RESERVATION_BYTES = 2 * (meshtastic_LocalConfig_size + meshtastic_ChannelFile_size);
 
 constexpr bool hasEventProfileStorageSpace(size_t totalBytes, size_t usedBytes)
 {
-    return usedBytes <= totalBytes && totalBytes - usedBytes >= eventProfileStorageReservationBytes;
+    return usedBytes <= totalBytes && totalBytes - usedBytes >= EVENT_PROFILE_STORAGE_RESERVATION_BYTES;
 }
 
 inline meshtastic_LocalConfig eventConfigFromStandard(const meshtastic_LocalConfig &standard,
@@ -159,13 +155,13 @@ constexpr bool shouldDeferBootPersistence(bool bootInitializationInProgress, boo
 }
 
 #if USERPREFS_EVENT_MODE
-static constexpr auto radioProfileStorage = radioProfileStoragePaths(true);
+static constexpr auto RADIO_PROFILE_STORAGE = radioProfileStoragePaths(true);
 #else
-static constexpr auto radioProfileStorage = radioProfileStoragePaths(false);
+static constexpr auto RADIO_PROFILE_STORAGE = radioProfileStoragePaths(false);
 #endif
-static constexpr const char *configFileName = radioProfileStorage.config;
-static constexpr const char *channelFileName = radioProfileStorage.channels;
-static constexpr const char *backupFileName = radioProfileStorage.backup;
+static constexpr const char *configFileName = RADIO_PROFILE_STORAGE.config;
+static constexpr const char *channelFileName = RADIO_PROFILE_STORAGE.channels;
+static constexpr const char *backupFileName = RADIO_PROFILE_STORAGE.backup;
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 
@@ -580,9 +576,7 @@ class NodeDB
     /// skip boot keygen and skip persisting defaults, so a transient read failure can't change our NodeNum
     /// or overwrite the on-disk config. Cleared at the top of every loadFromDisk() run.
     bool configDecodeFailed = false;
-    // Automatic writes stay deferred until the initial config load is known to
-    // be healthy. This prevents a damaged config from changing device state or
-    // node data during the same boot.
+    // Defer automatic writes until config load is healthy to protect device and node data from damaged configs.
     bool bootInitializationInProgress = true;
     bool configLoadComplete = false;
 #if USERPREFS_EVENT_MODE

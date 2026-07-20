@@ -56,9 +56,9 @@ void test_boot_defers_persistence_until_config_is_verified()
 
 void test_event_profile_requires_room_for_atomic_profile_writes()
 {
-    TEST_ASSERT_TRUE(hasEventProfileStorageSpace(eventProfileStorageReservationBytes, 0));
-    TEST_ASSERT_FALSE(hasEventProfileStorageSpace(eventProfileStorageReservationBytes - 1, 0));
-    TEST_ASSERT_FALSE(hasEventProfileStorageSpace(eventProfileStorageReservationBytes, 1));
+    TEST_ASSERT_TRUE(hasEventProfileStorageSpace(EVENT_PROFILE_STORAGE_RESERVATION_BYTES, 0));
+    TEST_ASSERT_FALSE(hasEventProfileStorageSpace(EVENT_PROFILE_STORAGE_RESERVATION_BYTES - 1, 0));
+    TEST_ASSERT_FALSE(hasEventProfileStorageSpace(EVENT_PROFILE_STORAGE_RESERVATION_BYTES, 1));
     TEST_ASSERT_FALSE(hasEventProfileStorageSpace(1, 2));
 }
 

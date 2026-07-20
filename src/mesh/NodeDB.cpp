@@ -2169,9 +2169,7 @@ void NodeDB::loadFromDisk()
     configLoadComplete = false;
 
 #if USERPREFS_EVENT_MODE
-    // The event config is intentionally isolated from the ordinary config.
-    // We only seed it when no event file exists; a corrupt event file must not
-    // silently fall back to and overwrite the user's normal radio profile.
+    // Seed only a missing event config; never overwrite normal files after a corrupt event config.
     bool eventConfigMissing = false;
 #ifdef FSCom
     spiLock->lock();
@@ -2182,7 +2180,7 @@ void NodeDB::loadFromDisk()
         eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
         if (eventProfileStorageUnavailable) {
             LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",
-                      static_cast<unsigned>(eventProfileStorageReservationBytes),
+                      static_cast<unsigned>(EVENT_PROFILE_STORAGE_RESERVATION_BYTES),
                       static_cast<unsigned>(totalBytes >= usedBytes ? totalBytes - usedBytes : 0));
         }
     }
@@ -2383,7 +2381,7 @@ void NodeDB::loadFromDisk()
     if (eventConfigMissing && state != LoadFileResult::LOAD_SUCCESS) {
         const LoadFileResult eventConfigState = state;
         const LoadFileResult standardConfigState =
-            loadProto(standardConfigFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
+            loadProto(STANDARD_CONFIG_FILE_NAME, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
                       &meshtastic_LocalConfig_msg, &config);
         if (standardConfigState == LoadFileResult::LOAD_SUCCESS) {
             // Preserve the user's identity and non-radio preferences, then
@@ -2394,12 +2392,10 @@ void NodeDB::loadFromDisk()
             config = eventConfigFromStandard(standardConfig, eventLora);
             state = LoadFileResult::LOAD_SUCCESS;
             initializedEventConfig = true;
-            LOG_INFO("Initialized event config without modifying %s", standardConfigFileName);
+            LOG_INFO("Initialized event config without modifying %s", STANDARD_CONFIG_FILE_NAME);
         } else {
-            // loadProto() clears config before decoding. Restore the event
-            // outcome so the normal default/degraded path handles that safely.
-            // A corrupt normal config is especially important: preserving its
-            // decode failure prevents a replacement identity from being made.
+            // Keep the event load outcome because loadProto() clears config before decoding.
+            // A normal decode failure must not create a replacement identity.
             state = standardConfigState == LoadFileResult::DECODE_FAILED ? LoadFileResult::DECODE_FAILED : eventConfigState;
         }
     }
@@ -2607,12 +2603,10 @@ void NodeDB::loadFromDisk()
             }
         }
 
-        // Both radio profiles can contain channel PSKs.  The inactive profile
-        // is not covered by saveToDisk(), so migrate it explicitly when it
-        // exists before treating the encrypted-storage pass as complete.
+        // Migrate inactive radio files explicitly: they may contain PSKs and are outside saveToDisk().
 #ifdef FSCom
-        const char *radioProfileFiles[] = {standardConfigFileName, standardChannelFileName, standardBackupFileName,
-                                           eventConfigFileName,    eventChannelFileName,    eventBackupFileName};
+        const char *radioProfileFiles[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME,
+                                           EVENT_CONFIG_FILE_NAME,    EVENT_CHANNEL_FILE_NAME,    EVENT_BACKUP_FILE_NAME};
         for (const char *fn : radioProfileFiles) {
             spiLock->lock();
             const bool exists = FSCom.exists(fn);
@@ -2757,9 +2751,9 @@ bool NodeDB::disableLockdownToPlaintext()
     // plaintext->encrypted migrate loop above. Order does not matter here;
     // EncryptedStorage::removeLockdownArtifacts() (which deletes the DEK,
     // the commit point) only runs after every file is confirmed plaintext.
-    const char *filesToCheck[] = {standardConfigFileName, standardChannelFileName, standardBackupFileName,
-                                  eventConfigFileName,    eventChannelFileName,    eventBackupFileName,
-                                  moduleConfigFileName,   deviceStateFileName,     nodeDatabaseFileName};
+    const char *filesToCheck[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME,
+                                  EVENT_CONFIG_FILE_NAME,    EVENT_CHANNEL_FILE_NAME,    EVENT_BACKUP_FILE_NAME,
+                                  moduleConfigFileName,      deviceStateFileName,        nodeDatabaseFileName};
     for (const char *fn : filesToCheck) {
         if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
             LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
