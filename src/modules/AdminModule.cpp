@@ -1,5 +1,6 @@
 #include "AdminModule.h"
 #include "Channels.h"
+#include "CryptoEngine.h"
 #include "DisplayFormatters.h"
 #include "HardwareRNG.h"
 #include "MeshService.h"
@@ -1849,8 +1850,14 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
     if (!sessionPasskeyValid || !Throttle::isWithinTimespanMs(session_time, 150 * 1000UL)) {
         // Session passkey authenticates admin replies, so it must be unpredictable: prefer the
         // hardware RNG, falling back to the seeded CSPRNG only when no hardware source exists.
-        if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
-            CryptRNG.rand(session_passkey, sizeof(session_passkey));
+        // Hold cryptLock like the signing path does: this runs on the admin receive path, which on
+        // nRF52 is the BLE task, and the fill toggles the CC310 that packet crypto also uses while
+        // the CryptRNG state is shared with signing.
+        {
+            concurrency::LockGuard g(cryptLock);
+            if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
+                CryptRNG.rand(session_passkey, sizeof(session_passkey));
+        }
         session_time = millis();
         sessionPasskeyValid = true;
     }
