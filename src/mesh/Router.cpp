@@ -452,28 +452,11 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-/** Size a decoded Data the way the sender's signedDataFits() gate would have sized it, with
- * attacker-controlled padding stripped.
- *
- * nanopb already discards unknown fields at the Data level, but Data.payload is an opaque bytes
- * field: unknown fields buried inside the *inner* message (Position/Telemetry/Waypoint/User) ride
- * along in payload.size and are silently dropped later by the module's own pb_decode. Sizing the
- * raw payload would let a forger pad an unsigned broadcast past the signable budget - dodging the
- * downgrade drop below - while the spoofed content still decodes and applies. So for inner types
- * we can parse, measure the canonical re-encoding instead. Types we cannot parse keep their wire
- * size, and the canonical size is only substituted when it is no larger, so this can never make a
- * packet look bigger than it is.
- *
- * Forward-compat note: canonical sizing measures what THIS build's schema understands. A field
- * added to Position/Telemetry/Waypoint/User (or to Data) in a later release is unknown here and
- * shrinks our measurement, so a legitimate unsigned broadcast that the sender declined to sign
- * because it did not fit could look signable to us and be dropped. That only bites within
- * XEDDSA_SIGNATURE_FIELD_BYTES of the budget, and only for a signer node, but it means the
- * inner-type list below must be kept in step with the schema: when a signable message type grows,
- * re-check that its legitimate maximum still lands clear of the boundary.
- *
- * Returns false only if the Data could not be sized at all.
- */
+/** Size a decoded Data as the sender's signedDataFits() gate would have, with padding stripped:
+ * unknown fields inside Data.payload survive in payload.size and would otherwise let a forger
+ * inflate an unsigned broadcast past the signable budget. Returns false only if sizing failed.
+ * Sizing only what this build's schema decodes, so a signable type that later grows needs its
+ * legitimate maximum re-checked against the budget or honest unsigned broadcasts get dropped. */
 static bool canonicalSignableSize(meshtastic_Data *d, size_t *size)
 {
     const pb_msgdesc_t *fields = nullptr;
@@ -498,9 +481,13 @@ static bool canonicalSignableSize(meshtastic_Data *d, size_t *size)
         // Scratch kept off the stack: these decoded structs are large for the smaller MCU targets.
         // Safe as file-static state because both callers of checkXeddsaReceivePolicy hold cryptLock.
         static union {
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
             meshtastic_Position position;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
             meshtastic_Telemetry telemetry;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
             meshtastic_Waypoint waypoint;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
             meshtastic_User user;
         } inner;
 
@@ -508,9 +495,8 @@ static bool canonicalSignableSize(meshtastic_Data *d, size_t *size)
         size_t canonicalPayload;
         if (pb_decode_from_bytes(d->payload.bytes, d->payload.size, fields, &inner) &&
             pb_get_encoded_size(&canonicalPayload, fields, &inner) && canonicalPayload <= d->payload.size) {
-            // Only the length matters to pb_get_encoded_size for a bytes field, so swap the size in
-            // place rather than copying the whole Data, then restore it - callers still need the
-            // original payload intact for the modules downstream.
+            // Only the length matters when sizing a bytes field, so swap it in place instead of
+            // copying the whole Data; restored below because modules still need the real payload.
             const pb_size_t prevSize = d->payload.size;
             d->payload.size = (pb_size_t)canonicalPayload;
             const bool sized = pb_get_encoded_size(size, &meshtastic_Data_msg, d);
@@ -556,10 +542,9 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // non-PKI broadcast whose signed encoding would still fit the LoRa frame. Size p->decoded
         // canonically so this counts the same fields the sender's signedDataFits() gate counted;
         // adding XEDDSA_SIGNATURE_FIELD_BYTES to that unsigned base mirrors it exactly, whatever
-        // fields the Data carried, and canonicalSignableSize() strips padding hidden inside
-        // Data.payload so the budget cannot be inflated. Unicast/PKI packets and broadcasts too big
-        // to carry a signature are never signed, so they must not be hard-failed here even for a
-        // known signer.
+        // fields the Data carried, with padding hidden inside Data.payload stripped. Unicast/PKI
+        // packets and broadcasts too big to carry a signature are never signed, so they must not be
+        // hard-failed here even for a known signer.
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
         if (node && nodeInfoLiteHasXeddsaSigned(node) && !p->pki_encrypted && isBroadcast(p->to)) {
             size_t canonicalSize;
