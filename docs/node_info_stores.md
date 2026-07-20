@@ -88,16 +88,19 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
 ## 4. TMM NodeInfo payload cache (extended, the ephemeral third tier)
 
 - **What:** a flat array of `NodeInfoPayloadEntry` (PSRAM-backed on hardware; see
-  Availability) - the full cached `User` payload (names, role, key) plus the metadata
-  needed to serve **spoofed direct NodeInfo replies** on a target's behalf, independent of
-  NodeDB. Also the last-resort key source for `NodeDB::copyPublicKey()`.
+  Availability) - the full cached `User` payload (names, role, key) plus the metadata that
+  backs TMM's **spoofed direct NodeInfo replies** on a target's behalf, independent of
+  NodeDB (the serve/throttle behaviour is documented in
+  [traffic_management_module.md](traffic_management_module.md)). Also the last-resort key
+  source for `NodeDB::copyPublicKey()`.
 - **Availability:** `TMM_HAS_NODEINFO_CACHE` - ESP32 with PSRAM (production home; 2000
   entries is too large for MCU internal RAM), plus native unit-test builds on the plain
   heap so the trust/retention paths run in CI.
-- **Entry:** `node`, `user` (full nanopb `User`), tick stamps (`obsTick` 3 min/tick,
-  `respTick` 5 s/tick), `sourceChannel`, `decodedBitfield`, and packed 1-bit flags:
-  `hasDecodedBitfield`, `keySignerProven`, `hasObserved`, `hasResponded`, `hasFullUser`,
-  `isMember`.
+- **Entry:** `node`, `user` (full nanopb `User`), the `obsTick` recency stamp (3 min/tick),
+  `sourceChannel`, `decodedBitfield`, and packed 1-bit flags: `hasDecodedBitfield`,
+  `keySignerProven`, `hasObserved`, `hasFullUser`, `isMember`. (The direct-response throttle
+  no longer keeps per-entry state here - it is a pair of separate RAM tables; see the module
+  doc.)
 - **Capacity:** `kNodeInfoCacheEntries = 2000`, linear scan (NodeInfo traffic is
   low-rate).
 - **Persistence:** none - this tier is deliberately ephemeral; it reconstructs from NodeDB
@@ -121,19 +124,27 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   unsigned-broadcast drop.)
 - **Serve gate honesty:** only a genuinely _heard_ NODEINFO frame stamps
   `obsTick`/`hasObserved`. Seeding and write-through are knowledge, not observation - they
-  can never make a silent node look alive to the replay path. The serve window (6 h) and
-  per-target throttle (30 s) are enforced by the sweep-cleared flag bits.
+  can never make a silent node look alive to the replay path. The 6 h serve window is
+  enforced by the sweep-cleared `hasObserved` bit; the spoofed-reply throttle that gate
+  feeds lives in the module (see [traffic_management_module.md](traffic_management_module.md)).
 
 ### Consistency with NodeDB (anti-entropy)
 
-Three mechanisms keep this tier a superset of NodeDB's identities:
+Four mechanisms keep this tier a superset of NodeDB's identities. All **merge rather than
+overwrite**, so a keyless commit never costs the cache a learned TOFU key.
 
-| Mechanism                                                             | When                                | What                                                                                                                                                                                                                                                          |
-| --------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Write-through hooks (`onNodeIdentityCommitted`, `onNodeKeyCommitted`) | on every NodeDB identity/key commit | immediate upsert; merges rather than overwrites - a keyless commit never costs the cache a learned TOFU key                                                                                                                                                   |
-| Reconcile sweep (`reconcileNodeInfoFromNodeDBLocked`)                 | boot seed, then hourly              | walks hot store (full identity) + warm tier (key-only records); adopts NodeDB content under the same keyless-merge rule; transfers signer verdicts only key-matched                                                                                           |
-| Membership refresh                                                    | inside the hourly reconcile         | clear-all then re-mark from both tiers (a per-entry NodeDB lookup every sweep would be O(entries x members) under the lock); additions stay immediate via the hooks, explicit removals via `purgeNode()`; a **passive** NodeDB eviction may lag up to an hour |
-| Purge hooks (`purgeNode`, `purgeAll`)                                 | NodeDB node removal / reset         | clear both the unified cache and the NodeInfo cache, each under its own compile guard                                                                                                                                                                         |
+| Mechanism                                                             | When                        | Role                             |
+| --------------------------------------------------------------------- | --------------------------- | -------------------------------- |
+| Write-through hooks (`onNodeIdentityCommitted`, `onNodeKeyCommitted`) | every identity/key commit   | immediate upsert                 |
+| Reconcile sweep (`reconcileNodeInfoFromNodeDBLocked`)                 | boot seed, then hourly      | re-seed from hot + warm tiers    |
+| Membership refresh                                                    | inside the hourly reconcile | re-mark which nodes NodeDB holds |
+| Purge hooks (`purgeNode`, `purgeAll`)                                 | node removal / reset        | drop the node from both caches   |
+
+Two details that bite: the reconcile sweep transfers signer verdicts only when **key-matched**;
+and membership refresh clears-then-re-marks from both tiers rather than a per-entry NodeDB lookup
+each sweep (which would be O(entries x members) under the lock), so while hook-driven additions
+and `purgeNode()` removals are immediate, a **passive** NodeDB eviction may lag membership by up
+to an hour.
 
 **Retention:** no timed eviction. Slots die only by LRU displacement on insert, ranked by
 trust tiers - members and signer-proven keys are stickiest; the seeding pass additionally
@@ -159,35 +170,33 @@ rehydration.
 
 ### Tick clocks and wrap safety
 
-All TMM timestamps are free-running modular ticks (uint8 or nibble) derived from
-`clockMs()`; modular subtraction gives a correct age only while the true age stays below
-the counter period. What keeps each clock honest differs, and matters when touching the
-sweep:
+All TMM timestamps are free-running modular ticks (uint8 or nibble) from `clockMs()`; modular
+subtraction is correct only while the true age stays below the counter period, so every clock
+needs something to clear expired state before it aliases.
 
-| Clock                        | Period   | Window/TTL      | Wrap safety                                                                                                                                   |
-| ---------------------------- | -------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| pos (uint8, 6 min/tick)      | 25.6 h   | <=255 ticks     | 60 s sweep clears expired state; margin as low as 1 tick (6 min) at the clamp                                                                 |
-| rate (nibble, 5 min/tick)    | 80 min   | <=15 ticks      | sweep, **plus** read-time window reset in `isRateLimited()`                                                                                   |
-| unknown (nibble, 1 min/tick) | 16 min   | 12 ticks        | sweep, plus read-time window reset                                                                                                            |
-| NodeInfo `obsTick` (3 min)   | 12.8 h   | 120 ticks (6 h) | **sweep only** - `maintainNodeInfoCacheLocked()` clearing `hasObserved` is the sole guarantee the 6 h serve gate never reads an aliased stamp |
-| NodeInfo `respTick` (5 s)    | 21.3 min | 6 ticks (30 s)  | sweep only (worst case of a missed clear: one spurious 30 s throttle)                                                                         |
+| Clock              | Tick / period  | Window          | Kept honest by                                     |
+| ------------------ | -------------- | --------------- | -------------------------------------------------- |
+| pos                | 6 min / 25.6 h | <=255 ticks     | 60 s sweep (margin as low as 1 tick at the clamp)  |
+| rate               | 5 min / 80 min | <=15 ticks      | sweep + read-time window reset (`isRateLimited()`) |
+| unknown            | 1 min / 16 min | 12 ticks        | sweep + read-time window reset                     |
+| NodeInfo `obsTick` | 3 min / 12.8 h | 120 ticks (6 h) | sweep only                                         |
 
-The warm tier is different by design: `WarmNodeStore.last_heard` is an **absolute**
-unix-seconds timestamp (quantised to 128 s by the metadata steal), so it cannot wrap until
-2106 and needs no sweep - affordable at 100 x 40 B, where the TMM caches chose 1-byte
-ticks to stay at 10 B/entry x up to 2048.
+`obsTick` is the sharp case: `maintainNodeInfoCacheLocked()` clearing `hasObserved` is the
+_sole_ guarantee the 6 h serve gate never reads an aliased stamp. That makes the sweep a
+compile-time invariant - guarded by `TMM_HAS_NODEINFO_CACHE` **alone** (never
+`TRAFFIC_MANAGEMENT_CACHE_SIZE`, which a variant may zero independently), mirroring `purgeAll()`:
+a build that has the cache always has its sweep.
 
-Because the NodeInfo clocks are sweep-dependent, the maintenance invariant is
-compile-time: `maintainNodeInfoCacheLocked()` is guarded by `TMM_HAS_NODEINFO_CACHE`
-**alone** (never by `TRAFFIC_MANAGEMENT_CACHE_SIZE`, which a variant may zero
-independently), mirroring `purgeAll()` - a build that has the cache always has its sweep.
+The warm tier is different by design: `WarmNodeStore.last_heard` is an **absolute** unix-seconds
+timestamp (128 s quantised), so it cannot wrap until 2106 and needs no sweep - the TMM caches
+chose 1-byte ticks instead to stay at 10 B/entry across up to 2048 entries.
 
-### Direct-response behavior under throttle
+### Direct-response behavior
 
-The per-target response throttle bounds only **our spoofed TX**. A request that arrives
-inside the throttle window is **not consumed**: `shouldRespondToNodeInfo()` returns false
-and the request forwards through normal relay handling toward the genuine target, which
-can answer itself. `nodeinfo_cache_hits` counts only replies actually sent.
+How this cache's identities are served as spoofed direct NodeInfo replies - the serve gates,
+the per-requester/per-target/global throttle, and the "throttled forwards, not dropped"
+behaviour - is documented with the module in
+[traffic_management_module.md](traffic_management_module.md).
 
 ---
 
@@ -196,23 +205,23 @@ can answer itself. `nodeinfo_cache_hits` counts only replies actually sent.
 Side-by-side view of what each store actually holds ("-" = not held). Details and
 rationale live in the per-store sections above.
 
-| Property                  | 1. Hot store (`NodeInfoLite`)    | 2. Warm tier (`WarmNodeEntry`)                 | 3. NodeInfo cache (`NodeInfoPayloadEntry`)                     | 4. Unified cache (`UnifiedCacheEntry`)               |
-| ------------------------- | -------------------------------- | ---------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------- |
-| Node number               | yes                              | yes                                            | yes (0 = free slot)                                            | yes (0 = free slot)                                  |
-| Names + user id           | yes (flattened fields)           | -                                              | yes (full `User`, when `hasFullUser`)                          | -                                                    |
-| Public key (32 B)         | yes (authoritative)              | yes (keyed entries)                            | yes (TOFU or proven; pinned against tiers 1-2)                 | -                                                    |
-| Signer provenance         | `HAS_XEDDSA_SIGNED` bitfield bit | 1 signer bit (shared with `last_heard`)        | `keySignerProven` (monotonic per key)                          | -                                                    |
-| Device role               | `role` field                     | 4-bit role (metadata steal)                    | inside the cached `User`                                       | 4-bit role in count-byte top bits (final fallback)   |
-| Recency                   | `last_heard` (unix secs)         | `last_heard` (unix secs, 128 s quantised)      | `obsTick` (3 min modular tick) + `hasObserved`                 | pos/rate/unknown modular ticks                       |
-| Position / telemetry      | via satellite copy-out accessors | -                                              | -                                                              | 8-bit position _fingerprint_ only (dedup)            |
-| Protected / favorite      | bitfield flags                   | 2-bit protected category                       | - (`isMember` keep-alive instead)                              | -                                                    |
-| Routing hint (`next_hop`) | yes (persisted field)            | -                                              | -                                                              | ACK-confirmed relay byte (preloaded from tier 1)     |
-| Direct-reply metadata     | -                                | -                                              | `respTick`, `hasResponded`, `sourceChannel`, `decodedBitfield` | -                                                    |
-| Traffic-shaping counters  | -                                | -                                              | -                                                              | rate + unknown counts, pos fingerprint               |
-| Entry size                | largest (full struct)            | 40 B exact                                     | ~`sizeof(User)`+8, platform-padded (no size assert by design)  | 10 B exact                                           |
-| Capacity                  | `MAX_NUM_NODES` (250/120/10)     | `WARM_NODE_COUNT` (~100)                       | `kNodeInfoCacheEntries` (2000)                                 | `TRAFFIC_MANAGEMENT_CACHE_SIZE` (2048/500/400/250/0) |
-| Persistence               | node DB file                     | raw-flash ring (nRF52840) or `/prefs/warm.dat` | none (rebuilt from seed + traffic)                             | none                                                 |
-| Storage                   | RAM                              | RAM + flash                                    | PSRAM on hardware; plain heap in native tests                  | PSRAM when available, else heap                      |
+| Property                  | 1. Hot store (`NodeInfoLite`)    | 2. Warm tier (`WarmNodeEntry`)                 | 3. NodeInfo cache (`NodeInfoPayloadEntry`)                    | 4. Unified cache (`UnifiedCacheEntry`)               |
+| ------------------------- | -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
+| Node number               | yes                              | yes                                            | yes (0 = free slot)                                           | yes (0 = free slot)                                  |
+| Names + user id           | yes (flattened fields)           | -                                              | yes (full `User`, when `hasFullUser`)                         | -                                                    |
+| Public key (32 B)         | yes (authoritative)              | yes (keyed entries)                            | yes (TOFU or proven; pinned against tiers 1-2)                | -                                                    |
+| Signer provenance         | `HAS_XEDDSA_SIGNED` bitfield bit | 1 signer bit (shared with `last_heard`)        | `keySignerProven` (monotonic per key)                         | -                                                    |
+| Device role               | `role` field                     | 4-bit role (metadata steal)                    | inside the cached `User`                                      | 4-bit role in count-byte top bits (final fallback)   |
+| Recency                   | `last_heard` (unix secs)         | `last_heard` (unix secs, 128 s quantised)      | `obsTick` (3 min modular tick) + `hasObserved`                | pos/rate/unknown modular ticks                       |
+| Position / telemetry      | via satellite copy-out accessors | -                                              | -                                                             | 8-bit position _fingerprint_ only (dedup)            |
+| Protected / favorite      | bitfield flags                   | 2-bit protected category                       | - (`isMember` keep-alive instead)                             | -                                                    |
+| Routing hint (`next_hop`) | yes (persisted field)            | -                                              | -                                                             | ACK-confirmed relay byte (preloaded from tier 1)     |
+| Direct-reply metadata     | -                                | -                                              | `sourceChannel`, `decodedBitfield` (+ `hasDecodedBitfield`)   | -                                                    |
+| Traffic-shaping counters  | -                                | -                                              | -                                                             | rate + unknown counts, pos fingerprint               |
+| Entry size                | largest (full struct)            | 40 B exact                                     | ~`sizeof(User)`+8, platform-padded (no size assert by design) | 10 B exact                                           |
+| Capacity                  | `MAX_NUM_NODES` (250/120/10)     | `WARM_NODE_COUNT` (~100)                       | `kNodeInfoCacheEntries` (2000)                                | `TRAFFIC_MANAGEMENT_CACHE_SIZE` (2048/500/400/250/0) |
+| Persistence               | node DB file                     | raw-flash ring (nRF52840) or `/prefs/warm.dat` | none (rebuilt from seed + traffic)                            | none                                                 |
+| Storage                   | RAM                              | RAM + flash                                    | PSRAM on hardware; plain heap in native tests                 | PSRAM when available, else heap                      |
 
 ## How a lookup falls through the tiers
 
