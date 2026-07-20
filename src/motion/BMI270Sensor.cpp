@@ -443,16 +443,6 @@ bool BMI270Sensor::writeRegister(uint8_t reg, uint8_t value)
     return wire->endTransmission() == 0;
 }
 
-bool BMI270Sensor::writeRegisters(uint8_t reg, const uint8_t *data, size_t len)
-{
-    wire->beginTransmission(deviceAddress());
-    wire->write(reg);
-    for (size_t i = 0; i < len; i++) {
-        wire->write(data[i]);
-    }
-    return wire->endTransmission() == 0;
-}
-
 uint8_t BMI270Sensor::readRegister(uint8_t reg)
 {
     wire->beginTransmission(deviceAddress());

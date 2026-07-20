@@ -13,7 +13,7 @@
 // DIO5 -> RFSW0_V1
 // DIO6 -> RFSW1_V2
 // DIO7 -> not connected on E80 module - note that GNSS and Wifi scanning are not possible.
-
+#ifdef USE_LR1121
 static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7, RADIOLIB_NC,
                                              RADIOLIB_NC};
 
@@ -30,13 +30,14 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
     END_OF_MODE_TABLE,
     // clang-format on
 };
+#endif
 
 // LR2021 RF switch matrix following the standard Semtech / Seeed T1000-E reference topology.
 // DIO5 -> antenna path select (HIGH = sub-GHz LF)
 // DIO6 -> TX enable / HP PA select
 // DIO7 -> not connected (no GNSS on LR2021)
 // DIO8 -> RF front-end power enable
-
+#ifdef USE_LR2021
 static const uint32_t lr20x0_rfswitch_dio_pins[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
                                                     RADIOLIB_LR2021_DIO8, RADIOLIB_NC};
 
@@ -51,3 +52,4 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
     END_OF_MODE_TABLE,
     // clang-format on
 };
+#endif

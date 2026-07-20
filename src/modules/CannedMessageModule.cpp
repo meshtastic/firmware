@@ -82,7 +82,6 @@ CannedMessageModule::CannedMessageModule()
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
     if (newDest == 0) {
         dest = NODENUM_BROADCAST;
@@ -114,19 +113,9 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     LOG_DEBUG("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
-void CannedMessageModule::LaunchRepeatDestination()
-{
-    if (!lastDestSet) {
-        LaunchWithDestination(NODENUM_BROADCAST, 0);
-    } else {
-        LaunchWithDestination(lastDest, lastChannel);
-    }
-}
-
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
     if (newDest == 0) {
         dest = NODENUM_BROADCAST;
@@ -289,10 +278,6 @@ void CannedMessageModule::updateDestinationSelectionList()
         }
     }
 
-    meshtastic_MeshPacket *p = allocDataPacket();
-    p->pki_encrypted = true;
-    p->channel = 0;
-
     // Populate active channels
     std::vector<String> seenChannels;
     seenChannels.reserve(channels.getNumChannels());
@@ -310,12 +295,6 @@ void CannedMessageModule::updateDestinationSelectionList()
         LOG_INFO("Nodes changed, forcing UI refresh.");
         screen->forceDisplay();
     }
-}
-
-// Returns true if character input is currently allowed (used for search/freetext states)
-bool CannedMessageModule::isCharInputAllowed() const
-{
-    return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
 }
 
 static int getRowHeightForEmoteText(const char *text, int minimumHeight, int emoteSpacing = 2)
@@ -1439,13 +1418,6 @@ bool CannedMessageModule::shouldDraw()
     return (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
             this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
             this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
-}
-
-// Has the user defined any canned messages?
-// Expose publicly whether canned message module is ready for use
-bool CannedMessageModule::hasMessages()
-{
-    return (this->messagesCount > 0);
 }
 
 int CannedMessageModule::getNextIndex()

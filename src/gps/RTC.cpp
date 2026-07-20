@@ -1,4 +1,4 @@
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
@@ -7,6 +7,10 @@
 #include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>
+
+#if HAS_LSE
+#include <STM32RTC.h>
+#endif
 
 static RTCQuality currentQuality = RTCQualityNone;
 uint32_t lastSetFromPhoneNtpOrGps = 0;
@@ -212,6 +216,30 @@ RTCSetResult readFromRTC()
             return RTCSetResultSuccess;
         }
     }
+#elif HAS_LSE
+    if (stm32wlRtcAvailable()) {
+        uint32_t now = millis();
+        tv.tv_sec = STM32RTC::getInstance().getEpoch();
+        tv.tv_usec = 0;
+        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
+            }
+            return RTCSetResultInvalidTime;
+        }
+#endif
+        if (currentQuality == RTCQualityNone) {
+            RTCQuality oldQuality = currentQuality;
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
+            currentQuality = RTCQualityDevice;
+            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+        }
+        return RTCSetResultSuccess;
+    }
 #else
     return readFromSystemTimeFallback();
 #endif
@@ -292,7 +320,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #else
             rtc.initI2C();
 #endif
-            tm *t = gmtime(&tv->tv_sec);
+            // tv_sec is a long, which is not time_t everywhere: on Windows
+            // time_t is 64-bit while long is 32-bit. Copy before taking &.
+            time_t setSecs = tv->tv_sec;
+            tm *t = gmtime(&setSecs);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
@@ -314,7 +345,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #else
             rtc.begin(Wire);
 #endif
-            tm *t = gmtime(&tv->tv_sec);
+            // tv_sec is a long, which is not time_t everywhere: on Windows
+            // time_t is 64-bit while long is 32-bit. Copy before taking &.
+            time_t setSecs = tv->tv_sec;
+            tm *t = gmtime(&setSecs);
             rtc.setDateTime(*t);
             LOG_DEBUG("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900, t->tm_mon + 1,
                       t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
@@ -328,13 +362,20 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #else
             ArtronShop_RX8130CE rtc(&Wire);
 #endif
-            tm *t = gmtime(&tv->tv_sec);
+            // tv_sec is a long, which is not time_t everywhere: on Windows
+            // time_t is 64-bit while long is 32-bit. Copy before taking &.
+            time_t setSecs = tv->tv_sec;
+            tm *t = gmtime(&setSecs);
             if (rtc.setTime(*t)) {
                 LOG_DEBUG("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
                           t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
             } else {
                 LOG_WARN("Failed to set time for RX8130CE");
             }
+        }
+#elif HAS_LSE
+        if (stm32wlRtcAvailable()) {
+            STM32RTC::getInstance().setEpoch(tv->tv_sec);
         }
 #elif defined(ARCH_ESP32) || defined(ARCH_RP2040)
         settimeofday(tv, NULL);
