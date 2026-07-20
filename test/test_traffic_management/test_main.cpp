@@ -32,6 +32,10 @@ namespace
 constexpr NodeNum kLocalNode = 0x11111111;
 constexpr NodeNum kRemoteNode = 0x22222222;
 constexpr NodeNum kTargetNode = 0x33333333;
+// A second, distinct requester. The per-requester direct-response throttle (60 s) is keyed on the
+// requesting packet's `from`, so tests that exercise the per-target / fallback / sweep throttles use
+// a fresh requester for their "served again" step to avoid the per-requester window masking them.
+constexpr NodeNum kRemoteNode2 = 0x44444444;
 
 // Telemetry hop exhaustion is gated on channel congestion (alterReceived checks
 // airTime->isTxAllowedChannelUtil/isTxAllowedAirUtil). Installs a global
@@ -913,8 +917,10 @@ static void test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow(void)
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
     TEST_ASSERT_EQUAL_UINT32(1, module.getStats().nodeinfo_cache_hits);
 
-    // Past the throttle window: served again.
+    // Past the throttle window: served again. Use a fresh requester so the per-requester throttle
+    // (60 s) doesn't mask the per-target respTick (30 s) release this test is exercising.
     TrafficManagementModule::s_testNowMs += 30000; // now > 30 s since first reply
+    request.from = kRemoteNode2;
     request.id = 0xAAAA0003;
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(mockRouter.sentPackets.size()));
@@ -1661,7 +1667,9 @@ static void test_tm_nodeinfo_sweepClearsResponseThrottleFlag(void)
     TEST_ASSERT_FALSE(flags & kFlagResponded);
     TEST_ASSERT_TRUE(flags & kFlagObserved);
 
-    // And the target is servable again.
+    // And the target is servable again. A fresh requester keeps the per-requester throttle (60 s)
+    // from masking the sweep's release of the per-target hasResponded flag this test exercises.
+    request.from = kRemoteNode2;
     request.id = 0xBBBB0002;
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(mockRouter.sentPackets.size()));
@@ -2127,13 +2135,92 @@ static void test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow(void)
     TEST_ASSERT_FALSE(module.ignoreRequestFlag());
     TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 
-    // Past the throttle window: served again.
+    // Past the throttle window: served again. Use a fresh requester so the per-requester throttle
+    // (60 s) doesn't mask the fallback stamp (30 s) release this test is exercising.
     TrafficManagementModule::s_testNowMs += 30000; // now > 30 s since first reply
+    request.from = kRemoteNode2;
     request.id = 0xBBBB0003;
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
     TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 
     resetRTCStateForTests();
+}
+
+/**
+ * #11104 reconciliation: the per-requester + global-floor throttle bounds spoofed direct replies by
+ * the (unauthenticated) requester address and by total airtime, independently of the per-target
+ * throttle. It is a fixed table in internal RAM, so it is the ONLY direct-response bound that
+ * survives on a non-PSRAM build with no per-target cache entry - hence a dedicated check:
+ *   - the same requester asking for a DIFFERENT target within 60 s is still throttled (the
+ *     aggregate-TX gap the per-target throttle leaves open, i.e. the reflector-flood case);
+ *   - a fresh requester is served, but only once the 1 s global floor has passed;
+ *   - after the per-requester window elapses, the original requester is served again.
+ */
+static void test_tm_nodeinfo_directResponse_perRequesterAndGlobalFloor(void)
+{
+    moduleConfig.traffic_management.nodeinfo_direct_response_max_hops = 10;
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    mockNodeDB->clearCachedNode();
+
+    const uint32_t base = 3600000;
+    TrafficManagementModule::s_testNowMs = base;
+
+    MockRouter mockRouter;
+    mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    MeshService mockService;
+    router = &mockRouter;
+    service = &mockService;
+
+    TrafficManagementModuleTestShim module;
+
+    // Three distinct, freshly-observed, signer-proven targets so the per-target respTick can never be
+    // the thing bounding a reply here - only the per-requester / global throttle can.
+    constexpr NodeNum kTargetA = 0x33330001, kTargetB = 0x33330002, kTargetC = 0x33330003;
+    constexpr NodeNum kRemoteNode3 = 0x66666666;
+    for (NodeNum t : {kTargetA, kTargetB, kTargetC}) {
+        module.handleReceived(makeNodeInfoPacket(t, "target-long", "tg"));
+        module.markKeySignerProvenForTest(t);
+    }
+
+    meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetA);
+    request.decoded.want_response = true;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+
+    // First reply for this requester: served.
+    request.id = 0xC0DE0001;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Same requester, DIFFERENT target, 10 s later: the per-target throttle can't fire (fresh entry),
+    // but the per-requester window (60 s) still suppresses our TX. Forwarded, not sent.
+    TrafficManagementModule::s_testNowMs = base + 10000;
+    request.to = kTargetB;
+    request.id = 0xC0DE0002;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(1, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // A DIFFERENT requester (fresh slot) is served - the 1 s global floor has long passed.
+    request.from = kRemoteNode2;
+    request.id = 0xC0DE0003;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // Yet a third fresh requester in the SAME instant, for a fresh target (so per-target can't be the
+    // cause), is deferred by the 1 s global airtime floor. Forwarded, not sent.
+    request.from = kRemoteNode3;
+    request.to = kTargetC;
+    request.id = 0xC0DE0004;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(mockRouter.sentPackets.size()));
+
+    // After the per-requester window elapses, the original requester is served again.
+    TrafficManagementModule::s_testNowMs = base + 70000;
+    request.from = kRemoteNode;
+    request.to = kTargetA;
+    request.id = 0xC0DE0005;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::STOP), static_cast<int>(module.handleReceived(request)));
+    TEST_ASSERT_EQUAL_UINT32(3, static_cast<uint32_t>(mockRouter.sentPackets.size()));
 }
 
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
@@ -3174,6 +3261,7 @@ TM_TEST_ENTRY void setup()
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackStaleEntryNotServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackFreshEntryServed);
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackThrottlesWithinWindow);
+    RUN_TEST(test_tm_nodeinfo_directResponse_perRequesterAndGlobalFloor);
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
     RUN_TEST(test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed);
 #endif
