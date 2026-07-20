@@ -1300,9 +1300,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int textWidth = 0;
     int nameX = 0;
     int yOffset = (currentResolution == ScreenResolution::High) ? 0 : 5;
-    const char *longName = owner.long_name[0]
-                               ? owner.long_name
-                               : ((nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "");
+    const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
     const char *shortName = owner.short_name ? owner.short_name : "";
     char combinedName[96];
     if (longName[0] && shortName[0]) {
@@ -1320,39 +1318,17 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++] + yOffset, combinedName,
                                          FONT_HEIGHT_SMALL, 1, false);
     } else {
-        const int maxNameWidth = SCREEN_WIDTH - 4;
-        const int longNameWidth = UIRenderer::measureStringWithEmotes(display, longName);
-        if (longNameWidth <= maxNameWidth) {
-            textWidth = longNameWidth;
-            nameX = (SCREEN_WIDTH - textWidth) / 2;
-            UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], longName, FONT_HEIGHT_SMALL, 1,
-                                             false);
+        // === LongName Centered ===
+        textWidth = UIRenderer::measureStringWithEmotes(display, longName);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], longName, FONT_HEIGHT_SMALL, 1,
+                                         false);
 
-            textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
-            nameX = (SCREEN_WIDTH - textWidth) / 2;
-            UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1,
-                                             false);
-        } else {
-            // Use both identity rows for a long owner name. truncateToWidth()
-            // keeps UTF-8 characters and emotes intact while finding the split.
-            const std::string fullName(longName);
-            const std::string firstLine = EmoteRenderer::truncateToWidth(display, fullName, maxNameWidth, "");
-            size_t secondStart = firstLine.size();
-            while (secondStart < fullName.size() && fullName[secondStart] == ' ')
-                secondStart++;
-            const std::string secondLine =
-                EmoteRenderer::truncateToWidth(display, fullName.substr(secondStart), maxNameWidth, "...");
-
-            textWidth = UIRenderer::measureStringWithEmotes(display, firstLine);
-            nameX = (SCREEN_WIDTH - textWidth) / 2;
-            UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], firstLine, FONT_HEIGHT_SMALL, 1,
-                                             false);
-
-            textWidth = UIRenderer::measureStringWithEmotes(display, secondLine);
-            nameX = (SCREEN_WIDTH - textWidth) / 2;
-            UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], secondLine, FONT_HEIGHT_SMALL, 1,
-                                             false);
-        }
+        // === ShortName Centered ===
+        textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1,
+                                         false);
     }
 #endif
     graphics::drawCommonFooter(display, x, y);

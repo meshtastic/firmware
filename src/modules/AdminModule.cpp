@@ -753,13 +753,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         char longName[sizeof(o.long_name)];
         strncpy(longName, o.long_name, sizeof(longName));
         longName[sizeof(longName) - 1] = '\0';
-#if defined(GAT562)
-        // Keep the 2.7.x GAT562 owner-name capacity. The wire and DeviceState
-        // fields remain 40 bytes; only the shared 2.8 NodeInfoLite cache is 25.
-        sanitizeUtf8(longName, sizeof(longName));
-#else
         clampLongName(longName);
-#endif
         changed |= strcmp(owner.long_name, longName);
         strncpy(owner.long_name, longName, sizeof(owner.long_name));
         owner.long_name[sizeof(owner.long_name) - 1] = '\0';

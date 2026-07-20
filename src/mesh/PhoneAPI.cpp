@@ -614,13 +614,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         auto us = nodeDB->readNextMeshNode(readIndex);
         if (us) {
             auto info = TypeConversions::ConvertToNodeInfo(us);
-#if defined(GAT562)
-            // The official 2.8 NodeInfoLite cache stores 24 name bytes. The
-            // local owner record still has the full 39-byte wire-compatible
-            // name, so use it for our own phone-facing NodeInfo.
-            info.has_user = true;
-            info.user = owner;
-#endif
             info.has_hops_away = false;
             info.is_favorite = true;
             {
@@ -1190,12 +1183,6 @@ void PhoneAPI::prefetchNodeInfos()
 
             auto info = TypeConversions::ConvertToNodeInfoThin(nextNode);
             bool isUs = info.num == nodeDB->getNodeNum();
-#if defined(GAT562)
-            if (isUs) {
-                info.has_user = true;
-                info.user = owner;
-            }
-#endif
             info.hops_away = isUs ? 0 : info.hops_away;
             info.last_heard = isUs ? getValidTime(RTCQualityFromNet) : info.last_heard;
             info.snr = isUs ? 0 : info.snr;
