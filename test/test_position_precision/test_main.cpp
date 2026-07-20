@@ -73,6 +73,21 @@ static void test_applyPositionPrecision_zeroScrubsLocationButKeepsTime()
     TEST_ASSERT_EQUAL_UINT32(0, position.timestamp);
     TEST_ASSERT_EQUAL_UINT32(0, position.sats_in_view);
     TEST_ASSERT_EQUAL_UINT32(0, position.precision_bits);
+    TEST_ASSERT_EQUAL(meshtastic_Position_LocSource_LOC_UNSET, position.location_source);
+}
+
+static void test_applyPositionPrecision_zeroKeepsTrustedSourceForTimeOnlyPacket()
+{
+    meshtastic_Position position = meshtastic_Position_init_default;
+    position.time = 42;
+    position.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
+
+    applyPositionPrecision(position, 0);
+
+    TEST_ASSERT_FALSE(position.has_latitude_i);
+    TEST_ASSERT_FALSE(position.has_longitude_i);
+    TEST_ASSERT_EQUAL_UINT32(42, position.time);
+    TEST_ASSERT_EQUAL(meshtastic_Position_LocSource_LOC_INTERNAL, position.location_source);
 }
 
 static void test_applyPositionPrecision_reencodesPositionPacket()
@@ -248,6 +263,7 @@ void setup()
     RUN_TEST(test_applyPositionPrecision_clampsLatLonAndSetsPrecisionBits);
     RUN_TEST(test_applyPositionPrecision_fullPrecisionKeepsLatLon);
     RUN_TEST(test_applyPositionPrecision_zeroScrubsLocationButKeepsTime);
+    RUN_TEST(test_applyPositionPrecision_zeroKeepsTrustedSourceForTimeOnlyPacket);
     RUN_TEST(test_applyPositionPrecision_reencodesPositionPacket);
     RUN_TEST(test_getPositionPrecisionForChannel_explicitPrecisionIsHonored);
     RUN_TEST(test_getPositionPrecisionForChannel_explicitZeroDisablesPrimary);

@@ -51,8 +51,14 @@ void applyPositionPrecision(meshtastic_Position &position, uint32_t precision)
 {
     if (precision == 0) {
         uint32_t time = position.time;
+        const bool isTrustedTimeOnly =
+            time > 0 && !position.has_latitude_i && !position.has_longitude_i &&
+            position.location_source >= meshtastic_Position_LocSource_LOC_INTERNAL;
+        const meshtastic_Position_LocSource timeSource = position.location_source;
         position = meshtastic_Position_init_default;
         position.time = time;
+        if (isTrustedTimeOnly)
+            position.location_source = timeSource;
         return;
     }
 
