@@ -635,6 +635,7 @@ NodeDB::NodeDB()
 #endif
     sortMeshDB();
     saveToDisk(saveWhat);
+    bootInitializationInProgress = false;
 }
 
 /**
@@ -2165,6 +2166,7 @@ void NodeDB::loadFromDisk()
 
     migrationSavePending = false;
     configDecodeFailed = false;
+    configLoadComplete = false;
 
 #if USERPREFS_EVENT_MODE
     // The event config is intentionally isolated from the ordinary config.
@@ -2413,6 +2415,7 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved config version %d", config.version);
     }
+    configLoadComplete = true;
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
@@ -2765,6 +2768,11 @@ bool NodeDB::disableLockdownToPlaintext()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+
+    if (shouldDeferBootPersistence(bootInitializationInProgress, configLoadComplete, configDecodeFailed)) {
+        LOG_WARN("NodeDB: deferred boot write to %s until config recovery completes", filename);
+        return true;
+    }
 
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.

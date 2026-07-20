@@ -23,7 +23,7 @@ void test_event_profile_uses_isolated_files()
 
 void test_event_config_preserves_identity_but_replaces_lora()
 {
-    auto standard = meshtastic_LocalConfig_init_zero;
+    meshtastic_LocalConfig standard = meshtastic_LocalConfig_init_zero;
     standard.has_security = true;
     standard.security.private_key.size = 1;
     standard.security.private_key.bytes[0] = 0xA5;
@@ -46,6 +46,14 @@ void test_event_config_preserves_identity_but_replaces_lora()
     TEST_ASSERT_EQUAL_UINT32(3, eventConfig.lora.channel_num);
 }
 
+void test_boot_defers_persistence_until_config_is_verified()
+{
+    TEST_ASSERT_TRUE(shouldDeferBootPersistence(true, false, false));
+    TEST_ASSERT_TRUE(shouldDeferBootPersistence(true, true, true));
+    TEST_ASSERT_FALSE(shouldDeferBootPersistence(true, true, false));
+    TEST_ASSERT_FALSE(shouldDeferBootPersistence(false, true, true));
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -58,6 +66,7 @@ void setup()
     RUN_TEST(test_standard_profile_uses_standard_files);
     RUN_TEST(test_event_profile_uses_isolated_files);
     RUN_TEST(test_event_config_preserves_identity_but_replaces_lora);
+    RUN_TEST(test_boot_defers_persistence_until_config_is_verified);
     exit(UNITY_END());
 }
 

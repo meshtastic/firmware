@@ -143,6 +143,11 @@ inline meshtastic_LocalConfig eventConfigFromStandard(const meshtastic_LocalConf
     return eventConfig;
 }
 
+constexpr bool shouldDeferBootPersistence(bool bootInitializationInProgress, bool configLoadComplete, bool configDecodeFailed)
+{
+    return bootInitializationInProgress && (!configLoadComplete || configDecodeFailed);
+}
+
 #if USERPREFS_EVENT_MODE
 static constexpr auto radioProfileStorage = radioProfileStoragePaths(true);
 #else
@@ -565,6 +570,11 @@ class NodeDB
     /// skip boot keygen and skip persisting defaults, so a transient read failure can't change our NodeNum
     /// or overwrite the on-disk config. Cleared at the top of every loadFromDisk() run.
     bool configDecodeFailed = false;
+    // Automatic writes stay deferred until the initial config load is known to
+    // be healthy. This prevents a damaged config from changing device state or
+    // node data during the same boot.
+    bool bootInitializationInProgress = true;
+    bool configLoadComplete = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     uint32_t lastSort = 0;          // When last sorted the nodeDB
