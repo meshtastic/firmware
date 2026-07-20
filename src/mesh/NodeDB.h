@@ -255,9 +255,9 @@ class NodeDB
      */
     void updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src = RX_SRC_RADIO);
 
-    /** Update user info and channel for this node based on received user data
-     */
-    bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
+    /** Update user info and channel for this node based on received user data.
+     * A known signer's identity is only learned when xeddsaSigned; defaults false so callers fail closed. */
+    bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0, bool xeddsaSigned = false);
 
     /*
      * Sets a node either favorite or unfavorite. Returns true if the node ends
