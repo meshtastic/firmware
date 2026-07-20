@@ -335,7 +335,20 @@ void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 
 void MQTT::onClientProxyReceive(meshtastic_MqttClientProxyMessage msg)
 {
-    onReceive(msg.topic, msg.payload_variant.data.bytes, msg.payload_variant.data.size);
+    // payload_variant is a union: on the text variant, data.size aliases the first bytes of the
+    // string, so reading it unconditionally let a client name any length up to PB_SIZE_MAX.
+    switch (msg.which_payload_variant) {
+    case meshtastic_MqttClientProxyMessage_data_tag:
+        onReceive(msg.topic, msg.payload_variant.data.bytes, msg.payload_variant.data.size);
+        break;
+    case meshtastic_MqttClientProxyMessage_text_tag:
+        onReceive(msg.topic, (byte *)msg.payload_variant.text,
+                  strnlen(msg.payload_variant.text, sizeof(msg.payload_variant.text)));
+        break;
+    default:
+        LOG_WARN("MQTT proxy message carries no payload, topic %s", msg.topic);
+        break;
+    }
 }
 
 void MQTT::onReceive(char *topic, byte *payload, size_t length)

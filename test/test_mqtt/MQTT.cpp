@@ -583,6 +583,63 @@ void test_receiveEmptyDataFromProxy(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+// A text-variant proxy message must be read as text. payload_variant is a union, so data.size
+// aliases the first bytes of the string: reading it regardless of which_payload_variant let a
+// client name a length of up to PB_SIZE_MAX and walk ~64KB off the end of the struct.
+void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    strcat(message.topic, "msh/2/e/test/!87654321");
+    message.which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
+    // 0xFF 0xFF is what data.size would read as: the largest length a pb_size_t can name.
+    memset(message.payload_variant.text, 0xFF, sizeof(message.payload_variant.text) - 1);
+    message.payload_variant.text[sizeof(message.payload_variant.text) - 1] = '\0';
+
+    mqtt->onClientProxyReceive(message);
+
+    // Not a ServiceEnvelope, so nothing is delivered - the point is that the read stays in bounds.
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A text-variant proxy message carrying a real envelope is still delivered, so the variant check
+// did not simply drop the text case.
+void test_receiveTextVariantFromProxyIsDelivered(void)
+{
+    const meshtastic_ServiceEnvelope env = {
+        .packet = const_cast<meshtastic_MeshPacket *>(&decoded), .channel_id = "test", .gateway_id = "!87654321"};
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    strcat(message.topic, "msh/2/e/test/!87654321");
+    message.which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
+    const size_t n = pb_encode_to_bytes((uint8_t *)message.payload_variant.text, sizeof(message.payload_variant.text) - 1,
+                                        &meshtastic_ServiceEnvelope_msg, &env);
+    TEST_ASSERT_GREATER_THAN(0, n);
+    // strnlen stops at the first NUL, so only an envelope without one round-trips as text.
+    if (memchr(message.payload_variant.text, 0, n) != nullptr) {
+        TEST_IGNORE_MESSAGE("encoded envelope contains a NUL; not representable as a text payload");
+        return;
+    }
+    message.payload_variant.text[n] = '\0';
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    TEST_ASSERT_EQUAL(decoded.id, mockRouter->packets_.front().id);
+}
+
+// A proxy message with no payload variant set must be ignored rather than read as bytes.
+void test_receiveNoVariantFromProxyIsIgnored(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    strcat(message.topic, "msh/2/e/test/!87654321");
+    message.which_payload_variant = 0;
+    memset(message.payload_variant.data.bytes, 0xFF, sizeof(message.payload_variant.data.bytes));
+    message.payload_variant.data.size = sizeof(message.payload_variant.data.bytes);
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
 // Packets should be ignored if downlink is not enabled.
 void test_receiveWithoutChannelDownlink(void)
 {
@@ -1051,6 +1108,9 @@ void setup()
     RUN_TEST(test_receiveDecodedProto);
     RUN_TEST(test_receiveDecodedProtoFromProxy);
     RUN_TEST(test_receiveEmptyDataFromProxy);
+    RUN_TEST(test_receiveTextVariantFromProxyIsNotReadAsBytes);
+    RUN_TEST(test_receiveTextVariantFromProxyIsDelivered);
+    RUN_TEST(test_receiveNoVariantFromProxyIsIgnored);
     RUN_TEST(test_receiveWithoutChannelDownlink);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
