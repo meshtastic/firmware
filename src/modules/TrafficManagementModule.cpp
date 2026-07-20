@@ -79,16 +79,6 @@ uint8_t sanitizePositionPrecision(uint8_t precision)
 }
 
 /**
- * Saturating increment for uint8_t counters.
- * Prevents overflow by capping at UINT8_MAX (255).
- */
-inline void saturatingIncrement(uint8_t &counter)
-{
-    if (counter < UINT8_MAX)
-        counter++;
-}
-
-/**
  * Return a short human-readable name for common port numbers.
  * Falls back to "port:<N>" for unknown ports.
  */
@@ -222,19 +212,6 @@ meshtastic_TrafficManagementStats TrafficManagementModule::getStats() const
 {
     concurrency::LockGuard guard(&cacheLock);
     return stats;
-}
-
-void TrafficManagementModule::resetStats()
-{
-    concurrency::LockGuard guard(&cacheLock);
-    stats = meshtastic_TrafficManagementStats_init_zero;
-}
-
-void TrafficManagementModule::recordRouterHopPreserved()
-{
-    // router_preserve_hops: not suitable right now - removed from config until
-    // the right heuristic for when to preserve vs. exhaust is clearer.
-    (void)stats.router_hops_preserved;
 }
 
 void TrafficManagementModule::incrementStat(uint32_t *field)

@@ -281,15 +281,6 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
     }
 }
 /**
- * Send a packet on a suitable interface.
- */
-ErrorCode Router::rawSend(meshtastic_MeshPacket *p)
-{
-    assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
-    return iface->send(p);
-}
-
-/**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
  * If the txmit queue is full it might return an error.
