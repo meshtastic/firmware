@@ -3315,10 +3315,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
-    // Once a node has proven it signs, only a signed update may change its identity. The public-key guard
-    // below is no help - an attacker can replay the victim's real (public) key. Our own record is exempt.
-    // Checked against the existing record before getOrCreateMeshNode, because creating an entry can evict
-    // another node and write the warm tier; a refused update must not leave those side effects behind.
+    // Only a signed update may change the identity of a node that has proven it signs; our own record is
+    // exempt. Checked before getOrCreateMeshNode so a refused update cannot evict or write the warm tier.
     const meshtastic_NodeInfoLite *existing = getMeshNode(nodeId);
     if (nodeId != getNodeNum() && existing && nodeInfoLiteHasXeddsaSigned(existing) && !xeddsaSigned) {
         LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
@@ -3420,11 +3418,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
-        // Admitting a node this way costs an eviction once the database is full, and on some platforms a
-        // warm-tier write. mp.from is unauthenticated header data, so a flood of invented node numbers
-        // would otherwise churn the database at packet rate and push real neighbours out. Only the
-        // packet-driven path is limited, and only while the database is full: explicit admission still
-        // evicts freely, and discovery is untouched while slots remain.
+        // mp.from is unauthenticated, so rate-limit admission once the database is full: otherwise
+        // invented node numbers churn it at packet rate and push real neighbours out.
         meshtastic_NodeInfoLite *info = getMeshNode(getFrom(&mp));
         if (!info) {
             if (isFull()) {
