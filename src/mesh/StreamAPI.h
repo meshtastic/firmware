@@ -80,7 +80,7 @@ class StreamAPI : public PhoneAPI
     /**
      * Send the current txBuffer over our stream
      */
-    void emitTxBuffer(size_t len);
+    bool emitTxBuffer(size_t len);
 
     /// Are we allowed to write packets to our output stream (subclasses can turn this off - i.e. SerialConsole)
     bool canWrite = true;
@@ -90,6 +90,23 @@ class StreamAPI : public PhoneAPI
 
     /// Low level function to emit a protobuf encapsulated log record
     void emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg);
+
+    /// Return whether the transport can accept a frame of the requested size.
+    virtual bool canWriteFrame(size_t frameLen) { return true; }
+    /// Let transports recover from or close after an incomplete write.
+    virtual void onFrameWriteFailed(size_t frameLen, size_t writtenLen) {}
+
+    /// Fill in the 4-byte 0x94C3 length header; returns the total frame length.
+    static size_t buildFrameHeader(uint8_t *buf, size_t payloadLen);
+
+    /// Complete retained transport output before dequeuing another PhoneAPI packet.
+    virtual bool finishPendingFrame() { return true; }
+    /// Return whether the dedicated log buffer is available for encoding.
+    virtual bool canEncodeLogRecord() { return true; }
+    /// Frame and write a payload, optionally using best-effort admission.
+    virtual bool writeFrame(uint8_t *buf, size_t len, bool bestEffort);
+
+    concurrency::Lock streamLock;
 
   private:
     /// Dedicated scratch + tx buffer for LogRecord emission.
@@ -102,7 +119,7 @@ class StreamAPI : public PhoneAPI
     /// re-used `fromRadioScratch` / `txBuf` and corrupted whatever the main
     /// path had already encoded. Symptoms on the host were
     /// `google.protobuf.message.DecodeError: Error parsing message with type
-    /// 'meshtastic.protobuf.FromRadio'` — any tool with
+    /// 'meshtastic.protobuf.FromRadio'` - any tool with
     /// `config.security.debug_log_api_enabled=true` under traffic would see
     /// torn frames every few messages.
     ///
@@ -112,5 +129,4 @@ class StreamAPI : public PhoneAPI
     /// interleave on the wire.
     meshtastic_FromRadio fromRadioScratchLog = {};
     uint8_t txBufLog[MAX_STREAM_BUF_SIZE] = {0};
-    concurrency::Lock streamLock;
 };

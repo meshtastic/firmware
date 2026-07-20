@@ -82,9 +82,12 @@ CannedMessageModule::CannedMessageModule()
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;
@@ -110,21 +113,15 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     LOG_DEBUG("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
-void CannedMessageModule::LaunchRepeatDestination()
-{
-    if (!lastDestSet) {
-        LaunchWithDestination(NODENUM_BROADCAST, 0);
-    } else {
-        LaunchWithDestination(lastDest, lastChannel);
-    }
-}
-
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;
@@ -281,10 +278,6 @@ void CannedMessageModule::updateDestinationSelectionList()
         }
     }
 
-    meshtastic_MeshPacket *p = allocDataPacket();
-    p->pki_encrypted = true;
-    p->channel = 0;
-
     // Populate active channels
     std::vector<String> seenChannels;
     seenChannels.reserve(channels.getNumChannels());
@@ -302,12 +295,6 @@ void CannedMessageModule::updateDestinationSelectionList()
         LOG_INFO("Nodes changed, forcing UI refresh.");
         screen->forceDisplay();
     }
-}
-
-// Returns true if character input is currently allowed (used for search/freetext states)
-bool CannedMessageModule::isCharInputAllowed() const
-{
-    return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
 }
 
 static int getRowHeightForEmoteText(const char *text, int minimumHeight, int emoteSpacing = 2)
@@ -1361,7 +1348,7 @@ int32_t CannedMessageModule::runOnce()
             case INPUT_BROKER_RIGHT:
                 break;
             default:
-                // Only insert ASCII printable characters (32–126)
+                // Only insert ASCII printable characters (32-126)
                 if (this->payload >= 32 && this->payload <= 126) {
                     requestFocus();
                     if (this->cursor == this->freetext.length()) {
@@ -1431,13 +1418,6 @@ bool CannedMessageModule::shouldDraw()
     return (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
             this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
             this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
-}
-
-// Has the user defined any canned messages?
-// Expose publicly whether canned message module is ready for use
-bool CannedMessageModule::hasMessages()
-{
-    return (this->messagesCount > 0);
 }
 
 int CannedMessageModule::getNextIndex()
@@ -2110,6 +2090,7 @@ static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
         return -6.0f;
     case PRESET(MEDIUM_SLOW):
     case PRESET(MEDIUM_FAST):
+    case PRESET(MEDIUM_TURBO):
         return -5.5f;
     case PRESET(SHORT_SLOW):
     case PRESET(SHORT_FAST):
@@ -2120,7 +2101,7 @@ static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
     }
 }
 
-// Return Good/Fair/Bad label and set 1–5 bars based on SNR and RSSI
+// Return Good/Fair/Bad label and set 1-5 bars based on SNR and RSSI
 static const char *getSignalGrade(float snr, int32_t rssi, float snrLimit, int &bars)
 {
     // 5-bar logic: strength inside Good/Fair/Bad category

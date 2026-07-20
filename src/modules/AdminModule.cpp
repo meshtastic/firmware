@@ -1,13 +1,17 @@
 #include "AdminModule.h"
 #include "Channels.h"
+#include "DisplayFormatters.h"
+#include "HardwareRNG.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionPrecision.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "SPILock.h"
+#include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
+#include <Throttle.h>
 #include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "MeshtasticOTA.h"
@@ -19,14 +23,25 @@
 #include "main.h"
 #endif
 #ifdef ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "unistd.h"
 #endif
 
 #include "Default.h"
 #include "MeshRadio.h"
+#include "MessageStore.h"
 #include "RadioInterface.h"
 #include "TypeConversions.h"
 #include "mesh/RadioLibInterface.h"
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#include "mesh/PhoneAPI.h"
+#endif
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+#include "security/EncryptedStorage.h"
+#endif
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -35,6 +50,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+
+#include <RNG.h>      // CryptRNG, the seeded CSPRNG used as fallback for the session passkey
+#include <Throttle.h> // rollover-safe elapsed-time checks for the session passkey
 
 #if MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
@@ -76,20 +94,76 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
     assert(r);
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // While storage is locked, drop every admin payload - both local and
+    // remote (PKC, mesh-relayed). Lockdown unlock is the prerequisite for
+    // any admin operation: operators must authenticate via lockdown_auth
+    // first. The lockdown_auth path itself is handled synchronously in
+    // PhoneAPI::handleToRadioPacket before reaching here, so the real
+    // unlock flow is not affected by this gate. Without this, a remote
+    // PKC-authorized peer (or a USERPREFS-baked admin_key) could drive
+    // factory_reset / set_config against a locked device before the
+    // operator has even unlocked it.
+    // Only gate when lockdown is ACTIVE. A lockdown-capable build that hasn't
+    // been provisioned (or was disabled) is not unlocked either, but must
+    // still serve admin normally - so check isLockdownActive() first.
+    if (EncryptedStorage::isLockdownActive() && !EncryptedStorage::isUnlocked()) {
+        LOG_WARN("AdminModule: dropping admin payload - storage locked");
+        return handled;
+    }
+#endif
+
     bool fromOthers = !isFromUs(&mp);
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
     }
+#ifdef ARCH_PORTDUINO
+    // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
+    // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
+    // can still block it. Rather than threading simulator awareness through the auth gates,
+    // intercept here before any auth logic runs. Local-origin + force_simradio only.
+    // TODO: should a local client bypass admin auth at all? Fenced to the simulator for now.
+    if (portduino_config.force_simradio && mp.from == 0 &&
+        r->which_payload_variant == meshtastic_AdminMessage_exit_simulator_tag) {
+        LOG_INFO("Exiting simulator");
+        exit(0);
+    }
+#endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
-    // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
-    // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
+        // Only accept a response from a remote we sent the matching request to. from == 0 is a
+        // local client, which PhoneAPI has already gated.
+        const pb_size_t moduleConfigTag = r->which_payload_variant == meshtastic_AdminMessage_get_module_config_response_tag
+                                              ? r->get_module_config_response.which_payload_variant
+                                              : 0;
+        if (mp.from != 0 && !responseIsSolicited(mp, r->which_payload_variant, moduleConfigTag)) {
+            LOG_INFO("Ignore admin response from 0x%08x, no outstanding request", mp.from);
+            return handled;
+        }
         LOG_DEBUG("Allow admin response message");
     } else if (mp.from == 0) {
+        // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
+        // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
+        // from == 0 as our own downlink and ignores it. Clients may set pki_encrypted
+        // on self-addressed admin (the python CLI does), so don't use it to reroute
+        // local packets into the remote-PKC key check.
+        //
+        // Under MESHTASTIC_PHONEAPI_ACCESS_CONTROL, the per-connection auth
+        // gate lives in PhoneAPI::handleToRadioPacket - any local admin
+        // payload other than lockdown_auth is dropped there if the
+        // originating connection is unauthorized. By the time we reach
+        // this branch the connection has already proven the passphrase,
+        // so is_managed needs no additional gate here.
+        //
+        // Without that build flag the legacy is_managed semantics still
+        // apply: refuse all plain local admin and require PKC instead.
+#ifndef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
         if (config.security.is_managed) {
             LOG_INFO("Ignore local admin payload because is_managed");
             return handled;
         }
+#endif
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin is disabled");
@@ -105,6 +179,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
              memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
             LOG_INFO("PKC admin payload with authorized sender key");
 
+            // Note: PKC admin does NOT automatically authorize the
+            // originating local PhoneAPI connection for content
+            // redaction purposes. PKC and the per-connection lockdown
+            // auth slot are independent gates - operators using PKC
+            // admin from a local app should still send lockdown_auth
+            // separately to unlock the redacted FromRadio stream.
+            // (The previous auto-authorize path read a shared
+            // g_currentContext set during synchronous PhoneAPI
+            // dispatch; by the time this Router-thread handler runs
+            // that pointer is unrelated, so the path was unsafe.)
+
             // Automatically favorite the node that is using the admin key
             auto remoteNode = nodeDB->getMeshNode(mp.from);
             if (remoteNode && !nodeInfoLiteIsFavorite(remoteNode)) {
@@ -113,8 +198,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                     // without the user doing so deliberately.
                     LOG_INFO("PKC admin valid, but not auto-favoriting node %x because role==CLIENT_BASE", mp.from);
                 } else {
-                    LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
-                    nodeInfoLiteSetBit(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+                    if (nodeDB->setProtectedFlag(remoteNode, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                        LOG_INFO("PKC admin valid. Auto-favoriting node %x", mp.from);
+                    } else {
+                        LOG_WARN("PKC admin valid, but auto-favorite refused for node %x (protected-node cap)", mp.from);
+                    }
                 }
             }
         } else {
@@ -140,6 +228,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
     }
     switch (r->which_payload_variant) {
+
+#ifdef MESHTASTIC_ENCRYPTED_STORAGE
+    // lockdown_auth is handled synchronously in
+    // PhoneAPI::handleToRadioPacket - see handleLockdownAuthInline. A
+    // packet should not normally reach AdminModule under that flag set,
+    // but if it ever does (e.g. injected via a non-PhoneAPI path), drop
+    // it silently rather than leaking a partial response.
+    case meshtastic_AdminMessage_lockdown_auth_tag:
+        LOG_WARN("AdminModule: lockdown_auth reached Router/AdminModule path; ignoring (should be handled in PhoneAPI)");
+        return handled;
+#endif // MESHTASTIC_ENCRYPTED_STORAGE
 
     /**
      * Getters
@@ -216,7 +315,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             break;
         }
 
-        // Hardware supports 2.4 GHz — apply the config.
+        // Hardware supports 2.4 GHz - apply the config.
         // Fail closed: null instance is treated as incapable.
         if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
             LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
@@ -231,6 +330,17 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     case meshtastic_AdminMessage_set_module_config_tag:
         LOG_DEBUG("Client set module config");
+#if !MESHTASTIC_EXCLUDE_BEACON
+        // broadcast_send_as_node: remote admins may only set this to their own node ID.
+        if (mp.from != 0 && r->set_module_config.which_payload_variant == meshtastic_ModuleConfig_mesh_beacon_tag) {
+            auto &b = r->set_module_config.payload_variant.mesh_beacon;
+            if (b.broadcast_send_as_node != 0 && b.broadcast_send_as_node != mp.from) {
+                LOG_WARN("Beacon: rejecting broadcast_send_as_node 0x%08x from node 0x%08x (must match sender)",
+                         b.broadcast_send_as_node, mp.from);
+                b.broadcast_send_as_node = moduleConfig.mesh_beacon.broadcast_send_as_node;
+            }
+        }
+#endif
         if (!handleSetModuleConfig(r->set_module_config)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
@@ -322,22 +432,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate factory config reset");
+        // Keep BLE active while reset cleanup performs nRF flash operations.
         nodeDB->factoryReset();
         LOG_INFO("Factory config reset finished, rebooting soon");
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate full factory reset");
         nodeDB->factoryReset(true);
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
-        disableBluetooth();
         LOG_INFO("Initiate node-db reset");
         //  CLIENT_BASE, ROUTER and ROUTER_LATE are able to preserve the remaining hop count when relaying a packet via a
         //  favorited node, so ensure that their favorites are kept on reset
@@ -345,6 +455,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             isOneOf(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_BASE,
                     meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE);
         nodeDB->resetNodes(rolePreference ? rolePreference : r->nodedb_reset);
+        disableBluetooth();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -364,6 +475,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Commit transaction for edited settings");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
+        flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
     }
     case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
@@ -373,8 +485,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_get_module_config_response_tag: {
         LOG_INFO("Client received a get_module_config response");
-        if (fromOthers && r->get_module_config_response.which_payload_variant ==
-                              meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
+        // which_payload_variant is the ModuleConfig oneof tag, so compare against that tag, not the
+        // AdminMessage ModuleConfigType enum (whose REMOTEHARDWARE value is a different number).
+        if (fromOthers && r->get_module_config_response.which_payload_variant == meshtastic_ModuleConfig_remote_hardware_tag) {
             handleGetModuleConfigResponse(mp, r);
         }
         break;
@@ -393,10 +506,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client received set_favorite_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
-            nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
-            saveChanges(SEGMENT_NODEDATABASE, false);
-            if (screen)
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
+                saveChanges(SEGMENT_NODEDATABASE, false);
+                if (screen)
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
+                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "favorite", r->set_favorite_node, MAX_NUM_NODES - 2);
+            } else {
+                LOG_WARN("Remote set_favorite_node for 0x%08x refused: protected-node cap", r->set_favorite_node);
+            }
         }
         break;
     }
@@ -413,13 +531,26 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_set_ignored_node_tag: {
         LOG_INFO("Client received set_ignored_node command");
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_ignored_node);
+        // Unlike the sibling node-targeted admin commands, create the entry if
+        // it's absent so the block sticks for a node we've not heard from yet
+        // (e.g. one a remote admin asks us to block) with no NodeInfo or key.
+        meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(r->set_ignored_node);
         if (node != NULL) {
-            nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
-            nodeDB->eraseNodeSatellites(node->num);
-            node->public_key.size = 0;
-            memset(node->public_key.bytes, 0, sizeof(node->public_key.bytes));
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
+                nodeDB->eraseNodeSatellites(node->num);
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+                messageStore.deleteAllMessagesFromNode(node->num);
+#endif
+                saveChanges(SEGMENT_NODEDATABASE, false);
+#if HAS_SCREEN
+                if (screen)
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+#endif
+            } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
+                sendWarning(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", r->set_ignored_node, MAX_NUM_NODES - 2);
+            } else {
+                LOG_WARN("Remote set_ignored_node for 0x%08x refused: protected-node cap", r->set_ignored_node);
+            }
         }
         break;
     }
@@ -481,7 +612,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN
         IF_SCREEN(screen->showSimpleBanner("Device is rebooting\ninto DFU mode.", 0));
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32)
         enterDfuMode();
 #endif
         break;
@@ -625,10 +756,15 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     int changed = 0;
 
     if (*o.long_name) {
-        changed |= strcmp(owner.long_name, o.long_name);
-        strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
+        // Apps built against the older 39-byte limit may send longer names; clamp
+        // before the changed-compare so re-sending the same long name is a no-op.
+        char longName[sizeof(o.long_name)];
+        strncpy(longName, o.long_name, sizeof(longName));
+        longName[sizeof(longName) - 1] = '\0';
+        clampLongName(longName);
+        changed |= strcmp(owner.long_name, longName);
+        strncpy(owner.long_name, longName, sizeof(owner.long_name));
         owner.long_name[sizeof(owner.long_name) - 1] = '\0';
-        sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
     }
     if (*o.short_name) {
         changed |= strcmp(owner.short_name, o.short_name);
@@ -642,7 +778,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         changed = 1;
         owner.is_licensed = o.is_licensed;
         if (channels.ensureLicensedOperation()) {
-            sendWarning(licensedModeMessage);
+            warnLicensedMode();
         }
     }
     if (owner.has_is_unmessagable != o.has_is_unmessagable ||
@@ -658,12 +794,52 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 }
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
+    !MESHTASTIC_EXCLUDE_ACCELEROMETER
+// Shared by double-tap-as-button (device) and wake-on-motion (display). Start on either flag's
+// off->on edge; stop on the on->off edge once neither needs it (disable() clears `enabled` so a
+// later re-enable restarts). Skip the stop if the sensor also drives the compass, else the heading
+// freezes until reboot. wasOn/nowOn = old/new of the changed flag; otherFeatureOn = the other flag.
+static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatureOn)
+{
+    if (!accelerometerThread) // null unless a sensor was detected at boot
+        return;
+
+    if (!wasOn && nowOn && accelerometerThread->enabled == false) {
+        accelerometerThread->enabled = true;
+        accelerometerThread->start();
+    } else if (wasOn && !nowOn && !otherFeatureOn && accelerometerThread->enabled == true &&
+               !accelerometerThread->providesHeading()) {
+        accelerometerThread->disable();
+    }
+}
+#endif
+
+// A "regenerate keys" client sends a blank SecurityConfig holding only the new private key, rather than the
+// config it read from us. Detect that shape - new private key, every other field at its proto default - so it
+// isn't mistaken for "and clear everything else".
+static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incoming,
+                                  const meshtastic_Config_SecurityConfig &current)
+{
+    if (incoming.private_key.size != 32)
+        return false;
+    if (current.private_key.size == 32 && memcmp(incoming.private_key.bytes, current.private_key.bytes, 32) == 0)
+        return false;
+
+    return incoming.admin_key_count == 0 && !incoming.is_managed && !incoming.serial_enabled && !incoming.debug_log_api_enabled &&
+           !incoming.admin_channel_enabled &&
+           incoming.packet_signature_policy ==
+               meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+}
+
 void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
+    bool loraPresetWarnPending = false;
+    meshtastic_Config_LoRaConfig pendingOldLora = {}, pendingNewLora = {};
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag: {
@@ -671,12 +847,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
-            accelerometerThread->enabled == false) {
-            config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
+        reconcileAccelerometerThread(config.device.double_tap_as_button_press,
+                                     c.payload_variant.device.double_tap_as_button_press, config.display.wake_on_tap_or_motion);
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
@@ -775,12 +947,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
     !MESHTASTIC_EXCLUDE_ACCELEROMETER
-        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
-            accelerometerThread->enabled == false) {
-            config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
-            accelerometerThread->enabled = true;
-            accelerometerThread->start();
-        }
+        reconcileAccelerometerThread(config.display.wake_on_tap_or_motion, c.payload_variant.display.wake_on_tap_or_motion,
+                                     config.device.double_tap_as_button_press);
 #endif
         config.display = c.payload_variant.display;
         break;
@@ -801,6 +969,17 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         if (validatedLora.spread_factor != clampSpreadFactor(validatedLora.spread_factor)) {
             LOG_WARN("Invalid spread_factor %d, setting to %d", validatedLora.spread_factor, LORA_SF_DEFAULT);
             validatedLora.spread_factor = LORA_SF_DEFAULT;
+        }
+
+        // A custom (non-preset) config that leaves bandwidth at its proto zero-value otherwise slips
+        // through validateConfigLora() and persists as 0, while the radio silently falls back to the
+        // default (config.lora.bandwidth then reads back 0 even though the radio runs at 250kHz).
+        // Coerce it here like coding_rate/spread_factor so the stored config matches the radio. In
+        // preset mode bandwidth 0 is expected (the preset supplies it), so leave it untouched.
+        const uint16_t clampedBandwidth = clampBandwidthCode(validatedLora.bandwidth);
+        if (!validatedLora.use_preset && validatedLora.bandwidth != clampedBandwidth) {
+            LOG_WARN("Invalid bandwidth %d, setting to %d", validatedLora.bandwidth, clampedBandwidth);
+            validatedLora.bandwidth = clampedBandwidth;
         }
 
         // If we're setting a new region, check the region is valid and then init the region or discard the change
@@ -829,7 +1008,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 }
                 if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 }
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             } else {
@@ -840,12 +1019,38 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         if (!RadioInterface::validateConfigLora(validatedLora)) {
             if (fromOthers) {
-                LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
-                //  modem_preset set to use the old setting if the check fails
-                validatedLora.modem_preset = oldLoraConfig.modem_preset;
+                // A preset locked to a sibling EU region still swaps the region for remote admin;
+                // any other invalid config is rejected outright.
+                const RegionInfo *swapRegion =
+                    validatedLora.use_preset
+                        ? RadioInterface::regionSwapForPreset(validatedLora.region, validatedLora.modem_preset)
+                        : NULL;
+                if (swapRegion) {
+                    validatedLora.region = swapRegion->code;
+                }
+                if (!swapRegion || !RadioInterface::validateConfigLora(validatedLora)) {
+                    LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+                    // Rejecting means rejecting everything: a partial restore of region/preset
+                    // could still apply other fields the validation already deemed invalid.
+                    validatedLora = oldLoraConfig;
+                }
             } else {
                 LOG_WARN("Invalid LoRa config received from client, using corrected values");
                 RadioInterface::clampConfigLora(validatedLora);
+            }
+            // A preset locked to a sibling EU region swaps the region during the clamp;
+            // apply the same housekeeping as an explicit region change.
+            if (validatedLora.region != oldLoraConfig.region) {
+                config.lora.region = validatedLora.region;
+                initRegion();
+                if (getEffectiveDutyCycle() < 100) {
+                    validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+                }
+                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
+                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
+                }
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             }
             //  use_preset and bandwidth are coerced into valid values by the check.
         }
@@ -882,7 +1087,20 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
 
+#if !MESHTASTIC_EXCLUDE_GPS
+        // Enable gps if it was previously disabled due to region not being set
+        if (!requiresReboot && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr &&
+            !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+            gps->enable();
+        }
+#endif
+
         config.lora = validatedLora; // Finally, return the validated config back to the main config
+        if (validatedLora.modem_preset != oldLoraConfig.modem_preset) {
+            pendingOldLora = oldLoraConfig;
+            pendingNewLora = validatedLora;
+            loraPresetWarnPending = true;
+        }
 
         break;
     }
@@ -891,26 +1109,36 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.has_bluetooth = true;
         config.bluetooth = c.payload_variant.bluetooth;
         break;
-    case meshtastic_Config_security_tag:
+    case meshtastic_Config_security_tag: {
         LOG_INFO("Set config: Security");
-        config.security = c.payload_variant.security;
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
-        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            if (config.security.private_key.size != 32) {
-                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-
-            } else {
-                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                    config.security.public_key.size = 32;
-                }
-            }
+        meshtastic_Config_SecurityConfig incoming = c.payload_variant.security;
+        // Preserve our keypair when a SET omits the private key but we already hold one: regenerating would
+        // change our NodeNum (== crc32(public_key)) and orphan us on the mesh. A SET without the key is a
+        // partial/legacy client, not an identity reset (that goes through factory_reset). Done outside the
+        // PKI guard so non-PKI builds keep their key bytes too.
+        if (incoming.private_key.size != 32 && config.security.private_key.size == 32) {
+            LOG_WARN("Security set omitted private key; preserving existing identity keypair");
+            incoming.private_key = config.security.private_key;
+            incoming.public_key = config.security.public_key;
         }
-#endif
-        owner.public_key.size = config.security.public_key.size;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
-#if !MESHTASTIC_EXCLUDE_PKI
-        crypto->setDHPrivateKey(config.security.private_key.bytes);
+        // Rotating the keypair must not drop the admin keys - that locks the owner out of remote admin with no
+        // recourse but a physical connection. Clearing admin keys still works via a SET that leaves the private
+        // key alone and sends an empty list.
+        if (isBareKeypairRotation(incoming, config.security)) {
+            LOG_INFO("Security set is a bare keypair rotation; preserving remaining security config");
+            meshtastic_Config_SecurityConfig rotated = config.security;
+            rotated.public_key = incoming.public_key; // usually empty; derived from the private key below
+            rotated.private_key = incoming.private_key;
+            incoming = rotated;
+        }
+        config.security = incoming;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
+        // First provisioning (no key) generates one; a private key supplied without its public key derives it.
+        if (config.security.private_key.size != 32) {
+            nodeDB->generateCryptoKeyPair();
+        } else if (config.security.public_key.size == 0) {
+            nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
+        }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
                                             config.security.admin_key[2].size == 32)) {
@@ -920,11 +1148,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             sendWarning(warning);
         }
 
-        if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
-            config.security.serial_enabled == c.payload_variant.security.serial_enabled)
-            requiresReboot = false;
+        changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+
+        requiresReboot = true;
 
         break;
+    }
     case meshtastic_Config_device_ui_tag:
         // NOOP! This is handled by handleStoreDeviceUIConfig
         break;
@@ -934,6 +1163,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     } // end of switch case which_payload_variant
 
     saveChanges(changes, requiresReboot);
+    if (loraPresetWarnPending)
+        warnOnLoraPresetChange(pendingOldLora, pendingNewLora);
+    // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
+    if (!hasOpenEditTransaction)
+        flushChannelWarnings();
 } // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -1045,6 +1279,91 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_traffic_management = true;
         moduleConfig.traffic_management = c.payload_variant.traffic_management;
         break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+    case meshtastic_ModuleConfig_mesh_beacon_tag: {
+        LOG_INFO("Set module config: MeshBeacon");
+        // Sanitize a local copy rather than const_cast-ing the const input (UB if a truly-const
+        // object is ever passed); the validated copy is assigned into moduleConfig below.
+        auto beaconCfg = c.payload_variant.mesh_beacon;
+        // Hard cap at 100 chars.
+        beaconCfg.broadcast_message[100] = '\0';
+        // Enforce interval minimum (0 means unset/use default).
+        if (beaconCfg.broadcast_interval_secs != 0 &&
+            beaconCfg.broadcast_interval_secs < default_mesh_beacon_min_broadcast_interval_secs)
+            beaconCfg.broadcast_interval_secs = default_mesh_beacon_min_broadcast_interval_secs;
+        // Validate broadcast_on_preset against broadcast_on_region (or current region if unset).
+        if (beaconCfg.has_broadcast_on_preset) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            probe.modem_preset = beaconCfg.broadcast_on_preset;
+            if (beaconCfg.broadcast_on_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = beaconCfg.broadcast_on_region;
+            if (!RadioInterface::validateConfigLora(probe)) {
+                LOG_WARN("Beacon: broadcast_on_preset %d invalid for region, clearing", beaconCfg.broadcast_on_preset);
+                beaconCfg.has_broadcast_on_preset = false;
+                beaconCfg.has_broadcast_on_channel = false;
+            }
+        }
+        // Validate broadcast_offer_preset against broadcast_offer_region (or current region if unset).
+        if (beaconCfg.has_broadcast_offer_preset) {
+            meshtastic_Config_LoRaConfig probe = config.lora;
+            probe.use_preset = true;
+            probe.modem_preset = beaconCfg.broadcast_offer_preset;
+            if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                probe.region = beaconCfg.broadcast_offer_region;
+            if (!RadioInterface::validateConfigLora(probe)) {
+                LOG_WARN("Beacon: broadcast_offer_preset %d invalid for region, clearing", beaconCfg.broadcast_offer_preset);
+                beaconCfg.has_broadcast_offer_preset = false;
+            }
+        }
+        // Validate broadcast_offer_region is a known region code.
+        if (beaconCfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            const RegionInfo *r = getRegion(beaconCfg.broadcast_offer_region);
+            if (r->code != beaconCfg.broadcast_offer_region) {
+                LOG_WARN("Beacon: broadcast_offer_region %d invalid, clearing", beaconCfg.broadcast_offer_region);
+                beaconCfg.broadcast_offer_region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+            }
+        }
+        // Validate each multi-target entry the same way as the single-target broadcast_on_* fields,
+        // so a bad preset/region is cleared on write rather than relying on the runtime TX drop.
+        for (pb_size_t i = 0; i < beaconCfg.broadcast_targets_count; i++) {
+            auto &t = beaconCfg.broadcast_targets[i];
+            // Region must be a known region code (UNSET = use running config at TX time).
+            if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+                const RegionInfo *r = getRegion(t.region);
+                if (r->code != t.region) {
+                    LOG_WARN("Beacon: broadcast_targets[%u] region %d invalid, clearing", i, t.region);
+                    t.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+                }
+            }
+            // Preset must be valid for the target region (or current region if unset).
+            if (t.has_preset) {
+                meshtastic_Config_LoRaConfig probe = config.lora;
+                probe.use_preset = true;
+                probe.modem_preset = t.preset;
+                if (t.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                    probe.region = t.region;
+                if (!RadioInterface::validateConfigLora(probe)) {
+                    LOG_WARN("Beacon: broadcast_targets[%u] preset %d invalid for region, clearing", i, t.preset);
+                    t.has_preset = false;
+                    t.has_channel_index = false;
+                }
+            }
+            // channel_index must reference a real channel-table slot.
+            if (t.has_channel_index && t.channel_index >= MAX_NUM_CHANNELS) {
+                LOG_WARN("Beacon: broadcast_targets[%u] channel_index %u out of range, clearing", i, t.channel_index);
+                t.has_channel_index = false;
+            }
+        }
+        moduleConfig.has_mesh_beacon = true;
+        moduleConfig.mesh_beacon = beaconCfg;
+        shouldReboot = false;
+        // Payload content changed - invalidate the broadcaster's cache.
+        if (meshBeaconBroadcastModule)
+            meshBeaconBroadcastModule->invalidateCache();
+        break;
+    }
+#endif
     }
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
     return true;
@@ -1054,10 +1373,33 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
-        sendWarning(licensedModeMessage);
+        warnLicensedMode();
     }
+    // Refresh derived state (primaryIndex in particular) BEFORE the precision clamp below. usesPublicKey()
+    // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
+    // running the clamp first could evaluate secondaries against the previous primary and skip the clamp/warning.
     channels.onConfigChanged(); // tell the radios about this change
+
+    // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
+    // that inherit a now-public primary key) and warn the client once if anything was coarsened.
+    bool clamped = false;
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        meshtastic_Channel &ch = channels.getByIndex(i);
+        if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.settings.has_module_settings)
+            continue;
+        uint32_t allowed = getPositionPrecisionForChannel(i);
+        if (allowed != ch.settings.module_settings.position_precision) {
+            ch.settings.module_settings.position_precision = allowed;
+            clamped = true;
+        }
+    }
+    if (clamped)
+        sendWarning(publicChannelPrecisionMessage);
     saveChanges(SEGMENT_CHANNELS, false);
+    warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
+    // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
+    if (!hasOpenEditTransaction)
+        flushChannelWarnings();
 }
 
 /**
@@ -1127,6 +1469,15 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
             LOG_INFO("Get config: Security");
             res.get_config_response.which_payload_variant = meshtastic_Config_security_tag;
             res.get_config_response.payload_variant.security = config.security;
+            // The device identity private key is backup material for the local owner only. A local
+            // admin client sets from == 0 (BLE/USB/TCP); never return the key to a remote requester,
+            // even an authorized one, since it would travel over the air. public_key/admin_key are
+            // public and stay put.
+            if (req.from != 0) {
+                auto &sec = res.get_config_response.payload_variant.security;
+                memset(sec.private_key.bytes, 0, sizeof(sec.private_key.bytes));
+                sec.private_key.size = 0;
+            }
             break;
         case meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG:
             LOG_INFO("Get config: Sessionkey");
@@ -1236,6 +1587,13 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+#if !MESHTASTIC_EXCLUDE_BEACON
+        case meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG:
+            configName = "MeshBeacon";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mesh_beacon_tag;
+            res.get_module_config_response.payload_variant.mesh_beacon = moduleConfig.mesh_beacon;
+            break;
+#endif
         }
         LOG_INFO("Get module config: %s", configName);
 
@@ -1284,6 +1642,13 @@ void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &r
 
 void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
 {
+#if WARM_NODE_COUNT > 0 && MESHTASTIC_NODEDB_MIGRATION_VERBOSE
+    // Debug aid: dump the warm tier to the console on a local metadata request
+    // (e.g. `meshtastic --info` over USB/BLE). Gated to req.from == 0 so remote
+    // or admin polling can't spam the console.
+    if (nodeDB && req.from == 0)
+        nodeDB->warmStore.dumpToLog("admin get_metadata");
+#endif
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
     r.get_device_metadata_response = getDeviceMetadata();
     r.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_response_tag;
@@ -1459,9 +1824,13 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     // Remove PSK of primary channel for plaintext amateur usage
 
     if (channels.ensureLicensedOperation()) {
-        sendWarning(licensedModeMessage);
+        warnLicensedMode();
     }
     channels.onConfigChanged();
+
+    if (strcmp(p.call_sign, "N0CALL") == 0) {
+        config.lora.tx_enabled = false;
+    }
 
     service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
@@ -1475,11 +1844,15 @@ AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_AP
 
 void AdminModule::setPassKey(meshtastic_AdminMessage *res)
 {
-    if (session_time == 0 || millis() / 1000 > session_time + 150) {
-        for (int i = 0; i < 8; i++) {
-            session_passkey[i] = random();
-        }
-        session_time = millis() / 1000;
+    // Regenerate once there is no session yet or the current key is older than 150s. session_time
+    // holds millis(); the Throttle check is rollover-safe, unlike the previous seconds comparison.
+    if (!sessionPasskeyValid || !Throttle::isWithinTimespanMs(session_time, 150 * 1000UL)) {
+        // Session passkey authenticates admin replies, so it must be unpredictable: prefer the
+        // hardware RNG, falling back to the seeded CSPRNG only when no hardware source exists.
+        if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
+            CryptRNG.rand(session_passkey, sizeof(session_passkey));
+        session_time = millis();
+        sessionPasskeyValid = true;
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);
     res->session_passkey.size = 8;
@@ -1492,7 +1865,8 @@ bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
 { // check that the key in the packet is still valid
     printBytes("Incoming session key: ", res->session_passkey.bytes, 8);
     printBytes("Expected session key: ", session_passkey, 8);
-    return (session_time + 300 > millis() / 1000 && res->session_passkey.size == 8 &&
+    // Key is valid for 300s from issue; sessionPasskeyValid guards an unissued session.
+    return (sessionPasskeyValid && Throttle::isWithinTimespanMs(session_time, 300 * 1000UL) && res->session_passkey.size == 8 &&
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
 }
 
@@ -1511,6 +1885,107 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+// The response variant that answers a getter request, or 0 if the request has none.
+static pb_size_t adminResponseForRequest(pb_size_t requestVariant)
+{
+    switch (requestVariant) {
+    case meshtastic_AdminMessage_get_channel_request_tag:
+        return meshtastic_AdminMessage_get_channel_response_tag;
+    case meshtastic_AdminMessage_get_owner_request_tag:
+        return meshtastic_AdminMessage_get_owner_response_tag;
+    case meshtastic_AdminMessage_get_config_request_tag:
+        return meshtastic_AdminMessage_get_config_response_tag;
+    case meshtastic_AdminMessage_get_module_config_request_tag:
+        return meshtastic_AdminMessage_get_module_config_response_tag;
+    case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
+        return meshtastic_AdminMessage_get_canned_message_module_messages_response_tag;
+    case meshtastic_AdminMessage_get_device_metadata_request_tag:
+        return meshtastic_AdminMessage_get_device_metadata_response_tag;
+    case meshtastic_AdminMessage_get_ringtone_request_tag:
+        return meshtastic_AdminMessage_get_ringtone_response_tag;
+    case meshtastic_AdminMessage_get_device_connection_status_request_tag:
+        return meshtastic_AdminMessage_get_device_connection_status_response_tag;
+    case meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag:
+        return meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag;
+    case meshtastic_AdminMessage_get_ui_config_request_tag:
+        return meshtastic_AdminMessage_get_ui_config_response_tag;
+    default:
+        return 0;
+    }
+}
+
+void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
+        return;
+    // Local admin is answered in-process, and a broadcast is never a request to one remote.
+    if (p.to == 0 || isBroadcast(p.to) || p.to == nodeDB->getNodeNum())
+        return;
+
+    meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin))
+        return;
+    const pb_size_t responseVariant = adminResponseForRequest(admin.which_payload_variant);
+    if (!responseVariant)
+        return; // not a getter whose response we can pair
+
+    const bool keyValid = p.pki_encrypted && p.public_key.size == 32;
+
+    // One entry per request (a client sends N indexed get_channel requests, each answered once, so
+    // entries must not merge). Free slot, else evict the oldest by rollover-safe elapsed time.
+    OutstandingAdminRequest *slot = nullptr;
+    for (auto &o : outstandingAdminRequests)
+        if (o.to == 0) {
+            slot = &o;
+            break;
+        }
+    if (!slot) {
+        const uint32_t now = millis();
+        slot = &outstandingAdminRequests[0];
+        for (auto &o : outstandingAdminRequests)
+            if ((uint32_t)(now - o.sentAtMs) > (uint32_t)(now - slot->sentAtMs))
+                slot = &o;
+    }
+
+    slot->to = p.to;
+    slot->sentAtMs = millis();
+    slot->expectedResponse = responseVariant;
+    slot->moduleConfigType = admin.which_payload_variant == meshtastic_AdminMessage_get_module_config_request_tag
+                                 ? (uint8_t)admin.get_module_config_request
+                                 : 0;
+    slot->keyValid = keyValid;
+    if (keyValid)
+        memcpy(slot->key, p.public_key.bytes, 32);
+    else
+        memset(slot->key, 0, 32);
+    LOG_DEBUG("Admin request sent to 0x%08x, expecting its response", p.to);
+}
+
+bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant, pb_size_t moduleConfigTag)
+{
+    // Scan every entry: several requests for the same variant may differ only in pinning, and an
+    // unpinned one still authorizes the response even if a pinned one does not.
+    for (auto &o : outstandingAdminRequests) {
+        if (o.to != mp.from || o.expectedResponse != responseVariant)
+            continue;
+        if (!Throttle::isWithinTimespanMs(o.sentAtMs, kOutstandingAdminRequestMs)) {
+            o.to = 0; // lapsed; free the slot and keep looking for another live match
+            continue;
+        }
+        // A request pinned to a PKC key must be answered over PKC by that same key.
+        if (o.keyValid && (!mp.pki_encrypted || mp.public_key.size != 32 || memcmp(mp.public_key.bytes, o.key, 32) != 0))
+            continue;
+        // remote_hardware is the only module config that mutates state (the pin table), so require
+        // it to answer a request for that exact subtype, not just any get_module_config_request.
+        if (moduleConfigTag == meshtastic_ModuleConfig_remote_hardware_tag &&
+            o.moduleConfigType != meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG)
+            continue;
+        o.to = 0; // consume: one request authorizes one response, no replay within the window
+        return true;
+    }
+    return false;
 }
 
 bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
@@ -1593,13 +2068,258 @@ void AdminModule::sendWarningAndLog(const char *format, ...)
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
 
-    LOG_WARN(buf);
-    // 2. Call sendWarning
-    // SECURITY NOTE: We pass "%s", buf instead of just 'buf'.
-    // If 'buf' contained a % symbol (e.g. "Battery 50%"), passing it directly
-    // would crash sendWarning. "%s" treats it purely as text.
+    // SECURITY NOTE: Both LOG_WARN and sendWarning are printf-style, so we pass
+    // "%s", buf rather than 'buf' directly. If 'buf' contained a % symbol (e.g. a
+    // user-supplied channel name like "50%"), passing it as the format string would
+    // read bogus varargs and could crash. "%s" treats it purely as text.
+    LOG_WARN("%s", buf);
     sendWarning("%s", buf);
 }
+
+// Strip spaces and fold to lowercase for loose preset-name comparison.
+static void normalizePresetName(const char *src, char *dst, size_t dstLen)
+{
+    size_t j = 0;
+    for (size_t i = 0; src[i] && j + 1 < dstLen; i++) {
+        if (src[i] != ' ')
+            dst[j++] = (char)tolower((unsigned char)src[i]);
+    }
+    dst[j] = '\0';
+}
+
+// Record one channel-configuration warning. The first message is kept verbatim in case it
+// turns out to be the only one; nameIssue/pskIssue and the channel bitmask feed the catch-all
+// wording if more than one channel ends up flagged. flushChannelWarnings() emits the result.
+void AdminModule::queueChannelWarning(uint8_t channelIndex, bool nameIssue, bool pskIssue, const char *format, ...)
+{
+    if (pendingWarningCount == 0) {
+        va_list args;
+        va_start(args, format);
+        vsnprintf(pendingWarningText, sizeof(pendingWarningText), format, args);
+        va_end(args);
+    }
+    if (channelIndex < MAX_NUM_CHANNELS)
+        pendingWarningChannels |= (1u << channelIndex);
+    pendingWarningNameIssue |= nameIssue;
+    pendingWarningPskIssue |= pskIssue;
+    pendingWarningCount++;
+}
+
+// Queue the fixed "licensed mode activated" notice, deferring it to commit during an edit
+// transaction so repeated triggers collapse to a single message.
+void AdminModule::warnLicensedMode()
+{
+    if (hasOpenEditTransaction)
+        pendingLicenseWarning = true;
+    else
+        sendWarning(licensedModeMessage);
+}
+
+// Emit the coalesced channel warning(s): nothing if none queued, the lone message verbatim if
+// exactly one, otherwise a single catch-all naming every flagged channel. The licensed-mode
+// notice, if queued, is emitted once alongside. Always resets state.
+void AdminModule::flushChannelWarnings()
+{
+    if (pendingLicenseWarning)
+        sendWarning(licensedModeMessage);
+
+    if (pendingWarningCount == 1) {
+        sendWarningAndLog("%s", pendingWarningText);
+    } else if (pendingWarningCount > 1) {
+        char list[48] = {};
+        for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
+            if (!(pendingWarningChannels & (1u << i)))
+                continue;
+            char num[8];
+            snprintf(num, sizeof(num), "%s%u", *list ? ", " : "", i);
+            strncat(list, num, sizeof(list) - strlen(list) - 1);
+        }
+        if (pendingWarningNameIssue && pendingWarningPskIssue)
+            sendWarningAndLog("There may be name and PSK issues on channels %s", list); // max 60 bytes
+        else if (pendingWarningNameIssue)
+            sendWarningAndLog("There may be name issues on channels %s", list); // max 52 bytes
+        else
+            sendWarningAndLog("There may be PSK issues on channels %s", list); // max 51 bytes
+    }
+    pendingWarningText[0] = '\0';
+    pendingWarningChannels = 0;
+    pendingWarningCount = 0;
+    pendingWarningNameIssue = false;
+    pendingWarningPskIssue = false;
+    pendingLicenseWarning = false;
+}
+
+/**
+ * @brief Emit client warnings for common misconfigurations on a newly committed channel.
+ *
+ * Called from handleSetChannel() after the channel has been saved. The following checks
+ * are performed:
+ *
+ * - Blank PSK (size == 0) on a non-licensed device: the channel has no encryption.
+ * - Blank name with a non-default key (not the default key, 0x01): the name will auto-resolve to
+ *   the current modem preset name, but the key mismatch means other preset nodes cannot
+ *   decode traffic on this channel.
+ * - Named channel whose name is a case/space variant of the current modem preset: the
+ *   explicit name prevents auto-resolution; client should clear it.
+ * - Same variant match but PSK is not the default key: looks like the preset channel but
+ *   is incompatible with nodes using the preset's default key.
+ *
+ * @param cc  The channel that was written.
+ */
+void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
+{
+    if (cc.role == meshtastic_Channel_Role_DISABLED || !cc.has_settings) // don't check unused channels
+        return;
+
+    bool blankPsk = (cc.settings.psk.size == 0 && !owner.is_licensed);
+
+    if (!config.lora.use_preset) { // custom or unset preset can mistype things too
+        const char *mistypePreset = nullptr;
+        if (*cc.settings.name) {
+            char normChan[32];
+            normalizePresetName(cc.settings.name, normChan, sizeof(normChan));
+            for (auto preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN;
+                 preset <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX;
+                 preset = (meshtastic_Config_LoRaConfig_ModemPreset)(preset + 1)) {
+                const char *name = DisplayFormatters::getModemPresetDisplayName(preset, false, true);
+                if (strcmp(name, "Invalid") == 0)
+                    continue; // skip preset slots without a real display name
+                if (strcmp(cc.settings.name, name) == 0)
+                    break; // exact match - not a mistype, no warning
+                char normPreset[32];
+                normalizePresetName(name, normPreset, sizeof(normPreset));
+                if (strcmp(normChan, normPreset) == 0) {
+                    mistypePreset = name;
+                    break;
+                }
+            }
+        }
+        // At most one warning: collapse blank-PSK + mistype into a single catch-all.
+        if (blankPsk && mistypePreset)
+            queueChannelWarning(cc.index, true, true, "There may be name and PSK issues on channel %d", cc.index);
+        else if (mistypePreset)
+            queueChannelWarning(cc.index, true, false,
+                                "Channel %d name '%s' looks like a mistype of '%s' - "
+                                "make sure to type it exactly!", // max 90 bytes
+                                cc.index, cc.settings.name, mistypePreset);
+        else if (blankPsk)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
+                                cc.index, cc.settings.name);
+        return;
+    }
+
+    const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true);
+    bool isDefaultKey = (cc.settings.psk.size == 1 && cc.settings.psk.bytes[0] == 0x01);
+    char normPreset[32], normChan[32]; // max size is 11 plus nul, but allow for future expansion
+    normalizePresetName(presetName, normPreset, sizeof(normPreset));
+    normalizePresetName(cc.settings.name, normChan, sizeof(normChan));
+
+    if (!*cc.settings.name) {
+        // Blank name resolves to the preset name - A and B are mutually exclusive (psk.size can't be both 0 and >0)
+        if (blankPsk)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
+                                cc.index, cc.settings.name);
+        else if (!isDefaultKey && cc.settings.psk.size > 0)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d will resolve to preset '%s' but uses a non-default key - "
+                                "default-key nodes can't decode it.", // max 102 bytes
+                                cc.index, presetName);
+        return;
+    }
+
+    if (strcmp(normChan, normPreset) != 0) { // name unrelated to preset
+        if (blankPsk)
+            queueChannelWarning(cc.index, false, true,
+                                "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
+                                cc.index, cc.settings.name);
+        return;
+    }
+
+    bool variantName = (strcmp(cc.settings.name, presetName) != 0);
+    bool keyMismatch = (!isDefaultKey && cc.settings.psk.size > 0);
+    int issues = (int)blankPsk + (int)variantName + (int)keyMismatch;
+
+    if (issues > 1) {
+        bool hasNameIssue = variantName;
+        bool hasPskIssue = blankPsk || keyMismatch;
+        if (hasNameIssue && hasPskIssue)
+            queueChannelWarning(cc.index, true, true, "There may be name and PSK issues on channel %d", cc.index);
+        else if (hasNameIssue)
+            queueChannelWarning(cc.index, true, false, "There may be name issues on channel %d", cc.index);
+        else
+            queueChannelWarning(cc.index, false, true, "There may be PSK issues on channel %d", cc.index);
+        return;
+    }
+
+    if (blankPsk)
+        queueChannelWarning(cc.index, false, true,
+                            "Channel %d '%s' has a blank PSK (no encryption) instead of default key", // max 100 bytes
+                            cc.index, cc.settings.name);
+    if (variantName)
+        queueChannelWarning(cc.index, true, false,
+                            "Channel %d name '%s' looks like a mistype of '%s' - "
+                            "clear the name to use the preset name automatically.", // max 113 bytes
+                            cc.index, cc.settings.name, presetName);
+    if (keyMismatch)
+        queueChannelWarning(cc.index, false, true,
+                            "Channel %d '%s' matches preset '%s' but uses a non-default key - "
+                            "default-key nodes can't decode it.", // max 108 bytes
+                            cc.index, cc.settings.name, presetName);
+} // warnOnChannelSet
+
+/**
+ * @brief Scan all channels for preset-name conflicts after a modem preset change is committed.
+ *
+ * Called from handleSetConfig() after the LoRa config has been saved, and only when
+ * modem_preset actually changed (rejected configs are never passed here). For every
+ * named, non-disabled channel two checks are performed:
+ *
+ * - Name matches the *old* preset (case-insensitive, spaces stripped): the channel
+ *   was likely tracking the previous preset; the user should rename it if it should
+ *   follow the new one.
+ * - Name matches the *new* preset: the channel name collides with the auto-generated
+ *   preset name but won't resolve automatically because the name is set explicitly.
+ *
+ * No-ops if the new config does not use a preset.
+ *
+ * @param oldLora  LoRa config before the update.
+ * @param newLora  LoRa config after the update.
+ */
+void AdminModule::warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora)
+{
+    if (!newLora.use_preset || newLora.modem_preset == oldLora.modem_preset)
+        return;
+
+    char normOld[32] = {}, normNew[32];
+    if (oldLora.use_preset) {
+        const char *oldName = DisplayFormatters::getModemPresetDisplayName(oldLora.modem_preset, false, true);
+        normalizePresetName(oldName, normOld, sizeof(normOld));
+    }
+    const char *newName = DisplayFormatters::getModemPresetDisplayName(newLora.modem_preset, false, true);
+    normalizePresetName(newName, normNew, sizeof(normNew));
+
+    // Queue one (name) warning per affected channel; flushChannelWarnings() collapses them
+    // into a single message - either the lone warning verbatim or a catch-all listing indices.
+    for (int i = 0; i < channels.getNumChannels(); i++) {
+        const meshtastic_Channel &ch = channels.getByIndex(i);
+        if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.has_settings || !*ch.settings.name)
+            continue;
+        char normChan[32];
+        normalizePresetName(ch.settings.name, normChan, sizeof(normChan));
+        if (*normOld && strcmp(normChan, normOld) == 0)
+            queueChannelWarning(i, true, false,
+                                "Channel %d name '%s' matches the old preset. "
+                                "Rename it manually if it should track the new preset.", // max 98 bytes
+                                i, ch.settings.name);
+        else if (strcmp(normChan, normNew) == 0)
+            queueChannelWarning(i, true, false,
+                                "Channel %d '%s' looks like preset '%s' but won't auto-resolve - "
+                                "clear the name to fix it.", // max 98 bytes
+                                i, ch.settings.name, newName);
+    }
+} // warnOnLoraPresetChange
 
 void disableBluetooth()
 {
@@ -1607,6 +2327,7 @@ void disableBluetooth()
 #ifdef ARCH_ESP32
     if (nimbleBluetooth)
         nimbleBluetooth->deinit();
+    esp32ReleaseBluetoothMemoryIfUnused();
 #elif defined(ARCH_NRF52)
     if (nrf52Bluetooth)
         nrf52Bluetooth->shutdown();

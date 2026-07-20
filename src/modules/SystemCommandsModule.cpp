@@ -117,9 +117,9 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return true;
     // factory reset
     case INPUT_BROKER_FACTORY_RST:
-        disableBluetooth();
         LOG_INFO("Initiate full factory reset");
         nodeDB->factoryReset(true);
+        disableBluetooth();
         // reboot(DEFAULT_REBOOT_SECONDS);
         LOG_INFO("Reboot in %d seconds", DEFAULT_REBOOT_SECONDS);
         if (screen)

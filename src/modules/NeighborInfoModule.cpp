@@ -2,7 +2,7 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include <Throttle.h>
 
 NeighborInfoModule *neighborInfoModule;
@@ -14,11 +14,11 @@ NOTE: For debugging only
 */
 void NeighborInfoModule::printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("%s NEIGHBORINFO PACKET from Node 0x%x to Node 0x%x (last sent by 0x%x)", header, np->node_id, nodeDB->getNodeNum(),
-              np->last_sent_by_id);
+    LOG_DEBUG("%s NEIGHBORINFO PACKET from Node 0x%08x to Node 0x%08x (last sent by 0x%08x)", header, np->node_id,
+              nodeDB->getNodeNum(), np->last_sent_by_id);
     LOG_DEBUG("Packet contains %d neighbors", np->neighbors_count);
     for (int i = 0; i < np->neighbors_count; i++) {
-        LOG_DEBUG("Neighbor %d: node_id=0x%x, snr=%.2f", i, np->neighbors[i].node_id, np->neighbors[i].snr);
+        LOG_DEBUG("Neighbor %d: node_id=0x%08x, snr=%.2f", i, np->neighbors[i].node_id, np->neighbors[i].snr);
     }
 }
 
@@ -30,7 +30,7 @@ void NeighborInfoModule::printNodeDBNeighbors()
 {
     LOG_DEBUG("Our NodeDB contains %d neighbors", neighbors.size());
     for (size_t i = 0; i < neighbors.size(); i++) {
-        LOG_DEBUG("Node %d: node_id=0x%x, snr=%.2f", i, neighbors[i].node_id, neighbors[i].snr);
+        LOG_DEBUG("Node %d: node_id=0x%08x, snr=%.2f", i, neighbors[i].node_id, neighbors[i].snr);
     }
 }
 
@@ -93,7 +93,7 @@ void NeighborInfoModule::cleanUpNeighbors()
         // broadcast interval cannot use isWithinTimespanMs() as it->last_rx_time is
         // seconds since 1970
         if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
-            LOG_DEBUG("Remove neighbor with node ID 0x%x", it->node_id);
+            LOG_DEBUG("Remove neighbor with node ID 0x%08x", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
         } else {

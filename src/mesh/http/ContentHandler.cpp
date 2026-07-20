@@ -9,13 +9,14 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
+#include "Power.h"
 #include "SPILock.h"
-#include "power.h"
-#include "serialization/JSON.h"
 #include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
+#include <cmath>
+#include <sstream>
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
@@ -73,15 +74,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAPIv1FromRadioOptions = new ResourceNode("/api/v1/fromradio", "OPTIONS", &handleAPIv1FromRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
-    //    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
-    //    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
-
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
-    //    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
-    //    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
-    //    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
-    //    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
-    //    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -99,8 +92,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeAPIv1ToRadio);
     secureServer->registerNode(nodeAPIv1FromRadioOptions);
     secureServer->registerNode(nodeAPIv1FromRadio);
-    //    secureServer->registerNode(nodeHotspotApple);
-    //    secureServer->registerNode(nodeHotspotAndroid);
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
@@ -108,12 +99,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
     secureServer->registerNode(nodeJsonNodes);
-    //    secureServer->registerNode(nodeUpdateFs);
-    //    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
-    //    secureServer->registerNode(nodeAdminFs);
-    //    secureServer->registerNode(nodeAdminSettings);
-    //    secureServer->registerNode(nodeAdminSettingsApply);
     secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
@@ -121,20 +107,13 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeAPIv1ToRadio);
     insecureServer->registerNode(nodeAPIv1FromRadioOptions);
     insecureServer->registerNode(nodeAPIv1FromRadio);
-    //    insecureServer->registerNode(nodeHotspotApple);
-    //    insecureServer->registerNode(nodeHotspotAndroid);
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
     insecureServer->registerNode(nodeJsonFsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    //    insecureServer->registerNode(nodeUpdateFs);
-    //    insecureServer->registerNode(nodeDeleteFs);
     insecureServer->registerNode(nodeAdmin);
-    //    insecureServer->registerNode(nodeAdminFs);
-    //    insecureServer->registerNode(nodeAdminSettings);
-    //    insecureServer->registerNode(nodeAdminSettingsApply);
     insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
@@ -229,70 +208,95 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     LOG_DEBUG("webAPI handleAPIv1ToRadio");
 }
 
-void htmlDeleteDir(const char *dirname)
+// Escape a string into a JSON double-quoted literal. Matches the previous
+// SimpleJSON StringifyString behavior (0x00-0x1F and 0x7F -> \u00xx lowercase,
+// escapes " \ / \b \f \n \r \t, UTF-8 passes through unchanged).
+static std::string jsonEscape(const std::string &str)
 {
-
-    File root = FSCom.open(dirname);
-    if (!root) {
-        return;
-    }
-    if (!root.isDirectory()) {
-        return;
-    }
-
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
-            htmlDeleteDir(file.name());
-            file.flush();
-            file.close();
+    std::string out = "\"";
+    for (size_t i = 0; i < str.size(); ++i) {
+        char chr = str[i];
+        if (chr == '"' || chr == '\\' || chr == '/') {
+            out += '\\';
+            out += chr;
+        } else if (chr == '\b') {
+            out += "\\b";
+        } else if (chr == '\f') {
+            out += "\\f";
+        } else if (chr == '\n') {
+            out += "\\n";
+        } else if (chr == '\r') {
+            out += "\\r";
+        } else if (chr == '\t') {
+            out += "\\t";
+        } else if ((unsigned char)chr < 0x20 || chr == 0x7F) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)chr);
+            out += buf;
         } else {
-            String fileName = String(file.name());
-            file.flush();
-            file.close();
-            LOG_DEBUG("    %s", fileName.c_str());
-            FSCom.remove(fileName);
+            out += chr;
         }
-        file = root.openNextFile();
     }
-    root.flush();
-    root.close();
+    out += "\"";
+    return out;
 }
 
-JSONArray htmlListDir(const char *dirname, uint8_t levels)
+// Format a numeric value the way the previous SimpleJSON serializer did
+// (std::stringstream with precision 15, NaN/Inf -> "null").
+static std::string jsonNum(double v)
+{
+    if (std::isinf(v) || std::isnan(v))
+        return "null";
+    std::ostringstream ss;
+    ss.precision(15);
+    ss << v;
+    return ss.str();
+}
+
+// Build a serialized JSON array string listing files in `dirname`.
+// Subdirectories recurse as nested arrays (up to `levels` deep).
+std::string htmlListDir(const char *dirname, uint8_t levels)
 {
     File root = FSCom.open(dirname, FILE_O_READ);
-    JSONArray fileList;
+    std::string out = "[";
+    bool first = true;
     if (!root) {
-        return fileList;
+        out += "]";
+        return out;
     }
     if (!root.isDirectory()) {
-        return fileList;
+        out += "]";
+        return out;
     }
 
     // iterate over the file list
     File file = root.openNextFile();
     while (file) {
+        std::string element;
+        bool haveElement = false;
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
 #ifdef ARCH_ESP32
-                fileList.push_back(new JSONValue(htmlListDir(file.path(), levels - 1)));
+                element = htmlListDir(file.path(), levels - 1);
 #else
-                fileList.push_back(new JSONValue(htmlListDir(file.name(), levels - 1)));
+                element = htmlListDir(file.name(), levels - 1);
 #endif
+                haveElement = true;
                 file.close();
             }
         } else {
-            JSONObject thisFileMap;
-            thisFileMap["size"] = new JSONValue((int)file.size());
 #ifdef ARCH_ESP32
             String fileName = String(file.path()).substring(1);
-            thisFileMap["name"] = new JSONValue(fileName.c_str());
 #else
             String fileName = String(file.name()).substring(1);
-            thisFileMap["name"] = new JSONValue(fileName.c_str());
 #endif
             String tempName = String(file.name()).substring(1);
+            // Keys in the previous std::map<string,...> were emitted in
+            // alphabetical order: name, nameModified, size.
+            element = "{";
+            element += jsonEscape("name");
+            element += ":";
+            element += jsonEscape(fileName.c_str());
             if (tempName.endsWith(".gz")) {
 #ifdef ARCH_ESP32
                 String modifiedFile = String(file.path()).substring(1);
@@ -300,15 +304,30 @@ JSONArray htmlListDir(const char *dirname, uint8_t levels)
                 String modifiedFile = String(file.name()).substring(1);
 #endif
                 modifiedFile.remove((modifiedFile.length() - 3), 3);
-                thisFileMap["nameModified"] = new JSONValue(modifiedFile.c_str());
+                element += ",";
+                element += jsonEscape("nameModified");
+                element += ":";
+                element += jsonEscape(modifiedFile.c_str());
             }
-            fileList.push_back(new JSONValue(thisFileMap));
+            element += ",";
+            element += jsonEscape("size");
+            element += ":";
+            element += jsonNum((int)file.size());
+            element += "}";
+            haveElement = true;
+        }
+        if (haveElement) {
+            if (!first)
+                out += ",";
+            out += element;
+            first = false;
         }
         file.close();
         file = root.openNextFile();
     }
     root.close();
-    return fileList;
+    out += "]";
+    return out;
 }
 
 void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
@@ -318,28 +337,25 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     concurrency::LockGuard g(spiLock);
-    auto fileList = htmlListDir("/static", 10);
+    std::string fileList = htmlListDir("/static", 10);
 
-    // create json output structure
-    JSONObject filesystemObj;
-    filesystemObj["total"] = new JSONValue((int)FSCom.totalBytes());
-    filesystemObj["used"] = new JSONValue((int)FSCom.usedBytes());
-    filesystemObj["free"] = new JSONValue(int(FSCom.totalBytes() - FSCom.usedBytes()));
+    uint64_t total = FSCom.totalBytes();
+    uint64_t used = FSCom.usedBytes();
 
-    JSONObject jsonObjInner;
-    jsonObjInner["files"] = new JSONValue(fileList);
-    jsonObjInner["filesystem"] = new JSONValue(filesystemObj);
+    // Key order matches the previous std::map-based emission (alphabetical).
+    std::string out;
+    out.reserve(fileList.size() + 128);
+    out += "{\"data\":{\"files\":";
+    out += fileList;
+    out += ",\"filesystem\":{\"free\":";
+    out += jsonNum((int)(total - used));
+    out += ",\"total\":";
+    out += jsonNum((int)total);
+    out += ",\"used\":";
+    out += jsonNum((int)used);
+    out += "}},\"status\":\"ok\"}";
 
-    JSONObject jsonObjOuter;
-    jsonObjOuter["data"] = new JSONValue(jsonObjInner);
-    jsonObjOuter["status"] = new JSONValue("ok");
-
-    JSONValue *value = new JSONValue(jsonObjOuter);
-
-    std::string jsonString = value->Stringify();
-    res->print(jsonString.c_str());
-
-    delete value;
+    res->print(out.c_str());
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -354,27 +370,13 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
         concurrency::LockGuard g(spiLock);
-        if (FSCom.remove(pathDelete.c_str())) {
-
-            LOG_INFO("%s", pathDelete.c_str());
-            JSONObject jsonObjOuter;
-            jsonObjOuter["status"] = new JSONValue("ok");
-            JSONValue *value = new JSONValue(jsonObjOuter);
-            std::string jsonString = value->Stringify();
-            res->print(jsonString.c_str());
-            delete value;
-            return;
-        } else {
-
-            LOG_INFO("%s", pathDelete.c_str());
-            JSONObject jsonObjOuter;
-            jsonObjOuter["status"] = new JSONValue("Error");
-            JSONValue *value = new JSONValue(jsonObjOuter);
-            std::string jsonString = value->Stringify();
-            res->print(jsonString.c_str());
-            delete value;
-            return;
-        }
+        const char *status = FSCom.remove(pathDelete.c_str()) ? "ok" : "Error";
+        LOG_INFO("%s", pathDelete.c_str());
+        std::string out = "{\"status\":";
+        out += jsonEscape(status);
+        out += "}";
+        res->print(out.c_str());
+        return;
     }
 }
 
@@ -615,95 +617,113 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
-    // Helper lambda to create JSON array and clean up memory properly
-    auto createJSONArrayFromLog = [](const uint32_t *logArray, int count) -> JSONValue * {
-        JSONArray tempArray;
+    auto arrayFromLog = [](const uint32_t *logArray, int count) -> std::string {
+        std::string s = "[";
         for (int i = 0; i < count; i++) {
-            tempArray.push_back(new JSONValue((int)logArray[i]));
+            if (i)
+                s += ",";
+            s += jsonNum((int)logArray[i]);
         }
-        JSONValue *result = new JSONValue(tempArray);
-        // Note: Don't delete tempArray elements here - JSONValue now owns them
-        return result;
+        s += "]";
+        return s;
     };
 
-    // data->airtime->tx_log
     uint32_t *logArray;
     logArray = airTime->airtimeReport(TX_LOG);
-    JSONValue *txLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
-
-    // data->airtime->rx_log
+    std::string txLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
     logArray = airTime->airtimeReport(RX_LOG);
-    JSONValue *rxLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
-
-    // data->airtime->rx_all_log
+    std::string rxLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
     logArray = airTime->airtimeReport(RX_ALL_LOG);
-    JSONValue *rxAllLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
+    std::string rxAllLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
 
-    // data->airtime
-    JSONObject jsonObjAirtime;
-    jsonObjAirtime["tx_log"] = txLogJsonValue;
-    jsonObjAirtime["rx_log"] = rxLogJsonValue;
-    jsonObjAirtime["rx_all_log"] = rxAllLogJsonValue;
-    jsonObjAirtime["channel_utilization"] = new JSONValue(airTime->channelUtilizationPercent());
-    jsonObjAirtime["utilization_tx"] = new JSONValue(airTime->utilizationTXPercent());
-    jsonObjAirtime["seconds_since_boot"] = new JSONValue(int(airTime->getSecondsSinceBoot()));
-    jsonObjAirtime["seconds_per_period"] = new JSONValue(int(airTime->getSecondsPerPeriod()));
-    jsonObjAirtime["periods_to_log"] = new JSONValue(airTime->getPeriodsToLog());
-
-    // data->wifi
-    JSONObject jsonObjWifi;
-    jsonObjWifi["rssi"] = new JSONValue(WiFi.RSSI());
     String wifiIPString = WiFi.localIP().toString();
     std::string wifiIP = wifiIPString.c_str();
-    jsonObjWifi["ip"] = new JSONValue(wifiIP.c_str());
 
-    // data->memory
-    JSONObject jsonObjMemory;
-    jsonObjMemory["heap_total"] = new JSONValue((int)memGet.getHeapSize());
-    jsonObjMemory["heap_free"] = new JSONValue((int)memGet.getFreeHeap());
-    jsonObjMemory["psram_total"] = new JSONValue((int)memGet.getPsramSize());
-    jsonObjMemory["psram_free"] = new JSONValue((int)memGet.getFreePsram());
     spiLock->lock();
-    jsonObjMemory["fs_total"] = new JSONValue((int)FSCom.totalBytes());
-    jsonObjMemory["fs_used"] = new JSONValue((int)FSCom.usedBytes());
-    jsonObjMemory["fs_free"] = new JSONValue(int(FSCom.totalBytes() - FSCom.usedBytes()));
+    uint64_t fsTotal = FSCom.totalBytes();
+    uint64_t fsUsed = FSCom.usedBytes();
     spiLock->unlock();
 
-    // data->power
-    JSONObject jsonObjPower;
-    jsonObjPower["battery_percent"] = new JSONValue(powerStatus->getBatteryChargePercent());
-    jsonObjPower["battery_voltage_mv"] = new JSONValue(powerStatus->getBatteryVoltageMv());
-    jsonObjPower["has_battery"] = new JSONValue(BoolToString(powerStatus->getHasBattery()));
-    jsonObjPower["has_usb"] = new JSONValue(BoolToString(powerStatus->getHasUSB()));
-    jsonObjPower["is_charging"] = new JSONValue(BoolToString(powerStatus->getIsCharging()));
+    // Emit keys in the same alphabetical order as the previous
+    // std::map-based JSON output to keep responses byte-compatible.
+    std::string out;
+    out.reserve(1024);
+    out += "{\"data\":{";
 
-    // data->device
-    JSONObject jsonObjDevice;
-    jsonObjDevice["reboot_counter"] = new JSONValue((int)myNodeInfo.reboot_count);
+    // airtime
+    out += "\"airtime\":{";
+    out += "\"channel_utilization\":";
+    out += jsonNum(airTime->channelUtilizationPercent());
+    out += ",\"periods_to_log\":";
+    out += jsonNum(airTime->getPeriodsToLog());
+    out += ",\"rx_all_log\":";
+    out += rxAllLog;
+    out += ",\"rx_log\":";
+    out += rxLog;
+    out += ",\"seconds_per_period\":";
+    out += jsonNum((int)airTime->getSecondsPerPeriod());
+    out += ",\"seconds_since_boot\":";
+    out += jsonNum((int)airTime->getSecondsSinceBoot());
+    out += ",\"tx_log\":";
+    out += txLog;
+    out += ",\"utilization_tx\":";
+    out += jsonNum(airTime->utilizationTXPercent());
+    out += "}";
 
-    // data->radio
-    JSONObject jsonObjRadio;
-    jsonObjRadio["frequency"] = new JSONValue(RadioLibInterface::instance->getFreq());
-    jsonObjRadio["lora_channel"] = new JSONValue((int)RadioLibInterface::instance->getChannelNum() + 1);
+    // device
+    out += ",\"device\":{\"reboot_counter\":";
+    out += jsonNum((int)myNodeInfo.reboot_count);
+    out += "}";
 
-    // collect data to inner data object
-    JSONObject jsonObjInner;
-    jsonObjInner["airtime"] = new JSONValue(jsonObjAirtime);
-    jsonObjInner["wifi"] = new JSONValue(jsonObjWifi);
-    jsonObjInner["memory"] = new JSONValue(jsonObjMemory);
-    jsonObjInner["power"] = new JSONValue(jsonObjPower);
-    jsonObjInner["device"] = new JSONValue(jsonObjDevice);
-    jsonObjInner["radio"] = new JSONValue(jsonObjRadio);
+    // memory
+    out += ",\"memory\":{";
+    out += "\"fs_free\":";
+    out += jsonNum((int)(fsTotal - fsUsed));
+    out += ",\"fs_total\":";
+    out += jsonNum((int)fsTotal);
+    out += ",\"fs_used\":";
+    out += jsonNum((int)fsUsed);
+    out += ",\"heap_free\":";
+    out += jsonNum((int)memGet.getFreeHeap());
+    out += ",\"heap_total\":";
+    out += jsonNum((int)memGet.getHeapSize());
+    out += ",\"psram_free\":";
+    out += jsonNum((int)memGet.getFreePsram());
+    out += ",\"psram_total\":";
+    out += jsonNum((int)memGet.getPsramSize());
+    out += "}";
 
-    // create json output structure
-    JSONObject jsonObjOuter;
-    jsonObjOuter["data"] = new JSONValue(jsonObjInner);
-    jsonObjOuter["status"] = new JSONValue("ok");
-    // serialize and write it to the stream
-    JSONValue *value = new JSONValue(jsonObjOuter);
-    std::string jsonString = value->Stringify();
-    res->print(jsonString.c_str());
-    delete value;
+    // power (has_* / is_charging were serialized as the strings "true"/"false")
+    out += ",\"power\":{";
+    out += "\"battery_percent\":";
+    out += jsonNum(powerStatus->getBatteryChargePercent());
+    out += ",\"battery_voltage_mv\":";
+    out += jsonNum(powerStatus->getBatteryVoltageMv());
+    out += ",\"has_battery\":";
+    out += jsonEscape(BoolToString(powerStatus->getHasBattery()));
+    out += ",\"has_usb\":";
+    out += jsonEscape(BoolToString(powerStatus->getHasUSB()));
+    out += ",\"is_charging\":";
+    out += jsonEscape(BoolToString(powerStatus->getIsCharging()));
+    out += "}";
+
+    // radio
+    out += ",\"radio\":{\"frequency\":";
+    out += jsonNum(RadioLibInterface::instance->getFreq());
+    out += ",\"lora_channel\":";
+    out += jsonNum((int)RadioLibInterface::instance->getChannelNum() + 1);
+    out += "}";
+
+    // wifi
+    out += ",\"wifi\":{\"ip\":";
+    out += jsonEscape(wifiIP);
+    out += ",\"rssi\":";
+    out += jsonNum(WiFi.RSSI());
+    out += "}";
+
+    out += "},\"status\":\"ok\"}";
+
+    res->print(out.c_str());
 }
 
 void handleNodes(HTTPRequest *req, HTTPResponse *res)
@@ -724,97 +744,66 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
-    JSONArray nodesArray;
+    std::string out;
+    out.reserve(2048);
+    out += "{\"data\":{\"nodes\":[";
 
+    bool firstNode = true;
     uint32_t readIndex = 0;
     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     while (tempNodeInfo != NULL) {
         if (nodeInfoLiteHasUser(tempNodeInfo)) {
-            JSONObject node;
-
             char id[16];
             snprintf(id, sizeof(id), "!%08x", tempNodeInfo->num);
 
-            node["id"] = new JSONValue(id);
-            node["snr"] = new JSONValue(tempNodeInfo->snr);
-            node["via_mqtt"] = new JSONValue(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
-            node["last_heard"] = new JSONValue((int)tempNodeInfo->last_heard);
-            node["position"] = new JSONValue();
-
+            std::string position;
             if (nodeDB->hasValidPosition(tempNodeInfo)) {
                 meshtastic_PositionLite posLite;
                 if (nodeDB->copyNodePosition(tempNodeInfo->num, posLite)) {
-                    JSONObject position;
-                    position["latitude"] = new JSONValue((float)posLite.latitude_i * 1e-7);
-                    position["longitude"] = new JSONValue((float)posLite.longitude_i * 1e-7);
-                    position["altitude"] = new JSONValue((int)posLite.altitude);
-                    node["position"] = new JSONValue(position);
+                    position = "{\"altitude\":";
+                    position += jsonNum((int)posLite.altitude);
+                    position += ",\"latitude\":";
+                    position += jsonNum((float)posLite.latitude_i * 1e-7);
+                    position += ",\"longitude\":";
+                    position += jsonNum((float)posLite.longitude_i * 1e-7);
+                    position += "}";
+                } else {
+                    position = "null";
                 }
+            } else {
+                position = "null";
             }
 
-            node["long_name"] = new JSONValue(tempNodeInfo->long_name);
-            node["short_name"] = new JSONValue(tempNodeInfo->short_name);
-            // mac_address dropped from NodeInfoLite as part of the slim refactor; emit zeros.
-            node["mac_address"] = new JSONValue("00:00:00:00:00:00");
-            node["hw_model"] = new JSONValue(tempNodeInfo->hw_model);
+            if (!firstNode)
+                out += ",";
+            firstNode = false;
 
-            nodesArray.push_back(new JSONValue(node));
+            // Alphabetical key order matches previous std::map-based output.
+            out += "{\"hw_model\":";
+            out += jsonNum(tempNodeInfo->hw_model);
+            out += ",\"id\":";
+            out += jsonEscape(id);
+            out += ",\"last_heard\":";
+            out += jsonNum((int)tempNodeInfo->last_heard);
+            out += ",\"long_name\":";
+            out += jsonEscape(tempNodeInfo->long_name);
+            out += ",\"mac_address\":";
+            out += jsonEscape("00:00:00:00:00:00");
+            out += ",\"position\":";
+            out += position;
+            out += ",\"short_name\":";
+            out += jsonEscape(tempNodeInfo->short_name);
+            out += ",\"snr\":";
+            out += jsonNum(tempNodeInfo->snr);
+            out += ",\"via_mqtt\":";
+            out += jsonEscape(BoolToString(nodeInfoLiteViaMqtt(tempNodeInfo)));
+            out += "}";
         }
         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
     }
 
-    // collect data to inner data object
-    JSONObject jsonObjInner;
-    jsonObjInner["nodes"] = new JSONValue(nodesArray);
-
-    // create json output structure
-    JSONObject jsonObjOuter;
-    jsonObjOuter["data"] = new JSONValue(jsonObjInner);
-    jsonObjOuter["status"] = new JSONValue("ok");
-    // serialize and write it to the stream
-    JSONValue *value = new JSONValue(jsonObjOuter);
-    std::string jsonString = value->Stringify();
-    res->print(jsonString.c_str());
-    delete value;
-}
-
-/*
-    This supports the Apple Captive Network Assistant (CNA) Portal
-*/
-void handleHotspot(HTTPRequest *req, HTTPResponse *res)
-{
-    LOG_INFO("Hotspot Request");
-
-    /*
-        If we don't do a redirect, be sure to return a "Success" message
-        otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
-    */
-
-    // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    // res->println("<!DOCTYPE html>");
-    res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />");
-}
-
-void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    res->println("<h1>Meshtastic</h1>");
-    res->println("Delete Content in /static/*");
-
-    LOG_INFO("Delete files from /static/* : ");
-
-    concurrency::LockGuard g(spiLock);
-    htmlDeleteDir("/static");
-
-    res->println("<p><hr><p><a href=/admin>Back to admin</a>");
+    out += "]},\"status\":\"ok\"}";
+    res->print(out.c_str());
 }
 
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
@@ -827,52 +816,6 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res)
     //    res->println("<a href=/admin/settings>Settings</a><br>");
     //    res->println("<a href=/admin/fs>Manage Web Content</a><br>");
     res->println("<a href=/json/report>Device Report</a><br>");
-}
-
-void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    res->println("<h1>Meshtastic</h1>");
-    res->println("This isn't done.");
-    res->println("<form action=/admin/settings/apply method=post>");
-    res->println("<table border=1>");
-    res->println("<tr><td>Set?</td><td>Setting</td><td>current value</td><td>new value</td></tr>");
-    res->println("<tr><td><input type=checkbox></td><td>WiFi SSID</td><td>false</td><td><input type=radio></td></tr>");
-    res->println("<tr><td><input type=checkbox></td><td>WiFi Password</td><td>false</td><td><input type=radio></td></tr>");
-    res->println(
-        "<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>");
-    res->println("</table>");
-    res->println("<table>");
-    res->println("<input type=submit value=Apply New Settings>");
-    res->println("<form>");
-    res->println("<p><hr><p><a href=/admin>Back to admin</a>");
-}
-
-void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "POST");
-    res->println("<h1>Meshtastic</h1>");
-    res->println(
-        "<html><head><meta http-equiv=\"refresh\" content=\"1;url=/admin/settings\" /><title>Settings Applied. </title>");
-
-    res->println("Settings Applied. Please wait.");
-}
-
-void handleFs(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    res->println("<h1>Meshtastic</h1>");
-    res->println("<a href=/admin/fs/delete>Delete Web Content</a><p><form action=/admin/fs/update "
-                 "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
-    res->println("<p><hr><p><a href=/admin>Back to admin</a>");
 }
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
@@ -897,20 +840,28 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 
     int n = WiFi.scanNetworks();
 
-    // build list of network objects
-    JSONArray networkObjs;
+    std::string out = "{\"data\":[";
+    bool firstNet = true;
     if (n > 0) {
         for (int i = 0; i < n; ++i) {
             char ssidArray[50];
+            // The previous implementation pre-escaped quotes before handing
+            // the value to the JSON serializer; preserve that (byte-compatible
+            // even if it double-encodes a quote) so existing clients are not
+            // affected by this refactor.
             String ssidString = String(WiFi.SSID(i));
             ssidString.replace("\"", "\\\"");
             ssidString.toCharArray(ssidArray, 50);
 
             if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
-                JSONObject thisNetwork;
-                thisNetwork["ssid"] = new JSONValue(ssidArray);
-                thisNetwork["rssi"] = new JSONValue(int(WiFi.RSSI(i)));
-                networkObjs.push_back(new JSONValue(thisNetwork));
+                if (!firstNet)
+                    out += ",";
+                firstNet = false;
+                out += "{\"rssi\":";
+                out += jsonNum((int)WiFi.RSSI(i));
+                out += ",\"ssid\":";
+                out += jsonEscape(ssidArray);
+                out += "}";
             }
             // Yield some cpu cycles to IP stack.
             //   This is important in case the list is large and it takes us time to return
@@ -918,16 +869,7 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
             yield();
         }
     }
-
-    // build output structure
-    JSONObject jsonObjOuter;
-    jsonObjOuter["data"] = new JSONValue(networkObjs);
-    jsonObjOuter["status"] = new JSONValue("ok");
-
-    // serialize and write it to the stream
-    JSONValue *value = new JSONValue(jsonObjOuter);
-    std::string jsonString = value->Stringify();
-    res->print(jsonString.c_str());
-    delete value;
+    out += "],\"status\":\"ok\"}";
+    res->print(out.c_str());
 }
 #endif

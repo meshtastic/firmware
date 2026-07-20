@@ -2,8 +2,9 @@
 #if HAS_SCREEN
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
+#include "Power.h"
 #include "draw/NodeListRenderer.h"
+#include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
@@ -12,7 +13,6 @@
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include <OLEDDisplay.h>
 #include <cctype>
 #include <graphics/images.h>
@@ -147,8 +147,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             // Transparent clock headers should inherit whatever body off-color is
             // already active under the header (important for light/inverted themes).
             const uint16_t transparentBgColor = resolveTFTOffColorAt(0, headerHeight + 1, getThemeBodyBg());
-            setAndRegisterTFTColorRole(TFTColorRole::HeaderBackground, transparentBgColor, transparentBgColor, 0, 0, screenW,
-                                       headerHeight);
+            // Intentionally skip the HeaderBackground region, as small screens draw the clock in the unused space in this region,
+            // and the transparent call was erasing segments from the clock
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, transparentBgColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, transparentBgColor);
         } else if (useInvertedHeaderStyle) {
@@ -578,7 +578,11 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 #endif
 
     display->setColor(BLACK);
+#if GRAPHICS_TFT_COLORING_ENABLED
     display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+#else
+    display->fillRect(0, footerY, connection_icon_width + 1, footerH);
+#endif
     display->setColor(WHITE);
     if (currentResolution == ScreenResolution::High) {
         const int bytesPerRow = (connection_icon_width + 7) / 8;

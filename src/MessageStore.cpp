@@ -1,11 +1,12 @@
 #include "configuration.h"
-#if HAS_SCREEN
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
 #include "FSCommon.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "gps/RTC.h"
+#include "memory/MemAudit.h"
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
@@ -28,8 +29,10 @@ static inline void resetMessagePool()
         g_messagePool = static_cast<char *>(malloc(MESSAGE_TEXT_POOL_SIZE));
         if (!g_messagePool) {
             LOG_ERROR("MessageStore: Failed to allocate %d bytes for message pool", MESSAGE_TEXT_POOL_SIZE);
+            memaudit::set("msgstore", 0);
             return;
         }
+        memaudit::set("msgstore", MESSAGE_TEXT_POOL_SIZE);
     }
     g_poolWritePos = 0;
     memset(g_messagePool, 0, MESSAGE_TEXT_POOL_SIZE);
@@ -60,6 +63,15 @@ static inline const char *getTextFromPool(uint16_t offset)
     if (!g_messagePool || offset >= MESSAGE_TEXT_POOL_SIZE)
         return "";
     return &g_messagePool[offset];
+}
+
+static inline bool isIgnoredNodeNum(uint32_t nodeNum)
+{
+    if (nodeNum == 0 || nodeNum == NODENUM_BROADCAST)
+        return false;
+
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+    return nodeInfoLiteIsIgnored(node);
 }
 
 // Helper: assign a timestamp (RTC if available, else boot-relative)
@@ -160,9 +172,44 @@ static inline void autosaveTick(MessageStore *store)
 }
 #endif
 
-// Add from incoming/outgoing packet
-const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
+bool MessageStore::shouldStorePacket(const meshtastic_MeshPacket &packet) const
 {
+    const uint32_t localNode = nodeDB->getNodeNum();
+    const bool isDM = packet.to != 0 && packet.to != NODENUM_BROADCAST;
+    if (isDM) {
+        const bool outgoing = packet.from == 0 || packet.from == localNode;
+        const uint32_t peer = outgoing ? packet.to : packet.from;
+        return !isIgnoredNodeNum(peer);
+    }
+
+    if (packet.from != 0 && packet.from != localNode)
+        return !isIgnoredNodeNum(packet.from);
+
+    return true;
+}
+
+bool MessageStore::isMessageVisible(const StoredMessage &msg) const
+{
+    const uint32_t localNode = nodeDB->getNodeNum();
+    if (msg.type == MessageType::DM_TO_US) {
+        const uint32_t peer = (msg.sender == localNode) ? msg.dest : msg.sender;
+        return !isIgnoredNodeNum(peer);
+    }
+
+    if (msg.sender != 0 && msg.sender != localNode)
+        return !isIgnoredNodeNum(msg.sender);
+
+    return true;
+}
+
+// Add from incoming/outgoing packet
+const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket &packet)
+{
+    if (!shouldStorePacket(packet)) {
+        LOG_DEBUG("Drop store 0x%08x", packet.from);
+        return nullptr;
+    }
+
     StoredMessage sm;
     assignTimestamp(sm);
     sm.channelIndex = packet.channel;
@@ -183,40 +230,17 @@ const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &pa
     sm.type = isDM ? MessageType::DM_TO_US : MessageType::BROADCAST;
     sm.ackStatus = (packet.from == 0) ? AckStatus::NONE : AckStatus::ACKED;
 
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    sm.xeddsaSigned = packet.xeddsa_signed;
+#endif
+
     addLiveMessage(sm);
 
 #if ENABLE_MESSAGE_PERSISTENCE
     markMessageStoreUnsaved();
 #endif
 
-    return liveMessages.back();
-}
-
-// Outgoing/manual message
-void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text)
-{
-    StoredMessage sm;
-
-    // Always use our local time (helper handles RTC vs boot time)
-    assignTimestamp(sm);
-
-    sm.sender = sender;
-    sm.channelIndex = channelIndex;
-    sm.textOffset = storeTextInPool(text.c_str(), text.size());
-    sm.textLength = text.size();
-
-    // Use the provided destination
-    sm.dest = sender;
-    sm.type = MessageType::DM_TO_US;
-
-    // Outgoing messages always start with unknown ack status
-    sm.ackStatus = AckStatus::NONE;
-
-    addLiveMessage(sm);
-
-#if ENABLE_MESSAGE_PERSISTENCE
-    markMessageStoreUnsaved();
-#endif
+    return &liveMessages.back();
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
@@ -230,6 +254,7 @@ struct __attribute__((packed)) StoredMessageRecord {
     uint8_t isBootRelative;
     uint8_t ackStatus;           // static_cast<uint8_t>(AckStatus)
     uint8_t type;                // static_cast<uint8_t>(MessageType)
+    uint8_t xeddsaSigned;        // 1 if packet carried a verified XEdDSA signature
     uint16_t textLength;         // message length
     char text[MAX_MESSAGE_SIZE]; // store actual text here
 };
@@ -245,6 +270,7 @@ static inline void writeMessageRecord(SafeFile &f, const StoredMessage &m)
     rec.isBootRelative = m.isBootRelative;
     rec.ackStatus = static_cast<uint8_t>(m.ackStatus);
     rec.type = static_cast<uint8_t>(m.type);
+    rec.xeddsaSigned = m.xeddsaSigned ? 1 : 0;
     rec.textLength = m.textLength;
 
     // Copy the actual text into the record from RAM pool
@@ -269,6 +295,7 @@ static inline bool readMessageRecord(File &f, StoredMessage &m)
     m.isBootRelative = rec.isBootRelative;
     m.ackStatus = static_cast<AckStatus>(rec.ackStatus);
     m.type = static_cast<MessageType>(rec.type);
+    m.xeddsaSigned = rec.xeddsaSigned != 0;
     m.textLength = rec.textLength;
 
     // 💡 Re-store text into pool and update offset
@@ -313,28 +340,33 @@ void MessageStore::loadFromFlash()
     resetMessagePool(); // reset pool when loading
 
 #ifdef FSCom
-    concurrency::LockGuard guard(spiLock);
+    {
+        concurrency::LockGuard guard(spiLock);
 
-    if (!FSCom.exists(filename.c_str()))
-        return;
+        if (!FSCom.exists(filename.c_str()))
+            return;
 
-    auto f = FSCom.open(filename.c_str(), FILE_O_READ);
-    if (!f)
-        return;
+        auto f = FSCom.open(filename.c_str(), FILE_O_READ);
+        if (!f)
+            return;
 
-    uint8_t count = 0;
-    f.readBytes(reinterpret_cast<char *>(&count), 1);
-    if (count > MAX_MESSAGES_SAVED)
-        count = MAX_MESSAGES_SAVED;
+        uint8_t count = 0;
+        f.readBytes(reinterpret_cast<char *>(&count), 1);
+        if (count > MAX_MESSAGES_SAVED)
+            count = MAX_MESSAGES_SAVED;
 
-    for (uint8_t i = 0; i < count; ++i) {
-        StoredMessage m;
-        if (!readMessageRecord(f, m))
-            break;
-        liveMessages.push_back(m);
+        for (uint8_t i = 0; i < count; ++i) {
+            StoredMessage m;
+            if (!readMessageRecord(f, m))
+                break;
+            liveMessages.push_back(m);
+        }
+
+        f.close();
     }
 
-    f.close();
+    if (pruneHiddenMessages())
+        saveToFlash();
 #endif
     // Loading messages does not trigger an autosave
     g_messageStoreHasUnsavedChanges = false;
@@ -356,7 +388,14 @@ void MessageStore::clearAllMessages()
 #ifdef FSCom
     SafeFile f(filename.c_str(), false);
     uint8_t count = 0;
-    f.write(&count, 1); // write "0 messages"
+
+    // SafeFile already does its own spiLock in its constructor and close().
+    // Avoid nesting spiLocks, as this will hang until watchdog reset!
+    {
+        concurrency::LockGuard guard(spiLock);
+        f.write(&count, 1); // write "0 messages"
+    }
+
     f.close();
 #endif
 
@@ -387,6 +426,13 @@ template <typename Predicate> static void eraseAllMatches(std::deque<StoredMessa
             ++it;
         }
     }
+}
+
+bool MessageStore::pruneHiddenMessages()
+{
+    const size_t before = liveMessages.size();
+    eraseAllMatches(liveMessages, [&](const StoredMessage &m) { return !isMessageVisible(m); });
+    return liveMessages.size() != before;
 }
 
 // Delete oldest message (RAM + persisted queue)
@@ -426,6 +472,20 @@ void MessageStore::deleteAllMessagesWithPeer(uint32_t peer)
     saveToFlash();
 }
 
+void MessageStore::deleteAllMessagesFromNode(uint32_t nodeNum)
+{
+    const uint32_t local = nodeDB->getNodeNum();
+    auto pred = [&](const StoredMessage &m) {
+        if (m.sender == nodeNum)
+            return true;
+        if (m.type != MessageType::DM_TO_US)
+            return false;
+        return m.sender == local ? m.dest == nodeNum : m.sender == nodeNum;
+    };
+    eraseAllMatches(liveMessages, pred);
+    saveToFlash();
+}
+
 // Delete oldest message in a direct chat with a node
 void MessageStore::deleteOldestMessageWithPeer(uint32_t peer)
 {
@@ -443,7 +503,7 @@ std::deque<StoredMessage> MessageStore::getChannelMessages(uint8_t channel) cons
 {
     std::deque<StoredMessage> result;
     for (const auto &m : liveMessages) {
-        if (m.type == MessageType::BROADCAST && m.channelIndex == channel) {
+        if (isMessageVisible(m) && m.type == MessageType::BROADCAST && m.channelIndex == channel) {
             result.push_back(m);
         }
     }
@@ -454,11 +514,20 @@ std::deque<StoredMessage> MessageStore::getDirectMessages() const
 {
     std::deque<StoredMessage> result;
     for (const auto &m : liveMessages) {
-        if (m.type == MessageType::DM_TO_US) {
+        if (isMessageVisible(m) && m.type == MessageType::DM_TO_US) {
             result.push_back(m);
         }
     }
     return result;
+}
+
+bool MessageStore::hasVisibleMessages() const
+{
+    for (const auto &m : liveMessages) {
+        if (isMessageVisible(m))
+            return true;
+    }
+    return false;
 }
 
 // Upgrade boot-relative timestamps once RTC is valid
