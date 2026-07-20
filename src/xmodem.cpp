@@ -62,10 +62,12 @@ bool XModemAdapter::isValidFilename(const char *name)
 {
     if (!name || name[0] == '\0')
         return false;
+    if (name[1] == ':')
+        return false;
     // Reject any ".." path component. Absolute paths and subdirectories are fine; they stay within
     // the filesystem root, so only traversal out of it needs blocking.
     for (const char *seg = name; *seg;) {
-        const char *slash = strchr(seg, '/');
+        const char *slash = strpbrk(seg, "/\\");
         const size_t len = slash ? (size_t)(slash - seg) : strlen(seg);
         if (len == 2 && seg[0] == '.' && seg[1] == '.')
             return false;

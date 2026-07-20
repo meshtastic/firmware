@@ -21,6 +21,22 @@ void test_xmodem_rejects_dotdot_traversal(void)
     TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("/.."));
 }
 
+void test_xmodem_rejects_backslash_traversal(void)
+{
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("..\\secret"));
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("..\\..\\Windows\\System32\\drivers\\etc\\hosts"));
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("dir\\..\\..\\x"));
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("dir/..\\x"));
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("dir\\.."));
+}
+
+void test_xmodem_rejects_drive_qualified(void)
+{
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("C:\\Windows\\System32\\x"));
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("C:/Windows/System32/x"));
+    TEST_ASSERT_FALSE(XModemAdapter::isValidFilename("c:relative.txt"));
+}
+
 void test_xmodem_rejects_empty(void)
 {
     TEST_ASSERT_FALSE(XModemAdapter::isValidFilename(""));
@@ -46,6 +62,8 @@ void setup()
     UNITY_BEGIN();
 #ifdef FSCom
     RUN_TEST(test_xmodem_rejects_dotdot_traversal);
+    RUN_TEST(test_xmodem_rejects_backslash_traversal);
+    RUN_TEST(test_xmodem_rejects_drive_qualified);
     RUN_TEST(test_xmodem_rejects_empty);
     RUN_TEST(test_xmodem_allows_legit_paths);
 #endif
