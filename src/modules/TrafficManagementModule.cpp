@@ -42,11 +42,6 @@ constexpr uint32_t kClientDefaultMaxHops = 0; // Clients: direct only (cannot in
 // suppressed. The cache path enforces the same 6 h in ticks (kNodeInfoMaxServeAgeTicks, header).
 constexpr uint32_t kNodeInfoMaxServeAgeSecs = 6UL * 60UL * 60UL; // 6 h (NodeDB fallback path)
 
-// Throttle: at most one spoofed reply per target per interval - the reply target is
-// attacker-controlled, so this bounds reflected floods. This ms form covers the NodeDB
-// fallback path; the cache path throttles per entry in ticks (kNodeInfoThrottleTicks, header).
-constexpr uint32_t kNodeInfoResponseThrottleMs = 30UL * 1000UL; // 30 s
-
 /// Convert seconds to milliseconds with overflow protection.
 uint32_t secsToMs(uint32_t secs)
 {
@@ -623,7 +618,6 @@ void TrafficManagementModule::maintainNodeInfoCacheLocked()
     // horizon). Entries are never freed on a timer - slots die by tiered LRU or purge.
     uint16_t nodeInfoSaturated = 0;
     const uint8_t nowObs = currentObsTick();
-    const uint8_t nowResp = currentRespTick();
     for (uint16_t i = 0; i < nodeInfoTargetEntries(); i++) {
         NodeInfoPayloadEntry &entry = nodeInfoPayload[i];
         if (entry.node == 0)
@@ -632,8 +626,6 @@ void TrafficManagementModule::maintainNodeInfoCacheLocked()
             entry.hasObserved = false;
             nodeInfoSaturated++;
         }
-        if (entry.hasResponded && static_cast<uint8_t>(nowResp - entry.respTick) >= kNodeInfoThrottleTicks)
-            entry.hasResponded = false;
         // Membership is NOT refreshed here: a per-entry NodeDB lookup would be
         // O(entries x members) every 60 s under cacheLock. The hourly reconcile pass
         // owns it (see reconcileNodeInfoFromNodeDBLocked).
@@ -878,8 +870,8 @@ int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum node)
     const NodeInfoPayloadEntry *entry = findNodeInfoEntry(node);
     if (!entry)
         return -1;
-    return (entry->hasObserved ? 1 : 0) | (entry->hasResponded ? 2 : 0) | (entry->isMember ? 4 : 0) |
-           (entry->hasFullUser ? 8 : 0) | (entry->keySignerProven ? 16 : 0);
+    return (entry->hasObserved ? 1 : 0) | (entry->isMember ? 2 : 0) | (entry->hasFullUser ? 4 : 0) |
+           (entry->keySignerProven ? 8 : 0);
 }
 
 void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
@@ -1426,23 +1418,13 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     uint8_t cachedSourceChannel = 0;
     bool cachedHasObserved = false;
     uint8_t cachedObsTick = 0;
-    bool cachedHasResponded = false;
-    uint8_t cachedRespTick = 0;
-    // Fallback-path throttle stamp (module-global uint32 millis; the cache path throttles
-    // per entry via respTick instead).
-    uint32_t cachedFallbackResponseMs = 0;
     // Signer-proven provenance of the cached key, consumed by the replay gate below
     // (maybe_unused: read only when TMM_NODEINFO_REPLAY_SIGNED_GATE is compiled in).
     [[maybe_unused]] bool cachedKeySignerProven = false;
-    // True once we commit to answering from the NodeDB fallback (no NodeInfo cache) path, so
-    // the shared throttle check/stamp below target the module-global fallback stamp instead
-    // of a per-node cache entry (which does not exist on this path).
+    // True once we commit to answering from the NodeDB fallback (no NodeInfo cache) path. The
+    // response throttle no longer distinguishes the paths - the per-requester/per-target RAM
+    // tables cover both - but the replay gate below still keys off it.
     bool usedFallback = false;
-#if TMM_HAS_NODEINFO_CACHE
-    // Slot index of the NodeInfo cache hit, captured here so the post-send throttle stamp can
-    // address the entry directly instead of rescanning the array (T5). -1 = no hit.
-    int32_t cachedNodeInfoIndex = -1;
-#endif
 
     {
         concurrency::LockGuard guard(&cacheLock);
@@ -1455,12 +1437,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedSourceChannel = entry->sourceChannel;
             cachedHasObserved = entry->hasObserved;
             cachedObsTick = entry->obsTick;
-            cachedHasResponded = entry->hasResponded;
-            cachedRespTick = entry->respTick;
             cachedKeySignerProven = entry->keySignerProven;
-#if TMM_HAS_NODEINFO_CACHE
-            cachedNodeInfoIndex = static_cast<int32_t>(entry - nodeInfoPayload);
-#endif
         }
     }
 
@@ -1497,14 +1474,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         }
 #endif
         cachedUser = TypeConversions::ConvertToUser(node);
-        // T3: the fallback path has no per-node cache entry, so it throttles against the
-        // module-global stamp. Load it here so the shared throttle check below covers this
-        // path too (previously only the cache path was throttled).
         usedFallback = true;
-        {
-            concurrency::LockGuard guard(&cacheLock);
-            cachedFallbackResponseMs = nodeInfoFallbackLastResponseMs;
-        }
     }
 
     // Staleness gate (cache path): never spoof a reply for a node not actually HEARD within
@@ -1528,39 +1498,16 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     if (!sendResponse)
         return true;
 
-    // Per-sender throttle (upstream #11104): checked here, once a reply would actually go out,
-    // so declined requests do not consume the budget.
-    if (!directResponseAllowed(getFrom(p), clockMs())) {
-        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x", getFrom(p));
-        return false;
-    }
-
-    // Per-target throttle: the reply target is attacker-controlled and direct responses bypass
-    // the rate limiter, so bound spoofed replies (cache path: per-target respTick; fallback:
-    // global stamp). Accepted: per-target keying doesn't bound aggregate TX across targets - the
-    // per-requestor + global-floor throttle below closes that gap and covers the non-PSRAM
-    // fallback path too.
-    const bool throttled =
-        usedFallback ? (cachedFallbackResponseMs != 0 && (clockMs() - cachedFallbackResponseMs) < kNodeInfoResponseThrottleMs)
-                     : (cachedHasResponded && static_cast<uint8_t>(currentRespTick() - cachedRespTick) < kNodeInfoThrottleTicks);
-    if (throttled) {
-        // Bound only OUR spoofed TX - never black-hole the request. Returning false lets
-        // handleReceived() CONTINUE, so the request forwards toward the genuine target (which
-        // can answer), instead of being consumed with no reply. A requester whose first reply
-        // was lost on a noisy link would otherwise get silence for the whole window. Repeats
-        // of the same packet id are already absorbed by the router's duplicate detection.
-        TM_LOG_DEBUG("NodeInfo response throttled for 0x%08x; forwarding request instead", p->to);
-        return false;
-    }
-
-    // Per-requestor + global-floor throttle: the reply is addressed to the requesting packet's
-    // unauthenticated `from`, so bound how much any single node can be made to receive and cap the
-    // total airtime this feature consumes - the aggregate-TX gap the per-target throttle above
-    // leaves open. This 8-slot table lives in internal RAM (not the PSRAM NodeInfo cache), so it
-    // throttles the non-PSRAM fallback path identically. Checked here, once a reply would actually
-    // go out, so requests declined for other reasons do not consume the budget; returning false
-    // forwards the request rather than black-holing it, as above.
-    if (!directResponseAllowed(getFrom(p), clockMs())) {
+    // Direct-response throttle: the reply is addressed to the requesting packet's unauthenticated
+    // `from` and spoofs the requested target, and direct responses bypass the rate limiter - so bound
+    // them per requester, per target, and by a global airtime floor (see directResponseAllowed). One
+    // check covers both the cache and NodeDB-fallback paths, since the throttle state is RAM tables,
+    // not per-cache-entry. Checked here, once a reply would actually go out, so requests declined for
+    // other reasons do not consume the budget. Returning false lets handleReceived() CONTINUE, so the
+    // request forwards toward the genuine target (which can answer) instead of being consumed with no
+    // reply; a requester whose first reply was lost on a noisy link would otherwise get silence for
+    // the whole window. Repeats of the same packet id are already absorbed by the router's dup detect.
+    if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request instead", getFrom(p));
         return false;
     }
@@ -1614,62 +1561,56 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
     service->sendToMesh(reply);
 
-    // Record the send so the throttle can suppress a burst: fallback path stamps the global
-    // marker (nowStampMs() keeps it off the 0 "never" sentinel at the wrap, T9); the cache
-    // path stamps the served entry's respTick below.
-    if (usedFallback) {
-        concurrency::LockGuard guard(&cacheLock);
-        nodeInfoFallbackLastResponseMs = nowStampMs();
-    }
-    // Stamp the served entry by the index captured at lookup instead of rescanning (T5). The
-    // lock was released in between, so re-validate node == p->to in case the slot was reused.
-#if TMM_HAS_NODEINFO_CACHE
-    if (!usedFallback && nodeInfoPayload && cachedNodeInfoIndex >= 0) {
-        concurrency::LockGuard guard(&cacheLock);
-        NodeInfoPayloadEntry &entry = nodeInfoPayload[cachedNodeInfoIndex];
-        if (entry.node == p->to) {
-            entry.respTick = currentRespTick();
-            entry.hasResponded = true;
-        }
-    }
-#endif
+    // The throttle state was already recorded by directResponseAllowed() above (it stamps only when
+    // it admits a reply), so there is nothing to stamp here.
 
     return true;
 }
 
-bool TrafficManagementModule::directResponseAllowed(NodeNum requestor, uint32_t nowMs)
+TrafficManagementModule::DirectResponseThrottleEntry *
+TrafficManagementModule::directResponseSlot(DirectResponseThrottleEntry *table, NodeNum key, uint32_t nowMs, uint32_t windowMs)
 {
-    // Reached from the packet path and from runOnce, so the throttle state needs the same lock as the cache.
+    // Known key still inside its window -> throttled (nullptr). Outside it -> reuse that slot.
+    for (size_t i = 0; i < kDirectResponseTrackedNodes; i++) {
+        if (table[i].key == key)
+            return ((nowMs - table[i].lastReplyMs) < windowMs) ? nullptr : &table[i];
+    }
+    // Unseen key: take a free slot, otherwise evict the least recently used one.
+    DirectResponseThrottleEntry *slot = &table[0];
+    for (size_t i = 0; i < kDirectResponseTrackedNodes; i++) {
+        if (table[i].key == 0)
+            return &table[i];
+        if (table[i].lastReplyMs < slot->lastReplyMs)
+            slot = &table[i];
+    }
+    return slot;
+}
+
+bool TrafficManagementModule::directResponseAllowed(NodeNum requester, NodeNum target, uint32_t nowMs)
+{
+    // Reached from the packet path (and shares state with the cache), so take the same lock.
     concurrency::LockGuard guard(&cacheLock);
 
+    // Global airtime floor first: cheapest, and the backstop once an attacker cycles requester/target
+    // past the 8-slot tables.
     if (lastDirectResponseMs != 0 && (nowMs - lastDirectResponseMs) < kDirectResponseGlobalMs)
         return false;
 
-    DirectResponseThrottleEntry *slot = nullptr;
-    for (size_t i = 0; i < kDirectResponseTrackedRequestors; i++) {
-        if (directResponseSeen[i].requestor == requestor) {
-            if ((nowMs - directResponseSeen[i].lastReplyMs) < kDirectResponsePerRequestorMs)
-                return false;
-            slot = &directResponseSeen[i];
-            break;
-        }
-    }
+    // Resolve both slots before stamping either, so a reply the target axis throttles does not consume
+    // the requester's budget (and vice versa).
+    DirectResponseThrottleEntry *reqSlot =
+        directResponseSlot(directRequesterSeen, requester, nowMs, kDirectResponsePerRequesterMs);
+    if (reqSlot == nullptr)
+        return false;
+    DirectResponseThrottleEntry *tgtSlot = directResponseSlot(directTargetSeen, target, nowMs, kDirectResponsePerTargetMs);
+    if (tgtSlot == nullptr)
+        return false;
 
-    if (slot == nullptr) {
-        // Unseen requester: take a free slot, otherwise reuse the least recently used one.
-        slot = &directResponseSeen[0];
-        for (size_t i = 0; i < kDirectResponseTrackedRequestors; i++) {
-            if (directResponseSeen[i].requestor == 0) {
-                slot = &directResponseSeen[i];
-                break;
-            }
-            if (directResponseSeen[i].lastReplyMs < slot->lastReplyMs)
-                slot = &directResponseSeen[i];
-        }
-    }
-
-    slot->requestor = requestor;
-    slot->lastReplyMs = nowMs;
+    // All windows clear: admit the reply and record it on every axis.
+    reqSlot->key = requester;
+    reqSlot->lastReplyMs = nowMs;
+    tgtSlot->key = target;
+    tgtSlot->lastReplyMs = nowMs;
     lastDirectResponseMs = nowMs;
     return true;
 }

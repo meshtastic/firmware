@@ -110,14 +110,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     static uint32_t clockMs() { return millis(); }
 #endif
 
-    /// clockMs() that never returns 0, for nodeInfoFallbackLastResponseMs whose 0 means "never".
-    /// The 1 ms skew at the ~49.7-day wrap is irrelevant to the throttle window. (T9)
-    static uint32_t nowStampMs()
-    {
-        const uint32_t nowMs = clockMs();
-        return nowMs == 0 ? 1u : nowMs;
-    }
-
   protected:
     /// Inspect a received packet; may consume it (STOP) for dedup/rate/unknown/direct-response.
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
@@ -142,7 +134,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     void dropNodeInfoCacheForTest();
 
     /// Test introspection: NodeInfo flag bits for `node` (-1 if absent): bit0 hasObserved,
-    /// bit1 hasResponded, bit2 isMember, bit3 hasFullUser, bit4 keySignerProven.
+    /// bit1 isMember, bit2 hasFullUser, bit3 keySignerProven.
     int peekNodeInfoFlagsForTest(NodeNum node);
 
     /// Test introspection: NodeInfo cache capacity (kNodeInfoCacheEntries), so tests can
@@ -217,21 +209,17 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Current unknown-clock tick nibble (1 min/tick).
     static uint8_t currentUnknownTick() { return static_cast<uint8_t>((clockMs() / kUnknownTimeTickMs) & 0x0F); }
 
-    // NodeInfo cache ticks (same idiom). The 60 s sweep clears each presence bit once its window
-    // passes, so stamps are never read near their uint8 aliasing horizon.
+    // NodeInfo observation tick (same idiom). The 60 s sweep clears the presence bit once the serve
+    // window passes, so the stamp is never read near its uint8 aliasing horizon. (Response throttling
+    // no longer lives here - it is the fixed per-requester/per-target RAM tables below, which use
+    // wrap-safe uint32 ms compares and so need no tick clock or sweep.)
     static constexpr uint32_t kNodeInfoObsTickMs = 180000UL;  // 3 min/tick (12.8 h period)
-    static constexpr uint32_t kNodeInfoRespTickMs = 5000UL;   // 5 s/tick (21.3 min period)
     static constexpr uint8_t kNodeInfoMaxServeAgeTicks = 120; // 6 h serve window
-    static constexpr uint8_t kNodeInfoThrottleTicks = 6;      // 30 s throttle window
 
     /// Current NodeInfo observation tick (3 min/tick).
     static uint8_t currentObsTick() { return static_cast<uint8_t>(clockMs() / kNodeInfoObsTickMs); }
-    /// Current NodeInfo response-throttle tick (5 s/tick).
-    static uint8_t currentRespTick() { return static_cast<uint8_t>(clockMs() / kNodeInfoRespTickMs); }
     static_assert(kNodeInfoMaxServeAgeTicks * kNodeInfoObsTickMs == 6UL * 60UL * 60UL * 1000UL,
                   "cache serve window must equal the fallback path's 6 h");
-    static_assert(kNodeInfoThrottleTicks * kNodeInfoRespTickMs == 30UL * 1000UL,
-                  "cache throttle window must equal the fallback path's 30 s");
 
     /// 8-bit position fingerprint from truncated lat/lon: low 4 significant bits of each, so
     /// adjacent grid cells never collide (collisions need 16+ cells apart in both dimensions).
@@ -258,10 +246,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // reply is only ever backed by genuine recent observation. Validity: hasObserved.
         uint8_t obsTick;
 
-        // Tick of our most recent spoofed direct reply (kNodeInfoRespTickMs clock). Drives the
-        // per-target response throttle. Validity: hasResponded.
-        uint8_t respTick;
-
         // Channel where we most recently heard this node's NodeInfo.
         uint8_t sourceChannel;
 
@@ -284,10 +268,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // horizon. Cleared by the sweep once the serve window passes (saturation).
         uint8_t hasObserved : 1;
 
-        // respTick is valid: a spoofed reply was emitted within the throttle clock's horizon.
-        // Cleared by the sweep once the throttle window passes.
-        uint8_t hasResponded : 1;
-
         // `user` carries a real User payload (from an observed frame or hot-store seed) rather
         // than a key-only warm-tier record. copyUser()/name-rehydration require it.
         uint8_t hasFullUser : 1;
@@ -303,11 +283,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     NodeInfoPayloadEntry *nodeInfoPayload = nullptr; // NodeInfo payloads (flat array; PSRAM on hardware, heap in tests)
     bool nodeInfoPayloadFromPsram = false;           // Tracks allocator for correct deallocation
-
-    // Fallback-path response throttle stamp (module-global; the cache path throttles per entry
-    // via respTick). Bounds spoofed replies to one per kNodeInfoResponseThrottleMs across all
-    // targets without the NodeInfo cache. 0 = never responded. Guarded by cacheLock. Local uptime (ms).
-    uint32_t nodeInfoFallbackLastResponseMs = 0;
 
     meshtastic_TrafficManagementStats stats;
 
@@ -385,22 +360,34 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// Decide (and with sendResponse, emit) a spoofed direct NodeInfo reply for a unicast request.
     bool shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse);
 
-    // A direct NodeInfo response is addressed from the requesting packet's `from`, which is
-    // unauthenticated. One request therefore makes every neighbour holding the target in cache transmit
-    // at an address the requester chose. Spacing replies per requester bounds how much any single node
-    // can be made to receive; a global floor bounds the airtime this feature can consume overall. This
-    // throttle is a fixed 8-slot table in internal RAM (not the PSRAM NodeInfo cache), so it protects
-    // the fallback path on non-PSRAM builds identically to the cache path. Guarded by cacheLock.
-    static constexpr uint32_t kDirectResponsePerRequestorMs = 60'000UL;
+    // Direct-response throttles. A reply is addressed FROM the requesting packet's unauthenticated
+    // `from` and spoofs the requested target, so one request can make every neighbour holding that
+    // target transmit at an address the attacker chose. Three fixed bounds, all in internal RAM (not
+    // the PSRAM NodeInfo cache) so they behave identically with and without PSRAM, all under cacheLock:
+    //   - per requester: how much any single node can be made to receive;
+    //   - per target: how often we vouch for the same identity (defence in depth; the requester and
+    //     target axes are both attacker-controlled, so neither alone is a hard bound);
+    //   - a global floor on total airtime, the backstop once an attacker cycles keys past the tables.
+    // Both tables are 8-slot LRU. Timestamps are full uint32 ms compared by wrap-safe subtraction, so
+    // there is no tick clock and no sweep to maintain (unlike the retired per-entry respTick throttle).
+    static constexpr uint32_t kDirectResponsePerRequesterMs = 60'000UL;
+    static constexpr uint32_t kDirectResponsePerTargetMs = 60'000UL;
     static constexpr uint32_t kDirectResponseGlobalMs = 1'000UL;
-    static constexpr size_t kDirectResponseTrackedRequestors = 8;
+    static constexpr size_t kDirectResponseTrackedNodes = 8;
     struct DirectResponseThrottleEntry {
-        NodeNum requestor;
-        uint32_t lastReplyMs;
+        NodeNum key;          // requester or target node; 0 = unused slot
+        uint32_t lastReplyMs; // clockMs() of our last reply keyed on this node
     };
-    DirectResponseThrottleEntry directResponseSeen[kDirectResponseTrackedRequestors] = {};
+    DirectResponseThrottleEntry directRequesterSeen[kDirectResponseTrackedNodes] = {};
+    DirectResponseThrottleEntry directTargetSeen[kDirectResponseTrackedNodes] = {};
     uint32_t lastDirectResponseMs = 0;
-    bool directResponseAllowed(NodeNum requestor, uint32_t nowMs);
+    /// True (and records the send) when a spoofed direct reply to `requester` for `target` is within
+    /// every throttle window; false throttles it. Caller must NOT hold cacheLock (this takes it).
+    bool directResponseAllowed(NodeNum requester, NodeNum target, uint32_t nowMs);
+    /// Slot in `table` to stamp for `key` at `nowMs`, or nullptr if `key` is still within `windowMs`
+    /// of its last reply (throttled). Does not stamp - the caller stamps only once all windows pass.
+    static DirectResponseThrottleEntry *directResponseSlot(DirectResponseThrottleEntry *table, NodeNum key, uint32_t nowMs,
+                                                           uint32_t windowMs);
     /// True when the requestor is within the role-clamped hop limit for direct responses.
     bool isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const;
     /// True when `from` exceeded the configured packet budget for the current rate window.
