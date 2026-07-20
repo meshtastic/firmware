@@ -2027,7 +2027,11 @@ void NodeDB::installDefaultDeviceState()
 #endif
 #endif
 
+#if defined(GAT562)
+    sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
+#else
     clampLongName(owner.long_name); // vendor userprefs may exceed the local cap
+#endif
 
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
@@ -2460,9 +2464,14 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
     }
 
-    // Devicestate saved by firmware that allowed 39-byte names gets clamped on
-    // first load; from here on owner never carries more than the local cap.
+    // GAT562 keeps its complete 2.7.x-compatible owner name in DeviceState.
+    // NodeInfoLite remains at the official 2.8 width and is truncated only when
+    // copied into that cache.
+#if defined(GAT562)
+    sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
+#else
     clampLongName(owner.long_name);
+#endif
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
