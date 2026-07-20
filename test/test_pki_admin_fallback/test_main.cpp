@@ -202,9 +202,7 @@ void test_wrong_admin_key_does_not_decode(void)
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
 }
 
-// The fallback runs up to three X25519 ops before the AEAD tag is checked, so a flood of undecryptable
-// unicasts is a CPU DoS. A global budget caps it: p->from is attacker-controlled, so a per-node throttle
-// would be free to evade. Successful runs refund their token, so authorized admin traffic is unaffected.
+// The fallback is budget-limited against flooding; see Router.cpp for why the budget is global.
 void test_admin_key_fallback_is_rate_limited(void)
 {
     // Start from a full bucket regardless of what earlier tests consumed (8 tokens, one per 250ms).

@@ -552,10 +552,8 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-// Each run of the admin-key fallback costs up to three X25519 operations and runs before the AEAD tag
-// is checked, so an unauthenticated flood can pin the CPU. p->from is attacker-controlled, so the budget
-// is global rather than per-node. A successful run refunds its token: authorized admin traffic is rare,
-// and after the first packet the sender's key is persisted so later packets take the fast path instead.
+// The fallback costs three X25519 ops before the AEAD tag is checked. Budget is global because p->from is
+// attacker-controlled; successful runs refund, and their key is then persisted for the fast path.
 #define ADMIN_KEY_FALLBACK_BURST 8
 #define ADMIN_KEY_FALLBACK_REFILL_MS 250
 
