@@ -929,11 +929,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             config.power.on_battery_shutdown_after_secs = 30;
         }
         break;
-    case meshtastic_Config_network_tag:
+    case meshtastic_Config_network_tag: {
         LOG_INFO("Set config: WiFi");
         config.has_network = true;
+        char prevPsk[sizeof(config.network.wifi_psk)];
+        memcpy(prevPsk, config.network.wifi_psk, sizeof(prevPsk));
         config.network = c.payload_variant.network;
+        writeSecret(config.network.wifi_psk, sizeof(config.network.wifi_psk), prevPsk);
         break;
+    }
     case meshtastic_Config_display_tag:
         LOG_INFO("Set config: Display");
         config.has_display = true;
@@ -1194,7 +1198,12 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Disable Bluetooth to prevent interference during MQTT configuration
         disableBluetooth();
         moduleConfig.has_mqtt = true;
-        moduleConfig.mqtt = c.payload_variant.mqtt;
+        {
+            char prevPass[sizeof(moduleConfig.mqtt.password)];
+            memcpy(prevPass, moduleConfig.mqtt.password, sizeof(prevPass));
+            moduleConfig.mqtt = c.payload_variant.mqtt;
+            writeSecret(moduleConfig.mqtt.password, sizeof(moduleConfig.mqtt.password), prevPass);
+        }
 #endif
         break;
     case meshtastic_ModuleConfig_serial_tag:
@@ -1451,8 +1460,9 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
             LOG_INFO("Get config: Network");
             res.get_config_response.which_payload_variant = meshtastic_Config_network_tag;
             res.get_config_response.payload_variant.network = config.network;
-            writeSecret(res.get_config_response.payload_variant.network.wifi_psk,
-                        sizeof(res.get_config_response.payload_variant.network.wifi_psk), config.network.wifi_psk);
+            if (req.from != 0)
+                strncpy(res.get_config_response.payload_variant.network.wifi_psk, secretReserved,
+                        sizeof(res.get_config_response.payload_variant.network.wifi_psk));
             break;
         case meshtastic_AdminMessage_ConfigType_DISPLAY_CONFIG:
             LOG_INFO("Get config: Display");
@@ -1523,6 +1533,9 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             configName = "MQTT";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
             res.get_module_config_response.payload_variant.mqtt = moduleConfig.mqtt;
+            if (req.from != 0)
+                strncpy(res.get_module_config_response.payload_variant.mqtt.password, secretReserved,
+                        sizeof(res.get_module_config_response.payload_variant.mqtt.password));
             break;
         case meshtastic_AdminMessage_ModuleConfigType_SERIAL_CONFIG:
             configName = "Serial";
