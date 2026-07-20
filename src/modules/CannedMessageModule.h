@@ -55,7 +55,6 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     CannedMessageModule();
 
     void LaunchWithDestination(NodeNum, uint8_t newChannel = 0);
-    void LaunchRepeatDestination();
     void LaunchFreetextWithDestination(NodeNum, uint8_t newChannel = 0);
 
     // === Emote Picker navigation ===
@@ -70,11 +69,9 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     // === State/UI ===
     bool shouldDraw();
-    bool hasMessages();
     void resetSearch();
     void updateDestinationSelectionList();
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    bool isCharInputAllowed() const;
     bool isFreeTextActive() const { return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT; }
     String drawWithCursor(String text, int cursor);
 
