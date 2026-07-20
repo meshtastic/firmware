@@ -294,10 +294,8 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool shouldDropPosition(const meshtastic_MeshPacket *p, const meshtastic_Position *pos, uint32_t nowMs);
     bool shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse);
 
-    // A direct NodeInfo response is addressed from the requesting packet's `from`, which is
-    // unauthenticated. One request therefore makes every neighbour holding the target in cache transmit
-    // at an address the requester chose. Spacing replies per requester bounds how much any single node
-    // can be made to receive; a global floor bounds the airtime this feature can consume overall.
+    // Replies go to the requesting packet's unauthenticated `from`, so space them per requester to bound
+    // what any one node can be made to receive, plus a global floor on airtime.
     static constexpr uint32_t kDirectResponsePerRequestorMs = 60'000UL;
     static constexpr uint32_t kDirectResponseGlobalMs = 1'000UL;
     static constexpr size_t kDirectResponseTrackedRequestors = 8;

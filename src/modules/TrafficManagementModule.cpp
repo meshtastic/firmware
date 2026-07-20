@@ -1092,8 +1092,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     if (!sendResponse)
         return true;
 
-    // Checked here, once we know a reply would actually go out, so requests we decline for other
-    // reasons do not consume the budget.
+    // Checked here, once a reply would actually go out, so declined requests do not consume the budget.
     if (!directResponseAllowed(getFrom(p), clockMs())) {
         TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x", getFrom(p));
         return false;
@@ -1153,6 +1152,9 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
 
 bool TrafficManagementModule::directResponseAllowed(NodeNum requestor, uint32_t nowMs)
 {
+    // Reached from the packet path and from runOnce, so the throttle state needs the same lock as the cache.
+    concurrency::LockGuard guard(&cacheLock);
+
     if (lastDirectResponseMs != 0 && (nowMs - lastDirectResponseMs) < kDirectResponseGlobalMs)
         return false;
 
