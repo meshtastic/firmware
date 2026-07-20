@@ -179,7 +179,7 @@ int CannedMessageModule::splitConfiguredMessages()
     while (i < upTo) {
         if (this->messageBuffer[i] == '|') {
             this->messageBuffer[i] = '\0'; // End previous message
-            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT)
+            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT - 1)
                 break;
             tempMessages[tempCount++] = (this->messageBuffer + i + 1);
         }
