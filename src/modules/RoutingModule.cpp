@@ -55,7 +55,8 @@ void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketI
     // Allow the caller to set want_ack on this ACK packet if it's important that the ACK be delivered reliably
     p->want_ack = ackWantsAck;
 
-    router->sendLocal(p); // we sometimes send directly to the local node
+    if (router->sendLocal(p) == ERRNO_SHOULD_RELEASE) // we sometimes send directly to the local node
+        packetPool.release(p);
 }
 
 uint8_t RoutingModule::getHopLimitForResponse(const meshtastic_MeshPacket &mp)
