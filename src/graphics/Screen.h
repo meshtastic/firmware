@@ -310,8 +310,6 @@ class Screen : public concurrency::OSThread
      */
     void doDeepSleep();
 
-    void blink();
-
     // Draw north
     float estimatedHeading(double lat, double lon);
 

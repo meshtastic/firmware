@@ -3310,10 +3310,17 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
 
 /** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
+bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
+        return false;
+    }
+
+    // Once a node has proven it signs, only a signed update may change its identity. The public-key guard
+    // below is no help - an attacker can replay the victim's real (public) key. Our own record is exempt.
+    if (nodeId != getNodeNum() && nodeInfoLiteHasXeddsaSigned(info) && !xeddsaSigned) {
+        LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
         return false;
     }
 

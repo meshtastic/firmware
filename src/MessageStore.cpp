@@ -7,7 +7,6 @@
 #include "SafeFile.h"
 #include "gps/RTC.h"
 #include "memory/MemAudit.h"
-#include <cassert>
 #include <cstring> // memcpy
 
 #ifndef MESSAGE_TEXT_POOL_SIZE
@@ -242,40 +241,6 @@ const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket 
 #endif
 
     return &liveMessages.back();
-}
-
-const StoredMessage &MessageStore::addFromPacket(const meshtastic_MeshPacket &packet)
-{
-    const StoredMessage *stored = tryAddFromPacket(packet);
-    assert(stored);
-    return *stored;
-}
-
-// Outgoing/manual message
-void MessageStore::addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text)
-{
-    StoredMessage sm;
-
-    // Always use our local time (helper handles RTC vs boot time)
-    assignTimestamp(sm);
-
-    sm.sender = sender;
-    sm.channelIndex = channelIndex;
-    sm.textOffset = storeTextInPool(text.c_str(), text.size());
-    sm.textLength = text.size();
-
-    // Use the provided destination
-    sm.dest = sender;
-    sm.type = MessageType::DM_TO_US;
-
-    // Outgoing messages always start with unknown ack status
-    sm.ackStatus = AckStatus::NONE;
-
-    addLiveMessage(sm);
-
-#if ENABLE_MESSAGE_PERSISTENCE
-    markMessageStoreUnsaved();
-#endif
 }
 
 #if ENABLE_MESSAGE_PERSISTENCE
