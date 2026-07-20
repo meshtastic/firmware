@@ -71,8 +71,7 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
 
 bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_KeyVerification *r)
 {
-    // Do not refresh the deadline here: this runs before the sender is checked, so any node could keep
-    // the session alive indefinitely. The deadline is extended only when the protocol actually advances.
+    // No refresh here: this runs before the sender is checked, so any node could hold the session open.
     updateState(false);
     // Note: pki_encrypted is not required here. The first response (M2) may arrive channel-encrypted in
     // the bootstrap case; the follow-on hash1 packet (M3) is required to be PKI in its branch below.
@@ -198,8 +197,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
         ignoreRequest = true; // do not let the busy path emit a NAK back to the requester
         return nullptr;
     }
-    // Opening a session raises a 30 second banner and a client notification, and locks out the only slot,
-    // all before the peer has authenticated anything. Space remote-initiated sessions out.
+    // Opening a session raises a banner and locks the only slot, before the peer has authenticated.
     if (lastRemoteSessionMs != 0 && Throttle::isWithinTimespanMs(lastRemoteSessionMs, KEY_VERIFICATION_REMOTE_COOLDOWN_MS)) {
         LOG_WARN("Key Verification requested, but within cooldown");
         ignoreRequest = true;
@@ -369,12 +367,10 @@ void KeyVerificationModule::updateState(bool resetTimer)
 {
     if (currentState != KEY_VERIFICATION_IDLE) {
         uint32_t now = getTime();
-        // Absolute cap first: incoming packets refresh the idle timer below, so this is what stops a peer
-        // from holding the slot open forever. millis() based, so it still applies when the RTC is unset.
+        // Absolute cap first: it is millis() based, so it bounds the session even when the RTC is unset.
         if (!Throttle::isWithinTimespanMs(sessionStartedMs, KEY_VERIFICATION_MAX_SESSION_MS)) {
             resetToIdle();
-        } else if (now >= currentNonceTimestamp + KEY_VERIFICATION_TIMEOUT_SECS) {
-            // Addition rather than getTime() - 60, which underflows before the clock passes 60.
+        } else if (now - currentNonceTimestamp >= KEY_VERIFICATION_TIMEOUT_SECS) {
             resetToIdle();
         } else if (resetTimer) {
             currentNonceTimestamp = now;

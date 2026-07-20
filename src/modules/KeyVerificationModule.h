@@ -84,12 +84,10 @@ class KeyVerificationModule : public ProtobufModule<meshtastic_KeyVerification> 
   private:
     uint64_t currentNonce = 0;
     uint32_t currentNonceTimestamp = 0;
-    // millis() when the current session was opened, never refreshed, so a peer cannot hold the single
-    // slot open indefinitely by resetting the idle timer with one packet per timeout window.
+    // millis() the session opened, never refreshed, so a peer cannot hold the slot open indefinitely.
     uint32_t sessionStartedMs = 0;
-    // millis() when a remote-initiated session last ended. Opening a session raises a banner and a client
-    // notification, so spacing sessions bounds both the slot DoS and the notification spam. Stamped at the
-    // end rather than the start, so the cooldown is a real gap between sessions.
+    // millis() a remote-initiated session last ended. Spacing sessions bounds the slot DoS and the
+    // banner spam; stamped at the end rather than the start so the cooldown is a real gap.
     uint32_t lastRemoteSessionMs = 0;
     bool sessionFromRemote = false;
     NodeNum currentRemoteNode = 0;
