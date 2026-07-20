@@ -314,6 +314,8 @@ int32_t SerialModule::runOnce()
 void SerialModule::sendTelemetry(meshtastic_Telemetry m)
 {
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p)
+        return;
     p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
@@ -350,6 +352,8 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     const meshtastic_Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
     meshtastic_MeshPacket *p = allocReply();
+    if (!p)
+        return;
     p->to = dest;
     if (ch != NULL) {
         p->channel = ch->index;

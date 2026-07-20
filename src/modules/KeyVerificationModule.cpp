@@ -169,6 +169,8 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
     KeyVerification.hash1.size = 32;
     memcpy(KeyVerification.hash1.bytes, owner.public_key.bytes, 32);
     meshtastic_MeshPacket *p = allocDataProtobuf(KeyVerification);
+    if (!p)
+        return false;
     p->to = remoteNode;
     p->channel = 0;
     // Only request PKI when we already hold the destination's key. Otherwise this first message goes out
@@ -325,6 +327,8 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     KeyVerification.hash1.size = 32;
     memcpy(KeyVerification.hash1.bytes, hash1, 32);
     meshtastic_MeshPacket *p = allocDataProtobuf(KeyVerification);
+    if (!p)
+        return;
     p->to = currentRemoteNode;
     p->channel = 0;
     p->pki_encrypted = true;

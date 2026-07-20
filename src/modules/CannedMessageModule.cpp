@@ -1022,6 +1022,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     lastDestSet = true;
 
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;

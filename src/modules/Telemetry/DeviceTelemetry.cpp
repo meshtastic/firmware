@@ -172,6 +172,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
 void DeviceTelemetryModule::sendLocalStatsToPhone()
 {
     meshtastic_MeshPacket *p = allocDataProtobuf(getLocalStatsTelemetry());
+    if (!p)
+        return;
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -191,6 +193,8 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     DEBUG_HEAP_AFTER("DeviceTelemetryModule::sendTelemetry", p);
 
+    if (!p)
+        return false;
     p->to = dest;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
