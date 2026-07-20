@@ -38,8 +38,6 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     TrafficManagementModule &operator=(const TrafficManagementModule &) = delete;
 
     meshtastic_TrafficManagementStats getStats() const;
-    void resetStats();
-    void recordRouterHopPreserved();
 
     // Next-hop overflow cache (routing hint).
     // setNextHop: store a confirmed last-byte next hop for `dest`. Called by
