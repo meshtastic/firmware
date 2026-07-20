@@ -584,7 +584,8 @@ void test_receiveEmptyDataFromProxy(void)
 }
 
 // Text must be read as text: data.size aliases the string's first bytes, so reading it regardless
-// of the variant let a client name a length of up to PB_SIZE_MAX.
+// of the variant let a client name a length of up to PB_SIZE_MAX. There is no delivery control for
+// this variant: an encoded ServiceEnvelope always contains NUL, so text can never carry one.
 void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
 {
     meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
@@ -597,30 +598,6 @@ void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
     mqtt->onClientProxyReceive(message);
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
-}
-
-// Control: the variant check did not simply drop the text case.
-void test_receiveTextVariantFromProxyIsDelivered(void)
-{
-    const meshtastic_ServiceEnvelope env = {
-        .packet = const_cast<meshtastic_MeshPacket *>(&decoded), .channel_id = "test", .gateway_id = "!87654321"};
-    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
-    snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
-    message.which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
-    const size_t n = pb_encode_to_bytes((uint8_t *)message.payload_variant.text, sizeof(message.payload_variant.text) - 1,
-                                        &meshtastic_ServiceEnvelope_msg, &env);
-    TEST_ASSERT_GREATER_THAN(0, n);
-    // strnlen stops at the first NUL, so only an envelope without one round-trips as text.
-    if (memchr(message.payload_variant.text, 0, n) != nullptr) {
-        TEST_IGNORE_MESSAGE("encoded envelope contains a NUL; not representable as a text payload");
-        return;
-    }
-    message.payload_variant.text[n] = '\0';
-
-    mqtt->onClientProxyReceive(message);
-
-    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
-    TEST_ASSERT_EQUAL(decoded.id, mockRouter->packets_.front().id);
 }
 
 // A proxy message with no payload variant set must be ignored rather than read as bytes.
@@ -1106,7 +1083,6 @@ void setup()
     RUN_TEST(test_receiveDecodedProtoFromProxy);
     RUN_TEST(test_receiveEmptyDataFromProxy);
     RUN_TEST(test_receiveTextVariantFromProxyIsNotReadAsBytes);
-    RUN_TEST(test_receiveTextVariantFromProxyIsDelivered);
     RUN_TEST(test_receiveNoVariantFromProxyIsIgnored);
     RUN_TEST(test_receiveWithoutChannelDownlink);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
