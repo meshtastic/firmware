@@ -110,7 +110,7 @@ class MockNodeDB : public NodeDB
     // Seed a full identity (name, 32-byte key of `keyByte`, optional signer bit) into the
     // hot-store buffer at index 1, for reconcile/seeding tests that iterate
     // getMeshNodeByIndex().
-    void setHotNodeIdentity(NodeNum n, const char *longName, uint8_t keyByte, bool signer)
+    void setHotNodeIdentity(NodeNum n, const char *longName, uint8_t keyByte, bool xeddsaSigned)
     {
         setHotNode(n, 0);
         meshtastic_NodeInfoLite &info = (*meshNodes)[1];
@@ -118,7 +118,7 @@ class MockNodeDB : public NodeDB
         info.public_key.size = 32;
         memset(info.public_key.bytes, keyByte, 32);
         info.bitfield |= NODEINFO_BITFIELD_HAS_USER_MASK;
-        if (signer)
+        if (xeddsaSigned)
             info.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
     }
 
@@ -1042,7 +1042,7 @@ static void test_tm_nodeinfo_gate_blocksUnsignedWarmSignerForgery(void)
     uint8_t warmKey[32];
     memset(warmKey, 0x5A, 32);
     mockNodeDB->warmStore.clear();
-    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*signer=*/true);
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*xeddsaSigned=*/true);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1082,7 +1082,7 @@ static void test_tm_nodeinfo_reconcile_seedsFromHotStoreButNeverServes(void)
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     mockNodeDB->clearCachedNode();
     mockNodeDB->warmStore.clear();
-    mockNodeDB->setHotNodeIdentity(kTargetNode, "hot-name", 0x77, /*signer=*/true);
+    mockNodeDB->setHotNodeIdentity(kTargetNode, "hot-name", 0x77, /*xeddsaSigned=*/true);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1138,7 +1138,7 @@ static void test_tm_nodeinfo_reconcile_seedsKeyOnlyFromWarmTier(void)
     uint8_t warmKey[32];
     memset(warmKey, 0x44, 32);
     mockNodeDB->warmStore.clear();
-    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*signer=*/true);
+    mockNodeDB->warmStore.absorb(kTargetNode, 1000000, warmKey, 0, 0, /*xeddsaSigned=*/true);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
@@ -1571,7 +1571,7 @@ static void test_tm_nodeinfo_reconcileMembershipMarking(void)
     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
     mockNodeDB->clearCachedNode();
     mockNodeDB->warmStore.clear();
-    mockNodeDB->setHotNodeIdentity(kTargetNode, "seeded-name", 0x5C, /*signer=*/false);
+    mockNodeDB->setHotNodeIdentity(kTargetNode, "seeded-name", 0x5C, /*xeddsaSigned=*/false);
 
     MockRouter mockRouter;
     mockRouter.addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));

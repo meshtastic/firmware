@@ -178,12 +178,12 @@ void test_ws_signer_roundTrip()
     WarmNodeStore ws;
     uint8_t key[32];
     makeKey(key, 0x78);
-    TEST_ASSERT_TRUE(ws.absorb(0x710, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/true));
-    TEST_ASSERT_TRUE(ws.absorb(0x711, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/false));
+    TEST_ASSERT_TRUE(ws.absorb(0x710, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*xeddsaSigned=*/true));
+    TEST_ASSERT_TRUE(ws.absorb(0x711, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*xeddsaSigned=*/false));
 
     WarmNodeEntry e;
     TEST_ASSERT_TRUE(ws.take(0x710, e));
-    TEST_ASSERT_TRUE_MESSAGE(warmSignerOf(e), "signer flag must round trip");
+    TEST_ASSERT_TRUE_MESSAGE(warmXeddsaSignedOf(e), "xeddsa-signed flag must round trip");
     TEST_ASSERT_EQUAL(5, warmRoleOf(e)); // and must not disturb its neighbours in the word
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
     TEST_ASSERT_EQUAL(1234u & WARM_TIME_MASK, warmTimeOf(e));
@@ -191,7 +191,7 @@ void test_ws_signer_roundTrip()
     // Control: without the flag the same entry reads back clear, so the accessor is
     // reporting the stored bit rather than always-true.
     TEST_ASSERT_TRUE(ws.take(0x711, e));
-    TEST_ASSERT_FALSE(warmSignerOf(e));
+    TEST_ASSERT_FALSE(warmXeddsaSignedOf(e));
     TEST_ASSERT_EQUAL(5, warmRoleOf(e));
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
 }
@@ -290,7 +290,7 @@ void test_ws_v2_migration_clearsSignerBit()
     uint8_t key[32], got[32];
     makeKey(key, 0x67);
     // signer=true sets bit 6, standing in for a v2 record whose timestamp had it set.
-    a.absorb(0x910, 123456, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/true);
+    a.absorb(0x910, 123456, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*xeddsaSigned=*/true);
     if (!a.saveIfDirty()) {
         TEST_IGNORE_MESSAGE("Filesystem not available in this test environment");
         return;
@@ -329,7 +329,7 @@ void test_ws_v2_migration_clearsSignerBit()
 
     WarmNodeEntry e;
     TEST_ASSERT_TRUE(b.take(0x910, e));
-    TEST_ASSERT_FALSE_MESSAGE(warmSignerOf(e), "a v2 timestamp bit must not read as a signer");
+    TEST_ASSERT_FALSE_MESSAGE(warmXeddsaSignedOf(e), "a v2 timestamp bit must not read as xeddsa-signed");
     // Unlike v1, v2 kept role/protected/time in place, so they survive the migration.
     TEST_ASSERT_EQUAL(123456u & WARM_TIME_MASK, warmTimeOf(e));
     TEST_ASSERT_EQUAL(5, warmRoleOf(e));

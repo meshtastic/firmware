@@ -579,7 +579,7 @@ void TrafficManagementModule::reconcileNodeInfoFromNodeDBLocked()
         if (!warm)
             continue;
         const bool hasKey = !memfll(warm->public_key, 0, sizeof(warm->public_key));
-        reconcileOne(warm->num, hasKey ? warm->public_key : nullptr, warmSignerOf(*warm), nullptr);
+        reconcileOne(warm->num, hasKey ? warm->public_key : nullptr, warmXeddsaSignedOf(*warm), nullptr);
     }
 #endif
 

@@ -369,11 +369,11 @@ class NodeDB
     bool copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
     /// True if n is a known XEdDSA signer for exactly `key32` (hot signed bitfield or warm
-    /// signer bit); the key match stops a rotated key inheriting a stale signer verdict.
+    /// xeddsa-signed bit); the key match stops a rotated key inheriting a stale signer verdict.
     bool isVerifiedSignerForKey(NodeNum n, const uint8_t *key32);
 
-    /// Key-agnostic "should n's signable traffic arrive signed", per hot bitfield or warm signer
-    /// bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
+    /// Key-agnostic "should n's signable traffic arrive signed", per hot bitfield or warm
+    /// xeddsa-signed bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
     bool isKnownXeddsaSigner(NodeNum n);
 
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s

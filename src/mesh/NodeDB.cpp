@@ -3811,7 +3811,7 @@ bool NodeDB::isVerifiedSignerForKey(NodeNum n, const uint8_t *key32)
 #if WARM_NODE_COUNT > 0
     uint8_t warmKey[32];
     if (warmStore.copyKey(n, warmKey) && memcmp(warmKey, key32, 32) == 0)
-        return warmStore.isVerifiedSigner(n);
+        return warmStore.hasXeddsaSigned(n);
 #endif
     return false;
 }
@@ -3823,7 +3823,7 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
     if (info)
         return nodeInfoLiteHasXeddsaSigned(info);
 #if WARM_NODE_COUNT > 0
-    return warmStore.isVerifiedSigner(n);
+    return warmStore.hasXeddsaSigned(n);
 #else
     return false;
 #endif
@@ -3945,9 +3945,9 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             // Restore the role the warm tier cached, so re-admission isn't stuck at CLIENT
             // until the next NodeInfo arrives.
             lite->role = static_cast<meshtastic_Config_DeviceConfig_Role>(warmRoleOf(warm));
-            // Restore the signer bit too: it is learned from verified traffic, not from
+            // Restore the XEdDSA-signed bit too: it is learned from verified traffic, not from
             // NodeInfo, so a round trip through the warm tier must not relearn it from zero.
-            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, warmSignerOf(warm));
+            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, warmXeddsaSignedOf(warm));
             if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
@@ -3964,7 +3964,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // its cached key matches the key we just restored from warm, so a name never attaches to
         // a different identity than the one we encrypt to. No-op without the TMM NodeInfo cache
         // or when no key is present (key-matched by design). CopyUserToNodeInfoLite sets only the
-        // user-related bits, so the warm-restored signer bit survives.
+        // user-related bits, so the warm-restored XEdDSA-signed bit survives.
         if (lite->public_key.size == 32 && !nodeInfoLiteHasUser(lite) && trafficManagementModule) {
             meshtastic_User tmmUser = meshtastic_User_init_zero;
             if (trafficManagementModule->copyUser(n, tmmUser) && tmmUser.public_key.size == 32 &&
