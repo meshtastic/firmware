@@ -905,13 +905,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case 0x48: {
-                // T=1oI2C soft reset (S-block): NAD=0x5A PCB=0xC0 LEN=0x00 plus CRC,
-                // which an SE050 answers with A5 E0 00 3F 19.
-                //
-                // The answer has to be fetched with requestFrom(). readBytes() comes from
-                // Stream and only drains the Wire RX buffer, which requestFrom() is what
-                // fills, so on its own it returns 0 bytes after burning Stream's 1000ms
-                // default timeout - and every SE050 falls through to FT6336U below.
+                // T=1oI2C soft reset; an SE050 answers A5 E0 00 3F 19. requestFrom() is
+                // required: readBytes() only drains the RX buffer requestFrom() fills.
                 const uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
                 const uint8_t expectedInfo[] = {0xA5, 0xE0, 0x00, 0x3F, 0x19};
                 uint8_t info[sizeof(expectedInfo)] = {0};
