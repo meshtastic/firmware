@@ -204,6 +204,14 @@ static void dispatch(meshtastic_PortNum port)
     MeshModule::callModules(request);
 }
 
+static void dispatchRelayedBroadcast(meshtastic_PortNum port)
+{
+    meshtastic_MeshPacket request = makeRequest(port);
+    request.to = NODENUM_BROADCAST;
+    request.hop_limit = request.hop_start - 1;
+    MeshModule::callModules(request);
+}
+
 } // namespace
 
 void setUp(void)
@@ -439,6 +447,44 @@ static void test_dispatch_noResponderSendsNak()
     TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, mockRoutingModule->ackNaks[0].to);
 }
 
+static void test_dispatch_relayedBroadcastDoesNotReplyOrNak()
+{
+    auto *telemetry = registerDispatchModule(
+        new SyntheticReplyModule("telemetry-owner", meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_TELEMETRY_APP));
+
+    dispatchRelayedBroadcast(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(0, telemetry->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static void test_dispatch_relayedBroadcastTrackerPositionReplies()
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
+    auto *position = registerDispatchModule(
+        new SyntheticReplyModule("position-owner", meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_POSITION_APP));
+
+    dispatchRelayedBroadcast(meshtastic_PortNum_POSITION_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(1, position->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static void test_dispatch_relayedBroadcastTrackerOnlyAllowsPosition()
+{
+    config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
+    auto *telemetry = registerDispatchModule(
+        new SyntheticReplyModule("telemetry-owner", meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_TELEMETRY_APP));
+
+    dispatchRelayedBroadcast(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(0, telemetry->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
 static void test_dispatch_ignoreRequestIsClearedPerPacket()
 {
     auto *ignoring = registerDispatchModule(new ReplyIgnoreModule());
@@ -493,6 +539,9 @@ void setup()
     RUN_TEST(test_dispatch_crossPortReplyUsesRequestOwner);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
     RUN_TEST(test_dispatch_noResponderSendsNak);
+    RUN_TEST(test_dispatch_relayedBroadcastDoesNotReplyOrNak);
+    RUN_TEST(test_dispatch_relayedBroadcastTrackerPositionReplies);
+    RUN_TEST(test_dispatch_relayedBroadcastTrackerOnlyAllowsPosition);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     exit(UNITY_END());
