@@ -93,7 +93,11 @@ class RadioInterface
     uint8_t cr = 5;
 
     static constexpr uint8_t NUM_SYM_CAD =
-        2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
+        2; // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48.
+           // NOTE: on SX126x the scanChannel symNum field is a *register encoding*, not a raw count -
+           // there raw 2 (RADIOLIB_SX126X_CAD_ON_4_SYMB) actually programs a 4-symbol scan, so SX126x
+           // overrides getCadSymbolCount() to reflect that. LR11x0/LR20x0 take symNum as a plain count,
+           // so for them this constant is both the value passed and the true symbol count.
     static constexpr uint8_t NUM_SYM_CAD_24GHZ =
         4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
     uint32_t slotTimeMsec = computeSlotTimeMsec();
@@ -111,6 +115,13 @@ class RadioInterface
     uint32_t lastTxStart = 0L;
 
     uint32_t computeSlotTimeMsec();
+
+    // Effective number of LoRa symbols the CAD scan actually runs on this chip. Used by
+    // computeSlotTimeMsec() to size the contention-window slot to the real scan length. Defaults to
+    // NUM_SYM_CAD (2) for chips whose driver takes symNum as a plain count (LR11x0/LR20x0) and for
+    // SX127x hardware CAD; SX126x/LLCC68/STM32WL override this to 4 because their register encoding
+    // turns our symNum value into a 4-symbol scan (see NUM_SYM_CAD).
+    virtual uint8_t getCadSymbolCount() const { return NUM_SYM_CAD; }
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need

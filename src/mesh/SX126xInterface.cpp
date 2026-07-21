@@ -388,8 +388,11 @@ template <typename T> void SX126xInterface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
+    // check if we can detect a LoRa preamble on the current channel.
+    // NOTE: symNum is the *encoded* SET_CAD_PARAMS value, not a raw count - RADIOLIB_SX126X_CAD_ON_4_SYMB
+    // (== raw 2) runs a 4-symbol scan. This is the value NUM_SYM_CAD already produced; naming it makes the
+    // intent explicit and keeps it in sync with getCadSymbolCount() (4), which sizes the CW slot time.
+    ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
                                        .detPeak = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
