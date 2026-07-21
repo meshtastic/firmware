@@ -3120,6 +3120,9 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 #include "MeshModule.h"
 #include "Throttle.h"
 
+// Minimum spacing between evictions once the node database is full.
+#define NODEDB_FULL_EVICTION_INTERVAL_MS (2 * 1000UL)
+
 static constexpr uint32_t HOPSTART_DROP_LOG_INTERVAL_MS = 15000;
 
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
@@ -3312,15 +3315,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
-    if (!info) {
+    // Only a signed update may change the identity of a node that has proven it signs; our own record is
+    // exempt. Checked before getOrCreateMeshNode so a refused update cannot evict or write the warm tier.
+    const meshtastic_NodeInfoLite *existing = getMeshNode(nodeId);
+    if (nodeId != getNodeNum() && existing && nodeInfoLiteHasXeddsaSigned(existing) && !xeddsaSigned) {
+        LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
         return false;
     }
 
-    // Once a node has proven it signs, only a signed update may change its identity. The public-key guard
-    // below is no help - an attacker can replay the victim's real (public) key. Our own record is exempt.
-    if (nodeId != getNodeNum() && nodeInfoLiteHasXeddsaSigned(info) && !xeddsaSigned) {
-        LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
+    if (!info) {
         return false;
     }
 
@@ -3414,7 +3418,19 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
-        meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
+        // mp.from is unauthenticated, so rate-limit admission once the database is full: otherwise
+        // invented node numbers churn it at packet rate and push real neighbours out.
+        meshtastic_NodeInfoLite *info = getMeshNode(getFrom(&mp));
+        if (!info) {
+            if (isFull()) {
+                if (Throttle::isWithinTimespanMs(lastFullEvictionMs, NODEDB_FULL_EVICTION_INTERVAL_MS)) {
+                    LOG_DEBUG("Node database full, defer admitting 0x%08x", mp.from);
+                    return;
+                }
+                lastFullEvictionMs = millis();
+            }
+            info = getOrCreateMeshNode(getFrom(&mp));
+        }
         if (!info) {
             return;
         }
