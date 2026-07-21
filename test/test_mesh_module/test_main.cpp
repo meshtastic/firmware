@@ -152,6 +152,7 @@ class NodeInfoPolicyShim : public NodeInfoModule
     using NodeInfoModule::handleReceivedProtobuf;
     using NodeInfoModule::isDirectBroadcastDiscoveryRequest;
 
+    MeshModule *asMeshModule() { return this; }
     void setCurrentRequest(const meshtastic_MeshPacket *request) { currentRequest = request; }
 };
 
@@ -511,7 +512,8 @@ static void test_nodeInfo_unicastRequestRetainsRoutingHopLimit()
 
 static void test_nodeInfo_rejectedBroadcastDoesNotSuppressDirectDiscovery()
 {
-    registerDispatchModule(new NodeInfoPolicyShim());
+    auto *nodeInfo = new NodeInfoPolicyShim();
+    dispatchModules.push_back(nodeInfo->asMeshModule());
     meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_NODEINFO_APP);
     request.to = NODENUM_BROADCAST;
     request.decoded.has_bitfield = true;
