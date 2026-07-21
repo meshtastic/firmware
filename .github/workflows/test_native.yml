@@ -22,6 +22,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Reconcile native-suite-count with test/ directories
         shell: bash
@@ -35,6 +37,10 @@ jobs:
           # Same canonical set as bin/run-tests.sh: directories named test_* directly under test/.
           expected_count=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | wc -l)
           canonical_count=$(tr -d '[:space:]' <"$count_file")
+          if ! [[ $canonical_count =~ ^[0-9]+$ ]]; then
+            echo "::error title=Invalid native-suite-count::$count_file must contain a single integer, got '$canonical_count'."
+            exit 1
+          fi
           echo "test/ directories: $expected_count"
           echo "native-suite-count: $canonical_count"
           if [[ $expected_count -ne $canonical_count ]]; then
@@ -51,6 +57,7 @@ jobs:
   simulator-tests:
     name: Native Simulator Tests
     runs-on: ubuntu-latest
+    needs: suite-count-check
     steps:
       - uses: actions/checkout@v7
         with:
@@ -125,6 +132,7 @@ jobs:
   platformio-tests:
     name: Native PlatformIO Tests
     runs-on: ubuntu-latest
+    needs: suite-count-check
     steps:
       - uses: actions/checkout@v7
         with:
