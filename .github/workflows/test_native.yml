@@ -105,22 +105,63 @@ jobs:
       - name: Disable BUILD_EPOCH
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
-      - name: PlatformIO Tests
-        run: |
-          set -o pipefail
-          # Filter out SKIPPED summary rows for hardware variants that can't run on the
-          # native host. They flood the log and make it harder to spot real failures.
-          # The JUnit XML is written directly to testreport.xml before the pipe, so
-          # the test artifact is unaffected.
-          platformio test -e coverage -v --junit-output-path testreport.xml 2>&1 | grep -v "[[:space:]]SKIPPED$"
+      - name: Build test programs once
+        # One shared build of src + every test program. This is the single source build; gcov then
+        # accumulates coverage counts into this shared .pio/build/coverage/src as the chunks run.
+        run: platformio test -e coverage --without-testing
 
-      - name: Save test results
-        if: always() # run this step even if previous step failed
-        uses: actions/upload-artifact@v7
-        with:
-          name: platformio-test-report-${{ steps.version.outputs.long }}
-          overwrite: true
-          path: ./testreport.xml
+      - name: Run tests one area at a time
+        shell: bash
+        run: |
+          set -uo pipefail
+          # One runner, no matrix, no concurrency. Group the test_* suites by area and run each
+          # area sequentially, reusing the single build above (--without-building). Each area gets
+          # its own JUnit report and its own collapsible log, so a failure lands in a small named
+          # section instead of being buried past the log limit. Sequential runs share one build
+          # dir, so gcov coverage accumulates and the single capture in the next step has the union.
+
+          # Ordered area rules "name:ERE"; first match wins. Anything unmatched falls to "misc", so
+          # a newly added suite always runs even before it is placed. Add a suite to an area by
+          # extending that area's regex; add a new area by inserting a rule line.
+          area_rules=(
+            "admin:^test_(admin|pki)_"
+            "crypto:^test_(crypto|packet_signing)$"
+            "routing:^test_(mesh|nexthop|traceroute|hop|traffic|nodedb|warm)_"
+            "position:^test_position_"
+            "fuzz:^test_fuzz_"
+            "packets:^test_(packet|transmit|meshpacket)_"
+            "io:^test_(serial|stream|xmodem|http|mqtt)"
+          )
+
+          mapfile -t suites < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
+          declare -A group
+          for s in "${suites[@]}"; do
+            a="misc"
+            for rule in "${area_rules[@]}"; do
+              if [[ "$s" =~ ${rule#*:} ]]; then a="${rule%%:*}"; break; fi
+            done
+            group[$a]="${group[$a]:-} -f $s"
+          done
+
+          run_order=()
+          for rule in "${area_rules[@]}"; do run_order+=("${rule%%:*}"); done
+          run_order+=("misc")
+
+          fail=0
+          for a in "${run_order[@]}"; do
+            [ -n "${group[$a]:-}" ] || continue
+            echo "::group::area $a (${group[$a]# })"
+            # Capture platformio's real exit status (not grep's) via a log file, then show the log
+            # with the noisy per-variant SKIPPED rows filtered out.
+            if ! platformio test -e coverage --without-building -v ${group[$a]# } \
+                 --junit-output-path "testreport-$a.xml" > "area-$a.log" 2>&1; then
+              fail=1
+              echo "::error::area $a had test failures"
+            fi
+            grep -v "[[:space:]]SKIPPED$" "area-$a.log" || true
+            echo "::endgroup::"
+          done
+          exit $fail
 
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
@@ -128,6 +169,14 @@ jobs:
           sudo apt-get install -y lcov
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
           sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
+
+      - name: Save test results
+        if: always() # run this step even if previous step failed
+        uses: actions/upload-artifact@v7
+        with:
+          name: platformio-test-report-${{ steps.version.outputs.long }}
+          overwrite: true
+          path: ./testreport-*.xml
 
       - name: Save coverage information
         uses: actions/upload-artifact@v7
@@ -166,14 +215,15 @@ jobs:
         # crossed with every hardware variant it cannot run on the native host (~4900 rows).
         # They carry no pass/fail/skip status and bury the suites that actually ran. Strip
         # them so the Test Report lists only suites with a real status. Only the copy the
-        # reporter renders is trimmed; the uploaded artifact keeps the full XML.
-        run: sed -i -E 's#<testsuite [^>]*tests="0"[^>]*/>##g' testreport.xml
+        # reporter renders is trimmed; the uploaded artifact keeps the full XML. One report
+        # per chunk now, so trim each.
+        run: sed -i -E 's#<testsuite [^>]*tests="0"[^>]*/>##g' testreport-*.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v3.0.0
         with:
           name: PlatformIO Tests
-          path: testreport.xml
+          path: testreport-*.xml
           reporter: java-junit
 
       - name: Download coverage artifacts
@@ -184,9 +234,17 @@ jobs:
           merge-multiple: true
 
       - name: Generate Code Coverage Report
+        # Merge every tracefile the jobs produced: coverage_base.info (zeroed baseline),
+        # coverage_integration.info, and one coverage_tests_<chunk>.info per chunk. lcov
+        # sums hit counts across them, so the merged report is the union of all chunks -
+        # identical to running the whole suite in one job.
         run: |
           sudo apt-get install -y lcov
-          lcov --quiet --add-tracefile code-coverage-report/coverage_base.info --add-tracefile code-coverage-report/coverage_integration.info --add-tracefile code-coverage-report/coverage_tests.info --output-file code-coverage-report/coverage_src.info
+          args=()
+          for f in code-coverage-report/coverage_*.info; do
+            args+=(--add-tracefile "$f")
+          done
+          lcov --quiet "${args[@]}" --output-file code-coverage-report/coverage_src.info
           genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
       - name: Save Code Coverage Report
