@@ -3,6 +3,23 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "configuration.h"
+#include "mesh/CryptoEngine.h"
+#include "mesh/MeshService.h"
+#include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
+#include "mesh/Router.h"
+#include "modules/NeighborInfoModule.h"
+#include "modules/RoutingModule.h"
+#include "support/MockMeshService.h"
+#include <memory>
+#include <vector>
+
+namespace
+{
+constexpr NodeNum LOCAL_NODE = 0x11111111;
+constexpr NodeNum REMOTE_NODE = 0x22222222;
+
 // Minimal concrete subclass for testing the base class helper
 class TestModule : public MeshModule
 {
@@ -13,11 +30,207 @@ class TestModule : public MeshModule
     using MeshModule::isMultiHopBroadcastRequest;
 };
 
+class MockNodeDB : public NodeDB
+{
+};
+
+class MockRadioInterface : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+};
+
+class MockRouter : public Router
+{
+  public:
+    ~MockRouter()
+    {
+        delete cryptLock;
+        cryptLock = nullptr;
+    }
+
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        sentPackets.push_back(*p);
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    std::vector<meshtastic_MeshPacket> sentPackets;
+};
+
+struct AckNak {
+    meshtastic_Routing_Error error;
+    NodeNum to;
+    PacketId requestId;
+    ChannelIndex channel;
+};
+
+class MockRoutingModule : public RoutingModule
+{
+  public:
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false) override
+    {
+        (void)hopLimit;
+        (void)ackWantsAck;
+        ackNaks.push_back({err, to, idFrom, chIndex});
+    }
+
+    std::vector<AckNak> ackNaks;
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override
+    {
+        (void)p;
+        return false;
+    }
+};
+
+class SyntheticReplyModule : public MeshModule
+{
+  public:
+    SyntheticReplyModule(const char *name, meshtastic_PortNum modulePort, meshtastic_PortNum replyPort,
+                         bool acceptsEveryPort = false)
+        : MeshModule(name, modulePort), replyPort(replyPort), acceptsEveryPort(acceptsEveryPort)
+    {
+        isPromiscuous = acceptsEveryPort;
+    }
+
+    uint32_t allocReplyCalls = 0;
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return acceptsEveryPort || p->decoded.portnum == ourPortNum; }
+
+    meshtastic_MeshPacket *allocReply() override
+    {
+        allocReplyCalls++;
+        meshtastic_MeshPacket *reply = router->allocForSending();
+        reply->decoded.portnum = replyPort;
+        return reply;
+    }
+
+  private:
+    meshtastic_PortNum replyPort;
+    bool acceptsEveryPort;
+};
+
+class ObservingIgnoreModule : public MeshModule
+{
+  public:
+    ObservingIgnoreModule() : MeshModule("storeforward-shaped", meshtastic_PortNum_STORE_FORWARD_APP) {}
+
+    uint32_t allocReplyCalls = 0;
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP; }
+
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
+    {
+        (void)mp;
+        ignoreRequest = true;
+        return ProcessMessage::CONTINUE;
+    }
+
+    meshtastic_MeshPacket *allocReply() override
+    {
+        allocReplyCalls++;
+        return nullptr;
+    }
+};
+
+class ReplyIgnoreModule : public MeshModule
+{
+  public:
+    ReplyIgnoreModule() : MeshModule("reply-ignore", meshtastic_PortNum_NEIGHBORINFO_APP) {}
+
+    uint32_t allocReplyCalls = 0;
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+
+    meshtastic_MeshPacket *allocReply() override
+    {
+        allocReplyCalls++;
+        ignoreRequest = true;
+        return nullptr;
+    }
+};
+
 static TestModule *testModule;
 static meshtastic_MeshPacket testPacket;
+static MockNodeDB *mockNodeDB;
+static MockMeshService *mockService;
+static MockRouter *mockRouter;
+static MockRoutingModule *mockRoutingModule;
+static NeighborInfoModule *realNeighborInfoModule;
+static std::vector<MeshModule *> dispatchModules;
+
+template <typename T> static T *registerDispatchModule(T *module)
+{
+    dispatchModules.push_back(module);
+    return module;
+}
+
+static meshtastic_MeshPacket makeRequest(meshtastic_PortNum port)
+{
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    packet.from = REMOTE_NODE;
+    packet.to = LOCAL_NODE;
+    packet.id = 0x12345678;
+    packet.channel = 0;
+    packet.hop_start = 3;
+    packet.hop_limit = 3;
+    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.decoded.portnum = port;
+    packet.decoded.want_response = true;
+    return packet;
+}
+
+static void dispatch(meshtastic_PortNum port)
+{
+    meshtastic_MeshPacket request = makeRequest(port);
+    MeshModule::callModules(request);
+}
+
+} // namespace
 
 void setUp(void)
 {
+    config = meshtastic_LocalConfig_init_zero;
+    moduleConfig = meshtastic_LocalModuleConfig_init_zero;
+    channelFile = meshtastic_ChannelFile_init_zero;
+    owner = meshtastic_User_init_zero;
+    myNodeInfo.my_node_num = LOCAL_NODE;
+
+    mockNodeDB = new MockNodeDB();
+    nodeDB = mockNodeDB;
+    myNodeInfo.my_node_num = LOCAL_NODE;
+
+    mockService = new MockMeshService();
+    service = mockService;
+
+    channels.initDefaults();
+    channels.onConfigChanged();
+
+    mockRouter = new MockRouter();
+    mockRouter->addInterface(std::unique_ptr<RadioInterface>(new MockRadioInterface()));
+    router = mockRouter;
+
+    mockRoutingModule = new MockRoutingModule();
+    routingModule = mockRoutingModule;
+
     testModule = new TestModule();
     memset(&testPacket, 0, sizeof(testPacket));
     TestModule::currentRequest = &testPacket;
@@ -26,7 +239,34 @@ void setUp(void)
 void tearDown(void)
 {
     TestModule::currentRequest = NULL;
+
+    for (auto it = dispatchModules.rbegin(); it != dispatchModules.rend(); ++it)
+        delete *it;
+    dispatchModules.clear();
+
+    delete realNeighborInfoModule;
+    realNeighborInfoModule = nullptr;
+
     delete testModule;
+    testModule = nullptr;
+
+    delete mockRoutingModule;
+    mockRoutingModule = nullptr;
+    routingModule = nullptr;
+
+    while (auto *status = mockService->getQueueStatusForPhone())
+        mockService->releaseQueueStatusToPool(status);
+    delete mockService;
+    mockService = nullptr;
+    service = nullptr;
+
+    delete mockRouter;
+    mockRouter = nullptr;
+    router = nullptr;
+
+    delete mockNodeDB;
+    mockNodeDB = nullptr;
+    nodeDB = nullptr;
 }
 
 // Zero-hop broadcast (hop_limit == hop_start): should be allowed
@@ -98,6 +338,139 @@ static void test_singleHopRelayedBroadcast_isBlocked()
     TEST_ASSERT_TRUE(testModule->isMultiHopBroadcastRequest());
 }
 
+static void test_replyPortMatches_ownPort()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_TRUE(MeshModule::replyPortMatches(meshtastic_PortNum_TELEMETRY_APP, request));
+}
+
+static void test_replyPortMatches_neighborInfoVsTelemetry()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_FALSE(MeshModule::replyPortMatches(meshtastic_PortNum_NEIGHBORINFO_APP, request));
+}
+
+static void test_replyPortMatches_positionRequest()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_POSITION_APP);
+
+    TEST_ASSERT_TRUE(MeshModule::replyPortMatches(meshtastic_PortNum_POSITION_APP, request));
+}
+
+static void test_replyPortMatches_unknownModulePort()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_FALSE(MeshModule::replyPortMatches(meshtastic_PortNum_UNKNOWN_APP, request));
+}
+
+static void test_replyPortMatches_unknownRequestPort()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_UNKNOWN_APP);
+
+    TEST_ASSERT_FALSE(MeshModule::replyPortMatches(meshtastic_PortNum_TELEMETRY_APP, request));
+}
+
+static void test_dispatch_foreignPortOffenderCannotShadowOwner()
+{
+    auto *offender = registerDispatchModule(new SyntheticReplyModule("neighbor-shaped", meshtastic_PortNum_NEIGHBORINFO_APP,
+                                                                     meshtastic_PortNum_NEIGHBORINFO_APP, true));
+    auto *owner = registerDispatchModule(
+        new SyntheticReplyModule("telemetry-owner", meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_TELEMETRY_APP));
+
+    dispatch(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(0, offender->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(1, owner->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_TELEMETRY_APP, mockRouter->sentPackets[0].decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static void test_dispatch_ownerPortStillReplies()
+{
+    auto *offender = registerDispatchModule(new SyntheticReplyModule("neighbor-shaped", meshtastic_PortNum_NEIGHBORINFO_APP,
+                                                                     meshtastic_PortNum_NEIGHBORINFO_APP, true));
+    auto *owner = registerDispatchModule(
+        new SyntheticReplyModule("telemetry-owner", meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_TELEMETRY_APP));
+
+    dispatch(meshtastic_PortNum_NEIGHBORINFO_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(1, offender->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, owner->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_NEIGHBORINFO_APP, mockRouter->sentPackets[0].decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static void test_dispatch_crossPortReplyUsesRequestOwner()
+{
+    auto *position = registerDispatchModule(
+        new SyntheticReplyModule("position-owner", meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_ATAK_PLUGIN_V2));
+
+    dispatch(meshtastic_PortNum_POSITION_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(1, position->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ATAK_PLUGIN_V2, mockRouter->sentPackets[0].decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static void test_dispatch_foreignPortObserverCanSuppressNak()
+{
+    auto *observer = registerDispatchModule(new ObservingIgnoreModule());
+
+    dispatch(meshtastic_PortNum_TEXT_MESSAGE_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(0, observer->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
+static void test_dispatch_noResponderSendsNak()
+{
+    dispatch(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NO_RESPONSE, mockRoutingModule->ackNaks[0].error);
+    TEST_ASSERT_EQUAL_HEX32(REMOTE_NODE, mockRoutingModule->ackNaks[0].to);
+}
+
+static void test_dispatch_ignoreRequestIsClearedPerPacket()
+{
+    auto *ignoring = registerDispatchModule(new ReplyIgnoreModule());
+
+    dispatch(meshtastic_PortNum_NEIGHBORINFO_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(1, ignoring->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+
+    dispatch(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(1, ignoring->allocReplyCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(1, mockRoutingModule->ackNaks.size());
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NO_RESPONSE, mockRoutingModule->ackNaks[0].error);
+}
+
+static void test_dispatch_realNeighborInfoCannotShadowTelemetryOwner()
+{
+    moduleConfig.neighbor_info.enabled = true;
+    realNeighborInfoModule = new NeighborInfoModule();
+    registerDispatchModule(
+        new SyntheticReplyModule("telemetry-owner", meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_TELEMETRY_APP));
+
+    dispatch(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_TELEMETRY_APP, mockRouter->sentPackets[0].decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -110,6 +483,18 @@ void setup()
     RUN_TEST(test_noCurrentRequest_isAllowed);
     RUN_TEST(test_legacyPacket_zeroHopStart_isAllowed);
     RUN_TEST(test_singleHopRelayedBroadcast_isBlocked);
+    RUN_TEST(test_replyPortMatches_ownPort);
+    RUN_TEST(test_replyPortMatches_neighborInfoVsTelemetry);
+    RUN_TEST(test_replyPortMatches_positionRequest);
+    RUN_TEST(test_replyPortMatches_unknownModulePort);
+    RUN_TEST(test_replyPortMatches_unknownRequestPort);
+    RUN_TEST(test_dispatch_foreignPortOffenderCannotShadowOwner);
+    RUN_TEST(test_dispatch_ownerPortStillReplies);
+    RUN_TEST(test_dispatch_crossPortReplyUsesRequestOwner);
+    RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
+    RUN_TEST(test_dispatch_noResponderSendsNak);
+    RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
+    RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     exit(UNITY_END());
 }
 
