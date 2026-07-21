@@ -292,6 +292,107 @@ void test_local_security_config_keeps_private_key(void)
     admin->drainReply();
 }
 
+// Decode the NetworkConfig / MqttConfig out of the response a handler queued in myReply.
+static bool decodeNetworkFromReply(meshtastic_MeshPacket *reply, meshtastic_Config_NetworkConfig &out)
+{
+    meshtastic_AdminMessage am = meshtastic_AdminMessage_init_zero;
+    if (!reply || reply->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return false;
+    if (!pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_AdminMessage_msg, &am))
+        return false;
+    if (am.which_payload_variant != meshtastic_AdminMessage_get_config_response_tag ||
+        am.get_config_response.which_payload_variant != meshtastic_Config_network_tag)
+        return false;
+    out = am.get_config_response.payload_variant.network;
+    return true;
+}
+
+static bool decodeMqttFromReply(meshtastic_MeshPacket *reply, meshtastic_ModuleConfig_MQTTConfig &out)
+{
+    meshtastic_AdminMessage am = meshtastic_AdminMessage_init_zero;
+    if (!reply || reply->which_payload_variant != meshtastic_MeshPacket_decoded_tag)
+        return false;
+    if (!pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_AdminMessage_msg, &am))
+        return false;
+    if (am.which_payload_variant != meshtastic_AdminMessage_get_module_config_response_tag ||
+        am.get_module_config_response.which_payload_variant != meshtastic_ModuleConfig_mqtt_tag)
+        return false;
+    out = am.get_module_config_response.payload_variant.mqtt;
+    return true;
+}
+
+// A remote requester gets the sentinel; the set path swaps the stored value back.
+void test_remote_network_config_omits_wifi_psk(void)
+{
+    strcpy(config.network.wifi_psk, "hunter2hunter2");
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(ADMIN_NODE);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_NETWORK_CONFIG);
+
+    meshtastic_Config_NetworkConfig net;
+    TEST_ASSERT_TRUE(decodeNetworkFromReply(admin->reply(), net));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("sekrit", net.wifi_psk, "remote network config must not carry the real psk");
+    admin->drainReply();
+}
+
+// Control: the local path still receives the stored psk.
+void test_local_network_config_keeps_wifi_psk(void)
+{
+    strcpy(config.network.wifi_psk, "hunter2hunter2");
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(0);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_NETWORK_CONFIG);
+
+    meshtastic_Config_NetworkConfig net;
+    TEST_ASSERT_TRUE(decodeNetworkFromReply(admin->reply(), net));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("hunter2hunter2", net.wifi_psk, "local client must still receive the psk");
+    admin->drainReply();
+}
+
+void test_remote_mqtt_config_omits_password(void)
+{
+    strcpy(moduleConfig.mqtt.password, "brokerpass");
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(ADMIN_NODE);
+    admin->handleGetModuleConfig(req, meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG);
+
+    meshtastic_ModuleConfig_MQTTConfig mqtt;
+    TEST_ASSERT_TRUE(decodeMqttFromReply(admin->reply(), mqtt));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("sekrit", mqtt.password, "remote mqtt config must not carry the broker password");
+    admin->drainReply();
+}
+
+void test_local_mqtt_config_keeps_password(void)
+{
+    strcpy(moduleConfig.mqtt.password, "brokerpass");
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(0);
+    admin->handleGetModuleConfig(req, meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG);
+
+    meshtastic_ModuleConfig_MQTTConfig mqtt;
+    TEST_ASSERT_TRUE(decodeMqttFromReply(admin->reply(), mqtt));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("brokerpass", mqtt.password, "local client must still receive the password");
+    admin->drainReply();
+}
+
+// A client that GETs and writes the config straight back must not wipe the stored value.
+void test_set_config_sentinel_psk_preserves_stored_value(void)
+{
+    strcpy(config.network.wifi_psk, "hunter2hunter2");
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    strcpy(c.payload_variant.network.wifi_psk, "sekrit");
+
+    admin->deferSaves();
+    admin->handleSetConfig(c, true);
+
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("hunter2hunter2", config.network.wifi_psk,
+                                     "a read-modify-write round trip must not wipe the psk");
+    admin->drainReply();
+}
+
 // An admin response carries no session passkey and its sender is not an admin-key holder, so a
 // request we sent is the only thing vouching for it. A get_module_config_response from a node we
 // never queried is not.
@@ -539,6 +640,11 @@ void setup()
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
     RUN_TEST(test_local_security_config_keeps_private_key);
+    RUN_TEST(test_remote_network_config_omits_wifi_psk);
+    RUN_TEST(test_local_network_config_keeps_wifi_psk);
+    RUN_TEST(test_remote_mqtt_config_omits_password);
+    RUN_TEST(test_local_mqtt_config_keeps_password);
+    RUN_TEST(test_set_config_sentinel_psk_preserves_stored_value);
     RUN_TEST(test_unsolicited_response_is_not_solicited);
     RUN_TEST(test_response_after_our_request_is_solicited);
     RUN_TEST(test_request_to_one_node_does_not_admit_another);

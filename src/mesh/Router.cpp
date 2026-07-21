@@ -194,6 +194,8 @@ PacketId generatePacketId()
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    if (!p)
+        return nullptr;
 
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
@@ -551,6 +553,54 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 }
 #endif
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+// The fallback costs three X25519 ops before the AEAD tag is checked. Budget is global because p->from is
+// attacker-controlled; successful runs refund, and their key is then persisted for the fast path.
+#define ADMIN_KEY_FALLBACK_BURST 8
+#define ADMIN_KEY_FALLBACK_REFILL_MS 250
+
+static uint32_t adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+static uint32_t adminKeyFallbackRefillMs = 0;
+
+static bool adminKeyFallbackAllowed()
+{
+    bool haveAdminKey = false;
+    for (int i = 0; i < 3; i++) {
+        if (config.security.admin_key[i].size == 32) {
+            haveAdminKey = true;
+            break;
+        }
+    }
+    if (!haveAdminKey)
+        return false; // nothing to try, so do not spend a token
+
+    uint32_t now = millis();
+    if (adminKeyFallbackRefillMs == 0)
+        adminKeyFallbackRefillMs = now;
+    uint32_t elapsed = now - adminKeyFallbackRefillMs;
+    if (elapsed >= ADMIN_KEY_FALLBACK_REFILL_MS) {
+        uint32_t refill = elapsed / ADMIN_KEY_FALLBACK_REFILL_MS;
+        adminKeyFallbackRefillMs += refill * ADMIN_KEY_FALLBACK_REFILL_MS;
+        if (refill >= ADMIN_KEY_FALLBACK_BURST - adminKeyFallbackTokens)
+            adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+        else
+            adminKeyFallbackTokens += refill;
+    }
+
+    if (adminKeyFallbackTokens == 0)
+        return false;
+
+    adminKeyFallbackTokens--;
+    return true;
+}
+
+static void adminKeyFallbackRefund()
+{
+    if (adminKeyFallbackTokens < ADMIN_KEY_FALLBACK_BURST)
+        adminKeyFallbackTokens++;
+}
+#endif
+
 DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
@@ -575,7 +625,14 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier), else
     // fall back to a not-yet-committed key held during an in-progress key-verification handshake.
     meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic) || crypto->getPendingPublicKey(p->from, remotePublic);
+    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
+    // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
+    // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
+    bool havePendingKey = false;
+    if (!haveRemoteKey) {
+        havePendingKey = crypto->getPendingPublicKey(p->from, remotePublic);
+        haveRemoteKey = havePendingKey;
+    }
 
     meshtastic_NodeInfoLite *ourNode = nullptr;
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
@@ -583,20 +640,26 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // Try the sender's known key first, then each configured admin key so an authorized admin can
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
+        bool viaPendingKey = false;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
+            viaPendingKey = havePendingKey;
         }
-        for (int i = 0; i < 3 && !decrypted; i++) {
-            if (config.security.admin_key[i].size != 32)
-                continue;
-            remotePublic.size = 32;
-            memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
+        if (!decrypted && adminKeyFallbackAllowed()) {
+            for (int i = 0; i < 3 && !decrypted; i++) {
+                if (config.security.admin_key[i].size != 32)
+                    continue;
+                remotePublic.size = 32;
+                memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
 
-            if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
-                decrypted = true;
-                viaAdminKey = true;
-                break; // stop after first successful decryption
+                if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                    decrypted = true;
+                    viaAdminKey = true;
+                    break; // stop after first successful decryption
+                }
             }
+            if (decrypted)
+                adminKeyFallbackRefund();
         }
         if (decrypted) {
             LOG_INFO("PKI Decryption worked!");
@@ -605,6 +668,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
             if (pb_decode_from_bytes(bytes, payloadSize, &meshtastic_Data_msg, &decodedtmp) &&
                 decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                if (viaPendingKey && decodedtmp.portnum != meshtastic_PortNum_KEY_VERIFICATION_APP) {
+                    // The pending key only proves the handshake initiator holds it, not that they are
+                    // p->from. Beyond the exchange it would let them send DMs that look authenticated.
+                    LOG_WARN("Refusing pending-key decrypt of port %u from 0x%08x", (unsigned)decodedtmp.portnum, p->from);
+                    return DecodeState::DECODE_FAILURE;
+                }
                 decrypted = true;
                 rawSize = payloadSize; // commit the overhead subtraction only on full success
                 LOG_INFO("Packet decrypted using PKI!");
