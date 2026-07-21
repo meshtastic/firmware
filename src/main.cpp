@@ -1454,8 +1454,8 @@ void loop()
             rebootAtMsec = millis() + 25;
         }
     }
-#if HAS_TFT
-    if (screen && portduino_config.displayPanel == x11 &&
+#if HAS_TFT && !defined(_WIN32)
+    if (screen && (portduino_config.displayPanel == sdl) &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
