@@ -165,13 +165,11 @@ void MCP23017Keyboard::reset() {
 }
 
 void MCP23017Keyboard::attachInterrupt(uint8_t pin, void (*func)(void)) const {
-    LOG_DEBUG("MCP23017 attached interrupt\n\n\n");
     pinMode(pin, INPUT_PULLUP);
     ::attachInterrupt(digitalPinToInterrupt(pin), func, FALLING); 
 }
 
 void MCP23017Keyboard::detachInterrupt(uint8_t pin) const {
-    LOG_DEBUG("MCP23017 deattached interrupt\n\n\n");
     ::detachInterrupt(pin);
 }
 
@@ -248,8 +246,7 @@ void MCP23017Keyboard::pressed(uint16_t keyRegister) {
     if (state == Init || state == Busy) return;
     if (keyCount(keyRegister) != 1) {
             return;
-        } else {
-        }
+        } 
 
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_pin = 0;

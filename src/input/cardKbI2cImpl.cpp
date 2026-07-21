@@ -16,7 +16,7 @@ void CardKbI2cImpl::init()
 #if defined(T_LORA_PAGER)
         uint8_t i2caddr_asize = sizeof(i2caddr_scan) / sizeof(i2caddr_scan[0]);
 #else
-        uint8_t i2caddr_asize = 5;
+        uint8_t i2caddr_asize = 6;
 #endif
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 
