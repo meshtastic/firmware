@@ -492,6 +492,7 @@ static void test_want_config_includes_status_message_module_config(void)
     const auto savedModuleConfig = moduleConfig;
     moduleConfig.has_statusmessage = true;
     strncpy(moduleConfig.statusmessage.node_status, "Ready", sizeof(moduleConfig.statusmessage.node_status) - 1);
+    moduleConfig.statusmessage.node_status[sizeof(moduleConfig.statusmessage.node_status) - 1] = '\0';
 
     meshtastic_ToRadio request = meshtastic_ToRadio_init_zero;
     request.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
