@@ -2168,17 +2168,17 @@ void NodeDB::loadFromDisk()
     configDecodeFailed = false;
     configLoadComplete = false;
 
-    if (shouldDiscardEventProfile(RUNNING_EVENT_FIRMWARE)) {
+#if !USERPREFS_EVENT_MODE
 #ifdef FSCom
-        const char *eventProfileFiles[] = {EVENT_CONFIG_FILE_NAME, EVENT_CHANNEL_FILE_NAME, EVENT_BACKUP_FILE_NAME};
-        spiLock->lock();
-        for (const char *filename : eventProfileFiles) {
-            if (FSCom.exists(filename) && !FSCom.remove(filename))
-                LOG_WARN("Unable to remove stale event profile file %s", filename);
-        }
-        spiLock->unlock();
-#endif
+    const char *eventProfileFiles[] = {EVENT_CONFIG_FILE_NAME, EVENT_CHANNEL_FILE_NAME, EVENT_BACKUP_FILE_NAME};
+    spiLock->lock();
+    for (const char *filename : eventProfileFiles) {
+        if (FSCom.exists(filename) && !FSCom.remove(filename))
+            LOG_WARN("Unable to remove stale event profile file %s", filename);
     }
+    spiLock->unlock();
+#endif
+#endif
 
 #if USERPREFS_EVENT_MODE
     // Seed only a missing event config; never overwrite normal files after a corrupt event config.
