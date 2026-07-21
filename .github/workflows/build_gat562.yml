@@ -63,7 +63,7 @@ jobs:
           PY
 
       - name: Build firmware
-        run: python -m platformio run -e "${{ matrix.target }}"
+        run: bin/build-nrf52.sh "${{ matrix.target }}"
 
       - name: Collect firmware
         env:
