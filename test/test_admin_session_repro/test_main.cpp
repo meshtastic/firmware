@@ -21,6 +21,10 @@
 #include "support/MockMeshService.h"
 #include <cstring>
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum ADMIN_NODE = 0x0B0B0B0B;   // authorized admin, sends remote admin to us
 static constexpr NodeNum QUERIED_NODE = 0x0C0C0C0C; // a remote we send admin requests to
@@ -156,6 +160,14 @@ void setUp(void)
     mockNodeDB->clearTestNodes();
     nodeDB = mockNodeDB;
     myNodeInfo.my_node_num = LOCAL_NODE;
+
+#ifdef ARCH_PORTDUINO
+    // The native test harness boots Portduino in simulated mode, and wouldEncryptWithPKC()
+    // hard-disables PKC whenever force_simradio is set. Left true, no outgoing admin request is
+    // ever key-pinned, so the pinning tests below cannot exercise what they are asserting.
+    // Model a real (non-sim) device instead.
+    portduino_config.force_simradio = false;
+#endif
 
     config = meshtastic_LocalConfig_init_zero;
     // A real device always holds a private key; without one perhapsEncode never picks PKC.
