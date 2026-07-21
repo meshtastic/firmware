@@ -114,8 +114,12 @@ See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
 #define SEN5X_PN4P0_CONC_THD 100
 
     bool sendCommand(uint16_t command);
+    // byteNumber is the payload size in data bytes (must be even; buffer holds no
+    // CRCs). A CRC is computed and inserted after every 2-byte pair on the wire.
     bool sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNumber = 0);
-    uint8_t readBuffer(uint8_t *buffer, uint8_t byteNumber); // Return number of bytes received
+    // byteNumber is the raw I2C transfer size including CRCs (a multiple of 3). Verifies
+    // and strips CRCs, writes byteNumber * 2 / 3 data bytes; returns that count, 0 on error.
+    uint8_t readBuffer(uint8_t *buffer, uint8_t byteNumber);
     uint8_t sen5xCRC(const uint8_t *buffer);
     bool startCleaning();
     uint8_t getMeasurements();

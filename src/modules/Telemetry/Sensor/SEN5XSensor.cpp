@@ -50,9 +50,10 @@ bool SEN5XSensor::findModel()
     }
     delay(50); // From Sensirion Datasheet
 
-    const uint8_t nameSize = 48;
-    uint8_t name[nameSize];
-    size_t charNumber = readBuffer(&name[0], nameSize);
+    // The product name reply is 32 data bytes, carried in 48 raw bytes with CRCs
+    const uint8_t nameSize = 32;
+    uint8_t name[nameSize]{};
+    size_t charNumber = readBuffer(&name[0], nameSize + (nameSize / 2));
     bool foundModel = false;
 
     if (charNumber < 5) {
@@ -804,7 +805,7 @@ uint8_t SEN5XSensor::getMeasurements()
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataReadyBuffer[3]{};
+    uint8_t dataReadyBuffer[2]{};
     size_t charNumber = readBuffer(&dataReadyBuffer[0], 3);
     if (charNumber < 2) {
         LOG_ERROR("%s: Error getting data ready flag value", sensorName);
