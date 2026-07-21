@@ -822,6 +822,34 @@ static bool signedDataFits(meshtastic_Data *d)
 }
 #endif
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey)
+{
+    // First, only PKC encrypt packets we are originating
+    return isFromUs(p) &&
+#if ARCH_PORTDUINO
+           // Sim radio via the cli flag skips PKC
+           !portduino_config.force_simradio &&
+#endif
+           // Don't use PKC with Ham mode
+           !owner.is_licensed &&
+           // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
+           !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
+                                          strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
+           // Check for valid keys and single node destination
+           config.security.private_key.size == 32 && !isBroadcast(p->to) &&
+           // Some portnums either make no sense to send with PKC
+           p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
+           p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
+           // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
+           // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
+           // uses the pending key resolved into haveDestKey/destKey above.
+           // Though possible the first packet each direction should go non-pkc
+           // to handle the case where the remote node has our key, but we don't have theirs.
+           !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey);
+}
+#endif
+
 /** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
@@ -915,28 +943,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         }
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
-        // First, only PKC encrypt packets we are originating
-        if (isFromUs(p) &&
-#if ARCH_PORTDUINO
-            // Sim radio via the cli flag skips PKC
-            !portduino_config.force_simradio &&
-#endif
-            // Don't use PKC with Ham mode
-            !owner.is_licensed &&
-            // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
-            !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
-                                           strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
-            // Check for valid keys and single node destination
-            config.security.private_key.size == 32 && !isBroadcast(p->to) &&
-            // Some portnums either make no sense to send with PKC
-            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
-            // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
-            // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
-            // uses the pending key resolved into haveDestKey/destKey above.
-            // Though possible the first packet each direction should go non-pkc
-            // to handle the case where the remote node has our key, but we don't have theirs.
-            !(p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP && !haveDestKey)) {
+        if (wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
             LOG_DEBUG("Use PKI!");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
