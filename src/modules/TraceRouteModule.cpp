@@ -305,6 +305,15 @@ void TraceRouteModule::updateNextHops(const meshtastic_MeshPacket &p, meshtastic
         }
         uint8_t nextHopByte = nodeDB->getLastByteOfNodeNum(nextHop);
 
+        // The route array is unauthenticated payload, so only learn from it when the node it names as our
+        // next hop is the one that actually relayed this packet to us. Otherwise a forged response could
+        // point any node's next_hop anywhere. relay_node is 0 for MQTT-sourced packets, which cannot
+        // corroborate an RF route either.
+        if (p.relay_node == NO_RELAY_NODE || nextHopByte != p.relay_node) {
+            LOG_DEBUG("Ignore traceroute next-hop 0x%02x, packet was relayed by 0x%02x", nextHopByte, p.relay_node);
+            return;
+        }
+
         // For the rest of the nodes in the route, set their next-hop
         // Note: if we are the last in the route, this loop will not run
         for (int8_t i = nextHopIndex; i < r->route_count; i++) {

@@ -63,6 +63,8 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     // So we manually call pb_encode_to_bytes and specify routing port number
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p)
+        return nullptr;
     p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &c);

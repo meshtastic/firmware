@@ -1092,6 +1092,12 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     if (!sendResponse)
         return true;
 
+    // Checked here, once a reply would actually go out, so declined requests do not consume the budget.
+    if (!directResponseAllowed(getFrom(p), clockMs())) {
+        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x", getFrom(p));
+        return false;
+    }
+
     meshtastic_MeshPacket *reply = router->allocForSending();
     if (!reply) {
         TM_LOG_WARN("NodeInfo direct response dropped: no packet buffer");
@@ -1141,6 +1147,43 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     reply->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
     service->sendToMesh(reply);
+    return true;
+}
+
+bool TrafficManagementModule::directResponseAllowed(NodeNum requestor, uint32_t nowMs)
+{
+    // Reached from the packet path and from runOnce, so the throttle state needs the same lock as the cache.
+    concurrency::LockGuard guard(&cacheLock);
+
+    if (lastDirectResponseMs != 0 && (nowMs - lastDirectResponseMs) < kDirectResponseGlobalMs)
+        return false;
+
+    DirectResponseThrottleEntry *slot = nullptr;
+    for (size_t i = 0; i < kDirectResponseTrackedRequestors; i++) {
+        if (directResponseSeen[i].requestor == requestor) {
+            if ((nowMs - directResponseSeen[i].lastReplyMs) < kDirectResponsePerRequestorMs)
+                return false;
+            slot = &directResponseSeen[i];
+            break;
+        }
+    }
+
+    if (slot == nullptr) {
+        // Unseen requester: take a free slot, otherwise reuse the least recently used one.
+        slot = &directResponseSeen[0];
+        for (size_t i = 0; i < kDirectResponseTrackedRequestors; i++) {
+            if (directResponseSeen[i].requestor == 0) {
+                slot = &directResponseSeen[i];
+                break;
+            }
+            if (directResponseSeen[i].lastReplyMs < slot->lastReplyMs)
+                slot = &directResponseSeen[i];
+        }
+    }
+
+    slot->requestor = requestor;
+    slot->lastReplyMs = nowMs;
+    lastDirectResponseMs = nowMs;
     return true;
 }
 
