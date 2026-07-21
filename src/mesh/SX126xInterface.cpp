@@ -283,10 +283,16 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // Do NOT treat a preamble/header-only IRQ as a full RX event: noisy preamble detections would
-    // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
-    // poll loop spins at high rate while they stay latched.
-    if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
+    // A preamble/header-only IRQ (no terminal RX event yet) means the chip is mid-reception. Do NOT
+    // treat it as a full RX event - that would repeatedly trigger readData(). But only CLEAR these bits
+    // when a TX is actually queued: clearing them makes isActivelyReceiving() read idle for the rest of
+    // the packet, so a TX queued during the payload phase passes the send gate and stomps the inbound
+    // packet (finding #10 of the LBT audit). While the TX queue is empty there is no starvation to
+    // avoid, so keep the bits latched - isActivelyReceiving() then correctly reports the in-progress
+    // reception and a later TX defers instead of overwriting it. A queued TX still needs the escape
+    // hatch: a noise preamble that never completes must not permanently block our own transmit, so we
+    // clear then. readData() clears everything once a real RX_DONE finally arrives.
+    if (!pollTxMode && !txQueue.empty() && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
         lora.clearIrqFlags(noisyRxMask);
         scheduleIrqPollTick();
         return;
