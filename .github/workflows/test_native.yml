@@ -163,6 +163,26 @@ jobs:
           done
           exit $fail
 
+      - name: Merge per-area reports into testreport.xml
+        # Preserve the single-file JUnit contract that downstream consumers rely on
+        # (pr_tests.yml's summary and generate-reports' Test Report both read testreport.xml).
+        # The per-area split is only for readable logs; the report stays consolidated.
+        if: always() # run even when a chunk failed, so the report captures the failures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          out = ET.Element('testsuites')
+          for f in sorted(glob.glob('testreport-*.xml')):
+              try:
+                  root = ET.parse(f).getroot()
+              except ET.ParseError:
+                  continue
+              # PlatformIO writes a <testsuites> root; fold in a bare <testsuite> too, just in case.
+              out.extend(root.findall('testsuite') if root.tag == 'testsuites' else [root])
+          ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
+          PY
+
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
         run: |
@@ -176,7 +196,7 @@ jobs:
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./testreport-*.xml
+          path: ./testreport.xml
 
       - name: Save coverage information
         uses: actions/upload-artifact@v7
@@ -215,15 +235,14 @@ jobs:
         # crossed with every hardware variant it cannot run on the native host (~4900 rows).
         # They carry no pass/fail/skip status and bury the suites that actually ran. Strip
         # them so the Test Report lists only suites with a real status. Only the copy the
-        # reporter renders is trimmed; the uploaded artifact keeps the full XML. One report
-        # per chunk now, so trim each.
-        run: sed -i -E 's#<testsuite [^>]*tests="0"[^>]*/>##g' testreport-*.xml
+        # reporter renders is trimmed; the uploaded artifact keeps the full XML.
+        run: sed -i -E 's#<testsuite [^>]*tests="0"[^>]*/>##g' testreport.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v3.0.0
         with:
           name: PlatformIO Tests
-          path: testreport-*.xml
+          path: testreport.xml
           reporter: java-junit
 
       - name: Download coverage artifacts
