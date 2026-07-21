@@ -10,6 +10,7 @@
 #include "mesh/RadioInterface.h"
 #include "mesh/Router.h"
 #include "modules/NeighborInfoModule.h"
+#include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
 #include "support/MockMeshService.h"
 #include <memory>
@@ -140,6 +141,13 @@ class ZeroHopReplyModule : public SyntheticReplyModule
         (void)req;
         return 0;
     }
+};
+
+class NodeInfoPolicyShim : public NodeInfoModule
+{
+  public:
+    using NodeInfoModule::getResponseHopLimit;
+    using NodeInfoModule::isDirectBroadcastDiscoveryRequest;
 };
 
 class ObservingIgnoreModule : public MeshModule
@@ -444,6 +452,45 @@ static void test_dispatch_moduleCanConstrainReplyHopLimit()
     TEST_ASSERT_EQUAL_UINT8(0, mockRouter->sentPackets[0].hop_limit);
 }
 
+static void test_nodeInfo_directBroadcastDiscoveryUsesZeroHopReply()
+{
+    NodeInfoPolicyShim nodeInfo;
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_NODEINFO_APP);
+    request.to = NODENUM_BROADCAST;
+    request.hop_start = 3;
+    request.hop_limit = 3;
+    request.decoded.has_bitfield = true;
+
+    TEST_ASSERT_TRUE(NodeInfoPolicyShim::isDirectBroadcastDiscoveryRequest(request));
+    TEST_ASSERT_EQUAL_UINT8(0, nodeInfo.getResponseHopLimit(request));
+}
+
+static void test_nodeInfo_relayedAndUnknownBroadcastDiscoveryDoNotQualify()
+{
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_NODEINFO_APP);
+    request.to = NODENUM_BROADCAST;
+    request.hop_start = 3;
+    request.hop_limit = 2;
+    request.decoded.has_bitfield = true;
+
+    TEST_ASSERT_FALSE(NodeInfoPolicyShim::isDirectBroadcastDiscoveryRequest(request));
+
+    request.hop_start = 0;
+    request.hop_limit = 0;
+    request.decoded.has_bitfield = false;
+
+    TEST_ASSERT_FALSE(NodeInfoPolicyShim::isDirectBroadcastDiscoveryRequest(request));
+}
+
+static void test_nodeInfo_unicastRequestRetainsRoutingHopLimit()
+{
+    NodeInfoPolicyShim nodeInfo;
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_NODEINFO_APP);
+
+    TEST_ASSERT_FALSE(NodeInfoPolicyShim::isDirectBroadcastDiscoveryRequest(request));
+    TEST_ASSERT_EQUAL_UINT8(mockRoutingModule->getHopLimitForResponse(request), nodeInfo.getResponseHopLimit(request));
+}
+
 static void test_dispatch_foreignPortObserverCanSuppressNak()
 {
     auto *observer = registerDispatchModule(new ObservingIgnoreModule());
@@ -518,6 +565,9 @@ void setup()
     RUN_TEST(test_dispatch_ownerPortStillReplies);
     RUN_TEST(test_dispatch_crossPortReplyUsesRequestOwner);
     RUN_TEST(test_dispatch_moduleCanConstrainReplyHopLimit);
+    RUN_TEST(test_nodeInfo_directBroadcastDiscoveryUsesZeroHopReply);
+    RUN_TEST(test_nodeInfo_relayedAndUnknownBroadcastDiscoveryDoNotQualify);
+    RUN_TEST(test_nodeInfo_unicastRequestRetainsRoutingHopLimit);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);

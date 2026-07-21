@@ -10,11 +10,13 @@ fresh node with no immediate peer identity.
 
 ## Design
 
-Keep the discovery announcement as a normal broadcast so the new node's
-identity remains visible throughout the mesh. Restrict the response:
+Send the discovery announcement as a zero-hop broadcast so the new node learns
+only its direct radio neighborhood. Restrict the response as a second line of
+defense:
 
+- Broadcast NodeInfo requests that ask for replies have `hop_limit = 0`.
 - Only a broadcast `NODEINFO_APP` request received at exactly zero hops may
-  produce a NodeInfo response.
+  produce a NodeInfo response, including requests sent by older firmware.
 - That response is unicast to the requester with `hop_limit = 0`; it cannot be
   relayed.
 - Relayed broadcasts and packets whose hop distance cannot be established do

@@ -113,6 +113,8 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
                                    wantReplies;
 
         p->decoded.want_response = requestWantResponse;
+        if (requestWantResponse && isBroadcast(dest))
+            p->hop_limit = 0;
         if (_shorterTimeout)
             p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
         else
@@ -135,6 +137,21 @@ void NodeInfoModule::triggerImmediateNodeInfoCheck()
     setIntervalFromNow(0);
 }
 
+bool NodeInfoModule::isDirectBroadcastDiscoveryRequest(const meshtastic_MeshPacket &request)
+{
+    return request.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+           request.decoded.portnum == meshtastic_PortNum_NODEINFO_APP && request.decoded.want_response &&
+           isBroadcast(request.to) && getHopsAway(request) == 0;
+}
+
+uint8_t NodeInfoModule::getResponseHopLimit(const meshtastic_MeshPacket &req)
+{
+    if (isDirectBroadcastDiscoveryRequest(req))
+        return 0;
+
+    return MeshModule::getResponseHopLimit(req);
+}
+
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     // Only apply suppression when actually replying to someone else's request, not for periodic broadcasts.
@@ -142,6 +159,13 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
                                              currentRequest->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
                                              currentRequest->decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
                                              currentRequest->decoded.want_response && !isFromUs(currentRequest);
+
+    const bool isBroadcastRequest = isReplyingToExternalRequest && isBroadcast(currentRequest->to);
+    if (isBroadcastRequest && !isDirectBroadcastDiscoveryRequest(*currentRequest)) {
+        LOG_DEBUG("Skip NodeInfo response to non-direct broadcast discovery");
+        ignoreRequest = true;
+        return NULL;
+    }
 
     if (suppressReplyForCurrentRequest && isReplyingToExternalRequest) {
         LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
