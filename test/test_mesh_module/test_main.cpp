@@ -3,6 +3,7 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "airtime.h"
 #include "configuration.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
@@ -199,6 +200,7 @@ static MockMeshService *mockService;
 static MockRouter *mockRouter;
 static MockRoutingModule *mockRoutingModule;
 static NeighborInfoModule *realNeighborInfoModule;
+static AirTime *testAirTime;
 static std::vector<MeshModule *> dispatchModules;
 
 template <typename T> static T *registerDispatchModule(T *module)
@@ -228,6 +230,11 @@ static void dispatch(meshtastic_PortNum port)
     MeshModule::callModules(request);
 }
 
+static void dispatch(meshtastic_MeshPacket request)
+{
+    MeshModule::callModules(request);
+}
+
 } // namespace
 
 void setUp(void)
@@ -237,6 +244,9 @@ void setUp(void)
     channelFile = meshtastic_ChannelFile_init_zero;
     owner = meshtastic_User_init_zero;
     myNodeInfo.my_node_num = LOCAL_NODE;
+
+    testAirTime = new AirTime();
+    airTime = testAirTime;
 
     mockNodeDB = new MockNodeDB();
     nodeDB = mockNodeDB;
@@ -291,6 +301,10 @@ void tearDown(void)
     delete mockNodeDB;
     mockNodeDB = nullptr;
     nodeDB = nullptr;
+
+    airTime = nullptr;
+    delete testAirTime;
+    testAirTime = nullptr;
 }
 
 // Zero-hop broadcast (hop_limit == hop_start): should be allowed
@@ -491,6 +505,33 @@ static void test_nodeInfo_unicastRequestRetainsRoutingHopLimit()
     TEST_ASSERT_EQUAL_UINT8(mockRoutingModule->getHopLimitForResponse(request), nodeInfo.getResponseHopLimit(request));
 }
 
+static void test_nodeInfo_rejectedBroadcastDoesNotSuppressDirectDiscovery()
+{
+    registerDispatchModule(new NodeInfoPolicyShim());
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_NODEINFO_APP);
+    request.to = NODENUM_BROADCAST;
+    request.decoded.has_bitfield = true;
+    request.hop_start = 3;
+    request.hop_limit = 2;
+
+    dispatch(request);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+
+    request.hop_start = 0;
+    request.hop_limit = 0;
+    request.decoded.has_bitfield = false;
+    dispatch(request);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+
+    request.decoded.has_bitfield = true;
+    dispatch(request);
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT8(0, mockRouter->sentPackets[0].hop_limit);
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
 static void test_dispatch_foreignPortObserverCanSuppressNak()
 {
     auto *observer = registerDispatchModule(new ObservingIgnoreModule());
@@ -568,6 +609,7 @@ void setup()
     RUN_TEST(test_nodeInfo_directBroadcastDiscoveryUsesZeroHopReply);
     RUN_TEST(test_nodeInfo_relayedAndUnknownBroadcastDiscoveryDoNotQualify);
     RUN_TEST(test_nodeInfo_unicastRequestRetainsRoutingHopLimit);
+    RUN_TEST(test_nodeInfo_rejectedBroadcastDoesNotSuppressDirectDiscovery);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);

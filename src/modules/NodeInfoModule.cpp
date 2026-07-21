@@ -31,7 +31,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     auto p = *pptr;
 
     // Suppress replies to senders we've replied to recently (12H window)
-    if (mp.decoded.want_response && !isFromUs(&mp)) {
+    if (mp.decoded.want_response && !isFromUs(&mp) && (!isBroadcast(mp.to) || isDirectBroadcastDiscoveryRequest(mp))) {
         const NodeNum sender = getFrom(&mp);
         const uint32_t now = mp.rx_time ? mp.rx_time : getTime();
         auto it = lastNodeInfoSeen.find(sender);
