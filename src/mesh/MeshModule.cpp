@@ -224,6 +224,11 @@ meshtastic_MeshPacket *MeshModule::allocReply()
     return r;
 }
 
+uint8_t MeshModule::getResponseHopLimit(const meshtastic_MeshPacket &req)
+{
+    return routingModule->getHopLimitForResponse(req);
+}
+
 /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
  * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
  * is optional
@@ -233,6 +238,7 @@ void MeshModule::sendResponse(const meshtastic_MeshPacket &req)
     auto r = allocReply();
     if (r) {
         setReplyTo(r, req);
+        r->hop_limit = getResponseHopLimit(req);
         currentReply = r;
     } else {
         // Ignore - this is now expected behavior for routing module (because it ignores some replies)

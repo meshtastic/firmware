@@ -126,6 +126,22 @@ class SyntheticReplyModule : public MeshModule
     bool acceptsEveryPort;
 };
 
+class ZeroHopReplyModule : public SyntheticReplyModule
+{
+  public:
+    ZeroHopReplyModule()
+        : SyntheticReplyModule("zero-hop-reply", meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_TELEMETRY_APP)
+    {
+    }
+
+  protected:
+    uint8_t getResponseHopLimit(const meshtastic_MeshPacket &req) override
+    {
+        (void)req;
+        return 0;
+    }
+};
+
 class ObservingIgnoreModule : public MeshModule
 {
   public:
@@ -418,6 +434,16 @@ static void test_dispatch_crossPortReplyUsesRequestOwner()
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
 }
 
+static void test_dispatch_moduleCanConstrainReplyHopLimit()
+{
+    registerDispatchModule(new ZeroHopReplyModule());
+
+    dispatch(meshtastic_PortNum_TELEMETRY_APP);
+
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT8(0, mockRouter->sentPackets[0].hop_limit);
+}
+
 static void test_dispatch_foreignPortObserverCanSuppressNak()
 {
     auto *observer = registerDispatchModule(new ObservingIgnoreModule());
@@ -491,6 +517,7 @@ void setup()
     RUN_TEST(test_dispatch_foreignPortOffenderCannotShadowOwner);
     RUN_TEST(test_dispatch_ownerPortStillReplies);
     RUN_TEST(test_dispatch_crossPortReplyUsesRequestOwner);
+    RUN_TEST(test_dispatch_moduleCanConstrainReplyHopLimit);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
