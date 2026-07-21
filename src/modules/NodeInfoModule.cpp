@@ -30,6 +30,19 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     auto p = *pptr;
 
+    if (p.is_licensed != owner.is_licensed) {
+        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
+        return true;
+    }
+    NodeNum sourceNum = getFrom(&mp);
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
+    // Broadcasts only: senders never sign unicast NodeInfo, so dropping it would break exchanges
+    // with signer nodes. Backstops ingress that skips Router's downgrade drop (e.g. decoded MQTT).
+    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
+        LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
+        return true;
+    }
+
     // Suppress replies to senders we've replied to recently (12H window)
     if (mp.decoded.want_response && !isFromUs(&mp) && (!isBroadcast(mp.to) || isDirectBroadcastDiscoveryRequest(mp))) {
         const NodeNum sender = getFrom(&mp);
@@ -43,19 +56,6 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         }
         lastNodeInfoSeen[sender] = now;
         pruneLastNodeInfoCache();
-    }
-
-    if (p.is_licensed != owner.is_licensed) {
-        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
-        return true;
-    }
-    NodeNum sourceNum = getFrom(&mp);
-    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
-    // Broadcasts only: senders never sign unicast NodeInfo, so dropping it would break exchanges
-    // with signer nodes. Backstops ingress that skips Router's downgrade drop (e.g. decoded MQTT).
-    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
-        LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
-        return true;
     }
 
     // Coerce user.id to be derived from the node number

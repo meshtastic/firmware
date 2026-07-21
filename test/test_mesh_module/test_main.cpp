@@ -147,8 +147,12 @@ class ZeroHopReplyModule : public SyntheticReplyModule
 class NodeInfoPolicyShim : public NodeInfoModule
 {
   public:
+    using NodeInfoModule::allocReply;
     using NodeInfoModule::getResponseHopLimit;
+    using NodeInfoModule::handleReceivedProtobuf;
     using NodeInfoModule::isDirectBroadcastDiscoveryRequest;
+
+    void setCurrentRequest(const meshtastic_MeshPacket *request) { currentRequest = request; }
 };
 
 class ObservingIgnoreModule : public MeshModule
@@ -532,6 +536,32 @@ static void test_nodeInfo_rejectedBroadcastDoesNotSuppressDirectDiscovery()
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
 }
 
+static void test_nodeInfo_rejectedDirectRequestDoesNotSuppressDiscovery()
+{
+    NodeInfoPolicyShim nodeInfo;
+    meshtastic_MeshPacket request = makeRequest(meshtastic_PortNum_NODEINFO_APP);
+    request.to = NODENUM_BROADCAST;
+    request.hop_start = 0;
+    request.hop_limit = 0;
+    request.decoded.has_bitfield = true;
+
+    TEST_ASSERT_NOT_NULL(mockNodeDB->getOrCreateMeshNode(REMOTE_NODE));
+
+    meshtastic_User rejectedUser = meshtastic_User_init_zero;
+    rejectedUser.is_licensed = true;
+    TEST_ASSERT_TRUE(nodeInfo.handleReceivedProtobuf(request, &rejectedUser));
+
+    meshtastic_User validUser = meshtastic_User_init_zero;
+    TEST_ASSERT_FALSE(nodeInfo.handleReceivedProtobuf(request, &validUser));
+
+    nodeInfo.setCurrentRequest(&request);
+    meshtastic_MeshPacket *reply = nodeInfo.allocReply();
+    nodeInfo.setCurrentRequest(nullptr);
+
+    TEST_ASSERT_NOT_NULL(reply);
+    packetPool.release(reply);
+}
+
 static void test_dispatch_foreignPortObserverCanSuppressNak()
 {
     auto *observer = registerDispatchModule(new ObservingIgnoreModule());
@@ -610,6 +640,7 @@ void setup()
     RUN_TEST(test_nodeInfo_relayedAndUnknownBroadcastDiscoveryDoNotQualify);
     RUN_TEST(test_nodeInfo_unicastRequestRetainsRoutingHopLimit);
     RUN_TEST(test_nodeInfo_rejectedBroadcastDoesNotSuppressDirectDiscovery);
+    RUN_TEST(test_nodeInfo_rejectedDirectRequestDoesNotSuppressDiscovery);
     RUN_TEST(test_dispatch_foreignPortObserverCanSuppressNak);
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
