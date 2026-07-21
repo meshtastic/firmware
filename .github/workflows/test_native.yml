@@ -10,6 +10,44 @@ env:
   LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
 
 jobs:
+  # Guard the registered native-suite total. `platformio test` discovers and runs whatever
+  # test_* directories exist, so it never notices when test/native-suite-count drifts from the
+  # actual directory count (a suite added without registering it, or the file left stale). That
+  # reconciliation only lives in bin/run-tests.sh, which CI does not invoke - so mirror the exact
+  # check here and fail the PR on a mismatch, keeping the manual count honest.
+  suite-count-check:
+    name: Native Suite Count
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Reconcile native-suite-count with test/ directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          count_file="test/native-suite-count"
+          if [[ ! -f $count_file ]]; then
+            echo "::error title=Missing native-suite-count::$count_file not found - it must record the number of test_* suite directories."
+            exit 1
+          fi
+          # Same canonical set as bin/run-tests.sh: directories named test_* directly under test/.
+          expected_count=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | wc -l)
+          canonical_count=$(tr -d '[:space:]' <"$count_file")
+          echo "test/ directories: $expected_count"
+          echo "native-suite-count: $canonical_count"
+          if [[ $expected_count -ne $canonical_count ]]; then
+            if [[ $expected_count -gt $canonical_count ]]; then
+              hint="a suite was added - bump $count_file to $expected_count"
+            else
+              hint="a suite was removed - lower $count_file to $expected_count"
+            fi
+            echo "::error title=native-suite-count mismatch::test/ has $expected_count suite directories but $count_file says $canonical_count ($hint)."
+            exit 1
+          fi
+          echo "native-suite-count matches the $expected_count suite directories."
+
   simulator-tests:
     name: Native Simulator Tests
     runs-on: ubuntu-latest
