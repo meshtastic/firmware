@@ -497,34 +497,6 @@ float GeoCoord::rangeMetersToRadians(double range_meters)
 }
 
 /**
- * Ported from http://www.edwilliams.org/avform147.htm#Intro
- * @brief Convert from radians to range in meters on a great circle
- * @param range_radians
- * The range in radians
- * @return Range in meters on a great circle
- */
-float GeoCoord::rangeRadiansToMeters(double range_radians)
-{
-    double distance_nm = ((180 * 60) / PI) * range_radians;
-    // 1 meter is 0.000539957 nm
-    return distance_nm * 0.000539957;
-}
-
-// Find distance from point to passed in point
-int32_t GeoCoord::distanceTo(const GeoCoord &pointB)
-{
-    return latLongToMeter(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                          pointB.getLongitude() * 1e-7);
-}
-
-// Find bearing from point to passed in point
-int32_t GeoCoord::bearingTo(const GeoCoord &pointB)
-{
-    return bearing(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                   pointB.getLongitude() * 1e-7);
-}
-
-/**
  * Create a new point based on the passed-in point
  * Ported from http://www.edwilliams.org/avform147.htm#LL
  * @param bearing

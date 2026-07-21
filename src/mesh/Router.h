@@ -94,7 +94,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
-    virtual ErrorCode rawSend(meshtastic_MeshPacket *p);
 
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
@@ -192,6 +191,18 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
  * @return false if the packet must be dropped.
  */
 bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p);
+#endif
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+/**
+ * Would perhapsEncode() PKC-encrypt this outgoing packet? Callers that must know the encryption a
+ * packet will get before it is encoded (e.g. pinning a peer key at request time) have to ask this
+ * rather than inspect p, whose pki_encrypted/public_key fields are only populated on the RX path.
+ *
+ * @param chIndex the channel index p carries before encoding rewrites it to a hash.
+ * @param haveDestKey whether a public key for p->to was resolvable.
+ */
+bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey);
 #endif
 
 extern Router *router;

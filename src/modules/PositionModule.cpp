@@ -292,6 +292,8 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
     LOG_INFO("Send TAK V2 PLI packet");
     meshtastic_MeshPacket *mp = allocDataPacket();
+    if (!mp)
+        return nullptr;
     mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN_V2;
 
     meshtastic_TAKPacketV2 takPacket = meshtastic_TAKPacketV2_init_zero;
@@ -572,6 +574,8 @@ int32_t PositionModule::runOnce()
 void PositionModule::sendLostAndFoundText()
 {
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = NODENUM_BROADCAST;
     char message[128];
     int written = snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7),

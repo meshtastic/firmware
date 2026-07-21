@@ -583,6 +583,37 @@ void test_receiveEmptyDataFromProxy(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+// Text must be read as text: data.size aliases the string's first bytes, so reading it regardless
+// of the variant let a client name a length of up to PB_SIZE_MAX. There is no delivery control for
+// this variant: an encoded ServiceEnvelope always contains NUL, so text can never carry one.
+void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
+    message.which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
+    // data.size would read these as the largest length a pb_size_t can name.
+    memset(message.payload_variant.text, 0xFF, sizeof(message.payload_variant.text) - 1);
+    message.payload_variant.text[sizeof(message.payload_variant.text) - 1] = '\0';
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A proxy message with no payload variant set must be ignored rather than read as bytes.
+void test_receiveNoVariantFromProxyIsIgnored(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
+    message.which_payload_variant = 0;
+    memset(message.payload_variant.data.bytes, 0xFF, sizeof(message.payload_variant.data.bytes));
+    message.payload_variant.data.size = sizeof(message.payload_variant.data.bytes);
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
 // Packets should be ignored if downlink is not enabled.
 void test_receiveWithoutChannelDownlink(void)
 {
@@ -1051,6 +1082,8 @@ void setup()
     RUN_TEST(test_receiveDecodedProto);
     RUN_TEST(test_receiveDecodedProtoFromProxy);
     RUN_TEST(test_receiveEmptyDataFromProxy);
+    RUN_TEST(test_receiveTextVariantFromProxyIsNotReadAsBytes);
+    RUN_TEST(test_receiveNoVariantFromProxyIsIgnored);
     RUN_TEST(test_receiveWithoutChannelDownlink);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
