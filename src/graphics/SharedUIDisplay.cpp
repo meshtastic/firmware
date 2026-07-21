@@ -118,7 +118,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
     const int headerHeight = highlightHeight + 2;
-    const uint16_t headerColorForRoles = getThemeHeaderBg();
+    [[maybe_unused]] const uint16_t headerColorForRoles = getThemeHeaderBg();
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
     const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !isTFTColoringEnabled() && !transparent_background);
@@ -131,10 +131,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
 
     {
-        const uint16_t headerColor = getThemeHeaderBg();
+        [[maybe_unused]] const uint16_t headerColor = getThemeHeaderBg();
         const uint16_t headerTextColor = getThemeHeaderText();
-        const uint16_t headerTitleColorForRole = use_title_color_override ? title_color_override : headerTextColor;
-        uint16_t headerStatusColor = getThemeHeaderStatus();
+        [[maybe_unused]] const uint16_t headerTitleColorForRole =
+            use_title_color_override ? title_color_override : headerTextColor;
+        [[maybe_unused]] uint16_t headerStatusColor = getThemeHeaderStatus();
 #if GRAPHICS_TFT_COLORING_ENABLED
         // Clock frame uses transparent header + date + empty title.
         // For accent clock themes (Pink/Creamsicle + classic monochrome), tint
@@ -232,11 +233,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     bool useHorizontalBattery = (currentResolution == ScreenResolution::High && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    bool hasBatteryFillRegion = false;
-    int16_t batteryFillRegionX = 0;
-    int16_t batteryFillRegionY = 0;
-    int16_t batteryFillRegionW = 0;
-    int16_t batteryFillRegionH = 0;
+    [[maybe_unused]] bool hasBatteryFillRegion = false;
+    [[maybe_unused]] int16_t batteryFillRegionX = 0;
+    [[maybe_unused]] int16_t batteryFillRegionY = 0;
+    [[maybe_unused]] int16_t batteryFillRegionW = 0;
+    [[maybe_unused]] int16_t batteryFillRegionH = 0;
 #if GRAPHICS_TFT_COLORING_ENABLED
     uint16_t batteryFillColor = getThemeBatteryFillColor(chargePercent);
     if (useClockHeaderAccent) {
@@ -316,7 +317,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         char chargeStr[4];
         snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
         int chargeNumWidth = display->getStringWidth(chargeStr);
-        const int percentWidth = display->getStringWidth("%");
+        [[maybe_unused]] const int percentWidth = display->getStringWidth("%");
         const int percentX = batteryX + chargeNumWidth - 1;
         display->drawString(batteryX, textY, chargeStr);
         display->drawString(percentX, textY, "%");
@@ -569,8 +570,8 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     const int footerH = (connection_icon_height * scale) + (2 * scale);
     const int iconX = 0;
     const int iconY = SCREEN_HEIGHT - (connection_icon_height * scale);
-    const int iconW = connection_icon_width * scale;
-    const int iconH = connection_icon_height * scale;
+    [[maybe_unused]] const int iconW = connection_icon_width * scale;
+    [[maybe_unused]] const int iconH = connection_icon_height * scale;
 
 #if GRAPHICS_TFT_COLORING_ENABLED
     // Only tint the link glyph itself on TFT; keep the footer background black.

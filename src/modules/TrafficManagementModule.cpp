@@ -847,8 +847,6 @@ int32_t TrafficManagementModule::runOnce()
         return INT32_MAX;
 
 #if TRAFFIC_MANAGEMENT_CACHE_SIZE > 0
-    const uint32_t nowMs = TrafficManagementModule::clockMs();
-
     // Warm-start the next-hop cache from persisted NodeInfoLite hints once nodeDB
     // is populated. Done here (not in the constructor) so nodeDB has finished
     // loading. Takes its own lock, so call before acquiring the sweep guard below.
@@ -883,7 +881,6 @@ int32_t TrafficManagementModule::runOnce()
     uint16_t expiredEntries = 0;
     const uint32_t sweepStartMs = TrafficManagementModule::clockMs();
 
-    const auto &cfg = moduleConfig.traffic_management;
     concurrency::LockGuard guard(&cacheLock);
 
     for (uint16_t i = 0; i < cacheSize(); i++) {

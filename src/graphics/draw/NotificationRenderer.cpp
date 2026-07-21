@@ -1027,7 +1027,6 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                 const int barSpacing = 2;
                 const int barHeightStep = 2;
                 const int gap = 6;
-                const int maxBarHeight = totalBars * barHeightStep;
 
                 int textWidth = display->getStringWidth(lineBuffer, strlen(lineBuffer), true);
                 int barsWidth = totalBars * barWidth + (totalBars - 1) * barSpacing + gap;
@@ -1052,6 +1051,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
                     }
                     const int activeBars = min(graphics::bannerSignalBars, totalBars);
                     const int regionWidth = activeBars * barWidth + (activeBars - 1) * barSpacing;
+                    const int maxBarHeight = totalBars * barHeightStep;
                     setAndRegisterTFTColorRole(TFTColorRole::SignalBars, signalBarsColor, TFTPalette::Black, baseX,
                                                baseY - maxBarHeight, regionWidth, maxBarHeight);
                 }
