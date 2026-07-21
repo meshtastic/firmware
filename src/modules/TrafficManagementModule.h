@@ -134,7 +134,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     void dropNodeInfoCacheForTest();
 
     /// Test introspection: NodeInfo flag bits for `node` (-1 if absent): bit0 hasObserved,
-    /// bit1 isMember, bit2 hasFullUser, bit3 keySignerProven.
+    /// bit1 isMember, bit2 hasFullUser, bit3 keyProven (keyXeddsaSigned | keyManuallyVerified).
     int peekNodeInfoFlagsForTest(NodeNum node);
 
     /// Test introspection: NodeInfo cache capacity (kNodeInfoCacheEntries), so tests can
@@ -253,16 +253,23 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // in direct replies). Validity: hasDecodedBitfield.
         uint8_t decodedBitfield;
 
-        // 1-bit flags, packed into one byte (6 spare bits; add future booleans here rather
+        // 1-bit flags, packed into one byte (2 spare bits; add future booleans here rather
         // than new bytes - the array is 2000 entries).
 
         // The source packet carried a decoded bitfield (so decodedBitfield is meaningful).
         uint8_t hasDecodedBitfield : 1;
 
-        // Key provenance: set once an XEdDSA signature was verified for user.public_key
-        // (directly, or inherited from NodeDB via isVerifiedSignerForKey). Monotonic per slot;
-        // the key-pin checks forbid the key changing underneath it. TOFU keys start at 0.
-        uint8_t keySignerProven : 1;
+        // Key provenance, split by how possession was established (either one implies "proven" -
+        // read the pair via keyProven()). Both are monotonic per slot until the key rotates (the
+        // key-pin checks forbid the key changing underneath them), and TOFU keys start at 0.
+        //
+        // keyXeddsaSigned: an XEdDSA signature was verified for user.public_key - a heard signed
+        // frame, or inherited from NodeDB via isVerifiedSignerForKey.
+        uint8_t keyXeddsaSigned : 1;
+        // keyManuallyVerified: the user confirmed possession of exactly this key out-of-band
+        // (QR / fingerprint). Routed here via onNodeKeyCommitted(proven) and re-seeded from the
+        // hot-store is_key_manually_verified bit at reconcile (warm records don't carry it).
+        uint8_t keyManuallyVerified : 1;
 
         // obsTick is valid: a NODEINFO frame was actually heard within the observation clock's
         // horizon. Cleared by the sweep once the serve window passes (saturation).
@@ -277,6 +284,10 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // removal; a passive NodeDB eviction may lag up to an hour). Member entries are
         // stickiest under LRU; the bit is the keep-alive (no TTL).
         uint8_t isMember : 1;
+
+        // Possession proven by either channel - the "signer-proven" predicate the replay gate,
+        // eviction tiering, and NodeDB pubkey-pool callers consume.
+        bool keyProven() const { return keyXeddsaSigned || keyManuallyVerified; }
     };
     // No exact-size static_assert: sizeof(meshtastic_User) and its padding vary by platform, so
     // any fixed byte count would fail the build on some boards.

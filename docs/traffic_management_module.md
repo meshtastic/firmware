@@ -112,9 +112,11 @@ and the request is left to propagate normally:
    window. Only a real observed frame stamps the recency bit - seeding and write-through are
    knowledge, not observation, so a silent node can never look alive to this path.
 5. **Signer-provenance gate** (`TMM_NODEINFO_REPLAY_SIGNED_GATE`, default on): vouch only for
-   an identity whose key is signer-proven (XEdDSA-verified, directly or inherited from
-   NodeDB). A trust-on-first-use identity is left for the genuine node - or another
-   cache-holder that _has_ proof - to answer. Bypassed when PKI is compiled out.
+   an identity whose key is proven - XEdDSA-verified (directly or inherited from NodeDB) **or**
+   manually verified out-of-band. Both paths honour both channels: the cache path via
+   `keyProven()`, the NodeDB fallback path via `HAS_XEDDSA_SIGNED | IS_KEY_MANUALLY_VERIFIED`. A
+   trust-on-first-use identity is left for the genuine node - or another cache-holder that _has_
+   proof - to answer. Bypassed when PKI is compiled out.
 6. **Throttle** (`directResponseAllowed()`): see the next section.
 
 **The spoofed reply.** On success TMM emits a NodeInfo reply with `from` set to the _target_
