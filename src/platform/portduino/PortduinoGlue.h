@@ -34,7 +34,22 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
-enum screen_modules { no_screen, x11, sdl, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
+enum screen_modules {
+    no_screen,
+    x11,
+    sdl,
+    fb,
+    st7789,
+    st7735,
+    st7735s,
+    st7796,
+    ili9341,
+    ili9342,
+    ili9486,
+    ili9488,
+    hx8357d,
+    hub75
+};
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
@@ -80,10 +95,10 @@ extern struct portduino_config_struct {
         {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"},
         {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
 
-    std::map<screen_modules, std::string> screen_names = {{x11, "X11"}, {sdl, "SDL"}, {fb, "FB"}, {st7789, "ST7789"},
-                                                          {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
-                                                          {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
-                                                          {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}, {hub75, "HUB75"}};
+    std::map<screen_modules, std::string> screen_names = {
+        {x11, "X11"},         {sdl, "SDL"},         {fb, "FB"},           {st7789, "ST7789"},   {st7735, "ST7735"},
+        {st7735s, "ST7735S"}, {st7796, "ST7796"},   {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
+        {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}, {hub75, "HUB75"}};
 
     lora_module_enum lora_module;
     bool has_rfswitch_table = false;
