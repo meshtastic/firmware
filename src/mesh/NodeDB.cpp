@@ -1861,6 +1861,8 @@ bool NodeDB::enforceSatelliteCaps()
 // them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
 static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
 {
+    if (nodeInfoLiteHasXeddsaSigned(&n))
+        return static_cast<uint8_t>(WarmProtected::XeddsaSigner);
     if (n.bitfield & (NODEINFO_BITFIELD_IS_FAVORITE_MASK | NODEINFO_BITFIELD_IS_IGNORED_MASK |
                       NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK))
         return static_cast<uint8_t>(WarmProtected::Flag);
@@ -3934,6 +3936,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
+            if (warmProtOf(warm) == static_cast<uint8_t>(WarmProtected::XeddsaSigner))
+                nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
             LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
         }
 #endif
