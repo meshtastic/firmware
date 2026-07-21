@@ -83,6 +83,10 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
+    // isChannelActive() passes RADIOLIB_SX126X_CAD_ON_4_SYMB, which programs a 4-symbol CAD scan
+    // (~4.5 symbols on air). Report that so computeSlotTimeMsec() sizes the CW slot to the real scan.
+    uint8_t getCadSymbolCount() const override { return 4; }
+
   private:
 #ifdef LORA_DIO1_SOFTWARE_POLL
     bool irqPollingActive = false;
