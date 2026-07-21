@@ -293,6 +293,19 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     bool shouldDropPosition(const meshtastic_MeshPacket *p, const meshtastic_Position *pos, uint32_t nowMs);
     bool shouldRespondToNodeInfo(const meshtastic_MeshPacket *p, bool sendResponse);
+
+    // Replies go to the requesting packet's unauthenticated `from`, so space them per requester to bound
+    // what any one node can be made to receive, plus a global floor on airtime.
+    static constexpr uint32_t kDirectResponsePerRequestorMs = 60'000UL;
+    static constexpr uint32_t kDirectResponseGlobalMs = 1'000UL;
+    static constexpr size_t kDirectResponseTrackedRequestors = 8;
+    struct DirectResponseThrottleEntry {
+        NodeNum requestor;
+        uint32_t lastReplyMs;
+    };
+    DirectResponseThrottleEntry directResponseSeen[kDirectResponseTrackedRequestors] = {};
+    uint32_t lastDirectResponseMs = 0;
+    bool directResponseAllowed(NodeNum requestor, uint32_t nowMs);
     bool isMinHopsFromRequestor(const meshtastic_MeshPacket *p) const;
     bool isRateLimited(NodeNum from, uint32_t nowMs);
     bool shouldDropUnknown(const meshtastic_MeshPacket *p, uint32_t nowMs);

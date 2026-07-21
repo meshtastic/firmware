@@ -231,6 +231,33 @@ void test_admin_key_fallback_is_rate_limited(void)
     assertDecodedAndLearned(&allowed, adminPub);
 }
 
+// A pending key is an unverified identity claim from whoever opened a key-verification handshake, so it
+// must decrypt only the exchange itself. Otherwise they could send DMs that look PKI-authenticated as a
+// node they never proved they are.
+void test_pending_key_decrypts_only_key_verification(void)
+{
+    // PEER is unknown to us; the handshake stashed its claimed key as pending.
+    static constexpr NodeNum PEER = 0x0C0C0C0C;
+    uint8_t peerPub[32], peerPriv[32];
+    crypto->generateKeyPair(peerPub, peerPriv);
+    crypto->setDHPrivateKey(ourPriv); // generateKeyPair changed it
+    crypto->setPendingPublicKey(PEER, peerPub);
+
+    // A DM on any other port must not decode, even though the pending key would decrypt it.
+    meshtastic_MeshPacket spoofed = makePkiPacket(PEER, meshtastic_PortNum_TEXT_MESSAGE_APP, 16, peerPriv);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&spoofed), "pending key must not decrypt a text DM");
+    TEST_ASSERT_FALSE_MESSAGE(spoofed.pki_encrypted, "spoofed DM must not be marked PKI-authenticated");
+
+    // The key-verification exchange itself still works, so bootstrapping is unaffected.
+    meshtastic_MeshPacket handshake = makePkiPacket(PEER, meshtastic_PortNum_KEY_VERIFICATION_APP, 16, peerPriv);
+    TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&handshake), "key verification must still decrypt");
+    TEST_ASSERT_TRUE(handshake.pki_encrypted);
+
+    // A pending key is never persisted, so the peer stays unknown until verification commits it.
+    TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(PEER), "pending key must not be learned into NodeDB");
+    crypto->clearPendingPublicKey();
+}
+
 #endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 void setup()
@@ -246,6 +273,7 @@ void setup()
     RUN_TEST(test_no_admin_key_unknown_sender_not_decoded);
     RUN_TEST(test_wrong_admin_key_does_not_decode);
     RUN_TEST(test_admin_key_fallback_is_rate_limited);
+    RUN_TEST(test_pending_key_decrypts_only_key_verification);
 #endif
     exit(UNITY_END());
 }
