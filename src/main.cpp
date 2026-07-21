@@ -1279,6 +1279,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
 #endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    deviceMetadata.has_xeddsa = true;
+#endif
     return deviceMetadata;
 }
 
