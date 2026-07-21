@@ -893,10 +893,14 @@ bool GPS::setup()
         } else if (gnssModel == GNSS_MODEL_MTK_PA1010D) {
             // PA1010D is used in the Pimoroni GPS board.
 
-            // Enable all constellations.
-            _serial_gps->write("$PMTK353,1,1,1,1,1*2A\r\n");
+            // PA1010D is MTK3333-family (same as L76B above); the 5-constellation request is
+            // NAK'd by real hardware, so use GPS + GLONASS instead, matching the L76B command.
+            _serial_gps->write("$PMTK353,1,1,0,0,0*2B\r\n");
             // Above command will reset the GPS and takes longer before it will accept new commands
             delay(1000);
+            if (getACK("$PMTK001,353,3", 900) != GNSS_RESPONSE_OK) {
+                LOG_WARN("PA1010D: constellation config (PMTK353) not acknowledged");
+            }
             // Only ask for RMC and GGA (GNRMC and GNGGA)
             _serial_gps->write("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n");
             delay(250);
