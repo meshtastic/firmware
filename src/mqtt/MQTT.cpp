@@ -150,7 +150,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->hop_limit = e.packet->hop_limit;
     p->hop_start = e.packet->hop_start;
     p->want_ack = e.packet->want_ack;
-    p->via_mqtt = true; // Mark that the packet was received via MQTT
+    p->via_mqtt = true;       // Mark that the packet was received via MQTT
+    p->pki_encrypted = false; // Only local AES-CCM decryption may establish PKI authentication.
     p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
     p->which_payload_variant = e.packet->which_payload_variant;
     memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
@@ -175,12 +176,9 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // impersonate a signing node with unsigned broadcasts. Hold cryptLock like the RF path
         // (perhapsDecode) does - checkXeddsaReceivePolicy -> xeddsa_verify mutates shared
         // CryptoEngine cache state, and MQTT ingress can run on a different task.
-        {
-            concurrency::LockGuard g(cryptLock);
-            if (!checkXeddsaReceivePolicy(p.get())) {
-                LOG_INFO("Ignore decoded message failing XEdDSA policy");
-                return;
-            }
+        if (passesRoutingAuthGate(p.get()) != RoutingAuthVerdict::ACCEPT) {
+            LOG_INFO("Ignore decoded message failing XEdDSA policy");
+            return;
         }
 #endif
     }
@@ -193,8 +191,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // likely they discovered each other via a channel we have downlink enabled for
         if (isToUs(p.get()) || (nodeInfoLiteHasUser(tx) && nodeInfoLiteHasUser(rx)))
             router->enqueueReceivedMessage(p.release());
-    } else if (router &&
-               perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
+    } else if (router && passesRoutingAuthGate(p.get()) == RoutingAuthVerdict::ACCEPT)
         router->enqueueReceivedMessage(p.release());
 }
 

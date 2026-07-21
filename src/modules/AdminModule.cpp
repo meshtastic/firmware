@@ -1136,6 +1136,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             rotated.private_key = incoming.private_key;
             incoming = rotated;
         }
+#if MESHTASTIC_EXCLUDE_PKI || MESHTASTIC_EXCLUDE_XEDDSA
+        if (incoming.packet_signature_policy !=
+            meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED) {
+            incoming.packet_signature_policy =
+                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+            const char *warning = "Packet authenticity policy is unavailable on this firmware build";
+            LOG_WARN(warning);
+            sendWarning(warning);
+        }
+#endif
         config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
@@ -1975,7 +1985,15 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     if (!responseVariant)
         return; // not a getter whose response we can pair
 
-    const bool keyValid = p.pki_encrypted && p.public_key.size == 32;
+    // Pin the key perhapsEncode will actually encrypt to, resolved the same way it resolves it.
+    // p.public_key is NOT it: nothing populates that field on the outgoing path (only perhapsDecode
+    // sets it, on RX), so reading it here pinned nothing and left `from` as the sole check.
+    bool keyValid = false;
+    meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    const bool haveDestKey = nodeDB->copyPublicKey(p.to, destKey);
+    keyValid = haveDestKey && wouldEncryptWithPKC(&p, p.channel, haveDestKey);
+#endif
 
     // One entry per request (a client sends N indexed get_channel requests, each answered once, so
     // entries must not merge). Free slot, else evict the oldest by rollover-safe elapsed time.
@@ -1994,6 +2012,7 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     }
 
     slot->to = p.to;
+    slot->requestId = p.id;
     slot->sentAtMs = millis();
     slot->expectedResponse = responseVariant;
     slot->moduleConfigType = admin.which_payload_variant == meshtastic_AdminMessage_get_module_config_request_tag
@@ -2001,7 +2020,7 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
                                  : 0;
     slot->keyValid = keyValid;
     if (keyValid)
-        memcpy(slot->key, p.public_key.bytes, 32);
+        memcpy(slot->key, destKey.bytes, 32);
     else
         memset(slot->key, 0, 32);
     LOG_DEBUG("Admin request sent to 0x%08x, expecting its response", p.to);
@@ -2013,6 +2032,11 @@ bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t
     // unpinned one still authorizes the response even if a pinned one does not.
     for (auto &o : outstandingAdminRequests) {
         if (o.to != mp.from || o.expectedResponse != responseVariant)
+            continue;
+        // mp.from is unauthenticated, so also require the response to echo our request's packet id
+        // (setReplyTo puts it in decoded.request_id). A blind injector must now guess it. Id 0 is
+        // no token at all - an omitted request_id decodes to 0 - so such a slot never matches.
+        if (o.requestId == 0 || mp.decoded.request_id != o.requestId)
             continue;
         if (!Throttle::isWithinTimespanMs(o.sentAtMs, kOutstandingAdminRequestMs)) {
             o.to = 0; // lapsed; free the slot and keep looking for another live match
