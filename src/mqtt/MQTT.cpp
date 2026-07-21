@@ -33,7 +33,11 @@
 
 #include "IPAddress.h"
 #if defined(ARCH_PORTDUINO)
+#if defined(_WIN32)
+#include <winsock2.h> // ntohl()
+#else
 #include <netinet/in.h>
+#endif
 #elif !defined(ntohl)
 #include <machine/endian.h>
 #define ntohl __ntohl
@@ -54,6 +58,32 @@ static bool isConnected = false;
 
 static uint32_t lastPositionUnavailableWarning = 0;
 static const uint32_t POSITION_UNAVAILABLE_WARNING_INTERVAL_MS = 15000; // 15 seconds
+
+inline bool shouldDropMqttDownlink(const meshtastic_MeshPacket &packet)
+{
+    if (is_in_repeated(config.lora.ignore_incoming, packet.from)) {
+        LOG_INFO("Drop MQTT ignored 0x%08x", packet.from);
+        return true;
+    }
+
+    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
+    if (nodeInfoLiteIsIgnored(node)) {
+        LOG_INFO("Drop MQTT node 0x%08x", packet.from);
+        return true;
+    }
+
+    if (packet.from == NODENUM_BROADCAST) {
+        LOG_INFO("Drop MQTT broadcast src");
+        return true;
+    }
+
+    if (config.lora.ignore_mqtt) {
+        LOG_INFO("Drop MQTT ignore_mqtt");
+        return true;
+    }
+
+    return false;
+}
 
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
@@ -91,8 +121,11 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // receives it when we get our own packet back. Then we'll stop our retransmissions.
         if (isFromUs(e.packet)) {
             auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+            if (!pAck)
+                return;
             pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
-            router->sendLocal(pAck);
+            if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
+                packetPool.release(pAck);
         } else {
             LOG_INFO("Ignore downlink message we originally sent");
         }
@@ -121,6 +154,9 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
     p->which_payload_variant = e.packet->which_payload_variant;
     memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
+
+    if (shouldDropMqttDownlink(*p))
+        return;
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {

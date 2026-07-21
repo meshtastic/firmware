@@ -65,7 +65,6 @@ void OnScreenKeyboardModule::stop(bool callEmptyCallback)
     // Keep NotificationRenderer legacy pointers in sync
     NotificationRenderer::virtualKeyboard = nullptr;
     NotificationRenderer::textInputCallback = nullptr;
-    clearPopup();
     if (callEmptyCallback && cb)
         cb("");
 }
@@ -131,9 +130,6 @@ bool OnScreenKeyboardModule::draw(OLEDDisplay *display)
     display->fillRect(0, 0, display->getWidth(), display->getHeight());
     display->setColor(WHITE);
     keyboard->draw(display, 0, 0);
-
-    // Draw popup overlay if needed
-    drawPopup(display);
     return true;
 }
 
@@ -148,123 +144,6 @@ void OnScreenKeyboardModule::onSubmit(const std::string &text)
 void OnScreenKeyboardModule::onCancel()
 {
     stop(true);
-}
-
-void OnScreenKeyboardModule::showPopup(const char *title, const char *content, uint32_t durationMs)
-{
-    if (!title || !content)
-        return;
-    strncpy(popupTitle, title, sizeof(popupTitle) - 1);
-    popupTitle[sizeof(popupTitle) - 1] = '\0';
-    strncpy(popupMessage, content, sizeof(popupMessage) - 1);
-    popupMessage[sizeof(popupMessage) - 1] = '\0';
-    popupUntil = millis() + durationMs;
-    popupVisible = true;
-}
-
-void OnScreenKeyboardModule::clearPopup()
-{
-    popupTitle[0] = '\0';
-    popupMessage[0] = '\0';
-    popupUntil = 0;
-    popupVisible = false;
-}
-
-void OnScreenKeyboardModule::drawPopupOverlay(OLEDDisplay *display)
-{
-    // Only render the popup overlay (without drawing the keyboard)
-    drawPopup(display);
-}
-
-void OnScreenKeyboardModule::drawPopup(OLEDDisplay *display)
-{
-    if (!popupVisible)
-        return;
-    if (millis() > popupUntil || popupMessage[0] == '\0') {
-        popupVisible = false;
-        return;
-    }
-
-    // Build lines and leverage NotificationRenderer inverted box drawing for consistent style
-    constexpr uint16_t maxContentLines = 3;
-    const bool hasTitle = popupTitle[0] != '\0';
-
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    const uint16_t maxWrapWidth = display->width() - 40;
-
-    auto wrapText = [&](const char *text, uint16_t availableWidth) -> std::vector<std::string> {
-        std::vector<std::string> wrapped;
-        std::string current;
-        std::string word;
-        const char *p = text;
-        while (*p && wrapped.size() < maxContentLines) {
-            while (*p && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) {
-                if (*p == '\n') {
-                    if (!current.empty()) {
-                        wrapped.push_back(current);
-                        current.clear();
-                        if (wrapped.size() >= maxContentLines)
-                            break;
-                    }
-                }
-                ++p;
-            }
-            if (!*p || wrapped.size() >= maxContentLines)
-                break;
-            word.clear();
-            while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r')
-                word += *p++;
-            if (word.empty())
-                continue;
-            std::string test = current.empty() ? word : (current + " " + word);
-            uint16_t w = display->getStringWidth(test.c_str(), test.length(), true);
-            if (w <= availableWidth)
-                current = test;
-            else {
-                if (!current.empty()) {
-                    wrapped.push_back(current);
-                    current = word;
-                    if (wrapped.size() >= maxContentLines)
-                        break;
-                } else {
-                    current = word;
-                    while (current.size() > 1 &&
-                           display->getStringWidth(current.c_str(), current.length(), true) > availableWidth)
-                        current.pop_back();
-                }
-            }
-        }
-        if (!current.empty() && wrapped.size() < maxContentLines)
-            wrapped.push_back(current);
-        return wrapped;
-    };
-
-    std::vector<std::string> allLines;
-    if (hasTitle)
-        allLines.emplace_back(popupTitle);
-
-    char buf[sizeof(popupMessage)];
-    strncpy(buf, popupMessage, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    char *paragraph = strtok(buf, "\n");
-    while (paragraph && allLines.size() < maxContentLines + (hasTitle ? 1 : 0)) {
-        auto wrapped = wrapText(paragraph, maxWrapWidth);
-        for (const auto &ln : wrapped) {
-            if (allLines.size() >= maxContentLines + (hasTitle ? 1 : 0))
-                break;
-            allLines.push_back(ln);
-        }
-        paragraph = strtok(nullptr, "\n");
-    }
-
-    std::vector<const char *> ptrs;
-    for (const auto &ln : allLines)
-        ptrs.push_back(ln.c_str());
-    ptrs.push_back(nullptr);
-
-    // Use the standard notification box drawing from NotificationRenderer
-    NotificationRenderer::drawNotificationBox(display, nullptr, ptrs.data(), allLines.size(), 0, 0);
 }
 
 } // namespace graphics

@@ -1078,16 +1078,6 @@ bool isSessionExpired()
     return (millis() - s_sessionStartedMs) > s_sessionMaxMs;
 }
 
-uint32_t getSessionRemainingSeconds()
-{
-    if (s_sessionMaxMs == 0)
-        return 0;
-    uint32_t elapsedMs = millis() - s_sessionStartedMs;
-    if (elapsedMs >= s_sessionMaxMs)
-        return 0;
-    return (s_sessionMaxMs - elapsedMs) / 1000UL;
-}
-
 uint8_t consumeSessionBoot()
 {
     if (s_bootsRemaining == 0) {

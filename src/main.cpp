@@ -428,10 +428,14 @@ void setup()
 #if ARCH_PORTDUINO
     RTCQuality ourQuality = RTCQualityDevice;
 
+#ifdef __linux__
+    // timedatectl is systemd-only, so macOS, Windows and WASM stay at
+    // RTCQualityDevice rather than claim NTP quality we have not verified.
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
         ourQuality = RTCQualityNTP;
     }
+#endif
 
     struct timeval tv;
     tv.tv_sec = time(NULL);
@@ -1218,7 +1222,7 @@ bool runASAP;
 // TODO find better home than main.cpp
 extern meshtastic_DeviceMetadata getDeviceMetadata()
 {
-    meshtastic_DeviceMetadata deviceMetadata;
+    meshtastic_DeviceMetadata deviceMetadata = meshtastic_DeviceMetadata_init_default;
     strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;

@@ -194,6 +194,8 @@ PacketId generatePacketId()
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    if (!p)
+        return nullptr;
 
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
@@ -280,15 +282,6 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         return send(p);
     }
 }
-/**
- * Send a packet on a suitable interface.
- */
-ErrorCode Router::rawSend(meshtastic_MeshPacket *p)
-{
-    assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
-    return iface->send(p);
-}
-
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
@@ -452,6 +445,62 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+/** Size a decoded Data as the sender's signedDataFits() gate would have, with padding stripped:
+ * unknown fields inside Data.payload survive in payload.size and would otherwise let a forger
+ * inflate an unsigned broadcast past the signable budget. Returns false only if sizing failed.
+ * Sizing only what this build's schema decodes, so a signable type that later grows needs its
+ * legitimate maximum re-checked against the budget or honest unsigned broadcasts get dropped. */
+static bool canonicalSignableSize(meshtastic_Data *d, size_t *size)
+{
+    const pb_msgdesc_t *fields = nullptr;
+    switch (d->portnum) {
+    case meshtastic_PortNum_POSITION_APP:
+        fields = &meshtastic_Position_msg;
+        break;
+    case meshtastic_PortNum_TELEMETRY_APP:
+        fields = &meshtastic_Telemetry_msg;
+        break;
+    case meshtastic_PortNum_WAYPOINT_APP:
+        fields = &meshtastic_Waypoint_msg;
+        break;
+    case meshtastic_PortNum_NODEINFO_APP:
+        fields = &meshtastic_User_msg;
+        break;
+    default:
+        break;
+    }
+
+    if (fields) {
+        // Scratch kept off the stack: these decoded structs are large for the smaller MCU targets.
+        // Safe as file-static state because both callers of checkXeddsaReceivePolicy hold cryptLock.
+        static union {
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_Position position;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_Telemetry telemetry;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_Waypoint waypoint;
+            // cppcheck-suppress unusedStructMember ; written by pb_decode through &inner
+            meshtastic_User user;
+        } inner;
+
+        memset(&inner, 0, sizeof(inner));
+        size_t canonicalPayload;
+        if (pb_decode_from_bytes(d->payload.bytes, d->payload.size, fields, &inner) &&
+            pb_get_encoded_size(&canonicalPayload, fields, &inner) && canonicalPayload <= d->payload.size) {
+            // Only the length matters when sizing a bytes field, so swap it in place instead of
+            // copying the whole Data; restored below because modules still need the real payload.
+            const pb_size_t prevSize = d->payload.size;
+            d->payload.size = (pb_size_t)canonicalPayload;
+            const bool sized = pb_get_encoded_size(size, &meshtastic_Data_msg, d);
+            d->payload.size = prevSize;
+            return sized;
+        }
+    }
+
+    return pb_get_encoded_size(size, &meshtastic_Data_msg, d);
+}
+
 bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 {
     // Only a signature we verify below may mark this packet signed; never trust an inbound flag.
@@ -486,12 +535,13 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // non-PKI broadcast whose signed encoding would still fit the LoRa frame. Size p->decoded
         // canonically so this counts the same fields the sender's signedDataFits() gate counted;
         // adding XEDDSA_SIGNATURE_FIELD_BYTES to that unsigned base mirrors it exactly, whatever
-        // fields the Data carried. Unicast/PKI packets and broadcasts too big to carry a signature
-        // are never signed, so they must not be hard-failed here even for a known signer.
+        // fields the Data carried, with padding hidden inside Data.payload stripped. Unicast/PKI
+        // packets and broadcasts too big to carry a signature are never signed, so they must not be
+        // hard-failed here even for a known signer.
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
         if (node && nodeInfoLiteHasXeddsaSigned(node) && !p->pki_encrypted && isBroadcast(p->to)) {
             size_t canonicalSize;
-            if (!pb_get_encoded_size(&canonicalSize, &meshtastic_Data_msg, &p->decoded))
+            if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
             if (canonicalSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
                 LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
@@ -527,7 +577,14 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier), else
     // fall back to a not-yet-committed key held during an in-progress key-verification handshake.
     meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic) || crypto->getPendingPublicKey(p->from, remotePublic);
+    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
+    // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
+    // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
+    bool havePendingKey = false;
+    if (!haveRemoteKey) {
+        havePendingKey = crypto->getPendingPublicKey(p->from, remotePublic);
+        haveRemoteKey = havePendingKey;
+    }
 
     meshtastic_NodeInfoLite *ourNode = nullptr;
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
@@ -535,8 +592,10 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // Try the sender's known key first, then each configured admin key so an authorized admin can
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
+        bool viaPendingKey = false;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
+            viaPendingKey = havePendingKey;
         }
         for (int i = 0; i < 3 && !decrypted; i++) {
             if (config.security.admin_key[i].size != 32)
@@ -557,6 +616,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
             if (pb_decode_from_bytes(bytes, payloadSize, &meshtastic_Data_msg, &decodedtmp) &&
                 decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                if (viaPendingKey && decodedtmp.portnum != meshtastic_PortNum_KEY_VERIFICATION_APP) {
+                    // The pending key only proves the handshake initiator holds it, not that they are
+                    // p->from. Beyond the exchange it would let them send DMs that look authenticated.
+                    LOG_WARN("Refusing pending-key decrypt of port %u from 0x%08x", (unsigned)decodedtmp.portnum, p->from);
+                    return DecodeState::DECODE_FAILURE;
+                }
                 decrypted = true;
                 rawSize = payloadSize; // commit the overhead subtraction only on full success
                 LOG_INFO("Packet decrypted using PKI!");

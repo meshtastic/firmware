@@ -70,12 +70,15 @@ const StoredMessage *getNewestMessageForActiveThread()
     const uint32_t peer = graphics::MessageRenderer::getThreadPeer();
     const uint32_t localNode = nodeDB->getNodeNum();
 
-    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
-        return &messages.back();
-    }
-
     for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
         const StoredMessage &m = *it;
+        if (!messageStore.isMessageVisible(m)) {
+            continue;
+        }
+
+        if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+            return &m;
+        }
 
         if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
             if (m.type == MessageType::BROADCAST && static_cast<int>(m.channelIndex) == channel) {

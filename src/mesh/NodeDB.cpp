@@ -3274,6 +3274,9 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+        messageStore.deleteAllMessagesFromNode(contact.node_num);
+#endif
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
@@ -3313,10 +3316,17 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
 
 /** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
+bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
+        return false;
+    }
+
+    // Once a node has proven it signs, only a signed update may change its identity. The public-key guard
+    // below is no help - an attacker can replay the victim's real (public) key. Our own record is exempt.
+    if (nodeId != getNodeNum() && nodeInfoLiteHasXeddsaSigned(info) && !xeddsaSigned) {
+        LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
         return false;
     }
 
