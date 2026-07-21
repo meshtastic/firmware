@@ -6,11 +6,18 @@
 #include "gps/RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "meshUtils.h"
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include <RNG.h>
 #include <SHA256.h>
+
+#define KEY_VERIFICATION_TIMEOUT_SECS 60
+// Hard cap on one session, independent of the refreshable idle timeout above.
+#define KEY_VERIFICATION_MAX_SESSION_MS (3 * 60 * 1000UL)
+// Minimum spacing between remote-initiated sessions.
+#define KEY_VERIFICATION_REMOTE_COOLDOWN_MS (60 * 1000UL)
 
 KeyVerificationModule *keyVerificationModule;
 
@@ -64,7 +71,8 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
 
 bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_KeyVerification *r)
 {
-    updateState();
+    // No refresh here: this runs before the sender is checked, so any node could hold the session open.
+    updateState(false);
     // Note: pki_encrypted is not required here. The first response (M2) may arrive channel-encrypted in
     // the bootstrap case; the follow-on hash1 packet (M3) is required to be PKI in its branch below.
     if (mp.from != currentRemoteNode) { // because the inital connection request is handled in allocReply()
@@ -98,6 +106,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             service->sendClientNotification(cn);
         }
         LOG_INFO("Received hash2");
+        currentNonceTimestamp = getTime(); // the protocol advanced, so extend the deadline
         currentState = KEY_VERIFICATION_SENDER_AWAITING_NUMBER;
         return true;
 
@@ -134,6 +143,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                 service->sendClientNotification(cn);
             }
 
+            currentNonceTimestamp = getTime(); // the protocol advanced, so extend the deadline
             currentState = KEY_VERIFICATION_RECEIVER_AWAITING_USER;
             return true;
         }
@@ -160,6 +170,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
             CryptRNG.rand((uint8_t *)&currentNonce, sizeof(currentNonce));
     }
     currentNonceTimestamp = getTime();
+    sessionStartedMs = millis();
     currentRemoteNode = remoteNode;
     meshtastic_KeyVerification KeyVerification = meshtastic_KeyVerification_init_zero;
     KeyVerification.nonce = currentNonce;
@@ -190,10 +201,19 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     updateState();
-    if (currentState != KEY_VERIFICATION_IDLE) { // TODO: cooldown period
+    if (currentState != KEY_VERIFICATION_IDLE) {
         LOG_WARN("Key Verification requested, but already in a request");
+        ignoreRequest = true; // do not let the busy path emit a NAK back to the requester
         return nullptr;
     }
+    // Opening a session raises a banner and locks the only slot, before the peer has authenticated.
+    if (lastRemoteSessionMs != 0 && Throttle::isWithinTimespanMs(lastRemoteSessionMs, KEY_VERIFICATION_REMOTE_COOLDOWN_MS)) {
+        LOG_WARN("Key Verification requested, but within cooldown");
+        ignoreRequest = true;
+        return nullptr;
+    }
+    sessionStartedMs = millis();
+    sessionFromRemote = true;
     currentState = KEY_VERIFICATION_RECEIVER_AWAITING_HASH1;
 
     auto req = *currentRequest;
@@ -357,11 +377,14 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
 void KeyVerificationModule::updateState(bool resetTimer)
 {
     if (currentState != KEY_VERIFICATION_IDLE) {
-        // check for the 60 second timeout
-        if (currentNonceTimestamp < getTime() - 60) {
+        uint32_t now = getTime();
+        // Absolute cap first: it is millis() based, so it bounds the session even when the RTC is unset.
+        if (!Throttle::isWithinTimespanMs(sessionStartedMs, KEY_VERIFICATION_MAX_SESSION_MS)) {
+            resetToIdle();
+        } else if (now - currentNonceTimestamp >= KEY_VERIFICATION_TIMEOUT_SECS) {
             resetToIdle();
         } else if (resetTimer) {
-            currentNonceTimestamp = getTime();
+            currentNonceTimestamp = now;
         }
     }
 }
@@ -370,8 +393,12 @@ void KeyVerificationModule::resetToIdle()
 {
     memset(hash1, 0, 32);
     memset(hash2, 0, 32);
+    if (sessionFromRemote)
+        lastRemoteSessionMs = millis(); // start the cooldown when the session ends, not when it opened
+    sessionFromRemote = false;
     currentNonce = 0;
     currentNonceTimestamp = 0;
+    sessionStartedMs = 0;
     currentSecurityNumber = 0;
     currentRemoteNode = 0;
     currentState = KEY_VERIFICATION_IDLE;
