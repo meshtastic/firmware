@@ -553,6 +553,54 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 }
 #endif
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+// The fallback costs three X25519 ops before the AEAD tag is checked. Budget is global because p->from is
+// attacker-controlled; successful runs refund, and their key is then persisted for the fast path.
+#define ADMIN_KEY_FALLBACK_BURST 8
+#define ADMIN_KEY_FALLBACK_REFILL_MS 250
+
+static uint32_t adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+static uint32_t adminKeyFallbackRefillMs = 0;
+
+static bool adminKeyFallbackAllowed()
+{
+    bool haveAdminKey = false;
+    for (int i = 0; i < 3; i++) {
+        if (config.security.admin_key[i].size == 32) {
+            haveAdminKey = true;
+            break;
+        }
+    }
+    if (!haveAdminKey)
+        return false; // nothing to try, so do not spend a token
+
+    uint32_t now = millis();
+    if (adminKeyFallbackRefillMs == 0)
+        adminKeyFallbackRefillMs = now;
+    uint32_t elapsed = now - adminKeyFallbackRefillMs;
+    if (elapsed >= ADMIN_KEY_FALLBACK_REFILL_MS) {
+        uint32_t refill = elapsed / ADMIN_KEY_FALLBACK_REFILL_MS;
+        adminKeyFallbackRefillMs += refill * ADMIN_KEY_FALLBACK_REFILL_MS;
+        if (refill >= ADMIN_KEY_FALLBACK_BURST - adminKeyFallbackTokens)
+            adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+        else
+            adminKeyFallbackTokens += refill;
+    }
+
+    if (adminKeyFallbackTokens == 0)
+        return false;
+
+    adminKeyFallbackTokens--;
+    return true;
+}
+
+static void adminKeyFallbackRefund()
+{
+    if (adminKeyFallbackTokens < ADMIN_KEY_FALLBACK_BURST)
+        adminKeyFallbackTokens++;
+}
+#endif
+
 DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
@@ -597,17 +645,21 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             decrypted = true;
             viaPendingKey = havePendingKey;
         }
-        for (int i = 0; i < 3 && !decrypted; i++) {
-            if (config.security.admin_key[i].size != 32)
-                continue;
-            remotePublic.size = 32;
-            memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
+        if (!decrypted && adminKeyFallbackAllowed()) {
+            for (int i = 0; i < 3 && !decrypted; i++) {
+                if (config.security.admin_key[i].size != 32)
+                    continue;
+                remotePublic.size = 32;
+                memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
 
-            if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
-                decrypted = true;
-                viaAdminKey = true;
-                break; // stop after first successful decryption
+                if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                    decrypted = true;
+                    viaAdminKey = true;
+                    break; // stop after first successful decryption
+                }
             }
+            if (decrypted)
+                adminKeyFallbackRefund();
         }
         if (decrypted) {
             LOG_INFO("PKI Decryption worked!");
