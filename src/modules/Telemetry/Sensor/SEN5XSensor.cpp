@@ -22,16 +22,18 @@ bool SEN5XSensor::getVersion()
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t versionBuffer[12]{};
-    size_t charNumber = readBuffer(&versionBuffer[0], 3);
-    if (charNumber == 0) {
-        LOG_ERROR("%s: Error getting data ready flag value", sensorName);
+    // The version reply is 8 data bytes (12 raw bytes with CRCs):
+    // fw major/minor, fw debug, hw major/minor, protocol major/minor, padding
+    uint8_t versionBuffer[8]{};
+    size_t charNumber = readBuffer(&versionBuffer[0], 12);
+    if (charNumber < 7) {
+        LOG_ERROR("%s: Error getting device version value", sensorName);
         return false;
     }
 
-    firmwareVer = versionBuffer[0] + (versionBuffer[1] / 10);
-    hardwareVer = versionBuffer[3] + (versionBuffer[4] / 10);
-    protocolVer = versionBuffer[5] + (versionBuffer[6] / 10);
+    firmwareVer = versionBuffer[0] + (versionBuffer[1] / 10.0f);
+    hardwareVer = versionBuffer[3] + (versionBuffer[4] / 10.0f);
+    protocolVer = versionBuffer[5] + (versionBuffer[6] / 10.0f);
 
     LOG_INFO("%s: Firmware Version: %0.2f", sensorName, firmwareVer);
     LOG_INFO("%s: Hardware Version: %0.2f", sensorName, hardwareVer);
@@ -540,7 +542,7 @@ bool SEN5XSensor::startCleaning()
     // This message will be always printed so the user knows the device it's not hung
     LOG_INFO("%s: Started fan cleaning it will take 10 seconds...", sensorName);
 
-    uint16_t started = millis();
+    uint32_t started = millis();
     while (millis() - started < 10500) {
         delay(500);
     }
@@ -918,7 +920,7 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
                 measurement->variant.air_quality_metrics.has_pm_temperature = true;
                 measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
             }
-            if (sen5xmeasurement.noxIndex != FLT_MAX) {
+            if (sen5xmeasurement.vocIndex != FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
                 measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
             }
