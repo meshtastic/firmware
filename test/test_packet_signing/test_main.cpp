@@ -729,8 +729,11 @@ void test_A17_strict_verifies_signer_from_warm_key_store(void)
 
     // Model its next hot-store eviction and prove Balanced still remembers the signer without
     // allocating a hot node merely to evaluate an unsigned packet.
+    // Mirror what NodeDB eviction actually stores for a signer: warmProtectedCategory() yields
+    // XeddsaSigner *and* the dedicated warm signer bit is set from nodeInfoLiteHasXeddsaSigned().
+    // isKnownXeddsaSigner() reads that signer bit, not the protected category.
     TEST_ASSERT_TRUE(mockNodeDB->warmStore.absorb(REMOTE_NODE, 2, pub, meshtastic_Config_DeviceConfig_Role_CLIENT,
-                                                  static_cast<uint8_t>(WarmProtected::XeddsaSigner)));
+                                                  static_cast<uint8_t>(WarmProtected::XeddsaSigner), /*signer=*/true));
     mockNodeDB->clearTestNodes();
     setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
     meshtastic_MeshPacket unsignedPacket =

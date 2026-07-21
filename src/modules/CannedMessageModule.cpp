@@ -1022,6 +1022,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     lastDestSet = true;
 
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;
@@ -1054,7 +1056,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
     }

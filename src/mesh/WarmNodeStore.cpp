@@ -161,6 +161,12 @@ bool WarmNodeStore::lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat
     return true;
 }
 
+bool WarmNodeStore::isVerifiedSigner(NodeNum num) const
+{
+    const WarmNodeEntry *e = find(num);
+    return e && warmSignerOf(*e);
+}
+
 bool WarmNodeStore::take(NodeNum num, WarmNodeEntry &out)
 {
     WarmNodeEntry *e = find(num);

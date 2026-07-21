@@ -16,7 +16,6 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #if HAS_TRAFFIC_MANAGEMENT
-#include "modules/TrafficManagementModule.h"
 #endif
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
@@ -271,6 +270,8 @@ PacketId generatePacketId()
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    if (!p)
+        return nullptr;
 
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
@@ -663,11 +664,15 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         if (compatible)
             return true;
 
-        // In Balanced, preserve legacy unsigned-unicast compatibility and only reject a signable
-        // unsigned broadcast from a known signer. Canonical sizing removes unknown protobuf
-        // fields before mirroring the sender-side signedDataFits() gate. Oversized broadcasts
-        // remain compatible.
-        if (nodeDB->hasSeenXeddsaSigner(p->from) && isBroadcast(p->to)) {
+        // In Balanced, preserve legacy unsigned-unicast compatibility and only reject the class a
+        // signing node always signs: a non-PKI broadcast whose signed encoding would still fit the
+        // LoRa frame. Canonical sizing removes unknown protobuf fields before mirroring the
+        // sender-side signedDataFits() gate, so this counts the same fields that gate counted.
+        // Unicast packets and broadcasts too big to carry a signature are never signed, so they
+        // must not be hard-failed here even for a known signer (PKI already returned above).
+        // isKnownXeddsaSigner consults the warm tier too: a signer evicted from the hot store
+        // must not become impersonatable via unsigned broadcasts until it is re-heard.
+        if (nodeDB->isKnownXeddsaSigner(p->from) && isBroadcast(p->to)) {
             size_t canonicalSize;
             if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
@@ -730,6 +735,54 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
     return RoutingAuthVerdict::ACCEPT;
 }
 
+#if !(MESHTASTIC_EXCLUDE_PKI)
+// The fallback costs three X25519 ops before the AEAD tag is checked. Budget is global because p->from is
+// attacker-controlled; successful runs refund, and their key is then persisted for the fast path.
+#define ADMIN_KEY_FALLBACK_BURST 8
+#define ADMIN_KEY_FALLBACK_REFILL_MS 250
+
+static uint32_t adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+static uint32_t adminKeyFallbackRefillMs = 0;
+
+static bool adminKeyFallbackAllowed()
+{
+    bool haveAdminKey = false;
+    for (int i = 0; i < 3; i++) {
+        if (config.security.admin_key[i].size == 32) {
+            haveAdminKey = true;
+            break;
+        }
+    }
+    if (!haveAdminKey)
+        return false; // nothing to try, so do not spend a token
+
+    uint32_t now = millis();
+    if (adminKeyFallbackRefillMs == 0)
+        adminKeyFallbackRefillMs = now;
+    uint32_t elapsed = now - adminKeyFallbackRefillMs;
+    if (elapsed >= ADMIN_KEY_FALLBACK_REFILL_MS) {
+        uint32_t refill = elapsed / ADMIN_KEY_FALLBACK_REFILL_MS;
+        adminKeyFallbackRefillMs += refill * ADMIN_KEY_FALLBACK_REFILL_MS;
+        if (refill >= ADMIN_KEY_FALLBACK_BURST - adminKeyFallbackTokens)
+            adminKeyFallbackTokens = ADMIN_KEY_FALLBACK_BURST;
+        else
+            adminKeyFallbackTokens += refill;
+    }
+
+    if (adminKeyFallbackTokens == 0)
+        return false;
+
+    adminKeyFallbackTokens--;
+    return true;
+}
+
+static void adminKeyFallbackRefund()
+{
+    if (adminKeyFallbackTokens < ADMIN_KEY_FALLBACK_BURST)
+        adminKeyFallbackTokens++;
+}
+#endif
+
 DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
@@ -757,33 +810,48 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool matchedChannel = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Resolve the sender's public key: prefer the one stored in NodeDB (hot store or warm tier), else
-    // fall back to a not-yet-committed key held during an in-progress key-verification handshake.
-    meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-    bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic) || crypto->getPendingPublicKey(p->from, remotePublic);
-
     meshtastic_NodeInfoLite *ourNode = nullptr;
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
         (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
         pkiAttempted = true;
         LOG_DEBUG("Attempt PKI decryption");
+        // Resolve the sender's public key only for actual PKI-decrypt candidates: prefer NodeDB
+        // (hot store or warm tier), else a not-yet-committed key held during an in-progress
+        // key-verification handshake. On a full NodeDB miss, copyPublicKey() falls through to a
+        // linear scan of TrafficManagement's large NodeInfo cache, so it must not run for every
+        // encrypted channel packet from an unknown sender - only for packets we might decrypt.
+        meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
+        bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
+        // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
+        // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
+        bool havePendingKey = false;
+        if (!haveRemoteKey) {
+            havePendingKey = crypto->getPendingPublicKey(p->from, remotePublic);
+            haveRemoteKey = havePendingKey;
+        }
         // Try the sender's known key first, then each configured admin key so an authorized admin can
         // reach a node that has not yet learned their key. AES-CCM AEAD rejects wrong candidates.
         bool viaAdminKey = false;
+        bool viaPendingKey = false;
         if (haveRemoteKey && crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
             decrypted = true;
+            viaPendingKey = havePendingKey;
         }
-        for (int i = 0; i < 3 && !decrypted; i++) {
-            if (config.security.admin_key[i].size != 32)
-                continue;
-            remotePublic.size = 32;
-            memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
+        if (!decrypted && adminKeyFallbackAllowed()) {
+            for (int i = 0; i < 3 && !decrypted; i++) {
+                if (config.security.admin_key[i].size != 32)
+                    continue;
+                remotePublic.size = 32;
+                memcpy(remotePublic.bytes, config.security.admin_key[i].bytes, 32);
 
-            if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
-                decrypted = true;
-                viaAdminKey = true;
-                break; // stop after first successful decryption
+                if (crypto->decryptCurve25519(p->from, remotePublic, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                    decrypted = true;
+                    viaAdminKey = true;
+                    break; // stop after first successful decryption
+                }
             }
+            if (decrypted)
+                adminKeyFallbackRefund();
         }
         if (decrypted) {
             LOG_INFO("PKI Decryption worked!");
@@ -792,6 +860,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
             if (pb_decode_from_bytes(bytes, payloadSize, &meshtastic_Data_msg, &decodedtmp) &&
                 decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                if (viaPendingKey && decodedtmp.portnum != meshtastic_PortNum_KEY_VERIFICATION_APP) {
+                    // The pending key only proves the handshake initiator holds it, not that they are
+                    // p->from. Beyond the exchange it would let them send DMs that look authenticated.
+                    LOG_WARN("Refusing pending-key decrypt of port %u from 0x%08x", (unsigned)decodedtmp.portnum, p->from);
+                    return DecodeState::DECODE_FAILURE;
+                }
                 decrypted = true;
                 rawSize = payloadSize; // commit the overhead subtraction only on full success
                 LOG_INFO("Packet decrypted using PKI!");
@@ -802,10 +876,12 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
                 if (viaAdminKey) {
                     // Persist the admin key for the sender so future packets take the fast path and we can
-                    // PKI-reply; p->from is bound into the AEAD nonce, so the trusted admin authenticated it.
-                    meshtastic_NodeInfoLite *fromNode = nodeDB->getOrCreateMeshNode(p->from);
-                    if (fromNode != nullptr)
-                        fromNode->public_key = remotePublic;
+                    // PKI-reply; p->from is bound into the AEAD nonce, so the trusted admin authenticated
+                    // it. commitRemoteKey is the bare-key commit primitive: it bypasses updateUser's
+                    // User-payload path deliberately and handles the TrafficManagement write-through.
+                    // AdminChannelProven = possession shown to the admin channel, not via an XEdDSA
+                    // NodeInfo signature, so the key stays TOFU-grade for signing purposes.
+                    nodeDB->commitRemoteKey(p->from, remotePublic.bytes, NodeDB::KeyCommitTrust::AdminChannelProven);
                 }
             } else {
                 // AEAD already authenticated this ciphertext, so no other candidate could decode it -

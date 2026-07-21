@@ -40,7 +40,7 @@ extern SerialModule *serialModule;
  * Radio interface for SerialModule
  *
  */
-class SerialModuleRadio : public MeshModule
+class SerialModuleRadio : public SinglePortModule
 {
     uint32_t lastRxID = 0;
     char outbuf[90] = "";
@@ -54,27 +54,12 @@ class SerialModuleRadio : public MeshModule
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   protected:
-    virtual meshtastic_MeshPacket *allocReply() override;
-
     /** Called to handle a particular incoming message
 
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
     virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
-
-    meshtastic_PortNum ourPortNum;
-
-    virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
-
-    meshtastic_MeshPacket *allocDataPacket()
-    {
-        // Update our local node info with our position (even if we don't decide to update anyone else)
-        meshtastic_MeshPacket *p = router->allocForSending();
-        p->decoded.portnum = ourPortNum;
-
-        return p;
-    }
 };
 
 extern SerialModuleRadio *serialModuleRadio;
