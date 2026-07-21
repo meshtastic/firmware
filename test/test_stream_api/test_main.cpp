@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/MeshService.h"
+#include "mesh/NodeDB.h"
 #include "mesh/StreamAPI.h"
 #include "mesh/StreamFrameWriter.h"
 #include <algorithm>
@@ -134,6 +135,13 @@ class StreamAPITestShim : public StreamAPI
         capturedPayload.assign(buf + 4, buf + 4 + len);
         return false;
     }
+};
+
+/// Minimal PhoneAPI transport for config-stream tests.
+class PhoneAPITestShim : public PhoneAPI
+{
+  protected:
+    bool checkIsConnected() override { return true; }
 };
 
 /// Exposes framed-log hooks and records best-effort writes.
@@ -475,6 +483,44 @@ static void test_lockdown_admin_gate_rejects_undecodable_admin(void)
                               "undecodable ADMIN_APP payload must not pass through even when authorized");
 }
 
+static void test_want_config_includes_status_message_module_config(void)
+{
+    ScopedMeshService scopedService;
+    NodeDB testNodeDB;
+    NodeDB *const savedNodeDB = nodeDB;
+    nodeDB = &testNodeDB;
+    const auto savedModuleConfig = moduleConfig;
+    moduleConfig.has_statusmessage = true;
+    strncpy(moduleConfig.statusmessage.node_status, "Ready", sizeof(moduleConfig.statusmessage.node_status) - 1);
+
+    meshtastic_ToRadio request = meshtastic_ToRadio_init_zero;
+    request.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
+    request.want_config_id = SPECIAL_NONCE_ONLY_CONFIG;
+    uint8_t requestBytes[meshtastic_ToRadio_size];
+    const size_t requestSize = pb_encode_to_bytes(requestBytes, sizeof(requestBytes), &meshtastic_ToRadio_msg, &request);
+
+    PhoneAPITestShim api;
+    api.handleToRadio(requestBytes, requestSize);
+
+    bool foundStatusMessageConfig = false;
+    for (unsigned i = 0; i < 64 && !foundStatusMessageConfig; ++i) {
+        uint8_t responseBytes[meshtastic_FromRadio_size];
+        const size_t responseSize = api.getFromRadio(responseBytes);
+        meshtastic_FromRadio response = meshtastic_FromRadio_init_zero;
+        TEST_ASSERT_TRUE(pb_decode_from_bytes(responseBytes, responseSize, &meshtastic_FromRadio_msg, &response));
+        if (response.which_payload_variant == meshtastic_FromRadio_moduleConfig_tag &&
+            response.moduleConfig.which_payload_variant == meshtastic_ModuleConfig_statusmessage_tag) {
+            foundStatusMessageConfig = true;
+            TEST_ASSERT_EQUAL_STRING("Ready", response.moduleConfig.payload_variant.statusmessage.node_status);
+        }
+    }
+
+    api.close();
+    moduleConfig = savedModuleConfig;
+    nodeDB = savedNodeDB;
+    TEST_ASSERT_TRUE(foundStatusMessageConfig);
+}
+
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
 /// Unity per-test teardown; fixtures clean themselves up.
@@ -496,6 +542,7 @@ void setup()
     RUN_TEST(test_stream_api_gates_logs_and_marks_them_best_effort);
     RUN_TEST(test_lockdown_admin_gate_ignores_wire_from);
     RUN_TEST(test_lockdown_admin_gate_rejects_undecodable_admin);
+    RUN_TEST(test_want_config_includes_status_message_module_config);
     // usingProtobufs intentionally has no reset path, so this must run last.
     RUN_TEST(test_serial_console_suppresses_raw_output_in_protobuf_mode);
     exit(UNITY_END());
