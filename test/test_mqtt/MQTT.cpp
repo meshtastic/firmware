@@ -53,6 +53,15 @@ class MockRouter : public Router
 class MockMeshService : public MeshService
 {
   public:
+    // No PhoneAPI reader exists in these tests, so packets the receive pipeline forwards to the phone
+    // (MeshService::sendToPhone enqueues pooled copies into toPhoneQueue) would leak at teardown. Drain
+    // the queue like the phone would. This surfaced once sendLocal() began dispatching local packets
+    // through handleReceived() directly rather than via the (mock-overridden) enqueueReceivedMessage().
+    ~MockMeshService()
+    {
+        while (meshtastic_MeshPacket *p = getForPhone())
+            releaseToPool(p);
+    }
     void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m) override
     {
         messages_.emplace_back(*m);
