@@ -1,0 +1,87 @@
+name: Build GAT562 Firmware
+
+on:
+  push:
+    branches:
+      - gat-iot
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gat562-firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - gat562_family
+          - gat562_t9
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-cache-dir "setuptools<72" "platformio==6.1.19"
+          python -m platformio --version
+
+      - name: Verify target
+        env:
+          PIO_TARGET: ${{ matrix.target }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          matrix = json.loads(
+              subprocess.check_output(
+                  ["python", "bin/generate_ci_matrix.py", "nrf52840", "--level", "extra"],
+                  text=True,
+              )
+          )
+          target = os.environ["PIO_TARGET"]
+          if target not in {entry["board"] for entry in matrix}:
+              raise SystemExit(f"Target not found: {target}")
+          print(f"Verified target: {target}")
+          PY
+
+      - name: Build firmware
+        run: python -m platformio run -e "${{ matrix.target }}"
+
+      - name: Collect firmware
+        env:
+          PIO_TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p "artifacts/$PIO_TARGET"
+          find release -maxdepth 1 -type f \
+            \( -name '*.bin' -o -name '*.uf2' -o -name '*.hex' -o -name '*.zip' -o -name '*.mt.json' -o -name 'device-*.sh' -o -name 'device-*.bat' \) \
+            -exec cp {} "artifacts/$PIO_TARGET/" \;
+          test -n "$(find "artifacts/$PIO_TARGET" -maxdepth 1 -type f -name '*.uf2' -print -quit)"
+          cd "artifacts/$PIO_TARGET"
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: GAT562-${{ matrix.target }}-${{ github.sha }}
+          path: artifacts/${{ matrix.target }}/
+          if-no-files-found: error
+          retention-days: 30
