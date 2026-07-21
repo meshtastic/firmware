@@ -1138,9 +1138,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #if MESHTASTIC_EXCLUDE_PKI || MESHTASTIC_EXCLUDE_XEDDSA
         if (incoming.packet_signature_policy !=
-            meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED) {
+            meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE) {
             incoming.packet_signature_policy =
-                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
             const char *warning = "Packet authenticity policy is unavailable on this firmware build";
             LOG_WARN(warning);
             sendWarning(warning);
