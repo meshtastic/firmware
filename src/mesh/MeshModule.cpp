@@ -108,11 +108,11 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
     auto ourNodeNum = nodeDB->getNodeNum();
     bool toUs = isBroadcast(mp.to) || isToUs(&mp);
-    const bool relayedBroadcastResponseRequest = isDecoded && mp.decoded.want_response && isBroadcast(mp.to) &&
-                                                 mp.hop_limit < mp.hop_start;
-    const bool suppressResponse = relayedBroadcastResponseRequest &&
-                                  (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER ||
-                                   mp.decoded.portnum != meshtastic_PortNum_POSITION_APP);
+    const bool relayedBroadcastResponseRequest =
+        isDecoded && mp.decoded.want_response && isBroadcast(mp.to) && mp.hop_limit < mp.hop_start;
+    const bool suppressResponse =
+        relayedBroadcastResponseRequest && (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER ||
+                                            mp.decoded.portnum != meshtastic_PortNum_POSITION_APP);
 
     // A relayed broadcast request reaches every node in range. Suppress both module replies and the fallback NAK to avoid a
     // mesh-wide response storm. Trackers retain Position replies so a fleet can answer a broadcast location request.
