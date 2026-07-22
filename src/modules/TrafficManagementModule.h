@@ -9,7 +9,7 @@
 #if HAS_TRAFFIC_MANAGEMENT
 
 // Replay provenance gate: when 1 (default), direct responses are spoofed only for nodes whose
-// cached key is signer-proven (XEdDSA-verified), not for trust-on-first-use identities.
+// cached key is key-proven (XEdDSA-signed or manually verified), not for trust-on-first-use identities.
 // Define as 0 to also serve fresh TOFU-only nodes; bypassed entirely when PKI is excluded.
 #ifndef TMM_NODEINFO_REPLAY_REQUIRE_SIGNED
 #define TMM_NODEINFO_REPLAY_REQUIRE_SIGNED 1
@@ -65,14 +65,14 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     bool preloadNextHopsFromNodeDB();
 
     /// Last-resort key source for NodeDB::copyPublicKey() after the hot and warm tiers miss.
-    /// Copies the 32-byte key for `node` into out[32]; `signerProven` (optional) reports whether
-    /// the key was XEdDSA-verified vs trust-on-first-use. Thread-safe.
-    bool copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven = nullptr) const;
+    /// Copies the 32-byte key for `node` into out[32]; `keyProven` (optional) reports whether
+    /// the key is proven (XEdDSA-signed or manually verified) vs trust-on-first-use. Thread-safe.
+    bool copyPublicKey(NodeNum node, uint8_t out[32], bool *keyProven = nullptr) const;
 
     /// Copy the full cached User for `node` (used by NodeDB to rehydrate a re-admitted node's
     /// name - the warm tier keeps keys but not names). False on miss or key-only records.
-    /// `signerProven` (optional) reports the cached key's provenance. Thread-safe.
-    bool copyUser(NodeNum node, meshtastic_User &out, bool *signerProven = nullptr) const;
+    /// `keyProven` (optional) reports the cached key's provenance. Thread-safe.
+    bool copyUser(NodeNum node, meshtastic_User &out, bool *keyProven = nullptr) const;
 
     /// Write-through hook from NodeDB::updateUser(): upsert the committed identity immediately
     /// (the reconcile sweep remains the backstop). NodeDB's key is authoritative, but a keyless
@@ -125,7 +125,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     /// (distinguishes "not tracked" from CLIENT == 0).
     int peekCachedRole(NodeNum node);
 
-    /// Test hook: force a cached NodeInfo entry's key to signer-proven so replay-gate tests
+    /// Test hook: force a cached NodeInfo entry's key to XEdDSA-signed so replay-gate tests
     /// can skip a full XEdDSA verification. No-op if absent.
     void markKeyXeddsaSignedForTest(NodeNum node);
 
@@ -285,7 +285,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
         // stickiest under LRU; the bit is the keep-alive (no TTL).
         uint8_t isMember : 1;
 
-        // Possession proven by either channel - the "signer-proven" predicate the replay gate,
+        // Possession proven by either channel - the "key-proven" predicate the replay gate,
         // eviction tiering, and NodeDB pubkey-pool callers consume.
         bool keyProven() const { return keyXeddsaSigned || keyManuallyVerified; }
     };

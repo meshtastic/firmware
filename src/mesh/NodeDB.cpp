@@ -3773,7 +3773,7 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
 #if HAS_TRAFFIC_MANAGEMENT
     // Last resort: a key the TrafficManagement NodeInfo cache learned from an observed frame
     // for a node no longer in either NodeDB tier. This extends the pool of peers we can
-    // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's signerProven), the
+    // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's keyProven), the
     // same first-contact trust NodeDB itself applies via updateUser().
     if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes)) {
         out.size = 32;
@@ -3788,10 +3788,10 @@ bool NodeDB::copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_k
     if (copyPublicKeyAuthoritative(n, out))
         return true;
 #if HAS_TRAFFIC_MANAGEMENT
-    // A cold-tier cache key backs an authenticated decrypt only when signer-proven; unverified TOFU
+    // A cold-tier cache key backs an authenticated decrypt only when key-proven; unverified TOFU
     // cache keys must not. Outbound encryption still uses the opportunistic copyPublicKey().
-    bool signerProven = false;
-    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) && signerProven) {
+    bool keyProven = false;
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &keyProven) && keyProven) {
         out.size = 32;
         return true;
     }

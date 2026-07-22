@@ -154,7 +154,7 @@ independent of `hasFullUser`. Because the re-mark is only hourly, hook-driven ad
 an hour.
 
 **Retention:** no timed eviction. Slots die only by LRU displacement on insert, ranked by
-trust tiers - members and signer-proven keys are stickiest; the seeding pass additionally
+trust tiers - members and key-proven keys are stickiest; the seeding pass additionally
 refuses to churn one member out for another (`spareMembers`).
 
 **Key-commit funnel:** every path that writes a remote key into the hot store must route

@@ -439,7 +439,7 @@ const TrafficManagementModule::NodeInfoPayloadEntry *TrafficManagementModule::fi
 
 /// Find or create a NodeInfo payload entry. Victim selection is trust-tiered so the cache
 /// doubles as a pubkey pool: NodeDB membership outranks key trust, then keyless < TOFU key <
-/// signer-proven key; within a tier the oldest observation loses (never-observed = oldest).
+/// key-proven key; within a tier the oldest observation loses (never-observed = oldest).
 TrafficManagementModule::NodeInfoPayloadEntry *
 TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmptySlot, bool spareMembers)
 {
@@ -466,7 +466,7 @@ TrafficManagementModule::findOrCreateNodeInfoEntry(NodeNum node, bool *usedEmpty
         }
         if (empty)
             continue; // an empty slot beats any victim; stop scoring
-        // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 signer-proven key;
+        // Eviction tier (lower loses first): 0 keyless, 1 TOFU key, 2 key-proven key;
         // +3 for NodeDB members - never shed a NodeDB-tier identity over a stranger.
         const uint8_t tier = static_cast<uint8_t>(((entry.user.public_key.size != 32) ? 0 : (entry.keyProven() ? 2 : 1)) +
                                                   (entry.isMember ? 3 : 0));
@@ -724,7 +724,7 @@ void TrafficManagementModule::onNodeKeyCommitted(NodeNum node, const uint8_t key
     // hasObserved/obsTick untouched: a key commit is knowledge, not an observation.
 }
 
-bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *signerProven) const
+bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool *keyProven) const
 {
     // Same enable gate as the write-through hooks and maintenance: a disabled module stops
     // updating and sweeping the cache, so its frozen contents must not keep feeding PKI key
@@ -740,12 +740,12 @@ bool TrafficManagementModule::copyPublicKey(NodeNum node, uint8_t out[32], bool 
         return false;
 
     memcpy(out, entry->user.public_key.bytes, 32);
-    if (signerProven)
-        *signerProven = entry->keyProven();
+    if (keyProven)
+        *keyProven = entry->keyProven();
     return true;
 }
 
-bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *signerProven) const
+bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool *keyProven) const
 {
     // Enable gate, as in copyPublicKey(): a disabled module must not feed name rehydration
     // from frozen cache contents once its maintenance/write-through have stopped.
@@ -762,8 +762,8 @@ bool TrafficManagementModule::copyUser(NodeNum node, meshtastic_User &out, bool 
         return false;
 
     out = entry->user;
-    if (signerProven)
-        *signerProven = entry->keyProven();
+    if (keyProven)
+        *keyProven = entry->keyProven();
     return true;
 }
 
@@ -1432,7 +1432,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     uint8_t cachedObsTick = 0;
     // Signer-proven provenance of the cached key, consumed by the replay gate below
     // (maybe_unused: read only when TMM_NODEINFO_REPLAY_SIGNED_GATE is compiled in).
-    [[maybe_unused]] bool cachedKeySignerProven = false;
+    [[maybe_unused]] bool cachedKeyProven = false;
     // True once we commit to answering from the NodeDB fallback (no NodeInfo cache) path. The
     // response throttle no longer distinguishes the paths - the per-requester/per-target RAM
     // tables cover both - but the replay gate below still keys off it.
@@ -1449,7 +1449,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
             cachedSourceChannel = entry->sourceChannel;
             cachedHasObserved = entry->hasObserved;
             cachedObsTick = entry->obsTick;
-            cachedKeySignerProven = entry->keyProven();
+            cachedKeyProven = entry->keyProven();
         }
     }
 
@@ -1500,10 +1500,10 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     }
 
 #if TMM_NODEINFO_REPLAY_SIGNED_GATE
-    // Replay provenance gate (cache path): only spoof a reply for a signer-proven cached key.
+    // Replay provenance gate (cache path): only spoof a reply for a key-proven cached key.
     // usedFallback entries were already gated above. See TMM_NODEINFO_REPLAY_REQUIRE_SIGNED.
-    if (!usedFallback && !cachedKeySignerProven) {
-        TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not signer-proven, not responding", p->to);
+    if (!usedFallback && !cachedKeyProven) {
+        TM_LOG_DEBUG("NodeInfo cache entry for 0x%08x not key-proven, not responding", p->to);
         return false;
     }
 #endif
