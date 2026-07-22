@@ -1,8 +1,25 @@
+/*
+
+NicheGraphics setup for Heltec Vision Master E-213 (HSPI; runtime-detected 2.13" panel).
+
+Panel choice depends on detectEInk() output:
+  - LCMEN213EFC1 (V1, unmarked)
+  - E0213A367 (V1.1, V1.2)
+
+Both panels share the same SPI wiring; the difference is the controller/waveform.
+
+The InkHUD build still uses InkHUD's internal drivers; the BaseUI build uses the shared
+graphics/eink layer. The two halves merge once InkHUD moves onto the shared layer.
+
+*/
+
 #pragma once
 
 #include "configuration.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
+#ifdef MESHTASTIC_INCLUDE_INKHUD
 
 // InkHUD-specific components
 // ---------------------------
@@ -116,4 +133,53 @@ void setupNicheGraphics()
     buttons->start();
 }
 
-#endif
+#else // BaseUI on the shared graphics/eink layer
+
+#include "graphics/BaseUIEInkDisplay.h"
+#include "graphics/eink/Panels/E0213A367.h"
+#include "graphics/eink/Panels/LCMEN213EFC1.h"
+
+#include "einkDetect.h" // Detect display model at runtime
+
+template <typename Base> class VMe213Panel : public Base
+{
+  protected:
+    SPIClass *beginSpi() override
+    {
+        auto *hspi = new SPIClass(HSPI);
+        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
+        return hspi;
+    }
+};
+
+void setupNicheGraphics() {}
+
+NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI()
+{
+    NicheGraphics::Drivers::EInk *driver;
+    uint8_t rotation;
+    uint8_t fastPerFull;
+    float stress;
+
+    if (detectEInk() == EInkDetectionResult::LCMEN213EFC1) { // V1 (unmarked)
+        auto *panel = new VMe213Panel<NicheGraphics::Panels::LCMEN213EFC1>();
+        driver = panel->create();
+        rotation = panel->rotation();
+        fastPerFull = 10;
+        stress = 1.5f;
+    } else { // E0213A367 (V1.1, V1.2)
+        auto *panel = new VMe213Panel<NicheGraphics::Panels::E0213A367>();
+        driver = panel->create();
+        rotation = panel->rotation();
+        fastPerFull = 15;
+        stress = 3.0f;
+    }
+
+    auto *display = new NicheGraphics::BaseUIEInkDisplay(driver, rotation);
+    display->setDisplayResilience(fastPerFull, stress);
+    return display;
+}
+
+#endif // MESHTASTIC_INCLUDE_INKHUD
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
