@@ -97,8 +97,22 @@ template <typename T> bool LR20x0Interface<T>::init()
     LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
 #elif ARCH_PORTDUINO
     if (portduino_config.lr2021_irq_dio_num >= 5 && portduino_config.lr2021_irq_dio_num <= 11) {
-        lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
-        LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
+        // Check for conflict with pins claimed by the RF switch table
+        bool conflict = false;
+        if (portduino_config.has_rfswitch_table) {
+            for (int i = 0; i < 5 && !conflict; i++) {
+                uint32_t pin = portduino_config.rfswitch_dio_pins[i];
+                if (pin != RADIOLIB_NC && (pin & ~RFSWITCH_PIN_FLAG) == (uint32_t)(portduino_config.lr2021_irq_dio_num - 5))
+                    conflict = true;
+            }
+        }
+        if (conflict) {
+            LOG_WARN("IRQ_DIO_NUM %d conflicts with an RF switch table pin, using default %d",
+                     portduino_config.lr2021_irq_dio_num, lora.irqDioNum);
+        } else {
+            lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
+            LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
+        }
     } else if (portduino_config.lr2021_irq_dio_num != 0) {
         LOG_WARN("IRQ_DIO_NUM %d out of range (5-11), using default %d", portduino_config.lr2021_irq_dio_num, lora.irqDioNum);
     } else {
