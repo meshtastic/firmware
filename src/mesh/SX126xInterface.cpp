@@ -283,17 +283,16 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // A preamble/header-only IRQ (no terminal RX event yet) means the chip is mid-reception. Do NOT
-    // treat it as a full RX event - that would repeatedly trigger readData(). But only CLEAR these bits
-    // when a TX is actually queued: clearing them makes isActivelyReceiving() read idle for the rest of
-    // the packet, so a TX queued during the payload phase passes the send gate and stomps the inbound
-    // packet (finding #10 of the LBT audit). While the TX queue is empty there is no starvation to
-    // avoid, so keep the bits latched - isActivelyReceiving() then correctly reports the in-progress
-    // reception and a later TX defers instead of overwriting it. A queued TX still needs the escape
-    // hatch: a noise preamble that never completes must not permanently block our own transmit, so we
-    // clear then. readData() clears everything once a real RX_DONE finally arrives.
-    if (!pollTxMode && !txQueue.empty() && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
-        lora.clearIrqFlags(noisyRxMask);
+    // A bare PREAMBLE (no terminal RX event yet) means the chip is mid-reception. Do NOT treat it as a
+    // full RX event - that would repeatedly trigger readData(). The escape hatch (a noise preamble that
+    // never completes must not permanently block our own TX) runs only while a TX is queued, and clears
+    // ONLY the preamble. HEADER_VALID is evidence of a real inbound frame, so keep it latched: clearing
+    // it would make isActivelyReceiving() read idle mid-payload and let the queued TX stomp the frame
+    // (finding #10). A stuck header can't block TX forever - receiveDetected() ages it out after
+    // maxPacketTimeMsec. readData() clears everything once a real RX_DONE arrives.
+    const bool preambleOnly = (irq & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    if (!pollTxMode && !txQueue.empty() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
+        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
         scheduleIrqPollTick();
         return;
     }
