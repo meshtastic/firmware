@@ -41,6 +41,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /* Offer chance for variant-specific defines */
 #include "variant.h"
 
+#if defined(RF95_FAN_EN) && !defined(RADIO_FAN_EN)
+#define RADIO_FAN_EN RF95_FAN_EN
+#endif
+
 // -----------------------------------------------------------------------------
 // Display feature overrides
 // -----------------------------------------------------------------------------

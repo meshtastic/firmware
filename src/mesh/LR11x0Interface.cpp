@@ -54,6 +54,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
 
+    enableFan();
+
 #if ARCH_PORTDUINO
     float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE

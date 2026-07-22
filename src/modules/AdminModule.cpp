@@ -1071,13 +1071,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
 
-#ifdef RF95_FAN_EN
-        // Turn PA off if disabled by config
-        if (c.payload_variant.lora.pa_fan_disabled) {
-            digitalWrite(RF95_FAN_EN, LOW ^ 0);
-        } else {
-            digitalWrite(RF95_FAN_EN, HIGH ^ 0);
-        }
+#ifdef RADIO_FAN_EN
+        digitalWrite(RADIO_FAN_EN, validatedLora.pa_fan_disabled ? LOW : HIGH);
 #endif
 
 #if HAS_LORA_FEM

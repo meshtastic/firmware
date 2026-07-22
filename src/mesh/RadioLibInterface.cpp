@@ -797,3 +797,19 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         return res == RADIOLIB_ERR_NONE;
     }
 }
+
+void RadioLibInterface::enableFan()
+{
+#ifdef RADIO_FAN_EN
+    pinMode(RADIO_FAN_EN, OUTPUT);
+    digitalWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? LOW : HIGH);
+#endif
+}
+
+void RadioLibInterface::disableFan()
+{
+#ifdef RADIO_FAN_EN
+    pinMode(RADIO_FAN_EN, OUTPUT);
+    digitalWrite(RADIO_FAN_EN, LOW);
+#endif
+}

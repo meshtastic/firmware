@@ -10,6 +10,9 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RF95Interface.h"
+#ifdef RADIO_EXTERNAL_PA
+#include "RadioExternalPa.h"
+#endif
 #include "Router.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
@@ -1411,6 +1414,11 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         power = maxPower;
     }
 
+#ifdef RADIO_EXTERNAL_PA
+    const int8_t externalPaChip = radioExternalPaMapPower(power, getFreq());
+    LOG_INFO("External PA: %d dBm total -> chip %d dBm", power, externalPaChip);
+    power = externalPaChip;
+#else
 #if HAS_LORA_FEM
     if (!devicestate.owner.is_licensed) {
         power = loraFEMInterface.powerConversion(power);
@@ -1443,6 +1451,8 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         }
     }
 #endif
+#endif
+
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
 
