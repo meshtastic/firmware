@@ -324,6 +324,27 @@ int32_t RadioLibInterface::getNoiseFloor()
     return currentNoiseFloor;
 }
 
+bool RadioLibInterface::channelBusyByRSSI()
+{
+    // Fail-open on every uncertainty. A false "busy" only defers one transmit, but a *persistent* false
+    // "busy" would silence the node - so anything short of a confident reading returns false (not busy).
+    if (!RSSI_LBT_GATE_ENABLED)
+        return false;
+
+    // getCurrentRSSI() (GET_RSSI_INST) is only meaningful while in RX, and we need a settled noise floor
+    // to compare against. Require the full rolling window (~NOISE_FLOOR_SAMPLES * 5 s of RX) so we never
+    // gate off a noisy, half-populated baseline. A preamble already in flight is handled upstream by
+    // isActivelyReceiving()/canSendImmediately(); this gate targets the mid-payload energy CAD can't see.
+    if (!isReceiving || getNoiseFloorSampleCountInternal() < NOISE_FLOOR_SAMPLES)
+        return false;
+
+    int16_t rssi = getCurrentRSSI();
+    if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN)
+        return false; // invalid / nonsensical reading -> don't gate
+
+    return rssi > (getNoiseFloor() + RSSI_LBT_MARGIN_DB);
+}
+
 bool RadioLibInterface::hasNoiseFloorSamples()
 {
     return getNoiseFloorSampleCountInternal() > 0;
@@ -454,7 +475,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay();
 #endif
                 } else {
-                    if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
+                    // Two-stage listen-before-talk: an RSSI energy check (catches a mid-payload packet
+                    // whose preamble CAD already missed) OR-ed with the CAD preamble scan. channelBusyByRSSI()
+                    // is a compile-time no-op unless the gate is enabled, and the || short-circuit runs it
+                    // first, while we are still in RX (before isChannelActive()'s setStandby()).
+                    if (channelBusyByRSSI() || isChannelActive()) { // is there currently traffic on the channel?
 #if !MESHTASTIC_EXCLUDE_BEACON
                         if (!MeshBeaconModule::hasTargetRadioSettings(txp))
 #endif
