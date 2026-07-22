@@ -70,8 +70,8 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
 struct RoutingAuthCache {
     bool valid = false;
-    meshtastic_Config_SecurityConfig_PacketSignaturePolicy policy =
-        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+    // Deliberately NOT initialized in-class as this eats flash space.
+    meshtastic_Config_SecurityConfig_PacketSignaturePolicy policy;
     meshtastic_MeshPacket wire = meshtastic_MeshPacket_init_zero;
     meshtastic_MeshPacket authenticated = meshtastic_MeshPacket_init_zero;
 };
@@ -161,6 +161,8 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     cryptLock = new concurrency::Lock();
     if (!routingAuthCacheLock)
         routingAuthCacheLock = new concurrency::Lock();
+    // Runtime default for the auth-cache snapshot policy. Keep it here, saves flash.
+    routingAuthCache.policy = meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
 }
 
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
@@ -705,7 +707,7 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         concurrency::LockGuard g(cryptLock);
         if (!checkXeddsaReceivePolicy(&authCandidate)) {
-            LOG_WARN("Already-decoded packet rejected by signature policy before routing state update");
+            LOG_WARN("Already-decoded packet rejected by signature policy");
             return RoutingAuthVerdict::REJECT;
         }
 #endif
@@ -716,15 +718,15 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
     }
     const DecodeState state = perhapsDecode(&authCandidate);
     if (state == DecodeState::DECODE_POLICY_REJECT) {
-        LOG_WARN("Packet rejected by signature policy before routing state update");
+        LOG_WARN("Packet rejected by signature policy");
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FATAL) {
-        LOG_WARN("Fatal decode error before routing state update");
+        LOG_WARN("Fatal decode error, dropping packet");
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
-        LOG_WARN("Decryptable packet failed decoding/authentication before routing state update");
+        LOG_WARN("Decryptable packet failed decoding, dropping packet");
         return RoutingAuthVerdict::REJECT;
     }
 
