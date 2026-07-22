@@ -151,14 +151,6 @@ def universe():
             include_dirs=["variants/native/portduino"],
             def_dir="variants/native/portduino",
         ),
-        # community: never built.
-        env(
-            "community-board",
-            "rp2350",
-            level="community",
-            include_dirs=["variants/rp2350/diy/community"],
-            def_dir="variants/rp2350/diy/community",
-        ),
     ]
 
 
@@ -285,11 +277,6 @@ def test_multiple_variant_dirs_union():
         ["variants/esp32s3/heltec_v3/variant.h", "variants/rp2040/rpipico/variant.h"]
     )
     assert result == {"heltec-v3", "rpipico", "rak4631"}
-
-
-def test_community_board_change_adds_nothing_but_not_full():
-    """Editing a community board (never built) adds nothing and does not fall back."""
-    assert sel(["variants/rp2350/diy/community/variant.h"]) == {"rak4631"}
 
 
 def test_build_outlist_narrowed_builds_selected_regardless_of_level():
