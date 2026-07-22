@@ -47,6 +47,7 @@
   This FAN has TACHO signal on Pin 27 for use with PWM.
 */
 #define RADIO_FAN_EN 2
+#define RADIO_FAN_PWM
 
 /*
   LED PIN setup and it has a NeoPixel LED.

@@ -10,9 +10,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RF95Interface.h"
-#ifdef RADIO_EXTERNAL_PA
 #include "RadioExternalPa.h"
-#endif
 #include "Router.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
@@ -1414,44 +1412,49 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
         power = maxPower;
     }
 
-#ifdef RADIO_EXTERNAL_PA
-    const int8_t externalPaChip = radioExternalPaMapPower(power, getFreq());
-    LOG_INFO("External PA: %d dBm total -> chip %d dBm", power, externalPaChip);
-    power = externalPaChip;
-#else
+    // Boards with an external PA controlled outside the transceiver (e.g. an analog PA
+    // biased through a DAC pin) map the desired total output to a possibly-negative chip
+    // output power here. This is applied even for licensed operators, because it reflects
+    // a hardware gain stage, not a regulatory limit (the regulatory clamp above already
+    // honors the license). Pass-through by default; see RadioExternalPa.h.
+    int8_t externalPaChip = radioExternalPaMapPower(power, getFreq());
+    if (externalPaChip != RADIO_EXTERNAL_PA_NO_MAP) {
+        LOG_INFO("External PA: %d dBm total -> chip %d dBm", power, externalPaChip);
+        power = externalPaChip;
+    } else {
 #if HAS_LORA_FEM
-    if (!devicestate.owner.is_licensed) {
-        power = loraFEMInterface.powerConversion(power);
-    }
+        if (!devicestate.owner.is_licensed) {
+            power = loraFEMInterface.powerConversion(power);
+        }
 #else
 // todo:All entries containing "lora fem" are grouped together above.
 #ifdef ARCH_PORTDUINO
-    size_t num_pa_points = portduino_config.num_pa_points;
-    const uint16_t *tx_gain = portduino_config.tx_gain_lora;
+        size_t num_pa_points = portduino_config.num_pa_points;
+        const uint16_t *tx_gain = portduino_config.tx_gain_lora;
 #else
-    size_t num_pa_points = NUM_PA_POINTS;
-    const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
+        size_t num_pa_points = NUM_PA_POINTS;
+        const uint16_t tx_gain[NUM_PA_POINTS] = {TX_GAIN_LORA};
 #endif
 
-    if (num_pa_points == 1) {
-        if (tx_gain[0] > 0 && !devicestate.owner.is_licensed) {
-            LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[0]);
-            power -= tx_gain[0];
-        }
-    } else if (!devicestate.owner.is_licensed) {
-        // we have an array of PA gain values.  Find the highest power setting that works.
-        for (int radio_dbm = 0; radio_dbm < (int)num_pa_points; radio_dbm++) {
-            if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
-                ((radio_dbm == (int)(num_pa_points - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
-                // we've exceeded the power limit, or hit the max we can do
-                LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
-                power -= tx_gain[radio_dbm];
-                break;
+        if (num_pa_points == 1) {
+            if (tx_gain[0] > 0 && !devicestate.owner.is_licensed) {
+                LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[0]);
+                power -= tx_gain[0];
+            }
+        } else if (!devicestate.owner.is_licensed) {
+            // we have an array of PA gain values.  Find the highest power setting that works.
+            for (int radio_dbm = 0; radio_dbm < (int)num_pa_points; radio_dbm++) {
+                if (((radio_dbm + tx_gain[radio_dbm]) > power) ||
+                    ((radio_dbm == (int)(num_pa_points - 1)) && ((radio_dbm + tx_gain[radio_dbm]) <= power))) {
+                    // we've exceeded the power limit, or hit the max we can do
+                    LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[radio_dbm]);
+                    power -= tx_gain[radio_dbm];
+                    break;
+                }
             }
         }
+#endif
     }
-#endif
-#endif
 
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
