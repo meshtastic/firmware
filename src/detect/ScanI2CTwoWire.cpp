@@ -220,6 +220,44 @@ bool detectSHT21SerialNumber(TwoWire *i2cBus, uint8_t address)
 }
 #endif
 
+// Everest Semiconductor ES7210 4-channel audio ADC, as found on the T-Deck. Its AD1/AD0 straps
+// select 0x40..0x43, so it lands squarely on the INA/SHT2X addresses. Chip ID registers and their
+// reset values, per the ES7210 datasheet rev 2.0.
+static constexpr uint8_t ES7210_CHIP_ID1_REG = 0x3D;
+static constexpr uint8_t ES7210_CHIP_ID1 = 0x72;
+static constexpr uint8_t ES7210_CHIP_ID0_REG = 0x3E;
+static constexpr uint8_t ES7210_CHIP_ID0 = 0x10;
+
+static bool readByteRegister(TwoWire *i2cBus, uint8_t address, uint8_t reg, uint8_t &value)
+{
+    i2cBus->beginTransmission(address);
+    i2cBus->write(reg);
+
+    if (i2cBus->endTransmission() != 0)
+        return false;
+
+    if (i2cBus->requestFrom(address, (uint8_t)1) != 1 || !i2cBus->available())
+        return false;
+
+    value = i2cBus->read();
+    return true;
+}
+
+// The INA219 has no manufacturer or die ID register to check, so it is inferred from "something
+// answered here and it wasn't anything else we know". That makes positively identifying the other
+// occupants of this address the only way to keep them out of the fallback.
+static bool detectES7210(TwoWire *i2cBus, uint8_t address)
+{
+    uint8_t id = 0;
+
+    // Read the high ID byte first so anything that clearly isn't an ES7210 costs a single
+    // transaction, then confirm with the low byte.
+    if (!readByteRegister(i2cBus, address, ES7210_CHIP_ID1_REG, id) || id != ES7210_CHIP_ID1)
+        return false;
+
+    return readByteRegister(i2cBus, address, ES7210_CHIP_ID0_REG, id) && id == ES7210_CHIP_ID0;
+}
+
 #define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
     case ADDR:                                                                                                                   \
         logFoundDevice(__VA_ARGS__);                                                                                             \
@@ -472,13 +510,23 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = INA260;
                     }
                 }
+
+                // The ES7210 audio ADC shares this address on some boards (T-Deck). It answers
+                // none of the checks above, so identify it here and leave the type unset - driving
+                // an audio codec as if it were a power monitor crashes the device. See #11115.
+                if (type == NONE && detectES7210(i2cBus, (uint8_t)addr.address)) {
+                    LOG_INFO("ES7210 audio codec at 0x%x, not a power sensor", (uint8_t)addr.address);
+                    break;
+                }
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
                 if (type == NONE && detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
                     logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
                     type = SHTXX;
                 }
 #endif
-                else { // Assume INA219 if none of the above ones are found
+                // Guarded on the type rather than chained to the SHT2X check above, so that a
+                // positively identified INA226/INA260 isn't overwritten right after being found.
+                if (type == NONE) { // Assume INA219 if none of the above ones are found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                 }

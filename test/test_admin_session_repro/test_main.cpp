@@ -21,6 +21,10 @@
 #include "support/MockMeshService.h"
 #include <cstring>
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum ADMIN_NODE = 0x0B0B0B0B;   // authorized admin, sends remote admin to us
 static constexpr NodeNum QUERIED_NODE = 0x0C0C0C0C; // a remote we send admin requests to
@@ -29,8 +33,43 @@ static const uint8_t ADMIN_KEY[32] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 
                                       0xcc, 0xdd, 0xee, 0xff, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                                       0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x20};
 
+// MeshService assigns every outgoing packet an id before noteOutgoingAdminRequest sees it, and
+// setReplyTo echoes it back as decoded.request_id, so the pairing is keyed on it.
+static constexpr uint32_t REQUEST_ID = 0x5EED0001;
+static const uint8_t QUERIED_KEY[32] = {0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCa, 0xCb,
+                                        0xCc, 0xCd, 0xCe, 0xCf, 0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6,
+                                        0xD7, 0xD8, 0xD9, 0xDa, 0xDb, 0xDc, 0xDd, 0xDe, 0xDf, 0xE0};
+
+// NodeDB with injectable nodes, so a destination can have a stored public key to pin.
+class MockNodeDB : public NodeDB
+{
+  public:
+    void clearTestNodes()
+    {
+        testNodes.clear();
+        meshNodes = &testNodes;
+        numMeshNodes = 0;
+    }
+
+    void addNodeWithKey(NodeNum num, const uint8_t *key)
+    {
+        meshtastic_NodeInfoLite n = meshtastic_NodeInfoLite_init_zero;
+        n.num = num;
+        if (key) {
+            n.public_key.size = 32;
+            memcpy(n.public_key.bytes, key, 32);
+        }
+        testNodes.push_back(n);
+        meshNodes = &testNodes;
+        numMeshNodes = testNodes.size();
+    }
+
+    std::vector<meshtastic_NodeInfoLite> testNodes;
+};
+
 static MockMeshService *mockService = nullptr;
 static AdminModuleTestShim *admin = nullptr;
+static MockNodeDB *mockNodeDB = nullptr;
 
 // A remote, PKC-authorized set_owner. `session` (if non-empty) is the session_passkey the client presents.
 static meshtastic_MeshPacket makeRemoteSetOwner(const char *newLongName, const uint8_t *session, size_t sessionLen,
@@ -71,6 +110,7 @@ static meshtastic_MeshPacket makeModuleConfigResponse(NodeNum from, meshtastic_A
     mp.to = LOCAL_NODE;
     mp.channel = 0;
     mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.request_id = REQUEST_ID; // setReplyTo echoes the request's packet id
     return mp;
 }
 
@@ -93,6 +133,7 @@ static meshtastic_MeshPacket makeOutgoingRequest(NodeNum to, const meshtastic_Ad
     p.to = to;
     p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     p.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    p.id = REQUEST_ID;
     p.decoded.payload.size =
         pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &req);
     return p;
@@ -114,11 +155,24 @@ void setUp(void)
     admin = new AdminModuleTestShim();
     admin->deferSaves(); // no disk/reboot side effects when a setter is accepted
 
-    if (!nodeDB)
-        nodeDB = new NodeDB();
+    if (!mockNodeDB)
+        mockNodeDB = new MockNodeDB();
+    mockNodeDB->clearTestNodes();
+    nodeDB = mockNodeDB;
     myNodeInfo.my_node_num = LOCAL_NODE;
 
+#ifdef ARCH_PORTDUINO
+    // The native test harness boots Portduino in simulated mode, and wouldEncryptWithPKC()
+    // hard-disables PKC whenever force_simradio is set. Left true, no outgoing admin request is
+    // ever key-pinned, so the pinning tests below cannot exercise what they are asserting.
+    // Model a real (non-sim) device instead.
+    portduino_config.force_simradio = false;
+#endif
+
     config = meshtastic_LocalConfig_init_zero;
+    // A real device always holds a private key; without one perhapsEncode never picks PKC.
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0xA5, 32);
     // Authorize ADMIN_NODE's key as an admin key so the PKC path accepts it and we reach the session gate.
     config.security.admin_key[0].size = 32;
     memcpy(config.security.admin_key[0].bytes, ADMIN_KEY, 32);
@@ -247,6 +301,26 @@ void test_local_security_config_keeps_private_key(void)
     TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
     TEST_ASSERT_EQUAL_MESSAGE(32, sec.private_key.size, "local backup must still receive the private key");
     TEST_ASSERT_EACH_EQUAL_HEX8(0xAB, sec.private_key.bytes, 32);
+    admin->drainReply();
+}
+
+// A local client writes this device-owned policy, then receives the same value in its next config read.
+void test_local_security_config_round_trips_packet_signature_policy(void)
+{
+    meshtastic_Config set = meshtastic_Config_init_zero;
+    set.which_payload_variant = meshtastic_Config_security_tag;
+    set.payload_variant.security = config.security;
+    set.payload_variant.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    admin->handleSetConfig(set, false);
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(0);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG);
+
+    meshtastic_Config_SecurityConfig sec;
+    TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+    TEST_ASSERT_EQUAL(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
+                      sec.packet_signature_policy);
     admin->drainReply();
 }
 
@@ -411,38 +485,104 @@ void test_response_variant_must_match_request(void)
 // must not relax the PKC pin of an earlier one (the old shared-slot model cleared it).
 void test_pinned_request_keeps_its_key_after_an_unpinned_request(void)
 {
-    uint8_t key[32];
-    memset(key, 0xC1, 32);
+    // QUERIED has a stored key, so a request to it will be PKC-encrypted and pins that key.
+    // STRANGER has none, so a request to it cannot be pinned.
+    mockNodeDB->addNodeWithKey(QUERIED_NODE, QUERIED_KEY);
+    mockNodeDB->addNodeWithKey(STRANGER_NODE, nullptr);
 
-    // A PKC-pinned get_config request to STRANGER (pins `key`).
     meshtastic_AdminMessage cfg = meshtastic_AdminMessage_init_zero;
     cfg.which_payload_variant = meshtastic_AdminMessage_get_config_request_tag;
-    meshtastic_MeshPacket pinned = makeOutgoingRequest(STRANGER_NODE, cfg);
-    pinned.pki_encrypted = true;
-    pinned.public_key.size = 32;
-    memcpy(pinned.public_key.bytes, key, 32);
-    admin->noteOutgoingAdminRequest(pinned);
+    admin->noteOutgoingAdminRequest(makeOutgoingRequest(QUERIED_NODE, cfg));
 
-    // A later, unpinned get_owner request to the same node.
     meshtastic_AdminMessage own = meshtastic_AdminMessage_init_zero;
     own.which_payload_variant = meshtastic_AdminMessage_get_owner_request_tag;
     admin->noteOutgoingAdminRequest(makeOutgoingRequest(STRANGER_NODE, own));
 
     meshtastic_AdminMessage m;
-    meshtastic_MeshPacket resp = makeModuleConfigResponse(STRANGER_NODE, m); // from set; pki off by default
+    meshtastic_MeshPacket resp = makeModuleConfigResponse(QUERIED_NODE, m); // pki off by default
 
-    // A plaintext get_config_response is still rejected: the config request was pinned.
     TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag, 0),
                               "an unpinned request must not relax an earlier request's key pin");
-    // Over PKC with the pinned key it is accepted.
+
     resp.pki_encrypted = true;
     resp.public_key.size = 32;
-    memcpy(resp.public_key.bytes, key, 32);
+    memcpy(resp.public_key.bytes, QUERIED_KEY, 32);
     TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_config_response_tag, 0));
-    // The unpinned get_owner_response is accepted in plaintext (its request carried no pin).
-    resp.pki_encrypted = false;
-    resp.public_key.size = 0;
-    TEST_ASSERT_TRUE(admin->responseIsSolicited(resp, meshtastic_AdminMessage_get_owner_response_tag, 0));
+}
+
+// The pin is taken from the destination's stored NodeDB key - the key perhapsEncode will encrypt
+// to. Reading the outgoing packet's public_key instead pinned nothing: nothing populates that
+// field before encryption, so every real request was unpinned and `from` alone admitted responses.
+void test_request_to_keyed_node_pins_the_stored_key(void)
+{
+    mockNodeDB->addNodeWithKey(QUERIED_NODE, QUERIED_KEY);
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(QUERIED_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket plain = makeModuleConfigResponse(QUERIED_NODE, m);
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(plain, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a plaintext response must not answer a PKC-pinned request");
+
+    meshtastic_MeshPacket wrongKey = makeModuleConfigResponse(QUERIED_NODE, m);
+    wrongKey.pki_encrypted = true;
+    wrongKey.public_key.size = 32;
+    memset(wrongKey.public_key.bytes, 0x77, 32);
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(wrongKey, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a response under a different key must not be accepted");
+
+    meshtastic_MeshPacket good = makeModuleConfigResponse(QUERIED_NODE, m);
+    good.pki_encrypted = true;
+    good.public_key.size = 32;
+    memcpy(good.public_key.bytes, QUERIED_KEY, 32);
+    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(good, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                             "the pinned key must still admit the genuine response");
+}
+
+// Ham mode never uses PKC, so pinning a key there would reject the legitimate plaintext response.
+void test_ham_mode_request_is_not_pinned(void)
+{
+    owner.is_licensed = true;
+    mockNodeDB->addNodeWithKey(QUERIED_NODE, QUERIED_KEY);
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(QUERIED_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(QUERIED_NODE, m);
+    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                             "a request that could not have gone out over PKC must not be pinned");
+}
+
+// The response must echo our request's packet id, so an injector cannot answer a request it did
+// not see just by naming the right node and variant.
+void test_response_with_wrong_request_id_is_rejected(void)
+{
+    admin->noteOutgoingAdminRequest(makeOutgoingModuleConfigRequest(STRANGER_NODE));
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+    mp.decoded.request_id = REQUEST_ID ^ 0xFFFF; // answers some other request
+
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a response that does not echo our request id must be rejected");
+
+    mp.decoded.request_id = REQUEST_ID;
+    TEST_ASSERT_TRUE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                             "the matching request id must still be accepted");
+}
+
+// A request we could not bind to an id must not be answerable by a response that simply omits
+// request_id, which decodes to 0.
+void test_request_without_an_id_admits_nothing(void)
+{
+    meshtastic_MeshPacket req = makeOutgoingModuleConfigRequest(STRANGER_NODE);
+    req.id = 0;
+    admin->noteOutgoingAdminRequest(req);
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeModuleConfigResponse(STRANGER_NODE, m);
+    mp.decoded.request_id = 0;
+
+    TEST_ASSERT_FALSE_MESSAGE(admin->responseIsSolicited(mp, MODULE_CONFIG_RESPONSE, REMOTE_HW_TAG),
+                              "a zero request id must not act as a matching token");
 }
 
 // A remote_hardware response must answer a request for that exact subtype, not just any module
@@ -532,6 +672,7 @@ void setup()
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
     RUN_TEST(test_local_security_config_keeps_private_key);
+    RUN_TEST(test_local_security_config_round_trips_packet_signature_policy);
     RUN_TEST(test_remote_network_config_omits_wifi_psk);
     RUN_TEST(test_local_network_config_keeps_wifi_psk);
     RUN_TEST(test_remote_mqtt_config_omits_password);
@@ -542,6 +683,10 @@ void setup()
     RUN_TEST(test_request_to_one_node_does_not_admit_another);
     RUN_TEST(test_response_variant_must_match_request);
     RUN_TEST(test_pinned_request_keeps_its_key_after_an_unpinned_request);
+    RUN_TEST(test_request_to_keyed_node_pins_the_stored_key);
+    RUN_TEST(test_ham_mode_request_is_not_pinned);
+    RUN_TEST(test_response_with_wrong_request_id_is_rejected);
+    RUN_TEST(test_request_without_an_id_admits_nothing);
     RUN_TEST(test_module_config_subtype_must_match);
     RUN_TEST(test_response_is_consumed_no_replay);
     RUN_TEST(test_outgoing_setter_does_not_admit_responses);
