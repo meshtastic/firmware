@@ -25,11 +25,6 @@ class OnScreenKeyboardModule
     static bool processVirtualKeyboardInput(const InputEvent &event, VirtualKeyboard *keyboard);
     bool draw(OLEDDisplay *display);
 
-    void showPopup(const char *title, const char *content, uint32_t durationMs);
-    void clearPopup();
-    // Draw only the popup overlay (used when legacy virtualKeyboard draws the keyboard)
-    void drawPopupOverlay(OLEDDisplay *display);
-
   private:
     OnScreenKeyboardModule() = default;
     ~OnScreenKeyboardModule();
@@ -39,15 +34,8 @@ class OnScreenKeyboardModule
     void onSubmit(const std::string &text);
     void onCancel();
 
-    void drawPopup(OLEDDisplay *display);
-
     VirtualKeyboard *keyboard = nullptr;
     std::function<void(const std::string &)> callback;
-
-    char popupTitle[64] = {0};
-    char popupMessage[256] = {0};
-    uint32_t popupUntil = 0;
-    bool popupVisible = false;
 };
 
 } // namespace graphics

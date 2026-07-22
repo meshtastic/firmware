@@ -13,12 +13,12 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Router.h"
 #include "SPILock.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "gps/RTC.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -114,6 +114,8 @@ int32_t RangeTestModule::runOnce()
 void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = dest;
     p->decoded.want_response = wantReplies;
     p->hop_limit = 0;
@@ -141,7 +143,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
 
         /*
             auto &p = mp.decoded;
-            LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
+            LOG_DEBUG("Received text msg self=0x%08x, from=0x%08x, to=0x%08x, id=%d, msg=%.*s",
                   LOG_INFO.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
         */
 
@@ -154,7 +156,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
 
             LOG_DEBUG("-----------------------------------------");
-            LOG_DEBUG("p.payload.bytes  \"%s\"", p.payload.bytes);
+            LOG_DEBUG("p.payload.bytes  \"%.*s\"", (int)p.payload.size, p.payload.bytes);
             LOG_DEBUG("p.payload.size   %d", p.payload.size);
             LOG_DEBUG("---- Received Packet:");
             LOG_DEBUG("mp.from          %d", mp.from);
@@ -192,7 +194,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
     /*
         LOG_DEBUG("-----------------------------------------");
-        LOG_DEBUG("p.payload.bytes  \"%s\"", p.payload.bytes);
+        LOG_DEBUG("p.payload.bytes  \"%.*s\"", (int)p.payload.size, p.payload.bytes);
         LOG_DEBUG("p.payload.size   %d", p.payload.size);
         LOG_DEBUG("---- Received Packet:");
         LOG_DEBUG("mp.from          %d", mp.from);
@@ -307,7 +309,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("%d,", mp.hop_limit); // Packet Hop Limit
 
     // TODO: If quotes are found in the payload, it has to be escaped.
-    fileToAppend.printf("\"%s\"\n", p.payload.bytes);
+    fileToAppend.printf("\"%.*s\"\n", (int)p.payload.size, p.payload.bytes);
     fileToAppend.printf("%i,", mp.rx_rssi); // RX RSSI
 
     fileToAppend.flush();

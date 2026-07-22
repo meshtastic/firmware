@@ -6,7 +6,7 @@
 
 #include "main.h"
 
-#include "RTC.h"
+#include "gps/RTC.h"
 
 using namespace NicheGraphics;
 
@@ -439,12 +439,11 @@ InkHUD::Applet::SignalStrength InkHUD::Applet::getSignalStrength(float snr, floa
         return SIGNAL_NONE;
 }
 
-// Apply the standard "node id" formatting to a nodenum int: !0123abdc
+// Format a node number as the standard user-facing node ID string: !xxxxxxxx
 std::string InkHUD::Applet::hexifyNodeNum(NodeNum num)
 {
-    // Not found in nodeDB, show a hex nodeid instead
     char nodeIdHex[10];
-    sprintf(nodeIdHex, "!%0x", num); // Convert to the typical "fixed width hex with !" format
+    sprintf(nodeIdHex, "!%08x", num);
     return std::string(nodeIdHex);
 }
 
@@ -648,30 +647,6 @@ std::string InkHUD::Applet::getTimeString(uint32_t epochSeconds)
 std::string InkHUD::Applet::getTimeString()
 {
     return getTimeString(getValidTime(RTCQuality::RTCQualityDevice, true));
-}
-
-// Calculate how many nodes have been seen within our preferred window of activity
-// This period is set by user, via the menu
-// Todo: optimize to calculate once only per WindowManager::render
-uint16_t InkHUD::Applet::getActiveNodeCount()
-{
-    // Don't even try to count nodes if RTC isn't set
-    // The last heard values in nodedb will be incomprehensible
-    if (getRTCQuality() == RTCQualityNone)
-        return 0;
-
-    uint16_t count = 0;
-
-    // For each node in db
-    for (uint16_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        const meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-
-        // Check if heard recently, and not our own node
-        if (sinceLastSeen(node) < settings->recentlyActiveSeconds && node->num != nodeDB->getNodeNum())
-            count++;
-    }
-
-    return count;
 }
 
 // Get an abbreviated, human readable, distance string

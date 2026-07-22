@@ -1,8 +1,10 @@
 #include "HardwareRNG.h"
 #include "configuration.h"
 #include "hardware/xosc.h"
+#include <cstring>
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
+#include <hardware/watchdog.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
 
@@ -97,8 +99,21 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src.id[2];
 }
 
+bool getDeviceId(uint8_t *deviceId)
+{
+    // RP2040/RP2350: 64-bit unique board id (flash serial / OTP) in bytes 0-7 (rest stay zero).
+    pico_unique_board_id_t board_id;
+    pico_get_unique_board_id(&board_id);
+    memcpy(deviceId, board_id.id, sizeof(board_id.id));
+    return true;
+}
+
 void rp2040Setup()
 {
+    if (watchdog_caused_reboot()) {
+        LOG_WARN("Rebooted by watchdog!");
+    }
+
     /* Sets a random seed to make sure we get different random numbers on each boot. */
     uint32_t seed = 0;
     if (!HardwareRNG::seed(seed)) {
@@ -126,6 +141,16 @@ void rp2040Setup()
     LOG_INFO("clk_adc  = %dkHz", f_clk_adc);
     LOG_INFO("clk_rtc  = %dkHz", f_clk_rtc);
 #endif
+}
+
+void rp2040Loop()
+{
+    static bool watchdog_running = false;
+    if (!watchdog_running) {
+        watchdog_enable(8000, true); // 8s timeout; pauses during debug
+        watchdog_running = true;
+    }
+    watchdog_update();
 }
 
 void enterDfuMode()

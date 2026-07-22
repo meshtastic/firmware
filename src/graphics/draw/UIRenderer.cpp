@@ -9,6 +9,9 @@
 #if !MESHTASTIC_EXCLUDE_STATUS
 #include "modules/StatusMessageModule.h"
 #endif
+#if BASEUI_HAS_GAMES
+#include "modules/games/GamesModule.h"
+#endif
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
@@ -21,8 +24,8 @@
 #include "main.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
-#include <RTC.h>
 #include <cstring>
+#include <gps/RTC.h>
 
 // External variables
 extern graphics::Screen *screen;
@@ -39,9 +42,9 @@ static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
 {
     int yOffset = (currentResolution == ScreenResolution::High) ? -5 : 1;
     if (currentResolution == ScreenResolution::High) {
-        NodeListRenderer::drawScaledXBitmap16x16(x, y + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite, display);
+        NodeListRenderer::drawScaledXBitmap16x16(x, y + yOffset, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
-        display->drawXbm(x + 1, y + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite);
+        display->drawXbm(x + 1, y + yOffset, imgGPS_width, imgGPS_height, imgGPS);
     }
 }
 
@@ -79,10 +82,12 @@ static inline void transformNeedlePoint(float localX, float localY, float sinHea
     outY = static_cast<int16_t>(y);
 }
 
+#if GRAPHICS_TFT_COLORING_ENABLED
 static float getCompassRingAngleOffset(float heading)
 {
     return (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) ? -heading : 0.0f;
 }
+#endif
 
 static inline StandardCompassNeedlePoints computeStandardCompassNeedlePoints(int16_t compassX, int16_t compassY,
                                                                              uint16_t compassDiam, float headingRadian,
@@ -516,9 +521,9 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
 {
     // Draw satellite image
     if (currentResolution == ScreenResolution::High) {
-        NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgSatellite_width, imgSatellite_height, imgSatellite, display);
+        NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
-        display->drawXbm(x + 1, y + 1, imgSatellite_width, imgSatellite_height, imgSatellite);
+        display->drawXbm(x + 1, y + 1, imgGPS_width, imgGPS_height, imgGPS);
     }
     char textString[10];
 
@@ -715,10 +720,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
         snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words);
     }
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || defined(ST7796_CS) ||             \
-     defined(HACKADAY_COMMUNICATOR) || defined(USE_ST7796)) &&                                                                   \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
+#if (defined(USE_EINK) || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (currentResolution == ScreenResolution::High) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 1, 8, 8, imgUser, display);
@@ -789,12 +791,34 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Print node's long name (e.g. "Backpack Node")
     if (username) {
+        int username_buffer = 0;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if (nodeInfoLiteHasXeddsaSigned(node)) {
+            if (currentResolution == ScreenResolution::High) {
+                graphics::NodeListRenderer::drawScaledXBitmap16x16(x + 2, getTextPositions(display)[line] + 1,
+                                                                   xeddsa_shield_width, xeddsa_shield_height, xeddsa_shield,
+                                                                   display);
+                username_buffer = (xeddsa_shield_width * 2) + 4;
+            } else {
+                display->drawXbm(x, getTextPositions(display)[line] + 3, xeddsa_shield_width, xeddsa_shield_height,
+                                 xeddsa_shield);
+                username_buffer = xeddsa_shield_width + 2;
+            }
+        }
+#endif
 #if GRAPHICS_TFT_COLORING_ENABLED
         const int usernameWidth = UIRenderer::measureStringWithEmotes(display, username);
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if (nodeInfoLiteHasXeddsaSigned(node)) {
+            setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black,
+                                       x + usernameWidth, getTextPositions(display)[line], username_buffer, FONT_HEIGHT_SMALL);
+        }
+#endif
         setAndRegisterTFTColorRole(TFTColorRole::FavoriteNodeBGHighlight, TFTPalette::Yellow, TFTPalette::Black, x,
                                    getTextPositions(display)[line], usernameWidth, FONT_HEIGHT_SMALL);
 #endif
-        UIRenderer::drawStringWithEmotes(display, x, getTextPositions(display)[line++], username, FONT_HEIGHT_SMALL, 1, false);
+        UIRenderer::drawStringWithEmotes(display, x + username_buffer, getTextPositions(display)[line++], username,
+                                         FONT_HEIGHT_SMALL, 1, false);
     }
 
 #if !MESHTASTIC_EXCLUDE_STATUS && !MESHTASTIC_EXCLUDE_STATUSDB
@@ -823,6 +847,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             return -6.0f;
         case PRESET(MEDIUM_SLOW):
         case PRESET(MEDIUM_FAST):
+        case PRESET(MEDIUM_TURBO):
             return -5.5f;
         case PRESET(SHORT_SLOW):
         case PRESET(SHORT_FAST):
@@ -1142,11 +1167,16 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    // Display Region and Channel Utilization
-    if (currentResolution == ScreenResolution::UltraLow) {
-        drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+    if (!config.lora.tx_enabled) {
+        const char *txdisabled = "Transmit Disabled";
+        display->drawString(x, getTextPositions(display)[line], txdisabled);
     } else {
-        drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        // Display Region and Channel Utilization
+        if (currentResolution == ScreenResolution::UltraLow) {
+            drawNodes(display, x, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        } else {
+            drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
+        }
     }
     char uptimeStr[32] = "";
     if (currentResolution != ScreenResolution::UltraLow) {
@@ -1354,30 +1384,6 @@ int UIRenderer::formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLED
     }
 
     return display->getStringWidth(buf);
-}
-
-// Check if the display can render a string (detect special chars; emoji)
-bool UIRenderer::haveGlyphs(const char *str)
-{
-#if defined(OLED_PL) || defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CS)
-    // Don't want to make any assumptions about custom language support
-    return true;
-#endif
-
-    // Check each character with the lookup function for the OLED library
-    // We're not really meant to use this directly..
-    bool have = true;
-    for (uint16_t i = 0; i < strlen(str); i++) {
-        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
-        // If font doesn't support a character, it is substituted for ¿
-        if (result == 191 && (uint8_t)str[i] != 191) {
-            have = false;
-            break;
-        }
-    }
-
-    // LOG_DEBUG("haveGlyphs=%d", have);
-    return have;
 }
 
 #ifdef USE_EINK
@@ -1808,6 +1814,13 @@ constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 // cppcheck-suppress constParameterPointer; signature must match OverlayCallback typedef from OLEDDisplayUi library
 void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+#if BASEUI_HAS_GAMES
+    // Hide the navigation bar while a game owns the screen (the attract screen doesn't intercept,
+    // so the nav bar stays visible there).
+    if (gamesModule && gamesModule->interceptingKeyboardInput())
+        return;
+#endif
+
     uint8_t frameToHighlight = state->currentFrame;
     if (state->frameState == IN_TRANSITION && state->transitionFrameTarget < screen->indicatorIcons.size()) {
         frameToHighlight = state->transitionFrameTarget;

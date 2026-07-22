@@ -17,6 +17,7 @@
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
+#include "modules/CannedMessageModule.h"
 #include <string>
 #include <vector>
 
@@ -403,6 +404,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Filter messages based on thread mode
     std::deque<StoredMessage> filtered;
     for (const auto &m : messageStore.getLiveMessages()) {
+        if (!messageStore.isMessageVisible(m))
+            continue;
         bool include = false;
         switch (currentMode) {
         case ThreadMode::ALL:
@@ -615,11 +618,21 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // Shrink Sender name if needed
         int availWidth = (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
-                         display->getStringWidth(chanType) - graphics::UIRenderer::measureStringWithEmotes(display, "   @...");
+                         display->getStringWidth(chanType) - graphics::UIRenderer::measureStringWithEmotes(display, "  *@...");
         if (availWidth < 0)
             availWidth = 0;
         char truncatedSender[64];
         graphics::UIRenderer::truncateStringWithEmotes(display, senderName, truncatedSender, sizeof(truncatedSender), availWidth);
+
+        // Determine signed-message prefix before building the header line, since it needs to go
+        // at the front of headerStr rather than appended after (strncat only appends at the end).
+        const char *signPrefix = "";
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        bool is_xeddsa_signed = m.xeddsaSigned;
+        if (is_xeddsa_signed) {
+            signPrefix = "*";
+        }
+#endif
 
         // Final header line
         char headerStr[128];
@@ -634,7 +647,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 snprintf(headerStr, sizeof(headerStr), "%s", timeBuf);
             }
         } else {
-            snprintf(headerStr, sizeof(headerStr), chanType[0] ? "%s @%s %s" : "%s @%s", timeBuf, truncatedSender, chanType);
+            snprintf(headerStr, sizeof(headerStr), chanType[0] ? "%s %s@%s %s" : "%s %s@%s", timeBuf, signPrefix, truncatedSender,
+                     chanType);
         }
 
         // Push header line
@@ -1060,6 +1074,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 {
     if (packet.from != 0) {
         hasUnreadMessage = true;
+        const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
 
         // Determine if message belongs to a muted channel
         bool isChannelMuted = false;
@@ -1150,11 +1165,13 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         // Shorter banner if already in a conversation (Channel or Direct)
         bool inThread = (getThreadMode() != ThreadMode::ALL);
 
-        if (shouldWakeOnReceivedMessage()) {
+        if (!suppressBanner && shouldWakeOnReceivedMessage()) {
             screen->setOn(true);
         }
 
-        screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
+        if (!suppressBanner) {
+            screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
+        }
     }
 
     // Always focus into the correct conversation thread when a message with real text arrives

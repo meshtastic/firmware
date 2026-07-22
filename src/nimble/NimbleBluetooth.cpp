@@ -8,6 +8,7 @@
 #include "concurrency/OSThread.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include "sleep.h"
 #include <BLE2904.h>
@@ -21,7 +22,12 @@
 #include "PowerStatus.h"
 
 #include "host/ble_gap.h"
+#include "host/ble_hs.h"
 #include "host/ble_store.h"
+#ifdef ARCH_ESP32
+#include <nvs.h>
+#include <nvs_flash.h>
+#endif
 
 namespace
 {
@@ -29,6 +35,56 @@ constexpr uint16_t kPreferredBleMtu = 517;
 constexpr uint16_t kPreferredBleTxOctets = 251;
 constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 } // namespace
+
+#ifdef ARCH_ESP32
+// Discard NimBLE bonds left in an incompatible on-disk format. The ESP-IDF/NimBLE upgrade changed
+// the length of the fixed-size bond records (ble_store_value_sec), so the new host rejects every
+// old record on each boot ("NVS data size mismatch for obj_type 1 ...") with no auto-recovery --
+// pairing stays broken until a factory reset. Wipe the bond namespace once when a stored record's
+// size differs from this build's struct; a same-size store is left untouched, so this never loops.
+// Adapted from https://github.com/h2zero/NimBLE-Arduino/issues/740
+static void purgeIncompatibleBleBonds()
+{
+    esp_err_t initErr = nvs_flash_init();
+    if (initErr != ESP_OK) {
+        LOG_WARN("purgeIncompatibleBleBonds: nvs_flash_init failed, err=%d", (int)initErr);
+        return; // NVS should already be up; if not, nothing safe to do here
+    }
+
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open("nimble_bond", NVS_READWRITE, &handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return; // no bonds stored yet
+    }
+    if (err != ESP_OK) {
+        LOG_ERROR("nimble_bond open failed, err=%d", err);
+        return;
+    }
+
+    // Probe the first record of each fixed-size object type (bonds are written from index 1); a
+    // stored size differing from this build's struct means the store predates a format change.
+    size_t sz = 0;
+    bool mismatch = (nvs_get_blob(handle, "our_sec_1", nullptr, &sz) == ESP_OK && sz != sizeof(struct ble_store_value_sec)) ||
+                    (nvs_get_blob(handle, "peer_sec_1", nullptr, &sz) == ESP_OK && sz != sizeof(struct ble_store_value_sec)) ||
+                    (nvs_get_blob(handle, "cccd_sec_1", nullptr, &sz) == ESP_OK && sz != sizeof(struct ble_store_value_cccd));
+
+    bool wiped = false;
+    if (mismatch) {
+        LOG_WARN("Wiping incompatible NimBLE bonds (on-disk format changed)");
+        wiped = nvs_erase_all(handle) == ESP_OK && nvs_commit(handle) == ESP_OK;
+        if (!wiped) {
+            LOG_ERROR("Failed to erase nimble_bond namespace");
+        }
+    }
+
+    nvs_close(handle);
+
+    if (wiped) {
+        LOG_INFO("Restarting after NimBLE bond cleanup");
+        ESP.restart();
+    }
+}
+#endif
 
 // Debugging options: careful, they slow things down quite a bit!
 // #define DEBUG_NIMBLE_ON_READ_TIMING  // uncomment to time onRead duration
@@ -40,11 +96,21 @@ constexpr uint16_t kPreferredBleTxTimeUs = (kPreferredBleTxOctets + 14) * 8;
 
 BLECharacteristic *fromNumCharacteristic;
 BLECharacteristic *BatteryCharacteristic;
+static int lastBatteryLevel = -1; // last value written to 0x2A19, to skip redundant writes/notifies
 BLECharacteristic *logRadioCharacteristic;
 BLEServer *bleServer;
 
 static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
+
+// Set by onDisconnect to defer (re)starting advertising to the main task. A stale-bond reconnect
+// triggers a MIC failure + NimBLE host reset; re-entering ble_gap_adv_* from the disconnect
+// callback while the host is mid-reset crashes (LoadProhibited), so the main task does it instead.
+static std::atomic<bool> pendingStartAdvertising{false};
+
+// Set by deinit() before it disconnects. Makes onRead bail immediately instead of arming the
+// up-to-20s wait, so a read arriving mid-teardown can't pin the NimBLE task and stall the disconnect.
+static std::atomic<bool> bleDraining{false};
 
 static void clearPairingDisplay()
 {
@@ -154,6 +220,21 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
   protected:
     virtual int32_t runOnce() override
     {
+        // Service a deferred advertising restart from onDisconnect, gated on ble_hs_synced() so we
+        // never re-enter the GAP API while the host is still mid-reset.
+        if (pendingStartAdvertising) {
+            if (checkIsConnected()) {
+                pendingStartAdvertising = false; // a new physical connection beat us to it; nothing to do
+            } else if (ble_hs_synced()) {
+                pendingStartAdvertising = false;
+                if (nimbleBluetooth) {
+                    nimbleBluetooth->startAdvertising();
+                }
+            } else {
+                return 200; // host still re-syncing after a reset; retry shortly
+            }
+        }
+
         while (runOnceHasWorkToDo()) {
             /*
               PROCESS fromPhoneQueue BEFORE toPhoneQueue:
@@ -187,11 +268,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         LOG_INFO("BLE onConfigStart");
 
         // Prefer high throughput during config/setup, at the cost of high power consumption (for a few seconds)
-        if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-                requestHighThroughputConnection(conn_handle);
-            }
+        uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+        if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+            requestHighThroughputConnection(conn_handle);
         }
     }
 
@@ -200,11 +279,9 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         LOG_INFO("BLE onConfigComplete");
 
         // Switch to lower power consumption BLE connection params for steady-state use after config/setup is complete
-        if (bleServer && isConnected()) {
-            uint16_t conn_handle = nimbleBluetoothConnHandle.load();
-            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-                requestLowerPowerConnection(conn_handle);
-            }
+        uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+        if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+            requestLowerPowerConnection(conn_handle);
         }
     }
 
@@ -332,12 +409,14 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
         uint8_t val[4];
         put_le32(val, fromRadioNum);
 
+        if (!fromNumCharacteristic) // BLE may have been torn down; never notify a freed characteristic
+            return;
         fromNumCharacteristic->setValue(val, sizeof(val));
         fromNumCharacteristic->notify();
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
+    virtual bool checkIsConnected() override { return nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE; }
 
     void requestHighThroughputConnection(uint16_t conn_handle)
     {
@@ -469,14 +548,18 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
             LOG_DEBUG("BLE onRead(%d): packet already waiting, no need to set onReadCallbackIsWaitingForData", currentReadCount);
 #endif
-        } else {
+        } else if (!bleDraining) {
+            // (If deinit() is tearing the stack down, skip the wait entirely and just return a 0-size
+            // response below - arming the wait here could pin this NimBLE task for ~20s and stall teardown.)
+
             // Tell the main task that we'd like a packet.
             bluetoothPhoneAPI->onReadCallbackIsWaitingForData = true;
 
             // Wait for the main task to produce a packet for us, up to about 20 seconds.
             // It normally takes just a few milliseconds, but at initial startup, etc, the main task can get blocked for longer
             // doing various setup tasks.
-            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && tries < 4000) {
+            // bleDraining lets deinit() release an in-flight wait immediately.
+            while (bluetoothPhoneAPI->onReadCallbackIsWaitingForData && !bleDraining && tries < 4000) {
                 // Schedule the main task runOnce to run ASAP.
                 bluetoothPhoneAPI->setIntervalFromNow(0);
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
@@ -595,6 +678,14 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
     }
     void onAuthenticationComplete(ble_gap_conn_desc *desc) override
     {
+        // Called on every BLE_GAP_EVENT_ENC_CHANGE, success or failure. A stale-bond reconnect
+        // yields a *failed* encryption change here -- don't latch a connected/authenticated state
+        // on a link that is actually being torn down.
+        if (desc == nullptr || !desc->sec_state.encrypted) {
+            LOG_WARN("BLE encryption change without an encrypted link; ignoring");
+            return;
+        }
+
         LOG_INFO("BLE authentication complete");
 
         meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
@@ -604,6 +695,35 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
         nimbleBluetoothConnHandle = desc->conn_handle;
     }
 };
+
+// Reset per-session PhoneAPI and transport state. Runs from onDisconnect, and again from
+// setupService() on BLE re-enable because deinit()'s bounded disconnect wait can expire
+// before the disconnect event delivers this cleanup (leaving stale queues/state behind).
+static void resetBleSessionState()
+{
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->close();
+
+        { // scope for fromPhoneMutex mutex
+            std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->fromPhoneMutex);
+            bluetoothPhoneAPI->fromPhoneQueueSize = 0;
+        }
+
+        bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false;
+        { // scope for toPhoneMutex mutex
+            std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);
+            bluetoothPhoneAPI->toPhoneQueueSize = 0;
+        }
+
+        bluetoothPhoneAPI->readCount = 0;
+        bluetoothPhoneAPI->notifyCount = 0;
+        bluetoothPhoneAPI->writeCount = 0;
+    }
+
+    memset(lastToRadio, 0, sizeof(lastToRadio));
+
+    nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE;
+}
 
 class NimbleBluetoothServerCallback : public BLEServerCallbacks
 {
@@ -647,35 +767,17 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
         bluetoothStatus->updateStatus(&newStatus);
         clearPairingDisplay();
 
+        resetBleSessionState();
+
+        // Defer the advertising restart to runOnce (see pendingStartAdvertising): calling
+        // startAdvertising() here would crash if this disconnect was a host reset.
+        pendingStartAdvertising = true;
         if (bluetoothPhoneAPI) {
-            bluetoothPhoneAPI->close();
-
-            { // scope for fromPhoneMutex mutex
-                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->fromPhoneMutex);
-                bluetoothPhoneAPI->fromPhoneQueueSize = 0;
-            }
-
-            bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false;
-            { // scope for toPhoneMutex mutex
-                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->toPhoneMutex);
-                bluetoothPhoneAPI->toPhoneQueueSize = 0;
-            }
-
-            bluetoothPhoneAPI->readCount = 0;
-            bluetoothPhoneAPI->notifyCount = 0;
-            bluetoothPhoneAPI->writeCount = 0;
+            bluetoothPhoneAPI->setIntervalFromNow(0);
         }
-
-        memset(lastToRadio, 0, sizeof(lastToRadio));
-
-        nimbleBluetoothConnHandle = BLE_HS_CONN_HANDLE_NONE;
-
-        ble->startAdvertising();
+        concurrency::mainDelay.interrupt(); // wake the main loop to service the restart
     }
 };
-
-static NimbleBluetoothToRadioCallback *toRadioCallbacks;
-static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 
 void NimbleBluetooth::startAdvertising()
 {
@@ -715,13 +817,44 @@ void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
     LOG_INFO("Disable bluetooth until reboot");
+
+    // BLEDevice::deinit() deletes the BLEServer before nimble_port_stop(); doing that with a live
+    // connection dispatches synthesized unsubscribe events into the freed server (LoadProhibited),
+    // so disconnect cleanly first. deinit() runs on the main task; the waits below are bounded.
+    // bleDraining must be set before we clear the flag / disconnect, so a read arriving now bails
+    // instead of re-arming the ~20s wait and re-pinning the NimBLE task through the whole teardown.
+    bleDraining = true;
+    if (bluetoothPhoneAPI)
+        bluetoothPhoneAPI->onReadCallbackIsWaitingForData = false; // release any in-flight onRead
+
+    // isDeInit must stay false here, else onDisconnect early-returns without clearing the handle.
+    uint16_t connHandle = nimbleBluetoothConnHandle.load();
+    if (connHandle != BLE_HS_CONN_HANDLE_NONE && bleServer) {
+        bleServer->disconnect(connHandle);
+        uint32_t start = millis();
+        while (nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE && Throttle::isWithinTimespanMs(start, 2000))
+            delay(10);
+        delay(50);
+    }
+
     isDeInit = true;
+    pendingStartAdvertising = false; // stack is going away; don't let runOnce retry the adv restart
 
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
 #endif
 
     BLEDevice::deinit(true);
+    bleServer = nullptr;             // deleted by deinit(); clear the dangling copy
+    BatteryCharacteristic = nullptr; // freed by deinit; clear so updateBatteryLevel() won't touch it
+    fromNumCharacteristic = nullptr; // freed by deinit; a late onNowHasData() must not notify freed memory
+    logRadioCharacteristic = nullptr;
+    lastBatteryLevel = -1;
+
+    // The bounded disconnect wait above can expire before onDisconnect runs, leaving the PhoneAPI
+    // observer attached with a live state machine; a later mesh packet would then drive onNowHasData()
+    // into the now-freed characteristics. Detach the observer and reset session state unconditionally.
+    resetBleSessionState();
 #endif
 }
 
@@ -732,32 +865,19 @@ bool NimbleBluetooth::isActive()
 
 bool NimbleBluetooth::isConnected()
 {
-    return bleServer && bleServer->getConnectedCount() > 0;
+    return nimbleBluetoothConnHandle.load() != BLE_HS_CONN_HANDLE_NONE;
 }
 
 int NimbleBluetooth::getRssi()
 {
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
-    if (!bleServer || !isConnected()) {
+    uint16_t conn_handle = nimbleBluetoothConnHandle.load();
+    if (conn_handle == BLE_HS_CONN_HANDLE_NONE) {
         return 0; // No active BLE connection
     }
 
-    uint16_t connHandle = nimbleBluetoothConnHandle.load();
-
-    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
-        const auto peers = bleServer->getPeerDevices(true);
-        if (!peers.empty()) {
-            connHandle = peers.begin()->first;
-            nimbleBluetoothConnHandle = connHandle;
-        }
-    }
-
-    if (connHandle == BLE_HS_CONN_HANDLE_NONE) {
-        return 0; // Connection handle not available yet
-    }
-
     int8_t rssi = 0;
-    const int rc = ble_gap_conn_rssi(connHandle, &rssi);
+    const int rc = ble_gap_conn_rssi(conn_handle, &rssi);
 
     if (rc == 0) {
         return rssi;
@@ -775,6 +895,18 @@ void NimbleBluetooth::setup()
 
     LOG_INFO("Init the NimBLE bluetooth module");
 
+    // deinit() latches these teardown guards; clear them so a re-init on the same boot (e.g. an
+    // admin disable-bluetooth followed by re-enable) doesn't leave onRead stuck draining or
+    // onDisconnect early-returning without clearing the connection handle.
+    bleDraining = false;
+    isDeInit = false;
+
+#ifdef ARCH_ESP32
+    // Runs before BLEDevice::init() reads the bond store, but logs after the "Init" line above so
+    // any bond-cleanup output doesn't appear to precede the module init.
+    purgeIncompatibleBleBonds(); // wipe bonds left in an incompatible on-disk format (post-upgrade)
+#endif
+
     BLEDevice::init(getDeviceName());
     BLEDevice::setPower(ESP_PWR_LVL_P9);
 
@@ -785,33 +917,36 @@ void NimbleBluetooth::setup()
         LOG_WARN("Unable to request MTU %u, rc=%d", kPreferredBleMtu, mtuResult);
     }
 
-    BLESecurity *pSecurity = new BLESecurity();
-    pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
-    pSecurity->setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    // BLESecurity only forwards to static NimBLEDevice setters; a stack instance suffices.
+    BLESecurity security;
+    security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         // Set IO capability to DisplayOnly for MITM authentication
-        pSecurity->setCapability(ESP_IO_CAP_OUT);
+        security.setCapability(ESP_IO_CAP_OUT);
         // Set the passkey
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
-            pSecurity->setPassKey(false); // generate a random passkey
+            security.setPassKey(false); // generate a random passkey
         } else {
             LOG_INFO("Use fixed passkey");
-            pSecurity->setPassKey(true, config.bluetooth.fixed_pin);
+            security.setPassKey(true, config.bluetooth.fixed_pin);
         }
         // Enable authorization requirements:
         // - bonding: true (for persistent storage of the keys)
         // - MITM: true (enables Man-In-The-Middle protection for password prompts)
         // - secure connection: true (enables secure connection for encryption)
-        pSecurity->setAuthenticationMode(true, true, true);
+        security.setAuthenticationMode(true, true, true);
     } else {
         // No IO capability for no PIN mode
-        pSecurity->setCapability(ESP_IO_CAP_NONE);
+        security.setCapability(ESP_IO_CAP_NONE);
         // No PIN mode: no MITM protection
-        pSecurity->setAuthenticationMode(true, false, false);
+        security.setAuthenticationMode(true, false, false);
     }
-    // Set the security callbacks
-    BLEDevice::setSecurityCallbacks(new NimbleBluetoothSecurityCallback());
+    // Statics: setup() re-runs on BLE re-enable, and the library never frees these
+    // caller-owned callback objects, so register the same instances every cycle.
+    static NimbleBluetoothSecurityCallback securityCallbacks;
+    BLEDevice::setSecurityCallbacks(&securityCallbacks);
     bleServer = BLEDevice::createServer();
 
     // BLEDevice::createServer calls ble_svc_gap_init, which resets the device
@@ -821,7 +956,8 @@ void NimbleBluetooth::setup()
         LOG_ERROR("ble_svc_gap_device_name_set: rc=%d %s", nameRc, BLEUtils::returnCodeToString(nameRc));
     }
 
-    bleServer->setCallbacks(new NimbleBluetoothServerCallback(this));
+    static NimbleBluetoothServerCallback serverCallbacks(this); // safe: NimbleBluetooth is a never-deleted singleton
+    bleServer->setCallbacks(&serverCallbacks);
     setupService();
     startAdvertising();
 }
@@ -854,13 +990,20 @@ void NimbleBluetooth::setupService()
             LOGRADIO_UUID, BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ |
                                BLECharacteristic::PROPERTY_READ_AUTHEN | BLECharacteristic::PROPERTY_READ_ENC);
     }
-    bluetoothPhoneAPI = new BluetoothPhoneAPI();
+    // setupService() re-runs on BLE re-enable; a fresh BluetoothPhoneAPI here would leak
+    // the old one as a still-scheduled zombie OSThread, so reuse it and reset its state
+    // (a skipped onDisconnect during deinit() can leave the previous session's behind).
+    if (!bluetoothPhoneAPI)
+        bluetoothPhoneAPI = new BluetoothPhoneAPI();
+    else
+        resetBleSessionState();
 
-    toRadioCallbacks = new NimbleBluetoothToRadioCallback();
-    ToRadioCharacteristic->setCallbacks(toRadioCallbacks);
+    // The characteristics are new each cycle, so setCallbacks() must re-run every time.
+    static NimbleBluetoothToRadioCallback toRadioCallbacks;
+    ToRadioCharacteristic->setCallbacks(&toRadioCallbacks);
 
-    fromRadioCallbacks = new NimbleBluetoothFromRadioCallback();
-    FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
+    static NimbleBluetoothFromRadioCallback fromRadioCallbacks;
+    FromRadioCharacteristic->setCallbacks(&fromRadioCallbacks);
 
     bleService->start();
 
@@ -873,40 +1016,47 @@ void NimbleBluetooth::setupService()
     BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
         (uint16_t)0x2a19, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     BatteryCharacteristic->addDescriptor(batteryLevelDescriptor);
+    // Seed an initial 0-100 level so an early read of 0x2A19 returns a valid value.
+    uint8_t initialLevel = (powerStatus && powerStatus->getHasBattery()) ? powerStatus->getBatteryChargePercent() : 0;
+    if (initialLevel > 100)
+        initialLevel = 100;
+    BatteryCharacteristic->setValue(&initialLevel, 1);
+    lastBatteryLevel = initialLevel;
     batteryService->start();
 }
 
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    if ((config.bluetooth.enabled == true) && bleServer && nimbleBluetooth->isConnected()) {
-        BatteryCharacteristic->setValue(&level, 1);
+    if (!config.bluetooth.enabled || !BatteryCharacteristic)
+        return;
+
+    if (level > 100) // 0x2A19 must stay within the BAS 0-100 range
+        level = 100;
+    if (level == lastBatteryLevel)
+        return;
+    lastBatteryLevel = level;
+
+    // Cache the value so a READ works without a subscriber; notify only when connected.
+    BatteryCharacteristic->setValue(&level, 1);
+    if (nimbleBluetooth && nimbleBluetooth->isConnected())
         BatteryCharacteristic->notify();
-    }
 }
 
 void NimbleBluetooth::clearBonds()
 {
     LOG_INFO("Clearing bluetooth bonds!");
+    ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_OUR_SEC, nullptr);
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_PEER_SEC, nullptr);
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_CCCD, nullptr);
 }
 
 void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 {
-    if (!bleServer || !isConnected() || length > 512) {
+    if (!isConnected() || length > 512) {
         return;
     }
     logRadioCharacteristic->setValue(logMessage, length);
     logRadioCharacteristic->notify();
-}
-
-void clearNVS()
-{
-    ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_PEER_SEC, nullptr);
-    ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_CCCD, nullptr);
-#ifdef ARCH_ESP32
-    ESP.restart();
-#endif
 }
 #endif

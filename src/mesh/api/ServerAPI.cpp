@@ -22,10 +22,36 @@ template <typename T> void ServerAPI<T>::close()
     StreamAPI::close();
 }
 
-/// Check the current underlying physical link to see if the client is currently connected
+/// Check the current underlying physical link to see if the client is currently
+/// connected
 template <typename T> bool ServerAPI<T>::checkIsConnected()
 {
     return client.connected();
+}
+
+template <typename T> bool ServerAPI<T>::canWriteFrame(size_t)
+{
+    // Only a dropped link is a reason to refuse a write up front. A full transmit
+    // buffer (availableForWrite() == 0) is normal backpressure, not a dead socket,
+    // so we must not close the connection on it. A genuinely failed write is
+    // detected after the fact in onFrameWriteFailed().
+    if (!client.connected()) {
+        canWrite = false;
+        enabled = false;
+        LOG_WARN("TCP client disconnected before write, closing API service");
+        close();
+        return false;
+    }
+
+    return true;
+}
+
+template <typename T> void ServerAPI<T>::onFrameWriteFailed(size_t frameLen, size_t writtenLen)
+{
+    canWrite = false;
+    enabled = false;
+    LOG_WARN("TCP client write short (%lu/%lu bytes), closing API service", (unsigned long)writtenLen, (unsigned long)frameLen);
+    close();
 }
 
 template <class T> int32_t ServerAPI<T>::runOnce()

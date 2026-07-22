@@ -18,13 +18,19 @@ uint8_t MeshModule::numPeriodicModules = 0;
  */
 meshtastic_MeshPacket *MeshModule::currentReply;
 
-MeshModule::MeshModule(const char *_name) : name(_name)
+MeshModule::MeshModule(const char *_name, meshtastic_PortNum _ourPortNum) : name(_name), ourPortNum(_ourPortNum)
 {
     // Can't trust static initializer order, so we check each time
     if (!modules)
         modules = new std::vector<MeshModule *>();
 
     modules->push_back(this);
+}
+
+bool MeshModule::replyPortMatches(meshtastic_PortNum modulePort, const meshtastic_MeshPacket &mp)
+{
+    return modulePort != meshtastic_PortNum_UNKNOWN_APP && mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+           mp.decoded.portnum == modulePort;
 }
 
 void MeshModule::setup() {}
@@ -57,6 +63,8 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     // So we manually call pb_encode_to_bytes and specify routing port number
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p)
+        return nullptr;
     p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &c);
@@ -68,7 +76,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
     if (err != meshtastic_Routing_Error_NONE)
-        LOG_WARN("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x", err, to, idFrom, p->id);
+        LOG_WARN("Alloc an err=%d,to=0x%08x,idFrom=0x%08x,id=0x%08x", err, to, idFrom, p->id);
 
     return p;
 }
@@ -105,6 +113,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         auto &pi = **i;
 
         pi.currentRequest = &mp;
+        pi.ignoreRequest = false;
 
         /// We only call modules that are interested in the packet (and the message is destined to us or we are promiscious)
         bool wantsPacket = (isDecoded || pi.encryptedOk) && (pi.isPromiscuous || toUs) && pi.wantPacket(&mp);
@@ -155,9 +164,13 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
                 // better solution (FIXME) would be to let phones have their own distinct addresses and we 'route' to them like
                 // any other node.
                 if (isDecoded && mp.decoded.want_response && toUs && (!isFromUs(&mp) || isToUs(&mp)) && !currentReply) {
-                    pi.sendResponse(mp);
+                    if (replyPortMatches(pi.ourPortNum, mp)) {
+                        pi.sendResponse(mp);
+                        LOG_INFO("Asked module '%s' to send a response", pi.name);
+                    } else {
+                        LOG_DEBUG("Module '%s' cannot respond on portnum=%d", pi.name, mp.decoded.portnum);
+                    }
                     ignoreRequest = ignoreRequest || pi.ignoreRequest; // If at least one module asks it, we may ignore a request
-                    LOG_INFO("Asked module '%s' to send a response", pi.name);
                 } else {
                     LOG_DEBUG("Module '%s' considered", pi.name);
                 }

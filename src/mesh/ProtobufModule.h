@@ -44,6 +44,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
     {
         // Update our local node info with our position (even if we don't decide to update anyone else)
         meshtastic_MeshPacket *p = allocDataPacket();
+        if (!p)
+            return nullptr;
 
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), fields, &payload);
@@ -89,7 +91,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
-                LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d", name, mp.from, mp.id, p.portnum,
+                LOG_INFO("Received %s from=0x%08x, id=0x%08x, portnum=%d, payloadlen=%d", name, mp.from, mp.id, p.portnum,
                          p.payload.size);
             } else {
                 LOG_ERROR("Error decoding proto module!");
