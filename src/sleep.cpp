@@ -521,7 +521,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(res == ESP_OK);
 
     console->flush();
-    if (loraWakeIrqAsserted()) {
+    const bool loraIrqPending = loraWakeIrqAsserted();
+    if (loraIrqPending) {
         // A LoRa IRQ is already pending (see loraWakeIrqAsserted). Don't sleep on top of it - return so
         // the main loop services the packet now instead of stranding it until the next wake.
         LOG_INFO("LoRa IRQ pending, skip light sleep to service packet");
@@ -566,7 +567,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     }
 #endif
 
-    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    // When we skipped the sleep because a LoRa IRQ was already pending, esp_sleep_get_wakeup_cause()
+    // would report the previous real sleep's cause (e.g. TIMER); synthesize a GPIO cause so the
+    // handling below (and PowerFSM) takes the packet-service path instead of a stale timer path.
+    esp_sleep_wakeup_cause_t cause = loraIrqPending ? ESP_SLEEP_WAKEUP_GPIO : esp_sleep_get_wakeup_cause();
     notifyLightSleepEnd.notifyObservers(cause); // Button interrupts are reattached here
 
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
