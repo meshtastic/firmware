@@ -19,6 +19,7 @@
 
 // supported modules list
 #define USE_LR1121
+#define LR1121_SUBGHZ_ONLY
 
 #define LR1121_IRQ_PIN LORA_DIO1
 #define LR1121_NRESET_PIN LORA_RESET
@@ -35,12 +36,12 @@
 // 2.4G Part
 #define LR1120_MAX_POWER 5
 
-// not yet implemented
-#define JANUS_RADIO
+// The second LR1121 is held inactive until dual-radio support is implemented.
 #define LR1121_IRQ2_PIN 34
 #define LR1121_NRESET2_PIN 21
 #define LR1121_BUSY2_PIN 39
 #define LR1121_SPI_NSS2_PIN 13
+#define NOMAD_WIFI_BACKPACK_NRESET_PIN 19
 
 // TODO: check if this is correct
 // #define LR11X0_DIO3_TCXO_VOLTAGE 1.6
