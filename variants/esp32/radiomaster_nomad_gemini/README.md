@@ -12,11 +12,11 @@ The primary radio uses CS 27, reset 15, DIO1 37, busy 36, SCK 25, MOSI 32, and M
 | 2.4 GHz transmit | low  | high | low  | low  |
 | Wi-Fi scan       | high | low  | low  | low  |
 
-DIO8 enables the 900 MHz transmit path. APC2 on GPIO26 is a calibrated DAC bias and remains at the selected value; it is not treated as a transmit-enable signal. The 915 MHz power table is:
+DIO8 enables the 900 MHz transmit path. APC2 on GPIO26 is applied immediately before transmission and cleared for receive, idle, and sleep. The provisional 915 MHz power table is:
 
 | Total dBm | LR1121 dBm | APC2 DAC |
 | --------: | ---------: | -------: |
-|        10 |        -17 |      150 |
+|        10 |        -17 |      120 |
 |        14 |        -16 |      120 |
 |        17 |        -14 |      120 |
 |        20 |        -11 |      120 |
@@ -28,4 +28,4 @@ GPIO2 controls the active-high fan. `lora.pa_fan_disabled` switches it fully off
 
 Meshtastic Wi-Fi runs on the primary ESP32. The currently unsupported ESP32-C3 Wi-Fi backpack is held in reset on GPIO19.
 
-Pin assignments and RF behavior follow the local mLRS Nomad HAL and the [ExpressLRS RadioMaster Nomad target](https://github.com/ExpressLRS/targets/blob/master/TX/Radiomaster%20Nomad.json). Output power still requires bench verification before this prototype is promoted beyond support level 3.
+Pin assignments and RF behavior follow the local mLRS Nomad HAL and the [ExpressLRS RadioMaster Nomad target](https://github.com/ExpressLRS/targets/blob/master/TX/Radiomaster%20Nomad.json). The power table still requires bench verification before this prototype is promoted beyond support level 3.
