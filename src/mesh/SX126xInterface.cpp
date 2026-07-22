@@ -395,27 +395,45 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel.
     // NOTE: symNum is the *encoded* SET_CAD_PARAMS value, not a raw count - RADIOLIB_SX126X_CAD_ON_4_SYMB
-    // (== raw 2) runs a 4-symbol scan. This is the value NUM_SYM_CAD already produced; naming it makes the
-    // intent explicit and keeps it in sync with getCadSymbolCount() (4), which sizes the CW slot time.
+    // (== raw 2) runs a 4-symbol scan, matching getCadSymbolCount() (4), which sizes the CW slot time.
+#ifdef MESHTASTIC_LBT_CAD_TO_RX
+    // #3: exit CAD straight into RX on detection (GOTO_RX) with the RX IRQs already mapped, so the chip's
+    // own CAD->RX transition delivers RX_DONE with no library call in between (see .notes/lbt). irqFlags is
+    // the status-enable set (CAD verdict + full RX set incl. PREAMBLE/HEADER_VALID for isActivelyReceiving);
+    // irqMask is the DIO-trigger set - CAD verdict + terminal RX events only, NOT PREAMBLE/HEADER_VALID,
+    // which would fire the ISR mid-frame and run readData() on an incomplete packet.
+    const uint8_t cadExitMode = RADIOLIB_SX126X_CAD_GOTO_RX;
+    const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS;
+    const uint32_t cadIrqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
+                                (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+#else
+    const uint8_t cadExitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT; // resolves to GOTO_STDBY
+    const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS;
+    const uint32_t cadIrqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK;
+#endif
     ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
                                        .detPeak = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
-#ifdef MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE
-                                       // #3: on detection drop straight into RX in hardware; the caller
-                                       // then hands off via resumeReceiveInPlace(false) (no standby).
-                                       .exitMode = RADIOLIB_SX126X_CAD_GOTO_RX,
-#else
-                                       .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT, // resolves to GOTO_STDBY
-#endif
+                                       .exitMode = cadExitMode,
                                        .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .irqFlags = cadIrqFlags,
+                                       .irqMask = cadIrqMask}};
     int16_t result;
     setTransmitEnable(false);
     setStandby();
     result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
+    if (result == RADIOLIB_LORA_DETECTED) {
+#ifdef MESHTASTIC_LBT_CAD_TO_RX
+        // The chip auto-entered RX (GOTO_RX). Hand it to the RX IRQ path WITHOUT a standby: drop the
+        // latched CAD verdict so the pin releases and the coming RX_DONE is a clean edge, re-attach the
+        // MCU ISR that setStandby() detached, and mark us receiving. NOT startReceive() - its standby
+        // would abort the packet we just detected.
+        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_CAD_DONE | RADIOLIB_SX126X_IRQ_CAD_DETECTED);
+        enableInterrupt(isrRxLevel0);
+        RadioLibInterface::startReceive(); // base bookkeeping only (isReceiving + powerMon)
+#endif
         return true;
+    }
     if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
 #ifdef ARCH_PORTDUINO
