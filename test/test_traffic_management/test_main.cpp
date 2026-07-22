@@ -107,7 +107,7 @@ class MockNodeDB : public NodeDB
         numMeshNodes = 2;
     }
 
-    // Seed a full identity (name, 32-byte key of `keyByte`, optional signer bit) into the
+    // Seed a full identity (name, 32-byte key of `keyByte`, optional XEdDSA-signed bit) into the
     // hot-store buffer at index 1, for reconcile/seeding tests that iterate
     // getMeshNodeByIndex().
     void setHotNodeIdentity(NodeNum n, const char *longName, uint8_t keyByte, bool xeddsaSigned)
@@ -196,7 +196,7 @@ class TrafficManagementModuleTestShim : public TrafficManagementModule
     using TrafficManagementModule::dropNodeInfoCacheForTest;
     using TrafficManagementModule::flushCache;
     using TrafficManagementModule::handleReceived;
-    using TrafficManagementModule::markKeySignerProvenForTest;
+    using TrafficManagementModule::markKeyXeddsaSignedForTest;
     using TrafficManagementModule::nodeInfoCacheCapacityForTest;
     using TrafficManagementModule::peekCachedRole;
     using TrafficManagementModule::peekNodeInfoFlagsForTest;
@@ -770,7 +770,7 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
     ProcessMessage observedResult = module.handleReceived(observed);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(observedResult));
     // Signed-only replay gate (default) requires signer-proven provenance to serve.
-    module.markKeySignerProvenForTest(kTargetNode);
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -851,7 +851,7 @@ static void test_tm_nodeinfo_directResponse_psramStaleEntryNotServed(void)
     meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
     module.handleReceived(observed);
     // Signer-proven so staleness is the sole reason it is not served (isolates the gate under test).
-    module.markKeySignerProvenForTest(kTargetNode);
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     // Advance the virtual clock just past the 6 h serve window.
     // 6 h + two 3-min observation ticks: guarantees the modular obs-tick age exceeds the
@@ -893,7 +893,7 @@ static void test_tm_nodeinfo_directResponse_psramThrottlesWithinWindow(void)
     meshtastic_MeshPacket observed = makeNodeInfoPacket(kTargetNode, "target-long", "tg");
     module.handleReceived(observed);
     // Signed-only replay gate (default) requires signer-proven provenance to serve.
-    module.markKeySignerProvenForTest(kTargetNode);
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -966,7 +966,7 @@ static void test_tm_nodeinfo_cache_rejectsMismatchedKey(void)
     // Poisoning attempt with a different key (0x22...) must be rejected.
     module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "attacker", 0x22));
     // Signed-only replay gate (default) requires signer-proven provenance to serve the reply.
-    module.markKeySignerProvenForTest(kTargetNode);
+    module.markKeyXeddsaSignedForTest(kTargetNode);
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetNode);
     request.decoded.want_response = true;
@@ -1313,7 +1313,7 @@ static void test_tm_nodeinfo_noTimedEviction_quietKeyedEntrySurvives(void)
 
     TrafficManagementModuleTestShim module;
     module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "quiet", 0x21));
-    module.markKeySignerProvenForTest(kTargetNode); // isolate: staleness, not the signed gate
+    module.markKeyXeddsaSignedForTest(kTargetNode); // isolate: staleness, not the signed gate
 
     // Nine days of silence, swept every three days. The old design would have evicted the
     // entry at the 7-day retention TTL; now nothing expires by timer.
@@ -1533,7 +1533,7 @@ static void test_tm_nodeinfo_tickSaturation_sweepClearsObserved(void)
 
     TrafficManagementModuleTestShim module;
     module.handleReceived(makeNodeInfoPacket(kTargetNode, "target-long", "tg"));
-    module.markKeySignerProvenForTest(kTargetNode);
+    module.markKeyXeddsaSignedForTest(kTargetNode);
     const uint32_t stampMs = TrafficManagementModule::s_testNowMs;
     int flags = module.peekNodeInfoFlagsForTest(kTargetNode);
     TEST_ASSERT_TRUE(flags >= 0 && (flags & kFlagObserved));
@@ -1777,7 +1777,7 @@ static void test_tm_nodeinfo_eviction_keyedTiersOutrankKeyless(void)
     constexpr NodeNum kTofu = 0x51000001, kProven = 0x51000002, kMember = 0x51000003, kNewcomer = 0x51000004;
     module.handleReceived(makeNodeInfoPacketWithKey(kTofu, "tofu", 0x11));
     module.handleReceived(makeNodeInfoPacketWithKey(kProven, "proven", 0x22));
-    module.markKeySignerProvenForTest(kProven);
+    module.markKeyXeddsaSignedForTest(kProven);
     uint8_t memberKey[32];
     memset(memberKey, 0x33, sizeof(memberKey));
     module.onNodeKeyCommitted(kMember, memberKey, false);
@@ -1815,7 +1815,7 @@ static void test_tm_nodeinfo_eviction_tofuLosesBeforeProvenAndMember(void)
     const uint16_t cap = TrafficManagementModuleTestShim::nodeInfoCacheCapacityForTest();
     fillNodeInfoCacheWithTofuStrangers(module, cap - 2u, kFillBase);
     module.handleReceived(makeNodeInfoPacketWithKey(kProven, "proven", 0x22));
-    module.markKeySignerProvenForTest(kProven);
+    module.markKeyXeddsaSignedForTest(kProven);
     uint8_t memberKey[32];
     memset(memberKey, 0x33, sizeof(memberKey));
     module.onNodeKeyCommitted(kMember, memberKey, false);
@@ -2135,7 +2135,7 @@ static void test_tm_nodeinfo_directResponse_perRequesterAndGlobalFloor(void)
     constexpr NodeNum kRemoteNode3 = 0x66666666;
     for (NodeNum t : {kTargetA, kTargetB, kTargetC}) {
         module.handleReceived(makeNodeInfoPacket(t, "target-long", "tg"));
-        module.markKeySignerProvenForTest(t);
+        module.markKeyXeddsaSignedForTest(t);
     }
 
     meshtastic_MeshPacket request = makeDecodedPacket(meshtastic_PortNum_NODEINFO_APP, kRemoteNode, kTargetA);

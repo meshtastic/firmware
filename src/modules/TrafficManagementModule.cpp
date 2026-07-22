@@ -886,7 +886,7 @@ int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum node)
     return (entry->hasObserved ? 1 : 0) | (entry->isMember ? 2 : 0) | (entry->hasFullUser ? 4 : 0) | (entry->keyProven() ? 8 : 0);
 }
 
-void TrafficManagementModule::markKeySignerProvenForTest(NodeNum node)
+void TrafficManagementModule::markKeyXeddsaSignedForTest(NodeNum node)
 {
     concurrency::LockGuard guard(&cacheLock);
     if (!nodeInfoPayload)
@@ -934,7 +934,7 @@ int TrafficManagementModule::peekNodeInfoFlagsForTest(NodeNum)
 {
     return -1;
 }
-void TrafficManagementModule::markKeySignerProvenForTest(NodeNum) {}
+void TrafficManagementModule::markKeyXeddsaSignedForTest(NodeNum) {}
 
 #endif // TMM_HAS_NODEINFO_CACHE
 
@@ -1482,7 +1482,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
         // path's keyProven() (XEdDSA | manual). An unproven (trust-on-first-use) identity is left
         // for the genuine node or another cache-holder to answer.
         if (!nodeInfoLiteHasXeddsaSigned(node) && !nodeInfoLiteIsKeyManuallyVerified(node)) {
-            TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x not signer-proven, not responding", p->to);
+            TM_LOG_DEBUG("NodeInfo NodeDB entry for 0x%08x not key-proven, not responding", p->to);
             return false;
         }
 #endif

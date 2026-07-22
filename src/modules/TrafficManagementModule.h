@@ -127,7 +127,7 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
 
     /// Test hook: force a cached NodeInfo entry's key to signer-proven so replay-gate tests
     /// can skip a full XEdDSA verification. No-op if absent.
-    void markKeySignerProvenForTest(NodeNum node);
+    void markKeyXeddsaSignedForTest(NodeNum node);
 
     /// Test hook: free the NodeInfo cache so the NodeDB fallback path can be exercised in
     /// builds where the cache is compiled in. No-op when already absent.
