@@ -159,7 +159,8 @@ void test_E1_perhaps_decode_fuzz(void)
 
         DecodeState st = perhapsDecode(&p);
         // Any verdict is fine; the contract is that arbitrary ciphertext never crashes the pipeline.
-        TEST_ASSERT_TRUE(st == DECODE_SUCCESS || st == DECODE_FAILURE || st == DECODE_FATAL);
+        TEST_ASSERT_TRUE(st == DECODE_SUCCESS || st == DECODE_FAILURE || st == DECODE_OPAQUE || st == DECODE_FATAL ||
+                         st == DECODE_POLICY_REJECT);
     }
 }
 
@@ -450,7 +451,8 @@ static meshtastic_AdminMessage fuzzAdminMessage()
         // manual bandwidth==0 path that used to SIGFPE the validator.
         r.set_config.which_payload_variant = meshtastic_Config_lora_tag;
         r.set_config.payload_variant.lora.region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
-        r.set_config.payload_variant.lora.modem_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
+        r.set_config.payload_variant.lora.modem_preset =
+            (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(_meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE);
         r.set_config.payload_variant.lora.use_preset = (rngRange(2) == 0);
         r.set_config.payload_variant.lora.bandwidth = rngRange(512); // includes 0
         r.set_config.payload_variant.lora.channel_num = rngNext();
@@ -553,7 +555,7 @@ static meshtastic_MeshBeacon fuzzBeacon()
         fuzzChannelSettings(b.offer_channel);
     b.offer_region = (meshtastic_Config_LoRaConfig_RegionCode)rngRange(32);
     b.has_offer_preset = (rngRange(2) == 0);
-    b.offer_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(16);
+    b.offer_preset = (meshtastic_Config_LoRaConfig_ModemPreset)rngRange(_meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE);
     return b;
 }
 

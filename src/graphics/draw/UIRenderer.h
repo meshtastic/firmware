@@ -104,9 +104,6 @@ class UIRenderer
     {
         drawStringWithEmotes(display, x, y, line.c_str(), fontHeight, emoteSpacing, fauxBold);
     }
-
-    // Check if the display can render a string (detect special chars; emoji)
-    static bool haveGlyphs(const char *str);
 }; // namespace UIRenderer
 
 } // namespace graphics

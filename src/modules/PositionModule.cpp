@@ -5,13 +5,13 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "meshUtils.h"
 #include "meshtastic/atak.pb.h"
@@ -292,6 +292,8 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
     LOG_INFO("Send TAK V2 PLI packet");
     meshtastic_MeshPacket *mp = allocDataPacket();
+    if (!mp)
+        return nullptr;
     mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN_V2;
 
     meshtastic_TAKPacketV2 takPacket = meshtastic_TAKPacketV2_init_zero;
@@ -418,12 +420,14 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
         meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-        notification->level = meshtastic_LogRecord_Level_INFO;
-        notification->time = getValidTime(RTCQualityFromNet);
-        sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
-                Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
-                    1000U);
-        service->sendClientNotification(notification);
+        if (notification) {
+            notification->level = meshtastic_LogRecord_Level_INFO;
+            notification->time = getValidTime(RTCQualityFromNet);
+            sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
+                    Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
+                        1000U);
+            service->sendClientNotification(notification);
+        }
         sleepOnNextExecution = true;
         LOG_DEBUG("Start next execution in 5s, then sleep");
         setIntervalFromNow(FIVE_SECONDS_MS);
@@ -570,6 +574,8 @@ int32_t PositionModule::runOnce()
 void PositionModule::sendLostAndFoundText()
 {
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = NODENUM_BROADCAST;
     char message[128];
     int written = snprintf(message, sizeof(message), "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7),

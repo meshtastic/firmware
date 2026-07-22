@@ -11,12 +11,13 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "TypeConversions.h"
+#include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
@@ -63,6 +64,7 @@ Allocator<meshtastic_ClientNotification> &clientNotificationPool = staticClientN
 
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
+#include "PositionPrecision.h"
 #include "Router.h"
 
 MeshService::MeshService()
@@ -111,7 +113,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     }
 
     printPacket("Forwarding to phone", mp);
-    sendToPhone(packetPool.allocCopy(*mp));
+    if (auto *toPhone = packetPool.allocCopy(*mp))
+        sendToPhone(toPhone);
 
     return 0;
 }
@@ -172,6 +175,51 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     return nodenum;
 }
 
+#if MESHTASTIC_ENABLE_FRAME_INJECTION
+// Deliver a client-supplied frame into the receive pipeline as if it arrived off the LoRa chip. Mirrors
+// the portduino SimRadio SIMULATOR_APP unwrap so the same host wire format works on real hardware: the
+// frame rides inside a Compressed envelope wrapped in a MeshPacket that carries from/to/id/channel.
+//   Compressed.portnum == UNKNOWN_APP -> Compressed.data is verbatim ciphertext, decrypted as if off-air
+//   otherwise                         -> Compressed.data is the plaintext payload for Compressed.portnum
+void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
+{
+    meshtastic_Compressed scratch;
+    if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        memset(&scratch, 0, sizeof(scratch));
+        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch)) {
+            if (scratch.portnum == meshtastic_PortNum_UNKNOWN_APP) {
+                p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+                memcpy(p.encrypted.bytes, scratch.data.bytes, scratch.data.size);
+                p.encrypted.size = scratch.data.size;
+            } else {
+                memcpy(&p.decoded.payload, &scratch.data, sizeof(scratch.data));
+                p.decoded.portnum = scratch.portnum;
+            }
+        } else {
+            LOG_ERROR("inject: could not decode Compressed envelope, dropping");
+            return;
+        }
+    }
+    // The real RX path (RadioLibInterface::handleReceiveInterrupt) drops sender==0; mirror it so injection
+    // behaves identically to an over-the-air frame.
+    if (p.from == 0) {
+        LOG_WARN("inject: dropping frame with from==0 (matches real LoRa RX)");
+        return;
+    }
+    meshtastic_MeshPacket *mp = packetPool.allocCopy(p);
+    if (!mp)
+        return;
+    if (mp->rx_snr == 0) // plausible synthetic link metadata unless the caller set it
+        mp->rx_snr = 8;
+    if (mp->rx_rssi == 0)
+        mp->rx_rssi = -40;
+    mp->rx_time = getValidTime(RTCQualityFromNet);
+    LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
+             mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");
+    router->enqueueReceivedMessage(mp);
+}
+#endif
+
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
@@ -183,6 +231,16 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     if (SimRadio::instance && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulates device received a packet via the LoRa chip
         SimRadio::instance->unpackAndReceive(p);
+        return;
+    }
+#endif
+#if MESHTASTIC_ENABLE_FRAME_INJECTION
+    // Real-hardware analog of the SimRadio path above: deliver a client-supplied frame into the RX
+    // pipeline exactly as if it had arrived off the LoRa chip. Reached before the p.from=0 line below,
+    // so an injected sender is preserved. Build-flag gated (off by default) - it lets anything with a
+    // wired connection forge over-the-air traffic, so it must never ship enabled.
+    if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
+        injectAsReceived(p);
         return;
     }
 #endif
@@ -199,14 +257,23 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only
               {
                   perhapsDecode(&p);
-                  const StoredMessage &sm = messageStore.addFromPacket(p);
-                  graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+                  if (const StoredMessage *sm = messageStore.tryAddFromPacket(p))
+                      graphics::MessageRenderer::handleNewMessage(nullptr, *sm, p); // notify UI
               })
+#if !MESHTASTIC_EXCLUDE_ADMIN
+    // Note admin requests on their way out: AdminModule only accepts a response from a remote we
+    // actually asked. Runs before encryption, while the payload is still readable.
+    if (adminModule && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        p.decoded.portnum == meshtastic_PortNum_ADMIN_APP)
+        adminModule->noteOutgoingAdminRequest(p);
+#endif
+
     // Send the packet into the mesh
     DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
     DEBUG_HEAP_AFTER("MeshService::handleToRadio", a);
-    sendToMesh(a, RX_SRC_USER);
+    if (a)
+        sendToMesh(a, RX_SRC_USER);
 
     bool loopback = false; // if true send any packet the phone sends back itself (for testing)
     if (loopback) {
@@ -226,6 +293,8 @@ bool MeshService::cancelSending(PacketId id)
 ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
 {
     meshtastic_QueueStatus *copied = queueStatusPool.allocCopy(qs);
+    if (!copied)
+        return ERRNO_UNKNOWN;
 
     copied->res = res;
     copied->mesh_packet_id = mesh_packet_id;
@@ -266,7 +335,8 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
         auto a = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("MeshService::sendToMesh", a);
 
-        sendToPhone(a);
+        if (a)
+            sendToPhone(a);
     }
 
     // Router may ask us to release the packet if it wasn't sent
@@ -288,8 +358,31 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 LOG_DEBUG("Skip position ping; no fresh position since boot");
                 return false;
             }
-            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
-            positionModule->sendOurPosition(dest, wantReplies, node->channel);
+            // Prefer the node's current channel, but fall back to the first channel with
+            // position enabled (matching PositionModule::sendOurPosition() behavior).
+            uint8_t sendChan = node->channel;
+            if (getPositionPrecisionForChannel(sendChan) == 0) {
+                bool found = false;
+                for (uint8_t ch = 0; ch < 8; ++ch) {
+                    if (getPositionPrecisionForChannel(ch) != 0) {
+                        sendChan = ch;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // No channel with position enabled: fall back to sending nodeinfo, as before.
+                    if (nodeInfoModule) {
+                        LOG_INFO(
+                            "No channel with position enabled; sending nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d",
+                            dest, wantReplies, node->channel);
+                        nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
+                    }
+                    return false;
+                }
+            }
+            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
+            positionModule->sendOurPosition(dest, wantReplies, sendChan);
             return true;
         }
     } else {
