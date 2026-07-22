@@ -399,8 +399,10 @@ std::unique_ptr<RadioInterface> initLoRa()
             return std::unique_ptr<RadioInterface>(new LR1120Interface(hal, cs, irq, rst, busy));
         case use_lr1121:
             return std::unique_ptr<RadioInterface>(new LR1121Interface(hal, cs, irq, rst, busy));
+#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
         case use_lr2021:
             return std::unique_ptr<RadioInterface>(new LR2021Interface(hal, cs, irq, rst, busy));
+#endif
         case use_llcc68:
             return std::unique_ptr<RadioInterface>(new LLCC68Interface(hal, cs, irq, rst, busy));
         case use_simradio:

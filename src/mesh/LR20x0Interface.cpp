@@ -89,13 +89,10 @@ template <typename T> bool LR20x0Interface<T>::init()
     // This is critical when DIO5 is used for RF switch control: the default irqDioNum=5 would
     // conflict with the RF switch table, causing setRfSwitchTable() to reconfigure DIO5 from
     // IRQ to RF_SWITCH and silently break all interrupts.
-#ifdef LR2021_IRQ_DIO_NUM
-    lora.irqDioNum = LR2021_IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
-#elif defined(IRQ_DIO_NUM)
-    lora.irqDioNum = IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
-#elif ARCH_PORTDUINO
+    //
+    // On ARCH_PORTDUINO, runtime YAML config takes precedence over compile-time macros so
+    // users can override IRQ routing without rebuilding.
+#if ARCH_PORTDUINO
     if (portduino_config.lr2021_irq_dio_num >= 5 && portduino_config.lr2021_irq_dio_num <= 11) {
         // Check for conflict with pins claimed by the RF switch table
         bool conflict = false;
@@ -118,6 +115,12 @@ template <typename T> bool LR20x0Interface<T>::init()
     } else {
         LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
     }
+#elif defined(LR2021_IRQ_DIO_NUM)
+    lora.irqDioNum = LR2021_IRQ_DIO_NUM;
+    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
+#elif defined(IRQ_DIO_NUM)
+    lora.irqDioNum = IRQ_DIO_NUM;
+    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
 #else
     LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
 #endif

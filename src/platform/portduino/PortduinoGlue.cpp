@@ -984,8 +984,8 @@ bool loadConfig(const char *configPath)
                 portduino_config.has_rfswitch_table = true;
 
                 // LR2021 has a different OpMode_t enum than LR11x0:
-                //   LR11x0: STBY=1, RX=2, TX=3, TX_HP=4, TX_HF=5, GNSS=6, WIFI=7
-                //   LR2021: STBY=1, RX=2, TX=3, RX_HF=4, TX_HF=5  (no TX_HP/GNSS/WIFI)
+                //   LR11x0: STBY=0, RX=1, TX=2, TX_HP=3, TX_HF=4, GNSS=5, WIFI=6
+                //   LR2021: STBY=0, RX=1, TX=2, RX_HF=3, TX_HF=4  (no TX_HP/GNSS/WIFI)
                 // Using LR11x0 modes for an LR2021 would program incorrect DIO RF switch
                 // config bits (mode 4 = RX_HF not TX_HP; modes 6/7 don't exist).
 #if !RADIOLIB_EXCLUDE_LR2021
