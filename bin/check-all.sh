@@ -31,16 +31,18 @@ export APP_VERSION=$VERSION
 
 if [[ $# -gt 0 ]]; then
 	# can override which environment by passing arg
-	BOARDS="$*"
+	BOARDS=("$@")
 else
-	BOARDS="tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-v2.0 heltec-v2.1 tbeam0.7 meshtastic-diy-v1 rak4631 rak4631_eink rak11200 t-echo canaryone pca10059_diy_eink"
+	BOARDS=(tlora-v2 tlora-v1 tlora_v1_3 tlora-v2-1-1.6 tbeam heltec-v2.0 heltec-v2.1 tbeam0.7 meshtastic-diy-v1 rak4631 rak4631_eink rak11200 t-echo canaryone pca10059_diy_eink)
 fi
 
-echo "BOARDS:${BOARDS}"
+echo "BOARDS:${BOARDS[*]}"
 
-CHECK=""
-for BOARD in $BOARDS; do
-	CHECK="${CHECK} -e ${BOARD}"
+# Array, not a string: board names reach pio as literal arguments, so an override containing
+# whitespace or a glob character cannot turn into extra pio arguments.
+CHECK=()
+for BOARD in "${BOARDS[@]}"; do
+	CHECK+=(-e "${BOARD}")
 done
 
 LOG=$(mktemp)
@@ -48,7 +50,7 @@ trap 'rm -f "$LOG"' EXIT
 
 # Keep streaming to the console so the CI log reads exactly as it did before; tee a copy for the
 # post-mortem classification below.
-pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt --inline-suppr" $CHECK --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high 2>&1 | tee "$LOG"
+pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt --inline-suppr" "${CHECK[@]}" --skip-packages --pattern="src/" --fail-on-defect=low --fail-on-defect=medium --fail-on-defect=high 2>&1 | tee "$LOG"
 STATUS=${PIPESTATUS[0]}
 
 if [[ $STATUS -eq 0 ]]; then
@@ -70,10 +72,10 @@ fi
 
 REASON=$(grep -Em1 "$TRANSIENT" "$LOG" | tr -d '\r' | cut -c1-200)
 
-echo "RESULT: SKIPPED ${BOARDS} - transient network failure: ${REASON}"
+echo "RESULT: SKIPPED ${BOARDS[*]} - transient network failure: ${REASON}"
 
 if [[ ${GITHUB_ACTIONS:-false} == "true" ]]; then
-	echo "::warning title=Static analysis skipped (${BOARDS})::pio check could not download its packages: ${REASON}"
+	echo "::warning title=Static analysis skipped (${BOARDS[*]})::pio check could not download its packages: ${REASON}"
 	exit 0
 fi
 
