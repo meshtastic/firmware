@@ -2597,7 +2597,7 @@ void NodeDB::loadFromDisk()
         const int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE,
                                 SEGMENT_NODEDATABASE};
         int toSave = 0;
-        for (int i = 0; i < 5; i++) {
+        for (size_t i = 0; i < sizeof(segments) / sizeof(segments[0]); i++) {
             if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {
                 toSave |= segments[i];
             }
@@ -2615,11 +2615,23 @@ void NodeDB::loadFromDisk()
             }
         }
 
-        // Migrate inactive radio files explicitly: they may contain PSKs and are outside saveToDisk().
+        // Backups are outside saveToDisk(), but can contain radio profile PSKs.
 #ifdef FSCom
-        const char *radioProfileFiles[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME,
-                                           EVENT_CONFIG_FILE_NAME,    EVENT_CHANNEL_FILE_NAME,    EVENT_BACKUP_FILE_NAME};
-        for (const char *fn : radioProfileFiles) {
+        spiLock->lock();
+        const bool activeBackupExists = FSCom.exists(backupFileName);
+        spiLock->unlock();
+        if (activeBackupExists && !EncryptedStorage::isEncrypted(backupFileName)) {
+            LOG_INFO("Migrating %s to encrypted storage", backupFileName);
+            EncryptedStorage::migrateFile(backupFileName);
+        }
+#endif
+
+        // Event firmware keeps the normal radio profile inactive, so migrate it separately.
+#if USERPREFS_EVENT_MODE
+#ifdef FSCom
+        const char *inactiveRadioProfileFiles[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME,
+                                                   STANDARD_BACKUP_FILE_NAME};
+        for (const char *fn : inactiveRadioProfileFiles) {
             spiLock->lock();
             const bool exists = FSCom.exists(fn);
             spiLock->unlock();
@@ -2628,6 +2640,7 @@ void NodeDB::loadFromDisk()
                 EncryptedStorage::migrateFile(fn);
             }
         }
+#endif
 #endif
     }
 #endif
