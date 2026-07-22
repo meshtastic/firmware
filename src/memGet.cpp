@@ -9,7 +9,6 @@
  */
 #include "memGet.h"
 #include "configuration.h"
-#include "memory/MemAudit.h"
 
 #if defined(MESHTASTIC_DYNAMIC_SBRK_HEAP)
 #include <malloc.h>
@@ -107,17 +106,4 @@ uint32_t MemGet::getPsramSize()
 #else
     return 0;
 #endif
-}
-
-void displayPercentHeapFree()
-{
-    uint32_t freeHeap = memGet.getFreeHeap();
-    uint32_t totalHeap = memGet.getHeapSize();
-    if (totalHeap == 0 || totalHeap == UINT32_MAX) {
-        LOG_INFO("Heap size unavailable");
-        return;
-    }
-    int percent = (int)((freeHeap * 100) / totalHeap);
-    LOG_INFO("Heap free: %d%% (%u/%u bytes)", percent, freeHeap, totalHeap);
-    memaudit::logBreakdown("heap"); // per-subsystem breakdown rides along with the periodic heap log
 }

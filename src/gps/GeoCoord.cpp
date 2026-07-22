@@ -36,17 +36,50 @@ GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
     GeoCoord::setCoords();
 }
 
-// Initialize all the coordinate systems
+// Initialize DMS eagerly (cheap, most commonly used); UTM/MGRS/OSGR/OLC are computed lazily on
+// first access via their getters (see ensure*() below), since most callers never touch them.
 void GeoCoord::setCoords()
 {
     double lat = _latitude * 1e-7;
     double lon = _longitude * 1e-7;
     GeoCoord::latLongToDMS(lat, lon, _dms);
-    GeoCoord::latLongToUTM(lat, lon, _utm);
-    GeoCoord::latLongToMGRS(lat, lon, _mgrs);
-    GeoCoord::latLongToOSGR(lat, lon, _osgr);
-    GeoCoord::latLongToOLC(lat, lon, _olc);
+    _utmValid = false;
+    _mgrsValid = false;
+    _osgrValid = false;
+    _olcValid = false;
     _dirty = false;
+}
+
+void GeoCoord::ensureUTM() const
+{
+    if (!_utmValid) {
+        GeoCoord::latLongToUTM(_latitude * 1e-7, _longitude * 1e-7, _utm);
+        _utmValid = true;
+    }
+}
+
+void GeoCoord::ensureMGRS() const
+{
+    if (!_mgrsValid) {
+        GeoCoord::latLongToMGRS(_latitude * 1e-7, _longitude * 1e-7, _mgrs);
+        _mgrsValid = true;
+    }
+}
+
+void GeoCoord::ensureOSGR() const
+{
+    if (!_osgrValid) {
+        GeoCoord::latLongToOSGR(_latitude * 1e-7, _longitude * 1e-7, _osgr);
+        _osgrValid = true;
+    }
+}
+
+void GeoCoord::ensureOLC() const
+{
+    if (!_olcValid) {
+        GeoCoord::latLongToOLC(_latitude * 1e-7, _longitude * 1e-7, _olc);
+        _olcValid = true;
+    }
 }
 
 void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt)
@@ -461,34 +494,6 @@ float GeoCoord::rangeMetersToRadians(double range_meters)
     // 1 nm is 1852 meters
     double distance_nm = range_meters * 1852;
     return (PI / (180 * 60)) * distance_nm;
-}
-
-/**
- * Ported from http://www.edwilliams.org/avform147.htm#Intro
- * @brief Convert from radians to range in meters on a great circle
- * @param range_radians
- * The range in radians
- * @return Range in meters on a great circle
- */
-float GeoCoord::rangeRadiansToMeters(double range_radians)
-{
-    double distance_nm = ((180 * 60) / PI) * range_radians;
-    // 1 meter is 0.000539957 nm
-    return distance_nm * 0.000539957;
-}
-
-// Find distance from point to passed in point
-int32_t GeoCoord::distanceTo(const GeoCoord &pointB)
-{
-    return latLongToMeter(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                          pointB.getLongitude() * 1e-7);
-}
-
-// Find bearing from point to passed in point
-int32_t GeoCoord::bearingTo(const GeoCoord &pointB)
-{
-    return bearing(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                   pointB.getLongitude() * 1e-7);
 }
 
 /**

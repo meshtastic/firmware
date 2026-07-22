@@ -170,9 +170,9 @@ https://github.com/brad112358/easy_E22
 #define USE_RF95
 #define USE_SX1268
 #define USE_LR1121
+#define USE_LR2021
 
 // RF95 CONFIG
-
 #define LORA_DIO0 (0 + 29) // P0.29 BUSY
 #define LORA_DIO1 (0 + 10) // P0.10 IRQ
 #define LORA_RESET (0 + 9) // P0.09 NRST
@@ -205,7 +205,7 @@ https://github.com/brad112358/easy_E22
 #endif
 
 // LR2021
-#define USE_LR2021
+#ifdef USE_LR2021
 #define LR2021_IRQ_PIN (0 + 10)      // P0.10 IRQ
 #define LR2021_NRESET_PIN LORA_RESET // P0.09 NRST
 #define LR2021_BUSY_PIN (0 + 29)     // P0.29 BUSY
@@ -213,6 +213,7 @@ https://github.com/brad112358/easy_E22
 #define LR2021_DIO3_TCXO_VOLTAGE 1.8
 #define LR2021_DIO_AS_RF_SWITCH
 #define LR2021_IRQ_DIO_NUM 9 // DIO9 → P0.10
+#endif
 
 #else // Easy E22 Promicro arrangement
 #define USE_SSD1306

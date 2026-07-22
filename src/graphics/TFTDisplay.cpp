@@ -121,7 +121,6 @@ static void rak14014_tpIntHandle(void)
 
 #elif defined(HACKADAY_COMMUNICATOR)
 #include <Arduino_GFX_Library.h>
-Arduino_DataBus *bus = nullptr;
 Arduino_GFX *tft = nullptr;
 
 #elif defined(ST72xx_DE)
@@ -1601,17 +1600,21 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Do TFT init");
+    // connect() re-runs on every display wake on variants whose handleSetOn() re-inits
+    // the UI (see the gates in Screen::handleSetOn); construct the driver exactly once.
+    if (!tft) {
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-    tft = new TFT_eSPI;
+        tft = new TFT_eSPI;
 #elif defined(HACKADAY_COMMUNICATOR)
-    bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
-    tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */, 12 /* col offset 1 */,
-                             0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */, nv3007_279_init_operations,
-                             sizeof(nv3007_279_init_operations));
-
+        Arduino_DataBus *bus =
+            new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
+        tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */,
+                                 12 /* col offset 1 */, 0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */,
+                                 nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
 #else
-    tft = new LGFX;
+        tft = new LGFX;
 #endif
+    }
 
     backlightEnable->set(true);
     LOG_INFO("Power to TFT Backlight");
