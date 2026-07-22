@@ -11,6 +11,25 @@
 
 NextHopRouter::NextHopRouter() {}
 
+bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
+{
+    // Opaque traffic is never admitted to PacketHistory, NodeDB, modules, phone, MQTT, or ACK
+    // handling. Relay only from the immutable outer routing header and let hop exhaustion bound it.
+    const auto mode = config.device.rebroadcast_mode;
+    if (!iface || isToUs(p) || isFromUs(p) || p->id == 0 || p->hop_limit == 0 || !isRebroadcaster() || owner.is_licensed ||
+        !IS_ONE_OF(mode, meshtastic_Config_DeviceConfig_RebroadcastMode_ALL,
+                   meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING) ||
+        (p->next_hop != NO_NEXT_HOP_PREFERENCE && p->next_hop != nodeDB->getLastByteOfNodeNum(getNodeNum())))
+        return false;
+
+    meshtastic_MeshPacket *relay = packetPool.allocCopy(*p);
+    if (!relay)
+        return false;
+    relay->hop_limit--;
+    relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
+    return Router::send(relay) == ERRNO_OK;
+}
+
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
 {
     packet = p;
@@ -65,16 +84,15 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_INFO("Fallback to flooding from relay_node=0x%x", p->relay_node);
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
-                reprocessPacket(p);
-                perhapsRebroadcast(p);
+                if (reprocessPacket(p))
+                    perhapsRebroadcast(p);
             }
         } else {
             bool isRepeated = getHopsAway(*p) == 0;
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
-                    reprocessPacket(p);
-                    if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
+                    if (reprocessPacket(p) && !perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 }
@@ -159,6 +177,9 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     }
 #endif
 
+    if (p->to == NODENUM_BROADCAST_NO_LORA)
+        return false;
+
     // Allow rebroadcast if hop_limit > 0 OR if we're exhausting hops (which sets hop_limit = 0 but still needs one relay)
     if (!isToUs(p) && !isFromUs(p) && (p->hop_limit > 0 || exhaustHops)) {
         if (p->id != 0) {
@@ -192,11 +213,10 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     }
 #endif
 
-                    if (p->next_hop == NO_NEXT_HOP_PREFERENCE) {
-                        FloodingRouter::send(tosend);
-                    } else {
-                        NextHopRouter::send(tosend);
-                    }
+                    ErrorCode res =
+                        (p->next_hop == NO_NEXT_HOP_PREFERENCE) ? FloodingRouter::send(tosend) : NextHopRouter::send(tosend);
+                    if (res == ERRNO_SHOULD_RELEASE)
+                        packetPool.release(tosend);
 
                     return true;
                 }
@@ -401,8 +421,10 @@ int32_t NextHopRouter::doRetransmissions()
                             trafficManagementModule->clearNextHop(p.packet->to);
                         }
 #endif
-                        if (auto *copy = packetPool.allocCopy(*p.packet))
-                            FloodingRouter::send(copy);
+                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                packetPool.release(copy);
+                        }
                     } else {
 #if NEXTHOP_EARLY_FLOOD_ON_UNVERIFIED
                         // M4 (gated): if the route isn't proven healthy, don't spend a second directed
@@ -416,22 +438,30 @@ int32_t NextHopRouter::doRetransmissions()
                             meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                             if (sentTo)
                                 sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
-                            if (auto *copy = packetPool.allocCopy(*p.packet))
-                                FloodingRouter::send(copy);
+                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                                if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                    packetPool.release(copy);
+                            }
                         } else {
-                            if (auto *copy = packetPool.allocCopy(*p.packet))
-                                NextHopRouter::send(copy);
+                            if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                                if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                    packetPool.release(copy);
+                            }
                         }
 #else
-                        if (auto *copy = packetPool.allocCopy(*p.packet))
-                            NextHopRouter::send(copy);
+                        if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                            if (NextHopRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                                packetPool.release(copy);
+                        }
 #endif
                     }
                 } else {
                     // Note: we call the superclass version because we don't want to have our version of send() add a new
                     // retransmission record
-                    if (auto *copy = packetPool.allocCopy(*p.packet))
-                        FloodingRouter::send(copy);
+                    if (auto *copy = packetPool.allocCopy(*p.packet)) {
+                        if (FloodingRouter::send(copy) == ERRNO_SHOULD_RELEASE)
+                            packetPool.release(copy);
+                    }
                 }
 
                 // Queue again

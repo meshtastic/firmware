@@ -9,6 +9,9 @@
 #if !MESHTASTIC_EXCLUDE_STATUS
 #include "modules/StatusMessageModule.h"
 #endif
+#if BASEUI_HAS_GAMES
+#include "modules/games/GamesModule.h"
+#endif
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/GeoCoord.h"
@@ -21,8 +24,8 @@
 #include "main.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
-#include <RTC.h>
 #include <cstring>
+#include <gps/RTC.h>
 
 // External variables
 extern graphics::Screen *screen;
@@ -39,9 +42,9 @@ static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
 {
     int yOffset = (currentResolution == ScreenResolution::High) ? -5 : 1;
     if (currentResolution == ScreenResolution::High) {
-        NodeListRenderer::drawScaledXBitmap16x16(x, y + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite, display);
+        NodeListRenderer::drawScaledXBitmap16x16(x, y + yOffset, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
-        display->drawXbm(x + 1, y + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite);
+        display->drawXbm(x + 1, y + yOffset, imgGPS_width, imgGPS_height, imgGPS);
     }
 }
 
@@ -518,9 +521,9 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
 {
     // Draw satellite image
     if (currentResolution == ScreenResolution::High) {
-        NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgSatellite_width, imgSatellite_height, imgSatellite, display);
+        NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
-        display->drawXbm(x + 1, y + 1, imgSatellite_width, imgSatellite_height, imgSatellite);
+        display->drawXbm(x + 1, y + 1, imgGPS_width, imgGPS_height, imgGPS);
     }
     char textString[10];
 
@@ -844,6 +847,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             return -6.0f;
         case PRESET(MEDIUM_SLOW):
         case PRESET(MEDIUM_FAST):
+        case PRESET(MEDIUM_TURBO):
             return -5.5f;
         case PRESET(SHORT_SLOW):
         case PRESET(SHORT_FAST):
@@ -1382,30 +1386,6 @@ int UIRenderer::formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLED
     return display->getStringWidth(buf);
 }
 
-// Check if the display can render a string (detect special chars; emoji)
-bool UIRenderer::haveGlyphs(const char *str)
-{
-#if defined(OLED_PL) || defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CS)
-    // Don't want to make any assumptions about custom language support
-    return true;
-#endif
-
-    // Check each character with the lookup function for the OLED library
-    // We're not really meant to use this directly..
-    bool have = true;
-    for (uint16_t i = 0; i < strlen(str); i++) {
-        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
-        // If font doesn't support a character, it is substituted for ¿
-        if (result == 191 && (uint8_t)str[i] != 191) {
-            have = false;
-            break;
-        }
-    }
-
-    // LOG_DEBUG("haveGlyphs=%d", have);
-    return have;
-}
-
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 void UIRenderer::drawDeepSleepFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1816,6 +1796,13 @@ constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 // cppcheck-suppress constParameterPointer; signature must match OverlayCallback typedef from OLEDDisplayUi library
 void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+#if BASEUI_HAS_GAMES
+    // Hide the navigation bar while a game owns the screen (the attract screen doesn't intercept,
+    // so the nav bar stays visible there).
+    if (gamesModule && gamesModule->interceptingKeyboardInput())
+        return;
+#endif
+
     uint8_t frameToHighlight = state->currentFrame;
     if (state->frameState == IN_TRANSITION && state->transitionFrameTarget < screen->indicatorIcons.size()) {
         frameToHighlight = state->transitionFrameTarget;

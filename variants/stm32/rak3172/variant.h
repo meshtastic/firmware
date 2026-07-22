@@ -24,4 +24,7 @@ Do not expect a working Meshtastic device with this target.
 #define RAK3172
 #define SERIAL_PRINT_PORT 1
 
+#define HAS_LSE 1
+#define STM32WL_LSE_DRIVE RCC_LSEDRIVE_LOW
+
 #endif

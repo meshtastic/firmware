@@ -69,7 +69,7 @@ message LoRaRegionPresetMap {
 ### 2.3 Why grouped (and the size envelope clients should respect)
 
 A `FromRadio` packet is capped at **512 bytes** (`MAX_TO_FROM_RADIO_SIZE`). Most regions
-share one identical preset list (the "standard" 9-preset list), so the map is delivered
+share one identical preset list (the "standard" 10-preset list), so the map is delivered
 **grouped**: `groups` holds each _distinct_ preset list once, and `region_groups` maps every
 known region to one of those groups by index. This keeps the encoded size additive
 (`groups` + `region_groups`) rather than multiplicative, well under the cap.
@@ -153,7 +153,10 @@ These rules are what keep the UX correct across firmware versions. Implement all
 5. **EU region auto-swap caveat.** The firmware treats the EU sibling regions
    (`EU_868` / `EU_866` / `EU_N_868`) specially: if the user is in one of them and selects a
    preset that belongs to a sibling's list, the firmware **swaps the region** rather than
-   rejecting the preset. Consequence for clients: **do not assume the region is immutable
+   rejecting the preset. To make this visible in the picker, the firmware advertises the
+   **same superset** (the union of the trio's presets) for all three sibling regions, so a
+   client filtering per §6 will offer every EU 86x preset regardless of which sibling is
+   currently selected. Consequence for clients: **do not assume the region is immutable
    across a preset change** - after an admin config write, re-read the resulting
    `LoRaConfig` and reflect the (possibly changed) region back into the UI.
 
@@ -246,29 +249,42 @@ For decoder unit tests. With the 2.8 region table, the firmware emits **6 groups
 indices are assigned in region-table order (first region to use a profile creates its group),
 so they are stable as listed here:
 
-| group_index             | default_preset | licensed_only | presets                                                                                                        |
-| ----------------------- | -------------- | ------------- | -------------------------------------------------------------------------------------------------------------- |
-| 0 (standard)            | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, SHORT_TURBO, LONG_TURBO |
-| 1 (EU 868)              | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE                          |
-| 2 (EU 866 SRD / "lite") | `LITE_FAST`    | false         | LITE_FAST, LITE_SLOW                                                                                           |
-| 3 (EU 868 narrow)       | `NARROW_SLOW`  | false         | NARROW_FAST, NARROW_SLOW                                                                                       |
-| 4 (ham 20 kHz)          | `TINY_FAST`    | **true**      | TINY_FAST, TINY_SLOW                                                                                           |
-| 5 (ham 100 kHz)         | `NARROW_SLOW`  | **true**      | NARROW_FAST, NARROW_SLOW                                                                                       |
+| group_index             | default_preset | licensed_only | presets                                                                                                                      |
+| ----------------------- | -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 0 (standard)            | `LONG_FAST`    | false         | LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, SHORT_TURBO, LONG_TURBO, MEDIUM_TURBO |
+| 1 (EU 868)              | `LONG_FAST`    | false         | _EU 86x superset_ (see below)                                                                                                |
+| 2 (EU 866 SRD / "lite") | `LITE_FAST`    | false         | _EU 86x superset_ (see below)                                                                                                |
+| 3 (EU 868 narrow)       | `NARROW_SLOW`  | false         | _EU 86x superset_ (see below)                                                                                                |
+| 4 (ham 20 kHz)          | `TINY_FAST`    | **true**      | TINY_FAST, TINY_SLOW                                                                                                         |
+| 5 (ham 100 kHz)         | `NARROW_SLOW`  | **true**      | NARROW_FAST, NARROW_SLOW                                                                                                     |
+
+The **EU 86x superset** advertised by groups 1, 2 and 3 is the union of the trio's own
+band presets, because the firmware auto-swaps region within the trio on preset selection
+(§5), so any of these is a legal pick from any of the three regions:
+
+```text
+LONG_FAST, LONG_SLOW, MEDIUM_SLOW, MEDIUM_FAST, SHORT_SLOW, SHORT_FAST, LONG_MODERATE, LITE_FAST, LITE_SLOW, NARROW_FAST, NARROW_SLOW
+```
+
+The three groups still differ by `default_preset` (`LONG_FAST` / `LITE_FAST` / `NARROW_SLOW`),
+which is why they remain distinct groups despite sharing this preset list.
 
 `region_groups` (region → group_index):
 
-| group | regions                                                                                                                                                               |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | US, EU_433, CN, JP, ANZ, ANZ_433, RU, KR, TW, IN, NZ_865, TH, UA_433, UA_868, MY_433, MY_919, SG_923, PH_433, PH_868, PH_915, KZ_433, KZ_863, NP_865, BR_902, LORA_24 |
-| 1     | EU_868                                                                                                                                                                |
-| 2     | EU_866                                                                                                                                                                |
-| 3     | EU_N_868                                                                                                                                                              |
-| 4     | ITU1_2M, ITU2_2M, ITU3_2M                                                                                                                                             |
-| 5     | ITU2_125CM                                                                                                                                                            |
+| group | regions                                                                                                                                                       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | US, EU_433, CN, JP, ANZ, ANZ_433, RU, KR, TW, IN, NZ_865, TH, UA_433, MY_433, MY_919, SG_923, PH_433, PH_868, PH_915, KZ_433, KZ_863, NP_865, BR_902, LORA_24 |
+| 1     | EU_868                                                                                                                                                        |
+| 2     | EU_866                                                                                                                                                        |
+| 3     | EU_N_868                                                                                                                                                      |
+| 4     | ITU1_2M, ITU2_2M, ITU3_2M                                                                                                                                     |
+| 5     | ITU2_125CM                                                                                                                                                    |
 
-> Note groups **3** and **5** carry the same preset list (NARROW\_\*) but are distinct groups
-> because they differ in `licensed_only`. Decoders must key on the group, not on the preset
-> list, to preserve the licensing flag.
+> Note that several groups can carry overlapping preset lists but remain distinct: groups 1,
+> 2 and 3 share the EU 86x superset yet differ in `default_preset`, and group **5** (ham
+> 100 kHz) shares the `NARROW_*` presets with group 3 but differs in `licensed_only`.
+> Decoders must key on the group, not on the preset list, to preserve `default_preset` and
+> the licensing flag.
 >
 > Regions **absent** from the table (no constraint info; see §5.1): `EU_874`, `EU_917`,
 > `ITU1_70CM`, `ITU2_70CM`, `ITU3_70CM`.

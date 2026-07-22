@@ -26,6 +26,7 @@ class NotificationRenderer
     static std::function<void(int)> alertBannerCallback;
     static uint32_t numDigits;
     static uint32_t currentNumber;
+    static char alphanumericValue[16]; // working buffer for the alphanumeric_picker
     static VirtualKeyboard *virtualKeyboard;
     static std::function<void(const std::string &)> textInputCallback;
 
@@ -38,11 +39,11 @@ class NotificationRenderer
     static BannerFont alertBannerLineFonts[MAX_LINES + 1];
     static void parseBannerMessageWithFonts(const char *message);
     static void resetBanner();
-    static void showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs);
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawHexPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
