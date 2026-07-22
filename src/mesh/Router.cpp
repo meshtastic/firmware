@@ -216,10 +216,10 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
  */
 int32_t Router::runOnce()
 {
-    meshtastic_MeshPacket *mp;
-    while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        // printPacket("handle fromRadioQ", mp);
-        perhapsHandleReceived(mp);
+    QueuedFromRadio qp;
+    while (fromRadioQueue.dequeue(&qp, 0)) {
+        // printPacket("handle fromRadioQ", qp.packet);
+        perhapsHandleReceived(qp.packet, qp.src);
     }
 
     // LOG_DEBUG("Sleep forever!");
@@ -230,15 +230,14 @@ int32_t Router::runOnce()
  * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
  * freeing the packet
  */
-void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
+void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p, RxSource src)
 {
     // Try enqueue until successful
-    while (!fromRadioQueue.enqueue(p, 0)) {
-        meshtastic_MeshPacket *old_p;
-        old_p = fromRadioQueue.dequeuePtr(0); // Dequeue and discard the oldest packet
-        if (old_p) {
-            printPacket("fromRadioQ full, drop oldest!", old_p);
-            packetPool.release(old_p);
+    while (!fromRadioQueue.enqueue(QueuedFromRadio{p, src}, 0)) {
+        QueuedFromRadio old_qp;
+        if (fromRadioQueue.dequeue(&old_qp, 0)) { // Dequeue and discard the oldest packet
+            printPacket("fromRadioQ full, drop oldest!", old_qp.packet);
+            packetPool.release(old_qp.packet);
         }
     }
     // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
@@ -327,10 +326,13 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
     // No need to deliver externally if the destination is the local node
     if (isToUs(p)) {
         printPacket("Enqueued local", p);
-        // Preserve the trusted origin explicitly. Queueing used to erase src and make a local
-        // phone/module packet indistinguishable from remote already-decoded ingress.
-        handleReceived(p, src);
-        return ERRNO_SHOULD_RELEASE;
+        // Queue rather than call handleReceived() synchronously: a reply generated from inside
+        // MeshModule::callModules() (e.g. an admin/module-config response) lands here via
+        // sendToMesh(), and calling handleReceived() in-line would re-enter callModules() from
+        // within itself. The queue carries src through so the packet is still replayed with its
+        // true origin instead of defaulting to RX_SRC_RADIO.
+        enqueueReceivedMessage(p, src);
+        return ERRNO_OK;
     } else if (!iface) {
         // We must be sending to remote nodes also, fail if no interface found
         abortSendAndNak(meshtastic_Routing_Error_NO_INTERFACE, p);
@@ -1356,7 +1358,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     packetPool.release(p_encrypted); // Release the encrypted packet (release() handles nullptr)
 }
 
-void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
+void Router::perhapsHandleReceived(meshtastic_MeshPacket *p, RxSource src)
 {
 #if ARCH_PORTDUINO
     // Even ignored packets get logged in the trace
@@ -1425,6 +1427,6 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
     // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
-    handleReceived(p);
+    handleReceived(p, src);
     packetPool.release(p);
 }

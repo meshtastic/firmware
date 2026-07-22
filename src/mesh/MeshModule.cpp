@@ -195,7 +195,11 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
             printPacket("Send response", currentReply);
-            service->sendToMesh(currentReply);
+            // A reply to a phone request loops back to us as its own destination (RX_SRC_LOCAL),
+            // which the loopback guard above hides from every module - including RoutingModule,
+            // whose handleReceivedProtobuf() is what forwards packets to the phone. Without
+            // ccToPhone the reply would be silently dropped instead of reaching the requester.
+            service->sendToMesh(currentReply, RX_SRC_LOCAL, isToUs(currentReply));
             currentReply = NULL;
         } else if (mp.from != ourNodeNum && !ignoreRequest) {
             // Note: if the message started with the local node or a module asked to ignore the request, we don't want to send a
