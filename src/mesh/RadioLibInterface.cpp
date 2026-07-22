@@ -291,41 +291,7 @@ void RadioLibInterface::updateNoiseFloor()
     currentNoiseFloor = getAverageNoiseFloorInternal();
 
     LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
-
-#ifdef LORA_RSSI_LBT_PROFILE
-    // Reuse this idle-RX sample (no extra SPI read) for the margin profiler's noise-jitter distribution.
-    rssiIdleStats.add((int16_t)(rssi - currentNoiseFloor));
-    profileRssiReport();
-#endif
 }
-
-#ifdef LORA_RSSI_LBT_PROFILE
-void RadioLibInterface::profileRssiOnPacket(int32_t packetRssi)
-{
-    if (!hasNoiseFloorSamples() || packetRssi >= 0 || packetRssi < NOISE_FLOOR_VALID_MIN)
-        return; // no baseline yet, or a nonsensical reading
-    rssiSignalStats.add((int16_t)(packetRssi - getNoiseFloor()));
-}
-
-void RadioLibInterface::profileRssiReport()
-{
-    uint32_t now = millis();
-    if (now - lastRssiProfileReport < 60000)
-        return;
-    lastRssiProfileReport = now;
-
-    // idle: watch the HIGH tail (p90..p99) - the margin must sit above it or noise reads "busy".
-    LOG_INFO("RSSIprof floor=%ddBm idle n=%u min=%d mean=%d p90=%d p95=%d p99=%d max=%d", getNoiseFloor(), rssiIdleStats.count,
-             rssiIdleStats.minDelta, rssiIdleStats.mean(), rssiIdleStats.percentile(90), rssiIdleStats.percentile(95),
-             rssiIdleStats.percentile(99), rssiIdleStats.maxDelta);
-    // signal: watch the LOW tail (p05..p10) - the margin must sit below it or real traffic is never gated.
-    LOG_INFO("RSSIprof signal n=%u min=%d p05=%d p10=%d mean=%d max=%d", rssiSignalStats.count, rssiSignalStats.minDelta,
-             rssiSignalStats.percentile(5), rssiSignalStats.percentile(10), rssiSignalStats.mean(), rssiSignalStats.maxDelta);
-    if (rssiSignalStats.count > 0)
-        LOG_INFO("RSSIprof suggest margin in (%d, %d) dB above floor", rssiIdleStats.percentile(99),
-                 rssiSignalStats.percentile(5));
-}
-#endif
 
 uint8_t RadioLibInterface::getNoiseFloorSampleCountInternal() const
 {
@@ -356,27 +322,6 @@ int32_t RadioLibInterface::getAverageNoiseFloor()
 int32_t RadioLibInterface::getNoiseFloor()
 {
     return currentNoiseFloor;
-}
-
-bool RadioLibInterface::channelBusyByRSSI()
-{
-    // Fail-open on every uncertainty. A false "busy" only defers one transmit, but a *persistent* false
-    // "busy" would silence the node - so anything short of a confident reading returns false (not busy).
-    if (!RSSI_LBT_GATE_ENABLED)
-        return false;
-
-    // getCurrentRSSI() (GET_RSSI_INST) is only meaningful while in RX, and we need a settled noise floor
-    // to compare against. Require the full rolling window (~NOISE_FLOOR_SAMPLES * 5 s of RX) so we never
-    // gate off a noisy, half-populated baseline. A preamble already in flight is handled upstream by
-    // isActivelyReceiving()/canSendImmediately(); this gate targets the mid-payload energy CAD can't see.
-    if (!isReceiving || getNoiseFloorSampleCountInternal() < NOISE_FLOOR_SAMPLES)
-        return false;
-
-    int16_t rssi = getCurrentRSSI();
-    if (rssi == NOISE_FLOOR_INVALID || rssi >= 0 || rssi < NOISE_FLOOR_VALID_MIN)
-        return false; // invalid / nonsensical reading -> don't gate
-
-    return rssi > (getNoiseFloor() + RSSI_LBT_MARGIN_DB);
 }
 
 bool RadioLibInterface::hasNoiseFloorSamples()
@@ -518,16 +463,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay();
 #endif
                 } else {
-                    // Two-stage listen-before-talk: an RSSI energy check (catches a mid-payload packet
-                    // whose preamble CAD already missed), then the CAD preamble scan. channelBusyByRSSI()
-                    // is a compile-time no-op unless the gate is enabled, and it reads RSSI while we are
-                    // still in RX (before isChannelActive()'s setStandby()). Split into two flags so the
-                    // #3 handoff below can tell a CAD detection (chip now in RX via GOTO_RX) from an
-                    // RSSI-only defer (chip never left RX). With MESHTASTIC_LBT_CAD_TO_RX off this is
-                    // exactly the old `channelBusyByRSSI() || isChannelActive()` short-circuit.
-                    const bool rssiBusy = channelBusyByRSSI();
-                    const bool cadBusy = !rssiBusy && isChannelActive(); // currently traffic on the channel?
-                    if (rssiBusy || cadBusy) {
+                    // Listen-before-talk: a CAD preamble scan immediately before we key up.
+                    // isChannelActive() reads (and, under MESHTASTIC_LBT_CAD_TO_RX, leaves) the radio in
+                    // the state the #3 handoff below expects.
+                    if (isChannelActive()) { // currently traffic on the channel?
 #ifndef MESHTASTIC_LBT_CAD_TO_RX
                         // Finding #1: re-arm unconditionally so we keep listening on the channel we are
                         // deferring on. The old `!hasTargetRadioSettings(txp)` guard skipped this for
@@ -537,9 +476,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         // while it waits to key up.
                         startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
 #else
-                        // Finding #3/#6: the chip is already in RX - isChannelActive() did the CAD->RX
-                        // handoff in place on detection, and the RSSI-only defer never left RX. A
-                        // startReceive() here would standby and abort that reception, so leave it be.
+                        // Finding #3: the chip is already in RX - isChannelActive() did the CAD->RX handoff
+                        // in place on detection. A startReceive() here would standby and abort that
+                        // reception, so leave it be.
 #endif
                         setTransmitDelay();
                     } else {
@@ -763,11 +702,6 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->relay_node = mp->hop_start == 0 ? NO_RELAY_NODE : radioBuffer.header.relay_node;
 
             addReceiveMetadata(mp);
-
-#ifdef LORA_RSSI_LBT_PROFILE
-            // Feed the decoded packet's RSSI to the margin profiler's real-traffic distribution.
-            profileRssiOnPacket(mp->rx_rssi);
-#endif
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point

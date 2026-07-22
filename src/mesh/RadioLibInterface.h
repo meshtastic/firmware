@@ -7,10 +7,6 @@
 #include <RadioLib.h>
 #include <sys/types.h>
 
-#ifdef LORA_RSSI_LBT_PROFILE
-#include "RssiProfiler.h"
-#endif
-
 // ESP32 has special rules about ISR code
 #ifdef ARDUINO_ARCH_ESP32
 #define INTERRUPT_ATTR IRAM_ATTR
@@ -122,36 +118,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     uint32_t lastNoiseFloorUpdate = 0;
     static const uint32_t NOISE_FLOOR_UPDATE_INTERVAL_MS = 5000;
     int32_t currentNoiseFloor = NOISE_FLOOR_DEFAULT;
-
-    // --- RSSI listen-before-talk second gate (LBT audit findings #4/#5) ---
-    // CAD detects only a preamble; a neighbour's packet whose preamble already aired (during our own TX,
-    // a CAD scan, or a standby gap) is mid-payload and invisible to CAD, so we transmit on top of it. As a
-    // second gate we compare the instantaneous in-RX RSSI against the rolling noise floor: a packet on air
-    // raises channel energy well above the floor even after its preamble is long gone.
-    //
-    // DISABLED by default. A mis-set threshold makes the node read "busy" on noise and stop transmitting
-    // entirely - worse than the bug. Define LORA_RSSI_LBT_MARGIN_DB (dB above the noise floor that counts
-    // as "busy") at build time to enable and tune on hardware. See .notes/lbt-audit-implementation-
-    // checklist.md (#4/#5) and .notes/lbt-radiolib-requirements.md.
-#ifdef LORA_RSSI_LBT_MARGIN_DB
-    static constexpr bool RSSI_LBT_GATE_ENABLED = true;
-    static constexpr int32_t RSSI_LBT_MARGIN_DB = LORA_RSSI_LBT_MARGIN_DB;
-#else
-    static constexpr bool RSSI_LBT_GATE_ENABLED = false;
-    static constexpr int32_t RSSI_LBT_MARGIN_DB = 0;
-#endif
-
-#ifdef LORA_RSSI_LBT_PROFILE
-    // RSSI-margin profiler (build with -DLORA_RSSI_LBT_PROFILE). Instrumentation only - never shipped.
-    // Accumulates (RSSI - noise floor) in two channel states so RSSI_LBT_MARGIN_DB can be read off the
-    // logs instead of guessed. Independent of the gate flag: you profile first to choose the margin, then
-    // build with -DLORA_RSSI_LBT_MARGIN_DB=<n>. See .notes/lbt-rssi-margin-profiler.md.
-    RssiDeltaStats rssiIdleStats;   // (instantaneous RSSI - floor) while idle -> noise jitter (its high tail)
-    RssiDeltaStats rssiSignalStats; // (packet RSSI - floor) on decoded packets -> real-traffic rise (its low tail)
-    uint32_t lastRssiProfileReport = 0;
-    void profileRssiOnPacket(int32_t packetRssi); // feed a decoded packet's RSSI
-    void profileRssiReport();                     // throttled log dump of both distributions
-#endif
 
     /**
      * Pure virtual hook for derived radio interfaces to provide instantaneous RSSI.
@@ -283,15 +249,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
   private:
     uint8_t getNoiseFloorSampleCountInternal() const;
     int32_t getAverageNoiseFloorInternal() const;
-
-    /**
-     * Second listen-before-talk gate (LBT audit #4/#5): true when the instantaneous in-RX RSSI sits more
-     * than RSSI_LBT_MARGIN_DB above the rolling noise floor - i.e. there is energy on the channel that a
-     * preamble-only CAD would miss. A compile-time no-op (always false) unless LORA_RSSI_LBT_MARGIN_DB is
-     * defined. Fails OPEN: returns false on any uncertain/invalid reading so it can never silence the
-     * node. MUST be called while the radio is in RX - getCurrentRSSI() (GET_RSSI_INST) is only valid there.
-     */
-    bool channelBusyByRSSI();
 
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
