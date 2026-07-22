@@ -8,14 +8,11 @@
  */
 class SinglePortModule : public MeshModule
 {
-  protected:
-    meshtastic_PortNum ourPortNum;
-
   public:
     /** Constructor
      * name is for debugging output
      */
-    SinglePortModule(const char *_name, meshtastic_PortNum _ourPortNum) : MeshModule(_name), ourPortNum(_ourPortNum) {}
+    SinglePortModule(const char *_name, meshtastic_PortNum _ourPortNum) : MeshModule(_name, _ourPortNum) {}
 
   protected:
     /**

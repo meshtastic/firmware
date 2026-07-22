@@ -202,6 +202,35 @@ void test_wrong_admin_key_does_not_decode(void)
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
 }
 
+// The fallback is budget-limited against flooding; see Router.cpp for why the budget is global.
+void test_admin_key_fallback_is_rate_limited(void)
+{
+    // Start from a full bucket regardless of what earlier tests consumed (8 tokens, one per 250ms).
+    delay(2500);
+
+    uint8_t otherPub[32], otherPriv[32];
+    crypto->generateKeyPair(otherPub, otherPriv);
+    crypto->setDHPrivateKey(ourPriv);
+    setAdminKey(0, otherPub); // wrong key, so every attempt below fails and keeps its token spent
+
+    // Drain the burst with undecryptable packets, as a flooding attacker would.
+    for (int i = 0; i < 8; i++) {
+        meshtastic_MeshPacket junk = makePkiPacket(ADMIN_NODE, meshtastic_PortNum_PRIVATE_APP, 16, adminPriv);
+        TEST_ASSERT_NOT_EQUAL(DECODE_SUCCESS, perhapsDecode(&junk));
+    }
+
+    // Budget exhausted: the fallback is skipped, so even a correct admin key does not decrypt.
+    setAdminKey(0, adminPub);
+    meshtastic_MeshPacket blocked = makePkiPacket(ADMIN_NODE, meshtastic_PortNum_PRIVATE_APP, 16, adminPriv);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&blocked), "fallback should be budget-limited");
+
+    // The budget refills, so the throttle is not a permanent lockout.
+    delay(600);
+    meshtastic_MeshPacket allowed = makePkiPacket(ADMIN_NODE, meshtastic_PortNum_PRIVATE_APP, 16, adminPriv);
+    TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&allowed), "budget should refill over time");
+    assertDecodedAndLearned(&allowed, adminPub);
+}
+
 // A pending key is an unverified identity claim from whoever opened a key-verification handshake, so it
 // must decrypt only the exchange itself. Otherwise they could send DMs that look PKI-authenticated as a
 // node they never proved they are.
@@ -243,6 +272,7 @@ void setup()
     RUN_TEST(test_admin_key_slot2_only_decrypts);
     RUN_TEST(test_no_admin_key_unknown_sender_not_decoded);
     RUN_TEST(test_wrong_admin_key_does_not_decode);
+    RUN_TEST(test_admin_key_fallback_is_rate_limited);
     RUN_TEST(test_pending_key_decrypts_only_key_verification);
 #endif
     exit(UNITY_END());
