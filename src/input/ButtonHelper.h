@@ -7,7 +7,8 @@
 #include <driver/gpio.h>
 #endif
 
-inline uint32_t getResolvedButtonPin() {
+inline uint32_t getResolvedButtonPin()
+{
     uint32_t btnPin = 0xFF;
 #if defined(USERPREFS_BUTTON_PIN)
     btnPin = USERPREFS_BUTTON_PIN;

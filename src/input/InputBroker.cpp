@@ -1,8 +1,8 @@
 #include "InputBroker.h"
-#include "input/ButtonHelper.h"
 #include "PowerFSM.h" // needed for event trigger
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/ButtonHelper.h"
 #include "input/HapticFeedback.h"
 #include "modules/ExternalNotificationModule.h"
 #ifdef MESHTASTIC_LOCKDOWN
@@ -332,53 +332,53 @@ void InputBroker::Init()
     if (_pinNum != 0xFF) {
         UserButtonThread = new ButtonThread("UserButton");
 #if !MESHTASTIC_EXCLUDE_SCREEN
-    if (screen) {
-        ButtonConfig userConfig;
-        userConfig.pinNumber = (uint8_t)_pinNum;
-        userConfig.activeLow = BUTTON_ACTIVE_LOW;
-        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfig.pullupSense = pullup_sense;
-        userConfig.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-        };
-        userConfig.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfig.longPress = INPUT_BROKER_SELECT;
-        userConfig.longPressTime = 500;
-        userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
-        UserButtonThread->initButton(userConfig);
-    } else
+        if (screen) {
+            ButtonConfig userConfig;
+            userConfig.pinNumber = (uint8_t)_pinNum;
+            userConfig.activeLow = BUTTON_ACTIVE_LOW;
+            userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+            userConfig.pullupSense = pullup_sense;
+            userConfig.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                UserButtonThread->setIntervalFromNow(0);
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                concurrency::mainDelay.interruptFromISR(&higherWake);
+            };
+            userConfig.singlePress = INPUT_BROKER_USER_PRESS;
+            userConfig.longPress = INPUT_BROKER_SELECT;
+            userConfig.longPressTime = 500;
+            userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
+            UserButtonThread->initButton(userConfig);
+        } else
 #endif
-    {
-        ButtonConfig userConfigNoScreen;
-        userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
-        userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
-        userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
-        userConfigNoScreen.pullupSense = pullup_sense;
-        userConfigNoScreen.intRoutine = []() {
-            UserButtonThread->userButton.tick();
-            UserButtonThread->setIntervalFromNow(0);
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            concurrency::mainDelay.interruptFromISR(&higherWake);
-        };
+        {
+            ButtonConfig userConfigNoScreen;
+            userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
+            userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
+            userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
+            userConfigNoScreen.pullupSense = pullup_sense;
+            userConfigNoScreen.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                UserButtonThread->setIntervalFromNow(0);
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                concurrency::mainDelay.interruptFromISR(&higherWake);
+            };
 #if defined(ELECROW_ThinkNode_M7)
-        userConfigNoScreen.longLongPressTime = 15 * 1000;
-        userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
+            userConfigNoScreen.longLongPressTime = 15 * 1000;
+            userConfigNoScreen.longLongPress = INPUT_BROKER_FACTORY_RST;
 #else
-        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+            userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
 #endif
-        userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
-        userConfigNoScreen.longPressTime = 500;
-        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
-        userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
-        userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
-        UserButtonThread->initButton(userConfigNoScreen);
-    }
+            userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
+            userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+            userConfigNoScreen.longPressTime = 500;
+            userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
+            userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
+            userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
+            UserButtonThread->initButton(userConfigNoScreen);
+        }
     }
 #endif
 #endif

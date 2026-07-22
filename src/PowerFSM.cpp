@@ -9,12 +9,12 @@
  */
 #include "PowerFSM.h"
 #include "Default.h"
-#include "input/ButtonHelper.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/ButtonHelper.h"
 #include "main.h"
 #include "modules/StatusLEDModule.h"
 #include "sleep.h"
@@ -29,7 +29,7 @@
 #endif
 #if MESHTASTIC_EXCLUDE_POWER_FSM
 FakeFsm powerFSM;
-void PowerFSM_setup(){};
+void PowerFSM_setup() {};
 #else
 /// Should we behave as if we have AC power now?
 static bool isPowered()

@@ -2,8 +2,8 @@
 #include "PowerMon.h"
 #include "configuration.h"
 #include "esp_task_wdt.h"
-#include "main.h"
 #include "input/ButtonHelper.h"
+#include "main.h"
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 #endif
@@ -349,8 +349,8 @@ void cpuDeepSleep(uint32_t msecToWake)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
 #endif
 
-        // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
-        // to detect wake and in normal operation the external part drives them hard.
+    // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
+    // to detect wake and in normal operation the external part drives them hard.
 #if HAS_BUTTON
     uint32_t _btnPin = getResolvedButtonPin();
     uint64_t gpioMask = 0;
