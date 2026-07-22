@@ -21,6 +21,10 @@
 #include "support/MockMeshService.h"
 #include <cstring>
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum ADMIN_NODE = 0x0B0B0B0B;   // authorized admin, sends remote admin to us
 static constexpr NodeNum QUERIED_NODE = 0x0C0C0C0C; // a remote we send admin requests to
@@ -157,6 +161,14 @@ void setUp(void)
     nodeDB = mockNodeDB;
     myNodeInfo.my_node_num = LOCAL_NODE;
 
+#ifdef ARCH_PORTDUINO
+    // The native test harness boots Portduino in simulated mode, and wouldEncryptWithPKC()
+    // hard-disables PKC whenever force_simradio is set. Left true, no outgoing admin request is
+    // ever key-pinned, so the pinning tests below cannot exercise what they are asserting.
+    // Model a real (non-sim) device instead.
+    portduino_config.force_simradio = false;
+#endif
+
     config = meshtastic_LocalConfig_init_zero;
     // A real device always holds a private key; without one perhapsEncode never picks PKC.
     config.security.private_key.size = 32;
@@ -289,6 +301,26 @@ void test_local_security_config_keeps_private_key(void)
     TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
     TEST_ASSERT_EQUAL_MESSAGE(32, sec.private_key.size, "local backup must still receive the private key");
     TEST_ASSERT_EACH_EQUAL_HEX8(0xAB, sec.private_key.bytes, 32);
+    admin->drainReply();
+}
+
+// A local client writes this device-owned policy, then receives the same value in its next config read.
+void test_local_security_config_round_trips_packet_signature_policy(void)
+{
+    meshtastic_Config set = meshtastic_Config_init_zero;
+    set.which_payload_variant = meshtastic_Config_security_tag;
+    set.payload_variant.security = config.security;
+    set.payload_variant.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    admin->handleSetConfig(set, false);
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(0);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG);
+
+    meshtastic_Config_SecurityConfig sec;
+    TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+    TEST_ASSERT_EQUAL(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
+                      sec.packet_signature_policy);
     admin->drainReply();
 }
 
@@ -640,6 +672,7 @@ void setup()
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
     RUN_TEST(test_local_security_config_keeps_private_key);
+    RUN_TEST(test_local_security_config_round_trips_packet_signature_policy);
     RUN_TEST(test_remote_network_config_omits_wifi_psk);
     RUN_TEST(test_local_network_config_keeps_wifi_psk);
     RUN_TEST(test_remote_mqtt_config_omits_password);

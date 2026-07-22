@@ -1136,6 +1136,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             rotated.private_key = incoming.private_key;
             incoming = rotated;
         }
+#if MESHTASTIC_EXCLUDE_PKI || MESHTASTIC_EXCLUDE_XEDDSA
+        if (incoming.packet_signature_policy !=
+            meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE) {
+            incoming.packet_signature_policy =
+                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+            const char *warning = "Packet authenticity policy is unavailable on this firmware build";
+            LOG_WARN(warning);
+            sendWarning(warning);
+        }
+#endif
         config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
