@@ -13,7 +13,6 @@
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "RadioInterface.h"
 #include "Router.h"
 #include "SPILock.h"
@@ -21,6 +20,7 @@
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
 #include "error.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
@@ -30,6 +30,9 @@
 #include "target_specific.h"
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
 #endif
 #include "xmodem.h"
 #include <ErriezCRC32.h>
@@ -478,6 +481,12 @@ NodeDB::NodeDB()
     LOG_DEBUG("Number of Device Reboots: %d", myNodeInfo.reboot_count);
 #endif
 
+    // UA_868 is obsolete; migrate to EU_868 before resetRadioConfig() below validates the region.
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UA_868) {
+        LOG_INFO("UA_868 region is obsolete, migrating saved config to EU_868");
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    }
+
     resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
@@ -760,6 +769,12 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     // didn't touch it; clear it and persist the empty store.
     warmStore.clear();
     warmStore.saveIfDirty();
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // Factory reset forgets everything; TMM's RAM caches must not survive to resurrect
+    // identities (the device usually reboots after this, but don't rely on it).
+    if (trafficManagementModule)
+        trafficManagementModule->purgeAll();
 #endif
 
     // second, install default state (this will deal with the duplicate mac address issue)
@@ -1521,16 +1536,34 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
 
+#ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
+#endif
+
 #ifdef USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL
     moduleConfig.telemetry.environment_update_interval = USERPREFS_CONFIG_ENV_TELEM_UPDATE_INTERVAL;
 #else
     moduleConfig.telemetry.environment_update_interval = 0;
 #endif
 
-#ifdef USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED
-    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_CONFIG_ENVIRONMENT_MEASUREMENT_ENABLED;
+#ifdef USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED
+    moduleConfig.telemetry.environment_screen_enabled = USERPREFS_CONFIG_ENV_SCREEN_SCREEN_ENABLED;
 #endif
+
+#ifdef USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL
+    moduleConfig.telemetry.air_quality_interval = USERPREFS_CONFIG_AQ_TELEM_UPDATE_INTERVAL;
+#else
     moduleConfig.telemetry.air_quality_interval = 0;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.air_quality_enabled = USERPREFS_CONFIG_AQ_MEASUREMENT_ENABLED;
+#endif
+
+#ifdef USERPREFS_CONFIG_AQ_SCREEN_ENABLED
+    moduleConfig.telemetry.air_quality_screen_enabled = USERPREFS_CONFIG_AQ_SCREEN_ENABLED;
+#endif
+
     moduleConfig.telemetry.power_update_interval = 0;
     moduleConfig.telemetry.health_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
@@ -1574,6 +1607,11 @@ void NodeDB::resetNodes(bool keepFavorites)
 #if WARM_NODE_COUNT > 0
     warmStore.clear(); // warm entries are never favorites; a DB reset clears them too
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // A user-initiated DB reset forgets everything; TMM's caches must not resurrect it.
+    if (trafficManagementModule)
+        trafficManagementModule->purgeAll();
+#endif
 
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1592,13 +1630,25 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
             removed++;
     }
     numMeshNodes -= removed;
-    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
-              meshtastic_NodeInfoLite());
-    if (removed)
-        eraseNodeSatellites(nodeNum);
+    if (removed) {
+        // Clear exactly the slots compaction vacated. Sizing this from `removed` (rather than a
+        // fixed one) keeps it inside the vector when nothing matched and the store is full.
+        const size_t first = numMeshNodes;
+        const size_t last = std::min(first + removed, nodeDatabase.nodes.size());
+        std::fill(nodeDatabase.nodes.begin() + first, nodeDatabase.nodes.begin() + last, meshtastic_NodeInfoLite());
+    }
+    // Drop the node's satellite stores and warm-tier copy regardless of which tier it lived in, so
+    // an explicit removal fully forgets it.
+    eraseNodeSatellites(nodeNum);
 #if WARM_NODE_COUNT > 0
     // Explicit user removal: don't let the warm tier resurrect the node
     warmStore.remove(nodeNum);
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // Explicit removal is full removal: the TrafficManagement caches (unified slot +
+    // NodeInfo identity cache) must not keep serving or resurrect the node either.
+    if (trafficManagementModule)
+        trafficManagementModule->purgeNode(nodeNum);
 #endif
 
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
@@ -1812,6 +1862,8 @@ bool NodeDB::enforceSatelliteCaps()
 // them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
 static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
 {
+    if (nodeInfoLiteHasXeddsaSigned(&n))
+        return static_cast<uint8_t>(WarmProtected::XeddsaSigner);
     if (n.bitfield & (NODEINFO_BITFIELD_IS_FAVORITE_MASK | NODEINFO_BITFIELD_IS_IGNORED_MASK |
                       NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK))
         return static_cast<uint8_t>(WarmProtected::Flag);
@@ -1853,7 +1905,8 @@ void NodeDB::cleanupMeshDB()
                 // Keep any key we learned (e.g. via a DM before the NodeInfo
                 // exchange completed) rather than losing it with the purge.
                 if (n.public_key.size == 32)
-                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes, n.role, warmProtectedCategory(n));
+                    warmStore.absorb(gone, n.last_heard, n.public_key.bytes, n.role, warmProtectedCategory(n),
+                                     nodeInfoLiteHasXeddsaSigned(&n));
 #endif
 
                 eraseNodeSatellites(gone);
@@ -2037,7 +2090,7 @@ void NodeDB::demoteOldestHotNodesToWarm()
         // Keep the public key if we have one (40 B warm record); keyless nodes
         // still get a placeholder so re-admission restores last_heard.
         warmStore.absorb(n.num, n.last_heard, n.public_key.size > 0 ? n.public_key.bytes : nullptr, n.role,
-                         warmProtectedCategory(n));
+                         warmProtectedCategory(n), nodeInfoLiteHasXeddsaSigned(&n));
         // Demotion drops the node from the header table, so drop its satellites
         // too (the eviction chokepoint) - they'd otherwise orphan until the next
         // enforceSatelliteCaps pass.
@@ -3090,6 +3143,9 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 #include "MeshModule.h"
 #include "Throttle.h"
 
+// Minimum spacing between evictions once the node database is full.
+#define NODEDB_FULL_EVICTION_INTERVAL_MS (2 * 1000UL)
+
 static constexpr uint32_t HOPSTART_DROP_LOG_INTERVAL_MS = 15000;
 
 void logHopStartDrop(const meshtastic_MeshPacket &p, const char *context)
@@ -3238,6 +3294,9 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
             LOG_WARN(PROTECTED_CAP_WARN_FMT, "ignore", contact.node_num, MAX_NUM_NODES - 2);
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
         eraseNodeSatellites(contact.node_num);
+#if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+        messageStore.deleteAllMessagesFromNode(contact.node_num);
+#endif
     } else {
         /* Clients are sending add_contact before every text message DM (because clients may hold a larger node database with
          * public keys than the radio holds). However, we don't want to update last_heard just because we sent someone a DM!
@@ -3277,8 +3336,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
 
 /** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
+bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
+    // Only a signed update may change the identity of a node that has proven it signs; our own record is
+    // exempt. Checked before getOrCreateMeshNode so a refused update cannot evict or write the warm tier.
+    const meshtastic_NodeInfoLite *existing = getMeshNode(nodeId);
+    if (nodeId != getNodeNum() && existing && nodeInfoLiteHasXeddsaSigned(existing) && !xeddsaSigned) {
+        LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
+        return false;
+    }
+
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
         return false;
@@ -3360,6 +3427,20 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         }
     }
 
+#if HAS_TRAFFIC_MANAGEMENT
+    // Write-through: every accepted remote-identity commit lands here (NodeInfoModule,
+    // MeshService, and TMM's requester learning all funnel through updateUser; the two
+    // key-write sites that bypass it call onNodeKeyCommitted instead), so TMM's NodeInfo
+    // cache reflects the commit immediately rather than at the next reconcile pass. Runs on
+    // acceptance, not on `changed`: an identical update still proves the identity is
+    // current. `p` is the post-hygiene payload; signerKnown transfers only key-matched
+    // verified-signer status (isVerifiedSignerForKey semantics), never a bare node flag.
+    if (nodeId != getNodeNum() && trafficManagementModule) {
+        const bool signerKnown = p.public_key.size == 32 && isVerifiedSignerForKey(nodeId, p.public_key.bytes);
+        trafficManagementModule->onNodeIdentityCommitted(nodeId, p, signerKnown);
+    }
+#endif
+
     return changed;
 }
 
@@ -3374,7 +3455,19 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
-        meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
+        // mp.from is unauthenticated, so rate-limit admission once the database is full: otherwise
+        // invented node numbers churn it at packet rate and push real neighbours out.
+        meshtastic_NodeInfoLite *info = getMeshNode(getFrom(&mp));
+        if (!info) {
+            if (isFull()) {
+                if (Throttle::isWithinTimespanMs(lastFullEvictionMs, NODEDB_FULL_EVICTION_INTERVAL_MS)) {
+                    LOG_DEBUG("Node database full, defer admitting 0x%08x", mp.from);
+                    return;
+                }
+                lastFullEvictionMs = millis();
+            }
+            info = getOrCreateMeshNode(getFrom(&mp));
+        }
         if (!info) {
             return;
         }
@@ -3658,7 +3751,7 @@ uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
     return 0;
 }
 
-bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+bool NodeDB::copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
 {
     const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (info && info->public_key.size == 32) {
@@ -3672,6 +3765,81 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     }
 #endif
     return false;
+}
+
+bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    if (copyPublicKeyAuthoritative(n, out))
+        return true;
+#if HAS_TRAFFIC_MANAGEMENT
+    // Last resort: a key the TrafficManagement NodeInfo cache learned from an observed frame
+    // for a node no longer in either NodeDB tier. This extends the pool of peers we can
+    // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's signerProven), the
+    // same first-contact trust NodeDB itself applies via updateUser().
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes)) {
+        out.size = 32;
+        return true;
+    }
+#endif
+    return false;
+}
+
+bool NodeDB::isVerifiedSignerForKey(NodeNum n, const uint8_t *key32)
+{
+    if (!key32)
+        return false;
+    // Hot store is authoritative when present; a node lives in the hot XOR warm tier, so if the
+    // hot store holds it the warm tier does not, and we decide entirely from the hot entry.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (info)
+        return info->public_key.size == 32 && nodeInfoLiteHasXeddsaSigned(info) && memcmp(info->public_key.bytes, key32, 32) == 0;
+#if WARM_NODE_COUNT > 0
+    uint8_t warmKey[32];
+    if (warmStore.copyKey(n, warmKey) && memcmp(warmKey, key32, 32) == 0)
+        return warmStore.isVerifiedSigner(n);
+#endif
+    return false;
+}
+
+bool NodeDB::isKnownXeddsaSigner(NodeNum n)
+{
+    // A node lives in the hot XOR warm tier, so the hot verdict is final when present.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (info)
+        return nodeInfoLiteHasXeddsaSigned(info);
+#if WARM_NODE_COUNT > 0
+    return warmStore.isVerifiedSigner(n);
+#else
+    return false;
+#endif
+}
+
+void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)
+{
+    if (!key32 || n == 0)
+        return;
+    // Local copy first: callers may pass the node's own key bytes back in (e.g. manual
+    // verification re-committing an already-stored key), and memcpy forbids overlap.
+    uint8_t key[32];
+    memcpy(key, key32, 32);
+
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(n);
+    if (!info)
+        return;
+    // Unconditional overwrite - deliberately NOT updateUser()'s "don't replace a known key" pin.
+    // That pin protects against unauthenticated NodeInfo broadcasts; the only callers here are
+    // possession/authority-proven (ManuallyVerified = user confirmed the key; AdminChannelProven =
+    // decrypted via the admin key with p->from bound into the AEAD nonce), i.e. exactly the paths
+    // meant to establish or rotate a key. Keep new call sites to that same trust bar.
+    memcpy(info->public_key.bytes, key, 32);
+    info->public_key.size = 32;
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Write-through, mirroring updateUser()'s identity hook: without it the TrafficManagement
+    // NodeInfo cache diverges until the next hourly reconcile.
+    if (trafficManagementModule)
+        trafficManagementModule->onNodeKeyCommitted(n, key, trust == KeyCommitTrust::ManuallyVerified);
+#endif
 }
 
 meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
@@ -3729,7 +3897,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 // Demote to the warm tier so the identity (and crucially the
                 // PKI key) outlives the hot-store slot.
                 warmStore.absorb(evicted.num, evicted.last_heard, evicted.public_key.size == 32 ? evicted.public_key.bytes : NULL,
-                                 evicted.role, warmProtectedCategory(evicted));
+                                 evicted.role, warmProtectedCategory(evicted), nodeInfoLiteHasXeddsaSigned(&evicted));
 #endif
                 eraseNodeSatellites(evicted.num);
                 // Shove the remaining nodes down the chain
@@ -3758,15 +3926,37 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // Re-admission: restore what the warm tier kept for this node
         WarmNodeEntry warm;
         if (warmStore.take(n, warm)) {
-            lite->last_heard = warmTimeOf(warm); // mask off the stolen role/protected metadata bits
+            lite->last_heard = warmTimeOf(warm); // mask off the stolen metadata bits
             // Restore the role the warm tier cached, so re-admission isn't stuck at CLIENT
             // until the next NodeInfo arrives.
             lite->role = static_cast<meshtastic_Config_DeviceConfig_Role>(warmRoleOf(warm));
+            // Restore the signer bit too: it is learned from verified traffic, not from
+            // NodeInfo, so a round trip through the warm tier must not relearn it from zero.
+            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, warmSignerOf(warm));
             if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
+            if (warmProtOf(warm) == static_cast<uint8_t>(WarmProtected::XeddsaSigner))
+                nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
             LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
+        }
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+        // Name rehydration: the warm tier keeps a node's key but not its name, so a re-admitted
+        // long-tail node is nameless until its next NodeInfo. The TrafficManagement NodeInfo
+        // cache is much larger and often still holds the full User. Restore it - but only when
+        // its cached key matches the key we just restored from warm, so a name never attaches to
+        // a different identity than the one we encrypt to. No-op without the TMM NodeInfo cache
+        // or when no key is present (key-matched by design). CopyUserToNodeInfoLite sets only the
+        // user-related bits, so the warm-restored signer bit survives.
+        if (lite->public_key.size == 32 && !nodeInfoLiteHasUser(lite) && trafficManagementModule) {
+            meshtastic_User tmmUser = meshtastic_User_init_zero;
+            if (trafficManagementModule->copyUser(n, tmmUser) && tmmUser.public_key.size == 32 &&
+                memcmp(tmmUser.public_key.bytes, lite->public_key.bytes, 32) == 0) {
+                TypeConversions::CopyUserToNodeInfoLite(lite, tmmUser);
+                LOG_INFO("Rehydrated node 0x%08x identity from TMM NodeInfo cache", n);
+            }
         }
 #endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
