@@ -1233,13 +1233,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
+#endif // HAS_I2S
 #if HAS_TFT
     if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
         moduleConfig.external_notification.nag_timeout = 0;
 #else
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif // HAS_TFT
-#endif // HAS_I2S
 
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
