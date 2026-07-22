@@ -279,6 +279,12 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     memcpy(response.hash2.bytes, hash2, 32);
 
     responsePacket = allocDataProtobuf(response);
+    if (!responsePacket) {
+        LOG_WARN("Key Verification response allocation failed");
+        ignoreRequest = true;
+        resetToIdle();
+        return nullptr;
+    }
 
     // PKI-encrypt the response only if we already held the requester's key. In the bootstrap case it goes
     // out channel-encrypted so the requester (who lacks our key) can decode it and read hash1.

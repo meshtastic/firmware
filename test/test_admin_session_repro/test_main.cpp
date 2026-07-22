@@ -304,6 +304,26 @@ void test_local_security_config_keeps_private_key(void)
     admin->drainReply();
 }
 
+// A local client writes this device-owned policy, then receives the same value in its next config read.
+void test_local_security_config_round_trips_packet_signature_policy(void)
+{
+    meshtastic_Config set = meshtastic_Config_init_zero;
+    set.which_payload_variant = meshtastic_Config_security_tag;
+    set.payload_variant.security = config.security;
+    set.payload_variant.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    admin->handleSetConfig(set, false);
+
+    meshtastic_MeshPacket req = makeGetConfigRequest(0);
+    admin->handleGetConfig(req, meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG);
+
+    meshtastic_Config_SecurityConfig sec;
+    TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+    TEST_ASSERT_EQUAL(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
+                      sec.packet_signature_policy);
+    admin->drainReply();
+}
+
 // Decode the NetworkConfig / MqttConfig out of the response a handler queued in myReply.
 static bool decodeNetworkFromReply(meshtastic_MeshPacket *reply, meshtastic_Config_NetworkConfig &out)
 {
@@ -652,6 +672,7 @@ void setup()
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
     RUN_TEST(test_local_security_config_keeps_private_key);
+    RUN_TEST(test_local_security_config_round_trips_packet_signature_policy);
     RUN_TEST(test_remote_network_config_omits_wifi_psk);
     RUN_TEST(test_local_network_config_keeps_wifi_psk);
     RUN_TEST(test_remote_mqtt_config_omits_password);
