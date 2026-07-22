@@ -1,3 +1,5 @@
+#pragma once
+
 #define HAS_SCREEN 0
 #define HAS_WIRE 0
 #define HAS_GPS 0
@@ -19,6 +21,7 @@
 
 // supported modules list
 #define USE_LR1121
+#define LR1121_SUBGHZ_ONLY
 
 #define LR1121_IRQ_PIN LORA_DIO1
 #define LR1121_NRESET_PIN LORA_RESET
@@ -28,22 +31,14 @@
 #define LR1121_SPI_MOSI_PIN LORA_MOSI
 #define LR1121_SPI_MISO_PIN LORA_MISO
 
-// Caps for the LR1121 *chip* output. The external analog PA (driven via the APC2
-// DAC pin, see RADIO_PA_APC2_PIN below) provides the rest of the gain, so the chip
-// itself is driven low. See src/platform/extra_variants/radiomaster_nomad_gemini.
+// The calibrated external PA supplies the remaining gain above the LR1121 output.
 #define LR1110_MAX_POWER 5
-// 2.4G Part
-#define LR1120_MAX_POWER 5
 
-// not yet implemented
-#define JANUS_RADIO
-#define LR1121_IRQ2_PIN 34
-#define LR1121_NRESET2_PIN 21
-#define LR1121_BUSY2_PIN 39
-#define LR1121_SPI_NSS2_PIN 13
+// The second LR1121 is held inactive until dual-radio support is implemented.
+#define NOMAD_SECOND_RADIO_NSS_PIN 13
+#define NOMAD_SECOND_RADIO_NRESET_PIN 21
+#define NOMAD_WIFI_BACKPACK_NRESET_PIN 19
 
-// TODO: check if this is correct
-// #define LR11X0_DIO3_TCXO_VOLTAGE 1.6
 #define LR11X0_DIO_AS_RF_SWITCH
 
 #define HAS_NEOPIXEL                         // Enable the use of neopixels
@@ -52,9 +47,7 @@
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // Type of neopixels in use
 #define ENABLE_AMBIENTLIGHTING               // Turn on Ambient Lighting
 
-// Primary button is GPIO14 (ELRS "button"); GPIO12 is the second button ("button2").
-// NOTE: GPIO34 is the second radio's DIO1 (LR1121_IRQ2_PIN) and is input-only with no
-// internal pull resistor, so it must NOT be reused as a button.
+// Primary button is GPIO14; GPIO12 is the second hardware button.
 #define BUTTON_PIN 14
 #define BUTTON_NEED_PULLUP
 
@@ -62,7 +55,5 @@
 
 #define RADIO_FAN_EN 2
 
-// Analog PA bias control (ELRS APC2). GPIO26 = ESP32 DAC channel 2, driven with
-// dacWrite() (0-255 -> 0-3.3V). Defining this enables the external-PA driver in
-// src/platform/extra_variants/radiomaster_nomad_gemini/variant.cpp.
+#define RADIO_EXTERNAL_PA
 #define RADIO_PA_APC2_PIN 26

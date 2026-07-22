@@ -11,6 +11,10 @@ LR1121Interface::LR1121Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, R
 
 bool LR1121Interface::wideLora()
 {
+#ifdef LR1121_SUBGHZ_ONLY
+    return false;
+#else
     return true;
+#endif
 }
 #endif
