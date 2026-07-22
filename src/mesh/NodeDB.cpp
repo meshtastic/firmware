@@ -957,6 +957,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
     config.security.admin_key_count = numAdminKeys;
 
+    // Left at COMPATIBLE when signature checking is compiled out, so we never report a policy
+    // nothing enforces (mirrors the set-config guard in AdminModule).
+#if defined(USERPREFS_CONFIG_SECURITY_PACKET_SIGNATURE_POLICY) && !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    config.security.packet_signature_policy = USERPREFS_CONFIG_SECURITY_PACKET_SIGNATURE_POLICY;
+#endif
+
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
