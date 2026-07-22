@@ -28,11 +28,6 @@ Lora:
   Busy: 22 #pin16 / GPIO54 1C6
   Reset: 25 #pin13 / GPIO57 1D1
 
-  # SubGHz max power (dBm). Chip raw max 22, module FEM amplifies beyond that.
-  LR2021_MAX_POWER: 22
-  # 2.4GHz max power (dBm).
-  LR2021_MAX_POWER_HF: 12
-
   spidev: spidev0.0 #pins are (CS=16, CLK=17, MOSI=18, MISO=19)
   spiSpeed: 2000000
 

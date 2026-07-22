@@ -105,8 +105,6 @@ extern struct portduino_config_struct {
     int sx128x_max_power = 13;
     int lr1110_max_power = 22;
     int lr1120_max_power = 13;
-    int lr2021_max_power = 22;
-    int lr2021_max_power_hf = 12;
     int lr2021_irq_dio_num = 0; // 0 = use chip default (5); set to 5-11 to override
     int rf95_max_power = 20;
     bool dio2_as_rf_switch = false;
@@ -295,10 +293,6 @@ extern struct portduino_config_struct {
             out << YAML::Key << "LR1110_MAX_POWER" << YAML::Value << lr1110_max_power;
         if (lr1120_max_power != 13)
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
-        if (lr2021_max_power != 22)
-            out << YAML::Key << "LR2021_MAX_POWER" << YAML::Value << lr2021_max_power;
-        if (lr2021_max_power_hf != 12)
-            out << YAML::Key << "LR2021_MAX_POWER_HF" << YAML::Value << lr2021_max_power_hf;
         if (lr2021_irq_dio_num != 0)
             out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << lr2021_irq_dio_num;
         if (rf95_max_power != 20)

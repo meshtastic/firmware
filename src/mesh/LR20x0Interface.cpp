@@ -28,20 +28,14 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 };
 #endif
 
-// Particular boards might define a different max power based on what their hardware can do, default to max power output if not
-// specified (may be dangerous if using external PA and LR20x0 power config forgotten)
-#if ARCH_PORTDUINO
-#define LR2021_MAX_POWER portduino_config.lr2021_max_power
-#endif
+// LR2021 power limits are handled intrinsically by RadioLib's setOutputPower()/checkOutputPower(),
+// which clamps to -9..22 dBm (sub-GHz PA) or -19..12 dBm (HF PA) based on the frequency band.
+// No module-level override is needed - the chip enforces its own limits.
 #ifndef LR2021_MAX_POWER
 #define LR2021_MAX_POWER 22
 #endif
 
 // the 2.4G part maxes at 12dBm
-
-#if ARCH_PORTDUINO
-#define LR2021_MAX_POWER_HF portduino_config.lr2021_max_power_hf
-#endif
 #ifndef LR2021_MAX_POWER_HF
 #define LR2021_MAX_POWER_HF 12
 #endif
@@ -84,48 +78,17 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-    // Set irqDioNum BEFORE lora.begin() - begin() → config() calls setDioFunction(irqDioNum, IRQ)
-    // to program the chip's internal DIO routing. Changing it after begin() is too late.
-    // This is critical when DIO5 is used for RF switch control: the default irqDioNum=5 would
-    // conflict with the RF switch table, causing setRfSwitchTable() to reconfigure DIO5 from
-    // IRQ to RF_SWITCH and silently break all interrupts.
-    //
-    // On ARCH_PORTDUINO, runtime YAML config takes precedence over compile-time macros so
-    // users can override IRQ routing without rebuilding.
+    // irqDioNum: set from compile-time macros or portduino config.
+    // Note: must be set before lora.begin() so config() programs the correct DIO.
+    // On ARCH_PORTDUINO, runtime YAML config takes precedence over compile-time macros.
+    // The user is responsible for ensuring IRQ_DIO_NUM doesn't conflict with RF switch pins.
 #if ARCH_PORTDUINO
     if (portduino_config.lr2021_irq_dio_num >= 5 && portduino_config.lr2021_irq_dio_num <= 11) {
-        // Check for conflict with pins claimed by the RF switch table
-        bool conflict = false;
-        if (portduino_config.has_rfswitch_table) {
-            for (int i = 0; i < 5 && !conflict; i++) {
-                uint32_t pin = portduino_config.rfswitch_dio_pins[i];
-                if (pin != RADIOLIB_NC && (pin & ~RFSWITCH_PIN_FLAG) == (uint32_t)(portduino_config.lr2021_irq_dio_num - 5))
-                    conflict = true;
-            }
-        }
-        if (conflict) {
-            LOG_WARN("IRQ_DIO_NUM %d conflicts with an RF switch table pin - set a non-conflicting"
-                     " DIO (e.g. 9) in config to avoid broken interrupts",
-                     portduino_config.lr2021_irq_dio_num);
-        } else {
-            lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
-            LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
-        }
+        lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
+        LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
     } else if (portduino_config.lr2021_irq_dio_num != 0) {
         LOG_WARN("IRQ_DIO_NUM %d out of range (5-11), using default %d", portduino_config.lr2021_irq_dio_num, lora.irqDioNum);
     } else {
-        // Default DIO5 is the most common RF switch pin - warn if it conflicts
-        if (portduino_config.has_rfswitch_table) {
-            bool defaultConflict = false;
-            for (int i = 0; i < 5 && !defaultConflict; i++) {
-                uint32_t pin = portduino_config.rfswitch_dio_pins[i];
-                if (pin != RADIOLIB_NC && (pin & ~RFSWITCH_PIN_FLAG) == 0) // DIO5 = index 0
-                    defaultConflict = true;
-            }
-            if (defaultConflict)
-                LOG_WARN("Default IRQ DIO5 conflicts with RF switch table - set IRQ_DIO_NUM to a"
-                         " non-conflicting DIO (e.g. 9) in config");
-        }
         LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
     }
 #elif defined(LR2021_IRQ_DIO_NUM)
