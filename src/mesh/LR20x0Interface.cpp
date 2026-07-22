@@ -96,9 +96,11 @@ template <typename T> bool LR20x0Interface<T>::init()
     lora.irqDioNum = IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
 #elif ARCH_PORTDUINO
-    if (portduino_config.lr2021_irq_dio_num > 0) {
+    if (portduino_config.lr2021_irq_dio_num >= 5 && portduino_config.lr2021_irq_dio_num <= 11) {
         lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
         LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
+    } else if (portduino_config.lr2021_irq_dio_num != 0) {
+        LOG_WARN("IRQ_DIO_NUM %d out of range (5-11), using default %d", portduino_config.lr2021_irq_dio_num, lora.irqDioNum);
     } else {
         LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
     }
