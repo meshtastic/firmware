@@ -815,13 +815,13 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
         pkiAttempted = true;
         LOG_DEBUG("Attempt PKI decryption");
-        // Resolve the sender's public key only for actual PKI-decrypt candidates: prefer NodeDB
-        // (hot store or warm tier), else a not-yet-committed key held during an in-progress
-        // key-verification handshake. On a full NodeDB miss, copyPublicKey() falls through to a
-        // linear scan of TrafficManagement's large NodeInfo cache, so it must not run for every
-        // encrypted channel packet from an unknown sender - only for packets we might decrypt.
+        // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
+        // packet: copyPublicKeyForDecrypt() can fall through to a linear scan of TrafficManagement's large
+        // NodeInfo cache. It returns authoritative keys (hot/warm), or a cold-tier cache key only when it is
+        // signer-proven - an unverified TOFU cache key must not back authenticated (pki_encrypted, p->from)
+        // DM attribution.
         meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-        bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
+        bool haveRemoteKey = nodeDB->copyPublicKeyForDecrypt(p->from, remotePublic);
         // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
         // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
         bool havePendingKey = false;
