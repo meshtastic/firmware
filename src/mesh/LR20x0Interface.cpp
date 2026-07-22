@@ -12,6 +12,10 @@
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#ifndef LR20X0_RFSWITCH_NATIVE
+#define lr20x0_rfswitch_dio_pins rfswitch_dio_pins
+#define lr20x0_rfswitch_table rfswitch_table
+#endif
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #define lr20x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
@@ -80,12 +84,24 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     RadioLibInterface::init();
 
+    // Set irqDioNum BEFORE lora.begin() - begin() → config() calls setDioFunction(irqDioNum, IRQ)
+    // to program the chip's internal DIO routing. Changing it after begin() is too late.
+    // This is critical when DIO5 is used for RF switch control: the default irqDioNum=5 would
+    // conflict with the RF switch table, causing setRfSwitchTable() to reconfigure DIO5 from
+    // IRQ to RF_SWITCH and silently break all interrupts.
 #ifdef LR2021_IRQ_DIO_NUM
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
 #elif defined(IRQ_DIO_NUM)
     lora.irqDioNum = IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
+#elif ARCH_PORTDUINO
+    if (portduino_config.lr2021_irq_dio_num > 0) {
+        lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
+        LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
+    } else {
+        LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+    }
 #else
     LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
 #endif
