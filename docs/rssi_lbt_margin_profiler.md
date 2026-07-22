@@ -117,3 +117,38 @@ the 5 s cadence) before `p99` is stable, and the signal line needs real traffic 
   margin. If you need a trustworthy `signal p05` on such a board, give the histogram negative-range bins.
 - Cost when enabled: two `RssiDeltaStats` (~296 bytes RAM total, 148 each), no extra SPI reads (the idle
   sample is reused), and one throttled log line per minute.
+
+## Histogram bucketing: design choices
+
+The percentiles come off a fixed histogram, and how the bins are laid out is a real trade-off. This
+section records the reasoning so the layout can be changed deliberately rather than by guess.
+
+**Why a histogram at all, not exact percentiles.** This is a default-off diagnostic that may run for
+hours on a memory-constrained node. A histogram gives fixed RAM, O(1) inserts, and no allocation. Exact
+percentiles would need every sample retained (the idle sampler alone is ~1 sample / 5 s → thousands per
+session → kilobytes) or reservoir sampling (more code, still approximate in the tails). Since the output
+is a margin chosen to ~2 dB, bin-edge precision is enough; exactness buys nothing here. If you ever need
+the true distribution, log raw `(rssi, floor, state)` over serial and analyse it off-box instead.
+
+**What the axis actually has to resolve.** The margin lives in `(idle p99, signal p05)`. In practice
+`idle p99` is a small positive number (noise rides a few dB over its own rolling mean - single digits on
+the boards measured so far) and `signal p05` sits from just below 0 up to ~+20 dB. So the _interesting_
+region is roughly `-a few .. +20 dB`. Fine resolution **there** is what matters; resolution far positive
+(`> +48`) or far negative (`< -20`) does not change any decision. With a fixed bin budget you spend bins
+on **range** or on **resolution** - the schemes below differ only in how they split that budget.
+
+| Scheme                    | Layout (2 dB bins unless noted)                     | RAM/inst.       | Argument                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------- | --------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A - current**           | `bin[0]` = all `< 0`; bins `0..64`; top = overflow  | 148 B           | All resolution spent on the positive side, so the **margin driver `idle p99` is finely resolved** and the mapping is trivial. The margin is always safe. Cost: the negative side has **no** resolution, so `signal p05` collapses to the minimum sample when a node decodes below-floor packets, and resolution above `+48` (rarely the deciding region) is wasted.                                                                                                                                                                   |
+| **B - re-centred**        | underflow `< -16`; bins `-16..+48`; overflow `≥ 48` | 148 B           | **Same RAM, same 2 dB resolution, moved onto the region that matters.** Both tails resolve: `idle p99` (small positive) and `signal p05` (near/just-below 0). Only sacrifices positive resolution `> +48`, which the tool never reads - it reads the signal **low** tail, and reports the high end via `maxDelta`, not a percentile. Cost: must pick the low edge (`-16` is a reasonable LoRa sub-floor-decode depth) and the mapping gains a two-sided clamp. **Recommended if `signal p05` / the overlap verdict must be trusted.** |
+| **C - wider, full range** | 4 dB bins over `-32..+96`                           | 148 B           | Covers everything both directions in the same bin count. Rejected: 4 dB **halves** margin precision exactly where it is needed. The interesting region is narrow, so fine bins there beat coarse bins everywhere.                                                                                                                                                                                                                                                                                                                     |
+| **D - more bins**         | 2 dB bins over `-20..+80` (~50 bins)                | ~216 B          | Full range **and** 2 dB, and no low-edge guess to get wrong. Cost: ~2× the histogram RAM (~432 B for the pair vs ~296). Fine if the target has the headroom; against the "adds no cost" goal otherwise.                                                                                                                                                                                                                                                                                                                               |
+| **E - exact**             | retained/reservoir samples                          | large / complex | No quantisation at all. Overkill for a ±2 dB margin pick; only worth it to characterise the distribution itself, and then off-box analysis is simpler.                                                                                                                                                                                                                                                                                                                                                                                |
+
+**Current choice and when to switch.** Scheme **A** ships because the shipped guidance only trusts the
+**margin** (`idle p99`, always positive, fully resolved) and A maximises resolution there for the least
+code. Move to **B** (cost-neutral) the moment you need a trustworthy `signal p05` or a reliable
+"tails overlap?" verdict on a high-SF / weak-neighbour board, where below-floor decodes push the signal
+low tail into the negative range A cannot resolve. Choose **D** over B only if you would rather not
+commit to a low edge and can spare the extra ~140 B. See the negative-bin note under _Limitations_ for
+why A's blind spot is fail-safe (it only ever makes the window look narrower, never a smaller margin).
