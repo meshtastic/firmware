@@ -29,6 +29,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if HAS_SCREEN
 #include "EInkParallelDisplay.h"
 #include <OLEDDisplay.h>
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+// Provided by each niche-enabled variant's nicheGraphics.h (defined once, in the main.cpp TU).
+extern NicheGraphics::BaseUIEInkDisplay *setupNicheGraphicsBaseUI();
+#endif
 #if defined(USE_HUB75)
 #include "graphics/HUB75Display.h" // ESP32 HUB75 (I2S-DMA)
 #endif
@@ -606,6 +610,9 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     LOG_DEBUG("Make TFTDisplay!");
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    // NicheGraphics-backed BaseUI E-Ink path. Variant provides setupNicheGraphicsBaseUI() in its nicheGraphics.h.
+    dispdev = setupNicheGraphicsBaseUI();
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
     dispdev = new EInkDisplay(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -881,7 +888,9 @@ void Screen::setup()
     // observer can see them.
     if (meshtastic_security::shouldRedactDisplay()) {
         drawLockdownLockScreen(dispdev);
-#if defined(USE_EINK_PARALLELDISPLAY)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+        static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay();
+#elif defined(USE_EINK_PARALLELDISPLAY)
         // Parallel-display variants drive refresh through a different path;
         // a bare drawLockdownLockScreen above lands the frame into the
         // panel buffer and the next ui->update() commits it as normal.
@@ -1042,7 +1051,9 @@ void Screen::forceDisplay(bool forceUiUpdate)
     }
 
     // Tell EInk class to update the display
-#if defined(USE_EINK_PARALLELDISPLAY)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay();
+#elif defined(USE_EINK_PARALLELDISPLAY)
     static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay();
 #elif defined(USE_EINK)
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
@@ -1244,7 +1255,8 @@ int32_t Screen::runOnce()
 
             // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
             // Carousel is potentially a major source of E-Ink display wear
-#if !defined(EINK_BACKGROUND_USES_FAST)
+            // (NicheGraphics BaseUI variants leave this to the shared DisplayHealth model instead)
+#if !defined(EINK_BACKGROUND_USES_FAST) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
 
@@ -1281,7 +1293,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     static FrameCallback screensaverFrame;
     static OverlayCallback screensaverOverlay;
 
-#if defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)
+#if (defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)) || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     // Join (await) a currently running async refresh, then run the post-update code.
     // Avoid skipping of screensaver frame. Would otherwise be handled by NotifiedWorkerThread.
     EINK_JOIN_ASYNCREFRESH(dispdev);
@@ -1308,7 +1320,9 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
         updateUiFrame(ui);
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
-#if defined(USE_EINK_PARALLELDISPLAY)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay(0);
+#elif defined(USE_EINK_PARALLELDISPLAY)
     static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay(0);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
     // Old EInkDisplay class
