@@ -104,8 +104,9 @@ template <typename T> bool LR20x0Interface<T>::init()
             }
         }
         if (conflict) {
-            LOG_WARN("IRQ_DIO_NUM %d conflicts with an RF switch table pin, using default %d",
-                     portduino_config.lr2021_irq_dio_num, lora.irqDioNum);
+            LOG_WARN("IRQ_DIO_NUM %d conflicts with an RF switch table pin - set a non-conflicting"
+                     " DIO (e.g. 9) in config to avoid broken interrupts",
+                     portduino_config.lr2021_irq_dio_num);
         } else {
             lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
             LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
@@ -113,6 +114,18 @@ template <typename T> bool LR20x0Interface<T>::init()
     } else if (portduino_config.lr2021_irq_dio_num != 0) {
         LOG_WARN("IRQ_DIO_NUM %d out of range (5-11), using default %d", portduino_config.lr2021_irq_dio_num, lora.irqDioNum);
     } else {
+        // Default DIO5 is the most common RF switch pin - warn if it conflicts
+        if (portduino_config.has_rfswitch_table) {
+            bool defaultConflict = false;
+            for (int i = 0; i < 5 && !defaultConflict; i++) {
+                uint32_t pin = portduino_config.rfswitch_dio_pins[i];
+                if (pin != RADIOLIB_NC && (pin & ~RFSWITCH_PIN_FLAG) == 0) // DIO5 = index 0
+                    defaultConflict = true;
+            }
+            if (defaultConflict)
+                LOG_WARN("Default IRQ DIO5 conflicts with RF switch table - set IRQ_DIO_NUM to a"
+                         " non-conflicting DIO (e.g. 9) in config");
+        }
         LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
     }
 #elif defined(LR2021_IRQ_DIO_NUM)

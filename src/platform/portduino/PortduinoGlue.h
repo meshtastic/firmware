@@ -352,12 +352,8 @@ extern struct portduino_config_struct {
             }
             out << YAML::EndSeq;
 
-            // LR2021 has a different mode enum than LR11x0:
-            //   LR11x0: STBY=0, RX=1, TX=2, TX_HP=3, TX_HF=4, GNSS=5, WIFI=6 (7 entries)
-            //   LR2021: STBY=0, RX=1, TX=2, RX_HF=3, TX_HF=4 (5 entries, no GNSS/WIFI)
-            // The load path in PortduinoGlue.cpp branches on use_lr2021 to use the
-            // correct LR2021::MODE_* enums; this save path must match so configs
-            // round-trip correctly.
+            // LR2021 OpMode_t differs from LR11x0: slot 3 = RX_HF (not TX_HP), slot 4 = TX_HF; no TX_HP/GNSS/WIFI.
+            // The load path in PortduinoGlue.cpp branches on use_lr2021; this save path must match.
 #if !RADIOLIB_EXCLUDE_LR2021
             int numModes = (lora_module == use_lr2021) ? 5 : 7;
 #else
