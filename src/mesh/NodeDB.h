@@ -364,6 +364,10 @@ class NodeDB
     /// opportunistic caches) - the pin reference for caches that mirror NodeDB's key hygiene.
     bool copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
+    /// Key for the inbound-decrypt path: authoritative (hot/warm), or a cold-tier cache key only when
+    /// it is signer-proven. Keeps unverified TOFU cache keys from backing pki_encrypted attribution.
+    bool copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
     /// True if n is a known XEdDSA signer for exactly `key32` (hot signed bitfield or warm
     /// signer bit); the key match stops a rotated key inheriting a stale signer verdict.
     bool isVerifiedSignerForKey(NodeNum n, const uint8_t *key32);
