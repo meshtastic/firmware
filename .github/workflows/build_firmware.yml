@@ -34,6 +34,7 @@ jobs:
           pio_platform: ${{ inputs.platform }}
           pio_env: ${{ inputs.pio_env }}
           pio_target: build
+          meshtastic_branch: develop
 
       - name: ESP32 - Download Unified OTA firmware
         # Currently only esp32 and esp32s3 use the unified ota
