@@ -30,7 +30,7 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   ESP32, 10 on STM32WL (see `mesh-pb-constants.h`).
 - **Eviction:** oldest non-protected node when full (`getOrCreateMeshNode`). On eviction
   the node's essentials are **absorbed into the warm tier** (see §2); on re-admission the
-  warm record is rehydrated back (`take()`), including the signer bit.
+  warm record is rehydrated back (`take()`), including the XEdDSA-signed bit.
 - **Persistence:** the node database file in LittleFS, saved on the usual NodeDB cadence.
 - **Authority:** key pinning (`updateUser`'s "Public Key mismatch" drop), signer
   provenance, and identity content all originate here. The lookup helpers that other
@@ -52,14 +52,14 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   else rebuilds from traffic in seconds.
 - **Entry:** exactly 40 bytes - `num(4) | last_heard(4) | public_key(32)`. The low 7 bits
   of `last_heard` are omitted, and replaced with metadata (role: 4 bits, protected
-  category: 2, signer bit: 1), leaving ~128 s recency resolution - plenty for LRU ranking.
+  category: 2, XEdDSA-signed bit: 1), leaving ~128 s recency resolution - plenty for LRU ranking.
 - **Capacity:** `WARM_NODE_COUNT` (100 on constrained parts; platform-tiered).
 - **Eviction:** LRU by `last_heard`, with keyed entries outranking keyless; keyless
   candidates never displace keyed entries.
 - **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring below LittleFS
   (append/replay/compact); everywhere else `/prefs/warm.dat` (LittleFS).
 - **Membership invariant:** a node lives in the hot **XOR** warm tier. `take()` removes
-  the warm record when the node is re-admitted hot, restoring role/protected/signer bits.
+  the warm record when the node is re-admitted hot, restoring role/protected/XEdDSA-signed bits.
 
 ## 3. TMM unified cache (base, traffic state)
 
@@ -212,24 +212,26 @@ behaviour - is documented with the module in
 Side-by-side view of what each store actually holds ("-" = not held). Details and
 rationale live in the per-store sections above.
 
-| Property                           | 1. Hot store (`NodeInfoLite`)           | 2. Warm tier (`WarmNodeEntry`)                            | 3. NodeInfo cache (`NodeInfoPayloadEntry`)                    | 4. Unified cache (`UnifiedCacheEntry`)               |
-| ---------------------------------- | --------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
-| Node number                        | yes                                     | yes                                                       | yes (0 = free slot)                                           | yes (0 = free slot)                                  |
-| Names + user id                    | yes (flattened fields)                  | -                                                         | yes (full `User`, when `hasFullUser`)                         | -                                                    |
-| Public key (32 B)                  | yes (authoritative)                     | yes (keyed entries)                                       | yes (TOFU or proven; pinned against tiers 1-2)                | -                                                    |
-| Key provenance - XEdDSA signed     | `HAS_XEDDSA_SIGNED` bitfield bit        | 1 XEdDSA-signed bit (shared with `last_heard`)            | `keyXeddsaSigned`                                             | -                                                    |
-| Key provenance - manually verified | `IS_KEY_MANUALLY_VERIFIED` bitfield bit | - (not carried; collapsed into protected category)        | `keyManuallyVerified`                                         | -                                                    |
-| Device role                        | `role` field                            | 4-bit role (metadata steal)                               | inside the cached `User`                                      | 4-bit role in count-byte top bits (final fallback)   |
-| Recency                            | `last_heard` (unix secs)                | `last_heard` (unix secs, 128 s quantised)                 | `obsTick` (3 min modular tick) + `hasObserved`                | pos/rate/unknown modular ticks                       |
-| Position / telemetry               | via satellite copy-out accessors        | -                                                         | -                                                             | 8-bit position _fingerprint_ only (dedup)            |
-| Protected / favorite               | bitfield flags                          | 2-bit protected category                                  | - (`isMember` keep-alive instead)                             | -                                                    |
-| Routing hint (`next_hop`)          | yes (persisted field)                   | -                                                         | -                                                             | ACK-confirmed relay byte (preloaded from tier 1)     |
-| Direct-reply metadata              | -                                       | -                                                         | `sourceChannel`, `decodedBitfield` (+ `hasDecodedBitfield`)   | -                                                    |
-| Traffic-shaping counters           | -                                       | -                                                         | -                                                             | rate + unknown counts, pos fingerprint               |
-| Entry size                         | largest (full struct)                   | 40 B exact                                                | ~`sizeof(User)`+8, platform-padded (no size assert by design) | 10 B exact                                           |
-| Capacity                           | `MAX_NUM_NODES` (250/120/10)            | `WARM_NODE_COUNT` (~100)                                  | `kNodeInfoCacheEntries` (2000)                                | `TRAFFIC_MANAGEMENT_CACHE_SIZE` (2048/500/400/250/0) |
-| Persistence (durable)              | LittleFS (node DB file)                 | raw flash ring (nRF52840) or LittleFS (`/prefs/warm.dat`) | none (rebuilt from seed + traffic)                            | none                                                 |
-| Storage (runtime)                  | heap                                    | heap (PSRAM on ESP32 when available)                      | PSRAM on hardware; heap in native tests                       | PSRAM when available, else heap                      |
+| Property                   | 1. Hot store                   | 2. Warm tier                   | 3. NodeInfo cache                  | 4. Unified cache                |
+| -------------------------- | ------------------------------ | ------------------------------ | ---------------------------------- | ------------------------------- |
+| Struct                     | `NodeInfoLite`                 | `WarmNodeEntry`                | `NodeInfoPayloadEntry`             | `UnifiedCacheEntry`             |
+| Node number                | yes                            | yes                            | yes (0 = free)                     | yes (0 = free)                  |
+| Names + user id            | yes (flattened)                | -                              | yes (full `User`)                  | -                               |
+| Public key (32 B)          | yes (authoritative)            | yes (keyed entries)            | yes (TOFU/proven; pinned)          | -                               |
+| Key source - XEdDSA signed | `HAS_XEDDSA_SIGNED` bit        | 1 bit (in `last_heard`)        | `keyXeddsaSigned`                  | -                               |
+| Key source - manual scan   | `IS_KEY_MANUALLY_VERIFIED` bit | - (not carried)                | `keyManuallyVerified`              | -                               |
+| Device role                | `role` field                   | 4-bit role (metadata steal)    | in cached `User`                   | 4-bit role (final fallback)     |
+| Recency                    | `last_heard` (unix s)          | `last_heard` (128 s quant.)    | `obsTick` (3 min) + `hasObserved`  | modular ticks                   |
+| Position / telemetry       | satellite accessors            | -                              | -                                  | 8-bit pos fingerprint (dedup)   |
+| Protected / favorite       | bitfield flags                 | 2-bit protected category       | - (`isMember` instead)             | -                               |
+| Routing hint (`next_hop`)  | yes (persisted)                | -                              | -                                  | ACK-confirmed relay byte        |
+| Direct-reply metadata      | -                              | -                              | `sourceChannel`, `decodedBitfield` | -                               |
+| Traffic-shaping counters   | -                              | -                              | -                                  | rate + unknown counts, pos fp   |
+| Entry size                 | largest (full struct)          | 40 B exact                     | ~`sizeof(User)`+8 (padded)         | 10 B exact                      |
+| Capacity (symbol)          | `MAX_NUM_NODES`                | `WARM_NODE_COUNT`              | `kNodeInfoCacheEntries`            | `TRAFFIC_MANAGEMENT_CACHE_SIZE` |
+| Capacity (entries)         | 250/120/10                     | ~100                           | 2000                               | 2048/500/400/250/0              |
+| Persistence (durable)      | LittleFS (node DB)             | flash ring (nRF52840)/LittleFS | none (rebuilt)                     | none                            |
+| Storage (runtime)          | heap                           | heap / PSRAM (ESP32)           | PSRAM (hw) / heap (test)           | PSRAM / heap                    |
 
 ## How a lookup falls through the tiers
 
@@ -240,7 +242,7 @@ identity/role/key consumer
  1. hot store (NodeInfoLite)         full identity, authoritative
         │ miss
         ▼
- 2. warm tier (WarmNodeStore)        key + role/protected/signer bits, persisted
+ 2. warm tier (WarmNodeStore)        key + role/protected/XEdDSA-signed bits, persisted
         │ miss
         ▼
  3. TMM NodeInfo cache (extended)    full User payloads + TOFU/proven keys, ephemeral

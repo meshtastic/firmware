@@ -1430,7 +1430,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     uint8_t cachedSourceChannel = 0;
     bool cachedHasObserved = false;
     uint8_t cachedObsTick = 0;
-    // Signer-proven provenance of the cached key, consumed by the replay gate below
+    // Key-proven provenance (XEdDSA-signed | manually verified) of the cached key, consumed by the replay gate below
     // (maybe_unused: read only when TMM_NODEINFO_REPLAY_SIGNED_GATE is compiled in).
     [[maybe_unused]] bool cachedKeyProven = false;
     // True once we commit to answering from the NodeDB fallback (no NodeInfo cache) path. The
