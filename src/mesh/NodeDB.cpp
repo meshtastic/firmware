@@ -3791,8 +3791,7 @@ bool NodeDB::copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_k
     // A cold-tier cache key backs an authenticated decrypt only when signer-proven; unverified TOFU
     // cache keys must not. Outbound encryption still uses the opportunistic copyPublicKey().
     bool signerProven = false;
-    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) &&
-        signerProven) {
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) && signerProven) {
         out.size = 32;
         return true;
     }
