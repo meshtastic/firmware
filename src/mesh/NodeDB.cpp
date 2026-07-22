@@ -1,4 +1,6 @@
 #include "configuration.h"
+
+#include "GpsProfile.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
@@ -765,41 +767,12 @@ void NodeDB::initConfigGPS()
     config.position.position_broadcast_smart_enabled = true;
 #endif
 
-    const uint32_t base_flags =
-        (meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW |
-         meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE);
-
-    if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_FIXED_POSITION ||
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                   meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-        config.position.position_flags = base_flags;
-        config.position.position_broadcast_smart_enabled = false;
-        config.position.position_broadcast_secs = ONE_DAY / 2;
-    } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_PEDESTRIAN) {
-        config.position.position_flags = (base_flags | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
-                                          meshtastic_Config_PositionConfig_PositionFlags_HEADING);
-        config.position.broadcast_smart_minimum_distance = 50;
-        config.position.broadcast_smart_minimum_interval_secs = 60;
-        config.position.position_broadcast_secs = 900;
-    } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_VEHICLE) {
-
-        config.position.position_flags = (base_flags | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
-                                          meshtastic_Config_PositionConfig_PositionFlags_HEADING);
-        config.position.broadcast_smart_minimum_distance = 500;
-        config.position.broadcast_smart_minimum_interval_secs = 120;
-        config.position.position_broadcast_secs = 900;
-    } else if (config.position.gps_profile == meshtastic_Config_PositionConfig_GpsProfile_AIRBORNE) {
+        GpsProfile::applyFixed(config.position);
+    } else if (!GpsProfile::apply(config.position)) { // Manual profile retains existing defaults.
         config.position.position_flags =
-            (base_flags | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
-             meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION |
-             meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING);
-        config.position.broadcast_smart_minimum_distance = 200;
-        config.position.broadcast_smart_minimum_interval_secs = 60;
-        config.position.position_broadcast_secs = 900;
-
-    } else { // original settings
-        config.position.position_flags =
-            (base_flags | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+            (GpsProfile::basePositionFlags() | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
              meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING);
         config.position.broadcast_smart_minimum_distance = 100;
         config.position.broadcast_smart_minimum_interval_secs = 30;

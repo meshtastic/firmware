@@ -6,6 +6,7 @@
 #include "Default.h"
 #include "GPS.h"
 #include "GpioLogic.h"
+#include "GpsProfile.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "RTC.h"
@@ -865,6 +866,20 @@ bool GPS::setup()
             delay(750); // will cause a receiver restart so wait a bit
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_BBR, "disable SBAS M10 GPS BBR", 300);
             delay(750); // will cause a receiver restart so wait a bit
+
+            uint8_t dynamicModel;
+            if (GpsProfile::ubxDynamicModel(config.position.gps_profile, dynamicModel)) {
+                const uint8_t dynamicModelConfig[] = {0x00, 0x03, 0x00, 0x00, 0x21, 0x00, 0x11, 0x20, dynamicModel};
+                clearBuffer();
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(dynamicModelConfig), dynamicModelConfig);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to set M10 dynamic model");
+                } else {
+                    LOG_INFO("Set M10 dynamic model for GPS profile %d", config.position.gps_profile);
+                }
+                delay(750);
+            }
 
             // Done with initialization, Now enable wanted NMEA messages in BBR layer so they will survive a periodic
             // sleep.
