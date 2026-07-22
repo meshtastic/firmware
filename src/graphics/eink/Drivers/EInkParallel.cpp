@@ -29,8 +29,18 @@ void EInkParallel::begin(SPIClass *, uint8_t, uint8_t, uint8_t, uint8_t)
     // Parallel panels don't use the SPI args; FastEPD owns the bus.
     if (!epaper) {
         epaper = new FASTEPD;
-        epaper->initPanel((int)panelType, panelClock);
+        int initRc = epaper->initPanel((int)panelType, panelClock);
         postPanelInit();
+
+        // FastEPD allocates its framebuffer only from PSRAM; if PSRAM init failed the alloc
+        // returns NULL and initPanel() returns an error, so clearWhite() below would
+        // memset(NULL). panelReady stays false so the update paths no-op -> node runs headless.
+        if (initRc != BBEP_SUCCESS || epaper->currentBuffer() == nullptr) {
+            LOG_ERROR("EPD framebuffer unavailable (initPanel rc=%d, PSRAM=%u); running headless", initRc,
+                      (unsigned)ESP.getPsramSize());
+            return;
+        }
+        panelReady = true;
         epaper->setMode(BB_MODE_1BPP);
         epaper->clearWhite();
         epaper->fullUpdate(true);
@@ -39,7 +49,7 @@ void EInkParallel::begin(SPIClass *, uint8_t, uint8_t, uint8_t, uint8_t)
 
 void EInkParallel::update(uint8_t *imageData, UpdateTypes type)
 {
-    if (!epaper)
+    if (!epaper || !panelReady)
         return;
 
     pendingType = type;

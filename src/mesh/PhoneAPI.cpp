@@ -38,7 +38,7 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Throttle.h"
-#include <RTC.h>
+#include "gps/RTC.h"
 
 namespace
 {
@@ -887,6 +887,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
+        case meshtastic_ModuleConfig_statusmessage_tag:
+            LOG_DEBUG("Send module config: status message");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_statusmessage_tag;
+            fromRadioScratch.moduleConfig.payload_variant.statusmessage = moduleConfig.statusmessage;
+            break;
         case meshtastic_ModuleConfig_traffic_management_tag:
             LOG_DEBUG("Send module config: traffic management");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
@@ -1201,19 +1206,49 @@ void PhoneAPI::prefetchNodeInfos()
         onNowHasData(0);
 }
 
+namespace
+{
+/// Derive a stable id for a replayed satellite-DB record. Unchanged history replayed on
+/// every reconnect must not look like a new packet to the phone's history/dedup - the id
+/// only changes when the underlying data (its timestamp) actually changes.
+// `kind` only needs to distinguish the record types that can otherwise collide (e.g. device
+// vs. environment metrics both replay as TELEMETRY_APP with the same node/last_heard) - pass
+// the payload's own variant/port constant.
+uint32_t makeReplayPacketId(NodeNum num, uint32_t timestamp, uint32_t kind)
+{
+    uint32_t h = num;
+    h = h * 2654435761u + timestamp;
+    h = h * 2654435761u + kind;
+    return h ? h : 1; // some clients treat id 0 as "unset"
+}
+
+/// Populate hop_start/hop_limit from the node's real last-known hop count (if any) so a
+/// replayed packet doesn't read as "heard directly" when it wasn't.
+void setReplayHopFields(meshtastic_MeshPacket &pkt, const meshtastic_NodeInfoLite *header)
+{
+    uint8_t hopLimit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+    uint8_t hopsAway = (header && header->has_hops_away) ? header->hops_away : 0;
+    pkt.hop_start = hopLimit;
+    pkt.hop_limit = hopsAway < hopLimit ? (uint8_t)(hopLimit - hopsAway) : 0;
+}
+} // namespace
+
 meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const meshtastic_PositionLite &pos)
 {
     // Shape this exactly like a fresh live broadcast Position from the peer so the
     // phone runs it through its normal "live position broadcast" handler path.
     // to=ourNum would read as a DM-from-peer and never lands in node detail UI.
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
+    const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     pkt.rx_time = pos.time;
+    // Stable per-node/per-fix id: replaying the same unchanged history on every
+    // reconnect must not look like a brand new packet to the phone's history/dedup.
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated
     pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
@@ -1231,13 +1266,13 @@ meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const mes
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     // No native timestamp on telemetry packets here; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated - iOS client filters
     // TRANSPORT_INTERNAL packets out of broadcast peer state updates.
@@ -1337,12 +1372,12 @@ meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const 
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated - iOS client filters
     // TRANSPORT_INTERNAL packets out of broadcast peer state updates.
@@ -1400,13 +1435,13 @@ meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const mesht
     meshtastic_MeshPacket pkt = meshtastic_MeshPacket_init_default;
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.id = generatePacketId();
     // StatusMessage has no native timestamp; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
     pkt.channel = 0;
-    pkt.hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    pkt.hop_start = pkt.hop_limit;
+    pkt.rx_snr = header ? header->snr : 0;
+    setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated - client filters
     pkt.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
@@ -1640,6 +1675,8 @@ bool PhoneAPI::available()
 void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message)
 {
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    if (!cn)
+        return;
     cn->has_reply_id = true;
     cn->reply_id = replyId;
     cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -1663,6 +1700,19 @@ bool PhoneAPI::wasSeenRecently(uint32_t id)
     memmove(recentToRadioPacketIds, recentToRadioPacketIds + 1, (19) * sizeof(uint32_t));
     recentToRadioPacketIds[19] = id;
     return false;
+}
+
+PhoneAPI::LocalAdminGate PhoneAPI::classifyLocalAdminPacket(const meshtastic_MeshPacket &p, bool adminAuthorized,
+                                                            meshtastic_AdminMessage &outAdmin)
+{
+    if (p.which_payload_variant != meshtastic_MeshPacket_decoded_tag || p.decoded.portnum != meshtastic_PortNum_ADMIN_APP)
+        return LocalAdminGate::NotAdmin;
+    outAdmin = meshtastic_AdminMessage_init_zero;
+    if (!pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &outAdmin))
+        return LocalAdminGate::NotAdmin; // undecodable: let the normal reject path respond
+    if (outAdmin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag)
+        return LocalAdminGate::LockdownAuth; // the passphrase itself; authenticate regardless of prior state
+    return adminAuthorized ? LocalAdminGate::AuthorizedPassThrough : LocalAdminGate::DropUnauthorized;
 }
 
 /**
@@ -1689,26 +1739,33 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     //       the gate here closes that race and covers H6/H7 from the
     //       audit: get_config_request and set_config from unauthed
     //       clients no longer reach AdminModule at all.
-    if (p.from == 0 && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p.decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
+    // Gate on the connection, not the wire `from`, which a client can forge to a non-zero value to
+    // bypass the check before MeshService normalizes it back to a local identity.
+    // Scope the decoded admin message: it holds the plaintext passphrase, so bound its lifetime.
+    {
         meshtastic_AdminMessage admin = meshtastic_AdminMessage_init_zero;
-        if (pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_AdminMessage_msg, &admin)) {
-            if (admin.which_payload_variant == meshtastic_AdminMessage_lockdown_auth_tag) {
-                handleLockdownAuthInline(admin.lockdown_auth);
-                // Wipe the decoded passphrase scratch - the byte array in
-                // p.decoded.payload.bytes is wiped by handleLockdownAuthInline.
-                volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
-                for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
-                    adminVol[i] = 0;
-                return true;
-            }
-            if (!getAdminAuthorized()) {
-                LOG_WARN("Lockdown: dropping admin payload variant=%d from unauthorized connection", admin.which_payload_variant);
-                return false;
-            }
+        switch (classifyLocalAdminPacket(p, getAdminAuthorized(), admin)) {
+        case LocalAdminGate::LockdownAuth: {
+            handleLockdownAuthInline(admin.lockdown_auth);
+            // The encoded wipe is the security-critical one: nothing else clears the passphrase from
+            // the packet buffer. handleLockdownAuthInline already zeroes the decoded copy up to its
+            // size; re-zero the full scratch capacity here as defense in depth.
+            volatile uint8_t *adminVol = const_cast<volatile uint8_t *>(admin.lockdown_auth.passphrase.bytes);
+            for (size_t i = 0; i < sizeof(admin.lockdown_auth.passphrase.bytes); i++)
+                adminVol[i] = 0;
+            volatile uint8_t *encodedVol = const_cast<volatile uint8_t *>(p.decoded.payload.bytes);
+            for (size_t i = 0; i < sizeof(p.decoded.payload.bytes); i++)
+                encodedVol[i] = 0;
+            p.decoded.payload.size = 0; // keep the length consistent with the wiped buffer
+            return true;
         }
-        // pb_decode failure: fall through to normal handling so the
-        // regular Router/AdminModule reject path can respond.
+        case LocalAdminGate::DropUnauthorized:
+            LOG_WARN("Lockdown: dropping admin payload variant=%d from unauthorized connection", admin.which_payload_variant);
+            return false;
+        case LocalAdminGate::NotAdmin:
+        case LocalAdminGate::AuthorizedPassThrough:
+            break; // normal handling
+        }
     }
 #endif
 

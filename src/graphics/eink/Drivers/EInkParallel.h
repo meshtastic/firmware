@@ -56,6 +56,9 @@ class EInkParallel : public EInk
     uint32_t panelType;
     uint32_t panelClock;
 
+    // Set only when begin() fully succeeds; update paths no-op while false.
+    bool panelReady = false;
+
     UpdateTypes pendingType = UpdateTypes::UNSPECIFIED;
     std::atomic<bool> asyncRunning{false};
     TaskHandle_t asyncTaskHandle = nullptr;

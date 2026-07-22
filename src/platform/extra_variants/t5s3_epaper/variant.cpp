@@ -36,7 +36,7 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
 
         // Check whether a system applet (e.g. menu) is currently handling input
         bool systemHandlingInput = false;
-        for (NicheGraphics::InkHUD::SystemApplet *sa : inkhud->systemApplets) {
+        for (const NicheGraphics::InkHUD::SystemApplet *sa : inkhud->systemApplets) {
             if (sa->handleInput) {
                 systemHandlingInput = true;
                 break;
@@ -418,19 +418,20 @@ void t5BacklightHandleUserInput()
 
 void t5TouchSetForcedByTimeout(bool forced)
 {
+    if (touchForcedByTimeout == forced) {
+        return;
+    }
+
     touchForcedByTimeout = forced;
     touchStateEpoch++;
     touchIndicatorRefreshPending = true;
 
     if (forced) {
-        // While timeout-forced, keep controller asleep to avoid stale IRQ chatter.
+        // Timeout only gates touch input in software. Avoid GT911 I2C here because
+        // PowerFSM same-state transitions can fire from phone contact and screen timeout.
         touchNeedsWake = false;
-        if (touchControllerReady && !touchLightSleepActive) {
-            touch.sleep();
-        }
     } else if (touchInputEnabled && touchControllerReady && !touchLightSleepActive) {
-        // Defer wake until readTouch() so I2C settles post-state transition.
-        touchNeedsWake = true;
+        touchNeedsWake = false;
     }
 
 #ifdef MESHTASTIC_INCLUDE_INKHUD

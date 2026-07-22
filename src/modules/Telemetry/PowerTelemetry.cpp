@@ -9,9 +9,9 @@
 #include "Power.h"
 #include "PowerFSM.h"
 #include "PowerTelemetry.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
+#include "gps/RTC.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include "sleep.h"
@@ -34,6 +34,8 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 int32_t PowerTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
+        if (shouldDeferDeepSleep())
+            return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
@@ -105,6 +107,11 @@ int32_t PowerTelemetryModule::runOnce()
             sendTelemetry(NODENUM_BROADCAST, true);
             lastSentToPhone = millis();
         }
+    }
+    if (sleepOnNextExecution) {
+        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
+        // this return value, which would otherwise override setIntervalFromNow()
+        return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, sendToMeshIntervalMs);
 }
@@ -258,7 +265,8 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;
     m.time = getTime();
-    if (getPowerTelemetry(&m)) {
+    bool validTelemetry = getPowerTelemetry(&m);
+    if (validTelemetry) {
         LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
                  "ch3_voltage=%f, ch3_current=%f",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
@@ -267,33 +275,42 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        p->to = dest;
-        p->decoded.want_response = false;
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-        else
-            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
-
-        lastMeasurementPacket = packetPool.allocCopy(*p);
-        if (phoneOnly) {
-            LOG_INFO("Send packet to phone");
-            service->sendToPhone(p);
+        if (!p) {
+            validTelemetry = false;
         } else {
-            LOG_INFO("Send packet to mesh");
-            service->sendToMesh(p, RX_SRC_LOCAL, true);
+            p->to = dest;
+            p->decoded.want_response = false;
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            else
+                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+            // release previous packet before occupying a new spot
+            if (lastMeasurementPacket != nullptr)
+                packetPool.release(lastMeasurementPacket);
 
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Start next execution in 5s then sleep");
-                sleepOnNextExecution = true;
-                setIntervalFromNow(5000);
+            lastMeasurementPacket = packetPool.allocCopy(*p);
+            if (phoneOnly) {
+                LOG_INFO("Send packet to phone");
+                service->sendToPhone(p);
+            } else {
+                LOG_INFO("Send packet to mesh");
+                service->sendToMesh(p, RX_SRC_LOCAL, true);
             }
         }
-        return true;
     }
-    return false;
+
+    // Arm the pre-sleep sequence even when no valid reading was available this cycle: a
+    // power-saving SENSOR node must still return to deep sleep, otherwise it stays awake
+    // until the next telemetry interval and drains its battery
+    if (!phoneOnly && isPowerSavingSensor()) {
+        if (!validTelemetry)
+            LOG_WARN("Power telemetry unavailable this cycle, sleep without sending");
+        sleepOnNextExecution = true;
+        preflightSleepDeferrals = 0;
+        LOG_DEBUG("Start next execution in 5s then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
+    }
+    return validTelemetry;
 }
 
 #endif

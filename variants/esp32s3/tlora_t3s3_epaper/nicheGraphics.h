@@ -7,6 +7,7 @@ Shared by both BaseUI and InkHUD envs.
 
 #pragma once
 
+#include "FSCommon.h"
 #include "configuration.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
@@ -31,9 +32,9 @@ class TLoraT3S3Panel : public NicheGraphics::Panels::DEPG0213BNS800
   protected:
     SPIClass *beginSpi() override
     {
-        auto *hspi = new SPIClass(HSPI);
-        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
-        return hspi;
+        // Display shares the HSPI bus with the SD card; reuse FSCommon's SPI_HSPI
+        // instance rather than re-initializing the same host.
+        return &SPI_HSPI;
     }
 };
 
