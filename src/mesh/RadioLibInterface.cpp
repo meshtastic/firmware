@@ -291,7 +291,41 @@ void RadioLibInterface::updateNoiseFloor()
     currentNoiseFloor = getAverageNoiseFloorInternal();
 
     LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
+
+#ifdef LORA_RSSI_LBT_PROFILE
+    // Reuse this idle-RX sample (no extra SPI read) for the margin profiler's noise-jitter distribution.
+    rssiIdleStats.add((int16_t)(rssi - currentNoiseFloor));
+    profileRssiReport();
+#endif
 }
+
+#ifdef LORA_RSSI_LBT_PROFILE
+void RadioLibInterface::profileRssiOnPacket(int32_t packetRssi)
+{
+    if (!hasNoiseFloorSamples() || packetRssi >= 0 || packetRssi < NOISE_FLOOR_VALID_MIN)
+        return; // no baseline yet, or a nonsensical reading
+    rssiSignalStats.add((int16_t)(packetRssi - getNoiseFloor()));
+}
+
+void RadioLibInterface::profileRssiReport()
+{
+    uint32_t now = millis();
+    if (now - lastRssiProfileReport < 60000)
+        return;
+    lastRssiProfileReport = now;
+
+    // idle: watch the HIGH tail (p90..p99) - the margin must sit above it or noise reads "busy".
+    LOG_INFO("RSSIprof floor=%ddBm idle n=%u min=%d mean=%d p90=%d p95=%d p99=%d max=%d", getNoiseFloor(), rssiIdleStats.count,
+             rssiIdleStats.minDelta, rssiIdleStats.mean(), rssiIdleStats.percentile(90), rssiIdleStats.percentile(95),
+             rssiIdleStats.percentile(99), rssiIdleStats.maxDelta);
+    // signal: watch the LOW tail (p05..p10) - the margin must sit below it or real traffic is never gated.
+    LOG_INFO("RSSIprof signal n=%u min=%d p05=%d p10=%d mean=%d max=%d", rssiSignalStats.count, rssiSignalStats.minDelta,
+             rssiSignalStats.percentile(5), rssiSignalStats.percentile(10), rssiSignalStats.mean(), rssiSignalStats.maxDelta);
+    if (rssiSignalStats.count > 0)
+        LOG_INFO("RSSIprof suggest margin in (%d, %d) dB above floor", rssiIdleStats.percentile(99),
+                 rssiSignalStats.percentile(5));
+}
+#endif
 
 uint8_t RadioLibInterface::getNoiseFloorSampleCountInternal() const
 {
@@ -708,6 +742,11 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->relay_node = mp->hop_start == 0 ? NO_RELAY_NODE : radioBuffer.header.relay_node;
 
             addReceiveMetadata(mp);
+
+#ifdef LORA_RSSI_LBT_PROFILE
+            // Feed the decoded packet's RSSI to the margin profiler's real-traffic distribution.
+            profileRssiOnPacket(mp->rx_rssi);
+#endif
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point

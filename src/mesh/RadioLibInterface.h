@@ -7,6 +7,10 @@
 #include <RadioLib.h>
 #include <sys/types.h>
 
+#ifdef LORA_RSSI_LBT_PROFILE
+#include "RssiProfiler.h"
+#endif
+
 // ESP32 has special rules about ISR code
 #ifdef ARDUINO_ARCH_ESP32
 #define INTERRUPT_ATTR IRAM_ATTR
@@ -128,6 +132,18 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 #else
     static constexpr bool RSSI_LBT_GATE_ENABLED = false;
     static constexpr int32_t RSSI_LBT_MARGIN_DB = 0;
+#endif
+
+#ifdef LORA_RSSI_LBT_PROFILE
+    // RSSI-margin profiler (build with -DLORA_RSSI_LBT_PROFILE). Instrumentation only - never shipped.
+    // Accumulates (RSSI - noise floor) in two channel states so RSSI_LBT_MARGIN_DB can be read off the
+    // logs instead of guessed. Independent of the gate flag: you profile first to choose the margin, then
+    // build with -DLORA_RSSI_LBT_MARGIN_DB=<n>. See .notes/lbt-rssi-margin-profiler.md.
+    RssiDeltaStats rssiIdleStats;   // (instantaneous RSSI - floor) while idle -> noise jitter (its high tail)
+    RssiDeltaStats rssiSignalStats; // (packet RSSI - floor) on decoded packets -> real-traffic rise (its low tail)
+    uint32_t lastRssiProfileReport = 0;
+    void profileRssiOnPacket(int32_t packetRssi); // feed a decoded packet's RSSI
+    void profileRssiReport();                     // throttled log dump of both distributions
 #endif
 
     /**
