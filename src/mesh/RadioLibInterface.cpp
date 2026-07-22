@@ -528,18 +528,19 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     const bool rssiBusy = channelBusyByRSSI();
                     const bool cadBusy = !rssiBusy && isChannelActive(); // currently traffic on the channel?
                     if (rssiBusy || cadBusy) {
-#if !MESHTASTIC_EXCLUDE_BEACON
-                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
-#endif
-                        {
 #ifndef MESHTASTIC_LBT_CAD_TO_RX
-                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+                        // Finding #1: re-arm unconditionally so we keep listening on the channel we are
+                        // deferring on. The old `!hasTargetRadioSettings(txp)` guard skipped this for
+                        // beacon-target packets, which could leave the node deaf (on the home config, when
+                        // the beacon target coincides with it) until the next TX cycle. A beacon's job is
+                        // to get a packet out, but it should still mirror the main path and keep listening
+                        // while it waits to key up.
+                        startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
 #else
-                            // Finding #3/#6: the chip is already in RX - isChannelActive() did the CAD->RX
-                            // handoff in place on detection, and the RSSI-only defer never left RX. A
-                            // startReceive() here would standby and abort that reception, so leave it be.
+                        // Finding #3/#6: the chip is already in RX - isChannelActive() did the CAD->RX
+                        // handoff in place on detection, and the RSSI-only defer never left RX. A
+                        // startReceive() here would standby and abort that reception, so leave it be.
 #endif
-                        }
                         setTransmitDelay();
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
