@@ -6,7 +6,7 @@ mid-payload, past its preamble). That gate, `RadioLibInterface::channelBusyByRSS
 channel busy when the instantaneous in-RX RSSI sits more than a fixed margin above the rolling noise
 floor:
 
-```
+```text
 busy  ⇔  getCurrentRSSI()  >  getNoiseFloor() + RSSI_LBT_MARGIN_DB
 ```
 
@@ -80,7 +80,7 @@ live.
 
 Every ~60 s the node logs three lines (deltas are dB above the noise floor):
 
-```
+```text
 RSSIprof floor=-119dBm idle n=412 min=-2 mean=1 p90=3 p95=4 p99=6 max=11
 RSSIprof signal n=57 min=14 p05=19 p10=22 mean=41 max=88
 RSSIprof suggest margin in (6, 19) dB above floor
@@ -108,5 +108,12 @@ the 5 s cadence) before `p99` is stable, and the signal line needs real traffic 
   the intended starting point.
 - Percentiles are read from the 2 dB histogram, so they are quantised to bin edges - fine for choosing a
   margin, not a precise statistic.
-- Cost when enabled: two `RssiDeltaStats` (~280 bytes RAM total), no extra SPI reads (the idle sample is
-  reused), and one throttled log line per minute.
+- All negative deltas share a single underflow bin (`bin[0]`), so a percentile that falls in it collapses
+  to the minimum sample rather than resolving within the negative range. This does **not** affect the
+  margin, which is keyed off the idle **high** tail (`idle p99`, always well positive - noise rides above
+  its own rolling mean). It can understate the signal **low** tail (`signal p05`) when a node decodes
+  packets sitting below its noise floor (possible at high SF), which would make the suggested window look
+  narrower - or falsely "overlapping" - than it is. It never biases toward a smaller (more aggressive)
+  margin. If you need a trustworthy `signal p05` on such a board, give the histogram negative-range bins.
+- Cost when enabled: two `RssiDeltaStats` (~296 bytes RAM total, 148 each), no extra SPI reads (the idle
+  sample is reused), and one throttled log line per minute.
