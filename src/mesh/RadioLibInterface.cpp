@@ -475,7 +475,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     case ISR_RX:
         handleReceiveInterrupt();
+#ifdef MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE
+        // Finding #6: re-arm RX without a standby() so a second packet already mid-demodulation
+        // (continuous RX) is not aborted. startRx=true re-issues RX so this is also safe on duty-cycle
+        // presets (no deafness). OPEN (needs HW validation): whether re-issuing SetRx disturbs an
+        // in-flight on-chip reception - if it does, this must be gated on a continuous-RX check and use
+        // startRx=false. See .notes/lbt-radiolib-requirements.md.
+        resumeReceiveInPlace(true);
+#else
         startReceive();
+#endif
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
@@ -510,15 +519,32 @@ void RadioLibInterface::onNotify(uint32_t notification)
 #endif
                 } else {
                     // Two-stage listen-before-talk: an RSSI energy check (catches a mid-payload packet
-                    // whose preamble CAD already missed) OR-ed with the CAD preamble scan. channelBusyByRSSI()
-                    // is a compile-time no-op unless the gate is enabled, and the || short-circuit runs it
-                    // first, while we are still in RX (before isChannelActive()'s setStandby()).
-                    if (channelBusyByRSSI() || isChannelActive()) { // is there currently traffic on the channel?
+                    // whose preamble CAD already missed), then the CAD preamble scan. channelBusyByRSSI()
+                    // is a compile-time no-op unless the gate is enabled, and it reads RSSI while we are
+                    // still in RX (before isChannelActive()'s setStandby()). Split into two flags so the
+                    // #3 handoff below can tell a CAD detection (chip now in RX via GOTO_RX) from an
+                    // RSSI-only defer (chip never left RX); with the macro off this is exactly the old
+                    // `channelBusyByRSSI() || isChannelActive()` short-circuit.
+                    const bool rssiBusy = channelBusyByRSSI();
+                    const bool cadBusy = !rssiBusy && isChannelActive(); // currently traffic on the channel?
+                    if (rssiBusy || cadBusy) {
 #if !MESHTASTIC_EXCLUDE_BEACON
                         if (!MeshBeaconModule::hasTargetRadioSettings(txp))
 #endif
                         {
+#ifdef MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE
+                            // Finding #3: when CAD (GOTO_RX exit mode) detected, the chip is already
+                            // demodulating that packet - hand it to the RX IRQ path without a standby
+                            // (startReceive() would abort it). The RSSI-only case never left RX, so a
+                            // normal re-arm is correct there.
+                            // OPEN (review/HW): interaction with a beacon target on the home config.
+                            if (cadBusy)
+                                resumeReceiveInPlace(false);
+                            else
+                                startReceive();
+#else
                             startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+#endif
                         }
                         setTransmitDelay();
                     } else {
@@ -766,6 +792,22 @@ void RadioLibInterface::handleReceiveInterrupt()
         }
     }
 }
+
+#ifdef MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE
+void RadioLibInterface::resumeReceiveInPlace(bool startRx)
+{
+    // RadioLib's resumeReceive() (fork: NomDeTom/RadioLib@rxResume) remaps the RX IRQ - and, when
+    // startRx, re-issues SetRx - WITHOUT the standby() that startReceive() performs, so a reception
+    // already in progress is not aborted. We then re-attach the MCU ISR that isrLevel0Common() detached
+    // on entry, and set the firmware RX bookkeeping via the base startReceive() (isReceiving + powerMon);
+    // the hardware is already armed above, so we must NOT call the chip-specific startReceive() override.
+    int16_t err = iface->resumeReceive(startRx, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("resumeReceive %s%d", radioLibErr, err);
+    enableInterrupt(isrRxLevel0);
+    RadioLibInterface::startReceive();
+}
+#endif
 
 void RadioLibInterface::startReceive()
 {

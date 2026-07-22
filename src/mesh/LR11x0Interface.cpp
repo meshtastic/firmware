@@ -292,7 +292,13 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
                                        .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+#ifdef MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE
+                                       // #3: on detection drop straight into RX in hardware; the caller
+                                       // then hands off via resumeReceiveInPlace(false) (no standby).
+                                       .exitMode = RADIOLIB_LR11X0_CAD_EXIT_MODE_RX,
+#else
+                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT, // resolves to STBY_RC
+#endif
                                        .timeout = 0,
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};

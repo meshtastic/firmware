@@ -401,7 +401,13 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
                                        .detPeak = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
+#ifdef MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE
+                                       // #3: on detection drop straight into RX in hardware; the caller
+                                       // then hands off via resumeReceiveInPlace(false) (no standby).
+                                       .exitMode = RADIOLIB_SX126X_CAD_GOTO_RX,
+#else
+                                       .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT, // resolves to GOTO_STDBY
+#endif
                                        .timeout = 0,
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};

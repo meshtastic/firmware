@@ -23,6 +23,13 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
+// MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE: define (via build_flags) ONLY when linking a RadioLib that
+// provides PhysicalLayer::resumeReceive() - i.e. the fork at NomDeTom/RadioLib@rxResume, or upstream once
+// merged. It unlocks two LBT-audit fixes (#3 CAD->RX handoff, #6 ISR_RX re-arm) that both need to re-arm
+// RX WITHOUT the standby() that startReceive() forces (which aborts an in-flight reception). Left
+// UNDEFINED here on purpose: against stock RadioLib these paths are compiled out and behaviour is
+// unchanged. See docs/rssi_lbt_margin_profiler.md's sibling notes and .notes/lbt-radiolib-requirements.md.
+
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
 
 /**
@@ -225,6 +232,17 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Subclasses must override and call this base method
      */
     virtual void startReceive();
+
+#ifdef MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE
+    /**
+     * Re-arm RX in place, without a preceding standby(), so a reception already underway is not aborted.
+     * Wraps RadioLib's resumeReceive() (remap RX IRQ, and re-issue RX when startRx=true) + re-attach the
+     * MCU ISR + the base RX bookkeeping. Used instead of startReceive() on the CAD->RX handoff (#3,
+     * startRx=false: the chip is already in RX from a GOTO_RX CAD) and the ISR_RX re-arm (#6, startRx=true).
+     * Requires a RadioLib with resumeReceive() - guarded by MESHTASTIC_RADIOLIB_HAS_RESUME_RECEIVE.
+     */
+    void resumeReceiveInPlace(bool startRx);
+#endif
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() = 0;
