@@ -49,8 +49,7 @@
 #include "meshSolarApp.h"
 #endif
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
-    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if HAS_SERIALMODULE
 
 #define RX_BUFFER 256
 #define TIMEOUT 250
