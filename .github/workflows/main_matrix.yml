@@ -80,18 +80,17 @@ jobs:
       - name: Generate matrix
         id: jsonStep
         run: |
-          CHANGED=.github/outputs/all_modified_files.txt
-          EXTRA=""
           # Narrow BOTH the build ('all') and static-analysis ('check') legs to the
-          # PR's affected variants. An absent/empty file (non-PR, 'ci:full-build'
-          # label, or diff failure) leaves EXTRA empty => the full set for that leg.
-          if [[ -s "$CHANGED" ]]; then
-            EXTRA="--changed-files $CHANGED"
-          fi
+          # PR's affected variants. The generator treats an absent/empty --changed-files
+          # as a no-op (full set), so it's passed unconditionally: a non-PR push, a
+          # 'ci:full-build'-labelled PR, or a diff failure all leave the file absent =>
+          # the full set for that leg. Pushes (empty GITHUB_HEAD_REF) build the full
+          # release set with no --level.
+          CHANGED=.github/outputs/all_modified_files.txt
           if [[ "$GITHUB_HEAD_REF" == "" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
-          else  
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr $EXTRA)
+          else
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr --changed-files "$CHANGED")
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "${{matrix.arch}}=$TARGETS" >> $GITHUB_OUTPUT
