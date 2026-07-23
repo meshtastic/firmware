@@ -27,10 +27,12 @@ _SPEC.loader.exec_module(gcm)
 
 BUDGETS = frozenset({"rak4631"})
 
-# Arch-base .ini -> the platform subdir it re-includes (family-wide bases). Mirrors
-# what base_ini_platform_incl() derives from the real tree: only esp32-common.ini
-# carries a +<platform/esp32> re-include; the chip base esp32.ini merely inherits it.
-BASE_INI_INCL = {"variants/esp32/esp32-common.ini": "esp32"}
+# Arch-base .ini -> the set of platform subdirs it re-includes (family-wide bases).
+# Mirrors what base_ini_platform_incl() derives from the real tree: only
+# esp32-common.ini carries a +<platform/esp32> re-include; the chip base esp32.ini
+# merely inherits it. Values are sets so a base that re-includes multiple platform
+# trees fans out to a safe superset instead of being silently dropped.
+BASE_INI_INCL = {"variants/esp32/esp32-common.ini": {"esp32"}}
 
 
 def env(
@@ -427,10 +429,11 @@ def test_env_definition_dirs_parses_headers():
 
 
 def test_base_ini_platform_incl_finds_family_base_only():
-    """A base .ini that re-includes exactly one platform tree is a family base.
+    """A base .ini that re-includes one or more platform trees is a family base.
 
     A chip base that only inherits (${esp32_common.build_src_filter}) has no direct
-    +<platform/X> and must be absent, so a change to it stays scoped to its top-dir."""
+    +<platform/X> and must be absent, so a change to it stays scoped to its top-dir.
+    Values are sets; a base re-including multiple trees maps to all of them."""
     with tempfile.TemporaryDirectory() as root:
         esp32_dir = os.path.join(root, "variants", "esp32")
         os.makedirs(esp32_dir)
@@ -454,9 +457,78 @@ def test_base_ini_platform_incl_finds_family_base_only():
             f.write("[nrf52_base]\nbuild_src_filter =\n  +<platform/nrf52/>\n")
 
         incl = gcm.base_ini_platform_incl(root=root)
-        assert incl["variants/esp32/esp32-common.ini"] == "esp32"
-        assert incl["variants/nrf52840/nrf52.ini"] == "nrf52"
+        assert incl["variants/esp32/esp32-common.ini"] == {"esp32"}
+        assert incl["variants/nrf52840/nrf52.ini"] == {"nrf52"}
         assert "variants/esp32/esp32.ini" not in incl
+
+
+def test_base_ini_platform_incl_multi_include_maps_to_all():
+    """A base re-including 2+ platform trees maps to the full set (fail-safe).
+
+    Previously such a base was silently dropped (len(hits)==1 guard), which would
+    scope a change to it to its own top-dir only -> under-build. Now it maps to every
+    re-included tree so Tier 2b fans out to a safe superset."""
+    with tempfile.TemporaryDirectory() as root:
+        esp32_dir = os.path.join(root, "variants", "esp32")
+        os.makedirs(esp32_dir)
+        with open(os.path.join(esp32_dir, "esp32-common.ini"), "w") as f:
+            f.write(
+                "[esp32_common]\nbuild_src_filter =\n"
+                "  -<platform/> +<platform/esp32/> +<platform/firmware_common/>\n"
+            )
+
+        incl = gcm.base_ini_platform_incl(root=root)
+        assert incl["variants/esp32/esp32-common.ini"] == {"esp32", "firmware_common"}
+
+
+def test_tier2b_multi_include_base_fans_out_superset():
+    """A multi-include family base selects every arch that compiles either tree.
+
+    esp32-common re-includes both esp32 and (hypothetically) extra_variants; a change
+    to it must build every esp32-family env AND every arch compiling extra_variants --
+    a safe superset, never an under-build."""
+    u = universe()
+    multi = dict(BASE_INI_INCL)
+    multi["variants/esp32/esp32-common.ini"] = {"esp32", "extra_variants"}
+    result = gcm.select_changed(
+        u,
+        ["variants/esp32/esp32-common.ini"],
+        gcm.platform_src_map_from_envs(u),
+        multi,
+        budgets=BUDGETS,
+    )
+    # esp32 family (esp32-pr-rep, heltec-v3) plus every extra_variants arch's pr reps.
+    assert result == {
+        "esp32-pr-rep",
+        "heltec-v3",
+        "rak4631",
+        "rpipico",
+        "rak11310",
+        "nrf54l15dk",
+    }
+
+
+def test_board_ini_globs_prefers_extra_configs():
+    """board_ini_globs returns the derived extra_configs globs, or the defaults.
+
+    A fake cfg lets this run without PlatformIO. Ensures the same glob list backs both
+    env_definition_dirs and base_ini_platform_incl (Win B applied consistently)."""
+
+    class _Cfg:
+        def __init__(self, value):
+            self._value = value
+
+        def get(self, section, option, default=None):
+            assert section == "platformio" and option == "extra_configs"
+            return self._value
+
+    derived = "variants/*/*.ini\nvariants/*/bases/*.ini\nnot_a.txt"
+    assert gcm.board_ini_globs(cfg=_Cfg(derived)) == [
+        "variants/*/*.ini",
+        "variants/*/bases/*.ini",
+    ]
+    # Empty extra_configs falls back to the built-in defaults.
+    assert gcm.board_ini_globs(cfg=_Cfg([])) == gcm.DEFAULT_BOARD_INI_GLOBS
 
 
 def test_budget_envs_reads_ram_budgets():

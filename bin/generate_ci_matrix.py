@@ -129,12 +129,14 @@ def env_definition_dirs(root=".", globs=DEFAULT_BOARD_INI_GLOBS):
 
 
 def base_ini_platform_incl(root=".", globs=DEFAULT_BOARD_INI_GLOBS):
-    """Map repo-relative .ini path -> the platform subdir it re-includes, if any.
+    """Map repo-relative .ini path -> the set of platform subdirs it re-includes.
 
-    Only arch-base .inis that carry a ``+<platform/X>`` re-include appear (e.g.
-    esp32-common.ini -> "esp32"). These are the *family-wide* bases; a chip base that
-    merely inherits the include (esp32.ini) is absent, so a change to it scopes to its
-    own top-dir instead of the whole family.
+    Only arch-base .inis that carry at least one ``+<platform/X>`` re-include appear
+    (e.g. esp32-common.ini -> {"esp32"}). These are the *family-wide* bases; a chip
+    base that merely inherits the include (esp32.ini) has no direct re-include and is
+    absent, so a change to it scopes to its own top-dir instead of the whole family.
+    A base that re-includes multiple platform trees maps to all of them, so Tier 2b
+    fans out to a safe superset rather than silently dropping the extra trees.
     """
     incl = {}
     for pattern in globs:
@@ -145,11 +147,25 @@ def base_ini_platform_incl(root=".", globs=DEFAULT_BOARD_INI_GLOBS):
                     hits = set(PLATFORM_INCL_RE.findall(f.read()))
             except OSError:
                 continue
-            # A base that re-includes exactly one platform tree is a family base for
-            # it. (Multiple would be ambiguous; none means it inherits -> scoped.)
-            if len(hits) == 1:
-                incl[rel] = next(iter(hits))
+            if hits:
+                incl[rel] = hits
     return incl
+
+
+def board_ini_globs(cfg=None):
+    """The .ini globs from [platformio] extra_configs (Win B), or the defaults.
+
+    Derived once and shared by every .ini scan (env_definition_dirs and
+    base_ini_platform_incl) so they never diverge: a new extra_configs glob is picked
+    up by both, not just one. Pass an existing cfg to avoid a redundant get_instance;
+    the PlatformIO import stays deferred so the module is import-safe for unit tests.
+    """
+    if cfg is None:
+        from platformio.project.config import ProjectConfig
+
+        cfg = ProjectConfig.get_instance()
+    globs = _ini_glob_list(cfg.get("platformio", "extra_configs", default=[]))
+    return globs or DEFAULT_BOARD_INI_GLOBS
 
 
 def load_all_envs():
@@ -165,8 +181,7 @@ def load_all_envs():
     cfg = ProjectConfig.get_instance()
     # Win B: derive the env-definition scan globs from the real extra_configs so a new
     # glob (or the InkHUD config) is never silently missed.
-    globs = _ini_glob_list(cfg.get("platformio", "extra_configs", default=[]))
-    defdir = env_definition_dirs(globs=globs or DEFAULT_BOARD_INI_GLOBS)
+    defdir = env_definition_dirs(globs=board_ini_globs(cfg))
     all_envs = []
     for pio_env in cfg.envs():
         build_flags = cfg.get(f"env:{pio_env}", "build_flags")
@@ -299,9 +314,13 @@ def select_changed(
         # Tier 2b: an arch base .ini (variants/<plat>/<name>.ini).
         m = ARCH_INI_RE.match(p)
         if m:
-            incl = base_ini_incl.get(p)
-            if incl and incl in platform_src_map:
-                add_top(platform_src_map[incl], sel)  # family-wide base
+            incls = base_ini_incl.get(p) or set()
+            mapped = [platform_src_map[s] for s in incls if s in platform_src_map]
+            if mapped:
+                # Family-wide base: fan out to every arch that compiles each
+                # re-included platform tree (a safe superset if it re-includes >1).
+                for tops in mapped:
+                    add_top(tops, sel)
             else:
                 add_top([m.group(1)], sel)  # chip/board base -> its own top dir
             continue
@@ -367,7 +386,7 @@ def main(argv=None):
                 all_envs,
                 changed,
                 platform_src_map,
-                base_ini_platform_incl(),
+                base_ini_platform_incl(globs=board_ini_globs()),
                 budgets=budget_envs(),
             )
 
