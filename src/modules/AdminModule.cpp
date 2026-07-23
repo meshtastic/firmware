@@ -898,14 +898,24 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
         break;
     } // case meshtastic_Config_device_tag
-    case meshtastic_Config_position_tag:
+    case meshtastic_Config_position_tag: {
         LOG_INFO("Set config: Position");
         config.has_position = true;
-        // No-op set (clients routinely re-push identical config) must not reboot. Whole-struct memcmp
-        // fails safe: any real field change still reboots; only a byte-identical set is spared. Tier 2
-        // narrows this further to reboot only on boot-only fields (GPIO/GPS). See plan-narrow-reboot-trigger.
-        if (memcmp(&config.position, &c.payload_variant.position, sizeof(config.position)) == 0)
-            requiresReboot = false;
+        // Reboot only when a field that can't be applied live changed. PositionModule reads these fields
+        // directly from config every send/schedule cycle (verified in PositionModule.cpp), so changing
+        // only them takes effect with no restart. Everything else - GPS driver mode/timing and GPIO pin
+        // assignments - stays on the reboot path. Fails safe: neutralize the known-live fields in a copy,
+        // then reboot if any *other* byte differs, so a newly-added PositionConfig field reboots until it
+        // is explicitly cleared as live here. See plan-narrow-reboot-trigger.
+        {
+            meshtastic_Config_PositionConfig live = config.position, incoming = c.payload_variant.position;
+            incoming.position_broadcast_secs = live.position_broadcast_secs;
+            incoming.position_broadcast_smart_enabled = live.position_broadcast_smart_enabled;
+            incoming.broadcast_smart_minimum_distance = live.broadcast_smart_minimum_distance;
+            incoming.position_flags = live.position_flags;
+            incoming.fixed_position = live.fixed_position;
+            requiresReboot = (memcmp(&live, &incoming, sizeof(live)) != 0);
+        }
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
         // clear the stored position since it may not get updated
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
@@ -918,6 +928,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         // Save nodedb as well in case we got a fixed position packet
         break;
+    } // case meshtastic_Config_position_tag
     case meshtastic_Config_power_tag:
         LOG_INFO("Set config: Power");
         config.has_power = true;
