@@ -114,6 +114,8 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #include <string>
 #endif
 
+const char *bootString =
+    nullptr; // Pointer to a string that will be drawn on the boot screen, if set (used for GPS probing status)
 #ifdef ARCH_ESP32
 #ifdef DEBUG_PARTITION_TABLE
 #include "esp_partition.h"
