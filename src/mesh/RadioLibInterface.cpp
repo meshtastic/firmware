@@ -11,6 +11,7 @@
 #if !MESHTASTIC_EXCLUDE_BEACON
 #include "modules/MeshBeaconModule.h"
 #endif
+#include "modules/RepeatScalingModule.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -789,6 +790,12 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             enableInterrupt(isrTxLevel0);
             lastTxStart = millis();
             printPacket("Started Tx", txp);
+            if (repeatScalingModule) {
+                uint8_t dupesTolerated = repeatScalingModule->getToleratedDupeCount(txp->from, txp->id);
+                if (dupesTolerated > 0)
+                    LOG_DEBUG("[REPEATSCALE] Transmitting 0x%08x from=0x%08x after tolerating %u duplicate(s)", txp->id,
+                              txp->from, dupesTolerated);
+            }
 #ifdef LED_LORA
             digitalWrite(LED_LORA, LED_STATE_ON);
 #endif
