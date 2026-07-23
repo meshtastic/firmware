@@ -876,6 +876,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         type = ICM42607P;
                         logFoundDevice("ICM-42607-P", (uint8_t)addr.address);
                         break;
+                    } else if (registerValue == 0x71 || registerValue == 0x73) {
+                        // MPU-9250 (0x71) / MPU-9255 (0x73) share 0x68/0x69 with MPU-6050 and BMX160;
+                        // WHO_AM_I disambiguates them here.
+                        type = MPU9250;
+                        logFoundDevice(registerValue == 0x73 ? "MPU9255" : "MPU9250", (uint8_t)addr.address);
+                        break;
                     } else if (registerValue == 0x68) { // WHO_AM_I from datasheet
                         type = MPU6050;
                         logFoundDevice("MPU6050", (uint8_t)addr.address);
