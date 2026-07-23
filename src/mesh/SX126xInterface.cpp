@@ -173,30 +173,6 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_WARN("Failed to apply SX1262 register 0x8B5 patch for RX improvement");
     }
 
-#if 0
-    // Read/write a register we are not using (only used for FSK mode) to test SPI comms
-    uint8_t crcLSB = 0;
-    int err = lora.readRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
-    if(err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
-
-    //if(crcLSB != 0x0f)
-    //    RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
-
-    crcLSB = 0x5a;
-    err = lora.writeRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
-    if(err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
-
-    err = lora.readRegister(SX126X_REG_CRC_POLYNOMIAL_LSB, &crcLSB, 1);
-    if(err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
-
-    if(crcLSB != 0x5a)
-        RECORD_CRITICALERROR(CriticalErrorCode_SX1262Failure);
-    // If we got this far register accesses (and therefore SPI comms) are good
-#endif
-
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
 
@@ -274,10 +250,61 @@ template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
+template <typename T> void SX126xInterface<T>::enableInterrupt(void (*callback)())
+{
+#ifdef LORA_DIO1_SOFTWARE_POLL
+    irqPollingActive = true;
+    pollTxMode = isIsrTxCallback(callback);
+    scheduleIrqPollTick();
+#else
+    lora.setDio1Action(callback);
+#endif
+}
+
 template <typename T> void SX126xInterface<T>::disableInterrupt()
 {
+#ifdef LORA_DIO1_SOFTWARE_POLL
+    irqPollingActive = false;
+#else
     lora.clearDio1Action();
+#endif
 }
+
+#ifdef LORA_DIO1_SOFTWARE_POLL
+template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
+{
+    if (!irqPollingActive)
+        return;
+
+    // getIrqFlags()/clearIrqFlags() both operate on the raw SX126x IRQ register, so use the
+    // chip-specific RADIOLIB_SX126X_IRQ_* masks on both the read and the clear.
+    uint16_t irq = lora.getIrqFlags();
+    const uint16_t rxEventMask =
+        RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
+    const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
+
+    // Do NOT treat a preamble/header-only IRQ as a full RX event: noisy preamble detections would
+    // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
+    // poll loop spins at high rate while they stay latched.
+    if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
+        lora.clearIrqFlags(noisyRxMask);
+        scheduleIrqPollTick();
+        return;
+    }
+
+    if (pollTxMode) {
+        if (irq & (RADIOLIB_SX126X_IRQ_TX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT)) {
+            deliverPendingIrqFromPoll(ISR_TX);
+            return;
+        }
+    } else if (irq & rxEventMask) {
+        deliverPendingIrqFromPoll(ISR_RX);
+        return;
+    }
+
+    scheduleIrqPollTick();
+}
+#endif
 
 template <typename T> void SX126xInterface<T>::setStandby()
 {

@@ -116,15 +116,15 @@ void test_ws_keyedCandidate_evictsOldestKeylessFirst()
     // Fill with keyed entries except two keyless ones in the middle
     for (size_t i = 0; i < ws.capacity(); i++) {
         const bool keyless = (i == 5 || i == 10);
-        // Timestamps spaced by the 64 s warm metadata quantum (<<6) so LRU order survives
-        // quantisation: keyless i=10 is oldest (50), i=5 next (60), keyed all older (10).
-        TEST_ASSERT_TRUE(ws.absorb(0x1000 + i, (keyless ? (i == 10 ? 50u : 60u) : 10u) << 6, keyless ? NULL : key));
+        // One quantum apart (shift by WARM_META_BITS) so LRU order survives quantisation:
+        // keyless i=10 is oldest (50), i=5 next (60), keyed all older (10).
+        TEST_ASSERT_TRUE(ws.absorb(0x1000 + i, (keyless ? (i == 10 ? 50u : 60u) : 10u) << WARM_META_BITS, keyless ? NULL : key));
     }
     // Keyed candidate must displace the OLDEST KEYLESS entry (0x100A, ts=50),
     // even though every keyed entry is older (ts=10)
     uint8_t k2[32];
     makeKey(k2, 0x43);
-    TEST_ASSERT_TRUE(ws.absorb(0x8888, 70u << 6, k2));
+    TEST_ASSERT_TRUE(ws.absorb(0x8888, 70u << WARM_META_BITS, k2));
     TEST_ASSERT_FALSE(ws.contains(0x1000 + 10));
     TEST_ASSERT_TRUE(ws.contains(0x1000 + 5));
     TEST_ASSERT_TRUE(ws.contains(0x8888));
@@ -169,6 +169,31 @@ void test_ws_meta_roundTrip()
     TEST_ASSERT_TRUE(ws.lookupMeta(0x702, role, prot));
     TEST_ASSERT_EQUAL(0, role);
     TEST_ASSERT_EQUAL((uint8_t)WarmProtected::None, prot);
+}
+
+// The signer flag rides the same packed word as role/protected, so it must survive a
+// round trip without disturbing them (or the quantised timestamp).
+void test_ws_signer_roundTrip()
+{
+    WarmNodeStore ws;
+    uint8_t key[32];
+    makeKey(key, 0x78);
+    TEST_ASSERT_TRUE(ws.absorb(0x710, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/true));
+    TEST_ASSERT_TRUE(ws.absorb(0x711, 1234, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/false));
+
+    WarmNodeEntry e;
+    TEST_ASSERT_TRUE(ws.take(0x710, e));
+    TEST_ASSERT_TRUE_MESSAGE(warmSignerOf(e), "signer flag must round trip");
+    TEST_ASSERT_EQUAL(5, warmRoleOf(e)); // and must not disturb its neighbours in the word
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
+    TEST_ASSERT_EQUAL(1234u & WARM_TIME_MASK, warmTimeOf(e));
+
+    // Control: without the flag the same entry reads back clear, so the accessor is
+    // reporting the stored bit rather than always-true.
+    TEST_ASSERT_TRUE(ws.take(0x711, e));
+    TEST_ASSERT_FALSE(warmSignerOf(e));
+    TEST_ASSERT_EQUAL(5, warmRoleOf(e));
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
 }
 
 void test_ws_remove_and_clear()
@@ -257,6 +282,107 @@ void test_ws_v1_migration_discardsLastHeard()
     b.saveIfDirty();
 }
 
+// A v2 (WRM2) warm.dat used bit 6 as a timestamp bit, so loading one must not read it as a
+// signer, while role/protected/time carry over. File backend only.
+void test_ws_v2_migration_clearsSignerBit()
+{
+    WarmNodeStore a;
+    uint8_t key[32], got[32];
+    makeKey(key, 0x67);
+    // signer=true sets bit 6, standing in for a v2 record whose timestamp had it set.
+    a.absorb(0x910, 123456, key, 5 /* TRACKER */, (uint8_t)WarmProtected::Role, /*signer=*/true);
+    if (!a.saveIfDirty()) {
+        TEST_IGNORE_MESSAGE("Filesystem not available in this test environment");
+        return;
+    }
+
+    // Flip the 4-byte header magic to v2 ("WRM2"). CRC covers only the entry bytes, so
+    // patching the header keeps it valid.
+    std::vector<uint8_t> buf;
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_READ);
+        if (!f) {
+            TEST_IGNORE_MESSAGE("warm.dat not readable in this environment");
+            return;
+        }
+        buf.resize(f.size());
+        const size_t got = f.read(buf.data(), buf.size());
+        f.close();
+        TEST_ASSERT_EQUAL_MESSAGE(buf.size(), got, "short read patching warm.dat");
+    }
+    TEST_ASSERT_TRUE(buf.size() >= 4);
+    const uint32_t v2magic = 0x324D5257u; // "WRM2"
+    memcpy(buf.data(), &v2magic, sizeof(v2magic));
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_WRITE);
+        TEST_ASSERT_TRUE((bool)f);
+        const size_t wrote = f.write(buf.data(), buf.size());
+        f.close();
+        TEST_ASSERT_EQUAL_MESSAGE(buf.size(), wrote, "short write patching warm.dat");
+    }
+
+    WarmNodeStore b;
+    b.load();
+    TEST_ASSERT_TRUE(b.contains(0x910));
+    TEST_ASSERT_TRUE(b.copyKey(0x910, got));
+    TEST_ASSERT_EQUAL_MEMORY(key, got, 32);
+
+    WarmNodeEntry e;
+    TEST_ASSERT_TRUE(b.take(0x910, e));
+    TEST_ASSERT_FALSE_MESSAGE(warmSignerOf(e), "a v2 timestamp bit must not read as a signer");
+    // Unlike v1, v2 kept role/protected/time in place, so they survive the migration.
+    TEST_ASSERT_EQUAL(123456u & WARM_TIME_MASK, warmTimeOf(e));
+    TEST_ASSERT_EQUAL(5, warmRoleOf(e));
+    TEST_ASSERT_EQUAL((uint8_t)WarmProtected::Role, warmProtOf(e));
+
+    b.clear();
+    b.saveIfDirty();
+}
+
+// Shrink safety: a warm.dat snapshot recording more entries than this build's
+// WARM_NODE_COUNT (e.g. written before a per-platform tier reduction) must be
+// rejected cleanly at the header check - load() starts empty instead of reading
+// past entries[]. (The nRF52840 raw-flash ring backend has no such cliff: it
+// replays records through place(), whose LRU admission keeps the newest.)
+void test_ws_load_rejectsOversizedSnapshot()
+{
+    WarmNodeStore a;
+    a.absorb(0xA00, 111, NULL);
+    if (!a.saveIfDirty()) {
+        TEST_IGNORE_MESSAGE("Filesystem not available in this test environment");
+        return;
+    }
+
+    // Patch the header's count field (offset 8) to one past capacity.
+    std::vector<uint8_t> buf;
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_READ);
+        if (!f) {
+            TEST_IGNORE_MESSAGE("warm.dat not readable in this environment");
+            return;
+        }
+        buf.resize(f.size());
+        f.read(buf.data(), buf.size());
+        f.close();
+    }
+    TEST_ASSERT_TRUE(buf.size() >= 16);
+    const uint16_t oversized = (uint16_t)(WARM_NODE_COUNT + 1);
+    memcpy(buf.data() + 8, &oversized, sizeof(oversized));
+    {
+        auto f = FSCom.open("/prefs/warm.dat", FILE_O_WRITE);
+        TEST_ASSERT_TRUE((bool)f);
+        f.write(buf.data(), buf.size());
+        f.close();
+    }
+
+    WarmNodeStore b;
+    b.load();
+    TEST_ASSERT_EQUAL(0, b.count()); // rejected as invalid, started empty
+
+    b.clear();
+    b.saveIfDirty();
+}
+
 WS_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -270,9 +396,12 @@ WS_TEST_ENTRY void setup()
     RUN_TEST(test_ws_keyedCandidate_evictsOldestKeylessFirst);
     RUN_TEST(test_ws_keyedCandidate_evictsOldestKeyedWhenNoKeyless);
     RUN_TEST(test_ws_meta_roundTrip);
+    RUN_TEST(test_ws_signer_roundTrip);
     RUN_TEST(test_ws_remove_and_clear);
     RUN_TEST(test_ws_persistence_roundTrip);
     RUN_TEST(test_ws_v1_migration_discardsLastHeard);
+    RUN_TEST(test_ws_v2_migration_clearsSignerBit);
+    RUN_TEST(test_ws_load_rejectsOversizedSnapshot);
     exit(UNITY_END());
 }
 

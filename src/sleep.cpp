@@ -190,20 +190,23 @@ void initDeepSleep()
 #endif
 }
 
-bool doPreflightSleep()
+bool doPreflightSleep(bool deepSleep)
 {
-    if (preflightSleep.notifyObservers(NULL) != 0)
+    // Observers only get a void*: non-NULL means the hardware (radio) is about to be powered
+    // down (deep sleep / shutdown), NULL means a light sleep where the radio keeps running
+    static const bool deepSleepFlag = true;
+    if (preflightSleep.notifyObservers(deepSleep ? (void *)&deepSleepFlag : NULL) != 0)
         return false; // vetoed
     else
         return true;
 }
 
 /// Tell devices we are going to sleep and wait for them to handle things
-static void waitEnterSleep(bool skipPreflight = false)
+static void waitEnterSleep(bool skipPreflight, bool deepSleep)
 {
     if (!skipPreflight) {
         uint32_t now = millis();
-        while (!doPreflightSleep()) {
+        while (!doPreflightSleep(deepSleep)) {
             delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
             if (!Throttle::isWithinTimespanMs(now,
@@ -230,7 +233,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
-    waitEnterSleep(skipPreflight);
+    waitEnterSleep(skipPreflight, true);
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
     // Full shutdown of bluetooth hardware
@@ -404,13 +407,13 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 {
     // LOG_DEBUG("Enter light sleep");
 
-    // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not entering
-    // LightSleep.
-#if defined(SENSECAP_INDICATOR)
+    // LORA_DIO1 is an extended IO pin (on an I/O expander). Setting it as a wake-up pin will cause problems,
+    // such as the device not entering light sleep. Boards opt in with LORA_DIO1_EXTENDED_IO in their variant.
+#if defined(LORA_DIO1_EXTENDED_IO)
     return ESP_SLEEP_WAKEUP_TIMER;
 #endif
 
-    waitEnterSleep(false);
+    waitEnterSleep(false, false);
     notifyLightSleep.notifyObservers(NULL); // Button interrupts are detached here
 
     uint64_t sleepUsec = sleepMsec * 1000LL;
@@ -586,7 +589,9 @@ bool shouldLoraWake(uint32_t msecToWake)
 
 void enableLoraInterrupt()
 {
-#if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+#if defined(LORA_DIO1_EXTENDED_IO)
+    // DIO1 is a virtual pin on an I/O expander - it cannot be a GPIO wakeup source
+#elif SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     esp_err_t res;
     res = gpio_pulldown_en((gpio_num_t)LORA_DIO1);
     if (res != ESP_OK) {

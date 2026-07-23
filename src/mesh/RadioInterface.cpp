@@ -31,13 +31,17 @@
 #include "platform/portduino/USBHal.h"
 #endif
 
+#if defined(ARCH_ESP32) && defined(USE_MCP23017)
+#include "platform/esp32/MCP23017LockingArduinoHal.h"
+#endif
+
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_STD[] = {
-    PRESET(LONG_FAST),  PRESET(LONG_SLOW),     PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST), PRESET(SHORT_SLOW),
-    PRESET(SHORT_FAST), PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  MODEM_PRESET_END};
+    PRESET(LONG_FAST),     PRESET(LONG_SLOW),   PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST),  PRESET(SHORT_SLOW), PRESET(SHORT_FAST),
+    PRESET(LONG_MODERATE), PRESET(SHORT_TURBO), PRESET(LONG_TURBO),  PRESET(MEDIUM_TURBO), MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_868[] = {
     PRESET(LONG_FAST),  PRESET(LONG_SLOW),  PRESET(MEDIUM_SLOW),   PRESET(MEDIUM_FAST),
@@ -51,6 +55,34 @@ static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_NARROW[] = {PRESET
                                                                           MODEM_PRESET_END};
 
 static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_TINY[] = {PRESET(TINY_FAST), PRESET(TINY_SLOW), MODEM_PRESET_END};
+
+// The EU_868/EU_866/EU_N_868 trio share the 868 band but own mutually exclusive preset
+// profiles. Selecting a preset locked to a sibling swaps the region to that sibling (see
+// regionSwapForPreset), so from any region in the trio every one of these presets is
+// selectable. This union is what we advertise to clients as the trio's legal list. It is a
+// display-only superset: on-device enforcement still uses each region's own disjoint
+// profile->presets, so this must never be assigned to a RegionProfile (that would make
+// supportsPreset() accept the preset in place and defeat the swap). Keep in sync with the
+// EU_868/EU_866/EU_N_868 profile lists below. Sized to the 11-preset wire cap.
+static const meshtastic_Config_LoRaConfig_ModemPreset PRESETS_EU_SUPERSET[] = {
+    PRESET(LONG_FAST),     PRESET(LONG_SLOW), PRESET(MEDIUM_SLOW), PRESET(MEDIUM_FAST), PRESET(SHORT_SLOW),  PRESET(SHORT_FAST),
+    PRESET(LONG_MODERATE), PRESET(LITE_FAST), PRESET(LITE_SLOW),   PRESET(NARROW_FAST), PRESET(NARROW_SLOW), MODEM_PRESET_END};
+
+// The EU_868/EU_866/EU_N_868 trio own mutually exclusive preset lists. Selecting a preset
+// locked to a sibling means the user wants that sibling region, not the default preset.
+static const meshtastic_Config_LoRaConfig_RegionCode SWAPPABLE_EU_REGIONS[] = {
+    meshtastic_Config_LoRaConfig_RegionCode_EU_868,
+    meshtastic_Config_LoRaConfig_RegionCode_EU_866,
+    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868,
+};
+
+static bool isSwappableEuRegion(meshtastic_Config_LoRaConfig_RegionCode code)
+{
+    for (auto c : SWAPPABLE_EU_REGIONS)
+        if (c == code)
+            return true;
+    return false;
+}
 
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
@@ -181,11 +213,9 @@ const RegionInfo regions[] = {
 
     /*
         433,05-434,7 Mhz 10 mW
-        868,0-868,6 Mhz 25 mW
-        https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
+        https://zakon.rada.gov.ua/laws/show/262-2026-п
     */
     RDEF(UA_433, 433.0f, 434.7f, 10, 10, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
-    RDEF(UA_868, 868.0f, 868.6f, 1, 14, false, false, PROFILE_STD, PRESET(LONG_FAST), 0),
 
     /*
         Malaysia
@@ -334,7 +364,11 @@ LoRaRadioType radioType = NO_RADIO;
 
 extern RadioLibHal *RadioLibHAL;
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+#if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
+extern SPIClass &SPI1; // alias for SPI_HSPI; both on SPI2_HOST
+#else
 extern SPIClass SPI1;
+#endif
 #endif
 
 std::unique_ptr<RadioInterface> initLoRa()
@@ -404,6 +438,10 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI1, loraSpiSettings);
+    RadioLibHAL = loraHal;
+#elif defined(ARCH_ESP32) && defined(USE_MCP23017)
+    // Radio control lines (RESET/DIO1/BUSY) are virtual pins on an MCP23017 I2C expander
+    LockingArduinoHal *loraHal = new MCP23017LockingArduinoHal(SPI, loraSpiSettings, mcpIoExpander);
     RadioLibHAL = loraHal;
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);
@@ -681,8 +719,13 @@ void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map)
             grp.default_preset = r->getDefaultPreset();
             grp.licensed_only = r->profile->licensedOnly;
             grp.presets_count = 0;
-            for (size_t i = 0; r->profile->presets[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++)
-                grp.presets[grp.presets_count++] = r->profile->presets[i];
+            // EU 86x siblings advertise the trio's superset - any of those presets is
+            // reachable from here via an automatic region swap. Every other region
+            // advertises exactly its own enforced profile list.
+            const meshtastic_Config_LoRaConfig_ModemPreset *advertised =
+                isSwappableEuRegion(r->code) ? PRESETS_EU_SUPERSET : r->profile->presets;
+            for (size_t i = 0; advertised[i] != MODEM_PRESET_END && grp.presets_count < maxPresets; i++)
+                grp.presets[grp.presets_count++] = advertised[i];
         }
 
         // Map this region to its group (capacity checked at the top of the loop).
@@ -957,14 +1000,6 @@ static void sendErrorNotification(const char *msg, meshtastic_LogRecord_Level le
     service->sendClientNotification(cn);
 }
 
-// The EU_868/EU_866/EU_N_868 trio own mutually exclusive preset lists. Selecting a preset
-// locked to a sibling means the user wants that sibling region, not the default preset.
-static const meshtastic_Config_LoRaConfig_RegionCode SWAPPABLE_EU_REGIONS[] = {
-    meshtastic_Config_LoRaConfig_RegionCode_EU_868,
-    meshtastic_Config_LoRaConfig_RegionCode_EU_866,
-    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868,
-};
-
 /**
  * If currentRegion is one of the swappable EU regions and preset belongs to a sibling in
  * that trio, return the sibling region that owns the preset. Returns nullptr otherwise.
@@ -972,12 +1007,7 @@ static const meshtastic_Config_LoRaConfig_RegionCode SWAPPABLE_EU_REGIONS[] = {
 const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConfig_RegionCode currentRegion,
                                                       meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
-    bool currentIsSwappable = false;
-    for (auto code : SWAPPABLE_EU_REGIONS) {
-        if (code == currentRegion)
-            currentIsSwappable = true;
-    }
-    if (!currentIsSwappable)
+    if (!isSwappableEuRegion(currentRegion))
         return nullptr;
 
     for (auto code : SWAPPABLE_EU_REGIONS) {
@@ -1114,7 +1144,8 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
             }
         }
     } else {
-        check_bw = bwCodeToKHz(loraConfig.bandwidth);
+        // Clamp at the source so numFreqSlots below can never be 0 (bandwidth 0 is reachable from a crafted set_config)
+        check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
     }
 
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
@@ -1146,8 +1177,9 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     const char *presetNameDisplay =
         DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
-    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
-    uint32_t presetNameHashSlot = hash(presetNameDisplay) % numFreqSlots;
+    // numFreqSlots can still be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
+    uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
+    uint32_t presetNameHashSlot = numFreqSlots ? (hash(presetNameDisplay) % numFreqSlots) : 0;
 
     if (loraConfig.override_frequency == 0) {
 
@@ -1249,7 +1281,8 @@ void RadioInterface::applyModemConfig()
                      newRegion->name);
             clampConfigLora(loraConfig);
         }
-        bw = bwCodeToKHz(loraConfig.bandwidth);
+        // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
+        bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
     }
@@ -1280,9 +1313,13 @@ void RadioInterface::applyModemConfig()
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
     // (numFreqSlots - 1).
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    uint32_t channelNameHashSlot = hash(channelName) % numFreqSlots;
+    // Guard the modulo: numFreqSlots can be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
+    uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
     uint32_t presetNameHashSlot =
-        hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) % numFreqSlots;
+        numFreqSlots
+            ? (hash(DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)) %
+               numFreqSlots)
+            : 0;
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {

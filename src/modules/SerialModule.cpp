@@ -3,9 +3,9 @@
 #include "MeshService.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
@@ -96,10 +96,12 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
         LOG_ERROR(warning);
 #ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_ERROR;
-        cn->time = getValidTime(RTCQualityFromNet);
-        snprintf(cn->message, sizeof(cn->message), "%s", warning);
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message), "%s", warning);
+            service->sendClientNotification(cn);
+        }
 #endif
         return false;
     }
@@ -107,7 +109,7 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
     return true;
 }
 
-SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
+SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", meshtastic_PortNum_SERIAL_APP)
 {
     switch (moduleConfig.serial.mode) {
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG:
@@ -312,6 +314,8 @@ int32_t SerialModule::runOnce()
 void SerialModule::sendTelemetry(meshtastic_Telemetry m)
 {
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p)
+        return;
     p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
@@ -327,18 +331,6 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
 }
 
 /**
- * Allocates a new mesh packet for use as a reply to a received packet.
- *
- * @return A pointer to the newly allocated mesh packet.
- */
-meshtastic_MeshPacket *SerialModuleRadio::allocReply()
-{
-    auto reply = allocDataPacket(); // Allocate a packet for sending
-
-    return reply;
-}
-
-/**
  * Sends a payload to a specified destination node.
  *
  * @param dest The destination node number.
@@ -347,7 +339,9 @@ meshtastic_MeshPacket *SerialModuleRadio::allocReply()
 void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     const meshtastic_Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
-    meshtastic_MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = dest;
     if (ch != NULL) {
         p->channel = ch->index;
@@ -394,7 +388,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                     lastRxID = mp.id;
                     // LOG_DEBUG("* * Message came this device");
                     // serialPrint->println("* * Message came this device");
-                    serialPrint->printf("%s", p.payload.bytes);
+                    serialPrint->printf("%.*s", (int)p.payload.size, p.payload.bytes);
                 }
             }
         } else {
@@ -406,7 +400,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
                 const char *sender = nodeInfoLiteHasUser(node) ? node->short_name : "???";
                 serialPrint->println();
-                serialPrint->printf("%s: %s", sender, p.payload.bytes);
+                serialPrint->printf("%s: %.*s", sender, (int)p.payload.size, p.payload.bytes);
                 serialPrint->println();
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
                         moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) &&

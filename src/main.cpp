@@ -21,14 +21,14 @@
 #include "power/PowerHAL.h"
 
 #include "FSCommon.h"
-#include "RTC.h"
+#include "Power.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
-#include "power.h"
+#include "gps/RTC.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
@@ -38,9 +38,13 @@
 #include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "memory/MemAudit.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+#include "memGet.h"
+#endif
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -169,6 +173,10 @@ AudioThread *audioThread = nullptr;
 ExtensionIOXL9555 io;
 #endif
 
+#ifdef USE_MCP23017
+#include "platform/esp32/ExtensionIOMCP23017.h"
+#endif
+
 #if HAS_TFT
 extern void tftSetup(void);
 #endif
@@ -188,7 +196,15 @@ void setupNicheGraphics();
 #endif
 
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+#if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
+// Reuse FSCommon's SPI_HSPI instance to avoid double-initializing SPI2_HOST in arduino-esp32 3.x.
+// Two SPIClass(HSPI) objects on the same bus cause the second spi_bus_initialize() to return
+// ESP_ERR_INVALID_STATE, leaving the LoRa device handle invalid and blocking SPI transfers.
+extern SPIClass SPI_HSPI;
+SPIClass &SPI1 = SPI_HSPI;
+#else
 SPIClass SPI1(HSPI);
+#endif
 #endif
 
 using namespace concurrency;
@@ -412,10 +428,14 @@ void setup()
 #if ARCH_PORTDUINO
     RTCQuality ourQuality = RTCQualityDevice;
 
+#ifdef __linux__
+    // timedatectl is systemd-only, so macOS, Windows and WASM stay at
+    // RTCQualityDevice rather than claim NTP quality we have not verified.
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
         ourQuality = RTCQualityNTP;
     }
+#endif
 
     struct timeval tv;
     tv.tv_sec = time(NULL);
@@ -601,6 +621,12 @@ void setup()
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
+
+#ifdef USE_MCP23017
+    // Bring up the I2C IO expander (LoRa reset, LCD reset, GPS wake) now that the PMU rails are up,
+    // before the I2C scan and radio/display init
+    mcp23017EarlyInit();
+#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
@@ -792,6 +818,10 @@ void setup()
 
 #ifdef ARCH_RP2040
     rp2040Setup();
+#endif
+
+#ifdef ARCH_STM32WL
+    stm32wlSetup();
 #endif
 
     // We do this as early as possible because this loads preferences from flash
@@ -1039,10 +1069,12 @@ void setup()
     if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
         LOG_WARN(LOW_ENTROPY_WARNING);
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        cn->level = meshtastic_LogRecord_Level_WARNING;
-        cn->time = getValidTime(RTCQualityFromNet);
-        sprintf(cn->message, LOW_ENTROPY_WARNING);
-        service->sendClientNotification(cn);
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->time = getValidTime(RTCQualityFromNet);
+            sprintf(cn->message, LOW_ENTROPY_WARNING);
+            service->sendClientNotification(cn);
+        }
         nodeDB->hasWarned = true;
     }
 #endif
@@ -1079,12 +1111,30 @@ void setup()
 #endif
 #endif
 
+#if defined(SENSECAP_INDICATOR)
+    // The ST7701 panel shares SCK/MOSI/MISO (41/48/47) with the SX1262, and its host is SPI2_HOST,
+    // which on the S3 is the same peripheral as the Arduino `SPI` object (FSPI == SPI2).
+    // LovyanGFX bit-bangs the ST7701 init sequence on those pins, and because this variant builds
+    // with USE_ARDUINO_HAL_GPIO it does so via Arduino pinMode()/digitalWrite(). pinMode() calls
+    // perimanSetPinBus(.., ESP32_BUS_TYPE_GPIO, ..), whose deinit callback (spiDetachBus_SCK) ends
+    // up in spiStopBus() and gates the SPI2 clock. RadioLib then spins forever in spiTransferByte()
+    // waiting on cmd.update, which never clears on a stopped peripheral, and the watchdog fires.
+    //
+    // Restart the bus here, after the panel is up and before the radio is touched. Note that
+    // SPIClass::begin() early-returns when _spi is already non-NULL, so end() first is required.
+    SPI.end();
+    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, -1); // CS is an IO-expander pin, driven by RadioLib
+    SPI.setFrequency(4000000);
+    LOG_DEBUG("SPI2 restarted after ST7701 init (SCK=%d, MISO=%d, MOSI=%d)", LORA_SCK, LORA_MISO, LORA_MOSI);
+#endif
+
     std::unique_ptr<RadioInterface> rIf;
     if (!config.lora.serial_hal_only) {
         rIf = initLoRa();
     } else {
         LOG_INFO("skipping LoRa radio init, for serialHal");
     }
+
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -1154,8 +1204,26 @@ void setup()
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
 
+    // Log the per-subsystem heap breakdown now that the big allocations are done
+    memaudit::logBreakdown("boot");
+
     // We manually run this to update the NodeStatus
     nodeDB->notifyObservers(true);
+
+#ifdef MESHTASTIC_HEAP_WATERMARK_CHECK
+    // Opt-in CI guardrail: on nRF52840 static RAM growth eats the heap arena 1:1,
+    // so flag loudly when less than 20% of the heap is free at the end of setup().
+    {
+        uint32_t heapTotal = memGet.getHeapSize();
+        // Platforms without heap accounting report UINT32_MAX (or 0); skip those
+        if (heapTotal != 0 && heapTotal != UINT32_MAX) {
+            uint32_t heapFree = memGet.getFreeHeap();
+            if (heapFree < heapTotal / 5) {
+                LOG_ERROR("Boot heap watermark: only %u of %u bytes free (<20%%)", heapFree, heapTotal);
+            }
+        }
+    }
+#endif
 }
 
 #endif
@@ -1175,7 +1243,7 @@ bool runASAP;
 // TODO find better home than main.cpp
 extern meshtastic_DeviceMetadata getDeviceMetadata()
 {
-    meshtastic_DeviceMetadata deviceMetadata;
+    meshtastic_DeviceMetadata deviceMetadata = meshtastic_DeviceMetadata_init_default;
     strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
@@ -1215,6 +1283,8 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
+    // Range test is always excluded as of 2.8
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_RANGETEST_CONFIG;
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
@@ -1231,6 +1301,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    deviceMetadata.has_xeddsa = true;
 #endif
     return deviceMetadata;
 }

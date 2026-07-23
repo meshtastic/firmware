@@ -12,6 +12,8 @@
 #include "mqtt/MQTT.h"
 #include "mqtt/ServiceEnvelope.h"
 
+#include "support/DeterministicRng.h" // rngSeed/rngNext/rngByte/rngRange - shared seeded LCG (fuzz group)
+
 #include <PubSubClient.h>
 #include <WiFiClient.h>
 
@@ -51,6 +53,15 @@ class MockRouter : public Router
 class MockMeshService : public MeshService
 {
   public:
+    // No PhoneAPI reader exists in these tests, so packets the receive pipeline forwards to the phone
+    // (MeshService::sendToPhone enqueues pooled copies into toPhoneQueue) would leak at teardown. Drain
+    // the queue like the phone would. This surfaced once sendLocal() began dispatching local packets
+    // through handleReceived() directly rather than via the (mock-overridden) enqueueReceivedMessage().
+    ~MockMeshService()
+    {
+        while (meshtastic_MeshPacket *p = getForPhone())
+            releaseToPool(p);
+    }
     void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m) override
     {
         messages_.emplace_back(*m);
@@ -275,6 +286,13 @@ class MQTTUnitTest : public MQTT
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, &env);
         mqttCallback(const_cast<char *>(topic.str().c_str()), bytes, numBytes);
     }
+    // Feed arbitrary bytes straight into the subscription callback - the non-RF ingress a malicious or
+    // broken broker could push. Mirrors publish()'s final mqttCallback() call but with an unconstrained
+    // payload, so it exercises DecodedServiceEnvelope decode + onReceiveProto with garbage.
+    void deliverRaw(const std::string &topic, const uint8_t *bytes, size_t n)
+    {
+        mqttCallback(const_cast<char *>(topic.c_str()), const_cast<uint8_t *>(bytes), (unsigned int)n);
+    }
     static void restart()
     {
         if (mqtt != NULL) {
@@ -325,6 +343,7 @@ const meshtastic_MeshPacket encrypted = {
 // Initialize mocks and configuration before running each test.
 void setUp(void)
 {
+    config = meshtastic_LocalConfig_init_zero;
     moduleConfig.mqtt =
         meshtastic_ModuleConfig_MQTTConfig{.enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true};
     moduleConfig.mqtt.map_report_settings = meshtastic_ModuleConfig_MapReportSettings{
@@ -574,6 +593,37 @@ void test_receiveEmptyDataFromProxy(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+// Text must be read as text: data.size aliases the string's first bytes, so reading it regardless
+// of the variant let a client name a length of up to PB_SIZE_MAX. There is no delivery control for
+// this variant: an encoded ServiceEnvelope always contains NUL, so text can never carry one.
+void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
+    message.which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
+    // data.size would read these as the largest length a pb_size_t can name.
+    memset(message.payload_variant.text, 0xFF, sizeof(message.payload_variant.text) - 1);
+    message.payload_variant.text[sizeof(message.payload_variant.text) - 1] = '\0';
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A proxy message with no payload variant set must be ignored rather than read as bytes.
+void test_receiveNoVariantFromProxyIsIgnored(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
+    message.which_payload_variant = 0;
+    memset(message.payload_variant.data.bytes, 0xFF, sizeof(message.payload_variant.data.bytes));
+    message.payload_variant.data.size = sizeof(message.payload_variant.data.bytes);
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
 // Packets should be ignored if downlink is not enabled.
 void test_receiveWithoutChannelDownlink(void)
 {
@@ -587,6 +637,8 @@ void test_receiveWithoutChannelDownlink(void)
 // Test receiving an encrypted MeshPacket on the PKI topic.
 void test_receiveEncryptedPKITopicToUs(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
     meshtastic_MeshPacket e = encrypted;
     e.to = myNodeInfo.my_node_num;
 
@@ -678,6 +730,8 @@ static meshtastic_MeshPacket makeDecodedBroadcast()
 // signing node (audit F3).
 void test_receiveDropsUnsignedBroadcastFromSigner(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
@@ -689,6 +743,8 @@ void test_receiveDropsUnsignedBroadcastFromSigner(void)
 // The same unsigned broadcast from a node never seen signing is accepted.
 void test_receiveAcceptsUnsignedBroadcastFromNonSigner(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
     unitTest->publish(&p);
 
@@ -720,6 +776,8 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
 // A decoded downlink carrying a signature that fails verification is dropped.
 void test_receiveDropsBadSignatureOnDecodedDownlink(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
     uint8_t pub[32], priv[32];
     crypto->generateKeyPair(pub, priv);
     mockNodeDB->emptyNode.public_key.size = 32;
@@ -731,6 +789,53 @@ void test_receiveDropsBadSignatureOnDecodedDownlink(void)
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
 
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+void test_receiveCompatibleAcceptsUnsignedBroadcastFromSigner(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+}
+
+void test_receiveStrictDropsUnsignedPortnumsAndUnicast(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_NODEINFO_APP,     meshtastic_PortNum_WAYPOINT_APP,
+    };
+    for (const auto port : ports) {
+        meshtastic_MeshPacket p = makeDecodedBroadcast();
+        p.decoded.portnum = port;
+        unitTest->publish(&p);
+    }
+
+    meshtastic_MeshPacket unicast = makeDecodedBroadcast();
+    unicast.to = myNodeInfo.my_node_num;
+    unicast.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    unitTest->publish(&unicast);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A plaintext broker assertion is not evidence that AES-CCM authentication succeeded locally.
+void test_receiveStrictDoesNotTrustDecodedPkiFlag(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    p.to = myNodeInfo.my_node_num;
+    p.pki_encrypted = true;
     unitTest->publish(&p);
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
@@ -963,6 +1068,65 @@ void test_configWithTLSEnabled(void)
 #endif
 }
 
+// ===========================================================================
+// Fuzz - adversarial MQTT downlink ingress (the non-RF path a broker can push)
+// ===========================================================================
+// Blitzes the onReceiveProto() chain with (a) raw garbage that must fail envelope decode cleanly and
+// (b) well-formed envelopes wrapping crafted inner packets. Contract: no crash, at most one enqueue per envelope.
+constexpr uint64_t MQTT_FUZZ_SEED = 0x00E3A71C0FULL;
+
+void test_receiveFuzzServiceEnvelope(void)
+{
+    printf("  seed=0x%llx\n", (unsigned long long)MQTT_FUZZ_SEED);
+    rngSeed(MQTT_FUZZ_SEED);
+
+    const char *channelIds[] = {"test", "PKI", "nope", ""};
+    const char *gatewayIds[] = {"!12345678", "!87654321", "!00000000"}; // [0] == our node id -> self path
+
+    for (unsigned k = 0; k < 4000; k++) {
+        if (rngRange(3) == 0) {
+            // (a) Raw bytes: mostly random, must be rejected at DecodedServiceEnvelope without crashing.
+            uint8_t raw[128];
+            size_t n = rngRange(sizeof(raw) + 1);
+            rngFill(raw, n);
+            unitTest->deliverRaw("msh/2/e/test/!87654321", raw, n);
+        } else {
+            // (b) Well-formed envelope around a crafted inner packet.
+            meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+            p.from = (rngRange(3) == 0) ? myNodeInfo.my_node_num : rngNext(); // self origin hits isFromUs
+            p.to = (rngRange(2)) ? myNodeInfo.my_node_num : rngNext();
+            p.id = rngNext();
+            p.channel = (uint8_t)rngByte();
+            p.hop_limit = (uint8_t)rngRange(10); // includes > HOP_MAX (the invalid-hop reject path)
+            p.hop_start = (uint8_t)rngRange(10);
+            p.want_ack = (rngRange(2) == 0);
+            p.pki_encrypted = (rngRange(2) == 0);
+            if (rngRange(2) == 0) {
+                p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+                p.decoded.portnum = (rngRange(6) == 0) ? meshtastic_PortNum_ADMIN_APP : (meshtastic_PortNum)rngRange(80);
+                p.decoded.want_response = (rngRange(2) == 0);
+                p.decoded.has_bitfield = (rngRange(2) == 0);
+                p.decoded.bitfield = (uint32_t)rngNext();
+                p.decoded.payload.size = rngRange(64);
+                rngFill(p.decoded.payload.bytes, p.decoded.payload.size);
+            } else {
+                p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+                p.encrypted.size = rngRange(64);
+                rngFill(p.encrypted.bytes, p.encrypted.size);
+            }
+            unitTest->publish(&p, gatewayIds[rngRange(3)], channelIds[rngRange(4)]);
+        }
+
+        // A single envelope reaches at most one enqueueReceivedMessage; more would be a routing bug.
+        TEST_ASSERT_TRUE_MESSAGE(mockRouter->packets_.size() <= 1, "MQTT downlink enqueued >1 packet per envelope");
+        // Drain capture lists so 4000 iterations stay bounded (values already released to their pools).
+        mockRouter->packets_.clear();
+        mockRoutingModule->ackNacks_.clear();
+        mockMeshService->messages_.clear();
+        mockMeshService->notifications_.clear();
+    }
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -983,6 +1147,8 @@ void setup()
     RUN_TEST(test_receiveDecodedProto);
     RUN_TEST(test_receiveDecodedProtoFromProxy);
     RUN_TEST(test_receiveEmptyDataFromProxy);
+    RUN_TEST(test_receiveTextVariantFromProxyIsNotReadAsBytes);
+    RUN_TEST(test_receiveNoVariantFromProxyIsIgnored);
     RUN_TEST(test_receiveWithoutChannelDownlink);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
@@ -995,9 +1161,13 @@ void setup()
     RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
     RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
     RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
+    RUN_TEST(test_receiveCompatibleAcceptsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveStrictDropsUnsignedPortnumsAndUnicast);
+    RUN_TEST(test_receiveStrictDoesNotTrustDecodedPkiFlag);
 #endif
     RUN_TEST(test_receiveIgnoresUnexpectedFields);
     RUN_TEST(test_receiveIgnoresInvalidHopLimit);
+    RUN_TEST(test_receiveFuzzServiceEnvelope);
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);

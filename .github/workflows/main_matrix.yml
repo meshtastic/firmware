@@ -3,17 +3,25 @@ concurrency:
   group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 on:
-  # # Triggers the workflow on push but only for the main branches
-  push:
+  # Full CI now runs in the merge queue instead of on post-merge push. PRs build a
+  # narrowed board subset (--level pr) for fast feedback; the merge queue rebuilds
+  # the full release matrix against the merged result before it lands. Because the
+  # merge_group run is the gate, there is nothing left to rebuild after the merge
+  # commit reaches the protected branch - so the old `push` trigger is dropped.
+  #
+  # merge_group events have an empty github.head_ref, so the existing setup job
+  # (which keys off GITHUB_HEAD_REF) produces the full matrix automatically.
+  # Note: merge_group does not support paths/paths-ignore filters - it always runs
+  # the full required checks, which is what a merge queue needs (branch protection
+  # cannot skip a required check).
+  merge_group:
+    types: [checks_requested]
     branches:
       - master
       - develop
       - pioarduino # Remove when merged // use `feature/` in the future.
       - event/*
       - feature/*
-    paths-ignore:
-      - "**.md"
-      - version.properties
 
   pull_request:
     branches:
@@ -26,7 +34,19 @@ on:
       - "**.md"
       #- "**.yml"
 
+  schedule:
+    # Nightly develop build, published to meshtastic.github.io firmware-nightly/ (no GitHub release).
+    # Scheduled runs execute on the default branch (develop). 09:00 UTC avoids the 00:00 tests
+    # and 02:00 daily_packaging crons.
+    - cron: 0 9 * * * # Nightly develop build/publish (default branch is develop)
+
   workflow_dispatch:
+    inputs:
+      # trunk-ignore(checkov/CKV_GHA_7): intentional manual-test switch for the nightly publish path
+      nightly:
+        description: "Nightly mode: build + publish develop to github.io firmware-nightly/ (skips creating a GitHub release)"
+        type: boolean
+        default: false
 
 permissions: read-all
 
@@ -85,7 +105,7 @@ jobs:
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
+    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -110,7 +130,7 @@ jobs:
       platform: ${{ matrix.build.platform }}
 
   build-debian-src:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
@@ -118,6 +138,7 @@ jobs:
     secrets: inherit
 
   MacOS:
+    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -131,6 +152,18 @@ jobs:
       macos_ver: ${{ matrix.macos_ver }}
     # secrets: inherit
 
+  Windows:
+    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        windows_ver:
+          - "2025" # x86_64
+    uses: ./.github/workflows/build_windows_bin.yml
+    with:
+      windows_ver: ${{ matrix.windows_ver }}
+    # secrets: inherit
+
   package-pio-deps-native-tft:
     if: ${{ github.repository == 'meshtastic/firmware' && github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/package_pio_deps.yml
@@ -139,7 +172,7 @@ jobs:
     secrets: inherit
 
   test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     permissions: # Needed for dorny/test-reporter.
       contents: read
       actions: read
@@ -147,6 +180,7 @@ jobs:
     uses: ./.github/workflows/test_native.yml
 
   build-wasm:
+    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     # Build the WebAssembly portduino node ([env:native-wasm]) as part of normal CI,
     # like the other platforms. It's a dedicated job (not a row in the `build`
     # matrix) because its artifact is meshnode.{mjs,wasm} - not a flashable
@@ -155,6 +189,7 @@ jobs:
     uses: ./.github/workflows/build_portduino_wasm.yml
 
   docker:
+    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     permissions: # Needed for pushing to GHCR.
       contents: read
       packages: write
@@ -255,7 +290,7 @@ jobs:
           retention-days: 30
 
   firmware-size-report:
-    if: github.repository == 'meshtastic/firmware'
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     continue-on-error: true
     permissions:
       contents: read
@@ -337,7 +372,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: report
         run: |
-          ARGS="./current-sizes.json"
+          ARGS="./current-sizes.json --budgets bin/ram_budgets.json"
           if [ -f ./develop-sizes.json ]; then
             ARGS="$ARGS --baseline develop:./develop-sizes.json"
           fi
@@ -375,11 +410,40 @@ jobs:
             ./pr-number.txt
           retention-days: 5
 
+  # RAM/flash guardrails: fails CI when an env listed in bin/ram_budgets.json
+  # exceeds its static RAM (.data+.bss) or flash budget. Kept separate from
+  # firmware-size-report, which is informational and continue-on-error.
+  size-budget-gate:
+    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v7
+
+      # No continue-on-error / empty-dir fallback: the gate must fail closed when
+      # the data it enforces on cannot be fetched (size_report.py additionally
+      # fails on missing budgeted envs under --enforce-budgets).
+      - name: Download current manifests
+        uses: actions/download-artifact@v8
+        with:
+          path: ./manifests/
+          pattern: manifest-*
+          merge-multiple: true
+
+      - name: Collect current firmware sizes
+        run: python3 bin/collect_sizes.py ./manifests/ ./current-sizes.json
+
+      - name: Enforce RAM/flash budgets
+        run: python3 bin/size_report.py ./current-sizes.json --budgets bin/ram_budgets.json --enforce-budgets
+
   release-artifacts:
     permissions: # Needed for 'gh release upload'.
       contents: write
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' && github.event.inputs.nightly != 'true' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
@@ -488,7 +552,7 @@ jobs:
           - rp2350
           - stm32
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware'}}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' && github.event.inputs.nightly != 'true' }}
     needs: [release-artifacts, version]
     steps:
       - name: Checkout
@@ -540,7 +604,7 @@ jobs:
 
   publish-firmware:
     runs-on: ubuntu-24.04
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true' }}
     needs: [release-firmware, version]
     env:
       targets: |-
@@ -591,4 +655,79 @@ jobs:
           user_name: github-actions[bot]
           user_email: github-actions[bot]@users.noreply.github.com
           commit_message: ${{ needs.version.outputs.long }}
+          enable_jekyll: true
+
+  # Nightly publish: refresh the single, stable firmware-nightly/ folder on
+  # meshtastic.github.io with the current develop build. Runs on the cron schedule
+  # (or a manual nightly=true dispatch) and never creates a GitHub release. The
+  # folder's release_notes.md is maintained by hand and deliberately left untouched.
+  publish-nightly:
+    runs-on: ubuntu-24.04
+    if: ${{ (github.event_name == 'schedule' || github.event.inputs.nightly == 'true') && github.repository == 'meshtastic/firmware' }}
+    needs: [setup, version, gather-artifacts]
+    env:
+      targets: |-
+        esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
+    steps:
+      - name: Get firmware artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: firmware-{${{ env.targets }}}-${{ needs.version.outputs.long }}
+          merge-multiple: true
+          path: ./stage
+
+      - name: Generate Release manifest
+        run: |
+          jq -n --arg ver "${{ needs.version.outputs.long }}" --argjson targets ${{ toJson(needs.setup.outputs.all) }} '{
+            "version": $ver,
+            "targets": $targets
+          }' > ./stage/firmware-${{ needs.version.outputs.long }}.json
+
+      - name: Generate nightly pointer
+        run: |
+          jq -n \
+            --arg ver "${{ needs.version.outputs.long }}" \
+            --arg sha "${{ github.sha }}" \
+            '{version: $ver, id: ("v" + $ver), title: ("Meshtastic Firmware " + $ver + " Nightly"), commit: $sha}' \
+            > ./stage/index.json
+
+      - name: Preserve manually-maintained release notes
+        # firmware-nightly/release_notes.md is edited by hand. Carry the current
+        # copy into ./stage so the keep_files:false publish (which refreshes the
+        # folder and clears stale nightly binaries) does not drop it. Seed a
+        # placeholder on the first run (404); fail closed on any other error so a
+        # transient fetch failure never clobbers the notes.
+        run: |
+          set -euo pipefail
+          url=https://raw.githubusercontent.com/meshtastic/meshtastic.github.io/master/firmware-nightly/release_notes.md
+          code=$(curl -sSL -o ./stage/release_notes.md -w '%{http_code}' --retry 5 --retry-all-errors "$url" || echo 000)
+          if [ "$code" = "200" ]; then
+            echo "Preserved existing release_notes.md"
+          elif [ "$code" = "404" ]; then
+            echo "No existing release_notes.md; seeding placeholder"
+            printf '# Nightly (develop)\n\nAutomated nightly build from the `develop` branch. Edit these notes by hand.\n' > ./stage/release_notes.md
+          else
+            echo "Unexpected HTTP $code fetching release_notes.md; refusing to publish to avoid clobbering manual notes"
+            exit 1
+          fi
+
+      # For diagnostics
+      - name: Display structure of files to publish
+        run: ls -lR ./stage
+
+      - name: Publish nightly to meshtastic.github.io
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.DIST_PAGES_DEPLOY_KEY }}
+          external_repository: meshtastic/meshtastic.github.io
+          publish_branch: master
+          publish_dir: ./stage
+          # keep_files:false is scoped to destination_dir, so this refreshes only
+          # firmware-nightly/ (clearing stale nightly binaries) while sibling
+          # release folders stay untouched; release_notes.md is carried in above.
+          destination_dir: firmware-nightly
+          keep_files: false
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: Nightly ${{ needs.version.outputs.long }}
           enable_jekyll: true
