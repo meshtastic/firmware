@@ -2,6 +2,10 @@
 
 #include "configuration.h"
 
+// Approximates the GPS_HARDSLEEP/GPS_SOFTSLEEP crossover curve without pow(); see .cpp for the
+// sampled reference values it interpolates between.
+uint32_t gpsHardsleepThresholdMs(uint32_t predictedSearchSecs);
+
 // Encapsulates code responsible for the timing of GPS updates
 class GPSUpdateScheduling
 {
