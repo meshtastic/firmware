@@ -304,8 +304,8 @@ void test_local_security_config_keeps_private_key(void)
     admin->drainReply();
 }
 
-// A local client writes this device-owned policy, then receives the same value in its next config read.
-void test_local_security_config_round_trips_packet_signature_policy(void)
+// A local client reads the effective policy after a set. Builds without packet-signature support coerce it to Compatible.
+void test_local_security_config_applies_packet_signature_policy(void)
 {
     meshtastic_Config set = meshtastic_Config_init_zero;
     set.which_payload_variant = meshtastic_Config_security_tag;
@@ -319,8 +319,13 @@ void test_local_security_config_round_trips_packet_signature_policy(void)
 
     meshtastic_Config_SecurityConfig sec;
     TEST_ASSERT_TRUE(decodeSecurityFromReply(admin->reply(), sec));
+#if MESHTASTIC_EXCLUDE_PKI || MESHTASTIC_EXCLUDE_XEDDSA
+    TEST_ASSERT_EQUAL(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE,
+                      sec.packet_signature_policy);
+#else
     TEST_ASSERT_EQUAL(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
                       sec.packet_signature_policy);
+#endif
     admin->drainReply();
 }
 
@@ -672,7 +677,7 @@ void setup()
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
     RUN_TEST(test_local_security_config_keeps_private_key);
-    RUN_TEST(test_local_security_config_round_trips_packet_signature_policy);
+    RUN_TEST(test_local_security_config_applies_packet_signature_policy);
     RUN_TEST(test_remote_network_config_omits_wifi_psk);
     RUN_TEST(test_local_network_config_keeps_wifi_psk);
     RUN_TEST(test_remote_mqtt_config_omits_password);
