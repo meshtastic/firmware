@@ -433,8 +433,37 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
     //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
 
-/// Ported from my old java code, returns distance in meters along the globe
-/// surface (by Haversine formula)
+// Piecewise-linear cos(|latitude|) lookup, denser near 90 degrees where cos() is both small and
+// fast-changing (a coarse uniform step size there blows up *relative* error - see
+// test_geocoord_distance's near-polar cases). Lets latLongToMeter avoid linking cos()/sin()/acos()
+// (and their ~4.4KB of internal range-reduction/kernel helpers) for what is a display/
+// movement-threshold utility, not a routing- or security-critical calculation.
+static double cosLatitudeApprox(double latRad)
+{
+    static constexpr float kLatDeg[] = {0, 15, 30, 45, 55, 65, 72, 78, 82, 85, 87, 88.5, 89.5, 90};
+    static constexpr float kCosVal[] = {1.0f,      0.965926f, 0.866025f, 0.707107f, 0.573576f, 0.422618f, 0.309017f,
+                                        0.207912f, 0.139173f, 0.087156f, 0.052336f, 0.026177f, 0.008727f, 0.0f};
+    constexpr size_t n = sizeof(kLatDeg) / sizeof(kLatDeg[0]);
+    double deg = fabs(latRad) * DEG_CONVERT;
+    if (deg >= kLatDeg[n - 1])
+        return kCosVal[n - 1];
+    size_t i = 1;
+    while (kLatDeg[i] < deg)
+        i++;
+    double x0 = kLatDeg[i - 1], x1 = kLatDeg[i];
+    double y0 = kCosVal[i - 1], y1 = kCosVal[i];
+    return y0 + (y1 - y0) * (deg - x0) / (x1 - x0);
+}
+
+/// Approximate distance in meters between two points, via an equirectangular (flat-plane)
+/// projection rather than exact spherical trigonometry (this used to be the spherical law of
+/// cosines - see git history if exact-sphere accuracy is ever needed again). Accurate to <1% for
+/// local/regional distances (measured up to ~500km) at any latitude, and <4% up to ~2000km away
+/// from extreme (>80 degree) latitudes; accuracy degrades further for long-range distances very
+/// close to the poles - an inherent limitation of flat-plane projection, not fixable by a better
+/// cos() approximation (see test_geocoord_distance for measured bounds). Accepted given every
+/// caller uses this for display or movement-threshold checks, never routing or security
+/// decisions, and Meshtastic deployments near the geographic poles are effectively nonexistent.
 float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
 {
     // Don't do math if the points are the same
@@ -445,14 +474,18 @@ float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double 
     double a2 = lng_a / DEG_CONVERT;
     double b1 = lat_b / DEG_CONVERT;
     double b2 = lng_b / DEG_CONVERT;
-    double cos_b1 = cos(b1);
-    double cos_a1 = cos(a1);
-    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
-    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
-    double t3 = sin(a1) * sin(b1);
-    double tt = acos(t1 + t2 + t3);
-    if (std::isnan(tt))
-        tt = 0.0; // Must have been the same point?
+
+    double meanLat = (a1 + b1) / 2;
+    double dLng = b2 - a2;
+    // Wrap to [-PI, PI]: unlike cos()/sin(), a raw longitude difference doesn't handle points that
+    // straddle the antimeridian (e.g. 179.9 and -179.9 are ~0.2 degrees apart, not ~360).
+    if (dLng > PI)
+        dLng -= 2 * PI;
+    else if (dLng < -PI)
+        dLng += 2 * PI;
+    double x = dLng * cosLatitudeApprox(meanLat);
+    double y = b1 - a1;
+    double tt = sqrt(x * x + y * y);
 
     return (float)(6366000 * tt);
 }
