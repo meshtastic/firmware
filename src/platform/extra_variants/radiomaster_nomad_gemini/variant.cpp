@@ -20,8 +20,8 @@
  * a bench against a power meter for Meshtastic - verify before trusting at 1 W, both
  * for PA safety and for regulatory compliance.
  *
- * TODO: dual-band operation uses ELRS power_values_dual and the second LR1121;
- * once Meshtastic supports it, branch on freqHz / active radio here.
+ * Dual-radio test builds recompute this shared APC2 level immediately before
+ * each serialized transmission.
  */
 
 // total dBm corresponds to the ELRS power presets 10/25/50/100/250/500/1000 mW.
@@ -50,7 +50,7 @@ void earlyInitVariant()
     pinMode(LR1121_SPI_NSS2_PIN, OUTPUT);
     digitalWrite(LR1121_SPI_NSS2_PIN, HIGH);
     pinMode(LR1121_NRESET2_PIN, OUTPUT);
-    digitalWrite(LR1121_NRESET2_PIN, LOW);
+    digitalWrite(LR1121_NRESET2_PIN, LOW); // RadioLib releases reset when it initializes radio 2
     pinMode(NOMAD_WIFI_BACKPACK_NRESET_PIN, OUTPUT);
     digitalWrite(NOMAD_WIFI_BACKPACK_NRESET_PIN, LOW);
     dacWrite(RADIO_PA_APC2_PIN, 0); // bias the PA off until we actually transmit

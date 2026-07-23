@@ -33,13 +33,19 @@
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
+#ifdef RADIOMASTER_NOMAD_DUAL_RADIO
+#define MAX_RADIO_TX_PACKETS (4 * MAX_TX_QUEUE)
+#else
+#define MAX_RADIO_TX_PACKETS (2 * MAX_TX_QUEUE)
+#endif
+
 // I think this is right, one packet for each of the three fifos + one packet being currently assembled for TX or RX
 // And every TX packet might have a retransmission packet or an ack alive at any moment
 
 #ifdef ARCH_PORTDUINO
 // Portduino (native) targets can use dynamic memory pools with runtime-configurable sizes
 #define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_RADIO_TX_PACKETS +                                                                  \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 // Live in-flight packet bytes are tracked under "pktpool(live)" in the MemAudit breakdown
@@ -49,7 +55,7 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 // On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
 // For now, make it dynamic again.
 #define MAX_PACKETS                                                                                                              \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_RADIO_TX_PACKETS +                                                                  \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 // Live in-flight packet bytes are tracked under "pktpool(live)" in the MemAudit breakdown
@@ -58,7 +64,7 @@ Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
 #else
 // Embedded targets use static memory pools with compile-time constants
 #define MAX_PACKETS_STATIC                                                                                                       \
-    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
+    (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + MAX_RADIO_TX_PACKETS +                                                                  \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
 
 // Static pool RAM is BSS, not heap; "pktpool(live)" still shows in-flight packet bytes

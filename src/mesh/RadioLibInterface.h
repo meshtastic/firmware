@@ -5,6 +5,7 @@
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
+#include <cassert>
 #include <sys/types.h>
 
 // ESP32 has special rules about ISR code
@@ -56,12 +57,22 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     /// Used as our notification from the ISR
-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK };
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK, RESUME_RECEIVE };
+    using InterruptCallback = void (*)();
 
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
-    static void isrTxLevel0(), isrLevel0Common(PendingISR code);
+    static void isrTxLevel0(), isrTxLevel1(), isrLevel0Common(uint8_t slot, PendingISR code);
+
+    static constexpr uint8_t ISR_INSTANCE_COUNT = 2;
+    static constexpr uint8_t NO_ISR_SLOT = ISR_INSTANCE_COUNT;
+    static RadioLibInterface *isrInstances[ISR_INSTANCE_COUNT];
+    static RadioLibInterface *activeTransmitter;
+    static bool coordinatedTransition;
+    uint8_t isrSlot = NO_ISR_SLOT;
+    RadioLibInterface *transmitPeer = nullptr;
+    bool resumeReceivePending = false;
 
     ModemType_t modemType = RADIOLIB_MODEM_LORA;
     DataRate_t getDataRate() const { return {.lora = {.spreadingFactor = sf, .bandwidth = bw, .codingRate = cr}}; }
@@ -124,12 +135,18 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     static RadioLibInterface *instance;
 
+    static RadioLibInterface *getInstance(uint8_t slot) { return slot < ISR_INSTANCE_COUNT ? isrInstances[slot] : nullptr; }
+
+    static constexpr uint8_t getMaxInstances() { return ISR_INSTANCE_COUNT; }
+
+    void setTransmitPeer(RadioLibInterface *peer) { transmitPeer = peer; }
+
+    bool hasActiveTransmitPeer() const { return activeTransmitter != nullptr && activeTransmitter != this; }
+
+    static void setCoordinatedTransition(bool active) { coordinatedTransition = active; }
+
     /** Clear instance on destruction so stale pointer checks in loop() are safe */
-    virtual ~RadioLibInterface()
-    {
-        if (instance == this)
-            instance = nullptr;
-    }
+    virtual ~RadioLibInterface();
 
     /**
      * Get the current calculated noise floor in dBm
@@ -292,11 +309,23 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * Raw ISR handler that just calls our polymorphic method
      */
-    static void isrRxLevel0();
+    static void isrRxLevel0(), isrRxLevel1();
+    InterruptCallback getIsrRxCallback() const;
+    InterruptCallback getIsrTxCallback() const;
 
     /**
      * If a send was in progress finish it and return the buffer to the pool */
     void completeSending();
+    bool beginCoordinatedTransmit();
+    void endCoordinatedTransmit();
+    void requestReceiveResume();
+    void maybeResumeReceive();
+
+    /**
+     * Put a paired radio into a disconnected standby state without processing
+     * queued notifications from inside the other radio's TX transition.
+     */
+    virtual void suspendForPeerTransmit();
 
     /**
      * Add SNR data to received messages

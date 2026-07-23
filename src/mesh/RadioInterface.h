@@ -87,6 +87,10 @@ class RadioInterface
 
   protected:
     bool disabled = false;
+    bool eventObserversEnabled = true;
+    meshtastic_Config_LoRaConfig *loraConfigOverride = nullptr;
+    const RegionInfo *radioRegion = nullptr;
+    meshtastic_MeshPacket_TransportMechanism transportMechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
 
     float bw = 125;
     uint8_t sf = 9;
@@ -111,6 +115,7 @@ class RadioInterface
     uint32_t lastTxStart = 0L;
 
     uint32_t computeSlotTimeMsec();
+    void registerEventObservers();
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
@@ -127,6 +132,15 @@ class RadioInterface
     RadioInterface();
 
     virtual ~RadioInterface() {}
+
+    void setLoRaConfigOverride(meshtastic_Config_LoRaConfig *overrideConfig) { loraConfigOverride = overrideConfig; }
+
+    void setTransportMechanism(meshtastic_MeshPacket_TransportMechanism transport) { transportMechanism = transport; }
+
+    void setEventObserversEnabled(bool enabled) { eventObserversEnabled = enabled; }
+
+    meshtastic_Config_LoRaConfig &getLoRaConfig();
+    const meshtastic_Config_LoRaConfig &getLoRaConfig() const;
 
     /// Fires once per valid received LoRa packet (arg = sender NodeNum). Used e.g. to flash LED_LORA.
     static Observable<uint32_t> loraRxPacketObservable;
@@ -276,9 +290,12 @@ class RadioInterface
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()
+    int8_t radiatedPower = 17;
 
     float savedFreq;
     uint32_t savedChannelNum;
+
+    [[nodiscard]] int8_t getRadiatedPower() const { return radiatedPower; }
 
     /***
      * given a packet set sendingPacket and decode the protobufs into radiobuf.  Returns # of bytes to send (including the

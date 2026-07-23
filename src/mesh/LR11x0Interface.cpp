@@ -78,7 +78,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+    if (getLoRaConfig().region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR1120_MAX_POWER);
     } else {
         limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
@@ -155,7 +155,7 @@ template <typename T> bool LR11x0Interface<T>::init()
     }
 
     if (res == RADIOLIB_ERR_NONE) {
-        if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
+        if (getLoRaConfig().sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
             LOG_INFO("Set RX gain to boosted mode; result: %d", res);
         } else {
@@ -193,7 +193,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
 
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+    if (getLoRaConfig().region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR1120_MAX_POWER);
     } else {
         limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
@@ -210,7 +210,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     assert(err == RADIOLIB_ERR_NONE);
 
     // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
-    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    err = lora.setRxBoostedGainMode(getLoRaConfig().sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
 
@@ -243,6 +243,19 @@ template <typename T> void LR11x0Interface<T>::setStandby()
     RadioLibInterface::setStandby();
 }
 
+template <typename T> void LR11x0Interface<T>::suspendForPeerTransmit()
+{
+    int err = lora.standby();
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_DEBUG("LR11x0 peer-TX standby failed with error %d", err);
+    assert(err == RADIOLIB_ERR_NONE);
+
+    isReceiving = false;
+    activeReceiveStart = 0;
+    disableInterrupt();
+    RadioLibInterface::setStandby();
+}
+
 /**
  * Add SNR data to received messages
  */
@@ -258,6 +271,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR11x0Interface<T>::configHardwareForSend()
 {
+    radioExternalPaMapPower(getRadiatedPower(), getFreq());
     radioExternalPaTxEnable(); // bias an external PA (if any) before we transmit
     RadioLibInterface::configHardwareForSend();
 }
@@ -270,6 +284,10 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
+    if (hasActiveTransmitPeer()) {
+        resumeReceivePending = true;
+        return;
+    }
 
     setStandby();
 
@@ -287,7 +305,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
-    enableInterrupt(isrRxLevel0);
+    enableInterrupt(getIsrRxCallback());
     checkRxDoneIrqFlag();
 #endif
 }
@@ -328,7 +346,7 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 template <typename T> void LR11x0Interface<T>::resetAGC()
 {
     // Safety: don't reset mid-packet
-    if (sendingPacket != NULL || (isReceiving && isActivelyReceiving()))
+    if (sendingPacket != NULL || hasActiveTransmitPeer() || (isReceiving && isActivelyReceiving()))
         return;
 
     LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
@@ -349,7 +367,7 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
     lora.calibrateImageRejection(getFreq() - 4.0f, getFreq() + 4.0f);
 
     // 5. Re-apply RX boosted gain mode
-    lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    lora.setRxBoostedGainMode(getLoRaConfig().sx126x_rx_boosted_gain);
 
     // 6. Resume receiving
     startReceive();

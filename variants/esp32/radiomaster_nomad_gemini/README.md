@@ -1,6 +1,6 @@
 # RadioMaster Nomad
 
-This prototype target enables the primary LR1121 sub-GHz path and is initially validated for the US 902-928 MHz band. The second LR1121 is held in reset with its chip-select inactive until Meshtastic has a dual-radio/backhaul design; its reserved pins are CS 13, reset 21, DIO1 34, and busy 39.
+This experimental target initializes both LR1121 sub-GHz paths. The primary follows `config.lora`; the secondary is fixed to US ShortTurbo at 926.750 MHz, is enabled only when the primary region is `US`, and maps logical channel 1 to `TRANSPORT_LORA_ALT1`. The secondary pins are CS 13, reset 21, DIO1 34, and busy 39.
 
 The primary radio uses CS 27, reset 15, DIO1 37, busy 36, SCK 25, MOSI 32, and MISO 33. Its LR1121-controlled RF switch is:
 
@@ -12,7 +12,7 @@ The primary radio uses CS 27, reset 15, DIO1 37, busy 36, SCK 25, MOSI 32, and M
 | 2.4 GHz transmit | low  | high | low  | low  |
 | Wi-Fi scan       | high | low  | low  | low  |
 
-DIO8 enables the 900 MHz transmit path. APC2 on GPIO26 is applied immediately before transmission and cleared for receive, idle, and sleep. The provisional 915 MHz power table is:
+DIO8 enables the 900 MHz transmit path. APC2 on GPIO26 is applied immediately before transmission and cleared for receive, idle, and sleep. This dual-radio review target enables both transmit paths, clamps them to 10 dBm, and serializes transmission. Do not test simultaneous 1 W operation. The provisional 915 MHz power table is:
 
 | Total dBm | LR1121 dBm | APC2 DAC |
 | --------: | ---------: | -------: |
@@ -29,3 +29,5 @@ GPIO2 controls the active-high fan. `lora.pa_fan_disabled` switches it fully off
 Meshtastic Wi-Fi runs on the primary ESP32. The currently unsupported ESP32-C3 Wi-Fi backpack is held in reset on GPIO19.
 
 Pin assignments and RF behavior follow the local mLRS Nomad HAL and the [ExpressLRS RadioMaster Nomad target](https://github.com/ExpressLRS/targets/blob/master/TX/Radiomaster%20Nomad.json). The power table still requires bench verification before this prototype is promoted beyond support level 3.
+
+See [the dual-radio experiment notes](../../../docs/radiomaster-nomad-dual-radio-experiment.md) for routing limitations and the staged RF-safety procedure.

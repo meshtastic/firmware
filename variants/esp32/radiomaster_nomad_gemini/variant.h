@@ -36,7 +36,7 @@
 // 2.4G Part
 #define LR1120_MAX_POWER 5
 
-// The second LR1121 is held inactive until dual-radio support is implemented.
+// Secondary LR1121 pins used by the dual-radio experiment.
 #define LR1121_IRQ2_PIN 34
 #define LR1121_NRESET2_PIN 21
 #define LR1121_BUSY2_PIN 39
@@ -67,3 +67,7 @@
 // dacWrite() (0-255 -> 0-3.3V). Defining this enables the external-PA driver in
 // src/platform/extra_variants/radiomaster_nomad_gemini/variant.cpp.
 #define RADIO_PA_APC2_PIN 26
+
+#ifdef RADIOMASTER_NOMAD_DUAL_RADIO
+#define NOMAD_DUAL_RADIO_TEST_MAX_POWER_DBM 10
+#endif

@@ -72,3 +72,11 @@ bool isToUs(const meshtastic_MeshPacket *p);
 void fixPriority(meshtastic_MeshPacket *p);
 
 bool isBroadcast(uint32_t dest);
+
+inline bool isLoraTransport(meshtastic_MeshPacket_TransportMechanism transport)
+{
+    return transport == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA ||
+           transport == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT1 ||
+           transport == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT2 ||
+           transport == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA_ALT3;
+}

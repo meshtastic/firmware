@@ -2,6 +2,7 @@
 #include "MeshTypes.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
+#include "RadioExternalPa.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -44,7 +45,17 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
-    instance = this;
+    for (uint8_t slot = 0; slot < ISR_INSTANCE_COUNT; slot++) {
+        if (isrInstances[slot] == nullptr) {
+            isrInstances[slot] = this;
+            isrSlot = slot;
+            break;
+        }
+    }
+    assert(isrSlot != NO_ISR_SLOT);
+    if (isrSlot == 0) {
+        instance = this;
+    }
 
     // Initialize unused sample slots to a sane default; sample count controls averaging.
     for (uint8_t i = 0; i < NOISE_FLOOR_SAMPLES; i++) {
@@ -57,6 +68,20 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #endif
 }
 
+RadioLibInterface::~RadioLibInterface()
+{
+    if (activeTransmitter == this) {
+        radioExternalPaRxIdle();
+        activeTransmitter = nullptr;
+    }
+    if (isrSlot < ISR_INSTANCE_COUNT && isrInstances[isrSlot] == this) {
+        isrInstances[isrSlot] = nullptr;
+    }
+    if (instance == this) {
+        instance = isrInstances[0] != nullptr ? isrInstances[0] : isrInstances[1];
+    }
+}
+
 #ifdef ARCH_ESP32
 // ESP32 doesn't use that flag
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR()
@@ -64,12 +89,17 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR(x)
 #endif
 
-void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
+void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(uint8_t slot, PendingISR cause)
 {
-    instance->disableInterrupt();
+    RadioLibInterface *radio = isrInstances[slot];
+    if (radio == nullptr) {
+        return;
+    }
+
+    radio->disableInterrupt();
 
     BaseType_t xHigherPriorityTaskWoken;
-    instance->notifyFromISR(&xHigherPriorityTaskWoken, cause, true);
+    radio->notifyFromISR(&xHigherPriorityTaskWoken, cause, true);
 
     /* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
     The macro used to do this is dependent on the port and may be called
@@ -79,21 +109,49 @@ void INTERRUPT_ATTR RadioLibInterface::isrLevel0Common(PendingISR cause)
 
 void INTERRUPT_ATTR RadioLibInterface::isrRxLevel0()
 {
-    isrLevel0Common(ISR_RX);
+    isrLevel0Common(0, ISR_RX);
+}
+
+void INTERRUPT_ATTR RadioLibInterface::isrRxLevel1()
+{
+    isrLevel0Common(1, ISR_RX);
 }
 
 void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
 {
-    isrLevel0Common(ISR_TX);
+    isrLevel0Common(0, ISR_TX);
+}
+
+void INTERRUPT_ATTR RadioLibInterface::isrTxLevel1()
+{
+    isrLevel0Common(1, ISR_TX);
 }
 
 /** Our ISR code currently needs this to find our active instance
  */
-RadioLibInterface *RadioLibInterface::instance;
+RadioLibInterface *RadioLibInterface::instance = nullptr;
+RadioLibInterface *RadioLibInterface::isrInstances[ISR_INSTANCE_COUNT] = {};
+RadioLibInterface *RadioLibInterface::activeTransmitter = nullptr;
+bool RadioLibInterface::coordinatedTransition = false;
+
+RadioLibInterface::InterruptCallback RadioLibInterface::getIsrRxCallback() const
+{
+    assert(isrSlot < ISR_INSTANCE_COUNT);
+    return isrSlot == 0 ? isrRxLevel0 : isrRxLevel1;
+}
+
+RadioLibInterface::InterruptCallback RadioLibInterface::getIsrTxCallback() const
+{
+    assert(isrSlot < ISR_INSTANCE_COUNT);
+    return isrSlot == 0 ? isrTxLevel0 : isrTxLevel1;
+}
 
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
 {
+    if (coordinatedTransition || hasActiveTransmitPeer())
+        return false;
+
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).
     // To do otherwise would be doubly bad because not only would we drop the packet that was on the way in,
     // we almost certainly guarantee no one outside will like the packet we are sending.
@@ -152,11 +210,13 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 {
+    const meshtastic_Config_LoRaConfig &loraConfig = getLoRaConfig();
 
 #ifndef DISABLE_WELCOME_UNSET
 
-    if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        if (disabled || !config.lora.tx_enabled) {
+    if (loraConfig.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+        config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        if (disabled || !loraConfig.tx_enabled || !config.lora.tx_enabled) {
             LOG_WARN("send - !config.lora.tx_enabled");
             packetPool.release(p);
             return ERRNO_DISABLED;
@@ -170,7 +230,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
 #else
 
-    if (disabled || !config.lora.tx_enabled) {
+    if (disabled || !loraConfig.tx_enabled || !config.lora.tx_enabled) {
         LOG_WARN("send - !config.lora.tx_enabled");
         packetPool.release(p);
         return ERRNO_DISABLED;
@@ -379,7 +439,7 @@ static constexpr bool txTimerOverwrite = false;
 // cppcheck-suppress constParameterPointer ; a function pointer can't meaningfully point to const
 bool RadioLibInterface::isIsrTxCallback(void (*callback)())
 {
-    return callback == isrTxLevel0;
+    return callback == isrTxLevel0 || callback == isrTxLevel1;
 }
 
 void RadioLibInterface::scheduleIrqPollTick()
@@ -425,6 +485,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     case ISR_POLL_TICK:
         handleSoftwareLoraIrqPoll();
+        break;
+    case RESUME_RECEIVE:
         break;
     case TRANSMIT_DELAY_COMPLETED:
 
@@ -479,6 +541,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
     default:
         assert(0); // We expected to receive a valid notification from the ISR
     }
+
+    maybeResumeReceive();
+    if (notification == RESUME_RECEIVE)
+        setTransmitDelay();
 }
 
 void RadioLibInterface::setTransmitDelay()
@@ -573,6 +639,48 @@ void RadioLibInterface::handleTransmitInterrupt()
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is definitely off now
 }
 
+bool RadioLibInterface::beginCoordinatedTransmit()
+{
+    if (!transmitPeer) {
+        return true;
+    }
+    if (coordinatedTransition || activeTransmitter) {
+        return false;
+    }
+    if (transmitPeer->isSending() || (transmitPeer->isReceiving && transmitPeer->isActivelyReceiving())) {
+        return false;
+    }
+
+    activeTransmitter = this;
+    radioExternalPaRxIdle();
+    transmitPeer->suspendForPeerTransmit();
+    return true;
+}
+
+void RadioLibInterface::endCoordinatedTransmit()
+{
+    if (activeTransmitter != this) {
+        return;
+    }
+
+    radioExternalPaRxIdle();
+    activeTransmitter = nullptr;
+    if (transmitPeer && !transmitPeer->disabled)
+        transmitPeer->requestReceiveResume();
+}
+
+void RadioLibInterface::requestReceiveResume()
+{
+    resumeReceivePending = true;
+    notify(RESUME_RECEIVE, true);
+}
+
+void RadioLibInterface::maybeResumeReceive()
+{
+    if (resumeReceivePending && !isSending() && !hasActiveTransmitPeer())
+        startReceive();
+}
+
 void RadioLibInterface::completeSending()
 {
     // We are careful to clear sending packet before calling printPacket because
@@ -600,6 +708,7 @@ void RadioLibInterface::completeSending()
         // We are done sending that packet, release it
         packetPool.release(p);
     }
+    endCoordinatedTransmit();
 }
 
 void RadioLibInterface::handleReceiveInterrupt()
@@ -619,7 +728,8 @@ void RadioLibInterface::handleReceiveInterrupt()
     uint32_t rxMsec = getPacketTime(length, true);
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+    if (getLoRaConfig().region == meshtastic_Config_LoRaConfig_RegionCode_UNSET ||
+        config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         LOG_WARN("lora rx disabled: Region unset");
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
         return;
@@ -705,6 +815,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
 void RadioLibInterface::startReceive()
 {
+    resumeReceivePending = false;
     isReceiving = true;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
 }
@@ -753,12 +864,17 @@ void RadioLibInterface::setStandby()
     powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
 }
 
+void RadioLibInterface::suspendForPeerTransmit()
+{
+    setStandby();
+}
+
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
-    if (disabled || !config.lora.tx_enabled) {
+    if (disabled || !getLoRaConfig().tx_enabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
 #if !MESHTASTIC_EXCLUDE_BEACON
         // This packet may have already triggered a beacon radio switch in TRANSMIT_DELAY_COMPLETED;
@@ -768,6 +884,18 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
 #endif
         packetPool.release(txp);
+        return false;
+    } else if (!beginCoordinatedTransmit()) {
+        bool dropped = false;
+        if (!txQueue.enqueue(txp, &dropped)) {
+            packetPool.release(txp);
+        }
+        if (dropped) {
+            txDrop++;
+        }
+        if (!hasActiveTransmitPeer())
+            startReceive();
+        setTransmitDelay();
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby
@@ -786,7 +914,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         } else {
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits
-            enableInterrupt(isrTxLevel0);
+            enableInterrupt(getIsrTxCallback());
             lastTxStart = millis();
             printPacket("Started Tx", txp);
 #ifdef LED_LORA
