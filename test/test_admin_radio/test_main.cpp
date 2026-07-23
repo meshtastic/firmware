@@ -1498,6 +1498,124 @@ static void test_warn_license_transaction_coalescedToSingleMessage()
 }
 
 // -----------------------------------------------------------------------
+// reloadConfig() radio-reload gating (node-DB-only admin saves)
+//
+// MeshService::reloadConfig() only re-derives the region and fires configChanged
+// (which drives the live SX126x/RadioInterface reconfigure) when saveWhat includes
+// SEGMENT_CONFIG or SEGMENT_CHANNELS. Pure node-DB metadata saves - favorite, ignore,
+// mute - must skip that reconfigure entirely: it's the crash in the WisMesh Tag
+// favorite-node bug (see plan-decouple-nodedb-admin-saves.md). These tests watch
+// service->configChanged directly so a regression (someone widening the saveWhat mask,
+// or reordering the check) is caught even though these run outside an edit transaction.
+// -----------------------------------------------------------------------
+
+// Counts configChanged.notifyObservers() calls; the only externally visible signal that
+// reloadConfig() took the radio-reconfigure branch.
+class ConfigChangedCounter : public Observer<void *>
+{
+  public:
+    int count = 0;
+
+  protected:
+    int onNotify(void *arg) override
+    {
+        count++;
+        return 0;
+    }
+};
+
+static const NodeNum TEST_NODE_NUM = 0x12345678;
+
+static void test_setFavoriteNode_skipsRadioReload_butPersists()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_favorite_node_tag;
+    m.set_favorite_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_removeFavoriteNode_skipsRadioReload()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_favorite_node_tag;
+    m.remove_favorite_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_setIgnoredNode_skipsRadioReload_butPersists()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_ignored_node_tag;
+    m.set_ignored_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsIgnored(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_removeIgnoredNode_skipsRadioReload()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_ignored_node_tag;
+    m.remove_ignored_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsIgnored(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_toggleMutedNode_skipsRadioReload_butPersists()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_toggle_muted_node_tag;
+    m.toggle_muted_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+// Regression guard: a real LoRa config/channel change must still reconfigure the radio -
+// the gate in reloadConfig() must not have swallowed the legitimate case.
+static void test_setChannel_stillTriggersRadioReload()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1));
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -1629,6 +1747,14 @@ void setup()
     RUN_TEST(test_warn_transaction_singleChannel_keepsSpecificMessage);
     RUN_TEST(test_warn_license_noTransaction_emittedImmediately);
     RUN_TEST(test_warn_license_transaction_coalescedToSingleMessage);
+
+    // reloadConfig() radio-reload gating (node-DB-only admin saves)
+    RUN_TEST(test_setFavoriteNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_removeFavoriteNode_skipsRadioReload);
+    RUN_TEST(test_setIgnoredNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_removeIgnoredNode_skipsRadioReload);
+    RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_setChannel_stillTriggersRadioReload);
 
     exit(UNITY_END());
 }
