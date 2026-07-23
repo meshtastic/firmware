@@ -957,6 +957,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
     config.security.admin_key_count = numAdminKeys;
 
+    // Left at COMPATIBLE when signature checking is compiled out, so we never report a policy
+    // nothing enforces (mirrors the set-config guard in AdminModule).
+#if defined(USERPREFS_CONFIG_SECURITY_PACKET_SIGNATURE_POLICY) && !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    config.security.packet_signature_policy = USERPREFS_CONFIG_SECURITY_PACKET_SIGNATURE_POLICY;
+#endif
+
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
@@ -1863,6 +1869,8 @@ bool NodeDB::enforceSatelliteCaps()
 // them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
 static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
 {
+    if (nodeInfoLiteHasXeddsaSigned(&n))
+        return static_cast<uint8_t>(WarmProtected::XeddsaSigner);
     if (n.bitfield & (NODEINFO_BITFIELD_IS_FAVORITE_MASK | NODEINFO_BITFIELD_IS_IGNORED_MASK |
                       NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK))
         return static_cast<uint8_t>(WarmProtected::Flag);
@@ -3783,6 +3791,22 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     return false;
 }
 
+bool NodeDB::copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    if (copyPublicKeyAuthoritative(n, out))
+        return true;
+#if HAS_TRAFFIC_MANAGEMENT
+    // A cold-tier cache key backs an authenticated decrypt only when signer-proven; unverified TOFU
+    // cache keys must not. Outbound encryption still uses the opportunistic copyPublicKey().
+    bool signerProven = false;
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) && signerProven) {
+        out.size = 32;
+        return true;
+    }
+#endif
+    return false;
+}
+
 bool NodeDB::isVerifiedSignerForKey(NodeNum n, const uint8_t *key32)
 {
     if (!key32)
@@ -3936,6 +3960,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
+            if (warmProtOf(warm) == static_cast<uint8_t>(WarmProtected::XeddsaSigner))
+                nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
             LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
         }
 #endif

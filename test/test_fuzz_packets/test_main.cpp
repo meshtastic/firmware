@@ -159,7 +159,8 @@ void test_E1_perhaps_decode_fuzz(void)
 
         DecodeState st = perhapsDecode(&p);
         // Any verdict is fine; the contract is that arbitrary ciphertext never crashes the pipeline.
-        TEST_ASSERT_TRUE(st == DECODE_SUCCESS || st == DECODE_FAILURE || st == DECODE_FATAL);
+        TEST_ASSERT_TRUE(st == DECODE_SUCCESS || st == DECODE_FAILURE || st == DECODE_OPAQUE || st == DECODE_FATAL ||
+                         st == DECODE_POLICY_REJECT);
     }
 }
 

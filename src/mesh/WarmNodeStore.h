@@ -63,7 +63,7 @@ static constexpr uint32_t WARM_SIGNER_MASK = 0x01u;
 enum class WarmFormat : uint8_t { Current, V2, V1 };
 
 // Protected category cached alongside role so consumers needn't re-derive the mapping.
-enum class WarmProtected : uint8_t { None = 0, Role = 1, Flag = 2 };
+enum class WarmProtected : uint8_t { None = 0, Role = 1, Flag = 2, XeddsaSigner = 3 };
 
 inline uint32_t warmPackLastHeard(uint32_t lastHeard, uint8_t role, uint8_t prot, bool signer)
 {
