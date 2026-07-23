@@ -44,286 +44,160 @@ namespace
 {
 constexpr uint8_t FILES_MANIFEST_LEVELS = 3;
 constexpr size_t FILES_MANIFEST_MAX_COUNT = 64;
-constexpr size_t MAX_CHUNKED_TORADIO_SLOTS = 2;
-constexpr size_t MAX_CHUNKED_FROMRADIO_SLOTS = 2;
+constexpr size_t MAX_CHUNKED_CLIENTS = 2;
 constexpr size_t MAX_CHUNKED_FROMRADIO_PACKET_SIZE = 20;
 constexpr uint16_t CHUNKED_FROMRADIO_FIRST_BYTES = 12;
 constexpr uint16_t CHUNKED_FROMRADIO_NEXT_BYTES = 15;
 constexpr uint32_t CHUNKED_TORADIO_TIMEOUT_MS = 30000;
+static_assert(MAX_TO_FROM_RADIO_SIZE <= 0x3fff, "chunk payload size must fit in two protobuf varint bytes");
 
-// Keep chunk state deliberately small: this is sized for the normal serial/BLE
-// client footprint, not for many simultaneous chunking clients. Extra clients
-// fail closed and stale ToRadio transfers are reclaimed after the timeout below.
-
-struct ChunkedToRadioSlot {
+struct ChunkedClient {
     PhoneAPI *who = nullptr;
-    uint16_t totalSize = 0;
-    uint16_t bytesUsed = 0;
-    uint32_t updatedMillis = 0;
-    uint8_t bytes[MAX_TO_FROM_RADIO_SIZE] = {0};
-};
-
-struct ChunkedFromRadioSlot {
-    PhoneAPI *who = nullptr;
+    uint16_t inTotal = 0;
+    uint16_t inUsed = 0;
+    uint16_t outTotal = 0;
+    uint16_t outUsed = 0;
+    uint32_t inUpdated = 0;
     bool enabled = false;
-    uint16_t totalSize = 0;
-    uint16_t bytesUsed = 0;
-    uint32_t updatedMillis = 0;
-    uint8_t bytes[MAX_TO_FROM_RADIO_SIZE] = {0};
+    uint8_t in[MAX_TO_FROM_RADIO_SIZE];
+    uint8_t out[MAX_TO_FROM_RADIO_SIZE];
 };
 
-static ChunkedToRadioSlot g_chunkedToRadioSlots[MAX_CHUNKED_TORADIO_SLOTS];
-static concurrency::Lock g_chunkedToRadioMutex;
-static ChunkedFromRadioSlot g_chunkedFromRadioSlots[MAX_CHUNKED_FROMRADIO_SLOTS];
-static concurrency::Lock g_chunkedFromRadioMutex;
+static ChunkedClient g_chunkedClients[MAX_CHUNKED_CLIENTS];
+static concurrency::Lock g_chunkedMutex;
 
 void releaseFilesManifest(std::vector<meshtastic_FileInfo> &filesManifest)
 {
     std::vector<meshtastic_FileInfo>().swap(filesManifest);
 }
 
-static void clearChunkedToRadioSlot_LH(ChunkedToRadioSlot &slot)
+static ChunkedClient *findChunkedClient_LH(PhoneAPI *api, bool allocate)
 {
-    slot.who = nullptr;
-    slot.totalSize = 0;
-    slot.bytesUsed = 0;
-    slot.updatedMillis = 0;
-    memset(slot.bytes, 0, sizeof(slot.bytes));
-}
-
-static void clearChunkedToRadioSlots(PhoneAPI *api)
-{
-    concurrency::LockGuard guard(&g_chunkedToRadioMutex);
-    for (auto &slot : g_chunkedToRadioSlots) {
-        if (slot.who == api) {
-            clearChunkedToRadioSlot_LH(slot);
+    ChunkedClient *freeSlot = nullptr;
+    for (auto &slot : g_chunkedClients) {
+        if (slot.who && !slot.who->isConnected()) {
+            slot.who = nullptr;
         }
-    }
-}
-
-static void clearChunkedFromRadioPayload_LH(ChunkedFromRadioSlot &slot)
-{
-    slot.totalSize = 0;
-    slot.bytesUsed = 0;
-    slot.updatedMillis = millis();
-    memset(slot.bytes, 0, sizeof(slot.bytes));
-}
-
-static void clearChunkedFromRadioSlot_LH(ChunkedFromRadioSlot &slot)
-{
-    slot.who = nullptr;
-    slot.enabled = false;
-    clearChunkedFromRadioPayload_LH(slot);
-}
-
-static void clearChunkedFromRadioSlot(PhoneAPI *api)
-{
-    concurrency::LockGuard guard(&g_chunkedFromRadioMutex);
-    for (auto &slot : g_chunkedFromRadioSlots) {
         if (slot.who == api) {
-            clearChunkedFromRadioSlot_LH(slot);
-        }
-    }
-}
-
-static ChunkedFromRadioSlot *findChunkedFromRadioSlot_LH(PhoneAPI *api)
-{
-    for (auto &slot : g_chunkedFromRadioSlots) {
-        if (slot.who == api) {
-            if (!api->isConnected()) {
-                clearChunkedFromRadioSlot_LH(slot);
-                return nullptr;
-            }
             return &slot;
         }
+        if (!slot.who) {
+            freeSlot = &slot;
+        }
     }
-
+    if (allocate && freeSlot) {
+        freeSlot->who = api;
+        freeSlot->inTotal = freeSlot->inUsed = 0;
+        freeSlot->outTotal = freeSlot->outUsed = 0;
+        freeSlot->enabled = false;
+        return freeSlot;
+    }
     return nullptr;
 }
 
-static ChunkedFromRadioSlot *findOrAllocChunkedFromRadioSlot_LH(PhoneAPI *api)
+static void clearChunkedClient(PhoneAPI *api)
 {
-    if (auto *existing = findChunkedFromRadioSlot_LH(api)) {
-        return existing;
-    }
-
-    for (auto &slot : g_chunkedFromRadioSlots) {
-        if (slot.who == nullptr) {
-            slot.who = api;
-            slot.updatedMillis = millis();
-            return &slot;
-        }
-    }
-
-    return nullptr;
-}
-
-static void noteChunkedApiSupport(PhoneAPI *api)
-{
-    concurrency::LockGuard guard(&g_chunkedFromRadioMutex);
-    auto *slot = findOrAllocChunkedFromRadioSlot_LH(api);
-    if (!slot) {
-        LOG_WARN("No ChunkedPayload capability slot available");
-        return;
-    }
-    slot->enabled = true;
-    slot->updatedMillis = millis();
-}
-
-static bool hasChunkedApiSupport_LH(PhoneAPI *api)
-{
-    auto *slot = findChunkedFromRadioSlot_LH(api);
-    return slot && slot->enabled;
-}
-
-static ChunkedToRadioSlot *findChunkedToRadioSlot_LH(PhoneAPI *api)
-{
-    for (auto &slot : g_chunkedToRadioSlots) {
-        if (slot.who != nullptr && !Throttle::isWithinTimespanMs(slot.updatedMillis, CHUNKED_TORADIO_TIMEOUT_MS)) {
-            clearChunkedToRadioSlot_LH(slot);
-        }
-    }
-
-    for (auto &slot : g_chunkedToRadioSlots) {
+    concurrency::LockGuard guard(&g_chunkedMutex);
+    for (auto &slot : g_chunkedClients) {
         if (slot.who == api) {
-            return &slot;
+            slot.who = nullptr;
+            return;
         }
     }
-
-    return nullptr;
-}
-
-static ChunkedToRadioSlot *allocChunkedToRadioSlot_LH(PhoneAPI *api, uint16_t totalSize)
-{
-    const uint32_t now = millis();
-    if (auto *existing = findChunkedToRadioSlot_LH(api)) {
-        clearChunkedToRadioSlot_LH(*existing);
-        existing->who = api;
-        existing->totalSize = totalSize;
-        existing->updatedMillis = millis();
-        return existing;
-    }
-
-    for (auto &slot : g_chunkedToRadioSlots) {
-        if (slot.who == nullptr) {
-            slot.who = api;
-            slot.totalSize = totalSize;
-            slot.updatedMillis = now;
-            return &slot;
-        }
-    }
-
-    for (auto &slot : g_chunkedToRadioSlots) {
-        if (slot.who == api) {
-            clearChunkedToRadioSlot_LH(slot);
-            slot.who = api;
-            slot.totalSize = totalSize;
-            slot.updatedMillis = now;
-            return &slot;
-        }
-    }
-
-    return nullptr;
 }
 
 static bool handleChunkedToRadio(PhoneAPI *api, const meshtastic_ChunkedPayload &chunk)
 {
     if (chunk.payload_chunk.size == 0) {
-        LOG_WARN("Invalid ChunkedPayload empty chunk total=%u", chunk.payload_size);
         return false;
     }
 
     uint8_t reassembled[MAX_TO_FROM_RADIO_SIZE];
     uint16_t reassembledSize = 0;
-    bool complete = false;
 
     {
-        concurrency::LockGuard guard(&g_chunkedToRadioMutex);
-        ChunkedToRadioSlot *slot = nullptr;
+        concurrency::LockGuard guard(&g_chunkedMutex);
+        ChunkedClient *slot = findChunkedClient_LH(api, chunk.payload_size != 0);
+        if (slot && slot->inTotal && !Throttle::isWithinTimespanMs(slot->inUpdated, CHUNKED_TORADIO_TIMEOUT_MS)) {
+            slot->inTotal = slot->inUsed = 0;
+        }
+
         if (chunk.payload_size != 0) {
             if (chunk.payload_size > MAX_TO_FROM_RADIO_SIZE || chunk.payload_size < chunk.payload_chunk.size) {
-                LOG_WARN("Invalid ChunkedPayload total=%u chunk=%u", chunk.payload_size, chunk.payload_chunk.size);
                 return false;
             }
-            slot = allocChunkedToRadioSlot_LH(api, chunk.payload_size);
-        } else {
-            slot = findChunkedToRadioSlot_LH(api);
+            if (slot) {
+                slot->inTotal = chunk.payload_size;
+                slot->inUsed = 0;
+            }
         }
 
-        if (!slot) {
-            LOG_WARN("No active ChunkedPayload transfer");
+        if (!slot || !slot->inTotal) {
             return false;
         }
 
-        if (slot->bytesUsed + chunk.payload_chunk.size > slot->totalSize) {
-            LOG_WARN("ChunkedPayload too large used=%u add=%u total=%u", slot->bytesUsed, chunk.payload_chunk.size, slot->totalSize);
-            clearChunkedToRadioSlot_LH(*slot);
+        if (slot->inUsed + chunk.payload_chunk.size > slot->inTotal) {
+            slot->inTotal = slot->inUsed = 0;
             return false;
         }
 
-        memcpy(slot->bytes + slot->bytesUsed, chunk.payload_chunk.bytes, chunk.payload_chunk.size);
-        slot->bytesUsed += chunk.payload_chunk.size;
-        slot->updatedMillis = millis();
-        LOG_DEBUG("ChunkedPayload bytes=%u used=%u total=%u", chunk.payload_chunk.size, slot->bytesUsed, slot->totalSize);
+        memcpy(slot->in + slot->inUsed, chunk.payload_chunk.bytes, chunk.payload_chunk.size);
+        slot->inUsed += chunk.payload_chunk.size;
+        slot->inUpdated = millis();
 
-        if (slot->bytesUsed == slot->totalSize) {
-            reassembledSize = slot->bytesUsed;
-            memcpy(reassembled, slot->bytes, reassembledSize);
-            clearChunkedToRadioSlot_LH(*slot);
-            complete = true;
+        if (slot->inUsed != slot->inTotal) {
+            return false;
         }
+
+        reassembledSize = slot->inUsed;
+        memcpy(reassembled, slot->in, reassembledSize);
+        slot->inTotal = slot->inUsed = 0;
+        slot->enabled = true;
     }
 
-    if (!complete) {
-        return false;
-    }
-
-    LOG_INFO("ChunkedPayload complete bytes=%u", reassembledSize);
-    noteChunkedApiSupport(api);
     return api->handleToRadio(reassembled, reassembledSize);
 }
 
-static size_t encodeChunkedFromRadio_LH(ChunkedFromRadioSlot &slot, uint8_t *buf)
+static size_t encodeChunkedFromRadio_LH(ChunkedClient &slot, uint8_t *buf)
 {
-    if (slot.totalSize == 0 || slot.bytesUsed >= slot.totalSize) {
-        return 0;
-    }
-
-    const bool firstChunk = slot.bytesUsed == 0;
+    const bool firstChunk = slot.outUsed == 0;
     uint16_t chunkSize = firstChunk ? CHUNKED_FROMRADIO_FIRST_BYTES : CHUNKED_FROMRADIO_NEXT_BYTES;
-    const uint16_t remaining = slot.totalSize - slot.bytesUsed;
+    const uint16_t remaining = slot.outTotal - slot.outUsed;
     if (chunkSize > remaining) {
         chunkSize = remaining;
     }
 
-    meshtastic_FromRadio chunked = {};
-    chunked.which_payload_variant = meshtastic_FromRadio_chunked_payload_tag;
-    chunked.chunked_payload.payload_size = firstChunk ? slot.totalSize : 0;
-    chunked.chunked_payload.payload_chunk.size = chunkSize;
-    memcpy(chunked.chunked_payload.payload_chunk.bytes, slot.bytes + slot.bytesUsed, chunkSize);
-
-    const size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &chunked);
-    if (numbytes == 0 || numbytes > MAX_CHUNKED_FROMRADIO_PACKET_SIZE) {
-        LOG_ERROR("Chunked FromRadio encode failed size=%u chunk=%u first=%d", numbytes, chunkSize, firstChunk);
-        clearChunkedFromRadioPayload_LH(slot);
-        return 0;
+    uint8_t *p = buf;
+    *p++ = 0xa2; // FromRadio field 20, length-delimited
+    *p++ = 0x01;
+    uint8_t *outerSize = p++;
+    if (firstChunk) {
+        *p++ = 0x08; // ChunkedPayload.payload_size
+        if (slot.outTotal >= 0x80) {
+            *p++ = (slot.outTotal & 0x7f) | 0x80;
+            *p++ = slot.outTotal >> 7;
+        } else {
+            *p++ = slot.outTotal;
+        }
     }
+    *p++ = 0x12; // ChunkedPayload.payload_chunk
+    *p++ = chunkSize;
+    memcpy(p, slot.out + slot.outUsed, chunkSize);
+    p += chunkSize;
+    *outerSize = p - outerSize - 1;
 
-    slot.bytesUsed += chunkSize;
-    slot.updatedMillis = millis();
-    LOG_DEBUG("Chunked FromRadio bytes=%u used=%u total=%u encoded=%u", chunkSize, slot.bytesUsed, slot.totalSize, numbytes);
-    if (slot.bytesUsed == slot.totalSize) {
-        clearChunkedFromRadioPayload_LH(slot);
+    slot.outUsed += chunkSize;
+    if (slot.outUsed == slot.outTotal) {
+        slot.outTotal = slot.outUsed = 0;
     }
-
-    return numbytes;
+    return p - buf;
 }
 
 static size_t getPendingChunkedFromRadio(PhoneAPI *api, uint8_t *buf)
 {
-    concurrency::LockGuard guard(&g_chunkedFromRadioMutex);
-    auto *slot = findChunkedFromRadioSlot_LH(api);
-    if (!slot || slot->totalSize == 0) {
+    concurrency::LockGuard guard(&g_chunkedMutex);
+    auto *slot = findChunkedClient_LH(api, false);
+    if (!slot || !slot->outTotal) {
         return 0;
     }
     return encodeChunkedFromRadio_LH(*slot, buf);
@@ -335,26 +209,19 @@ static size_t maybeEncodeChunkedFromRadio(PhoneAPI *api, uint8_t *buf, const uin
         return fromRadioSize;
     }
 
-    concurrency::LockGuard guard(&g_chunkedFromRadioMutex);
-    if (!hasChunkedApiSupport_LH(api)) {
+    concurrency::LockGuard guard(&g_chunkedMutex);
+    auto *slot = findChunkedClient_LH(api, false);
+    if (!slot || !slot->enabled) {
         return fromRadioSize;
     }
 
-    auto *slot = findOrAllocChunkedFromRadioSlot_LH(api);
-    if (!slot) {
-        LOG_WARN("No Chunked FromRadio slot available, sending unchunked bytes=%u", fromRadioSize);
-        return fromRadioSize;
-    }
-
-    if (fromRadioSize > sizeof(slot->bytes)) {
-        LOG_ERROR("FromRadio too large to chunk bytes=%u max=%u", fromRadioSize, sizeof(slot->bytes));
+    if (fromRadioSize > sizeof(slot->out)) {
         return 0;
     }
 
-    memcpy(slot->bytes, fromRadioBytes, fromRadioSize);
-    slot->totalSize = fromRadioSize;
-    slot->bytesUsed = 0;
-    slot->updatedMillis = millis();
+    memcpy(slot->out, fromRadioBytes, fromRadioSize);
+    slot->outTotal = fromRadioSize;
+    slot->outUsed = 0;
     return encodeChunkedFromRadio_LH(*slot, buf);
 }
 } // namespace
@@ -665,8 +532,7 @@ void PhoneAPI::handleStartConfig()
 void PhoneAPI::close()
 {
     LOG_DEBUG("PhoneAPI::close()");
-    clearChunkedToRadioSlots(this);
-    clearChunkedFromRadioSlot(this);
+    clearChunkedClient(this);
     if (service->api_state == service->STATE_BLE && api_type == TYPE_BLE)
         service->api_state = service->STATE_DISCONNECTED;
     else if (service->api_state == service->STATE_WIFI && api_type == TYPE_WIFI)
