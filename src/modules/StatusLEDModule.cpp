@@ -48,18 +48,7 @@ int StatusLEDModule::handleStatusUpdate(const meshtastic::Status *arg)
 {
     switch (arg->getStatusType()) {
     case STATUS_TYPE_POWER: {
-        if (powerStatus->getHasUSB() || powerStatus->getIsCharging()) {
-            power_state = charging;
-            if (powerStatus->getBatteryChargePercent() >= 100) {
-                power_state = charged;
-            }
-        } else {
-            if (powerStatus->getBatteryChargePercent() > 5) {
-                power_state = discharging;
-            } else {
-                power_state = critical;
-            }
-        }
+        power_state = powerStatus->getPowerState();
         break;
     }
     case STATUS_TYPE_BLUETOOTH: {
@@ -111,13 +100,13 @@ int32_t StatusLEDModule::runOnce()
 {
     my_interval = 1000;
 
-    if (power_state == charging) {
+    if (power_state == meshtastic::PowerState::Charging) {
 #ifndef POWER_LED_HARDWARE_BLINKS_WHILE_CHARGING
         CHARGE_LED_state = !CHARGE_LED_state;
 #endif
-    } else if (power_state == charged) {
+    } else if (power_state == meshtastic::PowerState::Charged) {
         CHARGE_LED_state = LED_STATE_ON;
-    } else if (power_state == critical) {
+    } else if (power_state == meshtastic::PowerState::Critical) {
         if (POWER_LED_starttime + 30000 < millis() && !doing_fast_blink) {
             doing_fast_blink = true;
             POWER_LED_starttime = millis();
@@ -138,9 +127,10 @@ int32_t StatusLEDModule::runOnce()
         CHARGE_LED_state = LED_STATE_OFF;
 #endif
     }
-// If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
+    // If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
+    const bool notCharging = power_state != meshtastic::PowerState::Charging && power_state != meshtastic::PowerState::Charged;
 #if defined(LED_HEARTBEAT)
-    if (power_state != charging && power_state != charged && !doing_fast_blink && !config.device.led_heartbeat_disabled) {
+    if (notCharging && !doing_fast_blink && !config.device.led_heartbeat_disabled) {
         if (HEARTBEAT_LED_state == LED_STATE_ON) {
             HEARTBEAT_LED_state = LED_STATE_OFF;
             my_interval = 999;
@@ -154,7 +144,7 @@ int32_t StatusLEDModule::runOnce()
         digitalWrite(LED_HEARTBEAT, HEARTBEAT_LED_state);
     }
 #else
-    if (power_state != charging && power_state != charged && !doing_fast_blink && !config.device.led_heartbeat_disabled) {
+    if (notCharging && !doing_fast_blink && !config.device.led_heartbeat_disabled) {
         if (CHARGE_LED_state == LED_STATE_ON) {
             CHARGE_LED_state = LED_STATE_OFF;
             my_interval = 999;
@@ -219,7 +209,7 @@ int32_t StatusLEDModule::runOnce()
 #ifdef LED_POWER
 #ifdef LED_POWER_CRITICAL
     if (LED_POWER != LED_POWER_CRITICAL) {
-        if (power_state == critical) {
+        if (power_state == meshtastic::PowerState::Critical) {
             digitalWrite(LED_POWER, 0);
             digitalWrite(LED_POWER_CRITICAL, CHARGE_LED_state);
         } else {
