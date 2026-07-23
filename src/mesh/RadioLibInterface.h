@@ -180,8 +180,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
      * This method must be used before putting the CPU into deep or light sleep.
+     * With deepSleep set, an in-flight transmission also vetoes sleep (see RadioInterface).
      */
-    virtual bool canSleep() override;
+    virtual bool canSleep(bool deepSleep) override;
 
     /**
      * Start waiting to receive a message

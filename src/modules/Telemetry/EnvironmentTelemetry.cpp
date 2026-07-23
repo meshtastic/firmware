@@ -9,11 +9,11 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "buzz.h"
+#include "gps/RTC.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -253,6 +253,8 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
+        if (shouldDeferDeepSleep())
+            return PREFLIGHT_SLEEP_RETRY_MS;
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
@@ -333,6 +335,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
             sendTelemetry(NODENUM_BROADCAST, true);
             lastSentToPhone = millis();
         }
+    }
+    if (sleepOnNextExecution) {
+        // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
+        // this return value, which would otherwise override setIntervalFromNow() with the sensor
+        // polling interval (35 ms for BSEC2) and trigger deep sleep while the TX is still on air
+        return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, result);
 }
@@ -635,7 +643,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m.time = getTime();
 
-    if (getEnvironmentTelemetry(&m)) {
+    bool validTelemetry = getEnvironmentTelemetry(&m);
+    if (validTelemetry) {
         LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
@@ -652,41 +661,55 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.soil_moisture);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        p->to = dest;
-        p->decoded.want_response = false;
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-        else
-            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
-
-        lastMeasurementPacket = packetPool.allocCopy(*p);
-        if (phoneOnly) {
-            LOG_INFO("Send packet to phone");
-            service->sendToPhone(p);
+        if (!p) {
+            validTelemetry = false;
         } else {
-            LOG_INFO("Send packet to mesh");
-            service->sendToMesh(p, RX_SRC_LOCAL, true);
+            p->to = dest;
+            p->decoded.want_response = false;
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            else
+                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+            // release previous packet before occupying a new spot
+            if (lastMeasurementPacket != nullptr)
+                packetPool.release(lastMeasurementPacket);
 
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                notification->level = meshtastic_LogRecord_Level_INFO;
-                notification->time = getValidTime(RTCQualityFromNet);
-                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
-                                                          default_telemetry_broadcast_interval_secs) /
-                            1000U);
-                service->sendClientNotification(notification);
-                sleepOnNextExecution = true;
-                LOG_DEBUG("Start next execution in 5s, then sleep");
-                setIntervalFromNow(FIVE_SECONDS_MS);
+            lastMeasurementPacket = packetPool.allocCopy(*p);
+            if (phoneOnly) {
+                LOG_INFO("Send packet to phone");
+                service->sendToPhone(p);
+            } else {
+                LOG_INFO("Send packet to mesh");
+                service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+                if (isPowerSavingSensor()) {
+                    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+                    if (notification) {
+                        notification->level = meshtastic_LogRecord_Level_INFO;
+                        notification->time = getValidTime(RTCQualityFromNet);
+                        sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                                Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                                  default_telemetry_broadcast_interval_secs) /
+                                    1000U);
+                        service->sendClientNotification(notification);
+                    }
+                }
             }
         }
-        return true;
     }
-    return false;
+
+    // Arm the pre-sleep sequence even when no valid reading was available this cycle (e.g. a
+    // BSEC2 call timing violation): a power-saving SENSOR node must still return to deep sleep,
+    // otherwise it stays awake until the next telemetry interval and drains its battery
+    if (!phoneOnly && isPowerSavingSensor()) {
+        if (!validTelemetry)
+            LOG_WARN("Environment telemetry unavailable this cycle, sleep without sending");
+        sleepOnNextExecution = true;
+        preflightSleepDeferrals = 0;
+        LOG_DEBUG("Start next execution in 5s, then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
+    }
+    return validTelemetry;
 }
 
 AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
