@@ -63,7 +63,7 @@ static constexpr uint32_t WARM_SIGNER_MASK = 0x01u;
 enum class WarmFormat : uint8_t { Current, V2, V1 };
 
 // Protected category cached alongside role so consumers needn't re-derive the mapping.
-enum class WarmProtected : uint8_t { None = 0, Role = 1, Flag = 2 };
+enum class WarmProtected : uint8_t { None = 0, Role = 1, Flag = 2, XeddsaSigner = 3 };
 
 inline uint32_t warmPackLastHeard(uint32_t lastHeard, uint8_t role, uint8_t prot, bool signer)
 {
@@ -119,6 +119,10 @@ class WarmNodeStore
     /// @return false if the node is not in the warm tier.
     bool lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat) const;
 
+    /// True if the warm tier holds this node with its signer bit set (an XEdDSA signature
+    /// was verified from it before eviction).
+    bool isVerifiedSigner(NodeNum num) const;
+
     /// Find and remove an entry (used when the node is re-admitted to the hot store).
     bool take(NodeNum num, WarmNodeEntry &out);
 
@@ -130,6 +134,15 @@ class WarmNodeStore
     void clear();
     size_t count() const;
     size_t capacity() const { return entries ? WARM_NODE_COUNT : 0; }
+
+    /// Slot-indexed read for whole-tier reconciliation: the entry in slot i, or nullptr
+    /// when the slot is empty or i >= capacity().
+    const WarmNodeEntry *entryAt(size_t i) const
+    {
+        if (!entries || i >= WARM_NODE_COUNT || entries[i].num == 0)
+            return nullptr;
+        return &entries[i];
+    }
 
 #if MESHTASTIC_NODEDB_MIGRATION_VERBOSE
     /// Debug: dump every live warm entry (num / last_heard / has-key) to the

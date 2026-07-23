@@ -52,8 +52,8 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Repeated reliable tx");
             // Check if it's still in the Tx queue, if not, we have to relay it again
             if (!findInTxQueue(p->from, p->id)) {
-                reprocessPacket(p);
-                perhapsRebroadcast(p);
+                if (reprocessPacket(p))
+                    perhapsRebroadcast(p);
             }
         } else {
             perhapsCancelDupe(p);
@@ -69,6 +69,12 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
+        // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
+        // This is intentionally redundant with ReliableRouter's ingress gate: it keeps this helper
+        // safe if another caller is introduced later.
+        if (passesRoutingAuthGate(const_cast<meshtastic_MeshPacket *>(p)) != RoutingAuthVerdict::ACCEPT)
+            return true;
+
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
         // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
         uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
@@ -76,7 +82,8 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
-            reprocessPacket(p);
+            if (!reprocessPacket(p))
+                return true;
             perhapsRebroadcast(p);
 
             rxDupe++;
@@ -88,32 +95,24 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
     return false;
 }
 
-void FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
+bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
+        if (decodedState != DecodeState::DECODE_SUCCESS && decodedState != DecodeState::DECODE_OPAQUE)
+            return false;
+    }
+
     if (nodeDB)
         nodeDB->updateFrom(*p);
 
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
-    if (traceRouteModule && p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        // If we got a packet that is not decoded, try to decode it so we can check for traceroute.
-        auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
-        if (decodedState == DecodeState::DECODE_SUCCESS) {
-            // parsing was successful, print for debugging
-            printPacket("reprocessPacket(DUP)", p);
-        } else {
-            // Fatal decoding error, we can't do anything with this packet
-            LOG_WARN(
-                "FloodingRouter::reprocessPacket: Fatal decode error (state=%d, id=0x%08x, from=%u), can't check for traceroute",
-                static_cast<int>(decodedState), p->id, getFrom(p));
-            return;
-        }
-    }
-
     if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         p->decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP) {
         traceRouteModule->processUpgradedPacket(*p);
     }
 #endif
+    return true;
 }
 
 bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)

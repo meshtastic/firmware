@@ -21,8 +21,12 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
-#include <sys/ioctl.h>
 #include <unistd.h>
+#ifndef _WIN32
+// Only the PORTDUINO_LINUX_HARDWARE block below calls ioctl() (HCIGETDEVINFO,
+// for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
+#include <sys/ioctl.h>
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -32,6 +36,12 @@
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
+#endif
+
+#ifdef _WIN32
+// Defined in WindowsMacAddr.cpp, which keeps <iphlpapi.h> out of this TU: it
+// pulls in RPC/OLE headers that collide with the Arduino API.
+bool portduinoWindowsPrimaryMac(uint8_t *dmac);
 #endif
 
 #ifdef __APPLE__
@@ -108,6 +118,44 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         return ARGP_ERR_UNKNOWN;
     }
     return 0;
+}
+
+// A kernel SPI transfer is capped by the spidev module's `bufsiz` parameter (4096 by default).
+// LovyanGFX pushes the framebuffer in large chunks, so a display bigger than that budget fails
+// deep inside the driver with a bare -EMSGSIZE. Check up front so the user gets told what to fix.
+static void checkSpidevBufsiz()
+{
+    if (portduino_config.display_spi_dev == "" || portduino_config.displayWidth == 0 || portduino_config.displayHeight == 0) {
+        return;
+    }
+    switch (portduino_config.displayPanel) {
+    case no_screen:
+    case x11:
+    case fb:
+    case hub75:
+        return; // not driven over spidev
+    default:
+        break;
+    }
+
+    const long required = (long)portduino_config.displayWidth * portduino_config.displayHeight / 2 * 3;
+
+    std::ifstream bufsizFile("/sys/module/spidev/parameters/bufsiz");
+    long bufsiz = 0;
+    if (!bufsizFile.is_open() || !(bufsizFile >> bufsiz)) {
+        // spidev may be built into the kernel without exposing the parameter; nothing to check.
+        return;
+    }
+
+    if (bufsiz < required) {
+        std::cerr << "SPI display " << portduino_config.displayWidth << "x" << portduino_config.displayHeight
+                  << " needs a spidev buffer of at least " << required << " bytes, but "
+                  << "/sys/module/spidev/parameters/bufsiz is " << bufsiz << "." << std::endl;
+        std::cerr << "Add 'spidev.bufsiz=" << required << "' to your kernel command line "
+                  << "(/boot/firmware/cmdline.txt on Raspberry Pi OS) and reboot." << std::endl;
+        std::cerr << "Or echo that value into /etc/modprobe.d/spidev.conf and reload the spidev module" << std::endl;
+        exit(EXIT_FAILURE);
+    }
 }
 
 void portduinoCustomInit()
@@ -193,6 +241,10 @@ void getMacAddr(uint8_t *dmac)
             }
             freeifaddrs(ifap);
         }
+#elif defined(_WIN32)
+        // No BlueZ on Windows; the host's primary adapter MAC is the equivalent
+        // stable identifier. On failure dmac is untouched and the blank-MAC check fires.
+        portduinoWindowsPrimaryMac(dmac);
 #else
         // No platform-specific MAC source; leave dmac at its default. Caller
         // can override via the --hwid CLI flag or the YAML config.
@@ -292,7 +344,9 @@ void portduinoSetup()
              std::filesystem::directory_iterator{portduino_config.config_directory}) {
             if (ends_with(entry.path().string(), ".yaml")) {
                 std::cout << "Also using " << entry << " as additional config file" << std::endl;
-                loadConfig(entry.path().c_str());
+                // .string() rather than .c_str(): path::value_type is wchar_t on
+                // Windows, and loadConfig() takes a const char *.
+                loadConfig(entry.path().string().c_str());
             }
         }
     }
@@ -542,6 +596,11 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     }
+
+    // if we have s SPI display, check /sys/module/spidev/parameters/bufsiz
+    // It needs to be at least width * height / 2 * 3
+    // fail with a more useful error message.
+    checkSpidevBufsiz();
 
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};

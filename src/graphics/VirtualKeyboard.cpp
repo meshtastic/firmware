@@ -718,11 +718,6 @@ void VirtualKeyboard::setInputText(const std::string &text)
     inputText = text;
 }
 
-std::string VirtualKeyboard::getInputText() const
-{
-    return inputText;
-}
-
 void VirtualKeyboard::setHeader(const std::string &header)
 {
     headerText = header;
