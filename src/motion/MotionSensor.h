@@ -9,11 +9,11 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
+#include "../Power.h"
 #include "../PowerFSM.h"
 #include "../detect/ScanI2C.h"
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
-#include "../power.h"
 #include "Wire.h"
 
 // Base class for motion processing
@@ -41,6 +41,12 @@ class MotionSensor
     inline virtual int32_t runOnce() { return MOTION_SENSOR_CHECK_INTERVAL_MS; };
 
     virtual void calibrate(uint16_t forSeconds){};
+
+    // True if this sensor produces the compass heading (screen->setHeading()) in runOnce().
+    // Combined accel+magnetometer parts (e.g. BMX160, ICM20948) and standalone magnetometers
+    // handled by the accelerometer thread (e.g. BMM150) override this. Used to avoid halting
+    // the thread - and freezing the compass - when motion-only features are disabled at runtime.
+    inline virtual bool providesHeading() const { return false; };
 
   protected:
     // Turn on the screen when a tap or motion is detected

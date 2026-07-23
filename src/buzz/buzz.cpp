@@ -194,18 +194,6 @@ void playBoop()
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
-void playLongPressLeadUp()
-{
-    // An ascending lead-up sequence for long press - builds anticipation
-    ToneDuration melody[] = {
-        {NOTE_C3, 100}, // Start low
-        {NOTE_E3, 100}, // Step up
-        {NOTE_G3, 100}, // Keep climbing
-        {NOTE_B3, 150}  // Peak with longer note for emphasis
-    };
-    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
-}
-
 // Static state for progressive lead-up notes
 static int leadUpNoteIndex = 0;
 static const ToneDuration leadUpNotes[] = {

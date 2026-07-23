@@ -7,14 +7,14 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
-#include "RTC.h"
+#include "Power.h"
 #include "Router.h"
 #include "airtime.h"
+#include "gps/RTC.h"
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
-#include "power.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
 #if defined(ARCH_ESP32) && HAS_WIFI
@@ -833,10 +833,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SET_REGION_UA_433:
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_UA_433);
-        break;
-
-    case SET_REGION_UA_868:
-        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_UA_868);
         break;
 
     case SET_REGION_MY_433:
@@ -1735,7 +1731,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("TH", MenuAction::SET_REGION_TH, MenuPage::EXIT));
         items.push_back(MenuItem("LoRa 2.4", MenuAction::SET_REGION_LORA_24, MenuPage::EXIT));
         items.push_back(MenuItem("UA 433", MenuAction::SET_REGION_UA_433, MenuPage::EXIT));
-        items.push_back(MenuItem("UA 868", MenuAction::SET_REGION_UA_868, MenuPage::EXIT));
         items.push_back(MenuItem("MY 433", MenuAction::SET_REGION_MY_433, MenuPage::EXIT));
         items.push_back(MenuItem("MY 919", MenuAction::SET_REGION_MY_919, MenuPage::EXIT));
         items.push_back(MenuItem("SG 923", MenuAction::SET_REGION_SG_923, MenuPage::EXIT));
@@ -2619,6 +2614,8 @@ uint16_t InkHUD::MenuApplet::getSystemInfoPanelHeight()
 void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char *message)
 {
     meshtastic_MeshPacket *p = router->allocForSending();
+    if (!p)
+        return;
     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     p->to = dest;
     p->channel = channel;
@@ -2627,7 +2624,7 @@ void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
     // Tack on a bell character if requested
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Append Null Terminator
         p->decoded.payload.size++;

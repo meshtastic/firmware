@@ -4,9 +4,9 @@
 
 #include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "RTC.h"
 #include "TelemetrySensor.h"
 #include "Wire.h"
+#include "gps/RTC.h"
 
 // Warm up times for SEN5X from the datasheet
 #ifndef SEN5X_WARMUP_MS_1
