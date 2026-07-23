@@ -140,7 +140,11 @@ int32_t StatusLEDModule::runOnce()
     }
 // If we want a LED to be dedicated to the simple hearbeat, we can use that instead of the charge LED
 #if defined(LED_HEARTBEAT)
+    #ifndef USE_HEARTBEAT_REGARDLESS_POWER_STATE
     if (power_state != charging && power_state != charged && !doing_fast_blink && !config.device.led_heartbeat_disabled) {
+    #else
+    if (!config.device.led_heartbeat_disabled) {
+    #endif
         if (HEARTBEAT_LED_state == LED_STATE_ON) {
             HEARTBEAT_LED_state = LED_STATE_OFF;
             my_interval = 999;
