@@ -144,6 +144,18 @@ jobs:
       macos_ver: ${{ matrix.macos_ver }}
     # secrets: inherit
 
+  Windows:
+    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        windows_ver:
+          - "2025" # x86_64
+    uses: ./.github/workflows/build_windows_bin.yml
+    with:
+      windows_ver: ${{ matrix.windows_ver }}
+    # secrets: inherit
+
   package-pio-deps-native-tft:
     if: ${{ github.repository == 'meshtastic/firmware' && github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/package_pio_deps.yml

@@ -137,12 +137,17 @@ void MeshService::loop()
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
 void MeshService::reloadConfig(int saveWhat)
 {
-    // If we can successfully set this radio to these settings, save them to disk
+    // Only LoRa config and channels (freq/PSK/slot) affect the radio. Saves that only touch
+    // module config, device state, or the node database (e.g. favoriting a node) have no reason
+    // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
+    if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
+        // If we can successfully set this radio to these settings, save them to disk
 
-    // This will also update the region as needed
-    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+        // This will also update the region as needed
+        nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
-    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+        configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+    }
     nodeDB->saveToDisk(saveWhat);
 }
 
@@ -257,8 +262,8 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only
               {
                   perhapsDecode(&p);
-                  const StoredMessage &sm = messageStore.addFromPacket(p);
-                  graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+                  if (const StoredMessage *sm = messageStore.tryAddFromPacket(p))
+                      graphics::MessageRenderer::handleNewMessage(nullptr, *sm, p); // notify UI
               })
 #if !MESHTASTIC_EXCLUDE_ADMIN
     // Note admin requests on their way out: AdminModule only accepts a response from a remote we

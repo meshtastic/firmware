@@ -16,6 +16,7 @@
 #include "gps/RTC.h"
 #include "mesh/NextHopRouter.h"
 #include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
 #include "mesh/ReliableRouter.h"
 #include "modules/RoutingModule.h"
 #include <cstdio>
@@ -100,6 +101,7 @@ class NextHopRouterTestShim : public NextHopRouter
     using NextHopRouter::noteRouteFailure;
     using NextHopRouter::noteRouteLearned;
     using NextHopRouter::noteRouteSuccess;
+    using NextHopRouter::perhapsRebroadcast;
     using Router::shouldDecrementHopLimit; // protected in Router
 
     bool filterViaFlooding(const meshtastic_MeshPacket *p) { return FloodingRouter::shouldFilterReceived(p); }
@@ -116,6 +118,32 @@ class NextHopRouterTestShim : public NextHopRouter
         for (auto &h : routeHealth)
             h = RouteHealth{};
     }
+};
+
+// Mirrors RadioLibInterface::send()'s NODENUM_BROADCAST_NO_LORA branch, which
+// returns ERRNO_SHOULD_RELEASE without releasing the packet.
+class MockRadioInterface : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        sendCount++;
+        if (declineAll || p->to == NODENUM_BROADCAST_NO_LORA)
+            return ERRNO_SHOULD_RELEASE;
+
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+
+    int sendCount = 0;
+    bool declineAll = false;
 };
 
 class CaptureRadioInterface : public RadioInterface
@@ -217,6 +245,20 @@ class ScopedAirTimeFixture
     AirTime *previous;
 };
 
+static meshtastic_MeshPacket makeRebroadcastCandidate(NodeNum to)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = kRemoteNode;
+    p.to = to;
+    p.id = 0x0BADF00D;
+    p.hop_start = 3;
+    p.hop_limit = 3;
+    p.next_hop = NO_NEXT_HOP_PREFERENCE;
+    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p.encrypted.size = 8;
+    return p;
+}
+
 static MockNodeDB *mockNodeDB = nullptr;
 static NextHopRouterTestShim *shim = nullptr;
 static ReliableRouterTestShim *reliableShim = nullptr;
@@ -225,6 +267,16 @@ static CaptureRadioInterface *reliableRadio = nullptr;
 static MockRoutingModule *mockRoutingModule = nullptr;
 static std::unique_ptr<ScopedAirTimeFixture> airTimeFixture;
 static PacketId nextBehaviorPacketId = 0x70000000;
+
+static MockRadioInterface *installMockIface()
+{
+    MockRadioInterface *mock = new MockRadioInterface();
+    // addInterface replaces and destroys the suite's original capture interface.
+    // Clear its borrowed pointer before the next Unity setUp() runs.
+    nextHopRadio = nullptr;
+    shim->addInterface(std::unique_ptr<RadioInterface>(mock));
+    return mock;
+}
 
 static constexpr uint32_t TTL = NextHopRouter::ROUTE_TTL_MSEC;
 static constexpr uint8_t THRESH = NextHopRouter::ROUTE_FAILURE_THRESHOLD;
@@ -314,7 +366,8 @@ void setUp(void)
     shim->resetRouteHealthForTest();
     shim->clearPendingForTest();
     reliableShim->clearPendingForTest();
-    nextHopRadio->reset();
+    if (nextHopRadio)
+        nextHopRadio->reset();
     reliableRadio->reset();
     mockRoutingModule->ackNaks.clear();
     configureBehaviorChannels();
@@ -714,6 +767,34 @@ void test_reliableAckStopsNormalPendingTransmission(void)
     TEST_ASSERT_EQUAL_UINT32(0, reliableShim->pendingCount());
 }
 
+void test_rebroadcast_normal_broadcast_is_relayed(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+
+    TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&p), "ordinary broadcast must be rebroadcast");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "exactly one packet should reach the radio");
+}
+
+void test_rebroadcast_no_lora_broadcast_is_not_relayed(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST_NO_LORA);
+
+    TEST_ASSERT_FALSE_MESSAGE(shim->perhapsRebroadcast(&p), "no-LoRa broadcast must not be rebroadcast");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "no packet should be handed to the radio at all");
+}
+
+void test_rebroadcast_declined_send_releases_packet(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    mockIface->declineAll = true;
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+
+    TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&p), "the rebroadcast must still be attempted");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
+}
+
 // ===========================================================================
 
 void setup()
@@ -785,6 +866,11 @@ void setup()
     RUN_TEST(test_eventPolicy_repeatedLocalPacketSuppressesCoordinateAckButKeepsTextAck);
     RUN_TEST(test_eventPolicy_seededRetrySuppressesTxUntilGateOff);
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
+
+    printf("\n=== rebroadcast of NODENUM_BROADCAST_NO_LORA ===\n");
+    RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
+    RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
+    RUN_TEST(test_rebroadcast_declined_send_releases_packet);
 
     int result = UNITY_END();
     airTimeFixture.reset();

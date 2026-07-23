@@ -10,11 +10,56 @@ env:
   LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
 
 jobs:
+  # Guard the registered native-suite total. `platformio test` discovers and runs whatever
+  # test_* directories exist, so it never notices when test/native-suite-count drifts from the
+  # actual directory count (a suite added without registering it, or the file left stale). That
+  # reconciliation only lives in bin/run-tests.sh, which CI does not invoke - so mirror the exact
+  # check here and fail the PR on a mismatch, keeping the manual count honest.
+  suite-count-check:
+    name: Native Suite Count
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Reconcile native-suite-count with test/ directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          count_file="test/native-suite-count"
+          if [[ ! -f $count_file ]]; then
+            echo "::error title=Missing native-suite-count::$count_file not found - it must record the number of test_* suite directories."
+            exit 1
+          fi
+          # Same canonical set as bin/run-tests.sh: directories named test_* directly under test/.
+          expected_count=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | wc -l)
+          canonical_count=$(tr -d '[:space:]' <"$count_file")
+          if ! [[ $canonical_count =~ ^[0-9]+$ ]]; then
+            echo "::error title=Invalid native-suite-count::$count_file must contain a single integer, got '$canonical_count'."
+            exit 1
+          fi
+          echo "test/ directories: $expected_count"
+          echo "native-suite-count: $canonical_count"
+          if [[ $expected_count -ne $canonical_count ]]; then
+            if [[ $expected_count -gt $canonical_count ]]; then
+              hint="a suite was added - bump $count_file to $expected_count"
+            else
+              hint="a suite was removed - lower $count_file to $expected_count"
+            fi
+            echo "::error title=native-suite-count mismatch::test/ has $expected_count suite directories but $count_file says $canonical_count ($hint)."
+            exit 1
+          fi
+          echo "native-suite-count matches the $expected_count suite directories."
+
   simulator-tests:
     name: Native Simulator Tests
     runs-on: ubuntu-latest
+    needs: suite-count-check
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
 
@@ -87,8 +132,9 @@ jobs:
   platformio-tests:
     name: Native PlatformIO Tests
     runs-on: ubuntu-latest
+    needs: suite-count-check
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
 
@@ -105,14 +151,90 @@ jobs:
       - name: Disable BUILD_EPOCH
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
-      - name: PlatformIO Tests
+      - name: Build test programs once
+        # One shared build of src + every test program. This is the single source build; gcov then
+        # accumulates coverage counts into this shared .pio/build/coverage/src as the chunks run.
+        run: platformio test -e coverage --without-testing
+
+      - name: Run tests one area at a time
+        shell: bash
         run: |
-          set -o pipefail
-          # Filter out SKIPPED summary rows for hardware variants that can't run on the
-          # native host. They flood the log and make it harder to spot real failures.
-          # The JUnit XML is written directly to testreport.xml before the pipe, so
-          # the test artifact is unaffected.
-          platformio test -e coverage -v --junit-output-path testreport.xml 2>&1 | grep -v "[[:space:]]SKIPPED$"
+          set -uo pipefail
+          # One runner, no matrix, no concurrency. Group the test_* suites by area and run each
+          # area sequentially, reusing the single build above (--without-building). Each area gets
+          # its own JUnit report and its own collapsible log, so a failure lands in a small named
+          # section instead of being buried past the log limit. Sequential runs share one build
+          # dir, so gcov coverage accumulates and the single capture in the next step has the union.
+
+          # Ordered area rules "name:ERE"; first match wins. Anything unmatched falls to "misc", so
+          # a newly added suite always runs even before it is placed. Add a suite to an area by
+          # extending that area's regex; add a new area by inserting a rule line.
+          area_rules=(
+            "admin:^test_(admin|pki)_"
+            "crypto:^test_(crypto|packet_signing)$"
+            "routing:^test_(mesh|nexthop|traceroute|hop|traffic|nodedb|warm)_"
+            "position:^test_position_"
+            "fuzz:^test_fuzz_"
+            "packets:^test_(packet|transmit|meshpacket)_"
+            "io:^test_(serial|stream|xmodem|http|mqtt)"
+          )
+
+          mapfile -t suites < <(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | sort)
+          declare -A group
+          for s in "${suites[@]}"; do
+            a="misc"
+            for rule in "${area_rules[@]}"; do
+              if [[ "$s" =~ ${rule#*:} ]]; then a="${rule%%:*}"; break; fi
+            done
+            group[$a]="${group[$a]:-} -f $s"
+          done
+
+          run_order=()
+          for rule in "${area_rules[@]}"; do run_order+=("${rule%%:*}"); done
+          run_order+=("misc")
+
+          fail=0
+          for a in "${run_order[@]}"; do
+            [ -n "${group[$a]:-}" ] || continue
+            echo "::group::area $a (${group[$a]# })"
+            # Capture platformio's real exit status (not grep's) via a log file, then show the log
+            # with the noisy per-variant SKIPPED rows filtered out.
+            if ! platformio test -e coverage --without-building -v ${group[$a]# } \
+                 --junit-output-path "testreport-$a.xml" > "area-$a.log" 2>&1; then
+              fail=1
+              echo "::error::area $a had test failures"
+            fi
+            grep -v "[[:space:]]SKIPPED$" "area-$a.log" || true
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: Merge per-area reports into testreport.xml
+        # Preserve the single-file JUnit contract that downstream consumers rely on
+        # (pr_tests.yml's summary and generate-reports' Test Report both read testreport.xml).
+        # The per-area split is only for readable logs; the report stays consolidated.
+        if: always() # run even when a chunk failed, so the report captures the failures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          out = ET.Element('testsuites')
+          for f in sorted(glob.glob('testreport-*.xml')):
+              try:
+                  root = ET.parse(f).getroot()
+              except ET.ParseError:
+                  continue
+              # PlatformIO writes a <testsuites> root; fold in a bare <testsuite> too, just in case.
+              out.extend(root.findall('testsuite') if root.tag == 'testsuites' else [root])
+          ET.ElementTree(out).write('testreport.xml', encoding='utf-8', xml_declaration=True)
+          PY
+
+      - name: Capture coverage information
+        if: always() # run this step even if previous step failed
+        run: |
+          sudo apt-get install -y lcov
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
+          sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
 
       - name: Event channel policy tests
         run: platformio test -e coverage-event-policy -v --junit-output-path event-policy-testreport.xml
@@ -124,13 +246,6 @@ jobs:
           name: platformio-test-report-${{ steps.version.outputs.long }}
           overwrite: true
           path: ./*testreport.xml
-
-      - name: Capture coverage information
-        if: always() # run this step even if previous step failed
-        run: |
-          sudo apt-get install -y lcov
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
-          sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
 
       - name: Save coverage information
         uses: actions/upload-artifact@v7
@@ -152,7 +267,7 @@ jobs:
       - platformio-tests
     if: always()
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Get release version string
         run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
@@ -187,9 +302,17 @@ jobs:
           merge-multiple: true
 
       - name: Generate Code Coverage Report
+        # Merge every tracefile the jobs produced: coverage_base.info (zeroed baseline),
+        # coverage_integration.info, and one coverage_tests_<chunk>.info per chunk. lcov
+        # sums hit counts across them, so the merged report is the union of all chunks -
+        # identical to running the whole suite in one job.
         run: |
           sudo apt-get install -y lcov
-          lcov --quiet --add-tracefile code-coverage-report/coverage_base.info --add-tracefile code-coverage-report/coverage_integration.info --add-tracefile code-coverage-report/coverage_tests.info --output-file code-coverage-report/coverage_src.info
+          args=()
+          for f in code-coverage-report/coverage_*.info; do
+            args+=(--add-tracefile "$f")
+          done
+          lcov --quiet "${args[@]}" --output-file code-coverage-report/coverage_src.info
           genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
       - name: Save Code Coverage Report

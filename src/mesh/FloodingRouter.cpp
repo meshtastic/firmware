@@ -68,6 +68,12 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 {
     // isRebroadcaster() is duplicated in perhapsRebroadcast(), but this avoids confusing log messages
     if (isRebroadcaster() && iface && p->hop_limit > 0) {
+        // Verify the replacement before deleting the valid lower-hop copy waiting in the TX queue.
+        // This is intentionally redundant with ReliableRouter's ingress gate: it keeps this helper
+        // safe if another caller is introduced later.
+        if (passesRoutingAuthGate(const_cast<meshtastic_MeshPacket *>(p)) != RoutingAuthVerdict::ACCEPT)
+            return true;
+
         // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
         // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
         uint8_t dropThreshold = p->hop_limit; // remove queued packets that have fewer hops remaining
@@ -75,8 +81,9 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Processing upgraded packet 0x%08x for rebroadcast with hop limit %d (dropping queued < %d)", p->id,
                       p->hop_limit, dropThreshold);
 
-            if (reprocessPacket(p))
-                perhapsRebroadcast(p);
+            if (!reprocessPacket(p))
+                return true;
+            perhapsRebroadcast(p);
 
             rxDupe++;
             // We already enqueued the improved copy, so make sure the incoming packet stops here.
@@ -89,29 +96,14 @@ bool FloodingRouter::perhapsHandleUpgradedPacket(const meshtastic_MeshPacket *p)
 
 bool FloodingRouter::reprocessPacket(const meshtastic_MeshPacket *p)
 {
+    if (p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
+        if (decodedState != DecodeState::DECODE_SUCCESS && decodedState != DecodeState::DECODE_OPAQUE)
+            return false;
+    }
+
     if (nodeDB)
         nodeDB->updateFrom(*p);
-
-    bool shouldDecode = false;
-#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
-    shouldDecode = true;
-#elif !MESHTASTIC_EXCLUDE_TRACEROUTE
-    shouldDecode = traceRouteModule != nullptr;
-#endif
-    if (shouldDecode && p->which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        // Duplicate handling can rebroadcast before the normal receive path. The
-        // event policy needs the portnum even when TraceRoute is excluded.
-        auto decodedState = perhapsDecode(const_cast<meshtastic_MeshPacket *>(p));
-        if (decodedState == DecodeState::DECODE_SUCCESS) {
-            // parsing was successful, print for debugging
-            printPacket("reprocessPacket(DUP)", p);
-        } else {
-            // Fatal decoding error, we can't do anything with this packet
-            LOG_WARN("FloodingRouter::reprocessPacket: decode error (state=%d, id=0x%08x, from=%u)",
-                     static_cast<int>(decodedState), p->id, getFrom(p));
-            return true;
-        }
-    }
 
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
     if (traceRouteModule && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&

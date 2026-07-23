@@ -247,19 +247,6 @@ static void test_private_channel_preserves_legacy_tx_and_rx_for_all_coordinate_p
     TEST_ASSERT_EQUAL_UINT32(kCoordinatePorts.size(), captureModule->packets.size());
 }
 
-static void test_pki_marked_rx_bypasses_event_gate_for_all_coordinate_ports()
-{
-    for (meshtastic_PortNum port : kCoordinatePorts) {
-        meshtastic_MeshPacket packet = makeDecodedPacket(port, kRemoteNode, kLocalNode, kEventChannel);
-        packet.pki_encrypted = true;
-        receivePacket(packet);
-    }
-
-    TEST_ASSERT_EQUAL_UINT32(kCoordinatePorts.size(), captureModule->packets.size());
-    for (const meshtastic_MeshPacket &packet : captureModule->packets)
-        TEST_ASSERT_TRUE(packet.pki_encrypted);
-}
-
 #if !(MESHTASTIC_EXCLUDE_PKI)
 static void test_tx_event_coordinate_that_uses_pki_reaches_radio()
 {
@@ -283,7 +270,7 @@ static void test_tx_event_coordinate_that_uses_pki_reaches_radio()
 }
 #endif
 
-static void test_opaque_tx_and_rx_are_not_misclassified_as_coordinates()
+static void test_opaque_tx_is_not_misclassified_as_coordinates()
 {
     meshtastic_MeshPacket *outgoing = testRouter->allocForSending();
     TEST_ASSERT_NOT_NULL(outgoing);
@@ -294,20 +281,6 @@ static void test_opaque_tx_and_rx_are_not_misclassified_as_coordinates()
 
     TEST_ASSERT_EQUAL_INT(ERRNO_OK, testRouter->send(outgoing));
     TEST_ASSERT_EQUAL_UINT32(1, captureRadio->packets.size());
-
-    meshtastic_MeshPacket opaque = meshtastic_MeshPacket_init_zero;
-    opaque.from = kRemoteNode;
-    opaque.to = NODENUM_BROADCAST;
-    opaque.id = 0x55667788;
-    opaque.channel = channels.getHash(kEventChannel);
-    opaque.hop_start = 3;
-    opaque.hop_limit = 3;
-    opaque.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-    opaque.encrypted.size = 0;
-    receivePacket(opaque);
-
-    TEST_ASSERT_EQUAL_UINT32(1, captureModule->packets.size());
-    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_encrypted_tag, captureModule->packets.front().which_payload_variant);
 }
 
 static void test_capture_endpoints_release_packet_pool_ownership()
@@ -420,11 +393,10 @@ EVENT_ROUTER_TEST_ENTRY void setup()
     RUN_TEST(test_tx_event_channel_enforces_compile_time_policy_for_all_coordinate_ports);
     RUN_TEST(test_rx_event_channel_enforces_compile_time_policy_for_all_coordinate_ports);
     RUN_TEST(test_private_channel_preserves_legacy_tx_and_rx_for_all_coordinate_ports);
-    RUN_TEST(test_pki_marked_rx_bypasses_event_gate_for_all_coordinate_ports);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_tx_event_coordinate_that_uses_pki_reaches_radio);
 #endif
-    RUN_TEST(test_opaque_tx_and_rx_are_not_misclassified_as_coordinates);
+    RUN_TEST(test_opaque_tx_is_not_misclassified_as_coordinates);
     RUN_TEST(test_capture_endpoints_release_packet_pool_ownership);
 
     exit(UNITY_END());

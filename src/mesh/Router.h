@@ -103,7 +103,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
-    virtual ErrorCode rawSend(meshtastic_MeshPacket *p);
 
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
@@ -121,6 +120,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * @return true to abandon the packet
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }
+
+    /** Relay an opaque packet without admitting it to local routing/history state. */
+    virtual bool relayOpaquePacket(const meshtastic_MeshPacket *) { return false; }
 
     /**
      * Determine if hop_limit should be decremented for a relay operation.
@@ -171,7 +173,8 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
-enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
+enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_OPAQUE, DECODE_FATAL, DECODE_POLICY_REJECT };
+enum class RoutingAuthVerdict { ACCEPT, OPAQUE_RELAY_ONLY, REJECT };
 
 /** FIXME - move this into a mesh packet class
  * Remove any encryption and decode the protobufs inside this packet (if necessary).
@@ -180,27 +183,33 @@ enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
  */
 DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
+/** Apply receive authentication before routing state mutation; unknown-channel packets may remain opaque relay-only. */
+RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p);
+#ifdef PIO_UNIT_TESTING
+uint32_t routingAuthEvaluationCount();
+void resetRoutingAuthEvaluationCount();
+#endif
+
 /** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
 
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-/** XEdDSA receive-side signature policy. When the packet carries a 64-byte signature *and* the
- * sender's public key is known, verify it: on success learn the sender's signer bit, on failure
- * drop. If the key is unknown the signature is left unverified and the packet passes. A signature
- * of any other non-zero length is treated as malformed and dropped. For unsigned packets, enforce
- * downgrade protection: drop a non-PKI broadcast from a known signer whose signed encoding would
- * still fit a LoRa frame (unicast, PKI, and oversized broadcasts always pass).
- *
- * The fit test sizes p->decoded with the real encoder, so it measures the fields the sender
- * encoded rather than any raw wire length.
- *
- * The caller MUST hold cryptLock: verification runs through the shared CryptoEngine key cache.
- * (perhapsDecode already holds it; other call sites must take it themselves.)
- *
- * @return false if the packet must be dropped.
- */
+/** Enforce the configured XEdDSA receive policy. The caller must hold cryptLock.
+ * Returns false when the packet must be dropped. */
 bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p);
+#endif
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+/**
+ * Would perhapsEncode() PKC-encrypt this outgoing packet? Callers that must know the encryption a
+ * packet will get before it is encoded (e.g. pinning a peer key at request time) have to ask this
+ * rather than inspect p, whose pki_encrypted/public_key fields are only populated on the RX path.
+ *
+ * @param chIndex the channel index p carries before encoding rewrites it to a hash.
+ * @param haveDestKey whether a public key for p->to was resolvable.
+ */
+bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, bool haveDestKey);
 #endif
 
 extern Router *router;
