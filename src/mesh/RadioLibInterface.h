@@ -81,7 +81,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with
      * this code for a long time.
      */
+    /* Build with -DMESHTASTIC_SYNCWORD_0x12 to use 0x12 instead of 0x2b.
+     * Required for SX1302 concentrator gateways: FRAME_SYNCH registers are 5-bit
+     * signed so 0x2b (PEAK2=22) overflows. 0x12 nodes cannot talk to stock 0x2b nodes. */
+#ifdef MESHTASTIC_SYNCWORD_0x12
+    const uint8_t syncWord = 0x12;
+#else
     const uint8_t syncWord = 0x2b;
+#endif
 
     float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
