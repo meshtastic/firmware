@@ -66,10 +66,15 @@ does not opt out keeps the historical behavior. `AdminModule::saveChanges`
 | `set_fixed_position` / `remove_fixed_position`                          | **No** (was yes)   | Rode `SEGMENT_CONFIG` only because `fixed_position` shares the Config file.                              |
 | `set_channel`                                                           | **Yes**            | Real frequency-slot/PSK change ([`:1445`](../src/modules/AdminModule.cpp#L1445)).                        |
 
-Why this matters beyond tidiness: the reconfigure is a live `setStandby()` + SPI reprogram run
-from the admin-message handler on the main task, while the radio is active - the exact
-sequence that crashed the WisMesh Tag on a favorite (#11146). Removing it for non-LoRa saves
-closes the rest of that crash class and
+Why this matters beyond tidiness: the reconfigure is a live `setStandby()` + SPI reprogram. It
+is _invoked_ from the admin-message handler on the main task (BLE `onWrite` only queues, so
+this is not the BLE callback thread), but the failure is cross-thread: the radio runs its own
+off-main worker (`RadioLibInterface`, a `NotifiedWorkerThread`) that also drives SPI under the
+shared, **non-recursive** `spiLock` (a FreeRTOS binary semaphore). The main-task reconfigure
+colliding with that worker over the lock / radio state locks the worker up, and the watchdog
+reboots the device - the crash seen on the WisMesh Tag favorite (#11146; same non-recursive
+`spiLock` hazard as #10705/#10728). Removing the reconfigure for non-LoRa saves closes the
+rest of that crash class and
 avoids a needless RX gap on the mesh radio.
 
 ---
@@ -211,9 +216,10 @@ use BLE only if you specifically want to reproduce the exact user-facing conditi
 
 ### 1. Radio-reload / crash validation (regression guard for `babeef08d`)
 
-Confirms the non-LoRa config saves no longer run the live radio reconfigure - the
-`setStandby()` + SPI reprogram (on the main task, while the radio is active) that rebooted the
-WisMesh Tag on a favorite (#11146).
+Confirms the non-LoRa config saves no longer run the live radio reconfigure - the main-task
+`setStandby()` + SPI reprogram that collided with the radio's off-main worker thread over the
+non-recursive `spiLock` and locked it up, tripping the watchdog reboot on the WisMesh Tag
+favorite (#11146).
 
 Perform each of: toggle Bluetooth `enabled`, change the WiFi PSK, rotate the security
 keypair, favorite/unfavorite a node.
