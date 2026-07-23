@@ -172,6 +172,13 @@ class HasBatteryLevel
 
     virtual bool isVbusIn() { return false; }
     virtual bool isCharging() { return false; }
+
+    /**
+     * Called when the charging state changes (external power connected or
+     * disconnected), so implementations can discard smoothing state that
+     * tracks the previous power state.
+     */
+    virtual void notifyChargingStateChanged() {}
 };
 #endif
 
@@ -351,6 +358,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 if (scaled > last_read_value)
                     last_read_value = scaled;
                 initial_read_done = true;
+            } else if (reseed_pending) {
+                // The charging state just changed, which steps the battery voltage
+                // sharply (charge voltage vs loaded/rested voltage). The previous
+                // filtered value tracks the old power state, so replace it instead
+                // of blending the step in over several reads.
+                last_read_value = scaled;
+                reseed_pending = false;
             } else {
                 // Already initialized - filter this reading
                 last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
@@ -523,6 +537,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return isVbusIn();
     }
 
+    /// Re-seed the smoothing filter with the next raw reading (and let that
+    /// reading happen immediately) so the reported voltage tracks the new
+    /// charging state within one poll instead of converging over several.
+    virtual void notifyChargingStateChanged() override
+    {
+        reseed_pending = true;
+        last_read_time_ms = 0;
+    }
+
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is
     /// pumping in power
@@ -537,6 +560,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // This value is over-written by the first ADC reading, it the voltage seems
     // reasonable.
     bool initial_read_done = false;
+    // Set when the charging state changes: the next ADC reading replaces the
+    // filtered value instead of being blended into it.
+    bool reseed_pending = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
 
@@ -890,6 +916,29 @@ void Power::readPowerStatus()
         isChargingNow = usbPowered = OptTrue;
 
 #endif
+
+    // A charging-state transition steps the battery voltage sharply (charge
+    // voltage vs loaded/rested voltage), but the analog reading is smoothed, so
+    // the reported voltage/SoC would otherwise keep tracking the old power state
+    // for several polls of this routine. Tell the sensor to drop its smoothing
+    // state and take a fresh reading now, so telemetry sent right after a
+    // plug/unplug reflects the new state within one poll.
+    static OptionalBool prevIsCharging = OptUnknown;
+    if (batteryLevel && hasBattery == OptTrue && isChargingNow != OptUnknown && prevIsCharging != OptUnknown &&
+        isChargingNow != prevIsCharging) {
+        LOG_INFO("Charging state changed, re-reading battery level");
+        batteryLevel->notifyChargingStateChanged();
+        batteryVoltageMv = batteryLevel->getBattVoltage();
+        int freshPercent = batteryLevel->getBatteryPercent();
+        if (freshPercent >= 0) {
+            batteryChargePercent = freshPercent;
+        } else {
+            batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
+                                               ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
+                                         0, 100);
+        }
+    }
+    prevIsCharging = isChargingNow;
 
     // Notify any status instances that are observing us
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
