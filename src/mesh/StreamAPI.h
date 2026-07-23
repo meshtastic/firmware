@@ -9,6 +9,10 @@
 // A To/FromRadio packet + our 32 bit header
 #define MAX_STREAM_BUF_SIZE (MAX_TO_FROM_RADIO_SIZE + sizeof(uint32_t))
 
+// Cap on one writeStream() slice: an uncapped dump never reaches loop(), so a board with a
+// hardware watchdog (RP2350 arms 8s) resets mid-dump.
+#define STREAM_WRITE_BUDGET_MSEC 100
+
 /**
  * A version of our 'phone' API that talks over a Stream.  So therefore well suited to use with serial links
  * or TCP connections.
@@ -64,10 +68,9 @@ class StreamAPI : public PhoneAPI
     int32_t readStream(const char *buf, uint16_t bufLen);
     int32_t handleRecStream(const char *buf, uint16_t bufLen);
 
-    /**
-     * call getFromRadio() and deliver encapsulated packets to the Stream
-     */
-    void writeStream();
+    /// Emit a slice of pending output. True asks the caller to come straight back; false covers
+    /// both a drained queue and backpressure, so it does not mean the queue is empty.
+    bool writeStream();
 
   protected:
     /**
