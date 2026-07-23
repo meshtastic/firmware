@@ -1050,6 +1050,7 @@ bool loadConfig(const char *configPath)
             }
             portduino_config.displayHeight = yamlConfig["Display"]["Height"].as<int>(0);
             portduino_config.displayWidth = yamlConfig["Display"]["Width"].as<int>(0);
+            portduino_config.displayZoom = yamlConfig["Display"]["Zoom"].as<float>(1.0);
 
             readGPIOFromYaml(yamlConfig["Display"]["DC"], portduino_config.displayDC, -1);
             readGPIOFromYaml(yamlConfig["Display"]["CS"], portduino_config.displayCS, -1);

@@ -149,6 +149,7 @@ extern struct portduino_config_struct {
     screen_modules displayPanel = no_screen;
     int displayWidth = 0;
     int displayHeight = 0;
+    float displayZoom = 1.0;
     bool displayRGBOrder = false;
     bool displayBacklightInvert = false;
     bool displayRotate = false;
@@ -446,6 +447,8 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "Width" << YAML::Value << displayWidth;
             if (displayHeight)
                 out << YAML::Key << "Height" << YAML::Value << displayHeight;
+            if (displayZoom != 1.0)
+                out << YAML::Key << "Zoom" << YAML::Value << displayZoom;
             if (displayRGBOrder)
                 out << YAML::Key << "RGBOrder" << YAML::Value << true;
             if (displayBacklightInvert)
@@ -460,7 +463,6 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "OffsetY" << YAML::Value << displayOffsetY;
 
             out << YAML::Key << "OffsetRotate" << YAML::Value << displayOffsetRotate;
-
             if (displayPanel == hub75) {
                 out << YAML::Key << "HUB75" << YAML::Value << YAML::BeginMap;
                 out << YAML::Key << "HardwareMapping" << YAML::Value << hub75_hardware_mapping;

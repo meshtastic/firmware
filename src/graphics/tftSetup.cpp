@@ -62,7 +62,7 @@ void tftSetup(void)
         if (portduino_config.displayPanel == sdl) {
             if (portduino_config.displayWidth && portduino_config.displayHeight)
                 displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::SDL, (uint16_t)portduino_config.displayWidth,
-                                                    (uint16_t)portduino_config.displayHeight);
+                                                    (uint16_t)portduino_config.displayHeight, portduino_config.displayZoom);
             else
                 displayConfig.device(DisplayDriverConfig::device_t::SDL);
         } else if (portduino_config.displayPanel == x11) {
