@@ -46,7 +46,7 @@ class MotionSensor
     // Public so an optional on-screen sensor debug readout can read them. Return false if nothing published yet.
     static bool getLatestCompassAccelSample(float &x, float &y, float &z, uint32_t &ageMs);
     static bool getLatestCompassMagSample(float &x, float &y, float &z, uint32_t &ageMs);
-  
+
     // True if this sensor produces the compass heading (screen->setHeading()) in runOnce().
     // Combined accel+magnetometer parts (e.g. BMX160, ICM20948) and standalone magnetometers
     // handled by the accelerometer thread (e.g. BMM150) override this. Used to avoid halting
