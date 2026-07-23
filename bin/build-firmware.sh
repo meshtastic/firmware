@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Example: ./bin/build-firmware.sh heltec-mesh-node-t114 nrf52
 
 export PIP_BREAK_SYSTEM_PACKAGES=1
 
