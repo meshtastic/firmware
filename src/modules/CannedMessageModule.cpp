@@ -2267,12 +2267,7 @@ bool CannedMessageModule::saveProtoForModule()
 {
     bool okay = true;
 
-#ifdef FSCom
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
-#endif
-
+    // "/prefs" is created by SafeFile (openFile) inside saveProto.
     okay &= nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
                               &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 

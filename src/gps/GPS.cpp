@@ -666,17 +666,13 @@ bool GPS::saveProbeCache() const
         return false;
     }
 
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
     GPSProbeCacheRecord record = {
         GPS_PROBE_CACHE_MAGIC, GPS_PROBE_CACHE_VERSION, 0, static_cast<uint32_t>(detectedBaud), static_cast<uint8_t>(gnssModel),
     };
 
     auto file = SafeFile(GPS_PROBE_CACHE_FILE, true);
-    spiLock->lock();
+    // SafeFile::write takes spiLock internally; don't hold it here (non-recursive lock).
     const size_t written = file.write(reinterpret_cast<const uint8_t *>(&record), sizeof(record));
-    spiLock->unlock();
     return (written == sizeof(record)) && file.close();
 #else
     return false;

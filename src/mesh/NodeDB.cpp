@@ -2802,12 +2802,7 @@ bool NodeDB::saveChannelsToDisk()
         return false;
     }
 
-#ifdef FSCom
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
-#endif
-
+    // Directory is created by SafeFile (openFile) inside saveProto.
     return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
 
@@ -2821,11 +2816,6 @@ bool NodeDB::saveDeviceStateToDisk()
         return false;
     }
 
-#ifdef FSCom
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
-#endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
     return saveProto(deviceStateFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate, true);
@@ -2856,12 +2846,6 @@ bool NodeDB::saveNodeDatabaseToDisk()
         LOG_DEBUG("Deferring NodeDB save: xmodem transfer in progress");
         return true;
     }
-#endif
-
-#ifdef FSCom
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
 #endif
 
     // Project the maps into the on-disk vectors just before encoding; cleared
@@ -2975,11 +2959,6 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
 #endif
 
     bool success = true;
-#ifdef FSCom
-    spiLock->lock();
-    FSCom.mkdir("/prefs");
-    spiLock->unlock();
-#endif
 
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
@@ -4148,9 +4127,7 @@ bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
         size_t backupSize;
         pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, &backup);
 
-        spiLock->lock();
-        FSCom.mkdir("/backups");
-        spiLock->unlock();
+        // "/backups" is created by SafeFile (openFile) inside saveProto.
         success = saveProto(backupFileName, backupSize, &meshtastic_BackupPreferences_msg, &backup);
 
         if (success) {

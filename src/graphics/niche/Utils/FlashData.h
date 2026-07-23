@@ -107,19 +107,16 @@ template <typename T> class FlashData
         return okay;
     }
 
-    // Save module's custom data (settings?) to flash. Doesn't use protobufs
-    // Takes the firmware's SPI lock, in case the files are stored on SD card
-    // Need to lock and unlock around specific FS methods, as the SafeFile class takes the lock for itself internally.
+    // Save module's custom data (settings?) to flash. Doesn't use protobufs.
+    // SafeFile (constructor/write/close) takes the firmware's SPI lock for itself internally
+    // (relevant when files are on an SD card), so we must not hold it across those calls.
     static void save(T *data, const char *label)
     {
         // Get a filename based on the label
         std::string filename = getFilename(label);
 
 #ifdef FSCom
-        spiLock->lock();
-        FSCom.mkdir("/NicheGraphics");
-        spiLock->unlock();
-
+        // "/NicheGraphics" is created by SafeFile (openFile) below.
         auto f = SafeFile(filename.c_str(), true); // "true": full atomic. Write new data to temp file, then rename.
 
         LOG_INFO("Saving %s", filename.c_str());
@@ -127,10 +124,8 @@ template <typename T> class FlashData
         // Calculate a hash of the data
         uint32_t hash = getHash(data);
 
-        spiLock->lock();
-        f.write((uint8_t *)data, sizeof(T));     // Write the actual data
+        f.write((uint8_t *)data, sizeof(T));     // Write the actual data (SafeFile::write takes spiLock internally)
         f.write((uint8_t *)&hash, sizeof(hash)); // Append the hash
-        spiLock->unlock();
 
         bool writeSucceeded = f.close();
 
