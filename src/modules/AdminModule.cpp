@@ -901,6 +901,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_position_tag:
         LOG_INFO("Set config: Position");
         config.has_position = true;
+        // No-op set (clients routinely re-push identical config) must not reboot. Whole-struct memcmp
+        // fails safe: any real field change still reboots; only a byte-identical set is spared. Tier 2
+        // narrows this further to reboot only on boot-only fields (GPIO/GPS). See plan-narrow-reboot-trigger.
+        if (memcmp(&config.position, &c.payload_variant.position, sizeof(config.position)) == 0)
+            requiresReboot = false;
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
         // clear the stored position since it may not get updated
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
@@ -936,6 +941,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_network_tag: {
         LOG_INFO("Set config: WiFi");
         config.has_network = true;
+        // No-op set must not reboot; any real change still restarts the network stack. memcmp fails safe.
+        if (memcmp(&config.network, &c.payload_variant.network, sizeof(config.network)) == 0)
+            requiresReboot = false;
         char prevPsk[sizeof(config.network.wifi_psk)];
         memcpy(prevPsk, config.network.wifi_psk, sizeof(prevPsk));
         config.network = c.payload_variant.network;
@@ -1117,6 +1125,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_bluetooth_tag:
         LOG_INFO("Set config: Bluetooth");
         config.has_bluetooth = true;
+        // No-op set must not reboot the very BLE link the phone is using; any real change still reboots.
+        if (memcmp(&config.bluetooth, &c.payload_variant.bluetooth, sizeof(config.bluetooth)) == 0)
+            requiresReboot = false;
         config.bluetooth = c.payload_variant.bluetooth;
         break;
     case meshtastic_Config_security_tag: {

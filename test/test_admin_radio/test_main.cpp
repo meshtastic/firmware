@@ -29,6 +29,9 @@
 // hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
 extern uint32_t hash(const char *str);
 
+// Set by AdminModule::reboot(); the reboot-gating tests assert on it (0 == no reboot scheduled).
+extern uint32_t rebootAtMsec;
+
 // Every client notification the AdminModule emits flows through sendClientNotification();
 // capture each formatted message so the warning/coalescing tests can assert on the exact
 // set of messages produced by a sequence of admin messages. This shadows test/support/MockMeshService.h's
@@ -1816,6 +1819,85 @@ static void test_reloadConfig_radioAffectedFalse_skipsReload()
 }
 
 // -----------------------------------------------------------------------
+// handleSetConfig() reboot gating (Tier 1: no-op sets must not reboot)
+//
+// position/network/bluetooth used to reboot on *every* set, including a client re-pushing
+// byte-identical config. A no-op set must now leave rebootAtMsec unset; any real change still
+// schedules the reboot exactly as before. See plan-narrow-reboot-trigger.md. reboot() only
+// arms rebootAtMsec (it does not exit), so that is the signal we assert on.
+// -----------------------------------------------------------------------
+
+static void test_setConfigPosition_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position; // byte-identical to current
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// A boot-only field (GPIO) must still reboot - this stays true through Tier 2.
+static void test_setConfigPosition_gpioChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = config.position.rx_gpio + 1;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigNetwork_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigNetwork_realChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    c.payload_variant.network.wifi_enabled = !config.network.wifi_enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigBluetooth_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigBluetooth_realChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    c.payload_variant.bluetooth.enabled = !config.bluetooth.enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -1967,6 +2049,12 @@ void setup()
     RUN_TEST(test_setConfigLora_stillTriggersRadioReload);
     RUN_TEST(test_reloadConfig_defaultRadioAffected_stillReloads);
     RUN_TEST(test_reloadConfig_radioAffectedFalse_skipsReload);
+    RUN_TEST(test_setConfigPosition_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpioChange_schedulesReboot);
+    RUN_TEST(test_setConfigNetwork_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigNetwork_realChange_schedulesReboot);
+    RUN_TEST(test_setConfigBluetooth_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigBluetooth_realChange_schedulesReboot);
 
     exit(UNITY_END());
 }
