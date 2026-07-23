@@ -41,9 +41,8 @@ bool HUB75Display::connect()
     cfg.i2sspeed = HUB75_I2S_CFG::HZ_8M; // timing headroom (signal integrity)
     cfg.latch_blanking = 4;              // clean row transitions
     cfg.clkphase = false;                // inverted clock phase: fixes 1px skew of lower half
-    cfg.double_buff = false;             // single buffer: halves the internal-SRAM DMA
-                                         // footprint. display() draws directly into the
-                                         // live buffer with a dirty-diff
+    cfg.double_buff = false;             // single buffer halves the internal-SRAM DMA
+                                         // footprint; display() dirty-diffs into the live buffer
 
     matrix = new MatrixPanel_I2S_DMA(cfg);
     bool ok = matrix->begin();
