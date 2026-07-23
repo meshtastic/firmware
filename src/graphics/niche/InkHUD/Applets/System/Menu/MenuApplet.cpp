@@ -343,6 +343,7 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     }
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+    // TODO(radioAffected): audit
     service->reloadConfig(changes);
 
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
@@ -357,6 +358,7 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
 
+    // TODO(radioAffected): audit
     service->reloadConfig(SEGMENT_CONFIG);
 
     // Notify UI that changes are being applied
@@ -374,6 +376,7 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     config.lora.modem_preset = preset;
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
+    // TODO(radioAffected): audit
     service->reloadConfig(SEGMENT_CONFIG);
 
     // Notify UI that changes are being applied
@@ -385,6 +388,7 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
 static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
 {
     nodeDB->saveToDisk(changes);
+    // TODO(radioAffected): audit
     service->reloadConfig(changes);
 
     if (reboot) {
@@ -450,6 +454,7 @@ static void applyTimezone(const char *tz)
     setenv("TZ", config.device.tzdef, 1);
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
+    // TODO(radioAffected): audit
     service->reloadConfig(SEGMENT_CONFIG);
 }
 
@@ -615,6 +620,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             break;
         }
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        // TODO(radioAffected): audit
         service->reloadConfig(SEGMENT_CONFIG);
 #endif
         break;
@@ -1068,6 +1074,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.uplink_enabled = !ch.settings.uplink_enabled;
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        // TODO(radioAffected): radio-affecting
         service->reloadConfig(SEGMENT_CHANNELS);
         break;
     }
@@ -1076,6 +1083,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.downlink_enabled = !ch.settings.downlink_enabled;
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        // TODO(radioAffected): radio-affecting
         service->reloadConfig(SEGMENT_CHANNELS);
         break;
     }
@@ -1092,6 +1100,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             ch.settings.module_settings.position_precision = 13; // default
 
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        // TODO(radioAffected): radio-affecting
         service->reloadConfig(SEGMENT_CHANNELS);
         break;
     }
@@ -1112,6 +1121,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
 
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
+        // TODO(radioAffected): radio-affecting
         service->reloadConfig(SEGMENT_CHANNELS);
         break;
     }
