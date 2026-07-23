@@ -717,6 +717,21 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     // wifi
     out += ",\"wifi\":{\"ip\":";
     out += jsonEscape(wifiIP);
+#ifdef ARCH_ESP32
+    if (config.network.ipv6_enabled) {
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        String wifiIPv6LocalString = WiFi.linkLocalIPv6().toString();
+        String wifiIPv6GlobalString = WiFi.globalIPv6().toString();
+#else
+        String wifiIPv6LocalString = WiFi.localIPv6().toString();
+        String wifiIPv6GlobalString = GlobalIPv6().toString();
+#endif
+        out += ",\"ipv6_global\":";
+        out += jsonEscape(wifiIPv6GlobalString.c_str());
+        out += ",\"ipv6_local\":";
+        out += jsonEscape(wifiIPv6LocalString.c_str());
+    }
+#endif
     out += ",\"rssi\":";
     out += jsonNum(WiFi.RSSI());
     out += "}";
