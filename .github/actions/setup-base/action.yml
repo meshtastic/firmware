@@ -16,7 +16,7 @@ runs:
         sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev libjsoncpp-dev lsb-release
 
     - name: Setup Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7.0.0
       with:
         python-version: 3.x
         cache: pip
