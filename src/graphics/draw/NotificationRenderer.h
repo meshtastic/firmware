@@ -39,7 +39,6 @@ class NotificationRenderer
     static BannerFont alertBannerLineFonts[MAX_LINES + 1];
     static void parseBannerMessageWithFonts(const char *message);
     static void resetBanner();
-    static void showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs);
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);

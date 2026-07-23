@@ -8,15 +8,16 @@
  * The RangeTestModule class is an OSThread that runs the module.
  * The RangeTestModuleRadio class handles sending and receiving packets.
  */
-#include "RangeTestModule.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RangeTestModule.h"
 #include "Router.h"
 #include "SPILock.h"
 #include "airtime.h"
-#include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include <Arduino.h>
@@ -114,6 +115,8 @@ int32_t RangeTestModule::runOnce()
 void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = dest;
     p->decoded.want_response = wantReplies;
     p->hop_limit = 0;
@@ -351,3 +354,5 @@ bool RangeTestModuleRadio::removeFile()
     return 0;
 #endif
 }
+
+#endif // !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS

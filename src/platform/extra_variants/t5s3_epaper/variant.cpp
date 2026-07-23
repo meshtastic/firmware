@@ -36,7 +36,7 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
 
         // Check whether a system applet (e.g. menu) is currently handling input
         bool systemHandlingInput = false;
-        for (NicheGraphics::InkHUD::SystemApplet *sa : inkhud->systemApplets) {
+        for (const NicheGraphics::InkHUD::SystemApplet *sa : inkhud->systemApplets) {
             if (sa->handleInput) {
                 systemHandlingInput = true;
                 break;

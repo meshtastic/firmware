@@ -1,5 +1,6 @@
 #include "AdminModule.h"
 #include "Channels.h"
+#include "CryptoEngine.h"
 #include "DisplayFormatters.h"
 #include "HardwareRNG.h"
 #include "MeshService.h"
@@ -815,6 +816,23 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
 }
 #endif
 
+// A "regenerate keys" client sends a blank SecurityConfig holding only the new private key, rather than the
+// config it read from us. Detect that shape - new private key, every other field at its proto default - so it
+// isn't mistaken for "and clear everything else".
+static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incoming,
+                                  const meshtastic_Config_SecurityConfig &current)
+{
+    if (incoming.private_key.size != 32)
+        return false;
+    if (current.private_key.size == 32 && memcmp(incoming.private_key.bytes, current.private_key.bytes, 32) == 0)
+        return false;
+
+    return incoming.admin_key_count == 0 && !incoming.is_managed && !incoming.serial_enabled && !incoming.debug_log_api_enabled &&
+           !incoming.admin_channel_enabled &&
+           incoming.packet_signature_policy ==
+               meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+}
+
 void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 {
     auto changes = SEGMENT_CONFIG;
@@ -911,11 +929,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             config.power.on_battery_shutdown_after_secs = 30;
         }
         break;
-    case meshtastic_Config_network_tag:
+    case meshtastic_Config_network_tag: {
         LOG_INFO("Set config: WiFi");
         config.has_network = true;
+        char prevPsk[sizeof(config.network.wifi_psk)];
+        memcpy(prevPsk, config.network.wifi_psk, sizeof(prevPsk));
         config.network = c.payload_variant.network;
+        writeSecret(config.network.wifi_psk, sizeof(config.network.wifi_psk), prevPsk);
         break;
+    }
     case meshtastic_Config_display_tag:
         LOG_INFO("Set config: Display");
         config.has_display = true;
@@ -1104,6 +1126,26 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             incoming.private_key = config.security.private_key;
             incoming.public_key = config.security.public_key;
         }
+        // Rotating the keypair must not drop the admin keys - that locks the owner out of remote admin with no
+        // recourse but a physical connection. Clearing admin keys still works via a SET that leaves the private
+        // key alone and sends an empty list.
+        if (isBareKeypairRotation(incoming, config.security)) {
+            LOG_INFO("Security set is a bare keypair rotation; preserving remaining security config");
+            meshtastic_Config_SecurityConfig rotated = config.security;
+            rotated.public_key = incoming.public_key; // usually empty; derived from the private key below
+            rotated.private_key = incoming.private_key;
+            incoming = rotated;
+        }
+#if MESHTASTIC_EXCLUDE_PKI || MESHTASTIC_EXCLUDE_XEDDSA
+        if (incoming.packet_signature_policy !=
+            meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE) {
+            incoming.packet_signature_policy =
+                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+            const char *warning = "Packet authenticity policy is unavailable on this firmware build";
+            LOG_WARN(warning);
+            sendWarning(warning);
+        }
+#endif
         config.security = incoming;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // First provisioning (no key) generates one; a private key supplied without its public key derives it.
@@ -1166,7 +1208,12 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         // Disable Bluetooth to prevent interference during MQTT configuration
         disableBluetooth();
         moduleConfig.has_mqtt = true;
-        moduleConfig.mqtt = c.payload_variant.mqtt;
+        {
+            char prevPass[sizeof(moduleConfig.mqtt.password)];
+            memcpy(prevPass, moduleConfig.mqtt.password, sizeof(prevPass));
+            moduleConfig.mqtt = c.payload_variant.mqtt;
+            writeSecret(moduleConfig.mqtt.password, sizeof(moduleConfig.mqtt.password), prevPass);
+        }
 #endif
         break;
     case meshtastic_ModuleConfig_serial_tag:
@@ -1389,6 +1436,9 @@ void AdminModule::handleGetOwner(const meshtastic_MeshPacket &req)
         res.which_payload_variant = meshtastic_AdminMessage_get_owner_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
+        if (!myReply) {
+            return;
+        }
         if (req.pki_encrypted) {
             myReply->pki_encrypted = true;
         }
@@ -1420,8 +1470,9 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
             LOG_INFO("Get config: Network");
             res.get_config_response.which_payload_variant = meshtastic_Config_network_tag;
             res.get_config_response.payload_variant.network = config.network;
-            writeSecret(res.get_config_response.payload_variant.network.wifi_psk,
-                        sizeof(res.get_config_response.payload_variant.network.wifi_psk), config.network.wifi_psk);
+            if (req.from != 0)
+                strncpy(res.get_config_response.payload_variant.network.wifi_psk, secretReserved,
+                        sizeof(res.get_config_response.payload_variant.network.wifi_psk));
             break;
         case meshtastic_AdminMessage_ConfigType_DISPLAY_CONFIG:
             LOG_INFO("Get config: Display");
@@ -1472,6 +1523,9 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         res.which_payload_variant = meshtastic_AdminMessage_get_config_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
+        if (!myReply) {
+            return;
+        }
         if (req.pki_encrypted) {
             myReply->pki_encrypted = true;
         }
@@ -1489,6 +1543,9 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             configName = "MQTT";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
             res.get_module_config_response.payload_variant.mqtt = moduleConfig.mqtt;
+            if (req.from != 0)
+                strncpy(res.get_module_config_response.payload_variant.mqtt.password, secretReserved,
+                        sizeof(res.get_module_config_response.payload_variant.mqtt.password));
             break;
         case meshtastic_AdminMessage_ModuleConfigType_SERIAL_CONFIG:
             configName = "Serial";
@@ -1581,6 +1638,9 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
         res.which_payload_variant = meshtastic_AdminMessage_get_module_config_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
+        if (!myReply) {
+            return;
+        }
         if (req.pki_encrypted) {
             myReply->pki_encrypted = true;
         }
@@ -1608,6 +1668,9 @@ void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &r
     }
     setPassKey(&r);
     myReply = allocDataProtobuf(r);
+    if (!myReply) {
+        return;
+    }
     if (req.pki_encrypted) {
         myReply->pki_encrypted = true;
     }
@@ -1627,6 +1690,9 @@ void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
     r.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_response_tag;
     setPassKey(&r);
     myReply = allocDataProtobuf(r);
+    if (!myReply) {
+        return;
+    }
     if (req.pki_encrypted) {
         myReply->pki_encrypted = true;
     }
@@ -1702,6 +1768,9 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
     setPassKey(&r);
     myReply = allocDataProtobuf(r);
+    if (!myReply) {
+        return;
+    }
     if (req.pki_encrypted) {
         myReply->pki_encrypted = true;
     }
@@ -1716,6 +1785,9 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
         r.which_payload_variant = meshtastic_AdminMessage_get_channel_response_tag;
         setPassKey(&r);
         myReply = allocDataProtobuf(r);
+        if (!myReply) {
+            return;
+        }
         if (req.pki_encrypted) {
             myReply->pki_encrypted = true;
         }
@@ -1728,6 +1800,9 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
     r.which_payload_variant = meshtastic_AdminMessage_get_ui_config_response_tag;
     r.get_ui_config_response = uiconfig;
     myReply = allocDataProtobuf(r);
+    if (!myReply) {
+        return;
+    }
     if (req.pki_encrypted) {
         myReply->pki_encrypted = true;
     }
@@ -1822,8 +1897,14 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
     if (!sessionPasskeyValid || !Throttle::isWithinTimespanMs(session_time, 150 * 1000UL)) {
         // Session passkey authenticates admin replies, so it must be unpredictable: prefer the
         // hardware RNG, falling back to the seeded CSPRNG only when no hardware source exists.
-        if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
-            CryptRNG.rand(session_passkey, sizeof(session_passkey));
+        // Hold cryptLock like the signing path does: this runs on the admin receive path, which on
+        // nRF52 is the BLE task, and the fill toggles the CC310 that packet crypto also uses while
+        // the CryptRNG state is shared with signing.
+        {
+            concurrency::LockGuard g(cryptLock);
+            if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
+                CryptRNG.rand(session_passkey, sizeof(session_passkey));
+        }
         session_time = millis();
         sessionPasskeyValid = true;
     }
@@ -1904,7 +1985,15 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     if (!responseVariant)
         return; // not a getter whose response we can pair
 
-    const bool keyValid = p.pki_encrypted && p.public_key.size == 32;
+    // Pin the key perhapsEncode will actually encrypt to, resolved the same way it resolves it.
+    // p.public_key is NOT it: nothing populates that field on the outgoing path (only perhapsDecode
+    // sets it, on RX), so reading it here pinned nothing and left `from` as the sole check.
+    bool keyValid = false;
+    meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    const bool haveDestKey = nodeDB->copyPublicKey(p.to, destKey);
+    keyValid = haveDestKey && wouldEncryptWithPKC(&p, p.channel, haveDestKey);
+#endif
 
     // One entry per request (a client sends N indexed get_channel requests, each answered once, so
     // entries must not merge). Free slot, else evict the oldest by rollover-safe elapsed time.
@@ -1923,6 +2012,7 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
     }
 
     slot->to = p.to;
+    slot->requestId = p.id;
     slot->sentAtMs = millis();
     slot->expectedResponse = responseVariant;
     slot->moduleConfigType = admin.which_payload_variant == meshtastic_AdminMessage_get_module_config_request_tag
@@ -1930,7 +2020,7 @@ void AdminModule::noteOutgoingAdminRequest(const meshtastic_MeshPacket &p)
                                  : 0;
     slot->keyValid = keyValid;
     if (keyValid)
-        memcpy(slot->key, p.public_key.bytes, 32);
+        memcpy(slot->key, destKey.bytes, 32);
     else
         memset(slot->key, 0, 32);
     LOG_DEBUG("Admin request sent to 0x%08x, expecting its response", p.to);
@@ -1942,6 +2032,11 @@ bool AdminModule::responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t
     // unpinned one still authorizes the response even if a pinned one does not.
     for (auto &o : outstandingAdminRequests) {
         if (o.to != mp.from || o.expectedResponse != responseVariant)
+            continue;
+        // mp.from is unauthenticated, so also require the response to echo our request's packet id
+        // (setReplyTo puts it in decoded.request_id). A blind injector must now guess it. Id 0 is
+        // no token at all - an omitted request_id decodes to 0 - so such a slot never matches.
+        if (o.requestId == 0 || mp.decoded.request_id != o.requestId)
             continue;
         if (!Throttle::isWithinTimespanMs(o.sentAtMs, kOutstandingAdminRequestMs)) {
             o.to = 0; // lapsed; free the slot and keep looking for another live match
