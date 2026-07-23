@@ -19,13 +19,6 @@
 // In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
 #define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
 
-// MESHTASTIC_LBT_CAD_TO_RX: define (via build_flags) to enable two LBT-audit fixes on stock RadioLib -
-// #3 (CAD->RX handoff) and #6 (ISR_RX re-arm). Both avoid the standby() that startReceive() forces (which
-// aborts an in-flight reception): #3 exits CAD straight into RX (GOTO_RX) with the RX IRQs pre-mapped in
-// the scan config, then hands off in place; #6 just re-attaches the MCU ISR (continuous RX never left RX,
-// readData() does not standby). Left UNDEFINED by default: needs on-hardware validation and assumes
-// continuous RX. See .notes/lbt (pr-11137-coderabbit-review.md, lbt-radiolib-requirements.md).
-
 #define AGC_RESET_INTERVAL_MS (60 * 1000) // 60 seconds
 
 /**
@@ -198,6 +191,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Subclasses must override and call this base method
      */
     virtual void startReceive();
+
+    /**
+     * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Default does a full
+     * startReceive() (standby + re-arm) - correct for any chip that leaves RX to scan. Chips that stay in
+     * RX (SX126x: CAD GOTO_RX handoff, or continuous RX after readData() which does not standby) override
+     * this to just re-attach the MCU ISR, so a reception already in flight is not aborted.
+     */
+    virtual void rearmReceive() { startReceive(); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() = 0;

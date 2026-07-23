@@ -420,16 +420,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     case ISR_RX:
         handleReceiveInterrupt();
-#ifdef MESHTASTIC_LBT_CAD_TO_RX
-        // Finding #6: in continuous RX the modem never left RX - readData() does not standby - so just
-        // re-attach the MCU ISR that isrLevel0Common() detached on entry. No standby and no re-issued
-        // SetRx, so a second packet already arriving on-chip is not aborted. (Assumes continuous RX; the
-        // default preset degenerates to it. HW validation owed - see .notes/lbt.)
-        enableInterrupt(isrRxLevel0);
-        RadioLibInterface::startReceive(); // base bookkeeping only (isReceiving + powerMon)
-#else
-        startReceive();
-#endif
+        // Finding #6: re-arm for the next packet. On SX126x rearmReceive() re-attaches the ISR without a
+        // standby - continuous RX never left RX and readData() does not standby, so a second packet already
+        // arriving is not aborted; every other chip falls back to a full startReceive().
+        rearmReceive();
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
@@ -463,23 +457,15 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay();
 #endif
                 } else {
-                    // Listen-before-talk: a CAD preamble scan immediately before we key up.
-                    // isChannelActive() reads (and, under MESHTASTIC_LBT_CAD_TO_RX, leaves) the radio in
-                    // the state the #3 handoff below expects.
+                    // Listen-before-talk: a CAD preamble scan immediately before we key up. On a busy
+                    // channel isChannelActive() leaves the radio armed for RX - SX126x hands off in place
+                    // via CAD GOTO_RX; other chips sit in standby after the scan.
                     if (isChannelActive()) { // currently traffic on the channel?
-#ifndef MESHTASTIC_LBT_CAD_TO_RX
-                        // Finding #1: re-arm unconditionally so we keep listening on the channel we are
-                        // deferring on. The old `!hasTargetRadioSettings(txp)` guard skipped this for
-                        // beacon-target packets, which could leave the node deaf (on the home config, when
-                        // the beacon target coincides with it) until the next TX cycle. A beacon's job is
-                        // to get a packet out, but it should still mirror the main path and keep listening
-                        // while it waits to key up.
-                        startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
-#else
-                        // Finding #3: the chip is already in RX - isChannelActive() did the CAD->RX handoff
-                        // in place on detection. A startReceive() here would standby and abort that
-                        // reception, so leave it be.
-#endif
+                        // Finding #1: re-arm unconditionally (no beacon-target skip) so we keep listening on
+                        // the channel we are deferring on - the old guard could leave a beacon node deaf on
+                        // its home config until the next TX cycle. rearmReceive() is a no-standby ISR
+                        // re-attach on SX126x (chip already in RX) and a full startReceive() elsewhere.
+                        rearmReceive();
                         setTransmitDelay();
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and

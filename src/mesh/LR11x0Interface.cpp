@@ -303,14 +303,8 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
 
     setStandby();
     result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED) {
-#ifdef MESHTASTIC_LBT_CAD_TO_RX
-        // onNotify skips the post-CAD re-arm when the flag is on (SX126x hands off in place); LR11x0 does
-        // not, so re-arm here to leave the chip receiving. No CAD->RX benefit on LR11x0, but no regression.
-        startReceive();
-#endif
-        return true;
-    }
+    if (result == RADIOLIB_LORA_DETECTED)
+        return true; // caller re-arms via rearmReceive() (LR11x0 uses the default full startReceive())
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
