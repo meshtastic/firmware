@@ -87,6 +87,7 @@
 #define TFT_DC 16  // pg1: OLED_DC=GPIO16
 #define TFT_BL 6   // pg1: OLED_BL=GPIO6 (backlight PWM)
 #define TFT_RST -1 // panel reset is EXIO1 on the expander, toggled in mcp23017EarlyInit()
+#define HAS_SPI_TFT 1 // main.cpp keys SPI-TFT Screen creation on this since #10803
 #define USE_TFTDISPLAY 1
 
 #define SPI_FREQUENCY 75000000
