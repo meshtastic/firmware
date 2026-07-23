@@ -277,6 +277,8 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
+// esp_task_wdt_init returns an unknown error, so skip it on ESP32H2
+#ifndef CONFIG_IDF_TARGET_ESP32H2
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
     const esp_task_wdt_config_t wdt_config = {
         .timeout_ms = APP_WATCHDOG_SECS * 1000,
@@ -302,7 +304,7 @@ void esp32Setup()
         res = esp_task_wdt_add(NULL);
     }
     assert(res == ESP_OK);
-
+#endif
 #if HAS_32768HZ
     enableSlowCLK();
 #endif
@@ -311,7 +313,9 @@ void esp32Setup()
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
+#ifndef CONFIG_IDF_TARGET_ESP32H2
     esp_task_wdt_reset(); // service our app level watchdog
+#endif
 
     // for debug printing
     // radio.radioIf.canSleep();
@@ -344,9 +348,10 @@ void cpuDeepSleep(uint32_t msecToWake)
         13,
 #endif
         34, 35, 37};
-
+#ifndef CONFIG_IDF_TARGET_ESP32H2
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
+#endif
 #endif
 
         // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
