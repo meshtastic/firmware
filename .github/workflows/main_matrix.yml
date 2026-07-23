@@ -215,7 +215,6 @@ jobs:
       push: false
 
   gather-artifacts:
-    # trunk-ignore(checkov/CKV2_GHA_1)
     if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: false
