@@ -184,9 +184,58 @@ Native coverage lives in `test/test_admin_radio/test_main.cpp`:
 The harness defers `reboot()` to `rebootAtMsec` (it does not exit), which is the signal the
 reboot tests assert on.
 
-**Hardware pass (outstanding):** the only reason to touch a real node now is to confirm
-whether the GPS-timing position fields (item 3 above) apply live, so they can be moved off the
-reboot path. Do not reclassify them on native evidence alone.
+Native tests cannot observe the actual side effects - the live SX126x SPI sequence and a real
+reboot don't happen in the host build - so the two claims that matter most (the crash is gone;
+"live" fields really apply without a restart) require hardware. See below.
+
+---
+
+## Hardware testing
+
+Run against a real node through the
+[meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) harness
+(`MESHTASTIC_FIRMWARE_ROOT` → this checkout), with a BLE client connected **for the whole
+test** and the serial log open - the connected-BLE state is what made the original bug fire,
+so it must be held throughout. A nRF52840 SX126x board (e.g. WisMesh Tag) is the reference
+target; the crash was reproduced there.
+
+### 1. Radio-reload / crash validation (regression guard for `babeef08d`)
+
+Confirms the non-LoRa config saves no longer run the live radio reconfigure - the
+`setStandby()` + SPI reprogram on the admin/BLE thread that rebooted the WisMesh Tag on a
+favorite (#11146).
+
+Over BLE, with the connection up, perform each of: toggle Bluetooth `enabled`, change the
+WiFi PSK, rotate the security keypair, favorite/unfavorite a node.
+
+- **Pass:** no radio re-init in the serial log before any reboot (no modem-reconfigure /
+  `setStandby` / re-`init` lines), and no watchdog reboot-loop. Saves that legitimately
+  reboot (WiFi, keypair) do so _cleanly, after_ the save - the reboot is fine; a live
+  reconfigure _before_ it is the failure.
+- **Positive control:** a `lora` config change and a `set_channel` **should** show the
+  reconfigure - proves the path still fires when it should.
+
+### 2. Position live-apply - expanding the Tier-2 live set (outstanding)
+
+The only reason to touch a node for the _reboot_ work: decide whether the GPS-timing fields
+left on the reboot path (`gps_mode`, `gps_enabled`, `gps_update_interval`, `gps_attempt_time`
+
+- item 3 above) can actually apply live and be reclassified.
+
+For each candidate field, one at a time, on a GPS-equipped node: change only that field over
+BLE and observe.
+
+- **Pass (→ reclassify as live):** the new value takes visible effect (e.g. GPS poll cadence
+  changes, mode switches) **and** no reboot banner appears. Only then add the field to the
+  live set in the `position_tag` gate and a native no-reboot case.
+- **Fail (→ leave rebooting):** the value only takes effect after a restart, or the node
+  reboots. This is the expected default - **fail toward rebooting**; do not reclassify on
+  native evidence alone.
+
+Fields already shipped as live (`position_broadcast_secs`, `position_broadcast_smart_enabled`,
+`broadcast_smart_minimum_distance`, `position_flags`, `fixed_position`) were proven live by
+static analysis; a spot-check that a broadcast-interval change takes effect with no reboot is
+a cheap confidence test but not a gate.
 
 ---
 
