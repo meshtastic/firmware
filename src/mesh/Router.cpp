@@ -70,8 +70,8 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
 struct RoutingAuthCache {
     bool valid = false;
-    meshtastic_Config_SecurityConfig_PacketSignaturePolicy policy =
-        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
+    // Deliberately NOT initialized in-class as this eats flash space.
+    meshtastic_Config_SecurityConfig_PacketSignaturePolicy policy;
     meshtastic_MeshPacket wire = meshtastic_MeshPacket_init_zero;
     meshtastic_MeshPacket authenticated = meshtastic_MeshPacket_init_zero;
 };
@@ -161,6 +161,8 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     cryptLock = new concurrency::Lock();
     if (!routingAuthCacheLock)
         routingAuthCacheLock = new concurrency::Lock();
+    // Runtime default for the auth-cache snapshot policy. Keep it here, saves flash.
+    routingAuthCache.policy = meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
 }
 
 bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
@@ -705,7 +707,7 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
         concurrency::LockGuard g(cryptLock);
         if (!checkXeddsaReceivePolicy(&authCandidate)) {
-            LOG_WARN("Already-decoded packet rejected by signature policy before routing state update");
+            LOG_WARN("Already-decoded packet rejected by signature policy");
             return RoutingAuthVerdict::REJECT;
         }
 #endif
@@ -716,15 +718,15 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
     }
     const DecodeState state = perhapsDecode(&authCandidate);
     if (state == DecodeState::DECODE_POLICY_REJECT) {
-        LOG_WARN("Packet rejected by signature policy before routing state update");
+        LOG_WARN("Packet rejected by signature policy");
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FATAL) {
-        LOG_WARN("Fatal decode error before routing state update");
+        LOG_WARN("Fatal decode error, dropping packet");
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
-        LOG_WARN("Decryptable packet failed decoding/authentication before routing state update");
+        LOG_WARN("Decryptable packet failed decoding, dropping packet");
         return RoutingAuthVerdict::REJECT;
     }
 
@@ -815,13 +817,13 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
         pkiAttempted = true;
         LOG_DEBUG("Attempt PKI decryption");
-        // Resolve the sender's public key only for actual PKI-decrypt candidates: prefer NodeDB
-        // (hot store or warm tier), else a not-yet-committed key held during an in-progress
-        // key-verification handshake. On a full NodeDB miss, copyPublicKey() falls through to a
-        // linear scan of TrafficManagement's large NodeInfo cache, so it must not run for every
-        // encrypted channel packet from an unknown sender - only for packets we might decrypt.
+        // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
+        // packet: copyPublicKeyForDecrypt() can fall through to a linear scan of TrafficManagement's large
+        // NodeInfo cache. It returns authoritative keys (hot/warm), or a cold-tier cache key only when it is
+        // signer-proven - an unverified TOFU cache key must not back authenticated (pki_encrypted, p->from)
+        // DM attribution.
         meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
-        bool haveRemoteKey = nodeDB->copyPublicKey(p->from, remotePublic);
+        bool haveRemoteKey = nodeDB->copyPublicKeyForDecrypt(p->from, remotePublic);
         // A pending key is an unverified identity claim supplied by whoever opened the handshake, so it is
         // accepted only for the exchange itself (checked after decode). perhapsEncode applies the same rule.
         bool havePendingKey = false;

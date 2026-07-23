@@ -1283,6 +1283,8 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
+    // Range test is always excluded as of 2.8
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_RANGETEST_CONFIG;
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
