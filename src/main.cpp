@@ -1438,14 +1438,22 @@ void loop()
         static uint32_t lastRadioMissedIrqPoll;
         if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
             lastRadioMissedIrqPoll = millis();
-            RadioLibInterface::instance->pollMissedIrqs();
+            for (uint8_t slot = 0; slot < RadioLibInterface::getMaxInstances(); slot++) {
+                RadioLibInterface *radio = RadioLibInterface::getInstance(slot);
+                if (radio)
+                    radio->pollMissedIrqs();
+            }
         }
 
         // Periodic AGC reset - warm sleep + recalibrate to prevent stuck AGC gain
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
             lastAgcReset = millis();
-            RadioLibInterface::instance->resetAGC();
+            for (uint8_t slot = 0; slot < RadioLibInterface::getMaxInstances(); slot++) {
+                RadioLibInterface *radio = RadioLibInterface::getInstance(slot);
+                if (radio)
+                    radio->resetAGC();
+            }
         }
     }
 

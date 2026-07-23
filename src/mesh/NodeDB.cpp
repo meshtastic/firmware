@@ -3487,8 +3487,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // inflate the local mesh-size estimate with non-RF nodes (and they usually carry
         // hop_start==0, landing in the hop-0 bucket that pulls the recommendation lowest), so
         // exclude via_mqtt too.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt &&
-            hopScalingModule) {
+        if (isLoraTransport(mp.transport_mechanism) && !mp.via_mqtt && hopScalingModule) {
             uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
             hopScalingModule->samplePacketForHistogram(mp.from, hopCount);
         }

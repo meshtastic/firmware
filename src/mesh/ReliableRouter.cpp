@@ -58,7 +58,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
             // Only stop retransmissions if the rebroadcast came via LoRa
-            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+            if (isLoraTransport(p->transport_mechanism)) {
                 stopRetransmission(key);
             }
         } else {

@@ -74,7 +74,7 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     if (seenRecently) {
         printPacket("Ignore dupe incoming msg", p);
 
-        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+        if (isLoraTransport(p->transport_mechanism)) {
             rxDupe++;
             stopRetransmission(p->from, p->id);
         }

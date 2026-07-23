@@ -9,6 +9,9 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#ifdef RADIOMASTER_NOMAD_DUAL_RADIO
+#include "NomadDualRadioInterface.h"
+#endif
 #include "RF95Interface.h"
 #include "RadioExternalPa.h"
 #include "Router.h"
@@ -592,13 +595,29 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #if defined(USE_LR1121) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
+#ifdef RADIOMASTER_NOMAD_DUAL_RADIO
+        rIf = std::unique_ptr<NomadDualRadioInterface>(new NomadDualRadioInterface(loraHal));
+#else
         rIf = std::unique_ptr<LR1121Interface>(
             new LR1121Interface(loraHal, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN));
+#endif
         if (!rIf->init()) {
-            LOG_WARN("No LR1121 radio");
+            LOG_WARN("No LR1121 radio%s",
+#ifdef RADIOMASTER_NOMAD_DUAL_RADIO
+                     " pair"
+#else
+                     ""
+#endif
+            );
             rIf = nullptr;
         } else {
-            LOG_INFO("LR1121 init success");
+            LOG_INFO("LR1121%s init success",
+#ifdef RADIOMASTER_NOMAD_DUAL_RADIO
+                     " pair"
+#else
+                     ""
+#endif
+            );
             radioType = LR1121_RADIO;
         }
     }
@@ -903,6 +922,17 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == MESHTASTIC_HEADER_LENGTH); // make sure the compiler did what we expected
+    radioRegion = myRegion;
+}
+
+meshtastic_Config_LoRaConfig &RadioInterface::getLoRaConfig()
+{
+    return loraConfigOverride ? *loraConfigOverride : config.lora;
+}
+
+const meshtastic_Config_LoRaConfig &RadioInterface::getLoRaConfig() const
+{
+    return loraConfigOverride ? *loraConfigOverride : config.lora;
 }
 
 bool RadioInterface::reconfigure()
@@ -915,9 +945,8 @@ bool RadioInterface::init()
 {
     LOG_INFO("Start meshradio init");
 
-    configChangedObserver.observe(&service->configChanged);
-    preflightSleepObserver.observe(&preflightSleep);
-    notifyDeepSleepObserver.observe(&notifyDeepSleep);
+    if (eventObserversEnabled)
+        registerEventObservers();
 
     // we now expect interfaces to operate in promiscuous mode
     // radioIf.setThisAddress(nodeDB->getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at
@@ -926,6 +955,13 @@ bool RadioInterface::init()
     applyModemConfig();
 
     return true;
+}
+
+void RadioInterface::registerEventObservers()
+{
+    configChangedObserver.observe(&service->configChanged);
+    preflightSleepObserver.observe(&preflightSleep);
+    notifyDeepSleepObserver.observe(&notifyDeepSleep);
 }
 
 int RadioInterface::notifyDeepSleepCb(void *unused)
@@ -1248,9 +1284,11 @@ void RadioInterface::applyModemConfig()
 {
     // Set up default configuration
     // No Sync Words in LORA mode
-    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+    meshtastic_Config_LoRaConfig &loraConfig = getLoRaConfig();
     const RegionInfo *newRegion = getRegion(loraConfig.region);
-    myRegion = newRegion;
+    radioRegion = newRegion;
+    if (!loraConfigOverride)
+        myRegion = newRegion;
 
     if (loraConfig.use_preset) {
         if (!validateConfigLora(loraConfig)) {
@@ -1322,7 +1360,8 @@ void RadioInterface::applyModemConfig()
     if (loraConfig.override_frequency) {
         freq = loraConfig.override_frequency;
         channel_num = -1;
-        uses_default_frequency_slot = false;
+        if (!loraConfigOverride)
+            uses_default_frequency_slot = false;
     } else {
 
         // If user has not manually specified a frequency slot, or has not specified one that is different than the default or the
@@ -1387,7 +1426,8 @@ uint32_t RadioInterface::computeSlotTimeMsec()
     float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
-    if (myRegion->wideLora) {
+    const RegionInfo *activeRegion = radioRegion ? radioRegion : myRegion;
+    if (activeRegion->wideLora) {
         // CAD duration derived from AN1200.22 of SX1280
         return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {
@@ -1403,21 +1443,32 @@ uint32_t RadioInterface::computeSlotTimeMsec()
 void RadioInterface::limitPower(int8_t loraMaxPower)
 {
     uint8_t maxPower = 255; // No limit
+    const RegionInfo *activeRegion = radioRegion ? radioRegion : myRegion;
 
-    if (myRegion->powerLimit)
-        maxPower = myRegion->powerLimit;
+    if (activeRegion->powerLimit)
+        maxPower = activeRegion->powerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
         LOG_INFO("Lower transmit power because of regulatory limits");
         power = maxPower;
     }
 
+#ifdef NOMAD_DUAL_RADIO_TEST_MAX_POWER_DBM
+    if (power > NOMAD_DUAL_RADIO_TEST_MAX_POWER_DBM) {
+        LOG_WARN("Nomad dual-radio test build: clamp transmit power from %d to %d dBm", power,
+                 NOMAD_DUAL_RADIO_TEST_MAX_POWER_DBM);
+        power = NOMAD_DUAL_RADIO_TEST_MAX_POWER_DBM;
+        getLoRaConfig().tx_power = power;
+    }
+#endif
+
     // Boards with an external PA controlled outside the transceiver (e.g. an analog PA
     // biased through a DAC pin) map the desired total output to a possibly-negative chip
     // output power here. This is applied even for licensed operators, because it reflects
     // a hardware gain stage, not a regulatory limit (the regulatory clamp above already
     // honors the license). Pass-through by default; see RadioExternalPa.h.
-    int8_t externalPaChip = radioExternalPaMapPower(power, getFreq());
+    radiatedPower = power;
+    int8_t externalPaChip = radioExternalPaMapPower(radiatedPower, getFreq());
     if (externalPaChip != RADIO_EXTERNAL_PA_NO_MAP) {
         LOG_INFO("External PA: %d dBm total -> chip %d dBm", power, externalPaChip);
         power = externalPaChip;
@@ -1465,7 +1516,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 {
     if (router) {
-        p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+        p->transport_mechanism = transportMechanism;
         router->enqueueReceivedMessage(p);
     }
 }

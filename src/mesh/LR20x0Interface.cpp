@@ -287,7 +287,7 @@ template <typename T> void LR20x0Interface<T>::startReceive()
     RadioLibInterface::startReceive();
 
     // Must be done AFTER starting receive, because startReceive clears (possibly stale) interrupt pending register bits
-    enableInterrupt(isrRxLevel0);
+    enableInterrupt(getIsrRxCallback());
     checkRxDoneIrqFlag();
 #endif
 }
