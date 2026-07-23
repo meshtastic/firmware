@@ -315,7 +315,7 @@ void battery_adcEnable()
     digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
 #endif
 #endif
-    delay(10);
+    delay(ADC_CTRL_SETTLE_MS);
 #endif
 }
 

@@ -30,6 +30,11 @@
 #define NUM_CELLS 1
 #endif
 
+// Override in variant.h for boards with a larger BATTERY_PIN filter capacitor
+#ifndef ADC_CTRL_SETTLE_MS
+#define ADC_CTRL_SETTLE_MS 10
+#endif
+
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/Sensor/nullSensor.h"
 #if __has_include(<Adafruit_INA219.h>)
