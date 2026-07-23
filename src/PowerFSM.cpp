@@ -14,6 +14,7 @@
 #include "PowerMon.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "input/ButtonHelper.h"
 #include "main.h"
 #include "modules/StatusLEDModule.h"
 #include "sleep.h"
@@ -28,7 +29,7 @@
 #endif
 #if MESHTASTIC_EXCLUDE_POWER_FSM
 FakeFsm powerFSM;
-void PowerFSM_setup(){};
+void PowerFSM_setup() {};
 #else
 /// Should we behave as if we have AC power now?
 static bool isPowered()
@@ -176,8 +177,9 @@ static void lsIdle()
             default:
                 // We woke for some other reason (button press, device IRQ interrupt)
 
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#if HAS_BUTTON
+                uint32_t _btnPin = getResolvedButtonPin();
+                bool pressed = (_btnPin != 0xFF) ? !digitalRead(_btnPin) : false;
 #else
                 bool pressed = false;
 #endif
