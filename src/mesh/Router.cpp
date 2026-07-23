@@ -1367,6 +1367,17 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p, RxSource src)
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif
+    // A locally-generated packet (e.g. a module's reply to a phone request, queued here only to avoid
+    // re-entering callModules() synchronously) was never actually received over the mesh. The ignore-list,
+    // PacketHistory/dedup, MQTT and pre-hop filters below exist to police untrusted radio ingress, and
+    // handleReceived() already special-cases RX_SRC_LOCAL (e.g. it only applies the routing-auth cache for
+    // RX_SRC_RADIO) - so skip straight there instead of risking the reply getting deduped or ignore-listed.
+    if (src == RX_SRC_LOCAL) {
+        handleReceived(p, src);
+        packetPool.release(p);
+        return;
+    }
+
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         clearRoutingAuthCache();
