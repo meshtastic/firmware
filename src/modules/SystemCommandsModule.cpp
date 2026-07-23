@@ -58,19 +58,20 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if defined(ARDUINO_ARCH_NRF52)
         if (!config.bluetooth.enabled) {
             disableBluetooth();
-            IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 2000;
+            IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF", 3000));
         } else {
-            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON", 3000));
+            if (nrf52Bluetooth)
+                nrf52Bluetooth->resumeAdvertising();
         }
 #else
         if (!config.bluetooth.enabled) {
             disableBluetooth();
             IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF", 3000));
         } else {
-            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON", 3000));
+            if (nimbleBluetooth)
+                nimbleBluetooth->setup();
         }
 #endif
         return 0;

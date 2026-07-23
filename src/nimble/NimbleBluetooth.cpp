@@ -22,8 +22,12 @@
 
 #if defined(CONFIG_NIMBLE_CPP_IDF)
 #include "host/ble_gap.h"
+#include "host/ble_hs.h"
+#include "host/ble_store.h"
 #else
 #include "nimble/nimble/host/include/host/ble_gap.h"
+#include "nimble/nimble/host/include/host/ble_hs.h"
+#include "nimble/nimble/host/include/host/ble_store.h"
 #endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -51,6 +55,26 @@ NimBLEServer *bleServer;
 
 static bool passkeyShowing;
 static std::atomic<uint16_t> nimbleBluetoothConnHandle{BLE_HS_CONN_HANDLE_NONE}; // BLE_HS_CONN_HANDLE_NONE means "no connection"
+
+// Set by deinit() (menu toggle), checked in setup() to gate address
+// resolution + IRK restore on the first init after any deinit.
+//
+// After NimBLEDevice::deinit() resets the ESP32 controller, LE Address
+// Resolution defaults to OFF and the sync-time restore_irks() races with
+// controller readiness -> bonded phones using RPAs fail LTK lookup and
+// instant-disconnect with reason 531. The gated branch in setup() issues
+// an HCI 0x202D and a second restore_irks() after a short delay to fix this.
+//
+// Stays false on fresh power-on so the initial init() -- which already
+// synced the controller correctly -- isn't disturbed by a redundant restore.
+static std::atomic<bool> s_didSleepSinceBoot{false};
+
+// Non-public NimBLE host helpers used by the deinit/reinit fix in setup().
+// Both live in nimble/host/src/ble_hs_priv.h and are not exposed via the
+// public host/*.h headers shipped with esp32-arduino, so we forward-declare
+// them here. The linker resolves them from the NimBLE host library.
+extern "C" int ble_hs_hci_cmd_tx(uint16_t opcode, const void *cmd, uint8_t cmd_len, void *rsp, uint8_t rsp_len);
+extern "C" int ble_hs_misc_restore_irks(void);
 
 static void clearPairingDisplay()
 {
@@ -758,12 +782,15 @@ void NimbleBluetooth::shutdown()
 #endif
 }
 
-// Proper shutdown for ESP32. Needs reboot to reverse.
+// Full shutdown for ESP32. Recoverable via setup(); the address-resolution
+// + IRK restore in setup() gated by s_didSleepSinceBoot repairs the state
+// that NimBLEDevice::deinit() leaves the controller in.
 void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
-    LOG_INFO("Disable bluetooth until reboot");
+    LOG_INFO("Disable bluetooth (menu toggle)");
     isDeInit = true;
+    s_didSleepSinceBoot = true; // gate setup() to re-enable address resolution + IRKs
 
 #ifdef BLE_LED
     digitalWrite(BLE_LED, LED_STATE_OFF);
@@ -823,9 +850,41 @@ void NimbleBluetooth::setup()
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
 
+    isDeInit = false; // fresh init -- disconnect handler must process again
+
     LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
+
+#ifdef ARCH_ESP32
+    if (s_didSleepSinceBoot) {
+        int peerCnt = 0, ourCnt = 0;
+        ble_store_util_count(BLE_STORE_OBJ_TYPE_PEER_SEC, &peerCnt);
+        ble_store_util_count(BLE_STORE_OBJ_TYPE_OUR_SEC, &ourCnt);
+        LOG_INFO("BLE init: peer_sec=%d our_sec=%d", peerCnt, ourCnt);
+
+        // The controller starts with LE Address Resolution DISABLED after any
+        // deinit+reinit. Re-enable it so bonded phones with RPAs can reconnect.
+        delay(50);
+        {
+            uint8_t enable = 1;
+            int rc = ble_hs_hci_cmd_tx(0x202D, &enable, 1, NULL, 0);
+            if (rc != 0) {
+                LOG_WARN("BLE set_addr_res_en failed rc=%d", rc);
+            } else {
+                LOG_INFO("BLE address resolution re-enabled");
+            }
+        }
+        // ble_hs_misc_restore_irks() during host sync may race with controller
+        // readiness. Retry after the delay to ensure IRKs reach the hardware.
+        int rc = ble_hs_misc_restore_irks();
+        if (rc != 0) {
+            LOG_WARN("BLE restore_irks retry failed rc=%d", rc);
+        }
+        s_didSleepSinceBoot = false; // one-shot per deinit cycle
+    }
+#endif
+
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
 #if NIMBLE_ENABLE_2M_PHY && (defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C6))
