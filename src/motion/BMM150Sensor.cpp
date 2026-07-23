@@ -4,7 +4,7 @@
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 #endif
 
 BMM150Sensor::BMM150Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}

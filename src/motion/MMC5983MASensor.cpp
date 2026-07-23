@@ -6,7 +6,7 @@
 #include "detect/ScanI2CTwoWire.h"
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 #endif
 
 static constexpr float MMC5983MA_ZERO_FIELD = 131072.0f;

@@ -28,7 +28,7 @@
 #include <gps/RTC.h>
 
 // External variables
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 #if defined(OLED_TINY)
 static uint32_t lastSwitchTime = 0;
 #endif
