@@ -4,10 +4,11 @@ name: Tests
 on:
   workflow_dispatch:
     inputs:
+      # trunk-ignore(checkov/CKV_GHA_7): the reason input is a free-text run label, never fed into the build
       reason:
-        description: "Reason for manual test run"
+        description: Reason for manual test run
         required: false
-        default: "Manual test execution"
+        default: Manual test execution
 
 concurrency:
   group: tests-${{ github.head_ref || github.run_id }}
@@ -21,7 +22,7 @@ permissions:
 
 jobs:
   native-tests:
-    name: "🧪 Native Tests"
+    name: 🧪 Native Tests
     if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/test_native.yml
     permissions:
@@ -30,7 +31,7 @@ jobs:
       checks: write
 
   test-summary:
-    name: "📊 Test Results"
+    name: 📊 Test Results
     runs-on: ubuntu-latest
     needs: [native-tests]
     if: always()
