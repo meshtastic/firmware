@@ -1616,6 +1616,206 @@ static void test_setChannel_stillTriggersRadioReload()
 }
 
 // -----------------------------------------------------------------------
+// handleSetConfig() radio-reload gating (non-LoRa Config sub-messages)
+//
+// Config is a monolithic disk segment, so every handleSetConfig() sub-message persists
+// SEGMENT_CONFIG. Only the lora sub-message actually feeds RadioInterface::reconfigure()
+// (which reads config.lora); every other sub-message - device/position/power/network/
+// display/bluetooth/security - must persist without firing the live SX126x reconfigure.
+// This is the same crash class as the WisMesh Tag favorite-node bug, reached through a
+// different admin message (a WiFi PSK change, a Bluetooth toggle, a keypair rotation, ...).
+// See plan-narrow-radio-reload-trigger.md. As with the node-DB tests above, these run
+// outside an edit transaction so saveChanges() reaches reloadConfig() directly.
+// -----------------------------------------------------------------------
+
+// Dispatch a set_config admin message carrying one Config sub-message.
+static void sendSetConfig(const meshtastic_Config &c)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_config_tag;
+    m.set_config = c;
+    sendAdmin(m);
+}
+
+static void test_setConfigDevice_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_device_tag;
+    c.payload_variant.device = config.device; // no-op change; role stays put
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigPosition_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// position_tag has a second, nested saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, ...)
+// when the GPS is turned off while not using a fixed position; that nested save must also
+// skip the reload, so exercise it explicitly (not just the end-of-case save).
+static void test_setConfigPosition_gpsOffNestedSave_skipsRadioReload()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    config.position.fixed_position = false;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    c.payload_variant.position.fixed_position = false;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigPower_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_power_tag;
+    c.payload_variant.power = config.power;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigNetwork_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    strncpy(c.payload_variant.network.wifi_psk, "hunter2hunter2", sizeof(c.payload_variant.network.wifi_psk) - 1);
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigDisplay_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_display_tag;
+    c.payload_variant.display = config.display;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigBluetooth_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    c.payload_variant.bluetooth.enabled = !config.bluetooth.enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_setConfigSecurity_skipsRadioReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    // Supply a full keypair (both keys present) so the handler takes neither keygen branch -
+    // keeps the test deterministic and off the crypto path; radioAffected is what's under test.
+    c.payload_variant.security.private_key.size = 32;
+    c.payload_variant.security.public_key.size = 32;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// remove_fixed_position rides SEGMENT_CONFIG only because config.position.fixed_position
+// shares the monolithic Config segment with config.lora; it must not reload the radio.
+// (set_fixed_position is intentionally not covered here - it dereferences the global
+// positionModule, which this unit-test harness does not construct.)
+static void test_removeFixedPosition_skipsRadioReload()
+{
+    config.position.fixed_position = true;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_fixed_position_tag;
+    m.remove_fixed_position = true;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(config.position.fixed_position);
+}
+
+// Regression guard: a set_config carrying the lora sub-message is the one case that must
+// still fire configChanged. Sending back the current valid preset leaves the region
+// unchanged, so exactly one reload occurs.
+static void test_setConfigLora_stillTriggersRadioReload()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+// Default-preservation guard: reloadConfig() callers that pass only saveWhat (MenuHandler,
+// MenuApplet, portduino - ~35 sites) rely on radioAffected defaulting to true. Pin that: a
+// SEGMENT_CONFIG or SEGMENT_CHANNELS save with the argument omitted must still reload.
+static void test_reloadConfig_defaultRadioAffected_stillReloads()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    service->reloadConfig(SEGMENT_CONFIG);   // radioAffected defaulted
+    service->reloadConfig(SEGMENT_CHANNELS); // radioAffected defaulted
+
+    TEST_ASSERT_EQUAL_INT(2, counter.count);
+}
+
+// ...and the explicit opt-out must suppress the reload even with SEGMENT_CONFIG set,
+// while the save-to-disk still happens (the whole point of separating the two concerns).
+static void test_reloadConfig_radioAffectedFalse_skipsReload()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -1755,6 +1955,18 @@ void setup()
     RUN_TEST(test_removeIgnoredNode_skipsRadioReload);
     RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
     RUN_TEST(test_setChannel_stillTriggersRadioReload);
+    RUN_TEST(test_setConfigDevice_skipsRadioReload);
+    RUN_TEST(test_setConfigPosition_skipsRadioReload);
+    RUN_TEST(test_setConfigPosition_gpsOffNestedSave_skipsRadioReload);
+    RUN_TEST(test_setConfigPower_skipsRadioReload);
+    RUN_TEST(test_setConfigNetwork_skipsRadioReload);
+    RUN_TEST(test_setConfigDisplay_skipsRadioReload);
+    RUN_TEST(test_setConfigBluetooth_skipsRadioReload);
+    RUN_TEST(test_setConfigSecurity_skipsRadioReload);
+    RUN_TEST(test_removeFixedPosition_skipsRadioReload);
+    RUN_TEST(test_setConfigLora_stillTriggersRadioReload);
+    RUN_TEST(test_reloadConfig_defaultRadioAffected_stillReloads);
+    RUN_TEST(test_reloadConfig_radioAffectedFalse_skipsReload);
 
     exit(UNITY_END());
 }

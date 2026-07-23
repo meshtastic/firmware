@@ -44,7 +44,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
-    void saveChanges(int saveWhat, bool shouldReboot = true);
+    void saveChanges(int saveWhat, bool shouldReboot = true, bool radioAffected = true);
 
     /**
      * Getters
