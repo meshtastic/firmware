@@ -106,7 +106,7 @@ static void clearChunkedClient(PhoneAPI *api)
     }
 }
 
-static bool handleChunkedToRadio(PhoneAPI *api, const meshtastic_ChunkedPayload &chunk)
+static bool handleChunkedToRadio(PhoneAPI *api, const meshtastic_ClientApiChunkedPayload &chunk)
 {
     if (chunk.payload_chunk.size == 0) {
         return false;
@@ -172,7 +172,7 @@ static size_t encodeChunkedFromRadio_LH(ChunkedClient &slot, uint8_t *buf)
     *p++ = 0x01;
     uint8_t *outerSize = p++;
     if (firstChunk) {
-        *p++ = 0x08; // ChunkedPayload.payload_size
+        *p++ = 0x08; // ClientApiChunkedPayload.payload_size
         if (slot.outTotal >= 0x80) {
             *p++ = (slot.outTotal & 0x7f) | 0x80;
             *p++ = slot.outTotal >> 7;
@@ -180,7 +180,7 @@ static size_t encodeChunkedFromRadio_LH(ChunkedClient &slot, uint8_t *buf)
             *p++ = slot.outTotal;
         }
     }
-    *p++ = 0x12; // ChunkedPayload.payload_chunk
+    *p++ = 0x12; // ClientApiChunkedPayload.payload_chunk
     *p++ = chunkSize;
     memcpy(p, slot.out + slot.outUsed, chunkSize);
     p += chunkSize;
@@ -696,8 +696,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             }
             break;
         case meshtastic_ToRadio_chunked_payload_tag:
-            handleChunkedToRadio(this, toRadioScratch.chunked_payload);
-            break;
+            return handleChunkedToRadio(this, toRadioScratch.chunked_payload);
         default:
             // Ignore nop messages
             break;
