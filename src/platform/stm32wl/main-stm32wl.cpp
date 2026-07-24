@@ -220,9 +220,8 @@ typedef struct __attribute__((packed)) ContextStateFrame {
 
 static char hardfault_message_buffer[256];
 
-// Bypasses uart_debug_write(), whose timeout relies on HAL_GetTick(): SysTick can't preempt a fault
-// handler (fixed NVIC priority -1), so that timeout never trips here. Use DWT->CYCCNT instead - a
-// free-running counter that keeps ticking regardless of interrupt state.
+// Bypasses uart_debug_write()'s HAL_GetTick() timeout (frozen inside a fault handler, since SysTick
+// can't preempt it) using DWT->CYCCNT instead, which keeps ticking regardless of interrupt state.
 static void faultSafeUartWrite(const uint8_t *data, size_t size)
 {
     USART_TypeDef *uart = Serial.getHandle()->Instance;
@@ -232,10 +231,12 @@ static void faultSafeUartWrite(const uint8_t *data, size_t size)
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
+    // One shared deadline for the whole write (not per byte), so a wedged UART can't stretch this
+    // out to size * timeoutCycles.
     const uint32_t timeoutCycles = SystemCoreClock / 5; // ~200ms - generous for a couple hundred bytes at any sane baud rate
+    const uint32_t start = DWT->CYCCNT;
 
     for (size_t i = 0; i < size; i++) {
-        uint32_t start = DWT->CYCCNT;
         while (!(uart->ISR & USART_ISR_TXE_TXFNF)) {
             if ((uint32_t)(DWT->CYCCNT - start) >= timeoutCycles)
                 return; // Give up rather than hang forever.
@@ -244,7 +245,6 @@ static void faultSafeUartWrite(const uint8_t *data, size_t size)
     }
 
     // Wait for the last byte to actually leave the shift register before returning, same reasoning.
-    uint32_t start = DWT->CYCCNT;
     while (!(uart->ISR & USART_ISR_TC)) {
         if ((uint32_t)(DWT->CYCCNT - start) >= timeoutCycles)
             return;
