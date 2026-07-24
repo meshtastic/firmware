@@ -1,5 +1,6 @@
 #include "gps/GeoCoord.h"
 #include <cmath>
+#include <cstdio>
 #include <unity.h>
 
 void setUp(void) {}
@@ -8,28 +9,41 @@ void tearDown(void) {}
 // Pins latLongToMeter()'s equirectangular-approximation accuracy against the original spherical
 // law of cosines, so a future change can't silently regress it.
 
+static constexpr double kPi = 3.14159265358979323846;
+
 static double referenceSphericalLawOfCosines(double lat_a, double lng_a, double lat_b, double lng_b)
 {
-    double a1 = lat_a * M_PI / 180.0;
-    double a2 = lng_a * M_PI / 180.0;
-    double b1 = lat_b * M_PI / 180.0;
-    double b2 = lng_b * M_PI / 180.0;
-    double t1 = cos(a1) * cos(a2) * cos(b1) * cos(b2);
-    double t2 = cos(a1) * sin(a2) * cos(b1) * sin(b2);
-    double t3 = sin(a1) * sin(b1);
+    double a1 = lat_a * kPi / 180.0;
+    double a2 = lng_a * kPi / 180.0;
+    double b1 = lat_b * kPi / 180.0;
+    double b2 = lng_b * kPi / 180.0;
+    double t1 = std::cos(a1) * std::cos(a2) * std::cos(b1) * std::cos(b2);
+    double t2 = std::cos(a1) * std::sin(a2) * std::cos(b1) * std::sin(b2);
+    double t3 = std::sin(a1) * std::sin(b1);
     double arg = t1 + t2 + t3;
     if (arg > 1.0)
         arg = 1.0;
     if (arg < -1.0)
         arg = -1.0;
-    return 6366000 * acos(arg);
+    return 6366000 * std::acos(arg);
 }
+
+// Below ~1m, relative error is dominated by rounding noise rather than the formula itself, so
+// assert an absolute bound instead (still catches a badly-broken implementation).
+static constexpr double kNearZeroAbsoluteToleranceMeters = 0.5;
 
 static void assertWithinPercent(double expected, double actual, double pct, const char *msg)
 {
-    if (expected < 1.0)
-        return; // near-zero distances: relative error is meaningless, skip
-    double err = fabs(actual - expected) / expected * 100.0;
+    if (expected < 1.0) {
+        if (std::fabs(actual - expected) > kNearZeroAbsoluteToleranceMeters) {
+            char buf[160];
+            snprintf(buf, sizeof(buf), "%s: expected=%.3f actual=%.3f (near-zero, limit %.1fm absolute)", msg, expected, actual,
+                     kNearZeroAbsoluteToleranceMeters);
+            TEST_FAIL_MESSAGE(buf);
+        }
+        return;
+    }
+    double err = std::fabs(actual - expected) / expected * 100.0;
     if (err > pct) {
         char buf[160];
         snprintf(buf, sizeof(buf), "%s: expected=%.1f actual=%.1f err=%.2f%% (limit %.2f%%)", msg, expected, actual, err, pct);
