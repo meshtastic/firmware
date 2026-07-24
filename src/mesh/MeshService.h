@@ -169,7 +169,6 @@ class MeshService
      * @param radioAffected when false, suppresses the live LoRa reconfigure even if saveWhat
      *        includes SEGMENT_CONFIG/SEGMENT_CHANNELS; the save-to-disk always happens. Defaults
      *        to true so callers that only pass saveWhat keep the historical bitmask behavior.
-     * @return true if client devices should be sent a new set of radio configs
      */
     void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS,
                       bool radioAffected = true);

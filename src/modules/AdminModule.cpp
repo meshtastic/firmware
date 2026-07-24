@@ -922,11 +922,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             c.payload_variant.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
             config.position.fixed_position == false && c.payload_variant.position.fixed_position == false) {
             nodeDB->clearLocalPosition();
-            saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
+            // SEGMENT_CONFIG is deliberately omitted here: config.position hasn't been updated to the
+            // incoming value yet, so saving it now would persist stale data. The final saveChanges()
+            // below re-saves SEGMENT_CONFIG once config.position is current.
+            saveChanges(SEGMENT_NODEDATABASE, false);
         }
         config.position = c.payload_variant.position;
-
-        // Save nodedb as well in case we got a fixed position packet
         break;
     } // case meshtastic_Config_position_tag
     case meshtastic_Config_power_tag:
