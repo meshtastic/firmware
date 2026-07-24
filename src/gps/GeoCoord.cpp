@@ -433,11 +433,8 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
     //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
 
-// Piecewise-linear cos(|latitude|) lookup, denser near 90 degrees where cos() is both small and
-// fast-changing (a coarse uniform step size there blows up *relative* error - see
-// test_geocoord_distance's near-polar cases). Lets latLongToMeter avoid linking cos()/sin()/acos()
-// (and their ~4.4KB of internal range-reduction/kernel helpers) for what is a display/
-// movement-threshold utility, not a routing- or security-critical calculation.
+// Piecewise-linear cos(|latitude|) lookup, denser near 90 degrees where cos() is small and fast-
+// changing. Avoids linking cos()/sin()/acos() (~4.4KB) for a display/movement-threshold utility.
 static double cosLatitudeApprox(double latRad)
 {
     static constexpr float kLatDeg[] = {0, 15, 30, 45, 55, 65, 72, 78, 82, 85, 87, 88.5, 89.5, 90};
@@ -455,15 +452,8 @@ static double cosLatitudeApprox(double latRad)
     return y0 + (y1 - y0) * (deg - x0) / (x1 - x0);
 }
 
-/// Approximate distance in meters between two points, via an equirectangular (flat-plane)
-/// projection rather than exact spherical trigonometry (this used to be the spherical law of
-/// cosines - see git history if exact-sphere accuracy is ever needed again). Accurate to <1% for
-/// local/regional distances (measured up to ~500km) at any latitude, and <4% up to ~2000km away
-/// from extreme (>80 degree) latitudes; accuracy degrades further for long-range distances very
-/// close to the poles - an inherent limitation of flat-plane projection, not fixable by a better
-/// cos() approximation (see test_geocoord_distance for measured bounds). Accepted given every
-/// caller uses this for display or movement-threshold checks, never routing or security
-/// decisions, and Meshtastic deployments near the geographic poles are effectively nonexistent.
+/// Approximate distance in meters via equirectangular projection (not exact spherical trig).
+/// <1% error to ~500km, degrading near the poles at long range (see test_geocoord_distance).
 float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
 {
     // Don't do math if the points are the same
