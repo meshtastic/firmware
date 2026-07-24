@@ -8,6 +8,18 @@
 
 #define _TCA8418_MULTI_TAP_THRESHOLD 1500
 
+#ifndef LEDC_BACKLIGHT_CHANNEL
+#define LEDC_BACKLIGHT_CHANNEL 4
+#endif
+
+#ifndef LEDC_BACKLIGHT_BIT_WIDTH
+#define LEDC_BACKLIGHT_BIT_WIDTH 8
+#endif
+
+#ifndef LEDC_BACKLIGHT_FREQ
+#define LEDC_BACKLIGHT_FREQ 1000 // Hz
+#endif
+
 using Key = TCA8418KeyboardBase::TCA8418Key;
 
 constexpr uint8_t modifierRightShiftKey = 31 - 1; // keynum -1
@@ -48,7 +60,7 @@ static unsigned char TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
     {'$', 0x00, 0x00},
     {'m', 'M', '.', 0x00, Key::MUTE_TOGGLE},
     {'n', 'N', ','},
-    {'b', 'B', '!', 0x00, Key::BL_TOGGLE},
+    {'b', 'B', '!', 0x00, Key::BT_TOGGLE},
     {'v', 'V', '?'},
     {'c', 'C', '9'},
     {'x', 'X', '8', 0x00, Key::DOWN},
@@ -56,7 +68,7 @@ static unsigned char TDeckProTapMap[_TCA8418_NUM_KEYS][5] = {
     {0x00, 0x00, 0x00}, // Ent, $, m, n, b, v, c, x, z, alt
     {0x00, 0x00, 0x00},
     {0x00, 0x00, 0x00},
-    {0x20, 0x00, 0x00},
+    {0x20, 0x00, 0x00, 0x00, Key::BL_TOGGLE},
     {0x00, 0x00, '0'},
     {0x00, 0x00, 0x00} // R_Shift, sym, space, mic, L_Shift
 };
@@ -65,12 +77,20 @@ TDeckProKeyboard::TDeckProKeyboard()
     : TCA8418KeyboardBase(_TCA8418_ROWS, _TCA8418_COLS), modifierFlag(0), last_modifier_time(0), last_key(UINT8_MAX),
       next_key(UINT8_MAX), last_tap(0L), char_idx(0), tap_interval(0)
 {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    ledcAttach(KB_BL_PIN, LEDC_BACKLIGHT_FREQ, LEDC_BACKLIGHT_BIT_WIDTH);
+#else
+    ledcSetup(LEDC_BACKLIGHT_CHANNEL, LEDC_BACKLIGHT_FREQ, LEDC_BACKLIGHT_BIT_WIDTH);
+    ledcAttachPin(KB_BL_PIN, LEDC_BACKLIGHT_CHANNEL);
+#endif
+    reset();
 }
 
 void TDeckProKeyboard::reset()
 {
     TCA8418KeyboardBase::reset();
     pinMode(KB_BL_PIN, OUTPUT);
+    digitalWrite(KB_BL_PIN, LOW);
     setBacklight(false);
 }
 
@@ -162,16 +182,32 @@ void TDeckProKeyboard::released()
 
 void TDeckProKeyboard::setBacklight(bool on)
 {
-    if (on) {
-        digitalWrite(KB_BL_PIN, HIGH);
-    } else {
-        digitalWrite(KB_BL_PIN, LOW);
-    }
+    uint32_t _brightness = 0;
+    if (on)
+        _brightness = brightness;
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    ledcWrite(KB_BL_PIN, _brightness);
+#else
+    ledcWrite(LEDC_BACKLIGHT_CHANNEL, _brightness);
+#endif
 }
 
-void TDeckProKeyboard::toggleBacklight(void)
+void TDeckProKeyboard::toggleBacklight(bool off)
 {
-    digitalWrite(KB_BL_PIN, !digitalRead(KB_BL_PIN));
+    if (off) {
+        brightness = 0;
+    } else {
+        if (brightness == 0) {
+            brightness = 40;
+        } else if (brightness == 40) {
+            brightness = 127;
+        } else if (brightness >= 127) {
+            brightness = 0;
+        }
+    }
+    LOG_DEBUG("Toggle backlight: %d", brightness);
+
+    setBacklight(true);
 }
 
 void TDeckProKeyboard::updateModifierFlag(uint8_t key)
