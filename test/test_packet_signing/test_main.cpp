@@ -389,6 +389,10 @@ void setUp(void)
     channels.initDefaults();
     channels.onConfigChanged();
 
+    // sendLocal() defers isToUs() packets to fromRadioQueue rather than handling them in-line; drain
+    // any left behind by a test that failed an assertion before draining its own (e.g. an aborted
+    // TEST_ASSERT partway through), so it can't leak into the next test's counters.
+    pipelineRouter->runOnce();
     pipelineRouter->clearPending();
     pipelineRouter->rxDupe = 0;
     pipelineRouter->txRelayCanceled = 0;
@@ -1216,9 +1220,12 @@ void test_C8_trusted_local_decoded_delivery_is_not_filtered(void)
     meshtastic_MeshPacket *local =
         packetPool.allocCopy(makeDecoded(0, LOCAL_NODE, meshtastic_PortNum_POSITION_APP, SMALL_PAYLOAD));
     TEST_ASSERT_NOT_NULL(local);
-    TEST_ASSERT_EQUAL(ERRNO_SHOULD_RELEASE, pipelineRouter->sendLocal(local, RX_SRC_USER));
+    // sendLocal() defers isToUs() packets to fromRadioQueue instead of calling handleReceived()
+    // in-line (avoids re-entering callModules() from within itself); drain it like the real Router
+    // thread would on its next tick. The queue - not this call - now owns releasing the packet.
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(local, RX_SRC_USER));
+    pipelineRouter->runOnce();
     TEST_ASSERT_EQUAL_MESSAGE(1, pipelineModule->calls, "trusted phone-origin packet must reach local modules");
-    packetPool.release(local);
 }
 
 void test_C9_known_channel_malformed_plaintext_is_not_relayed_as_opaque(void)

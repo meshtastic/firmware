@@ -41,8 +41,9 @@ class MockRouter : public Router
         delete cryptLock;
         cryptLock = NULL;
     }
-    void enqueueReceivedMessage(meshtastic_MeshPacket *p) override
+    void enqueueReceivedMessage(meshtastic_MeshPacket *p, RxSource src = RX_SRC_RADIO) override
     {
+        (void)src;
         packets_.emplace_back(*p);
         packetPool.release(p);
     }
