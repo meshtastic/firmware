@@ -1128,7 +1128,12 @@ void setup()
     LOG_DEBUG("SPI2 restarted after ST7701 init (SCK=%d, MISO=%d, MOSI=%d)", LORA_SCK, LORA_MISO, LORA_MOSI);
 #endif
 
-    auto rIf = initLoRa();
+    std::unique_ptr<RadioInterface> rIf;
+    if (!config.lora.serial_hal_only) {
+        rIf = initLoRa();
+    } else {
+        LOG_INFO("skipping LoRa radio init, for serialHal");
+    }
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
@@ -1173,10 +1178,9 @@ void setup()
 
     // Start airtime logger thread.
     airTime = new AirTime();
-
-    if (!rIf)
+    if (!rIf && !config.lora.serial_hal_only)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
-    else {
+    else if (rIf) {
 #ifndef ARCH_PORTDUINO_WASM
         // Log bit rate to debug output
         LOG_DEBUG("LoRA bitrate = %f bytes / sec", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
