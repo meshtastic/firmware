@@ -69,6 +69,10 @@ template <class T> class SX126xInterface : public RadioLibInterface
      */
     virtual void startReceive() override;
 
+    /** #3/#6: re-arm RX without a standby - the chip is already in RX (CAD GOTO_RX handoff, or continuous
+     * RX after RX_DONE), so just re-attach the MCU ISR + bookkeeping. Overrides the base full re-arm. */
+    void rearmReceive() override;
+
     /**
      *  We override to turn on transmitter power as needed.
      */
@@ -82,6 +86,10 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+    // isChannelActive() passes RADIOLIB_SX126X_CAD_ON_4_SYMB, which programs a 4-symbol CAD scan
+    // (~4.5 symbols on air). Report that so computeSlotTimeMsec() sizes the CW slot to the real scan.
+    uint8_t getCadSymbolCount() const override { return 4; }
 
   private:
 #ifdef LORA_DIO1_SOFTWARE_POLL

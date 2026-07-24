@@ -420,7 +420,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     case ISR_RX:
         handleReceiveInterrupt();
-        startReceive();
+        // Finding #6: re-arm for the next packet. On SX126x rearmReceive() re-attaches the ISR without a
+        // standby - continuous RX never left RX and readData() does not standby, so a second packet already
+        // arriving is not aborted; every other chip falls back to a full startReceive().
+        rearmReceive();
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:
@@ -454,13 +457,15 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay();
 #endif
                 } else {
-                    if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-#if !MESHTASTIC_EXCLUDE_BEACON
-                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
-#endif
-                        {
-                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
-                        }
+                    // Listen-before-talk: a CAD preamble scan immediately before we key up. On a busy
+                    // channel isChannelActive() leaves the radio armed for RX - SX126x hands off in place
+                    // via CAD GOTO_RX; other chips sit in standby after the scan.
+                    if (isChannelActive()) { // currently traffic on the channel?
+                        // Finding #1: re-arm unconditionally (no beacon-target skip) so we keep listening on
+                        // the channel we are deferring on - the old guard could leave a beacon node deaf on
+                        // its home config until the next TX cycle. rearmReceive() is a no-standby ISR
+                        // re-attach on SX126x (chip already in RX) and a full startReceive() elsewhere.
+                        rearmReceive();
                         setTransmitDelay();
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and

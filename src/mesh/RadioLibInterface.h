@@ -192,6 +192,14 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startReceive();
 
+    /**
+     * Re-arm RX after a busy-channel CAD detect or after servicing an RX_DONE. Default does a full
+     * startReceive() (standby + re-arm) - correct for any chip that leaves RX to scan. Chips that stay in
+     * RX (SX126x: CAD GOTO_RX handoff, or continuous RX after readData() which does not standby) override
+     * this to just re-attach the MCU ISR, so a reception already in flight is not aborted.
+     */
+    virtual void rearmReceive() { startReceive(); }
+
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() = 0;
 

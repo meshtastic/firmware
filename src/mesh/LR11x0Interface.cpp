@@ -288,11 +288,14 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
+    // check if we can detect a LoRa preamble on the current channel.
+    // CAD->RX (#3) is SX126x-only: LR11x0's startChannelScan conflates cfg.cad.irqFlags/irqMask (it drives
+    // the DIO from irqFlags and ignores irqMask), so the flag/mask split the in-place handoff needs isn't
+    // available. Keep LR11x0 on the standard GOTO_STDBY + re-arm path.
     ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
                                        .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT, // resolves to STBY_RC
                                        .timeout = 0,
                                        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
                                        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
@@ -301,7 +304,7 @@ template <typename T> bool LR11x0Interface<T>::isChannelActive()
     setStandby();
     result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED)
-        return true;
+        return true; // caller re-arms via rearmReceive() (LR11x0 uses the default full startReceive())
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 

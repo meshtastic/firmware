@@ -277,8 +277,12 @@ template <typename T> void SX128xInterface<T>::startReceive()
 /** Is the channel currently active? */
 template <typename T> bool SX128xInterface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD_24GHZ,
+    // check if we can detect a LoRa preamble on the current channel.
+    // NOTE: symNum here is the *encoded* SET_CAD_PARAMS register value (symbol count in bits 7:5),
+    // NOT a raw count. NUM_SYM_CAD_24GHZ (== 4) is the plain count used by computeSlotTimeMsec; the
+    // matching register encoding for 4 symbols is RADIOLIB_SX128X_CAD_ON_4_SYMB. Passing the raw 4
+    // would set bits 7:5 = 000, i.e. a 1-symbol scan, leaving LBT nearly blind on 2.4 GHz.
+    ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX128X_CAD_ON_4_SYMB,
                                        .detPeak = 0,
                                        .detMin = 0,
                                        .exitMode = 0,

@@ -283,11 +283,16 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
         RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR;
     const uint16_t noisyRxMask = RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED | RADIOLIB_SX126X_IRQ_HEADER_VALID;
 
-    // Do NOT treat a preamble/header-only IRQ as a full RX event: noisy preamble detections would
-    // repeatedly trigger readData() and starve TX scheduling. Clear these non-terminal bits, or the
-    // poll loop spins at high rate while they stay latched.
-    if (!pollTxMode && (irq & noisyRxMask) && ((irq & ~noisyRxMask) == 0U)) {
-        lora.clearIrqFlags(noisyRxMask);
+    // A bare PREAMBLE (no terminal RX event yet) means the chip is mid-reception. Do NOT treat it as a
+    // full RX event - that would repeatedly trigger readData(). The escape hatch (a noise preamble that
+    // never completes must not permanently block our own TX) runs only while a TX is queued, and clears
+    // ONLY the preamble. HEADER_VALID is evidence of a real inbound frame, so keep it latched: clearing
+    // it would make isActivelyReceiving() read idle mid-payload and let the queued TX stomp the frame
+    // (finding #10). A stuck header can't block TX forever - receiveDetected() ages it out after
+    // maxPacketTimeMsec. readData() clears everything once a real RX_DONE arrives.
+    const bool preambleOnly = (irq & RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    if (!pollTxMode && !txQueue.empty() && preambleOnly && ((irq & ~noisyRxMask) == 0U)) {
+        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
         scheduleIrqPollTick();
         return;
     }
@@ -385,23 +390,47 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
 }
 
+template <typename T> void SX126xInterface<T>::rearmReceive()
+{
+    // #3/#6: the chip is already in RX (CAD GOTO_RX handoff, or continuous RX after RX_DONE - readData()
+    // does not standby). Re-attach the MCU ISR that was detached and set RX bookkeeping via the base
+    // startReceive(), WITHOUT the chip-specific standby+SetRx that would abort an in-flight reception.
+    enableInterrupt(isrRxLevel0);
+    RadioLibInterface::startReceive();
+}
+
 /** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
-    // check if we can detect a LoRa preamble on the current channel
-    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
+    // check if we can detect a LoRa preamble on the current channel.
+    // NOTE: symNum is the *encoded* SET_CAD_PARAMS value, not a raw count - RADIOLIB_SX126X_CAD_ON_4_SYMB
+    // (== raw 2) runs a 4-symbol scan, matching getCadSymbolCount() (4), which sizes the CW slot time.
+    // #3: exit CAD straight into RX on detection (GOTO_RX) with the RX IRQs already mapped, so the chip's
+    // own CAD->RX transition delivers RX_DONE with no library call in between (see .notes/lbt). irqFlags is
+    // the status-enable set (CAD verdict + full RX set incl. PREAMBLE/HEADER_VALID for isActivelyReceiving);
+    // irqMask is the DIO-trigger set - CAD verdict + terminal RX events only, NOT PREAMBLE/HEADER_VALID,
+    // which would fire the ISR mid-frame and run readData() on an incomplete packet.
+    const uint32_t cadIrqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS | MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS;
+    const uint32_t cadIrqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK | (1UL << RADIOLIB_IRQ_RX_DONE) | (1UL << RADIOLIB_IRQ_TIMEOUT) |
+                                (1UL << RADIOLIB_IRQ_CRC_ERR) | (1UL << RADIOLIB_IRQ_HEADER_ERR);
+    ChannelScanConfig_t cfg = {.cad = {.symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
                                        .detPeak = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
                                        .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
-                                       .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
+                                       .exitMode = RADIOLIB_SX126X_CAD_GOTO_RX,
                                        .timeout = 0,
-                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
-                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
+                                       .irqFlags = cadIrqFlags,
+                                       .irqMask = cadIrqMask}};
     int16_t result;
     setTransmitEnable(false);
     setStandby();
     result = lora.scanChannel(cfg);
-    if (result == RADIOLIB_LORA_DETECTED)
+    if (result == RADIOLIB_LORA_DETECTED) {
+        // The chip auto-entered RX (GOTO_RX). Drop the latched CAD verdict so the pin releases and the
+        // coming RX_DONE is a clean edge; the caller re-arms via rearmReceive() (SX126x: re-attach the MCU
+        // ISR + bookkeeping, no standby - a startReceive() here would abort the packet we just detected).
+        lora.clearIrqFlags(RADIOLIB_SX126X_IRQ_CAD_DONE | RADIOLIB_SX126X_IRQ_CAD_DETECTED);
         return true;
+    }
     if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
 #ifdef ARCH_PORTDUINO
