@@ -1,4 +1,5 @@
-# trunk-ignore-all(trivy/DS002): We must run as root for this container
+# trunk-ignore-all(trivy/DS-0002): We must run as root for this container
+# trunk-ignore-all(checkov/CKV_DOCKER_8): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3002): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
