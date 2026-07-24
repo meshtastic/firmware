@@ -5,9 +5,8 @@
 void setUp(void) {}
 void tearDown(void) {}
 
-// gpsHardsleepThresholdMs() replaces `2750 * pow(seconds, 1.22)` with a piecewise-linear lookup
-// table, to avoid pulling double-precision libm into flash-constrained builds for this single
-// heuristic. This confirms the replacement tracks the original curve closely.
+// Confirms gpsHardsleepThresholdMs()'s pow()-free lookup table tracks the original
+// `2750 * pow(seconds, 1.22)` curve closely.
 static double originalFormula(uint32_t seconds)
 {
     return 2750.0 * std::pow((double)seconds, 1.22);
@@ -15,17 +14,14 @@ static double originalFormula(uint32_t seconds)
 
 static void test_matches_original_formula_at_sampled_points(void)
 {
-    // Points intentionally include both table breakpoints and off-breakpoint values. Inputs above
-    // 900s are excluded here: predictedSearchDurationMs() is clamped to 15 minutes elsewhere
-    // (GPSUpdateScheduling::searchedTooLong), and the table intentionally clamps to its last
-    // point beyond that - see test_clamps_above_table_range.
+    // Mix of table breakpoints and off-breakpoint values, capped at 900s (the pre-existing
+    // 15-minute search clamp - see test_clamps_above_table_range for the boundary itself).
     const uint32_t samples[] = {1, 5, 10, 33, 60, 100, 150, 300, 500, 900};
     for (uint32_t s : samples) {
         double expected = originalFormula(s);
         uint32_t actual = gpsHardsleepThresholdMs(s);
-        // Sub-10s inputs diverge more in relative terms but stay small in absolute terms (see the
-        // comment above kThresholdCurveSecs in GPSUpdateScheduling.cpp for the measured bounds);
-        // everything else should track within ~1%.
+        // Sub-10s inputs diverge more in relative (but small absolute) terms; see
+        // GPSUpdateScheduling.cpp for the measured bounds.
         double tolerance = s < 10 ? 3000.0 : expected * 0.01 + 100.0;
         TEST_ASSERT_DOUBLE_WITHIN(tolerance, expected, (double)actual);
     }

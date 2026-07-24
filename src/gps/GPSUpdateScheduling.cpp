@@ -2,12 +2,8 @@
 
 #include "Default.h"
 
-// Sampled from the original `2750 * seconds^1.22` curve (see GPS::down()'s history for context:
-// a heuristic manually fitted to power observations from U-blox NEO-6M and M10050,
-// https://www.desmos.com/calculator/6gvjghoumr). Piecewise-linear interpolation between these
-// points tracks the original formula within ~0.5% for inputs >=10s, within ~1.6% for 5-10s, and
-// diverges further (in relative terms only - a couple of seconds absolute) below 5s - all
-// negligible next to update intervals measured in tens of seconds to hours.
+// Sampled from the original `2750 * seconds^1.22` curve. Interpolation tracks it within ~0.5%
+// for inputs >=10s and ~1.6% below that, negligible next to update intervals of tens of seconds+.
 static constexpr uint32_t kThresholdCurveSecs[] = {0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 450, 600, 900};
 static constexpr uint32_t kThresholdCurveMs[] = {0,      19592,  45639,   74845,   106314,  174350,  285925,  406141,
                                                  666053, 946093, 1551548, 2203893, 2893481, 4745172, 6740269, 11053722};
