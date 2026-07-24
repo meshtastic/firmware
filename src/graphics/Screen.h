@@ -107,8 +107,15 @@ class Screen
 #include <AutoOLEDWire.h>
 #endif
 
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+// NicheGraphics-backed BaseUI e-ink stack; supplies the EINK_* compat macros for converted variants.
+// InkHUD builds keep the legacy includes: their TUs carry InkHUD's own NicheGraphics::Drivers classes,
+// which would collide with graphics/eink/ declarations until InkHUD moves onto the shared layer.
+#include "BaseUIEInkDisplay.h"
+#else
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
+#endif
 #include "PointStruct.h"
 #include "Power.h"
 #include "TFTDisplay.h"
