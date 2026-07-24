@@ -33,6 +33,7 @@ jobs:
         with:
           msystem: UCRT64
           update: true
+          cache: true
           # argp is not packaged for the mingw environments and is built below.
           # Python is omitted too: MSYS2's reports a `mingw` platform tag no wheel matches.
           install: >-
@@ -51,6 +52,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+          cache: "pip"
 
       # framework-portduino calls argp_parse(); MSYS2 packages argp only for the
       # msys runtime, which cannot link into a native binary. No install() rules.
@@ -68,6 +70,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install platformio
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-windows-${{ inputs.windows_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini') }}
+          restore-keys: |
+            pio-windows-${{ inputs.windows_ver }}-
 
       - name: Get release version string
         shell: pwsh
