@@ -8,8 +8,9 @@ bool AsyncUDP::listenMulticast(IPAddress multicastIP, uint16_t port, uint8_t ttl
 {
     if (!isMulticast(multicastIP))
         return false;
+    if (!udp.beginMulticast(multicastIP, port))
+        return false;
     localPort = port;
-    udp.beginMulticast(multicastIP, port);
     return true;
 }
 
