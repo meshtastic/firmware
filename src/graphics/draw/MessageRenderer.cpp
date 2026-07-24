@@ -23,7 +23,7 @@
 
 // External declarations
 extern bool hasUnreadMessage;
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 using graphics::Emote;
 using graphics::emotes;
