@@ -231,6 +231,10 @@ class MeshModule
 
     friend class ReliableRouter;
 
+  protected:
+    virtual uint8_t getResponseHopLimit(const meshtastic_MeshPacket &req);
+
+  private:
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  This method calls allocReply()
      * to generate the reply message, and if !NULL that message will be delivered to whoever sent req

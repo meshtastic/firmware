@@ -31,6 +31,10 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     void triggerImmediateNodeInfoCheck();
 
   protected:
+    static bool isDirectBroadcastDiscoveryRequest(const meshtastic_MeshPacket &request);
+
+    virtual uint8_t getResponseHopLimit(const meshtastic_MeshPacket &req) override;
+
     /** Called to handle a particular incoming message
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
