@@ -173,21 +173,23 @@ static void lsIdle()
                 powerFSM.trigger(EVENT_SERIAL_CONNECTED);
                 break;
 
-            default:
-                // We woke for some other reason (button press, device IRQ interrupt)
-
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#else
+            case ESP_SLEEP_WAKEUP_GPIO: {
                 bool pressed = false;
+#if defined(BUTTON_PIN)
+                pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#elif defined(KB_INT)
+                // keyboard press (probably) triggered GPIO interrupt
+                pressed = true;
 #endif
-                if (pressed) { // If we woke because of press, instead generate a PRESS event.
+                if (pressed) {
                     powerFSM.trigger(EVENT_PRESS);
-                } else {
-                    // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
-                    // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
-                    powerFSM.trigger(EVENT_WAKE_TIMER);
                 }
+                break;
+            }
+            default:
+                // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
+                // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
+                powerFSM.trigger(EVENT_WAKE_TIMER);
                 break;
             }
         } else {

@@ -15,6 +15,12 @@
 #include "TCA8418Keyboard.h"
 #endif
 
+#if defined(ELECROW_ThinkNode_M9)
+#include "STC8HKeyboard.h"
+#include "graphics/Screen.h"                    // for the global `screen` + FrameFocus
+#include "graphics/draw/NotificationRenderer.h" // for resetBanner()
+#endif
+
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 
@@ -60,6 +66,11 @@ int32_t KbI2cBase::runOnce()
 #if WIRE_INTERFACES_COUNT == 2
             LOG_DEBUG("Use I2C Bus 1 (the second one)");
             i2cBus = &Wire1;
+#if defined(ELECROW_ThinkNode_M9)
+            if (cardkb_found.address == TSTC8_KB_ADDR) {
+                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire1);
+            }
+#endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
                 Q10keyboard.setBacklight(0);
@@ -75,6 +86,11 @@ int32_t KbI2cBase::runOnce()
         case ScanI2C::WIRE:
             LOG_DEBUG("Use I2C Bus 0 (the first one)");
             i2cBus = &Wire;
+#if defined(ELECROW_ThinkNode_M9)
+            if (cardkb_found.address == TSTC8_KB_ADDR) {
+                Stc8HKeyBoard.begin(TSTC8_KB_ADDR, &Wire);
+            }
+#endif
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
                 Q10keyboard.setBacklight(0);
@@ -542,6 +558,104 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
+#if defined(ELECROW_ThinkNode_M9)
+    case 0x12: { // STC8H companion-MCU keypad (ThinkNode-M9)
+        Stc8HKeyBoard.key_event = false;
+        InputEvent e = {};
+        e.inputEvent = INPUT_BROKER_NONE;
+        e.source = this->_originName;
+        uint8_t c = Stc8HKeyBoard.bsp_get_key_value(); // unsigned so the 0x8x/0xbx codes match
+        switch (c) {
+        case 0x81: // Mute
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = INPUT_BROKER_MSG_MUTE_TOGGLE;
+            break;
+        case 0x82: // Home
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            graphics::NotificationRenderer::resetBanner();
+            // TODO(M9): also reset CannedMessage/PresetMessage state once those modules are ported
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_FAULT);
+            break;
+        case 0x83: // Time
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            graphics::NotificationRenderer::resetBanner();
+            // TODO(M9): also reset CannedMessage/PresetMessage state once those modules are ported
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_CLOCK);
+            break;
+        case 0x84:
+            e.inputEvent = INPUT_BROKER_GPS_TOGGLE;
+            Stc8HKeyBoard.switch_flashlight();
+            break;
+        case 0x85: // FM
+            e.inputEvent = INPUT_BROKER_SEND_PING;
+            e.kbchar = 0;
+            break;
+        case 0x86: // FM (long press)
+            e.inputEvent = INPUT_BROKER_CANCEL;
+            e.kbchar = 0;
+            break;
+        case 0x87: // Preset
+            graphics::NotificationRenderer::resetBanner();
+            // TODO(M9): also reset CannedMessage state once that module is ported
+            e.inputEvent = INPUT_BROKER_SELECT_LONG;
+            e.kbchar = 0;
+            break;
+        case 0xb5: // Up
+            e.inputEvent = INPUT_BROKER_UP;
+            e.kbchar = 0;
+            break;
+        case 0xb4: // Left
+            e.inputEvent = INPUT_BROKER_LEFT;
+            e.kbchar = 0;
+            break;
+        case 0xb6: // Down
+            e.inputEvent = INPUT_BROKER_DOWN;
+            e.kbchar = 0;
+            break;
+        case 0xb7: // Right
+            e.inputEvent = INPUT_BROKER_RIGHT;
+            e.kbchar = 0;
+            break;
+        case 0x20: // Space
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = 0x20;
+            break;
+        case 0x0d: // Enter
+            e.inputEvent = INPUT_BROKER_SELECT;
+            e.kbchar = 0;
+            break;
+        case 0x08: // Del
+            e.inputEvent = INPUT_BROKER_BACK;
+            e.kbchar = 0;
+            break;
+        case 0x89: // Del (long press)
+            e.inputEvent = INPUT_BROKER_BACK;
+            e.kbchar = 0;
+            break;
+        case 0x88: // Invalid key value
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = 0;
+            break;
+        default: // all other keys (printable ASCII)
+            if ((c >= 0x20) && (c <= 0x7F)) {
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = c;
+            } else {
+                e.inputEvent = INPUT_BROKER_NONE;
+                e.kbchar = 0;
+            }
+            break;
+        }
+        if (e.inputEvent != INPUT_BROKER_NONE) {
+            // LOG_DEBUG("STC8H companion-MCU keypad key event: 0x%02x", c);
+            this->notifyObservers(&e);
+        }
+
+        break;
+    }
+#endif
     default:
         LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }

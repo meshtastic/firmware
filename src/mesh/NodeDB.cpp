@@ -1006,7 +1006,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2)) &&            \
+     defined(ELECROW_PANEL) || defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT) || defined(RAK_WISMESH_TAP_V2) ||             \
+     defined(ELECROW_ThinkNode_M9)) &&                                                                                           \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -1238,13 +1239,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
+#endif // HAS_I2S
 #if HAS_TFT
     if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
         moduleConfig.external_notification.nag_timeout = 0;
 #else
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif // HAS_TFT
-#endif // HAS_I2S
 
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
