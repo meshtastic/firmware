@@ -109,13 +109,6 @@ bool SEN5XSensor::sendCommand(uint16_t command)
 
 bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNumber)
 {
-    // The payload is consumed in 2-byte pairs (each followed by a CRC byte);
-    // an odd size would read past the caller's buffer and overrun toSend
-    if (byteNumber % 2 != 0) {
-        LOG_ERROR("%s: Invalid payload size %u, must be even", sensorName, byteNumber);
-        return false;
-    }
-
     // At least we need two bytes for the command
     uint8_t bufferSize = 2;
 
@@ -171,13 +164,6 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 
 uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
-    // Replies arrive in 3-byte groups (2 data bytes + 1 CRC); any other size
-    // would underflow the read loop below and overrun the destination buffer
-    if (byteNumber == 0 || byteNumber % 3 != 0) {
-        LOG_ERROR("%s: Invalid read size %u, must be a multiple of 3", sensorName, byteNumber);
-        return 0;
-    }
-
 #ifdef SEN5X_I2C_CLOCK_SPEED
     LOG_DEBUG("%s: Attempting to reclock speed to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SEN5X_I2C_CLOCK_SPEED);
