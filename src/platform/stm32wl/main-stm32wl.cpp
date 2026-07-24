@@ -220,7 +220,38 @@ typedef struct __attribute__((packed)) ContextStateFrame {
 
 static char hardfault_message_buffer[256];
 
-// printf directly using srcwrapper's debug UART function.
+// Bypasses uart_debug_write(), whose timeout relies on HAL_GetTick(): SysTick can't preempt a fault
+// handler (fixed NVIC priority -1), so that timeout never trips here. Use DWT->CYCCNT instead - a
+// free-running counter that keeps ticking regardless of interrupt state.
+static void faultSafeUartWrite(const uint8_t *data, size_t size)
+{
+    USART_TypeDef *uart = Serial.getHandle()->Instance;
+    if (!uart || !(uart->CR1 & USART_CR1_UE))
+        return; // Not mapped, or Serial.begin() hasn't run yet - nothing we can do.
+
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+    const uint32_t timeoutCycles = SystemCoreClock / 5; // ~200ms - generous for a couple hundred bytes at any sane baud rate
+
+    for (size_t i = 0; i < size; i++) {
+        uint32_t start = DWT->CYCCNT;
+        while (!(uart->ISR & USART_ISR_TXE_TXFNF)) {
+            if ((uint32_t)(DWT->CYCCNT - start) >= timeoutCycles)
+                return; // Give up rather than hang forever.
+        }
+        uart->TDR = data[i];
+    }
+
+    // Wait for the last byte to actually leave the shift register before returning, same reasoning.
+    uint32_t start = DWT->CYCCNT;
+    while (!(uart->ISR & USART_ISR_TC)) {
+        if ((uint32_t)(DWT->CYCCNT - start) >= timeoutCycles)
+            return;
+    }
+}
+
+// printf directly to the debug UART, fault-handler-safe (see faultSafeUartWrite() above).
 static void debug_printf(const char *format, ...)
 {
     va_list args;
@@ -230,7 +261,7 @@ static void debug_printf(const char *format, ...)
 
     if (length < 0)
         return;
-    uart_debug_write((uint8_t *)hardfault_message_buffer, min((unsigned int)length, sizeof(hardfault_message_buffer) - 1));
+    faultSafeUartWrite((uint8_t *)hardfault_message_buffer, min((unsigned int)length, sizeof(hardfault_message_buffer) - 1));
 }
 
 // N picked by guessing
