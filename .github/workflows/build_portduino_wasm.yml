@@ -29,7 +29,7 @@ jobs:
         uses: ./.github/actions/setup-native
 
       - name: Setup Emscripten SDK
-        uses: emscripten-core/setup-emsdk@v16
+        uses: emscripten-core/setup-emsdk@0822153d7a5488b70a269cfa0a631b2a86ab4da2 # 'v17' main
         with:
           version: 6.0.1
           actions-cache-folder: emsdk-cache
