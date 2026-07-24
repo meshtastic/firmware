@@ -1,0 +1,101 @@
+name: Build XIAO S3 Wio-SX1262 Non-Kit
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build (tag/branch/commit)
+        required: true
+        default: v2.7.26.54e0d8d
+      pio_env:
+        description: PlatformIO environment name
+        required: true
+        default: seeed-xiao-s3-wio-sx1262
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Create non-kit variant from seeed_xiao_s3
+        run: |
+          set -euo pipefail
+          base="variants/esp32s3/seeed_xiao_s3"
+          dest="variants/esp32s3/seeed_xiao_s3_wio_sx1262"
+          rm -rf "$dest"
+          cp -R "$base" "$dest"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          files = {
+              "pins": Path("variants/esp32s3/seeed_xiao_s3_wio_sx1262/pins_arduino.h"),
+              "variant": Path("variants/esp32s3/seeed_xiao_s3_wio_sx1262/variant.h"),
+              "pio": Path("variants/esp32s3/seeed_xiao_s3_wio_sx1262/platformio.ini"),
+          }
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              data = path.read_text(encoding="utf-8")
+              if old not in data:
+                  raise RuntimeError(f"Expected pattern not found in {path}: {old}")
+              path.write_text(data.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(files["pins"], "static const uint8_t SS = 41;", "static const uint8_t SS = 5;")
+
+          for old, new in [
+              ("#define HAS_GPS 1", "#define HAS_GPS 0"),
+              ("#define USCREEN_SSD1306", "//#define USCREEN_SSD1306"),
+              ("#define LORA_CS 41", "#define LORA_CS 5"),
+              ("#define LORA_RESET 42", "#define LORA_RESET 3"),
+              ("#define LORA_DIO1 39", "#define LORA_DIO1 2"),
+              ("#define SX126X_BUSY 40", "#define SX126X_BUSY 4"),
+              ("#define SX126X_RXEN 38", "#define SX126X_RXEN 6"),
+          ]:
+              replace_once(files["variant"], old, new)
+
+          replace_once(files["pio"], "[env:seeed-xiao-s3]", "[env:seeed-xiao-s3-wio-sx1262]")
+          replace_once(
+              files["pio"],
+              "-I variants/esp32s3/seeed_xiao_s3",
+              "-I variants/esp32s3/seeed_xiao_s3_wio_sx1262",
+          )
+          PY
+
+      - name: Show resulting key lines
+        run: |
+          grep -n "SS = 5" variants/esp32s3/seeed_xiao_s3_wio_sx1262/pins_arduino.h
+          grep -nE "HAS_GPS|USCREEN_SSD1306|LORA_CS|LORA_RESET|LORA_DIO1|SX126X_BUSY|SX126X_RXEN" variants/esp32s3/seeed_xiao_s3_wio_sx1262/variant.h
+          grep -nE "\[env:seeed-xiao-s3-wio-sx1262\]|seeed_xiao_s3_wio_sx1262" variants/esp32s3/seeed_xiao_s3_wio_sx1262/platformio.ini
+
+      - name: Build firmware
+        run: python -m platformio run -e "${{ inputs.pio_env }}"
+
+      - name: List build output
+        run: ls -lah .pio/build/${{ inputs.pio_env }}
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware-${{ inputs.pio_env }}-${{ inputs.ref }}
+          path: |
+            .pio/build/${{ inputs.pio_env }}/firmware-*.bin
+            .pio/build/${{ inputs.pio_env }}/firmware-*.elf
+            .pio/build/${{ inputs.pio_env }}/firmware-*.map
+            .pio/build/${{ inputs.pio_env }}/firmware-*.mt.json
+            .pio/build/${{ inputs.pio_env }}/littlefs-*.bin
+          retention-days: 14
