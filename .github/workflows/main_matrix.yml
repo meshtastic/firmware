@@ -61,18 +61,48 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history so tj-actions/changed-files diffs the PR reliably; an
+          # incomplete diff could under-build, and this job compiles nothing so the
+          # extra clone is cheap.
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
           cache: pip
       - run: pip install -U platformio
+      # On pull requests, list the changed files so the build matrix can be narrowed
+      # to the affected variants (bin/generate_ci_matrix.py --changed-files). Skipped
+      # on a 'ci:full-build'-labelled PR; on any failure the output file is absent and
+      # the generator builds the full pr set. all_modified_files is ACMRD, so file
+      # deletions count too (and force the safe full-build fallback).
+      - name: Detect changed files
+        id: changed
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-build')
+        # Never let detection break CI: on failure the file is absent and the matrix
+        # falls back to the full pr set.
+        continue-on-error: true
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          separator: "\n"
+          write_output_files: true
+          output_dir: .github/outputs
       - name: Generate matrix
         id: jsonStep
         run: |
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
+          #
+          # Narrow BOTH the build ('all') and static-analysis ('check') legs to the
+          # PR's affected variants. An absent/empty file (non-PR, 'ci:full-build'
+          # label, or diff failure) leaves EXTRA empty => the full set for that leg.
+          CHANGED=.github/outputs/all_modified_files.txt
+          EXTRA=""
+          if [[ -s "$CHANGED" ]]; then
+            EXTRA="--changed-files $CHANGED"
+          fi
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr)
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr $EXTRA)
           else
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           fi
@@ -130,6 +160,32 @@ jobs:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ matrix.build.board }}
       platform: ${{ matrix.build.platform }}
+
+  # Single, stable status check for branch protection. Both the build ('all') and
+  # check matrices are dynamic (narrowed per-PR), so individual "build (<board>)" /
+  # "check (<board>)" checks vary run-to-run and are unsuitable as required checks.
+  # Require this job instead: it always runs and passes only if every build and check
+  # that ran succeeded. (check is intentionally skipped on schedule / workflow_dispatch
+  # and on forks, which is allowed here; build always runs and must succeed.)
+  ci-gate:
+    if: always()
+    needs: [build, check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify build and check results
+        run: |
+          echo "build=${{ needs.build.result }} check=${{ needs.check.result }}"
+          if [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "::error::One or more firmware builds failed, were cancelled, or did not run."
+            exit 1
+          fi
+          case "${{ needs.check.result }}" in
+            success | skipped) ;;
+            *)
+              echo "::error::One or more checks failed or were cancelled (${{ needs.check.result }})."
+              exit 1
+              ;;
+          esac
 
   build-debian-src:
     if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
@@ -211,7 +267,10 @@ jobs:
 
   gather-artifacts:
     # trunk-ignore(checkov/CKV2_GHA_1)
-    if: github.repository == 'meshtastic/firmware'
+    # Skipped on PRs: a narrowed build need not produce all 8 fixed arch legs (an
+    # empty leg would fail the exact-name download), and this job's only consumers
+    # (release-artifacts on dispatch, publish-nightly on schedule) never run on PRs.
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
