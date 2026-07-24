@@ -119,7 +119,7 @@ static void rak14014_tpIntHandle(void)
     _rak14014_touch_int = true;
 }
 
-#elif defined(HACKADAY_COMMUNICATOR)
+#elif defined(HACKADAY_COMMUNICATOR) || defined(HELTEC_RCC6)
 #include <Arduino_GFX_Library.h>
 Arduino_GFX *tft = nullptr;
 
@@ -1307,7 +1307,7 @@ void TFTDisplay::display(bool fromBlank)
                     }
                 }
             }
-#if defined(HACKADAY_COMMUNICATOR)
+#if defined(HACKADAY_COMMUNICATOR) || defined(HELTEC_RCC6)
             tft->draw16bitBeRGBBitmap(0, yStart, repaintChunkBuffer, displayWidth, rowsThisChunk);
 #else
             tft->pushImage(0, yStart, displayWidth, rowsThisChunk, repaintChunkBuffer);
@@ -1407,7 +1407,7 @@ void TFTDisplay::display(bool fromBlank)
                 linePixelBuffer[x] = isset ? colorTftWhite : colorTftBlack;
 #endif
             }
-#if defined(HACKADAY_COMMUNICATOR)
+#if defined(HACKADAY_COMMUNICATOR) || defined(HELTEC_RCC6)
             tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
                                       (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1);
 #else
@@ -1487,7 +1487,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         display(true);
         if (portduino_config.displayBacklight.pin > 0)
             digitalWrite(portduino_config.displayBacklight.pin, TFT_BACKLIGHT_ON);
-#elif defined(HACKADAY_COMMUNICATOR)
+#elif defined(HACKADAY_COMMUNICATOR) || defined(HELTEC_RCC6)
         tft->displayOn();
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
     !defined(HELTEC_MESH_NODE_T1)
@@ -1502,8 +1502,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(true); // using unPhone library
 #endif
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-#elif !defined(M5STACK) && !defined(ST7789_CS) &&                                                                                \
-    !defined(HACKADAY_COMMUNICATOR) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
+#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_RCC6)
         tft->setBrightness(172);
 #endif
         break;
@@ -1515,7 +1514,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->clear();
         if (portduino_config.displayBacklight.pin > 0)
             digitalWrite(portduino_config.displayBacklight.pin, !TFT_BACKLIGHT_ON);
-#elif defined(HACKADAY_COMMUNICATOR)
+#elif defined(HACKADAY_COMMUNICATOR) || defined(HELTEC_RCC6)
         tft->displayOff();
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
     !defined(HELTEC_MESH_NODE_T1)
@@ -1530,7 +1529,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(false); // using unPhone library
 #endif
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_RCC6)
         tft->setBrightness(0);
 #endif
         break;
@@ -1546,7 +1545,7 @@ void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
 {
 #if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
     // todo
-#elif !defined(HACKADAY_COMMUNICATOR)
+#elif !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_RCC6)
     tft->setBrightness(_brightness);
     LOG_DEBUG("Brightness is set to value: %i ", _brightness);
 #endif
@@ -1564,7 +1563,8 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) &&                                 \
+    !defined(HELTEC_MESH_NODE_T1) && !defined(HELTEC_RCC6)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -1583,7 +1583,8 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) &&                                 \
+    !defined(HELTEC_MESH_NODE_T1) && !defined(HELTEC_RCC6)
     return tft->getTouch(x, y);
 #else
     return false;
@@ -1611,6 +1612,9 @@ bool TFTDisplay::connect()
         tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */,
                                  12 /* col offset 1 */, 0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */,
                                  nv3007_279_init_operations, sizeof(nv3007_279_init_operations));
+#elif defined(HELTEC_RCC6)
+        Arduino_DataBus *bus = new Arduino_SWSPI(TFT_RS, TFT_CS, TFT_SCL, TFT_SDA, GFX_NOT_DEFINED);
+        tft = new Arduino_NV3001B(bus, TFT_RST, 3, true, TFT_WIDTH, TFT_HEIGHT, 0, 0, 0, 0);
 #else
         tft = new LGFX;
 #endif
@@ -1622,7 +1626,7 @@ bool TFTDisplay::connect()
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
 #endif
-#ifdef HACKADAY_COMMUNICATOR
+#if defined(HACKADAY_COMMUNICATOR) || defined(HELTEC_RCC6)
     bool beginStatus = tft->begin();
     if (beginStatus)
         LOG_DEBUG("TFT Success!");
@@ -1647,6 +1651,8 @@ bool TFTDisplay::connect()
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER)
     tft->setRotation(0); // use config.yaml to set rotation
+#elif defined(HELTEC_RCC6)
+    tft->setRotation(3);
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif

@@ -210,6 +210,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #elif defined(MESHNOLOGY_W10)
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
+#elif defined(HELTEC_RCC6)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RCC6
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
