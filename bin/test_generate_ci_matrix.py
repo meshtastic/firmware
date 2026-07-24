@@ -212,28 +212,48 @@ def test_variant_local_builds_touched_boards_incl_extra():
     """Editing a variant dir builds every env there, even extra-tier ones."""
     result = sel(["variants/esp32/tbeam/variant.h"])
     # Both the release-only tbeam and the extra tbeam-displayshield share the dir.
-    assert result == {"tbeam", "tbeam-displayshield", "rak4631"}
+    assert result == {"tbeam", "tbeam-displayshield"}
 
 
-def test_budgeted_env_always_present():
-    """rak4631 (the only budgeted env) is unioned into every narrowed result."""
-    assert "rak4631" in sel(["variants/esp32/tbeam/variant.h"])
-    assert "rak4631" in sel(["variants/rp2040/rpipico/variant.h"])
+def test_budgeted_env_not_forced_into_unrelated_selection():
+    """A change to an unrelated board must NOT drag in the budgeted env (rak4631).
+
+    rak4631 is built only when a change actually affects it (its own variant dir,
+    the nrf52 platform tree / an nrf52840 base, or the shared extra_variants tree)
+    or as the non-empty floor below - never as a blanket addition to every result."""
+    assert "rak4631" not in sel(["variants/esp32/tbeam/variant.h"])
+    assert "rak4631" not in sel(["variants/rp2040/rpipico/variant.h"])
+    assert "rak4631" not in sel(["variants/esp32s3/heltec_v4/variant.h"])
+
+
+def test_budgeted_env_is_the_nonempty_floor():
+    """A change mapping only to covered-elsewhere envs (portduino/native) hits the
+    budgeted floor so the matrix stays non-empty; with no budgets it degrades to a
+    full fallback (None) instead."""
+    assert sel(["variants/native/portduino/platformio.ini"]) == {"rak4631"}
+    u = universe()
+    assert (
+        gcm.select_changed(
+            u,
+            ["variants/native/portduino/platformio.ini"],
+            gcm.platform_src_map_from_envs(u),
+            BASE_INI_INCL,
+            budgets=frozenset(),
+        )
+        is None
+    )
 
 
 def test_longest_prefix_no_sibling_bleed():
     """A nested board dir must not be swallowed by its shorter sibling."""
-    assert sel(["variants/esp32s3/heltec_v4_r8/variant.h"]) == {
-        "heltec_v4_r8",
-        "rak4631",
-    }
-    assert sel(["variants/esp32s3/heltec_v4/variant.h"]) == {"heltec_v4", "rak4631"}
+    assert sel(["variants/esp32s3/heltec_v4_r8/variant.h"]) == {"heltec_v4_r8"}
+    assert sel(["variants/esp32s3/heltec_v4/variant.h"]) == {"heltec_v4"}
 
 
 def test_definition_dir_catches_derived_board():
     """Editing a derived board's own dir selects it even though its -I is shared."""
     result = sel(["variants/nrf52840/diy/seeed_xiao_nrf52840_e22/platformio.ini"])
-    assert result == {"xiao_e22_30", "xiao_e22_33", "rak4631"}
+    assert result == {"xiao_e22_30", "xiao_e22_33"}
     # kit_base is NOT selected: it lives in the shared kit dir, not the e22 dir.
     assert "kit_base" not in result
 
@@ -241,13 +261,13 @@ def test_definition_dir_catches_derived_board():
 def test_shared_include_dir_fans_out():
     """Editing a shared variant dir selects every env that -I-includes it."""
     result = sel(["variants/nrf52840/seeed_xiao_nrf52840_kit/variant.h"])
-    assert result == {"kit_base", "xiao_e22_30", "xiao_e22_33", "rak4631"}
+    assert result == {"kit_base", "xiao_e22_30", "xiao_e22_33"}
 
 
 def test_platform_src_esp32_family():
     """src/platform/esp32 maps to the whole ESP32 family's pr reps (derived)."""
     result = sel(["src/platform/esp32/ESP32CryptoEngine.cpp"])
-    assert result == {"esp32-pr-rep", "heltec-v3", "rak4631"}
+    assert result == {"esp32-pr-rep", "heltec-v3"}
 
 
 def test_platform_src_nrf52():
@@ -257,15 +277,12 @@ def test_platform_src_nrf52():
 
 def test_platform_src_rp2xx0_both_chips():
     result = sel(["src/platform/rp2xx0/main-rp2xx0.cpp"])
-    assert result == {"rpipico", "rak11310", "rak4631"}
+    assert result == {"rpipico", "rak11310"}
 
 
 def test_zero_pr_arch_escalates_to_all_envs():
     """nrf54l15 has no pr env, so an arch change builds all of its envs."""
-    assert sel(["src/platform/nrf54l15/main-nrf54l15.cpp"]) == {
-        "nrf54l15dk",
-        "rak4631",
-    }
+    assert sel(["src/platform/nrf54l15/main-nrf54l15.cpp"]) == {"nrf54l15dk"}
 
 
 def test_platform_src_extra_variants_covers_every_arch():
@@ -286,28 +303,26 @@ def test_platform_src_extra_variants_covers_every_arch():
 
 
 def test_native_platform_src_adds_nothing_but_not_full():
-    """A portduino-only change adds no build env (covered elsewhere), not a fallback."""
+    """A portduino-only change selects no firmware env (covered elsewhere), so it
+    lands on the budgeted floor rather than a full fallback."""
     assert sel(["src/platform/portduino/PortduinoGlue.cpp"]) == {"rak4631"}
 
 
 def test_native_variant_change_adds_nothing_but_not_full():
+    """A native variant change selects nothing emittable -> budgeted floor, not full."""
     result = sel(["variants/native/portduino/platformio.ini"])
     assert result == {"rak4631"}
 
 
 def test_arch_ini_common_is_family_wide():
     """esp32-common.ini (a +<platform/esp32> base) affects the whole ESP32 family."""
-    assert sel(["variants/esp32/esp32-common.ini"]) == {
-        "esp32-pr-rep",
-        "heltec-v3",
-        "rak4631",
-    }
+    assert sel(["variants/esp32/esp32-common.ini"]) == {"esp32-pr-rep", "heltec-v3"}
 
 
 def test_arch_ini_chip_base_is_scoped():
     """esp32.ini (inherits the include, not a family base) affects only its top dir."""
     result = sel(["variants/esp32/esp32.ini"])
-    assert result == {"esp32-pr-rep", "rak4631"}
+    assert result == {"esp32-pr-rep"}
     assert "heltec-v3" not in result  # s3 boards unaffected by the esp32-only base
 
 
@@ -343,7 +358,7 @@ def test_multiple_variant_dirs_union():
     result = sel(
         ["variants/esp32s3/heltec_v3/variant.h", "variants/rp2040/rpipico/variant.h"]
     )
-    assert result == {"heltec-v3", "rpipico", "rak4631"}
+    assert result == {"heltec-v3", "rpipico"}
 
 
 def test_build_outlist_narrowed_builds_selected_regardless_of_level():

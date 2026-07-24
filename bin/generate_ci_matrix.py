@@ -51,8 +51,10 @@ DEFAULT_BOARD_INI_GLOBS = (
     "variants/*/diy/*/platformio.ini",
 )
 
-# RAM/flash budgets file (repo-relative). Budgeted envs must always be in the matrix
-# so the fail-closed size-budget-gate has data to check against.
+# RAM/flash budgets file (repo-relative). Budgeted envs are the non-empty floor
+# select_changed falls back to when a PR affects only covered-elsewhere envs, so the
+# matrix (and the size-budget-gate's data) is never empty. They are NOT force-added to
+# an otherwise non-empty narrowed selection, so an unrelated change never drags them in.
 RAM_BUDGETS = "bin/ram_budgets.json"
 
 # -I variants/<dir> include flag. Anchored on start-or-space so the nrf52 flag
@@ -264,8 +266,11 @@ def select_changed(
     ``platform_src_map`` (platform subdir -> top-dirs) and ``base_ini_incl`` (arch-base
     .ini path -> the platform subdir it re-includes) are derived from PlatformIO in
     ``main``; passing them in keeps this function unit-testable without PlatformIO.
-    ``budgets`` (env names) are always unioned in so the fail-closed size-budget-gate
-    always has data, which also guarantees a non-empty matrix.
+    ``budgets`` (env names) are used only as the non-empty floor: when the narrowed
+    selection is otherwise empty (a change touching only covered-elsewhere envs like
+    portduino), they are returned so the matrix - and the size-budget-gate's data - is
+    never empty. They are NOT unioned into a non-empty selection, so an unrelated change
+    never drags the budgeted board into the build.
     """
     dir_to_envs = defaultdict(set)  # board dir -> ALL envs there (for path matching)
     pr_by_top = defaultdict(list)
@@ -326,8 +331,12 @@ def select_changed(
             continue
         # Tier 3: shared source / build system / unknown -> full fallback.
         return None
-    sel |= set(budgets)
-    return sel or None
+    # An affected selection is returned as-is (budgeted envs are NOT force-added, so an
+    # unrelated change never builds them). Only a selection that is otherwise empty -
+    # every changed file mapped only to covered-elsewhere envs (portduino/native) -
+    # falls back to the budgeted envs as a non-empty floor, so the build matrix and the
+    # size-budget-gate always have data (and a truly empty budgets set -> None -> full).
+    return sel or set(budgets) or None
 
 
 def build_outlist(all_envs, platform, level, selected):

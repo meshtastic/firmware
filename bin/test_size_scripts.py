@@ -413,8 +413,11 @@ def test_budget_gate_over_flash_budget():
         assert "786,000" in stderr
 
 
-def test_budget_gate_env_not_built_fails_closed():
-    """Under --enforce-budgets, a budgeted env missing from the sizes fails."""
+def test_budget_gate_env_not_built_is_skipped():
+    """Under --enforce-budgets, a budgeted env absent from the sizes is skipped, not
+    failed: it was narrowed out of this run's matrix (its binary is unchanged from
+    base, so it cannot have regressed) and the gate runs only after a successful
+    build, so 'absent' never masks a build failure."""
     with tempfile.TemporaryDirectory() as tmpdir:
         sizes_file = write_json(
             tmpdir, "sizes.json", {"heltec-v3": {"flash_bytes": 1000000}}
@@ -429,8 +432,11 @@ def test_budget_gate_env_not_built_fails_closed():
             "size_report.py",
             [sizes_file, "--budgets", budgets_file, "--enforce-budgets"],
         )
-        assert rc == 1, f"expected fail-closed for unbuilt env, got rc={rc}"
-        assert "not built" in stderr
+        assert (
+            rc == 0
+        ), f"expected skip (pass) for narrowed-out env, got rc={rc}: {stderr}"
+        # The env still appears in the informational budget table as n/a.
+        assert "n/a" in stdout
 
 
 def test_budget_report_env_not_built_shows_na():
