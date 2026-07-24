@@ -74,4 +74,5 @@ void c6l_init()
     setbit(in_data, 6); // enable SX_ANT_SW
     setbit(in_data, 5); // enable SX_LNA_EN
     i2c_write_byte(PI4IO_M_ADDR, PI4IO_REG_OUT_SET, in_data);
+    printf("I'm a banana\n");
 }
