@@ -1130,11 +1130,11 @@ void menuHandler::homeBaseMenu()
         } else if (selected == Backlight) {
             screen->setOn(false);
 #if defined(PIN_EINK_EN)
-            if (uiconfig.screen_brightness == 1) {
+            if (uiconfig.screen_brightness > 0) {
                 uiconfig.screen_brightness = 0;
                 digitalWrite(PIN_EINK_EN, LOW);
             } else {
-                uiconfig.screen_brightness = 1;
+                uiconfig.screen_brightness = 255;
                 digitalWrite(PIN_EINK_EN, HIGH);
             }
             saveUIConfig();
@@ -1143,7 +1143,7 @@ void menuHandler::homeBaseMenu()
                 uiconfig.screen_brightness = 0;
                 io.digitalWrite(PCA_PIN_EINK_EN, LOW);
             } else {
-                uiconfig.screen_brightness = 1;
+                uiconfig.screen_brightness = 255;
                 io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
             }
             saveUIConfig();

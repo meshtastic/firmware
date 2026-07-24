@@ -246,7 +246,7 @@ void InputBroker::Init()
     touchConfig.longPress = INPUT_BROKER_NONE;
     touchConfig.suppressLeadUpSound = true;
     touchConfig.onPress = []() {
-        touchBacklightWasOn = uiconfig.screen_brightness == 1;
+        touchBacklightWasOn = (digitalRead(PIN_EINK_EN) == HIGH);
         if (!touchBacklightWasOn) {
             digitalWrite(PIN_EINK_EN, HIGH);
         }
@@ -254,7 +254,9 @@ void InputBroker::Init()
     };
     touchConfig.onRelease = []() {
         if (touchBacklightActive && !touchBacklightWasOn) {
-            digitalWrite(PIN_EINK_EN, LOW);
+            if (!(screen && screen->isScreenOn() && (uiconfig.screen_brightness > 0))) {
+                digitalWrite(PIN_EINK_EN, LOW);
+            }
         }
         touchBacklightActive = false;
     };
