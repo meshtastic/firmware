@@ -820,7 +820,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
         // packet: copyPublicKeyForDecrypt() can fall through to a linear scan of TrafficManagement's large
         // NodeInfo cache. It returns authoritative keys (hot/warm), or a cold-tier cache key only when it is
-        // signer-proven - an unverified TOFU cache key must not back authenticated (pki_encrypted, p->from)
+        // key-proven - an unverified TOFU cache key must not back authenticated (pki_encrypted, p->from)
         // DM attribution.
         meshtastic_NodeInfoLite_public_key_t remotePublic = {0, {0}};
         bool haveRemoteKey = nodeDB->copyPublicKeyForDecrypt(p->from, remotePublic);

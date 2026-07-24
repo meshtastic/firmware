@@ -30,8 +30,8 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   ESP32, 10 on STM32WL (see `mesh-pb-constants.h`).
 - **Eviction:** oldest non-protected node when full (`getOrCreateMeshNode`). On eviction
   the node's essentials are **absorbed into the warm tier** (see §2); on re-admission the
-  warm record is rehydrated back (`take()`), including the signer bit.
-- **Persistence:** the node database file, saved on the usual NodeDB cadence.
+  warm record is rehydrated back (`take()`), including the XEdDSA-signed bit.
+- **Persistence:** the node database file in LittleFS, saved on the usual NodeDB cadence.
 - **Authority:** key pinning (`updateUser`'s "Public Key mismatch" drop), signer
   provenance, and identity content all originate here. The lookup helpers that other
   stores mirror:
@@ -52,14 +52,14 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   else rebuilds from traffic in seconds.
 - **Entry:** exactly 40 bytes - `num(4) | last_heard(4) | public_key(32)`. The low 7 bits
   of `last_heard` are omitted, and replaced with metadata (role: 4 bits, protected
-  category: 2, signer bit: 1), leaving ~128 s recency resolution - plenty for LRU ranking.
+  category: 2, XEdDSA-signed bit: 1), leaving ~128 s recency resolution - plenty for LRU ranking.
 - **Capacity:** `WARM_NODE_COUNT` (100 on constrained parts; platform-tiered).
 - **Eviction:** LRU by `last_heard`, with keyed entries outranking keyless; keyless
   candidates never displace keyed entries.
 - **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring below LittleFS
-  (append/replay/compact); everywhere else `/prefs/warm.dat`.
+  (append/replay/compact); everywhere else `/prefs/warm.dat` (LittleFS).
 - **Membership invariant:** a node lives in the hot **XOR** warm tier. `take()` removes
-  the warm record when the node is re-admitted hot, restoring role/protected/signer bits.
+  the warm record when the node is re-admitted hot, restoring role/protected/XEdDSA-signed bits.
 
 ## 3. TMM unified cache (base, traffic state)
 
@@ -83,7 +83,7 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   preferring to keep entries with a `next_hop` hint **or** a cached special (non-`CLIENT`)
   role - the long-tail state this cache exists to retain (`findOrCreateEntry`'s `preferred`
   test covers both, not just `next_hop`).
-- **Persistence:** none - RAM/PSRAM only, rebuilt from traffic.
+- **Persistence:** none - PSRAM (or heap) only, rebuilt from traffic.
 
 ## 4. TMM NodeInfo payload cache (extended, the ephemeral third tier)
 
@@ -98,7 +98,7 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   heap so the trust/retention paths run in CI.
 - **Entry:** `node`, `user` (full nanopb `User`), the `obsTick` recency stamp (3 min/tick),
   `sourceChannel`, `decodedBitfield`, and packed 1-bit flags: `hasDecodedBitfield`,
-  `keySignerProven`, `hasObserved`, `hasFullUser`, `isMember`. (The direct-response throttle
+  `keyXeddsaSigned`, `keyManuallyVerified`, `hasObserved`, `hasFullUser`, `isMember`. (The direct-response throttle
   no longer keeps per-entry state here - it is a pair of separate RAM tables; see the module
   doc.)
 - **Capacity:** `kNodeInfoCacheEntries = 2000`, linear scan (NodeInfo traffic is
@@ -113,9 +113,14 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   pin), and, failing NodeDB knowledge, against the cache's **own previously cached key**
   (TOFU pin). Mismatches are dropped, never overwritten. A frame advertising _our own_ key
   is dropped outright (impersonation).
-- **`keySignerProven`:** set when a frame's XEdDSA signature was router-verified
-  (`mp.xeddsa_signed`) or when NodeDB already knew the node as a signer **for the same
-  key** (`isVerifiedSignerForKey`). Monotonic per slot; a changed key resets it.
+- **Key provenance (`keyXeddsaSigned` + `keyManuallyVerified`, combined via `keyProven()`):**
+  `keyXeddsaSigned` is set when a frame's XEdDSA signature was router-verified
+  (`mp.xeddsa_signed`) or when NodeDB already knew the node as a signer **for the same key**
+  (`isVerifiedSignerForKey`). `keyManuallyVerified` is set when the user confirmed possession
+  out-of-band (QR / fingerprint), routed via `onNodeKeyCommitted(proven)` and re-seeded from the
+  hot store's `is_key_manually_verified` bit at reconcile. Either bit makes `keyProven()` true -
+  the predicate the replay gate, eviction tiering, and pubkey-pool callers use. Both are monotonic
+  per slot; a changed key resets both.
 - **Unsigned-identity gate:** a NodeInfo arriving _unsigned_ from a node we have ever
   verified as a signer - per `NodeDB::isKnownXeddsaSigner()`, which covers hot **and
   warm** tiers - drives no cache, role, or `updateUser()` write. (Warm coverage matters: a
@@ -123,10 +128,10 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   until re-heard. The same rule guards `Router::checkXeddsaReceivePolicy`'s
   unsigned-broadcast drop.)
 - **Serve gate honesty:** only a genuinely _heard_ NODEINFO frame stamps
-  `obsTick`/`hasObserved`. Seeding and write-through are knowledge, not observation - they
-  can never make a silent node look alive to the replay path. The 6 h serve window is
-  enforced by the sweep-cleared `hasObserved` bit; the spoofed-reply throttle that gate
-  feeds lives in the module (see [traffic_management_module.md](traffic_management_module.md)).
+  `obsTick`/`hasObserved` - seeding and write-through don't, so a silent node never looks alive
+  to the replay path. The sweep clears `hasObserved` to enforce the 6 h serve window. The
+  spoofed-reply throttle this gate feeds lives in the module (see
+  [traffic_management_module.md](traffic_management_module.md)).
 
 ### Consistency with NodeDB (anti-entropy)
 
@@ -149,14 +154,14 @@ independent of `hasFullUser`. Because the re-mark is only hourly, hook-driven ad
 an hour.
 
 **Retention:** no timed eviction. Slots die only by LRU displacement on insert, ranked by
-trust tiers - members and signer-proven keys are stickiest; the seeding pass additionally
+trust tiers - members and key-proven keys are stickiest; the seeding pass additionally
 refuses to churn one member out for another (`spareMembers`).
 
 **Key-commit funnel:** every path that writes a remote key into the hot store must route
 the write-through. Full-identity commits funnel through `NodeDB::updateUser()`; bare-key
 commits (admin-channel learn in `Router::perhapsDecode`, manual verification in
 `KeyVerificationModule`) funnel through `NodeDB::commitRemoteKey()`, which carries an
-explicit `KeyCommitTrust` provenance (`ManuallyVerified` maps to `proven=true` in this
+explicit `KeyCommitTrust` provenance (`ManuallyVerified` sets the `keyManuallyVerified` bit in this
 cache). Never assign `info->public_key` directly when **learning or rotating a remote
 key** - the cache would silently diverge until the next reconcile. (The lone direct write
 in `getOrCreateMeshNode()`'s warm-tier re-admission is exempt: it restores a key the warm
@@ -207,23 +212,26 @@ behaviour - is documented with the module in
 Side-by-side view of what each store actually holds ("-" = not held). Details and
 rationale live in the per-store sections above.
 
-| Property                  | 1. Hot store (`NodeInfoLite`)    | 2. Warm tier (`WarmNodeEntry`)                 | 3. NodeInfo cache (`NodeInfoPayloadEntry`)                    | 4. Unified cache (`UnifiedCacheEntry`)               |
-| ------------------------- | -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
-| Node number               | yes                              | yes                                            | yes (0 = free slot)                                           | yes (0 = free slot)                                  |
-| Names + user id           | yes (flattened fields)           | -                                              | yes (full `User`, when `hasFullUser`)                         | -                                                    |
-| Public key (32 B)         | yes (authoritative)              | yes (keyed entries)                            | yes (TOFU or proven; pinned against tiers 1-2)                | -                                                    |
-| Signer provenance         | `HAS_XEDDSA_SIGNED` bitfield bit | 1 signer bit (shared with `last_heard`)        | `keySignerProven` (monotonic per key)                         | -                                                    |
-| Device role               | `role` field                     | 4-bit role (metadata steal)                    | inside the cached `User`                                      | 4-bit role in count-byte top bits (final fallback)   |
-| Recency                   | `last_heard` (unix secs)         | `last_heard` (unix secs, 128 s quantised)      | `obsTick` (3 min modular tick) + `hasObserved`                | pos/rate/unknown modular ticks                       |
-| Position / telemetry      | via satellite copy-out accessors | -                                              | -                                                             | 8-bit position _fingerprint_ only (dedup)            |
-| Protected / favorite      | bitfield flags                   | 2-bit protected category                       | - (`isMember` keep-alive instead)                             | -                                                    |
-| Routing hint (`next_hop`) | yes (persisted field)            | -                                              | -                                                             | ACK-confirmed relay byte (preloaded from tier 1)     |
-| Direct-reply metadata     | -                                | -                                              | `sourceChannel`, `decodedBitfield` (+ `hasDecodedBitfield`)   | -                                                    |
-| Traffic-shaping counters  | -                                | -                                              | -                                                             | rate + unknown counts, pos fingerprint               |
-| Entry size                | largest (full struct)            | 40 B exact                                     | ~`sizeof(User)`+8, platform-padded (no size assert by design) | 10 B exact                                           |
-| Capacity                  | `MAX_NUM_NODES` (250/120/10)     | `WARM_NODE_COUNT` (~100)                       | `kNodeInfoCacheEntries` (2000)                                | `TRAFFIC_MANAGEMENT_CACHE_SIZE` (2048/500/400/250/0) |
-| Persistence               | node DB file                     | raw-flash ring (nRF52840) or `/prefs/warm.dat` | none (rebuilt from seed + traffic)                            | none                                                 |
-| Storage                   | RAM                              | RAM + flash                                    | PSRAM on hardware; plain heap in native tests                 | PSRAM when available, else heap                      |
+| Property                   | 1. Hot store                   | 2. Warm tier                   | 3. NodeInfo cache                  | 4. Unified cache                |
+| -------------------------- | ------------------------------ | ------------------------------ | ---------------------------------- | ------------------------------- |
+| Struct                     | `NodeInfoLite`                 | `WarmNodeEntry`                | `NodeInfoPayloadEntry`             | `UnifiedCacheEntry`             |
+| Node number                | yes                            | yes                            | yes (0 = free)                     | yes (0 = free)                  |
+| Names + user id            | yes (flattened)                | -                              | yes (full `User`)                  | -                               |
+| Public key (32 B)          | yes (authoritative)            | yes (keyed entries)            | yes (TOFU/proven; pinned)          | -                               |
+| Key source - XEdDSA signed | `HAS_XEDDSA_SIGNED` bit        | 1 bit (in `last_heard`)        | `keyXeddsaSigned`                  | -                               |
+| Key source - manual scan   | `IS_KEY_MANUALLY_VERIFIED` bit | - (not carried)                | `keyManuallyVerified`              | -                               |
+| Device role                | `role` field                   | 4-bit role (metadata steal)    | in cached `User`                   | 4-bit role (final fallback)     |
+| Recency                    | `last_heard` (unix s)          | `last_heard` (128 s quant.)    | `obsTick` (3 min) + `hasObserved`  | modular ticks                   |
+| Position / telemetry       | satellite accessors            | -                              | -                                  | 8-bit pos fingerprint (dedup)   |
+| Protected / favorite       | bitfield flags                 | 2-bit protected category       | - (`isMember` instead)             | -                               |
+| Routing hint (`next_hop`)  | yes (persisted)                | -                              | -                                  | ACK-confirmed relay byte        |
+| Direct-reply metadata      | -                              | -                              | `sourceChannel`, `decodedBitfield` | -                               |
+| Traffic-shaping counters   | -                              | -                              | -                                  | rate + unknown counts, pos fp   |
+| Entry size                 | largest (full struct)          | 40 B exact                     | ~`sizeof(User)`+8 (padded)         | 10 B exact                      |
+| Capacity (symbol)          | `MAX_NUM_NODES`                | `WARM_NODE_COUNT`              | `kNodeInfoCacheEntries`            | `TRAFFIC_MANAGEMENT_CACHE_SIZE` |
+| Capacity (entries)         | 250/120/10                     | ~100                           | 2000                               | 2048/500/400/250/0              |
+| Persistence (durable)      | LittleFS (node DB)             | flash ring (nRF52840)/LittleFS | none (rebuilt)                     | none                            |
+| Storage (runtime)          | heap                           | heap / PSRAM (ESP32)           | PSRAM (hw) / heap (test)           | PSRAM / heap                    |
 
 ## How a lookup falls through the tiers
 
@@ -234,7 +242,7 @@ identity/role/key consumer
  1. hot store (NodeInfoLite)         full identity, authoritative
         │ miss
         ▼
- 2. warm tier (WarmNodeStore)        key + role/protected/signer bits, persisted
+ 2. warm tier (WarmNodeStore)        key + role/protected/XEdDSA-signed bits, persisted
         │ miss
         ▼
  3. TMM NodeInfo cache (extended)    full User payloads + TOFU/proven keys, ephemeral

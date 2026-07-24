@@ -43,21 +43,21 @@ static_assert(sizeof(WarmNodeEntry) == 40, "WarmNodeEntry must stay 40 B - persi
 //
 // The warm tier only uses last_heard to LRU-rank evicted (long-tail) nodes, so ~minute
 // recency resolution is plenty. We reclaim the low WARM_META_BITS of that field to carry
-// the evicted node's device role, a protected category + a signer flag, at zero cost to
+// the evicted node's device role, a protected category + an XEdDSA-signed flag, at zero cost to
 // record size (entry stays 40 B; no RAM/flash growth). The high bits remain a real
 // unix-seconds timestamp quantised to (1 << WARM_META_BITS) seconds.
 //
 // Safe because: a real timestamp can never be all-ones (the tombstone sentinel) before
 // 2106, and tombstones/erased flash are detected via num before last_heard is read. Only
 // the LOW bits are stolen - the high (era) bits are untouched, so the time range is intact.
-static constexpr uint32_t WARM_META_BITS = 7;                          // role(4) + protected(2) + signer(1)
+static constexpr uint32_t WARM_META_BITS = 7;                          // role(4) + protected(2) + xeddsa-signed(1)
 static constexpr uint32_t WARM_META_MASK = (1u << WARM_META_BITS) - 1; // 0x7F → 128 s quantum
 static constexpr uint32_t WARM_TIME_MASK = ~WARM_META_MASK;            // 0xFFFFFF80
 static constexpr uint32_t WARM_ROLE_MASK = 0x0Fu;                      // bits [3:0] device role (0..12)
 static constexpr uint32_t WARM_PROT_SHIFT = 4;                         // bits [5:4] protected category
 static constexpr uint32_t WARM_PROT_MASK = 0x03u;
-static constexpr uint32_t WARM_SIGNER_SHIFT = 6; // bit [6] we verified an XEdDSA signature from this node
-static constexpr uint32_t WARM_SIGNER_MASK = 0x01u;
+static constexpr uint32_t WARM_XEDDSA_SIGNED_SHIFT = 6; // bit [6] we verified an XEdDSA signature from this node
+static constexpr uint32_t WARM_XEDDSA_SIGNED_MASK = 0x01u;
 
 // On-disk record format, from the page/file magic; older ones are normalised by load().
 enum class WarmFormat : uint8_t { Current, V2, V1 };
@@ -65,11 +65,11 @@ enum class WarmFormat : uint8_t { Current, V2, V1 };
 // Protected category cached alongside role so consumers needn't re-derive the mapping.
 enum class WarmProtected : uint8_t { None = 0, Role = 1, Flag = 2, XeddsaSigner = 3 };
 
-inline uint32_t warmPackLastHeard(uint32_t lastHeard, uint8_t role, uint8_t prot, bool signer)
+inline uint32_t warmPackLastHeard(uint32_t lastHeard, uint8_t role, uint8_t prot, bool xeddsaSigned)
 {
     return (lastHeard & WARM_TIME_MASK) | (static_cast<uint32_t>(role) & WARM_ROLE_MASK) |
            ((static_cast<uint32_t>(prot) & WARM_PROT_MASK) << WARM_PROT_SHIFT) |
-           ((signer ? WARM_SIGNER_MASK : 0u) << WARM_SIGNER_SHIFT);
+           ((xeddsaSigned ? WARM_XEDDSA_SIGNED_MASK : 0u) << WARM_XEDDSA_SIGNED_SHIFT);
 }
 inline uint32_t warmTimeOf(const WarmNodeEntry &e)
 {
@@ -83,9 +83,9 @@ inline uint8_t warmProtOf(const WarmNodeEntry &e)
 {
     return static_cast<uint8_t>((e.last_heard >> WARM_PROT_SHIFT) & WARM_PROT_MASK);
 }
-inline bool warmSignerOf(const WarmNodeEntry &e)
+inline bool warmXeddsaSignedOf(const WarmNodeEntry &e)
 {
-    return ((e.last_heard >> WARM_SIGNER_SHIFT) & WARM_SIGNER_MASK) != 0;
+    return ((e.last_heard >> WARM_XEDDSA_SIGNED_SHIFT) & WARM_XEDDSA_SIGNED_MASK) != 0;
 }
 
 // Gated on NRF52840_XXAA: the ring sits at 0xEA000
@@ -109,19 +109,19 @@ class WarmNodeStore
     /// entries; otherwise the oldest (keyless-first) entry is replaced.
     /// @param role         the node's device role (meshtastic_Config_DeviceConfig_Role, 0..12)
     /// @param protectedCat WarmProtected category cached for the hop-trim path
-    /// @param signer       true if we ever verified an XEdDSA signature from this node, so
+    /// @param xeddsaSigned true if we ever verified an XEdDSA signature from this node, so
     ///                     re-admission restores the bit rather than relearning it
     /// @return true if the node was stored or updated
     bool absorb(NodeNum num, uint32_t lastHeard, const uint8_t *key32 /* may be NULL */, uint8_t role = 0,
-                uint8_t protectedCat = 0, bool signer = false);
+                uint8_t protectedCat = 0, bool xeddsaSigned = false);
 
     /// Look up the cached device role + protected category for a warm node.
     /// @return false if the node is not in the warm tier.
     bool lookupMeta(NodeNum num, uint8_t &role, uint8_t &protectedCat) const;
 
-    /// True if the warm tier holds this node with its signer bit set (an XEdDSA signature
+    /// True if the warm tier holds this node with its XEdDSA-signed bit set (an XEdDSA signature
     /// was verified from it before eviction).
-    bool isVerifiedSigner(NodeNum num) const;
+    bool hasXeddsaSigned(NodeNum num) const;
 
     /// Find and remove an entry (used when the node is re-admitted to the hot store).
     bool take(NodeNum num, WarmNodeEntry &out);
