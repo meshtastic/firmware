@@ -15,7 +15,8 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     LOG_INFO("%s: Init sensor", sensorName);
 #ifdef PMSA003I_ENABLE_PIN
     pinMode(PMSA003I_ENABLE_PIN, OUTPUT);
-    digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
+    LOG_DEBUG("%s: has enable pin", sensorName);
+    wakeUp();
 #endif
 
     _bus = bus;
@@ -44,7 +45,8 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
 
     status = 1;
-    LOG_INFO("%s Enabled", sensorName);
+    LOG_INFO("%s: Enabled", sensorName);
+    sleep();
 
     initI2CSensor();
     return true;
@@ -147,7 +149,7 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 
 bool PMSA003ISensor::isActive()
 {
-    return state == State::ACTIVE;
+    return state == PMSA003I_ACTIVE;
 }
 
 int32_t PMSA003ISensor::wakeUpTimeMs()
@@ -188,7 +190,7 @@ void PMSA003ISensor::sleep()
 #ifdef PMSA003I_ENABLE_PIN
     LOG_INFO("%s: Sleep", sensorName);
     digitalWrite(PMSA003I_ENABLE_PIN, LOW);
-    state = State::IDLE;
+    state = PMSA003I_IDLE;
     pmMeasureStarted = 0;
 #endif
 }
@@ -198,7 +200,7 @@ uint32_t PMSA003ISensor::wakeUp()
 #ifdef PMSA003I_ENABLE_PIN
     LOG_INFO("%s: Waking up", sensorName);
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
-    state = State::ACTIVE;
+    state = PMSA003I_ACTIVE;
     pmMeasureStarted = getTime();
 
     return PMSA003I_WARMUP_MS;

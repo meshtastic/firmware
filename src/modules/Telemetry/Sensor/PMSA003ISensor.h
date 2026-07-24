@@ -26,8 +26,8 @@ class PMSA003ISensor : public TelemetrySensor
     virtual int32_t pendingForReadyMs() override;
 
   private:
-    enum class State { IDLE, ACTIVE };
-    State state = State::ACTIVE;
+    enum State { PMSA003I_IDLE, PMSA003I_ACTIVE };
+    State state = PMSA003I_ACTIVE;
 
     uint16_t computedChecksum = 0;
     uint16_t receivedChecksum = 0;
