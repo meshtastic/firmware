@@ -1,7 +1,5 @@
-// Meshnology W12 "WiFi LoRa 32 V5" - shadows the generic esp32s3 variant pins.
-// Deliberately omits PIN_RGB_LED / LED_BUILTIN / RGB_BUILTIN: the generic definitions make the
-// core's digitalWrite() reference the RMT-backed RGB LED HAL, which fails to link against this
-// build's trimmed FreeRTOS config (no xEventGroupSetBitsFromISR).
+// Meshnology W12 - shadows the generic esp32s3 pins, minus RGB_BUILTIN/LED_BUILTIN so
+// digitalWrite() does not pull in the RMT RGB HAL, which fails to link in this build.
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 
