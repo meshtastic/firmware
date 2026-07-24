@@ -20,24 +20,45 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install deps
+      - name: Capture runner image version (for caching)
+        id: r_image
+        run: echo "ver=$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-macos-${{ inputs.macos_ver }}-${{ steps.r_image.outputs.ver }}
+
+      - name: Install deps (Homebrew)
         shell: bash
-        run: |
-          brew update
-          brew install platformio yaml-cpp libuv openssl@3 libusb argp-standalone pkg-config ulfius
+        env:
+          # GitHub-Hosted MacOS runner images are updated frequently
+          # so skip running `brew update` to avoid unnecessary failures and delays.
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: >
+          brew install
+          platformio yaml-cpp libuv openssl@3 libusb argp-standalone pkg-config ulfius jsoncpp
 
       - name: Get release version string
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini') }}
+          restore-keys: |
+            pio-macos-${{ inputs.macos_ver }}-
+
       - name: Build for MacOS
         run: |
           platformio run -e native-macos
         env:
           PKG_VERSION: ${{ steps.version.outputs.long }}
-        # Errors in this step should not fail the entire workflow while MacOS support is in development.
-        continue-on-error: true
 
       - name: List output files
         run: ls -lah .pio/build/native-macos/
