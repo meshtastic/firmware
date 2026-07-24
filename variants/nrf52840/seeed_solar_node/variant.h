@@ -147,6 +147,7 @@ extern "C" {
 
 #define PIN_SERIAL2_RX (-1)
 #define PIN_SERIAL2_TX (-1)
+
 #ifdef __cplusplus
 }
 #endif
