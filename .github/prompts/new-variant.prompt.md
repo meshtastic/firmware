@@ -112,6 +112,7 @@ upload_speed = 921600
 
 - `custom_meshtastic_support_level = 1` - Built on every PR (actively supported)
 - `custom_meshtastic_support_level = 2` - Built only on merge to main branches
+- `board_level = pr` - PR fast-feedback build; reserved for one board per platform, do not set on new variants
 - `board_level = extra` - Only built on full releases
 
 ## Build Manifest Metadata
