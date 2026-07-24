@@ -236,13 +236,16 @@ jobs:
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
           sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
 
+      - name: Event channel policy tests
+        run: platformio test -e coverage-event-policy -v --junit-output-path event-policy-testreport.xml
+
       - name: Save test results
         if: always() # run this step even if previous step failed
         uses: actions/upload-artifact@v7
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}
           overwrite: true
-          path: ./testreport.xml
+          path: ./*testreport.xml
 
       - name: Save coverage information
         uses: actions/upload-artifact@v7

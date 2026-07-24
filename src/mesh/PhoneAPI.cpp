@@ -1769,6 +1769,16 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     }
 #endif
 
+    // Reject before recording duplicate or per-port cooldown state, so a blocked
+    // attempt cannot throttle a valid private-channel position retry.
+    if (isBlockedEventCoordinatePacket(&p)) {
+        LOG_DEBUG("Suppress phone coordinate send on event (everyone) channel");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Location sharing is disabled on this channel");
+        return false;
+    }
+
 #if defined(ARCH_PORTDUINO)
     // For use with the simulator, we should not ignore duplicate packets from the phone
     if (SimRadio::instance == nullptr)

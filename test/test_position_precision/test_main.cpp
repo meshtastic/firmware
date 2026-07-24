@@ -1,11 +1,16 @@
 #include "Channels.h"
 #include "GeoCoord.h"
+#include "NodeDB.h"
 #include "PositionPrecision.h"
+#include "Router.h"
 #include "TestUtil.h"
 #include "mesh-pb-constants.h"
 #include <cstdint>
 #include <cstring>
 #include <unity.h>
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 
 static meshtastic_Position makePosition()
 {
@@ -129,6 +134,8 @@ static void test_getPositionPrecisionForChannel_clampsPreciseOnDefaultKeyChannel
     channels.initDefaults(); // channel 0: primary, default key (psk {0x01}) -> publicly decryptable
     uint8_t idx = 0;
     meshtastic_Channel &ch = channels.getByIndex(idx);
+    ch.settings.psk.size = 1;
+    ch.settings.psk.bytes[0] = 0x01;
     ch.settings.has_module_settings = true;
     ch.settings.module_settings.position_precision = 32; // user requests "Precise" on a public channel
 
@@ -236,6 +243,178 @@ static void test_geocoord_extreme_coords_no_oob()
         }
 }
 
+static void configureEventChannels(bool eventAtIndexOne, bool inheritEventKeyOnSecondary)
+{
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = 2;
+
+    meshtastic_Channel eventChannel = makeChannel(meshtastic_Channel_Role_PRIMARY, true, 16);
+    meshtastic_Channel otherChannel = makeChannel(meshtastic_Channel_Role_SECONDARY, true, 16);
+    strcpy(eventChannel.settings.name, "everyone");
+#ifdef USERPREFS_CHANNEL_0_PSK
+    static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    eventChannel.settings.psk.size = sizeof(configuredEventPsk);
+    memcpy(eventChannel.settings.psk.bytes, configuredEventPsk, sizeof(configuredEventPsk));
+#endif
+    if (!inheritEventKeyOnSecondary) {
+        otherChannel.settings.psk.size = 32;
+        memset(otherChannel.settings.psk.bytes, 0xAB, 32);
+        strcpy(otherChannel.settings.name, "private");
+    }
+
+    eventChannel.index = eventAtIndexOne ? 1 : 0;
+    otherChannel.index = eventAtIndexOne ? 0 : 1;
+    channelFile.channels[eventChannel.index] = eventChannel;
+    channelFile.channels[otherChannel.index] = otherChannel;
+    channels.onConfigChanged();
+}
+
+static void test_getPositionPrecisionForChannel_eventChannelClampedToZero()
+{
+    // The event ("everyone") channel must never share location, even when the
+    // stored precision is non-zero. Under the block gate the clamp forces 0;
+    // otherwise the stored value is honored like any other channel.
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    configureEventChannels(false, false);
+    TEST_ASSERT_TRUE(channels.isEventChannel(0));
+    TEST_ASSERT_EQUAL_UINT32(0, getPositionPrecisionForChannel(0));
+#else
+    meshtastic_Channel channel = makeChannel(meshtastic_Channel_Role_PRIMARY, true, 16);
+    TEST_ASSERT_EQUAL_UINT32(16, getPositionPrecisionForChannel(channel));
+#endif
+}
+
+static void test_eventChannelIdentity_usesEffectiveKeyAndSurvivesReorder()
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    configureEventChannels(false, true);
+    TEST_ASSERT_TRUE(channels.isEventChannel(0));
+    TEST_ASSERT_TRUE(channels.isEventChannel(1));
+    TEST_ASSERT_EQUAL_UINT32(0, getPositionPrecisionForChannel(1));
+
+    configureEventChannels(true, false);
+    TEST_ASSERT_FALSE(channels.isEventChannel(0));
+    TEST_ASSERT_TRUE(channels.isEventChannel(1));
+    TEST_ASSERT_EQUAL_UINT32(16, getPositionPrecisionForChannel(0));
+    TEST_ASSERT_EQUAL_UINT32(0, getPositionPrecisionForChannel(1));
+#else
+    TEST_ASSERT_FALSE(channels.isEventChannel(0));
+#endif
+}
+
+static meshtastic_MeshPacket makeDecodedPacket(meshtastic_PortNum portnum, uint8_t channelIndex)
+{
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_default;
+    packet.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet.decoded.portnum = portnum;
+    packet.channel = channelIndex;
+    return packet;
+}
+
+static void test_eventCoordinatePolicy_coversPortsAndExcludesPki()
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    configureEventChannels(false, false);
+    auto position = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, 0);
+    auto waypoint = makeDecodedPacket(meshtastic_PortNum_WAYPOINT_APP, 0);
+    auto mapReport = makeDecodedPacket(meshtastic_PortNum_MAP_REPORT_APP, 0);
+    auto text = makeDecodedPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, 0);
+
+    TEST_ASSERT_TRUE(isBlockedEventCoordinatePacket(&position));
+    TEST_ASSERT_TRUE(isBlockedEventCoordinatePacket(&waypoint));
+    TEST_ASSERT_TRUE(isBlockedEventCoordinatePacket(&mapReport));
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&text));
+
+    waypoint.pki_encrypted = true;
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&waypoint));
+
+    waypoint.pki_encrypted = false;
+    waypoint.to = 0x12345678;
+    config.security.private_key.size = 32;
+    owner.is_licensed = false;
+#if ARCH_PORTDUINO
+    portduino_config.force_simradio = false;
+#endif
+    TEST_ASSERT_TRUE(willUsePki(&waypoint));
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&waypoint));
+#else
+    auto position = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, 0);
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&position));
+#endif
+}
+
+static void test_eventCoordinatePolicy_doesNotClassifyOpaquePacketsByHash()
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    configureEventChannels(false, false);
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_default;
+    packet.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    packet.channel = channels.getHash(0);
+    packet.from = 0;
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&packet));
+
+    packet.pki_encrypted = true;
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&packet));
+
+    packet.channel = 0;
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&packet));
+
+    packet.pki_encrypted = false;
+    packet.channel = channels.getHash(0);
+    packet.from = 0x12345678;
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&packet));
+
+    packet.from = 0;
+    packet.channel = channels.getHash(1);
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&packet));
+#else
+    TEST_ASSERT_TRUE(true);
+#endif
+}
+
+static void test_eventCoordinatePolicy_usesResolvedUnicastChannel()
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    NodeDB *savedNodeDB = nodeDB;
+    nodeDB = new NodeDB();
+    configureEventChannels(false, false);
+    meshtastic_NodeInfoLite *node =
+        nodeDB->getNumMeshNodes() > 1 ? nodeDB->getMeshNodeByIndex(1) : nodeDB->getOrCreateMeshNode(0x12345678);
+    TEST_ASSERT_NOT_NULL(node);
+    const NodeNum destination = node->num;
+    const uint8_t savedChannel = node->channel;
+
+    auto position = makeDecodedPacket(meshtastic_PortNum_POSITION_APP, 0);
+    position.to = destination;
+    node->channel = 1;
+    TEST_ASSERT_FALSE(isBlockedEventCoordinatePacket(&position));
+
+    position.from = 0x87654321;
+    TEST_ASSERT_TRUE(isBlockedEventCoordinatePacket(&position));
+
+    position.from = 0;
+    node->channel = 0;
+    TEST_ASSERT_TRUE(isBlockedEventCoordinatePacket(&position));
+    node->channel = savedChannel;
+    delete nodeDB;
+    nodeDB = savedNodeDB;
+#else
+    TEST_ASSERT_TRUE(true);
+#endif
+}
+
+static void test_getPositionPrecisionForChannel_nonEventFullKeyIsHonored()
+{
+    // A private channel with a full 32-byte key that is not the configured
+    // channel-0 PSK must be
+    // unaffected by the clamp on either side of the gate.
+    meshtastic_Channel channel = makeChannel(meshtastic_Channel_Role_PRIMARY, true, 16);
+    channel.settings.psk.size = 32;
+    memset(channel.settings.psk.bytes, 0xAB, 32);
+
+    TEST_ASSERT_EQUAL_UINT32(16, getPositionPrecisionForChannel(channel));
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -262,6 +441,12 @@ void setup()
     RUN_TEST(test_cryptoKeyIsPublic_aes256KeyIsPrivate);
     RUN_TEST(test_cryptoKeyIsPublic_invalidKeyIsNotPublic);
     RUN_TEST(test_geocoord_extreme_coords_no_oob);
+    RUN_TEST(test_getPositionPrecisionForChannel_eventChannelClampedToZero);
+    RUN_TEST(test_eventChannelIdentity_usesEffectiveKeyAndSurvivesReorder);
+    RUN_TEST(test_eventCoordinatePolicy_coversPortsAndExcludesPki);
+    RUN_TEST(test_eventCoordinatePolicy_doesNotClassifyOpaquePacketsByHash);
+    RUN_TEST(test_eventCoordinatePolicy_usesResolvedUnicastChannel);
+    RUN_TEST(test_getPositionPrecisionForChannel_nonEventFullKeyIsHonored);
     exit(UNITY_END());
 }
 

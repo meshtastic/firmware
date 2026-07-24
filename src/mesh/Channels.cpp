@@ -495,6 +495,21 @@ bool Channels::isWellKnownChannel(ChannelIndex chIndex)
     return false;
 }
 
+bool Channels::isEventChannel(ChannelIndex chIndex)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    static_assert(sizeof(configuredEventPsk) == 16 || sizeof(configuredEventPsk) == 32,
+                  "USERPREFS_CHANNEL_0_PSK must be an AES-128 or AES-256 key");
+    CryptoKey effectiveKey = getKey(chIndex);
+    return effectiveKey.length == sizeof(configuredEventPsk) &&
+           memcmp(effectiveKey.bytes, configuredEventPsk, sizeof(configuredEventPsk)) == 0;
+#else
+    (void)chIndex;
+    return false;
+#endif
+}
+
 bool Channels::hasDefaultChannel()
 {
     // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel

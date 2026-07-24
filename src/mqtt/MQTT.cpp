@@ -698,6 +698,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 {
     if (mp_encrypted.via_mqtt)
         return; // Don't send messages that came from MQTT back into MQTT
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (isBlockedEventCoordinatePacket(&mp_decoded)) {
+        LOG_DEBUG("MQTT onSend - Suppress coordinate packet on event channel");
+        return;
+    }
+#endif
     bool uplinkEnabled = false;
     for (int i = 0; i <= 7; i++) {
         if (channels.getByIndex(i).settings.uplink_enabled)
@@ -775,6 +781,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
 void MQTT::perhapsReportToMap()
 {
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    if (channels.isEventChannel(channels.getPrimaryIndex())) {
+        LOG_DEBUG("Suppress MQTT map report on event (everyone) channel");
+        return;
+    }
+#endif
     if (!moduleConfig.mqtt.map_reporting_enabled || !moduleConfig.mqtt.map_report_settings.should_report_location ||
         !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
