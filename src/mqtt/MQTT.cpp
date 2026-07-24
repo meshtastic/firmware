@@ -124,9 +124,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
             if (!pAck)
                 return;
             pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
-            // sendLocal consumes packets sent to a live interface, but returns SHOULD_RELEASE
-            // when it handled a local delivery synchronously. Match MeshService::sendToMesh's
-            // ownership contract so the MQTT acknowledgement cannot leak on the local path.
+            // Release locally handled ACKs only when sendLocal requests it.
             if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
                 packetPool.release(pAck);
         } else {
@@ -161,10 +159,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
 
     if (shouldDropMqttDownlink(*p))
         return;
-    // A decoded MQTT packet has already crossed the broker boundary, so authenticate it in place
-    // before handing it to the router. The routing-auth cache intentionally keeps an authenticated
-    // copy separate for encrypted packets, but a cache hit alone does not update this packet's
-    // xeddsa_signed marker (which is part of the downstream message metadata).
+    // Authenticate decoded MQTT packets in place so xeddsa_signed reaches consumers.
     bool decodedAuthChecked = false;
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {

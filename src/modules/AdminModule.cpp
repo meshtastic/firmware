@@ -201,6 +201,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
 #endif
+    } else if (authorizedLicensedSigner) {
+        // Router verified a plaintext licensed-mode signer against the admin allowlist above.
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin is disabled");

@@ -17,6 +17,7 @@
 #include "mesh/NodeDB.h"
 #include "mesh/mesh-pb-constants.h"
 #include "modules/AdminModule.h"
+#include "modules/NodeInfoModule.h"
 #include "support/AdminModuleTestShim.h"
 #include "support/MockMeshService.h"
 #include <cstring>
@@ -90,6 +91,18 @@ static meshtastic_MeshPacket makeRemoteSetOwner(const char *newLongName, const u
     mp.pki_encrypted = true; // arrived over PKC
     mp.public_key.size = 32;
     memcpy(mp.public_key.bytes, ADMIN_KEY, 32); // matches config.security.admin_key[0] -> authorized
+    return mp;
+}
+
+static meshtastic_MeshPacket makeLicensedRemoteSetOwner(const char *newLongName, const uint8_t *session, size_t sessionLen,
+                                                        meshtastic_AdminMessage &out)
+{
+    auto mp = makeRemoteSetOwner(newLongName, session, sessionLen, out);
+    mp.to = LOCAL_NODE;
+    mp.pki_encrypted = false;
+    mp.xeddsa_signed = true;
+    mp.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    out.set_owner.is_licensed = true;
     return mp;
 }
 
@@ -205,6 +218,24 @@ void test_remote_setter_without_session_is_rejected(void)
 
     // Rejected at the session gate -> owner unchanged (this is ndoo's "Admin message without session_key!").
     TEST_ASSERT_EQUAL_STRING("Original", owner.long_name);
+}
+
+void test_licensed_signed_setter_with_session_is_accepted(void)
+{
+    owner.is_licensed = true;
+    meshtastic_AdminMessage sessionResponse = meshtastic_AdminMessage_init_zero;
+    admin->setPassKey(&sessionResponse);
+
+    meshtastic_AdminMessage m;
+    meshtastic_MeshPacket mp = makeLicensedRemoteSetOwner("LicensedAdmin", sessionResponse.session_passkey.bytes,
+                                                          sessionResponse.session_passkey.size, m);
+    NodeInfoModule *savedNodeInfoModule = nodeInfoModule;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    admin->handleReceivedProtobuf(mp, &m);
+    nodeInfoModule = savedNodeInfoModule;
+    admin->drainReply();
+
+    TEST_ASSERT_EQUAL_STRING("LicensedAdmin", owner.long_name);
 }
 
 // The node's session key is minted only by setPassKey (which runs when it answers an admin GET),
@@ -673,6 +704,7 @@ void setup()
     UNITY_BEGIN();
 #if !(MESHTASTIC_EXCLUDE_PKI)
     RUN_TEST(test_remote_setter_without_session_is_rejected);
+    RUN_TEST(test_licensed_signed_setter_with_session_is_accepted);
     RUN_TEST(test_expected_session_key_is_zero_before_any_get);
     RUN_TEST(test_session_gate_accepts_key_from_a_get_response);
     RUN_TEST(test_remote_security_config_omits_private_key);
