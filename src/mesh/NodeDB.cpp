@@ -1243,6 +1243,12 @@ void NodeDB::installDefaultModuleConfig()
         moduleConfig.external_notification.nag_timeout = 0;
 #else
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
+
+#if ARCH_PORTDUINO
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+#endif
+  
 #endif // HAS_TFT
 #endif // HAS_I2S
 
