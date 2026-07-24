@@ -117,6 +117,9 @@ PB_BIND(meshtastic_NodeRemoteHardwarePin, meshtastic_NodeRemoteHardwarePin, AUTO
 PB_BIND(meshtastic_ChunkedPayload, meshtastic_ChunkedPayload, AUTO)
 
 
+PB_BIND(meshtastic_ClientApiChunkedPayload, meshtastic_ClientApiChunkedPayload, AUTO)
+
+
 PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
 
 
