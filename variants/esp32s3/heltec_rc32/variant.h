@@ -1,0 +1,74 @@
+#ifndef _VARIANT_HELTEC_RC32_
+#define _VARIANT_HELTEC_RC32_
+
+#define HAS_SCREEN 1
+#define HAS_SPI_TFT 1
+#define USE_TFTDISPLAY 1
+#define TFT_SCL 17
+#define TFT_SDA 38
+#define TFT_CS 39
+#define TFT_RS 16
+#define TFT_DC TFT_RS
+#define TFT_RST 4
+#define TFT_EN 6
+#define TFT_EN_ON LOW
+#define TFT_EN_OFF HIGH
+#define VTFT_CTRL TFT_EN
+#define TFT_BL 5
+#define TFT_BLK TFT_BL
+#define TFT_BACKLIGHT_ON HIGH
+#define TFT_BACKLIGHT_OFF LOW
+#define TFT_WIDTH 128
+#define TFT_HEIGHT 220
+#define TFT_BLACK 0
+#define SPI_FREQUENCY 8000000
+#define SCREEN_ROTATE
+
+#define BUTTON_PIN 0
+
+#define HAS_GPS 1
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+#define GPS_RX_PIN 44
+#define GPS_TX_PIN 43
+#define PIN_GPS_EN 45
+#define GPS_EN_ACTIVE HIGH
+#define PIN_GPS_RESET 40
+#define GPS_RESET_MODE LOW
+#define PIN_GPS_PPS 41
+
+#define I2C_SCL 18
+#define I2C_SDA 21
+#define SENSOR_INT_PIN 42
+#define SENSOR_RST_PIN 2
+#define SENSOR_POWER_CTRL_PIN 46
+#define SENSOR_POWER_ON HIGH
+#define PERIPHERAL_WARMUP_MS 100
+
+#define LED_POWER 47
+#define PIN_BUZZER 48
+
+#define USE_SX1262
+#define LORA_SCK 11
+#define LORA_MISO 13
+#define LORA_MOSI 12
+#define LORA_CS 10
+#define LORA_DIO0 RADIOLIB_NC
+#define LORA_DIO1 14
+#define LORA_RESET 9
+
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY 1
+#define SX126X_RESET LORA_RESET
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+
+#define BATTERY_PIN 7
+#define ADC_CHANNEL ADC_CHANNEL_6
+#define ADC_CTRL 15
+#define ADC_CTRL_ENABLED HIGH
+#define ADC_MULTIPLIER 4.9
+#define ADC_ATTENUATION ADC_ATTEN_DB_2_5
+
+#endif
