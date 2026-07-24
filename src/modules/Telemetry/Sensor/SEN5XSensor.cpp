@@ -690,16 +690,16 @@ bool SEN5XSensor::readValues()
     int16_t int_noxIndex = static_cast<int16_t>((dataBuffer[14] << 8) | dataBuffer[15]);
 
     // Convert values based on Sensirion Arduino lib.
-    // The sensor reports unavailable values as 0xFFFF (unsigned) / 0x7FFF
-    // (signed); map those to the sentinels getMetrics() checks for
-    sen5xmeasurement.pM1p0 = (uint_pM1p0 != 0xFFFF) ? (uint_pM1p0 / 10) : UINT16_MAX;
-    sen5xmeasurement.pM2p5 = (uint_pM2p5 != 0xFFFF) ? (uint_pM2p5 / 10) : UINT16_MAX;
-    sen5xmeasurement.pM4p0 = (uint_pM4p0 != 0xFFFF) ? (uint_pM4p0 / 10) : UINT16_MAX;
-    sen5xmeasurement.pM10p0 = (uint_pM10p0 != 0xFFFF) ? (uint_pM10p0 / 10) : UINT16_MAX;
-    sen5xmeasurement.humidity = (int_humidity != 0x7FFF) ? (int_humidity / 100.0f) : FLT_MAX;
-    sen5xmeasurement.temperature = (int_temperature != 0x7FFF) ? (int_temperature / 200.0f) : FLT_MAX;
-    sen5xmeasurement.vocIndex = (int_vocIndex != 0x7FFF) ? (int_vocIndex / 10.0f) : FLT_MAX;
-    sen5xmeasurement.noxIndex = (int_noxIndex != 0x7FFF) ? (int_noxIndex / 10.0f) : FLT_MAX;
+    // Map values the sensor reports as unavailable (SEN5X_UINT_INVALID /
+    // SEN5X_INT_INVALID) to the sentinels getMetrics() checks for
+    sen5xmeasurement.pM1p0 = (uint_pM1p0 != SEN5X_UINT_INVALID) ? (uint_pM1p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM2p5 = (uint_pM2p5 != SEN5X_UINT_INVALID) ? (uint_pM2p5 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM4p0 = (uint_pM4p0 != SEN5X_UINT_INVALID) ? (uint_pM4p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM10p0 = (uint_pM10p0 != SEN5X_UINT_INVALID) ? (uint_pM10p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.humidity = (int_humidity != SEN5X_INT_INVALID) ? (int_humidity / 100.0f) : FLT_MAX;
+    sen5xmeasurement.temperature = (int_temperature != SEN5X_INT_INVALID) ? (int_temperature / 200.0f) : FLT_MAX;
+    sen5xmeasurement.vocIndex = (int_vocIndex != SEN5X_INT_INVALID) ? (int_vocIndex / 10.0f) : FLT_MAX;
+    sen5xmeasurement.noxIndex = (int_noxIndex != SEN5X_INT_INVALID) ? (int_noxIndex / 10.0f) : FLT_MAX;
 
     LOG_DEBUG("%s: Got readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
               sen5xmeasurement.pM2p5, sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
@@ -748,14 +748,14 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     // Convert values based on Sensirion Arduino lib.
     // Raw PN values are #/cm3 with 0.1 resolution; multiplying by 10
     // converts to #/0.1l without the truncation of dividing first.
-    // The sensor reports unavailable values as 0xFFFF; map those to the
+    // Map values the sensor reports as unavailable (SEN5X_UINT_INVALID) to the
     // sentinels getMetrics() checks for
-    sen5xmeasurement.pN0p5 = (uint_pN0p5 != 0xFFFF) ? ((uint32_t)uint_pN0p5 * 10) : UINT32_MAX;
-    sen5xmeasurement.pN1p0 = (uint_pN1p0 != 0xFFFF) ? ((uint32_t)uint_pN1p0 * 10) : UINT32_MAX;
-    sen5xmeasurement.pN2p5 = (uint_pN2p5 != 0xFFFF) ? ((uint32_t)uint_pN2p5 * 10) : UINT32_MAX;
-    sen5xmeasurement.pN4p0 = (uint_pN4p0 != 0xFFFF) ? ((uint32_t)uint_pN4p0 * 10) : UINT32_MAX;
-    sen5xmeasurement.pN10p0 = (uint_pN10p0 != 0xFFFF) ? ((uint32_t)uint_pN10p0 * 10) : UINT32_MAX;
-    sen5xmeasurement.tSize = (uint_tSize != 0xFFFF) ? (uint_tSize / 1000.0f) : FLT_MAX;
+    sen5xmeasurement.pN0p5 = (uint_pN0p5 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN0p5 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN1p0 = (uint_pN1p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN1p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN2p5 = (uint_pN2p5 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN2p5 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN4p0 = (uint_pN4p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN4p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN10p0 = (uint_pN10p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN10p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.tSize = (uint_tSize != SEN5X_UINT_INVALID) ? (uint_tSize / 1000.0f) : FLT_MAX;
 
     // Remove accumuluative values:
     // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85

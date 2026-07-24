@@ -86,6 +86,10 @@ class SEN5XSensor : public TelemetrySensor
 #define SEN5X_READ_RAW_VALUES 0x03D2
 #define SEN5X_READ_PM_VALUES 0x0413
 
+// Values the sensor reports when a reading is unavailable
+#define SEN5X_UINT_INVALID 0xFFFF
+#define SEN5X_INT_INVALID 0x7FFF
+
 // Reply payload sizes in data bytes; the raw I2C transfer adds one CRC byte
 // per 2-byte group, so requests are <size> + <size> / 2 raw bytes
 #define SEN5X_VERSION_BUFFER_SIZE 8
