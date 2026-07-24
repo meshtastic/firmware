@@ -63,7 +63,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.platformio/.cache
-          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini') }}
+          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
           restore-keys: |
             pio-macos-${{ inputs.macos_ver }}-
 
@@ -78,7 +78,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/.platformio/.cache
-          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini') }}
+          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
 
       - name: List output files
         run: ls -lah .pio/build/native-macos/
