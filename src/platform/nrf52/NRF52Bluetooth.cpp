@@ -472,11 +472,20 @@ void NRF52Bluetooth::disconnect()
         for (uint8_t i = 0; i < connection_num; i++)
             Bluefruit.disconnect(i);
 
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
+        // Wait for disconnection, but only best-effort with a timeout: phone-originated admin
+        // messages run on Bluefruit's own BLE event task (sendLocal delivers synchronously), and
+        // there the DISCONNECTED event that clears the connected flag can't be processed until we
+        // return - an unbounded wait deadlocks until the watchdog fires. The SoftDevice completes
+        // the link termination on its own regardless. delay() rather than yield() so lower-priority
+        // tasks (including the watchdog feed in the main loop) keep running while we wait.
+        uint32_t start = millis();
+        while (Bluefruit.connected() && millis() - start < 1000)
+            delay(1);
 
-        LOG_INFO("Ended BLE connection");
+        if (Bluefruit.connected())
+            LOG_INFO("BLE disconnect still pending, continuing shutdown");
+        else
+            LOG_INFO("Ended BLE connection");
     }
 }
 
