@@ -5,11 +5,8 @@
 void setUp(void) {}
 void tearDown(void) {}
 
-// GeoCoord::latLongToMeter() was rewritten from the exact spherical law of cosines (needing
-// cos()/sin()/acos(), ~4.4KB of libm on wio-e5) to an equirectangular (flat-plane) approximation,
-// to avoid linking that trig chain for what is a display/movement-threshold utility. These tests
-// pin the measured accuracy bounds against the original formula, so a future change can't silently
-// regress them.
+// Pins latLongToMeter()'s equirectangular-approximation accuracy against the original spherical
+// law of cosines, so a future change can't silently regress it.
 
 static double referenceSphericalLawOfCosines(double lat_a, double lng_a, double lat_b, double lng_b)
 {
@@ -47,9 +44,7 @@ static void test_identical_points_is_zero(void)
 
 static void test_local_distances_within_1_percent(void)
 {
-    // Movement-threshold scale (meters to a few km) - the most common real usage
-    // (PositionModule's smart-broadcast check, PositionsApplet/FavoritesMapApplet's 10m/50m
-    // thresholds).
+    // Movement-threshold scale (meters to a few km) - the most common real usage.
     struct {
         double la, lo, lb, lob;
     } cases[] = {
@@ -86,9 +81,8 @@ static void test_regional_distances_within_4_percent(void)
 
 static void test_antimeridian_wraparound(void)
 {
-    // Two points ~22km apart straddling the 180th meridian. A naive longitude subtraction
-    // (b2-a2 without wrapping) would compute this as ~40,000km - this is the regression case for
-    // the wraparound fix.
+    // Two points ~22km apart straddling the 180th meridian - regression case for the antimeridian
+    // wraparound fix (a naive b2-a2 would compute this as ~40,000km).
     double expected = referenceSphericalLawOfCosines(0.0, 179.9, 0.0, -179.9);
     double actual = GeoCoord::latLongToMeter(0.0, 179.9, 0.0, -179.9);
     TEST_ASSERT_FLOAT_WITHIN(expected * 0.05f, expected, actual);
