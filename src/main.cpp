@@ -22,13 +22,13 @@
 
 #include "FSCommon.h"
 #include "Power.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
+#include "gps/RTC.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
@@ -428,10 +428,14 @@ void setup()
 #if ARCH_PORTDUINO
     RTCQuality ourQuality = RTCQualityDevice;
 
+#ifdef __linux__
+    // timedatectl is systemd-only, so macOS, Windows and WASM stay at
+    // RTCQualityDevice rather than claim NTP quality we have not verified.
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
         ourQuality = RTCQualityNTP;
     }
+#endif
 
     struct timeval tv;
     tv.tv_sec = time(NULL);
@@ -820,6 +824,10 @@ void setup()
     rp2040Setup();
 #endif
 
+#ifdef ARCH_STM32WL
+    stm32wlSetup();
+#endif
+
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
@@ -1107,6 +1115,23 @@ void setup()
 #endif
 #endif
 
+#if defined(SENSECAP_INDICATOR)
+    // The ST7701 panel shares SCK/MOSI/MISO (41/48/47) with the SX1262, and its host is SPI2_HOST,
+    // which on the S3 is the same peripheral as the Arduino `SPI` object (FSPI == SPI2).
+    // LovyanGFX bit-bangs the ST7701 init sequence on those pins, and because this variant builds
+    // with USE_ARDUINO_HAL_GPIO it does so via Arduino pinMode()/digitalWrite(). pinMode() calls
+    // perimanSetPinBus(.., ESP32_BUS_TYPE_GPIO, ..), whose deinit callback (spiDetachBus_SCK) ends
+    // up in spiStopBus() and gates the SPI2 clock. RadioLib then spins forever in spiTransferByte()
+    // waiting on cmd.update, which never clears on a stopped peripheral, and the watchdog fires.
+    //
+    // Restart the bus here, after the panel is up and before the radio is touched. Note that
+    // SPIClass::begin() early-returns when _spi is already non-NULL, so end() first is required.
+    SPI.end();
+    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, -1); // CS is an IO-expander pin, driven by RadioLib
+    SPI.setFrequency(4000000);
+    LOG_DEBUG("SPI2 restarted after ST7701 init (SCK=%d, MISO=%d, MOSI=%d)", LORA_SCK, LORA_MISO, LORA_MOSI);
+#endif
+
     auto rIf = initLoRa();
 
     lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
@@ -1218,7 +1243,7 @@ bool runASAP;
 // TODO find better home than main.cpp
 extern meshtastic_DeviceMetadata getDeviceMetadata()
 {
-    meshtastic_DeviceMetadata deviceMetadata;
+    meshtastic_DeviceMetadata deviceMetadata = meshtastic_DeviceMetadata_init_default;
     strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
@@ -1258,6 +1283,8 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
+    // Range test is always excluded as of 2.8
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_RANGETEST_CONFIG;
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
@@ -1274,6 +1301,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    deviceMetadata.has_xeddsa = true;
 #endif
     return deviceMetadata;
 }

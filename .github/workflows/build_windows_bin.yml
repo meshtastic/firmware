@@ -1,0 +1,120 @@
+name: Build Windows Binary
+
+on:
+  workflow_call:
+    inputs:
+      windows_ver:
+        required: false
+        default: "2025"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-Windows:
+    runs-on: windows-${{ inputs.windows_ver }}
+    defaults:
+      run:
+        # UCRT64 is the MinGW-w64 environment native-windows targets; the `msys`
+        # environment would link msys-2.0.dll and produce a Cygwin-style binary.
+        shell: msys2 {0}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          # Keep the token out of .git/config so later steps and artifacts can't leak it.
+          persist-credentials: false
+
+      - name: Setup MSYS2 / UCRT64
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          # argp is not packaged for the mingw environments and is built below.
+          # Python is omitted too: MSYS2's reports a `mingw` platform tag no wheel matches.
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-yaml-cpp
+            mingw-w64-ucrt-x86_64-libuv
+            mingw-w64-ucrt-x86_64-jsoncpp
+            mingw-w64-ucrt-x86_64-openssl
+            mingw-w64-ucrt-x86_64-libusb
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            git
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      # framework-portduino calls argp_parse(); MSYS2 packages argp only for the
+      # msys runtime, which cannot link into a native binary. No install() rules.
+      - name: Build and install argp-standalone
+        run: |
+          git clone --depth 1 https://github.com/tom42/argp-standalone /tmp/argp
+          cd /tmp/argp
+          cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release .
+          cmake --build build
+          cp include/argp-standalone/argp.h /ucrt64/include/argp.h
+          cp build/src/libargp-standalone.a /ucrt64/lib/libargp.a
+
+      - name: Install PlatformIO
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Get release version string
+        shell: pwsh
+        id: version
+        run: echo "long=$(python ./bin/buildinfo.py long)" >> $env:GITHUB_OUTPUT
+
+      # Runs outside the MSYS2 shell so PlatformIO stays on the runner's
+      # CPython; the UCRT64 toolchain is reached through PATH instead.
+      - name: Build for Windows
+        shell: pwsh
+        run: |
+          $env:PATH = "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin;$env:PATH"
+          platformio run -e native-windows
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.long }}
+
+      - name: List output files
+        run: ls -lah .pio/build/native-windows/
+
+      # The env links statically, so only Windows system DLLs should appear here.
+      # A third-party DLL means the static link regressed.
+      - name: Verify the binary is self-contained
+        run: |
+          set -euo pipefail
+          bin=.pio/build/native-windows/meshtasticd.exe
+          test -f "$bin"
+          # `|| true` keeps grep's no-match exit out of `set -e`; an empty import
+          # table is caught by the test below instead of passing as "no deps".
+          deps=$(objdump -p "$bin" | grep -i 'DLL Name' || true)
+          test -n "$deps"
+          extra=$(printf '%s\n' "$deps" \
+            | grep -viE 'api-ms-win|KERNEL32|WS2_32|ADVAPI32|USER32|msvcrt|ucrtbase|bcrypt|IPHLPAPI|SHELL32|ole32|CRYPT32|SETUPAPI|CFGMGR32|WINMM|dbghelp' || true)
+          if [ -n "$extra" ]; then
+            printf '%s\n' "$extra"
+            echo "::error::meshtasticd.exe has non-system DLL dependencies (static link regressed)"
+            exit 1
+          fi
+          echo "OK: no third-party DLL dependencies"
+
+      - name: Smoke test the binary
+        run: |
+          .pio/build/native-windows/meshtasticd.exe --version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware-windows-${{ inputs.windows_ver }}-${{ steps.version.outputs.long }}
+          overwrite: true
+          path: |
+            .pio/build/native-windows/meshtasticd.exe

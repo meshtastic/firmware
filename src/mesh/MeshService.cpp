@@ -11,12 +11,13 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "TypeConversions.h"
+#include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
+#include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RoutingModule.h"
@@ -63,6 +64,7 @@ Allocator<meshtastic_ClientNotification> &clientNotificationPool = staticClientN
 
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
+#include "PositionPrecision.h"
 #include "Router.h"
 
 MeshService::MeshService()
@@ -135,12 +137,17 @@ void MeshService::loop()
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
 void MeshService::reloadConfig(int saveWhat)
 {
-    // If we can successfully set this radio to these settings, save them to disk
+    // Only LoRa config and channels (freq/PSK/slot) affect the radio. Saves that only touch
+    // module config, device state, or the node database (e.g. favoriting a node) have no reason
+    // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
+    if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
+        // If we can successfully set this radio to these settings, save them to disk
 
-    // This will also update the region as needed
-    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+        // This will also update the region as needed
+        nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
-    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+        configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+    }
     nodeDB->saveToDisk(saveWhat);
 }
 
@@ -255,9 +262,17 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only
               {
                   perhapsDecode(&p);
-                  const StoredMessage &sm = messageStore.addFromPacket(p);
-                  graphics::MessageRenderer::handleNewMessage(nullptr, sm, p); // notify UI
+                  if (const StoredMessage *sm = messageStore.tryAddFromPacket(p))
+                      graphics::MessageRenderer::handleNewMessage(nullptr, *sm, p); // notify UI
               })
+#if !MESHTASTIC_EXCLUDE_ADMIN
+    // Note admin requests on their way out: AdminModule only accepts a response from a remote we
+    // actually asked. Runs before encryption, while the payload is still readable.
+    if (adminModule && p.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        p.decoded.portnum == meshtastic_PortNum_ADMIN_APP)
+        adminModule->noteOutgoingAdminRequest(p);
+#endif
+
     // Send the packet into the mesh
     DEBUG_HEAP_BEFORE;
     auto a = packetPool.allocCopy(p);
@@ -309,13 +324,20 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
+    // callModules' loopback gate keeps RX_SRC_LOCAL packets from RoutingModule, the only module
+    // that forwards to the phone, so deliver our own reply's copy here or the client never sees it.
+    const bool localDelivery = isToUs(p);
+    if (src == RX_SRC_LOCAL && localDelivery)
+        ccToPhone = true;
+
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     ErrorCode res = router->sendLocal(p, src);
 
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */
     meshtastic_QueueStatus qs = router->getQueueStatus();
-    ErrorCode r = sendQueueStatusToPhone(qs, res, mesh_packet_id);
+    // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
+    ErrorCode r = sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id);
     if (r != ERRNO_OK) {
         LOG_DEBUG("Can't send status to phone");
     }
@@ -348,8 +370,31 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 LOG_DEBUG("Skip position ping; no fresh position since boot");
                 return false;
             }
-            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
-            positionModule->sendOurPosition(dest, wantReplies, node->channel);
+            // Prefer the node's current channel, but fall back to the first channel with
+            // position enabled (matching PositionModule::sendOurPosition() behavior).
+            uint8_t sendChan = node->channel;
+            if (getPositionPrecisionForChannel(sendChan) == 0) {
+                bool found = false;
+                for (uint8_t ch = 0; ch < 8; ++ch) {
+                    if (getPositionPrecisionForChannel(ch) != 0) {
+                        sendChan = ch;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // No channel with position enabled: fall back to sending nodeinfo, as before.
+                    if (nodeInfoModule) {
+                        LOG_INFO(
+                            "No channel with position enabled; sending nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d",
+                            dest, wantReplies, node->channel);
+                        nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
+                    }
+                    return false;
+                }
+            }
+            LOG_INFO("Send position ping to 0x%08x, wantReplies=%d, channel=%d", dest, wantReplies, sendChan);
+            positionModule->sendOurPosition(dest, wantReplies, sendChan);
             return true;
         }
     } else {

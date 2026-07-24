@@ -70,12 +70,15 @@ const StoredMessage *getNewestMessageForActiveThread()
     const uint32_t peer = graphics::MessageRenderer::getThreadPeer();
     const uint32_t localNode = nodeDB->getNodeNum();
 
-    if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
-        return &messages.back();
-    }
-
     for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
         const StoredMessage &m = *it;
+        if (!messageStore.isMessageVisible(m)) {
+            continue;
+        }
+
+        if (mode == graphics::MessageRenderer::ThreadMode::ALL) {
+            return &m;
+        }
 
         if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
             if (m.type == MessageType::BROADCAST && static_cast<int>(m.channelIndex) == channel) {
@@ -242,7 +245,6 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"TH", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_TH},
         {"LORA_24", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_LORA_24},
         {"UA_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_UA_433},
-        {"UA_868", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_UA_868},
         {"MY_433", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_MY_433},
         {"MY_919", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_MY_919},
         {"SG_923", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_SG_923},
