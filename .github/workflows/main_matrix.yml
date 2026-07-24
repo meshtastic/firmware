@@ -118,6 +118,7 @@ jobs:
           pio_platform: ${{ matrix.check.platform }}
           pio_env: ${{ matrix.check.board }}
           pio_target: check
+          meshtastic_branch: develop
 
   build:
     needs: [setup, version]
