@@ -102,7 +102,7 @@ jobs:
             EXTRA="--changed-files $CHANGED"
           fi
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr $EXTRA))
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr $EXTRA)
           else
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           fi
