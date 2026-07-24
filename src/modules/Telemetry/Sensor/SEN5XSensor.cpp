@@ -22,11 +22,11 @@ bool SEN5XSensor::getVersion()
     }
     delay(20); // From Sensirion Datasheet
 
-    // The version reply is 8 data bytes (12 raw bytes with CRCs):
-    // fw major/minor, fw debug, hw major/minor, protocol major/minor, padding
-    uint8_t versionBuffer[8]{};
-    size_t charNumber = readBuffer(&versionBuffer[0], 12);
-    if (charNumber < 7) {
+    // Version reply layout: fw major/minor, fw debug, hw major/minor,
+    // protocol major/minor, padding
+    uint8_t versionBuffer[SEN5X_VERSION_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&versionBuffer[0], SEN5X_VERSION_BUFFER_SIZE + (SEN5X_VERSION_BUFFER_SIZE / 2));
+    if (charNumber < SEN5X_VERSION_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting device version value", sensorName);
         return false;
     }
@@ -50,13 +50,11 @@ bool SEN5XSensor::findModel()
     }
     delay(50); // From Sensirion Datasheet
 
-    // The product name reply is 32 data bytes, carried in 48 raw bytes with CRCs
-    const uint8_t nameSize = 32;
-    uint8_t name[nameSize]{};
-    size_t charNumber = readBuffer(&name[0], nameSize + (nameSize / 2));
+    uint8_t name[SEN5X_PRODUCT_NAME_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&name[0], SEN5X_PRODUCT_NAME_BUFFER_SIZE + (SEN5X_PRODUCT_NAME_BUFFER_SIZE / 2));
     bool foundModel = false;
 
-    if (charNumber < 5) {
+    if (charNumber < SEN5X_PRODUCT_NAME_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting device name", sensorName);
         return foundModel;
     }
@@ -687,9 +685,9 @@ bool SEN5XSensor::readValues()
     LOG_DEBUG("%s: Reading PM Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[16]{};
-    size_t receivedNumber = readBuffer(&dataBuffer[0], 24);
-    if (receivedNumber < 16) {
+    uint8_t dataBuffer[SEN5X_READ_VALUES_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&dataBuffer[0], SEN5X_READ_VALUES_BUFFER_SIZE + (SEN5X_READ_VALUES_BUFFER_SIZE / 2));
+    if (receivedNumber < SEN5X_READ_VALUES_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting values", sensorName);
         return false;
     }
@@ -742,9 +740,9 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     LOG_DEBUG("%s: Reading PN Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[20]{};
-    size_t receivedNumber = readBuffer(&dataBuffer[0], 30);
-    if (receivedNumber < 20) {
+    uint8_t dataBuffer[SEN5X_READ_PM_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&dataBuffer[0], SEN5X_READ_PM_BUFFER_SIZE + (SEN5X_READ_PM_BUFFER_SIZE / 2));
+    if (receivedNumber < SEN5X_READ_PM_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting PN values", sensorName);
         return false;
     }
@@ -805,9 +803,9 @@ uint8_t SEN5XSensor::getMeasurements()
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataReadyBuffer[2]{};
-    size_t charNumber = readBuffer(&dataReadyBuffer[0], 3);
-    if (charNumber < 2) {
+    uint8_t dataReadyBuffer[SEN5X_DATA_READY_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&dataReadyBuffer[0], SEN5X_DATA_READY_BUFFER_SIZE + (SEN5X_DATA_READY_BUFFER_SIZE / 2));
+    if (charNumber < SEN5X_DATA_READY_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting data ready flag value", sensorName);
         return 2;
     }
