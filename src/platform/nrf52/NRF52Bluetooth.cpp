@@ -7,6 +7,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -472,14 +473,10 @@ void NRF52Bluetooth::disconnect()
         for (uint8_t i = 0; i < connection_num; i++)
             Bluefruit.disconnect(i);
 
-        // Wait for disconnection, but only best-effort with a timeout: phone-originated admin
-        // messages run on Bluefruit's own BLE event task (sendLocal delivers synchronously), and
-        // there the DISCONNECTED event that clears the connected flag can't be processed until we
-        // return - an unbounded wait deadlocks until the watchdog fires. The SoftDevice completes
-        // the link termination on its own regardless. delay() rather than yield() so lower-priority
-        // tasks (including the watchdog feed in the main loop) keep running while we wait.
+        // Best-effort wait: on Bluefruit's BLE event task the DISCONNECTED event can't be processed
+        // until this callback returns, so an unbounded wait would deadlock until the watchdog fires.
         uint32_t start = millis();
-        while (Bluefruit.connected() && millis() - start < 1000)
+        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, 1000))
             delay(1);
 
         if (Bluefruit.connected())
