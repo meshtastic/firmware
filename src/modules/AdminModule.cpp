@@ -1071,13 +1071,21 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
 
-#ifdef RF95_FAN_EN
+#ifdef RADIO_FAN_EN
+#ifdef RADIO_FAN_PWM
+#if defined(ARCH_ESP32)
+        ledcWrite(1, c.payload_variant.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+#elif defined(ARCH_NRF52)
+        analogWrite(RADIO_FAN_EN, c.payload_variant.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+#endif
+#else
         // Turn PA off if disabled by config
         if (c.payload_variant.lora.pa_fan_disabled) {
-            digitalWrite(RF95_FAN_EN, LOW ^ 0);
+            digitalWrite(RADIO_FAN_EN, LOW ^ 0);
         } else {
-            digitalWrite(RF95_FAN_EN, HIGH ^ 0);
+            digitalWrite(RADIO_FAN_EN, HIGH ^ 0);
         }
+#endif
 #endif
 
 #if HAS_LORA_FEM
