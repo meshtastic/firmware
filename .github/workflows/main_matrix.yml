@@ -199,15 +199,8 @@ jobs:
       fail-fast: false
       matrix:
         distro: [debian, alpine]
-        platform: [linux/amd64, linux/arm64, linux/arm/v7]
-        pio_env: [native, native-tft]
-        exclude:
-          - distro: alpine
-            platform: linux/arm/v7
-          - pio_env: native-tft
-            platform: linux/arm64
-          - pio_env: native-tft
-            platform: linux/arm/v7
+        platform: [linux/arm64]
+        pio_env: [native-tft]
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: ${{ matrix.distro }}
