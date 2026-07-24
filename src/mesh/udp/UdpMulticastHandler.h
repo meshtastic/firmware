@@ -84,6 +84,8 @@ class UdpMulticastHandler final
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
+            if (!p)
+                return;
             // Unset received SNR/RSSI
             p->rx_snr = 0;
             p->rx_rssi = 0;
