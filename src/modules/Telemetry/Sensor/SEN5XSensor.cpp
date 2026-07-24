@@ -22,16 +22,18 @@ bool SEN5XSensor::getVersion()
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t versionBuffer[12]{};
-    size_t charNumber = readBuffer(&versionBuffer[0], 3);
-    if (charNumber == 0) {
-        LOG_ERROR("%s: Error getting data ready flag value", sensorName);
+    // Version reply layout: fw major/minor, fw debug, hw major/minor,
+    // protocol major/minor, padding
+    uint8_t versionBuffer[SEN5X_VERSION_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&versionBuffer[0], SEN5X_VERSION_BUFFER_SIZE + (SEN5X_VERSION_BUFFER_SIZE / 2));
+    if (charNumber < SEN5X_VERSION_BUFFER_SIZE) {
+        LOG_ERROR("%s: Error getting device version value", sensorName);
         return false;
     }
 
-    firmwareVer = versionBuffer[0] + (versionBuffer[1] / 10);
-    hardwareVer = versionBuffer[3] + (versionBuffer[4] / 10);
-    protocolVer = versionBuffer[5] + (versionBuffer[6] / 10);
+    firmwareVer = versionBuffer[0] + (versionBuffer[1] / 10.0f);
+    hardwareVer = versionBuffer[3] + (versionBuffer[4] / 10.0f);
+    protocolVer = versionBuffer[5] + (versionBuffer[6] / 10.0f);
 
     LOG_INFO("%s: Firmware Version: %0.2f", sensorName, firmwareVer);
     LOG_INFO("%s: Hardware Version: %0.2f", sensorName, hardwareVer);
@@ -48,12 +50,11 @@ bool SEN5XSensor::findModel()
     }
     delay(50); // From Sensirion Datasheet
 
-    const uint8_t nameSize = 48;
-    uint8_t name[nameSize];
-    size_t charNumber = readBuffer(&name[0], nameSize);
+    uint8_t name[SEN5X_PRODUCT_NAME_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&name[0], SEN5X_PRODUCT_NAME_BUFFER_SIZE + (SEN5X_PRODUCT_NAME_BUFFER_SIZE / 2));
     bool foundModel = false;
 
-    if (charNumber == 0) {
+    if (charNumber < SEN5X_PRODUCT_NAME_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting device name", sensorName);
         return foundModel;
     }
@@ -367,15 +368,18 @@ bool SEN5XSensor::vocStateFromSensor()
 
     delay(20); // From Sensirion Datasheet
 
-    // Retrieve the data
-    // Allocate buffer to account for CRC
-    size_t receivedNumber = readBuffer(&vocState[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
+    // Retrieve the data into a staging buffer so a partial read (e.g. a CRC
+    // failure halfway through) cannot corrupt the current vocState.
+    // The requested size accounts for the CRC bytes
+    uint8_t stateBuffer[SEN5X_VOC_STATE_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&stateBuffer[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
     delay(20); // From Sensirion Datasheet
 
-    if (receivedNumber == 0) {
+    if (receivedNumber < SEN5X_VOC_STATE_BUFFER_SIZE) {
         LOG_DEBUG("%s: Error getting VOC's state", sensorName);
         return false;
     }
+    memcpy(vocState, stateBuffer, SEN5X_VOC_STATE_BUFFER_SIZE);
 
     // Print the state (if debug is on)
     LOG_DEBUG("%s: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1],
@@ -433,6 +437,7 @@ bool SEN5XSensor::loadState()
     return okay;
 #else
     LOG_ERROR("%s: Filesystem not implemented", sensorName);
+    return false;
 #endif
 }
 
@@ -478,6 +483,7 @@ bool SEN5XSensor::saveState()
     return okay;
 #else
     LOG_ERROR("%s: Filesystem not implemented", sensorName);
+    return false;
 #endif
 }
 
@@ -503,8 +509,7 @@ uint32_t SEN5XSensor::wakeUp()
     // keep track of how long it has passed
     pmMeasureStarted = getTime();
     state = SEN5X_MEASUREMENT;
-    if (state == SEN5X_MEASUREMENT)
-        LOG_INFO("%s: Started measurement mode", sensorName);
+    LOG_INFO("%s: Started measurement mode", sensorName);
     return SEN5X_WARMUP_MS_1;
 }
 
@@ -539,7 +544,7 @@ bool SEN5XSensor::startCleaning()
     // This message will be always printed so the user knows the device it's not hung
     LOG_INFO("%s: Started fan cleaning it will take 10 seconds...", sensorName);
 
-    uint16_t started = millis();
+    uint32_t started = millis();
     while (millis() - started < 10500) {
         delay(500);
     }
@@ -666,9 +671,9 @@ bool SEN5XSensor::readValues()
     LOG_DEBUG("%s: Reading PM Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[16]{};
-    size_t receivedNumber = readBuffer(&dataBuffer[0], 24);
-    if (receivedNumber == 0) {
+    uint8_t dataBuffer[SEN5X_READ_VALUES_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&dataBuffer[0], SEN5X_READ_VALUES_BUFFER_SIZE + (SEN5X_READ_VALUES_BUFFER_SIZE / 2));
+    if (receivedNumber < SEN5X_READ_VALUES_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting values", sensorName);
         return false;
     }
@@ -684,15 +689,17 @@ bool SEN5XSensor::readValues()
     int16_t int_vocIndex = static_cast<int16_t>((dataBuffer[12] << 8) | dataBuffer[13]);
     int16_t int_noxIndex = static_cast<int16_t>((dataBuffer[14] << 8) | dataBuffer[15]);
 
-    // Convert values based on Sensirion Arduino lib
-    sen5xmeasurement.pM1p0 = !isnan(uint_pM1p0) ? uint_pM1p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM2p5 = !isnan(uint_pM2p5) ? uint_pM2p5 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM4p0 = !isnan(uint_pM4p0) ? uint_pM4p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM10p0 = !isnan(uint_pM10p0) ? uint_pM10p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.humidity = !isnan(int_humidity) ? int_humidity / 100.0f : FLT_MAX;
-    sen5xmeasurement.temperature = !isnan(int_temperature) ? int_temperature / 200.0f : FLT_MAX;
-    sen5xmeasurement.vocIndex = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
-    sen5xmeasurement.noxIndex = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
+    // Convert values based on Sensirion Arduino lib.
+    // Map values the sensor reports as unavailable (SEN5X_UINT_INVALID /
+    // SEN5X_INT_INVALID) to the sentinels getMetrics() checks for
+    sen5xmeasurement.pM1p0 = (uint_pM1p0 != SEN5X_UINT_INVALID) ? (uint_pM1p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM2p5 = (uint_pM2p5 != SEN5X_UINT_INVALID) ? (uint_pM2p5 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM4p0 = (uint_pM4p0 != SEN5X_UINT_INVALID) ? (uint_pM4p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM10p0 = (uint_pM10p0 != SEN5X_UINT_INVALID) ? (uint_pM10p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.humidity = (int_humidity != SEN5X_INT_INVALID) ? (int_humidity / 100.0f) : FLT_MAX;
+    sen5xmeasurement.temperature = (int_temperature != SEN5X_INT_INVALID) ? (int_temperature / 200.0f) : FLT_MAX;
+    sen5xmeasurement.vocIndex = (int_vocIndex != SEN5X_INT_INVALID) ? (int_vocIndex / 10.0f) : FLT_MAX;
+    sen5xmeasurement.noxIndex = (int_noxIndex != SEN5X_INT_INVALID) ? (int_noxIndex / 10.0f) : FLT_MAX;
 
     LOG_DEBUG("%s: Got readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
               sen5xmeasurement.pM2p5, sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
@@ -719,9 +726,9 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     LOG_DEBUG("%s: Reading PN Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[20]{};
-    size_t receivedNumber = readBuffer(&dataBuffer[0], 30);
-    if (receivedNumber == 0) {
+    uint8_t dataBuffer[SEN5X_READ_PM_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&dataBuffer[0], SEN5X_READ_PM_BUFFER_SIZE + (SEN5X_READ_PM_BUFFER_SIZE / 2));
+    if (receivedNumber < SEN5X_READ_PM_BUFFER_SIZE) {
         LOG_ERROR("%s: Error getting PN values", sensorName);
         return false;
     }
@@ -738,22 +745,29 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     uint16_t uint_pN10p0 = static_cast<uint16_t>((dataBuffer[16] << 8) | dataBuffer[17]);
     uint16_t uint_tSize = static_cast<uint16_t>((dataBuffer[18] << 8) | dataBuffer[19]);
 
-    // Convert values based on Sensirion Arduino lib
-    // Multiply by 100 for converting from #/cm3 to #/0.1l for PN values
-    sen5xmeasurement.pN0p5 = !isnan(uint_pN0p5) ? uint_pN0p5 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN1p0 = !isnan(uint_pN1p0) ? uint_pN1p0 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN2p5 = !isnan(uint_pN2p5) ? uint_pN2p5 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN4p0 = !isnan(uint_pN4p0) ? uint_pN4p0 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN10p0 = !isnan(uint_pN10p0) ? uint_pN10p0 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.tSize = !isnan(uint_tSize) ? uint_tSize / 1000.0f : FLT_MAX;
+    // Convert values based on Sensirion Arduino lib.
+    // Raw PN values are #/cm3 with 0.1 resolution; multiplying by 10
+    // converts to #/0.1l without the truncation of dividing first.
+    // Map values the sensor reports as unavailable (SEN5X_UINT_INVALID) to the
+    // sentinels getMetrics() checks for
+    sen5xmeasurement.pN0p5 = (uint_pN0p5 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN0p5 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN1p0 = (uint_pN1p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN1p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN2p5 = (uint_pN2p5 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN2p5 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN4p0 = (uint_pN4p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN4p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN10p0 = (uint_pN10p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN10p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.tSize = (uint_tSize != SEN5X_UINT_INVALID) ? (uint_tSize / 1000.0f) : FLT_MAX;
 
     // Remove accumuluative values:
     // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
     if (!cumulative) {
-        sen5xmeasurement.pN10p0 -= sen5xmeasurement.pN4p0;
-        sen5xmeasurement.pN4p0 -= sen5xmeasurement.pN2p5;
-        sen5xmeasurement.pN2p5 -= sen5xmeasurement.pN1p0;
-        sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
+        if (sen5xmeasurement.pN10p0 != UINT32_MAX && sen5xmeasurement.pN4p0 != UINT32_MAX)
+            sen5xmeasurement.pN10p0 -= sen5xmeasurement.pN4p0;
+        if (sen5xmeasurement.pN4p0 != UINT32_MAX && sen5xmeasurement.pN2p5 != UINT32_MAX)
+            sen5xmeasurement.pN4p0 -= sen5xmeasurement.pN2p5;
+        if (sen5xmeasurement.pN2p5 != UINT32_MAX && sen5xmeasurement.pN1p0 != UINT32_MAX)
+            sen5xmeasurement.pN2p5 -= sen5xmeasurement.pN1p0;
+        if (sen5xmeasurement.pN1p0 != UINT32_MAX && sen5xmeasurement.pN0p5 != UINT32_MAX)
+            sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
     }
 
     LOG_DEBUG("%s: Got readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
@@ -775,10 +789,10 @@ uint8_t SEN5XSensor::getMeasurements()
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataReadyBuffer[3];
-    size_t charNumber = readBuffer(&dataReadyBuffer[0], 3);
-    if (charNumber == 0) {
-        LOG_ERROR("%s: Error getting device version value", sensorName);
+    uint8_t dataReadyBuffer[SEN5X_DATA_READY_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&dataReadyBuffer[0], SEN5X_DATA_READY_BUFFER_SIZE + (SEN5X_DATA_READY_BUFFER_SIZE / 2));
+    if (charNumber < SEN5X_DATA_READY_BUFFER_SIZE) {
+        LOG_ERROR("%s: Error getting data ready flag value", sensorName);
         return 2;
     }
 
@@ -917,7 +931,7 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
                 measurement->variant.air_quality_metrics.has_pm_temperature = true;
                 measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
             }
-            if (sen5xmeasurement.noxIndex != FLT_MAX) {
+            if (sen5xmeasurement.vocIndex != FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
                 measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
             }
