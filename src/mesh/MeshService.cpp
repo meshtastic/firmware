@@ -324,11 +324,8 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
-    // A locally-generated packet addressed to ourselves (e.g. a module's response to a
-    // phone-originated admin/config request) can only be consumed by local API clients:
-    // sendLocal() dispatches it with src preserved, and the loopback gate in
-    // MeshModule::callModules hides RX_SRC_LOCAL packets from RoutingModule, the phone
-    // forwarder. Deliver the phone's copy here or the client times out waiting for it.
+    // callModules' loopback gate keeps RX_SRC_LOCAL packets from RoutingModule, the only module
+    // that forwards to the phone, so deliver our own reply's copy here or the client never sees it.
     const bool localDelivery = isToUs(p);
     if (src == RX_SRC_LOCAL && localDelivery)
         ccToPhone = true;
@@ -339,8 +336,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */
     meshtastic_QueueStatus qs = router->getQueueStatus();
-    // Local delivery reports ERRNO_SHOULD_RELEASE (caller frees) - that is success, not a
-    // failure the phone should surface in the QueueStatus.
+    // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
     ErrorCode r = sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id);
     if (r != ERRNO_OK) {
         LOG_DEBUG("Can't send status to phone");

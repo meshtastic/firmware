@@ -473,14 +473,7 @@ static void test_dispatch_realNeighborInfoCannotShadowTelemetryOwner()
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
 }
 
-// Regression tests for the 2.8 config-timeout report (regressed by PR #10967): sendLocal now
-// preserves src, so a module reply addressed to the local node reaches callModules as
-// RX_SRC_LOCAL, where the loopback gate hides it from RoutingModule - the only path into the
-// phone queue. MeshService::sendToMesh must deliver the phone's copy itself.
-
-// A module-style reply addressed to ourselves must land in the phone queue, and its
-// QueueStatus must report success (not ERRNO_SHOULD_RELEASE) even though sendLocal asked the
-// caller to release it.
+// A reply addressed to ourselves reaches the phone queue, with SHOULD_RELEASE reported as success.
 static void test_localReplyToSelf_isDeliveredToPhone()
 {
     meshtastic_MeshPacket reply = meshtastic_MeshPacket_init_zero;
@@ -535,11 +528,14 @@ static void test_phoneRequest_replyReachesPhone()
     mockService->releaseToPool(toPhone);
     TEST_ASSERT_NULL(mockService->getForPhone()); // the request itself must not echo back
 
-    // Both the request's and the reply's QueueStatus report success
+    // One QueueStatus for the request, one for the reply, both reporting success
+    uint32_t statuses = 0;
     while (auto *qs = mockService->getQueueStatusForPhone()) {
         TEST_ASSERT_EQUAL(ERRNO_OK, qs->res);
         mockService->releaseQueueStatusToPool(qs);
+        statuses++;
     }
+    TEST_ASSERT_EQUAL_UINT32(2, statuses);
 
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
