@@ -3,12 +3,21 @@ concurrency:
   group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 on:
-  # # Triggers the workflow on push but only for the main branches
+  # The merge queue is the pre-merge gate for the protected branches (master,
+  # develop): a merge_group run validates the merged result before code lands. For
+  # now PRs and merge_group runs build the same narrowed board subset (--level pr);
+  # see the setup job. push still runs the full matrix on master/develop (post-merge)
+  # as well as on the event/* and feature/* branches, which have no merge queue.
+  merge_group:
+    types: [checks_requested]
+    branches:
+      - master
+      - develop
+
   push:
     branches:
       - master
       - develop
-      - pioarduino # Remove when merged // use `feature/` in the future.
       - event/*
       - feature/*
     paths-ignore:
@@ -19,7 +28,6 @@ on:
     branches:
       - master
       - develop
-      - pioarduino # Remove when merged // use `feature/` in the future.
       - event/*
       - feature/*
     paths-ignore:
@@ -28,9 +36,9 @@ on:
 
   schedule:
     # Nightly develop build, published to meshtastic.github.io firmware-nightly/ (no GitHub release).
-    # Scheduled runs execute on the default branch (develop). 09:00 UTC avoids the 00:00 tests
+    # Scheduled runs execute on the default branch (develop). 07:00 UTC avoids the 00:00 tests
     # and 02:00 daily_packaging crons.
-    - cron: 0 9 * * * # Nightly develop build/publish (default branch is develop)
+    - cron: 0 7 * * * # Nightly develop build/publish (default branch is develop)
 
   workflow_dispatch:
     inputs:
@@ -61,10 +69,12 @@ jobs:
       - name: Generate matrix
         id: jsonStep
         run: |
-          if [[ "$GITHUB_HEAD_REF" == "" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
-          else  
+          # PRs and (for now) merge_group builds use the narrowed --level pr board
+          # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr)
+          else
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "${{matrix.arch}}=$TARGETS" >> $GITHUB_OUTPUT
