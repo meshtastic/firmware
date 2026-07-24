@@ -467,6 +467,7 @@ bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passk
 // Disconnect any BLE connections
 void NRF52Bluetooth::disconnect()
 {
+    static constexpr uint32_t DISCONNECT_TIMEOUT_MSEC = 1000;
     uint8_t connection_num = Bluefruit.connected();
     if (connection_num) {
         // Close all connections. We're only expecting one.
@@ -476,7 +477,7 @@ void NRF52Bluetooth::disconnect()
         // Best-effort wait: on Bluefruit's BLE event task the DISCONNECTED event can't be processed
         // until this callback returns, so an unbounded wait would deadlock until the watchdog fires.
         uint32_t start = millis();
-        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, 1000))
+        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, DISCONNECT_TIMEOUT_MSEC))
             delay(1);
 
         if (Bluefruit.connected())
