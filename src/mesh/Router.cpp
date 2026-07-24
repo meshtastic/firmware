@@ -96,6 +96,8 @@ static bool routingAuthCacheMatches(const meshtastic_MeshPacket &packet)
 
 static void storeRoutingAuthCache(const meshtastic_MeshPacket &wire, const meshtastic_MeshPacket &authenticated)
 {
+    if (!routingAuthCacheLock)
+        return;
     concurrency::LockGuard guard(routingAuthCacheLock);
     routingAuthCache.wire = wire;
     routingAuthCache.authenticated = authenticated;
@@ -688,7 +690,46 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
 }
 #endif
 
-RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
+static RoutingAuthVerdict evaluateRoutingAuth(const meshtastic_MeshPacket &wire, meshtastic_MeshPacket &authenticated)
+{
+    authenticated = wire;
+    routingAuthEvaluations++;
+    if (authenticated.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        // Already-decoded remote ingress (notably Portduino SimRadio) did not pass through a
+        // decryptor. Never trust serialized local authentication metadata on that boundary.
+        authenticated.pki_encrypted = false;
+        authenticated.public_key.size = 0;
+        authenticated.xeddsa_signed = false;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+        concurrency::LockGuard g(cryptLock);
+        if (!checkXeddsaReceivePolicy(&authenticated)) {
+            LOG_WARN("Already-decoded packet rejected by routing signature policy");
+            return RoutingAuthVerdict::REJECT;
+        }
+#endif
+        return RoutingAuthVerdict::ACCEPT;
+    }
+    const DecodeState state = perhapsDecode(&authenticated);
+    if (state == DecodeState::DECODE_POLICY_REJECT) {
+        LOG_WARN("Packet rejected by routing signature policy");
+        return RoutingAuthVerdict::REJECT;
+    }
+    if (state == DecodeState::DECODE_FATAL) {
+        LOG_WARN("Fatal decode error during routing authentication");
+        return RoutingAuthVerdict::REJECT;
+    }
+    if (state == DecodeState::DECODE_FAILURE) {
+        LOG_WARN("Decryptable packet failed routing authentication");
+        return RoutingAuthVerdict::REJECT;
+    }
+
+    // Only an explicit unknown-channel result remains eligible for opaque relay.
+    if (state == DecodeState::DECODE_OPAQUE)
+        return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
+    return RoutingAuthVerdict::ACCEPT;
+}
+
+RoutingAuthVerdict passesRoutingAuthGate(const meshtastic_MeshPacket *p)
 {
     // Routing still needs the original encrypted representation for byte-for-byte relay and for
     // MQTT uplink. Authenticate a copy here; handleReceived() performs the normal in-place decode
@@ -696,45 +737,11 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
     if (routingAuthCacheMatches(*p))
         return RoutingAuthVerdict::ACCEPT;
 
-    meshtastic_MeshPacket wire = *p;
-    meshtastic_MeshPacket authCandidate = *p;
-    routingAuthEvaluations++;
-    if (authCandidate.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        // Already-decoded remote ingress (notably Portduino SimRadio) did not pass through a
-        // decryptor. Never trust serialized local authentication metadata on that boundary.
-        authCandidate.pki_encrypted = false;
-        authCandidate.public_key.size = 0;
-#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-        concurrency::LockGuard g(cryptLock);
-        if (!checkXeddsaReceivePolicy(&authCandidate)) {
-            LOG_WARN("Already-decoded packet rejected by signature policy");
-            return RoutingAuthVerdict::REJECT;
-        }
-#endif
-        p->xeddsa_signed = authCandidate.xeddsa_signed;
-        wire = *p;
-        storeRoutingAuthCache(wire, authCandidate);
-        return RoutingAuthVerdict::ACCEPT;
-    }
-    const DecodeState state = perhapsDecode(&authCandidate);
-    if (state == DecodeState::DECODE_POLICY_REJECT) {
-        LOG_WARN("Packet rejected by signature policy");
-        return RoutingAuthVerdict::REJECT;
-    }
-    if (state == DecodeState::DECODE_FATAL) {
-        LOG_WARN("Fatal decode error, dropping packet");
-        return RoutingAuthVerdict::REJECT;
-    }
-    if (state == DecodeState::DECODE_FAILURE) {
-        LOG_WARN("Decryptable packet failed decoding, dropping packet");
-        return RoutingAuthVerdict::REJECT;
-    }
-
-    // Only an explicit unknown-channel result remains eligible for opaque relay.
-    if (state == DecodeState::DECODE_OPAQUE)
-        return RoutingAuthVerdict::OPAQUE_RELAY_ONLY;
-    storeRoutingAuthCache(wire, authCandidate);
-    return RoutingAuthVerdict::ACCEPT;
+    meshtastic_MeshPacket authenticated = meshtastic_MeshPacket_init_zero;
+    const RoutingAuthVerdict verdict = evaluateRoutingAuth(*p, authenticated);
+    if (verdict == RoutingAuthVerdict::ACCEPT)
+        storeRoutingAuthCache(*p, authenticated);
+    return verdict;
 }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -801,6 +808,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     // Authentication metadata is local-only. Re-establish it below only after successful PKI decryption.
     p->pki_encrypted = false;
     p->public_key.size = 0;
+    p->xeddsa_signed = false;
 
     size_t rawSize = p->encrypted.size;
     if (rawSize > sizeof(bytes)) {
@@ -813,8 +821,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     meshtastic_NodeInfoLite *ourNode = nullptr;
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
-        (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
+    if (!owner.is_licensed && p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) &&
+        rawSize > MESHTASTIC_PKC_OVERHEAD && (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
         pkiAttempted = true;
         LOG_DEBUG("Attempt PKI decryption");
         // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
@@ -1063,12 +1071,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // verification at every XEdDSA-enabled receiver that knows our key.
             p->decoded.xeddsa_signature.size = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-            // Sign broadcast packets when the Data still fits a LoRa frame with the signature
-            // attached. This must be the exact encoded-size criterion, not a payload-size
-            // heuristic: a heuristic band where we sign-then-fail-TOO_LARGE breaks packets that
+            // Licensed packets stay plaintext, so sign both broadcasts and unicasts. Normal mode
+            // continues to sign broadcasts only. Use the exact encoded size: a payload-size heuristic
+            // where we sign-then-fail-TOO_LARGE breaks packets that
             // were deliverable unsigned, and perhapsDecode() applies the mirror-image rule when
             // deciding whether an unsigned broadcast from a known signer is a downgrade.
-            if (!p->pki_encrypted && isBroadcast(p->to) && signedDataFits(&p->decoded)) {
+            if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
@@ -1205,7 +1213,7 @@ NodeNum Router::getNodeNum()
  * Handle any packet that is received by an interface on this node.
  * Note: some packets may merely being passed through this node and will be forwarded elsewhere.
  */
-void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
+void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src, bool routingAuthRequired)
 {
     bool skipHandle = false;
 
@@ -1220,8 +1228,15 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // Consume the decoded/authenticated handoff after preserving the exact encrypted packet and
     // before mutating any packet fields that participate in the exact cache match.
-    if (src == RX_SRC_RADIO)
-        applyRoutingAuthCache(p);
+    if (routingAuthRequired && !applyRoutingAuthCache(p)) {
+        meshtastic_MeshPacket authenticated = meshtastic_MeshPacket_init_zero;
+        if (evaluateRoutingAuth(*p, authenticated) != RoutingAuthVerdict::ACCEPT) {
+            LOG_WARN("Routing authentication handoff was lost and packet re-verification failed");
+            packetPool.release(p_encrypted);
+            return;
+        }
+        *p = authenticated;
+    }
 
     // Also, we should set the time from the ISR and it should have msec level resolution.
     // Keep the decoded working packet and encrypted MQTT copy on the same local arrival timestamp.
@@ -1425,6 +1440,6 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
     // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
-    handleReceived(p);
+    handleReceived(p, RX_SRC_RADIO, true);
     packetPool.release(p);
 }

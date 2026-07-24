@@ -11,6 +11,7 @@
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
+#include <ErriezCRC32.h>
 #include <FSCommon.h>
 #include <Throttle.h>
 #include <ctype.h> // for better whitespace handling
@@ -69,6 +70,17 @@
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+static bool licensedIdentityWillMigrate()
+{
+    if (config.security.private_key.size != 32 || config.security.public_key.size != 32)
+        return true;
+    if (nodeDB->checkLowEntropyPublicKey(config.security.public_key))
+        return true;
+    return crc32Buffer(config.security.public_key.bytes, config.security.public_key.size) != nodeDB->getNodeNum();
+}
+#endif
 
 /// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
 /// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want
@@ -132,6 +144,30 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 #endif
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
+    const bool licensedRemote = owner.is_licensed && mp.from != 0;
+    bool authorizedLicensedSigner = false;
+    // Could tighten responses further by tracking the last public key queried.
+    if (licensedRemote) {
+        const bool directedAdmin = mp.to == nodeDB->getNodeNum() && !isBroadcast(mp.to) &&
+                                   mp.decoded.portnum == meshtastic_PortNum_ADMIN_APP && !mp.pki_encrypted;
+        if (!directedAdmin || !mp.xeddsa_signed || mp.public_key.size != 32) {
+            LOG_INFO("Ignore licensed admin payload without a directed Router-verified signature");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+            return handled;
+        }
+        for (const auto &adminKey : config.security.admin_key) {
+            if (adminKey.size == 32 && memcmp(mp.public_key.bytes, adminKey.bytes, 32) == 0) {
+                authorizedLicensedSigner = true;
+                break;
+            }
+        }
+        if (!messageIsResponse(r) && !authorizedLicensedSigner) {
+            LOG_INFO("Received signed licensed admin payload from a non-allowlisted key");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+            return handled;
+        }
+        LOG_INFO("Signed licensed admin payload with Router-verified sender");
+    }
     if (messageIsResponse(r)) {
         // Only accept a response from a remote we sent the matching request to. from == 0 is a
         // local client, which PhoneAPI has already gated.
@@ -165,6 +201,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
 #endif
+    } else if (authorizedLicensedSigner) {
+        // Router verified a plaintext licensed-mode signer against the admin allowlist above.
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
             LOG_INFO("Ignore admin channel, legacy admin is disabled");
@@ -192,7 +230,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             // that pointer is unrelated, so the path was unsafe.)
 
             // Automatically favorite the node that is using the admin key
-            auto remoteNode = nodeDB->getMeshNode(mp.from);
+            auto remoteNode = nodeDB ? nodeDB->getMeshNode(mp.from) : nullptr;
             if (remoteNode && !nodeInfoLiteIsFavorite(remoteNode)) {
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
                     // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
@@ -755,6 +793,8 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
 void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
+    bool identityUpdated = false;
+    bool channelsSanitized = false;
 
     if (*o.long_name) {
         // Apps built against the older 39-byte limit may send longer names; clamp
@@ -773,15 +813,28 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         owner.short_name[sizeof(owner.short_name) - 1] = '\0';
         sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
     }
-    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
-
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        const bool identityWillMigrate =
+            o.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && licensedIdentityWillMigrate();
+        if (identityWillMigrate)
+            sendWarning(licensedIdentityMigrationMessage);
+#endif
         owner.is_licensed = o.is_licensed;
         if (channels.ensureLicensedOperation()) {
             warnLicensedMode();
+            channelsSanitized = true;
         }
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if (owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            identityUpdated = nodeDB->generateCryptoKeyPair();
+            if (identityWillMigrate)
+                nodeDB->licensedIdentityMigrationPending = false;
+        }
+#endif
     }
+    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
     if (owner.has_is_unmessagable != o.has_is_unmessagable ||
         (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
         changed = 1;
@@ -791,7 +844,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE);
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
+                    (channelsSanitized ? SEGMENT_CHANNELS : 0));
     }
 }
 
@@ -994,7 +1048,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                    if (crypto) {
+                    if (crypto && !owner.is_licensed) {
                         crypto->ensurePkiKeys(config.security, owner);
                     }
 #endif
@@ -1007,6 +1061,17 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 }
                 // Ensure initRegion() uses the newly validated region
                 config.lora.region = validatedLora.region;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+                if (owner.is_licensed && isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+                    const bool identityWillMigrate = licensedIdentityWillMigrate();
+                    if (identityWillMigrate)
+                        sendWarning(licensedIdentityMigrationMessage);
+                    nodeDB->generateCryptoKeyPair();
+                    changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+                    if (identityWillMigrate)
+                        nodeDB->licensedIdentityMigrationPending = false;
+                }
+#endif
                 initRegion();
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
@@ -1015,7 +1080,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             } else {
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
@@ -1818,6 +1883,9 @@ void AdminModule::reboot(int32_t seconds)
 
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
+#ifdef PIO_UNIT_TESTING
+    lastSaveWhatForTest = saveWhat;
+#endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
@@ -1870,6 +1938,17 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     // Remove PSK of primary channel for plaintext amateur usage
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        const bool identityWillMigrate = licensedIdentityWillMigrate();
+        if (identityWillMigrate)
+            sendWarning(licensedIdentityMigrationMessage);
+        nodeDB->generateCryptoKeyPair();
+        if (identityWillMigrate)
+            nodeDB->licensedIdentityMigrationPending = false;
+    }
+#endif
 
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();

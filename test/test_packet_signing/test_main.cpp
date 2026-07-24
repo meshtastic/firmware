@@ -923,6 +923,31 @@ void test_B7_infrastructure_port_signing_matrix(void)
     }
 }
 
+void test_B8_licensed_port_and_destination_signing_matrix(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_ROUTING_APP,      meshtastic_PortNum_NODEINFO_APP,
+    };
+    const NodeNum destinations[] = {NODENUM_BROADCAST, REMOTE_NODE};
+    for (const auto port : ports) {
+        for (const auto destination : destinations) {
+            meshtastic_MeshPacket packet = makeDecoded(LOCAL_NODE, destination, port, SMALL_PAYLOAD);
+            TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&packet));
+            TEST_ASSERT_EQUAL(XEDDSA_SIGNATURE_SIZE, packet.decoded.xeddsa_signature.size);
+            TEST_ASSERT_TRUE(packet.xeddsa_signed);
+            TEST_ASSERT_FALSE(packet.pki_encrypted);
+        }
+    }
+}
+
 // ===========================================================================
 // Group C - routing pipeline and NodeInfo authentication ordering
 // ===========================================================================
@@ -1652,6 +1677,7 @@ void setup()
     RUN_TEST(test_B5_preset_signature_on_local_packet_cleared);
     RUN_TEST(test_B6_rich_shape_sweep_no_deadband);
     RUN_TEST(test_B7_infrastructure_port_signing_matrix);
+    RUN_TEST(test_B8_licensed_port_and_destination_signing_matrix);
 
     printf("\n=== Group C: routing pipeline authentication ordering ===\n");
     RUN_TEST(test_C1_invalid_first_copy_does_not_poison_valid_same_id);

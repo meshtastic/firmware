@@ -39,6 +39,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
   private:
     bool hasOpenEditTransaction = false;
+#ifdef PIO_UNIT_TESTING
+    int lastSaveWhatForTest = 0;
+#endif
 
     uint8_t session_passkey[8] = {0};
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
@@ -138,6 +141,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
 static constexpr const char *licensedModeMessage =
     "Licensed mode activated, removing admin channel and encryption from all channels";
+
+static constexpr const char *licensedIdentityMigrationMessage =
+    "Licensed signing requires an identity key; this node identity will change after key generation";
 
 static constexpr const char *publicChannelPrecisionMessage =
     "Precise position is not allowed on a public (open / known-key) channel; reduced to coarse precision";

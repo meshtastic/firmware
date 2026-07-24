@@ -19,6 +19,9 @@
 #include "TestUtil.h"
 #include "mesh/Channels.h"
 #include "modules/AdminModule.h"
+#include "modules/NodeInfoModule.h"
+#include <pb_decode.h>
+#include <pb_encode.h>
 #include <string>
 #include <unity.h>
 #include <vector>
@@ -950,6 +953,69 @@ static void test_channelSpacingCalculation_placeholder()
 // AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
 
+static void installEncryptedAndAdminChannels()
+{
+    channels.initDefaults();
+    meshtastic_Channel admin = meshtastic_Channel_init_zero;
+    admin.index = 1;
+    admin.role = meshtastic_Channel_Role_SECONDARY;
+    admin.has_settings = true;
+    strncpy(admin.settings.name, Channels::adminChannel, sizeof(admin.settings.name));
+    admin.settings.psk.size = 16;
+    memset(admin.settings.psk.bytes, 0xA5, admin.settings.psk.size);
+    channels.setChannel(admin);
+}
+
+static void assertLicensedChannelsSanitized()
+{
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(0).settings.psk.size);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channels.getByIndex(1).role);
+    TEST_ASSERT_EQUAL(0, channels.getByIndex(1).settings.psk.size);
+}
+
+static void test_handleSetOwner_persistsLicensedChannelSanitation()
+{
+    NodeDB *savedNodeDB = nodeDB;
+    nodeDB = new NodeDB();
+    owner = meshtastic_User_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    installEncryptedAndAdminChannels();
+
+    meshtastic_User licensed = meshtastic_User_init_zero;
+    licensed.is_licensed = true;
+    testAdmin->deferSaves();
+    NodeInfoModule *savedNodeInfoModule = nodeInfoModule;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    testAdmin->handleSetOwner(licensed);
+    nodeInfoModule = savedNodeInfoModule;
+
+    TEST_ASSERT_TRUE(testAdmin->savedSegments() & SEGMENT_CHANNELS);
+    assertLicensedChannelsSanitized();
+
+    uint8_t encoded[meshtastic_ChannelFile_size];
+    const size_t encodedSize = pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_ChannelFile_msg, &channelFile);
+    TEST_ASSERT_GREATER_THAN(0, encodedSize);
+    meshtastic_ChannelFile reloaded = meshtastic_ChannelFile_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(encoded, encodedSize, &meshtastic_ChannelFile_msg, &reloaded));
+    channelFile = reloaded;
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "sanitized reload must not trigger another persistence write");
+
+    delete nodeDB;
+    nodeDB = savedNodeDB;
+}
+
+static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
+{
+    owner = meshtastic_User_init_zero;
+    owner.is_licensed = true;
+    installEncryptedAndAdminChannels();
+
+    TEST_ASSERT_TRUE(channels.ensureLicensedOperation());
+    assertLicensedChannelsSanitized();
+    TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "boot sanitation must be idempotent");
+}
+
 static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode region, bool usePreset,
                                            meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
@@ -1530,6 +1596,9 @@ void setup()
     initializeTestEnvironment();
 
     UNITY_BEGIN();
+
+    RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
+    RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
 
     // getRegion()
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);
