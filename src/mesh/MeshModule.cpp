@@ -108,6 +108,16 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
     auto ourNodeNum = nodeDB->getNodeNum();
     bool toUs = isBroadcast(mp.to) || isToUs(&mp);
+    const bool relayedBroadcastResponseRequest =
+        isDecoded && mp.decoded.want_response && isBroadcast(mp.to) && mp.hop_limit < mp.hop_start;
+    const bool suppressResponse =
+        relayedBroadcastResponseRequest && (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER ||
+                                            mp.decoded.portnum != meshtastic_PortNum_POSITION_APP);
+
+    // A relayed broadcast request reaches every node in range. Suppress both module replies and the fallback NAK to avoid a
+    // mesh-wide response storm. Trackers retain Position replies so a fleet can answer a broadcast location request.
+    if (suppressResponse)
+        ignoreRequest = true;
 
     for (auto i = modules->begin(); i != modules->end(); ++i) {
         auto &pi = **i;
@@ -145,7 +155,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
                 // no one should have already replied!
                 assert(!currentReply);
 
-                if (isDecoded && mp.decoded.want_response) {
+                if (isDecoded && mp.decoded.want_response && !suppressResponse) {
                     printPacket("packet on wrong channel, returning error", &mp);
                     currentReply = pi.allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
                 } else
@@ -163,7 +173,8 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
                 // because currently when the phone sends things, it sends things using the local node ID as the from address.  A
                 // better solution (FIXME) would be to let phones have their own distinct addresses and we 'route' to them like
                 // any other node.
-                if (isDecoded && mp.decoded.want_response && toUs && (!isFromUs(&mp) || isToUs(&mp)) && !currentReply) {
+                if (isDecoded && mp.decoded.want_response && toUs && (!isFromUs(&mp) || isToUs(&mp)) && !currentReply &&
+                    !suppressResponse) {
                     if (replyPortMatches(pi.ourPortNum, mp)) {
                         pi.sendResponse(mp);
                         LOG_INFO("Asked module '%s' to send a response", pi.name);
