@@ -47,7 +47,8 @@ enum lora_module_enum {
     use_lr1110,
     use_lr1120,
     use_lr1121,
-    use_llcc68
+    use_llcc68,
+    use_lr2021
 };
 
 struct pinMapping {
@@ -78,7 +79,11 @@ extern struct portduino_config_struct {
     // Lora
     std::map<lora_module_enum, std::string> loraModules = {
         {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"},
-        {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+        {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"},
+#if !RADIOLIB_EXCLUDE_LR2021
+        {use_lr2021, "lr2021"}
+#endif
+    };
 
     std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
                                                           {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
@@ -100,6 +105,7 @@ extern struct portduino_config_struct {
     int sx128x_max_power = 13;
     int lr1110_max_power = 22;
     int lr1120_max_power = 13;
+    int lr2021_irq_dio_num = 0; // 0 = use chip default (5); set to 5-11 to override
     int rf95_max_power = 20;
     bool dio2_as_rf_switch = false;
     int dio3_tcxo_voltage = 0;
@@ -287,6 +293,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "LR1110_MAX_POWER" << YAML::Value << lr1110_max_power;
         if (lr1120_max_power != 13)
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
+        if (lr2021_irq_dio_num != 0)
+            out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << lr2021_irq_dio_num;
         if (rf95_max_power != 20)
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
 
@@ -338,7 +346,14 @@ extern struct portduino_config_struct {
             }
             out << YAML::EndSeq;
 
-            for (int i = 0; i < 7; i++) {
+            // LR2021 OpMode_t differs from LR11x0: slot 3 = RX_HF (not TX_HP), slot 4 = TX_HF; no TX_HP/GNSS/WIFI.
+            // The load path in PortduinoGlue.cpp branches on use_lr2021; this save path must match.
+#if !RADIOLIB_EXCLUDE_LR2021
+            int numModes = (lora_module == use_lr2021) ? 5 : 7;
+#else
+            int numModes = 7;
+#endif
+            for (int i = 0; i < numModes; i++) {
                 switch (i) {
                 case 0:
                     out << YAML::Key << "MODE_STBY";
@@ -350,7 +365,11 @@ extern struct portduino_config_struct {
                     out << YAML::Key << "MODE_TX";
                     break;
                 case 3:
+#if !RADIOLIB_EXCLUDE_LR2021
+                    out << YAML::Key << ((lora_module == use_lr2021) ? "MODE_RX_HF" : "MODE_TX_HP");
+#else
                     out << YAML::Key << "MODE_TX_HP";
+#endif
                     break;
                 case 4:
                     out << YAML::Key << "MODE_TX_HF";
