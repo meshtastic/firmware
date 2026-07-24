@@ -135,12 +135,15 @@ void MeshService::loop()
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-void MeshService::reloadConfig(int saveWhat)
+void MeshService::reloadConfig(int saveWhat, bool radioAffected)
 {
     // Only LoRa config and channels (freq/PSK/slot) affect the radio. Saves that only touch
     // module config, device state, or the node database (e.g. favoriting a node) have no reason
     // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
-    if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
+    // radioAffected lets a caller suppress the reload even when SEGMENT_CONFIG is set - the Config
+    // segment is monolithic, so a non-LoRa sub-message (device/network/bluetooth/security/...) must
+    // still persist SEGMENT_CONFIG but should not trigger the reconfigure.
+    if (radioAffected && (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS))) {
         // If we can successfully set this radio to these settings, save them to disk
 
         // This will also update the region as needed

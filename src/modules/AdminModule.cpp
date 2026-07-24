@@ -583,7 +583,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         nodeDB->updatePosition(node->num, r->set_fixed_position, RX_SRC_LOCAL);
         nodeDB->setLocalPosition(r->set_fixed_position);
         config.position.fixed_position = true;
-        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps != nullptr)
             gps->enable();
@@ -596,7 +596,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client received remove_fixed_position command");
         nodeDB->clearLocalPosition();
         config.position.fixed_position = false;
-        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
@@ -839,6 +839,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
+    // Config is a monolithic segment: only the lora sub-message actually affects the radio, so only
+    // that case sets radioAffected. Every other sub-message still persists SEGMENT_CONFIG but must not
+    // trigger the live SX126x reconfigure (see MeshService::reloadConfig).
+    bool radioAffected = false;
     bool loraPresetWarnPending = false;
     meshtastic_Config_LoRaConfig pendingOldLora = {}, pendingNewLora = {};
 
@@ -894,21 +898,38 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 #endif
         break;
     } // case meshtastic_Config_device_tag
-    case meshtastic_Config_position_tag:
+    case meshtastic_Config_position_tag: {
         LOG_INFO("Set config: Position");
         config.has_position = true;
+        // Reboot only when a field that can't be applied live changed. PositionModule reads these fields
+        // directly from config every send/schedule cycle (verified in PositionModule.cpp), so changing
+        // only them takes effect with no restart. Everything else - GPS driver mode/timing and GPIO pin
+        // assignments - stays on the reboot path. Fails safe: neutralize the known-live fields in a copy,
+        // then reboot if any *other* byte differs, so a newly-added PositionConfig field reboots until it
+        // is explicitly cleared as live here. See plan-narrow-reboot-trigger.
+        {
+            meshtastic_Config_PositionConfig live = config.position, incoming = c.payload_variant.position;
+            incoming.position_broadcast_secs = live.position_broadcast_secs;
+            incoming.position_broadcast_smart_enabled = live.position_broadcast_smart_enabled;
+            incoming.broadcast_smart_minimum_distance = live.broadcast_smart_minimum_distance;
+            incoming.position_flags = live.position_flags;
+            incoming.fixed_position = live.fixed_position;
+            requiresReboot = (memcmp(&live, &incoming, sizeof(live)) != 0);
+        }
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
         // clear the stored position since it may not get updated
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
             c.payload_variant.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
             config.position.fixed_position == false && c.payload_variant.position.fixed_position == false) {
             nodeDB->clearLocalPosition();
-            saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+            // SEGMENT_CONFIG is deliberately omitted here: config.position hasn't been updated to the
+            // incoming value yet, so saving it now would persist stale data. The final saveChanges()
+            // below re-saves SEGMENT_CONFIG once config.position is current.
+            saveChanges(SEGMENT_NODEDATABASE, false);
         }
         config.position = c.payload_variant.position;
-
-        // Save nodedb as well in case we got a fixed position packet
         break;
+    } // case meshtastic_Config_position_tag
     case meshtastic_Config_power_tag:
         LOG_INFO("Set config: Power");
         config.has_power = true;
@@ -932,6 +953,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_network_tag: {
         LOG_INFO("Set config: WiFi");
         config.has_network = true;
+        // No-op set must not reboot; any real change still restarts the network stack. memcmp fails safe.
+        if (memcmp(&config.network, &c.payload_variant.network, sizeof(config.network)) == 0)
+            requiresReboot = false;
         char prevPsk[sizeof(config.network.wifi_psk)];
         memcpy(prevPsk, config.network.wifi_psk, sizeof(prevPsk));
         config.network = c.payload_variant.network;
@@ -965,6 +989,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         LOG_INFO("Set config: LoRa");
         config.has_lora = true;
+        radioAffected = true; // the only sub-message that legitimately needs a live radio reconfigure
 
         if (validatedLora.coding_rate != clampCodingRate(validatedLora.coding_rate)) {
             LOG_WARN("Invalid coding_rate %d, setting to %d", validatedLora.coding_rate, LORA_CR_DEFAULT);
@@ -1112,6 +1137,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_bluetooth_tag:
         LOG_INFO("Set config: Bluetooth");
         config.has_bluetooth = true;
+        // No-op set must not reboot the very BLE link the phone is using; any real change still reboots.
+        if (memcmp(&config.bluetooth, &c.payload_variant.bluetooth, sizeof(config.bluetooth)) == 0)
+            requiresReboot = false;
         config.bluetooth = c.payload_variant.bluetooth;
         break;
     case meshtastic_Config_security_tag: {
@@ -1177,7 +1205,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         disableBluetooth();
     } // end of switch case which_payload_variant
 
-    saveChanges(changes, requiresReboot);
+    saveChanges(changes, requiresReboot, radioAffected);
     if (loraPresetWarnPending)
         warnOnLoraPresetChange(pendingOldLora, pendingNewLora);
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
@@ -1816,11 +1844,11 @@ void AdminModule::reboot(int32_t seconds)
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool radioAffected)
 {
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        service->reloadConfig(saveWhat, radioAffected); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delay save of changes to disk until the open transaction is committed");
     }

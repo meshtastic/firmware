@@ -74,11 +74,16 @@ static const uint8_t LOW_ENTROPY_HASHES[][32] = {
      0x37, 0x82, 0x8d, 0xb2, 0xcc, 0xd8, 0x97, 0x40, 0x9a, 0x5c, 0x8f, 0x40, 0x55, 0xcb, 0x4c, 0x3e}};
 static const char LOW_ENTROPY_WARNING[] = "Compromised keys were detected and regenerated.";
 #endif
-/*
-DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
-#define here.
-*/
 
+// Persistence segments. Each SEGMENT_* is a bit selecting which on-disk proto file to edit.
+// saveToDisk(mask) rewrites exactly the files whose bits are set (see NodeDB::saveToDiskNoRetry).
+//
+// SEGMENT_CONFIG is the whole LocalConfig proto in a single file: it covers all eight
+// sub-messages (device/display/lora/position/power/network/bluetooth/security), and writing it
+// reserializes the entire struct. So the mask says *which file* to persist, never *which
+// sub-message* changed - it cannot tell a LoRa change from a Bluetooth one. Do not infer "the
+// radio needs reconfiguring" from SEGMENT_CONFIG; that is a separate axis, radioAffected (see
+// MeshService::reloadConfig).
 #define SEGMENT_CONFIG 1
 #define SEGMENT_MODULECONFIG 2
 #define SEGMENT_DEVICESTATE 4
