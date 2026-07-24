@@ -2,6 +2,7 @@
 
 #include "BBQ10Keyboard.h"
 #include "InputBroker.h"
+#include "MCP23017Keyboard.h"
 #include "MPR121Keyboard.h"
 #include "Wire.h"
 #include "concurrency/OSThread.h"
@@ -23,6 +24,7 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     TwoWire *i2cBus = 0;
 
     BBQ10Keyboard Q10keyboard;
+    MCP23017Keyboard MCPkeyboard;
     MPR121Keyboard MPRkeyboard;
     TCA8418KeyboardBase &TCAKeyboard;
     bool is_sym = false;

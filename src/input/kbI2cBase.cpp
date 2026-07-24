@@ -64,6 +64,9 @@ int32_t KbI2cBase::runOnce()
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
                 Q10keyboard.setBacklight(0);
             }
+            if (cardkb_found.address == MCP23017_KB_ADDR) {
+                MCPkeyboard.begin(MCP23017_KB_ADDR, &Wire1);
+            }
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
             }
@@ -78,6 +81,9 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
                 Q10keyboard.setBacklight(0);
+            }
+            if (cardkb_found.address == MCP23017_KB_ADDR) {
+                MCPkeyboard.begin(MCP23017_KB_ADDR, &Wire);
             }
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
@@ -536,6 +542,67 @@ int32_t KbI2cBase::runOnce()
                 break;
             }
 
+            if (e.inputEvent != INPUT_BROKER_NONE) {
+                this->notifyObservers(&e);
+            }
+        }
+        break;
+    }
+    case 0x20: { // MCP23017 (Dirección I2C por defecto)
+        MCPkeyboard.trigger();
+        InputEvent e = {};
+
+        while (MCPkeyboard.hasEvent()) {
+            char nextEvent = MCPkeyboard.dequeueEvent();
+            e.inputEvent = INPUT_BROKER_ANYKEY;
+            e.kbchar = 0x00;
+            e.source = this->_originName;
+            
+            switch (nextEvent) {
+            case 0x00: // KB_NONE
+                e.inputEvent = INPUT_BROKER_NONE;
+                e.kbchar = 0x00;
+                break;
+            case 0xb4: // KB_LEFT
+                e.inputEvent = INPUT_BROKER_LEFT;
+                e.kbchar = 0x00;
+                break;
+            case 0xb5: // KB_UP
+                e.inputEvent = INPUT_BROKER_UP;
+                e.kbchar = 0x00;
+                break;
+            case 0xb6: // KB_DOWN
+                e.inputEvent = INPUT_BROKER_DOWN;
+                e.kbchar = 0x00;
+                break;
+            case 0xb7: // KB_RIGHT
+                e.inputEvent = INPUT_BROKER_RIGHT;
+                e.kbchar = 0x00;
+                break;
+            case 0x1b: // KB_ESC
+                e.inputEvent = INPUT_BROKER_CANCEL;
+                e.kbchar = 0;
+                break;
+            case 0x08: // KB_BSP
+                e.inputEvent = INPUT_BROKER_BACK;
+                e.kbchar = 0x08;
+                break;
+            case 0x0d: // KB_SELECT
+                e.inputEvent = INPUT_BROKER_SELECT;
+                e.kbchar = 0x00;
+                break;
+            default:
+                if (nextEvent > 127) { // Invalid key, ignore it
+                    e.inputEvent = INPUT_BROKER_NONE;
+                    e.kbchar = 0x00;
+                    break;
+                }
+                // Normal character 
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = nextEvent; 
+                break;
+            }
+            
             if (e.inputEvent != INPUT_BROKER_NONE) {
                 this->notifyObservers(&e);
             }

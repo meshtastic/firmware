@@ -70,6 +70,7 @@ class ScanI2C
         SCD4X,
         MAX30102,
         TPS65233,
+        MCP23017,
         MPR121KB,
         CGRADSENS,
         INA226,
