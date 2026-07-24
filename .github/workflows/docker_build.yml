@@ -105,6 +105,6 @@ jobs:
           platforms: ${{ inputs.platform }}
           build-args: |
             PIO_ENV=${{ inputs.pio_env }}
-          # Cache image layers in GitHub Actions cache to speed up subsequent builds.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Disabled for now: Cache image layers in GitHub Actions cache to speed up subsequent builds.
+          # cache-from: type=gha
+          # cache-to: type=gha,mode=max
