@@ -638,6 +638,7 @@ NodeDB::NodeDB()
 #endif
     sortMeshDB();
     saveToDisk(saveWhat);
+    bootInitializationInProgress = false;
 }
 
 /**
@@ -2193,6 +2194,40 @@ void NodeDB::loadFromDisk()
 
     migrationSavePending = false;
     configDecodeFailed = false;
+    configLoadComplete = false;
+
+#if !USERPREFS_EVENT_MODE
+#ifdef FSCom
+    const char *eventProfileFiles[] = {EVENT_CONFIG_FILE_NAME, EVENT_CHANNEL_FILE_NAME, EVENT_BACKUP_FILE_NAME};
+    spiLock->lock();
+    for (const char *filename : eventProfileFiles) {
+        if (FSCom.exists(filename) && !FSCom.remove(filename))
+            LOG_WARN("Unable to remove stale event profile file %s", filename);
+    }
+    spiLock->unlock();
+#endif
+#endif
+
+#if USERPREFS_EVENT_MODE
+    // Seed only a missing event config; never overwrite normal files after a corrupt event config.
+    bool eventConfigMissing = false;
+#ifdef FSCom
+    spiLock->lock();
+    eventConfigMissing = !FSCom.exists(configFileName);
+    if (eventConfigMissing) {
+        const size_t totalBytes = FSCom.totalBytes();
+        const size_t usedBytes = FSCom.usedBytes();
+        eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
+        if (eventProfileStorageUnavailable) {
+            LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",
+                      static_cast<unsigned>(EVENT_PROFILE_STORAGE_RESERVATION_BYTES),
+                      static_cast<unsigned>(totalBytes >= usedBytes ? totalBytes - usedBytes : 0));
+        }
+    }
+    spiLock->unlock();
+#endif
+    bool initializedEventConfig = false;
+#endif
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2382,6 +2417,29 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
+#if USERPREFS_EVENT_MODE
+    if (eventConfigMissing && state != LoadFileResult::LOAD_SUCCESS) {
+        const LoadFileResult eventConfigState = state;
+        const LoadFileResult standardConfigState =
+            loadProto(STANDARD_CONFIG_FILE_NAME, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
+                      &meshtastic_LocalConfig_msg, &config);
+        if (standardConfigState == LoadFileResult::LOAD_SUCCESS) {
+            // Preserve the user's identity and non-radio preferences, then
+            // replace only LoRa with this event build's compiled defaults.
+            const meshtastic_LocalConfig standardConfig = config;
+            installDefaultConfig(true);
+            const meshtastic_Config_LoRaConfig eventLora = config.lora;
+            config = eventConfigFromStandard(standardConfig, eventLora);
+            state = LoadFileResult::LOAD_SUCCESS;
+            initializedEventConfig = true;
+            LOG_INFO("Initialized event config without modifying %s", STANDARD_CONFIG_FILE_NAME);
+        } else {
+            // Keep the event load outcome because loadProto() clears config before decoding.
+            // A normal decode failure must not create a replacement identity.
+            state = standardConfigState == LoadFileResult::DECODE_FAILED ? LoadFileResult::DECODE_FAILED : eventConfigState;
+        }
+    }
+#endif
     if (state == LoadFileResult::DECODE_FAILED) {
         // Config file present but undecodable this boot (corruption / torn write / transient decrypt fail).
         // loadProto() already zeroed `config`, so the keypair is gone from RAM; minting a new one would change
@@ -2403,6 +2461,7 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved config version %d", config.version);
     }
+    configLoadComplete = true;
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
@@ -2441,6 +2500,15 @@ void NodeDB::loadFromDisk()
 
 #ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
     config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
+#endif
+
+#if USERPREFS_EVENT_MODE
+    if (initializedEventConfig) {
+        // This is the first durable event-profile write.  A failed write is
+        // safe: normal files remain untouched and the next event boot retries.
+        if (!saveToDisk(SEGMENT_CONFIG))
+            LOG_ERROR("Unable to persist initial event config");
+    }
 #endif
 
     if (backupSecurity.private_key.size > 0) {
@@ -2557,7 +2625,7 @@ void NodeDB::loadFromDisk()
         const int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE,
                                 SEGMENT_NODEDATABASE};
         int toSave = 0;
-        for (int i = 0; i < 5; i++) {
+        for (size_t i = 0; i < sizeof(segments) / sizeof(segments[0]); i++) {
             if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {
                 toSave |= segments[i];
             }
@@ -2574,6 +2642,34 @@ void NodeDB::loadFromDisk()
                 EncryptedStorage::migrateFile(fn);
             }
         }
+
+        // Backups are outside saveToDisk(), but can contain radio profile PSKs.
+#ifdef FSCom
+        spiLock->lock();
+        const bool activeBackupExists = FSCom.exists(backupFileName);
+        spiLock->unlock();
+        if (activeBackupExists && !EncryptedStorage::isEncrypted(backupFileName)) {
+            LOG_INFO("Migrating %s to encrypted storage", backupFileName);
+            EncryptedStorage::migrateFile(backupFileName);
+        }
+#endif
+
+        // Event firmware keeps the normal radio profile inactive, so migrate it separately.
+#if USERPREFS_EVENT_MODE
+#ifdef FSCom
+        const char *inactiveRadioProfileFiles[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME,
+                                                   STANDARD_BACKUP_FILE_NAME};
+        for (const char *fn : inactiveRadioProfileFiles) {
+            spiLock->lock();
+            const bool exists = FSCom.exists(fn);
+            spiLock->unlock();
+            if (exists && !EncryptedStorage::isEncrypted(fn)) {
+                LOG_INFO("Migrating inactive radio profile %s to encrypted storage", fn);
+                EncryptedStorage::migrateFile(fn);
+            }
+        }
+#endif
+#endif
     }
 #endif
 
@@ -2708,8 +2804,9 @@ bool NodeDB::disableLockdownToPlaintext()
     // plaintext->encrypted migrate loop above. Order does not matter here;
     // EncryptedStorage::removeLockdownArtifacts() (which deletes the DEK,
     // the commit point) only runs after every file is confirmed plaintext.
-    const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
-                                  nodeDatabaseFileName};
+    const char *filesToCheck[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME,
+                                  EVENT_CONFIG_FILE_NAME,    EVENT_CHANNEL_FILE_NAME,    EVENT_BACKUP_FILE_NAME,
+                                  moduleConfigFileName,      deviceStateFileName,        nodeDatabaseFileName};
     for (const char *fn : filesToCheck) {
         if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
             LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
@@ -2728,6 +2825,11 @@ bool NodeDB::disableLockdownToPlaintext()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+
+    if (shouldDeferBootPersistence(bootInitializationInProgress, configLoadComplete, configDecodeFailed)) {
+        LOG_WARN("NodeDB: deferred boot write to %s until config recovery completes", filename);
+        return true;
+    }
 
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
@@ -2979,6 +3081,19 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     spiLock->lock();
     FSCom.mkdir("/prefs");
     spiLock->unlock();
+#endif
+
+#if USERPREFS_EVENT_MODE
+    if (eventProfileStorageUnavailable) {
+        if (saveWhat & SEGMENT_CONFIG) {
+            LOG_WARN("Skipping event config write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CONFIG;
+        }
+        if (saveWhat & SEGMENT_CHANNELS) {
+            LOG_WARN("Skipping event channel write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CHANNELS;
+        }
+    }
 #endif
 
     if (saveWhat & SEGMENT_CONFIG) {

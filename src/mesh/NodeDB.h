@@ -112,11 +112,58 @@ extern meshtastic_Position localPosition;
 static constexpr const char *deviceStateFileName = "/prefs/device.proto";
 static constexpr const char *legacyPrefFileName = "/prefs/db.proto";
 static constexpr const char *nodeDatabaseFileName = "/prefs/nodes.proto";
-static constexpr const char *configFileName = "/prefs/config.proto";
+// Event builds isolate radio profiles so normal firmware resumes its config and channels after OTA.
+static constexpr const char *STANDARD_CONFIG_FILE_NAME = "/prefs/config.proto";
+static constexpr const char *STANDARD_CHANNEL_FILE_NAME = "/prefs/channels.proto";
+static constexpr const char *EVENT_CONFIG_FILE_NAME = "/prefs/event-config.proto";
+static constexpr const char *EVENT_CHANNEL_FILE_NAME = "/prefs/event-channels.proto";
+static constexpr const char *STANDARD_BACKUP_FILE_NAME = "/backups/backup.proto";
+static constexpr const char *EVENT_BACKUP_FILE_NAME = "/backups/event-backup.proto";
+
+struct RadioProfileStoragePaths {
+    const char *config;
+    const char *channels;
+    const char *backup;
+};
+
+constexpr RadioProfileStoragePaths radioProfileStoragePaths(bool eventMode)
+{
+    return eventMode ? RadioProfileStoragePaths{EVENT_CONFIG_FILE_NAME, EVENT_CHANNEL_FILE_NAME, EVENT_BACKUP_FILE_NAME}
+                     : RadioProfileStoragePaths{STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME};
+}
+
+// Reserve event files and their atomic temporaries before seeding, preventing retry formatting on full storage.
+static constexpr size_t EVENT_PROFILE_STORAGE_RESERVATION_BYTES = 2 * (meshtastic_LocalConfig_size + meshtastic_ChannelFile_size);
+
+constexpr bool hasEventProfileStorageSpace(size_t totalBytes, size_t usedBytes)
+{
+    return usedBytes <= totalBytes && totalBytes - usedBytes >= EVENT_PROFILE_STORAGE_RESERVATION_BYTES;
+}
+
+inline meshtastic_LocalConfig eventConfigFromStandard(const meshtastic_LocalConfig &standard,
+                                                      const meshtastic_Config_LoRaConfig &eventLora)
+{
+    meshtastic_LocalConfig eventConfig = standard;
+    eventConfig.has_lora = true;
+    eventConfig.lora = eventLora;
+    return eventConfig;
+}
+
+constexpr bool shouldDeferBootPersistence(bool bootInitializationInProgress, bool configLoadComplete, bool configDecodeFailed)
+{
+    return bootInitializationInProgress && (!configLoadComplete || configDecodeFailed);
+}
+
+#if USERPREFS_EVENT_MODE
+static constexpr auto RADIO_PROFILE_STORAGE = radioProfileStoragePaths(true);
+#else
+static constexpr auto RADIO_PROFILE_STORAGE = radioProfileStoragePaths(false);
+#endif
+static constexpr const char *configFileName = RADIO_PROFILE_STORAGE.config;
+static constexpr const char *channelFileName = RADIO_PROFILE_STORAGE.channels;
+static constexpr const char *backupFileName = RADIO_PROFILE_STORAGE.backup;
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
-static constexpr const char *channelFileName = "/prefs/channels.proto";
-static constexpr const char *backupFileName = "/backups/backup.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
@@ -560,6 +607,14 @@ class NodeDB
     /// skip boot keygen and skip persisting defaults, so a transient read failure can't change our NodeNum
     /// or overwrite the on-disk config. Cleared at the top of every loadFromDisk() run.
     bool configDecodeFailed = false;
+    // Defer automatic writes until config load is healthy to protect device and node data from damaged configs.
+    bool bootInitializationInProgress = true;
+    bool configLoadComplete = false;
+#if USERPREFS_EVENT_MODE
+    // The active event profile is intentionally non-durable when there was not
+    // enough room to create it safely at boot. A later boot retries the check.
+    bool eventProfileStorageUnavailable = false;
+#endif
     uint32_t lastNodeDbSave = 0;     // when we last saved our db to flash
     uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
     uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
