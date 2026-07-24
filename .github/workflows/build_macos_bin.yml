@@ -14,6 +14,10 @@ permissions:
 jobs:
   build-MacOS:
     runs-on: macos-${{ inputs.macos_ver }}
+    # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
+    # restore it but never save, so they stop filling up the repo's Actions cache storage.
+    env:
+      SAVE_CACHE: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -24,8 +28,9 @@ jobs:
         id: r_image
         run: echo "ver=$ImageVersion" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Homebrew downloads
-        uses: actions/cache@v6
+      - name: Restore Homebrew cache
+        id: brew-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/Library/Caches/Homebrew
           key: brew-macos-${{ inputs.macos_ver }}-${{ steps.r_image.outputs.ver }}
@@ -41,16 +46,24 @@ jobs:
           brew install
           platformio yaml-cpp libuv openssl@3 libusb argp-standalone pkg-config ulfius jsoncpp
 
+      - name: Save Homebrew cache
+        if: env.SAVE_CACHE == 'true' && steps.brew-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-macos-${{ inputs.macos_ver }}-${{ steps.r_image.outputs.ver }}
+
       - name: Get release version string
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v6
+      - name: Restore PlatformIO cache
+        id: pio-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/.platformio/.cache
-          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini') }}
+          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
           restore-keys: |
             pio-macos-${{ inputs.macos_ver }}-
 
@@ -59,6 +72,13 @@ jobs:
           platformio run -e native-macos
         env:
           PKG_VERSION: ${{ steps.version.outputs.long }}
+
+      - name: Save PlatformIO cache
+        if: env.SAVE_CACHE == 'true' && steps.pio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-macos-${{ inputs.macos_ver }}-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
 
       - name: List output files
         run: ls -lah .pio/build/native-macos/
