@@ -27,6 +27,7 @@ class TCA8418KeyboardBase
         MUTE_TOGGLE = 0xAC,
         SEND_PING = 0xAF,
         BL_TOGGLE = 0xAB,
+        OPEN_FREETEXT = 0x8E,
         FUNCTION_F1 = 0xF1,
         FUNCTION_F2 = 0xF2,
         FUNCTION_F3 = 0xF3,
@@ -128,6 +129,7 @@ class TCA8418KeyboardBase
     };
 
     virtual void pressed(uint8_t key);
+    virtual void held(void);
     virtual void released(void);
 
     virtual void queueEvent(char);
