@@ -107,8 +107,7 @@ class Screen
 #include <AutoOLEDWire.h>
 #endif
 
-#include "EInkDisplay2.h"
-#include "EInkDynamicDisplay.h"
+#include "BaseUIEInkDisplay.h"
 #include "PointStruct.h"
 #include "Power.h"
 #include "TFTDisplay.h"

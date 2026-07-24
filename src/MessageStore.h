@@ -4,6 +4,7 @@
 
 // Disable debug logging entirely on release builds of HELTEC_MESH_SOLAR for space constraints
 #if defined(HELTEC_MESH_SOLAR)
+#undef LOG_DEBUG
 #define LOG_DEBUG(...)
 #endif
 
