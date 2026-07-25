@@ -323,13 +323,19 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
             return;
         }
     }
-    isReceiving = true;
     receivingPacket = packetPool.allocCopy(*p);
+    if (!receivingPacket) {
+        return;
+    }
+    isReceiving = true;
     uint32_t airtimeMsec = getPacketTime(p, true);
     notifyLater(airtimeMsec, ISR_RX, false); // Model the time it is busy receiving
 #else
-    isReceiving = true;
     receivingPacket = packetPool.allocCopy(*p);
+    if (!receivingPacket) {
+        return;
+    }
+    isReceiving = true;
     handleReceiveInterrupt(); // Simulate receiving the packet immediately
     startTransmitTimer();
 #endif
