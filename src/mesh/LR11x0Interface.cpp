@@ -28,7 +28,6 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 #endif
 
 // the 2.4G part maxes at 13dBm
-
 #if ARCH_PORTDUINO
 #define LR1120_MAX_POWER portduino_config.lr1120_max_power
 #endif
@@ -54,22 +53,28 @@ template <typename T> bool LR11x0Interface<T>::init()
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
 
+    // An explicit Vref always wins; TCXO_OPTIONAL only supplies a default for boards that declare a
+    // TCXO may be fitted without saying at what voltage. Both may appear in the same variant file.
 #if ARCH_PORTDUINO
     float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
 #elif defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR11X0_DIO3_TCXO_VOLTAGE;
-    LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", LR11X0_DIO3_TCXO_VOLTAGE);
-    // (DIO3 is not free to be used as an IRQ)
 #elif defined(TCXO_OPTIONAL)
-    float tcxoVoltage = 1.6f; // TCXO_OPTIONAL: try default 1.6 V first, fall back to XTAL on failure
-    LOG_DEBUG("TCXO_OPTIONAL: no LR11X0_DIO3_TCXO_VOLTAGE defined, trying default TCXO Vref 1.6 V first");
+    float tcxoVoltage = 1.6f;
 #else
-    float tcxoVoltage =
-        0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
-           // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
-    // (DIO3 is free to be used as an IRQ)
-    LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
+    // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
+    // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
+    float tcxoVoltage = 0;
+#endif
+
+    // DIO3 is free to be used as an IRQ only while no TCXO Vref is driven on it
+    if (tcxoVoltage > 0)
+        LOG_DEBUG("LR11x0 TCXO Vref %f V on DIO3 (DIO3 unavailable as an IRQ)", tcxoVoltage);
+    else
+        LOG_DEBUG("LR11x0 no TCXO Vref, XTAL only (DIO3 free as an IRQ)");
+#if defined(TCXO_OPTIONAL)
+    LOG_DEBUG("TCXO_OPTIONAL: oscillator type unknown, probing XTAL first and using any TCXO Vref only as fallback");
 #endif
 
     RadioLibInterface::init();
@@ -95,52 +100,39 @@ template <typename T> bool LR11x0Interface<T>::init()
     // Allow extra time for TCXO to stabilize after power-on
     delay(10);
 
+    // Timestamped brackets so a hang inside RadioLib leaves a dangling "attempt" line in the boot log
+    auto tryBegin = [&](int attempt, float vref) {
+        uint32_t attemptStart = millis();
+        LOG_INFO("LR11x0 begin() attempt %d: tcxoVoltage=%.3fV at t=%ums", attempt, vref, attemptStart);
+        int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, vref);
+        LOG_INFO("LR11x0 begin() attempt %d returned %d after %ums", attempt, res, millis() - attemptStart);
+        return res;
+    };
+
 #if defined(TCXO_OPTIONAL)
-    // Try XTAL first, TCXO as fallback - the reverse of the naive order. Measured on hardware
-    // (see .notes/hardware/lr1121-tcxo-hang/ and the RadioLib bug report referencing this):
-    // on a bare/non-TCXO module, a TCXO-first attempt either hangs RadioLib's calibration wait
-    // forever (unpatched upstream) or, even once that's fixed with a timeout, costs a full ~1.3s
-    // failed attempt before falling back - whereas XTAL succeeds immediately (~350ms). On a
-    // genuine TCXO module, XTAL fails fast and cleanly (~300ms, RADIOLIB_ERR_SPI_CMD_FAILED),
-    // so falling back to TCXO costs only that ~300ms. XTAL-first is a strict improvement for
-    // hang-avoidance either way, and sidesteps the RadioLib bug entirely rather than depending
-    // on a timeout fix landing upstream.
-    float firstAttemptVoltage = (tcxoVoltage > 0) ? 0.0f : tcxoVoltage;
+    // 1. XTAL, because a TCXO-first attempt hangs RadioLib's calibration wait on a bare module,
+    //    whereas XTAL fails fast and cleanly (SPI_CMD_FAILED) on a module that does have a TCXO
+    float attemptVoltage = 0;
 #else
-    float firstAttemptVoltage = tcxoVoltage;
+    float attemptVoltage = tcxoVoltage;
+#endif
+    int res = tryBegin(1, attemptVoltage);
+
+#if defined(TCXO_OPTIONAL)
+    // 2. XTAL failed with the chip present, so fall back to the TCXO if the variant configured one
+    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        LOG_WARN("LR11x0 XTAL init failed (err %d), retrying with TCXO Vref %f V", res, tcxoVoltage);
+        attemptVoltage = tcxoVoltage;
+        res = tryBegin(2, attemptVoltage);
+    }
 #endif
 
-    // DIAGNOSTIC: bracket each lora.begin() call with before/after markers (with millis()
-    // timestamps) so a hang inside RadioLib shows up as a dangling "begin attempt" log line
-    // with no matching "returned" line, instead of the boot log just silently stopping.
-    uint32_t attemptStart = millis();
-    LOG_INFO("LR11x0 begin() attempt 1: tcxoVoltage=%.3fV at t=%ums", firstAttemptVoltage, attemptStart);
-    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, firstAttemptVoltage);
-    LOG_INFO("LR11x0 begin() attempt 1 returned %d after %ums", res, millis() - attemptStart);
-
-    // Retry if we get SPI command failed - some units need extra time
+    // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry
     if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
         LOG_WARN("LR11x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", res);
         delay(100);
-        attemptStart = millis();
-        LOG_INFO("LR11x0 begin() attempt 2: tcxoVoltage=%.3fV at t=%ums", firstAttemptVoltage, attemptStart);
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, firstAttemptVoltage);
-        LOG_INFO("LR11x0 begin() attempt 2 returned %d after %ums", res, millis() - attemptStart);
+        res = tryBegin(3, attemptVoltage);
     }
-
-#if defined(TCXO_OPTIONAL)
-    // If the XTAL-first attempt failed (for any reason other than chip not found) and a TCXO
-    // was actually configured for this board, retry with TCXO now.
-    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && firstAttemptVoltage != tcxoVoltage) {
-        LOG_WARN("LR11x0 init failed without TCXO (err %d), retrying with TCXO Vref %f V", res, tcxoVoltage);
-        attemptStart = millis();
-        LOG_INFO("LR11x0 begin() attempt 3 (TCXO): tcxoVoltage=%.3fV at t=%ums", tcxoVoltage, attemptStart);
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
-        LOG_INFO("LR11x0 begin() attempt 3 returned %d after %ums", res, millis() - attemptStart);
-        if (res == RADIOLIB_ERR_NONE)
-            LOG_INFO("LR11x0 init success with TCXO Vref %f V", tcxoVoltage);
-    }
-#endif
 
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
