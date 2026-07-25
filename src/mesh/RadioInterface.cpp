@@ -1451,9 +1451,15 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 
 void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 {
+    if (!p)
+        return;
+
     if (router) {
         p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         router->enqueueReceivedMessage(p);
+    } else {
+        LOG_WARN("deliverToReceiver: router is null, releasing packet");
+        packetPool.release(p);
     }
 }
 
@@ -1462,10 +1468,28 @@ void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
  */
 size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 {
-    assert(!sendingPacket);
+    if (!p) {
+        LOG_ERROR("beginSending called with null packet");
+        return 0;
+    }
 
-    // LOG_DEBUG("Send queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
-    assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag); // It should have already been encoded by now
+    if (sendingPacket) {
+        LOG_WARN("beginSending called while transmission active; releasing previous packet");
+        packetPool.release(sendingPacket);
+        sendingPacket = nullptr;
+    }
+
+    if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag) {
+        LOG_ERROR("beginSending called with unencrypted packet variant");
+        packetPool.release(p);
+        return 0;
+    }
+
+    if (p->encrypted.size > sizeof(radioBuffer.payload)) {
+        LOG_ERROR("Packet payload size %u exceeds radioBuffer capacity %zu", p->encrypted.size, sizeof(radioBuffer.payload));
+        packetPool.release(p);
+        return 0;
+    }
 
     radioBuffer.header.from = p->from;
     radioBuffer.header.to = p->to;
@@ -1481,9 +1505,12 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
         p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
     radioBuffer.header.flags |= (p->hop_start << PACKET_FLAGS_HOP_START_SHIFT) & PACKET_FLAGS_HOP_START_MASK;
 
-    // if the sender nodenum is zero, that means uninitialized
-    assert(radioBuffer.header.from);
-    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
+    if (!radioBuffer.header.from) {
+        LOG_ERROR("Sender node num is zero");
+        packetPool.release(p);
+        return 0;
+    }
+
     memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;

@@ -54,7 +54,7 @@ template <class T> class Allocator
     }
 
     /// Variations of the above methods that return std::unique_ptr instead of raw pointers.
-    using UniqueAllocation = std::unique_ptr<T, const std::function<void(T *)> &>;
+    using UniqueAllocation = std::unique_ptr<T, std::function<void(T *)>>;
     /// Return a queable object which has been prefilled with zeros.
     /// std::unique_ptr wrapped variant of allocZeroed().
     UniqueAllocation allocUniqueZeroed() { return UniqueAllocation(allocZeroed(), deleter); }
@@ -149,9 +149,18 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         }
 
         // Find the index of this pointer in our pool
-        int index = p - pool;
+        uintptr_t offset = reinterpret_cast<uintptr_t>(p) - reinterpret_cast<uintptr_t>(pool);
+        if (offset % sizeof(T) != 0) {
+            LOG_WARN("Pointer 0x%x is misaligned inside static pool!", p);
+            return;
+        }
+
+        int index = offset / sizeof(T);
         if (index >= 0 && index < MaxSize) {
-            assert(used[index]); // Should be marked as used
+            if (!used[index]) {
+                LOG_WARN("Double free detected for pool item %d at 0x%x", index, p);
+                return;
+            }
             used[index] = false;
             this->auditAdd(-(int32_t)sizeof(T));
             LOG_HEAP("Released static pool item %d at 0x%x", index, p);

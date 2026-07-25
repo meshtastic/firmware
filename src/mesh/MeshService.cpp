@@ -168,14 +168,20 @@ void MeshService::reloadOwner(bool shouldSave)
 NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
 {
     NodeNum nodenum = 0;
-    for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
+    int count = toPhoneQueue.numUsed();
+    for (int i = 0; i < count; i++) {
         meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
+        if (!p)
+            continue;
         if (p->id == request_id) {
             nodenum = p->to;
             // make sure to continue this to make one full loop
         }
         // put it right back on the queue
-        toPhoneQueue.enqueue(p, 0);
+        if (!toPhoneQueue.enqueue(p, 0)) {
+            LOG_ERROR("Failed to re-enqueue packet in getNodenumFromRequestId; releasing");
+            packetPool.release(p);
+        }
     }
     return nodenum;
 }
@@ -313,10 +319,15 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 
     lastQueueStatus = *copied;
 
-    res = toPhoneQueueStatusQueue.enqueue(copied, 0);
+    bool enqueued = toPhoneQueueStatusQueue.enqueue(copied, 0);
+    if (!enqueued) {
+        LOG_WARN("Failed to enqueue QueueStatus to phone queue; releasing");
+        releaseQueueStatusToPool(copied);
+        return ERRNO_UNKNOWN;
+    }
     fromNum++;
 
-    return res ? ERRNO_OK : ERRNO_UNKNOWN;
+    return ERRNO_OK;
 }
 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
@@ -361,7 +372,10 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
-    assert(node);
+    if (!node) {
+        LOG_WARN("trySendPosition: local node info is null");
+        return false;
+    }
 
     if (nodeDB->hasValidPosition(node)) {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
@@ -529,7 +543,10 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    assert(node);
+    if (!node) {
+        LOG_WARN("refreshLocalMeshNode: local node info is null");
+        return nullptr;
+    }
 
     // Update our local node info with our time (even if we don't decide to update anyone else)
     node->last_heard =
@@ -554,6 +571,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
     const meshtastic_NodeInfoLite *node = refreshLocalMeshNode();
+    if (!node)
+        return 0;
     meshtastic_Position pos = meshtastic_Position_init_default;
 
     if (newStatus->getHasLock()) {

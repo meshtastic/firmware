@@ -18,6 +18,10 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
 
+    void deliverToReceiverPublic(meshtastic_MeshPacket *p) { deliverToReceiver(p); }
+    meshtastic_MeshPacket *getSendingPacket() const { return sendingPacket; }
+    size_t getRadioBufferPayloadCapacity() const { return sizeof(radioBuffer.payload); }
+
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
 
@@ -351,6 +355,74 @@ void tearDown(void)
     mockMeshService = nullptr;
 }
 
+// -----------------------------------------------------------------------
+// Verification & Stress Tests for Target Fixes
+// -----------------------------------------------------------------------
+
+static void test_beginSending_oversizedPayloadAbortsSafely()
+{
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    p->from = 0x12345678;
+    p->to = 0x87654321;
+    p->id = 0x10203040;
+    p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    
+    // Set encrypted size larger than sizeof(radioBuffer.payload) (which is 256 - sizeof(PacketHeader))
+    p->encrypted.size = testRadio->getRadioBufferPayloadCapacity() + 10;
+
+    size_t result = testRadio->beginSending(p);
+
+    TEST_ASSERT_EQUAL_UINT(0, result);
+    TEST_ASSERT_NULL(testRadio->getSendingPacket());
+
+    packetPool.release(p);
+}
+
+static void test_deliverToReceiver_nullRouterReleasesPacket()
+{
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    TEST_ASSERT_NOT_NULL(p);
+    p->id = 0xabcdef01;
+
+    router = nullptr;
+
+    uint32_t activeBefore = packetPool.getNumActive();
+    testRadio->deliverToReceiverPublic(p);
+    uint32_t activeAfter = packetPool.getNumActive();
+
+    // Packet p should have been released back to pool, decreasing active count by 1
+    TEST_ASSERT_EQUAL_UINT(activeBefore - 1, activeAfter);
+}
+
+static void test_sendQueueStatusToPhone_fullQueueReleasesCopied()
+{
+    meshtastic_QueueStatus qs = meshtastic_QueueStatus_init_zero;
+    qs.res = ERRNO_OK;
+    qs.mesh_packet_id = 999;
+
+    // Fill toPhoneQueueStatusQueue (capacity is MAX_NUM_PHONE_QUEUE = 4)
+    while (service->toPhoneQueueStatusQueue.numFree() > 0) {
+        meshtastic_QueueStatus *fillCopy = queueStatusPool.allocCopy(qs);
+        service->toPhoneQueueStatusQueue.enqueue(fillCopy, 0);
+    }
+    TEST_ASSERT_EQUAL_UINT(0, service->toPhoneQueueStatusQueue.numFree());
+
+    uint32_t activeQsBefore = queueStatusPool.getNumActive();
+    ErrorCode rc = service->sendQueueStatusToPhone(qs, ERRNO_OK, 1000);
+    uint32_t activeQsAfter = queueStatusPool.getNumActive();
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, rc);
+    // Net active queue status allocations in pool should remain unchanged because oldest was dequeued/released and copied was enqueued
+    TEST_ASSERT_EQUAL_UINT(activeQsBefore, activeQsAfter);
+
+    // Clean up queue
+    while (service->toPhoneQueueStatusQueue.numFree() < service->toPhoneQueueStatusQueue.capacity()) {
+        meshtastic_QueueStatus *d = service->toPhoneQueueStatusQueue.dequeuePtr(0);
+        if (d) releaseQueueStatusToPool(d);
+    }
+}
+
 void setup()
 {
     delay(10);
@@ -377,6 +449,9 @@ void setup()
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
+    RUN_TEST(test_beginSending_oversizedPayloadAbortsSafely);
+    RUN_TEST(test_deliverToReceiver_nullRouterReleasesPacket);
+    RUN_TEST(test_sendQueueStatusToPhone_fullQueueReleasesCopied);
     exit(UNITY_END());
 }
 

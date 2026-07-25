@@ -292,6 +292,10 @@ meshtastic_MeshPacket *Router::allocForSending()
 void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit,
                         bool ackWantsAck)
 {
+    if (!routingModule) {
+        LOG_WARN("sendAckNak: routingModule is null");
+        return;
+    }
     routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit, ackWantsAck);
 }
 
@@ -451,6 +455,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        LOG_ERROR("Invalid payload variant in Router::send");
+        packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
     }
 
@@ -472,6 +478,9 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         DEBUG_HEAP_BEFORE;
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
         DEBUG_HEAP_AFTER("Router::send", p_decoded);
+        if (!p_decoded) {
+            LOG_WARN("Failed to allocate decoded packet copy in Router::send");
+        }
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -495,7 +504,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
-    assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+    if (!iface) {
+        LOG_ERROR("No interface configured for send!");
+        abortSendAndNak(meshtastic_Routing_Error_NO_INTERFACE, p);
+        return ERRNO_NO_INTERFACES;
+    }
     return iface->send(p);
 }
 
@@ -1293,6 +1306,9 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     DEBUG_HEAP_BEFORE;
     meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
     DEBUG_HEAP_AFTER("Router::handleReceived", p_encrypted);
+    if (!p_encrypted) {
+        LOG_WARN("Failed to allocate encrypted packet copy in Router::handleReceived");
+    }
 
     // Consume the decoded/authenticated handoff after preserving the exact encrypted packet and
     // before mutating any packet fields that participate in the exact cache match.
