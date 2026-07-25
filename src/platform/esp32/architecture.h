@@ -200,6 +200,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_TBEAM_1_WATT
 #elif defined(T_LORA_PAGER)
 #define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
+#elif defined(HELTEC_V4_R2)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_V4
 #elif defined(HELTEC_V4)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V4
 #elif defined(M5STACK_UNITC6L)

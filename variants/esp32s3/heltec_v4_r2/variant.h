@@ -73,8 +73,8 @@
  * Display SPI (SPI3_HOST):
  *   SCK  → GPIO47   LCD_RS/DC → GPIO21
  *   MOSI → GPIO33   CS        → GPIO34
- *   MISO → GPIO26   RST       → GPIO48
- *                   BL        → GPIO35
+ *   MISO → NC (-1)  RST       → GPIO48     [GPIO26 is PSRAM CS — do not use]
+ *   BL   → GPIO35
  *
  * Touch I2C (Wire, port 0 — GPIO3/4):
  *   SDA → GPIO4   RST → GPIO45
