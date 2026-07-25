@@ -3500,7 +3500,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         }
 #endif
 
-       // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
+        // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         const int8_t hopsAway = getHopsAway(mp);
         
         // Gating rule: 0-hop payloads must have real hardware metrics to be treated as a direct link.
