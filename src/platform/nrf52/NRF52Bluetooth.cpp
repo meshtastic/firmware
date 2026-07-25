@@ -7,6 +7,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -466,17 +467,23 @@ bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passk
 // Disconnect any BLE connections
 void NRF52Bluetooth::disconnect()
 {
+    static constexpr uint32_t DISCONNECT_TIMEOUT_MSEC = 1000;
     uint8_t connection_num = Bluefruit.connected();
     if (connection_num) {
         // Close all connections. We're only expecting one.
         for (uint8_t i = 0; i < connection_num; i++)
             Bluefruit.disconnect(i);
 
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
+        // Best-effort wait: on Bluefruit's BLE event task the DISCONNECTED event can't be processed
+        // until this callback returns, so an unbounded wait would deadlock until the watchdog fires.
+        uint32_t start = millis();
+        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, DISCONNECT_TIMEOUT_MSEC))
+            delay(1);
 
-        LOG_INFO("Ended BLE connection");
+        if (Bluefruit.connected())
+            LOG_WARN("BLE disconnect unconfirmed after %ums, continuing shutdown", millis() - start);
+        else
+            LOG_INFO("Ended BLE connection");
     }
 }
 
