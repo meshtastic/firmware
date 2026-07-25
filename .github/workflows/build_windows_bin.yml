@@ -48,6 +48,7 @@ jobs:
             mingw-w64-ucrt-x86_64-jsoncpp
             mingw-w64-ucrt-x86_64-openssl
             mingw-w64-ucrt-x86_64-libusb
+            mingw-w64-ucrt-x86_64-SDL2
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             git
