@@ -1358,6 +1358,13 @@ void RadioInterface::applyModemConfig()
     }
 
     slotTimeMsec = computeSlotTimeMsec();
+
+      if(loraConfig.preamble_length != 0) {
+       preambleLength = loraConfig.preamble_length ;
+    } else {
+    preambleLength = preambleLengthDefault;
+    }
+
     preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
 
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
@@ -1373,6 +1380,7 @@ void RadioInterface::applyModemConfig()
     }
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
+    LOG_INFO("preamble length: %d", preambleLength);
     LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
 } // end of applyModemConfig
 
