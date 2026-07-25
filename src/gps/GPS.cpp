@@ -2201,11 +2201,6 @@ bool GPS::hasLock()
     return false;
 }
 
-bool GPS::hasFlow()
-{
-    return reader.passedChecksum() > 0;
-}
-
 bool GPS::whileActive()
 {
     unsigned int charsInBuf = 0;

@@ -255,9 +255,9 @@ class NodeDB
      */
     void updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src = RX_SRC_RADIO);
 
-    /** Update user info and channel for this node based on received user data
-     */
-    bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
+    /** Update user info and channel for this node based on received user data.
+     * A known signer's identity is only learned when xeddsaSigned; defaults false so callers fail closed. */
+    bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0, bool xeddsaSigned = false);
 
     /*
      * Sets a node either favorite or unfavorite. Returns true if the node ends
@@ -359,6 +359,37 @@ class NodeDB
     /// Copy the 32-byte public key for node n - hot store first, then the warm
     /// tier. Returns false if we don't know a key for n.
     bool copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
+    /// Copy the 32-byte key for n from the AUTHORITATIVE tiers only (hot, then warm; never
+    /// opportunistic caches) - the pin reference for caches that mirror NodeDB's key hygiene.
+    bool copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
+    /// Key for the inbound-decrypt path: authoritative (hot/warm), or a cold-tier cache key only when
+    /// it is signer-proven. Keeps unverified TOFU cache keys from backing pki_encrypted attribution.
+    bool copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
+
+    /// True if n is a known XEdDSA signer for exactly `key32` (hot signed bitfield or warm
+    /// signer bit); the key match stops a rotated key inheriting a stale signer verdict.
+    bool isVerifiedSignerForKey(NodeNum n, const uint8_t *key32);
+
+    /// Key-agnostic "should n's signable traffic arrive signed", per hot bitfield or warm signer
+    /// bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
+    bool isKnownXeddsaSigner(NodeNum n);
+
+    /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
+    /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:
+    /// only ManuallyVerified vouches for possession of exactly this key.
+    enum class KeyCommitTrust : uint8_t {
+        AdminChannelProven, // possession shown to the admin channel (AEAD) - TOFU-grade for signing
+        ManuallyVerified,   // the user confirmed possession of exactly this key
+    };
+
+    /// THE primitive for key writes that bypass updateUser() (no User payload; provenance
+    /// differs from a received NodeInfo): writes the 32-byte key to the hot store and
+    /// write-through to the TrafficManagement NodeInfo cache. Any future direct key-write
+    /// site must call this rather than assigning info->public_key, or the TrafficManagement
+    /// cache silently diverges until the next hourly reconcile.
+    void commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust);
 
     /// Resolve a node's device role - hot store (with user) first, then the role
     /// cached in the warm tier, else CLIENT. Lets role-aware policy keep firing for
@@ -529,9 +560,10 @@ class NodeDB
     /// skip boot keygen and skip persisting defaults, so a transient read failure can't change our NodeNum
     /// or overwrite the on-disk config. Cleared at the top of every loadFromDisk() run.
     bool configDecodeFailed = false;
-    uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
-    uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
-    uint32_t lastSort = 0;          // When last sorted the nodeDB
+    uint32_t lastNodeDbSave = 0;     // when we last saved our db to flash
+    uint32_t lastFullEvictionMs = 0; // when we last evicted to admit a new node, once the db is full
+    uint32_t lastBackupAttempt = 0;  // when we last tried a backup automatically or manually
+    uint32_t lastSort = 0;           // When last sorted the nodeDB
 
     /*
      * Internal boolean to track sorting paused
