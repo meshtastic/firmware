@@ -12,7 +12,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 TraceRouteModule *traceRouteModule;
 
