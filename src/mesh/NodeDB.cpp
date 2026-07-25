@@ -3500,12 +3500,20 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         }
 #endif
 
-        // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
+       // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         const int8_t hopsAway = getHopsAway(mp);
-        if (hopsAway >= 0) {
+        
+        // Gating rule: 0-hop payloads must have real hardware metrics to be treated as a direct link.
+        // Prevent uninitialized historical sync / forwarded payloads from pretending to be local neighbors.
+        bool is_phantom_packet = (hopsAway == 0 && mp.rx_snr == 0.0f && mp.rx_rssi == 0);
+
+        if (hopsAway >= 0 && !is_phantom_packet) {
             info->has_hops_away = true;
             info->hops_away = hopsAway;
+        } else if (is_phantom_packet) {
+            info->has_hops_away = false; // Protect topology; drop direct neighbor flag
         }
+        
         sortMeshDB();
     }
 }
