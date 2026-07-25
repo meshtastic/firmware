@@ -542,18 +542,21 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     break;
                 }
 #endif
+                // Get INA219 configuration register 0x00 expecting 0x399F after power-on reset
+                uint16_t registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
+                if (registerValue == 0x399F) {
+                    logFoundDevice("INA219", (uint8_t)addr.address);
+                    type = INA219;
+                    break;
+                }
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && HAS_TELEMETRY
+                // Assume HM330x as the weakest detection method if none of the above ones are found
                 if (probeHM330x(i2cBus, addr.address)) {
                     logFoundDevice("HM330X", (uint8_t)addr.address);
                     type = HM330X;
                     break;
                 }
 #endif
-                if (type == NONE) { // Assume INA219 if none of the above ones are found
-                    logFoundDevice("INA219", (uint8_t)addr.address);
-                    type = INA219;
-                    break;
-                }
             }
             case INA3221_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
