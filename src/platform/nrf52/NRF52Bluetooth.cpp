@@ -481,7 +481,7 @@ void NRF52Bluetooth::disconnect()
             delay(1);
 
         if (Bluefruit.connected())
-            LOG_INFO("BLE disconnect still pending, continuing shutdown");
+            LOG_WARN("BLE disconnect unconfirmed after %ums, continuing shutdown", millis() - start);
         else
             LOG_INFO("Ended BLE connection");
     }
