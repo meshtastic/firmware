@@ -25,6 +25,9 @@
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/EnvironmentTelemetry.h"
+#endif
 #include "modules/TraceRouteModule.h"
 #include <algorithm>
 #include <array>
@@ -1455,6 +1458,118 @@ void menuHandler::positionBaseMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::environmentTelemetryMenu()
+{
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    enum optionsNumbers { Back, Source, enumEnd };
+
+    static const char *optionsArray[] = {"Back", "Source"};
+    static int optionsEnumArray[] = {Back, Source};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Environment";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = enumEnd;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Source) {
+            menuQueue = EnvironmentTelemetrySourceMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
+void menuHandler::environmentTelemetrySourceMenu()
+{
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    enum optionsNumbers { Back, Mesh, FavoritesOnly, LocalSourceBase = 100 };
+    static constexpr uint8_t MAX_LOCAL_SOURCES = 16;
+    static constexpr uint8_t MAX_OPTIONS = MAX_LOCAL_SOURCES + 3;
+
+    static const char *optionsArray[MAX_OPTIONS];
+    static int optionsEnumArray[MAX_OPTIONS];
+    static char localSourceLabels[MAX_LOCAL_SOURCES][32];
+
+    uint8_t optionCount = 0;
+    optionsArray[optionCount] = "Back";
+    optionsEnumArray[optionCount++] = Back;
+
+    uint8_t localSourceCount = 0;
+    if (environmentTelemetryModule != nullptr) {
+        localSourceCount = environmentTelemetryModule->getLocalSourceCount();
+    }
+    if (localSourceCount > MAX_LOCAL_SOURCES) {
+        localSourceCount = MAX_LOCAL_SOURCES;
+    }
+
+    for (uint8_t index = 0; index < localSourceCount; ++index) {
+        const char *sensorLabel = environmentTelemetryModule->getLocalSourceLabel(index);
+        strncpy(localSourceLabels[index], sensorLabel != nullptr ? sensorLabel : "Local Sensor",
+                sizeof(localSourceLabels[index]) - 1);
+        localSourceLabels[index][sizeof(localSourceLabels[index]) - 1] = '\0';
+        optionsArray[optionCount] = localSourceLabels[index];
+        optionsEnumArray[optionCount++] = LocalSourceBase + index;
+    }
+
+    optionsArray[optionCount] = "Mesh";
+    optionsEnumArray[optionCount++] = Mesh;
+    optionsArray[optionCount] = "Favorite Nodes Only";
+    optionsEnumArray[optionCount++] = FavoritesOnly;
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Source";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = optionCount;
+
+    const int localSourceStartIndex = 1;
+    const int meshIndex = localSourceStartIndex + localSourceCount;
+    const int favoritesIndex = meshIndex + 1;
+
+    switch (EnvironmentTelemetryModule::getDisplaySource()) {
+    case EnvironmentTelemetryModule::DisplaySource::LocalSensor:
+        if (EnvironmentTelemetryModule::getSelectedLocalSourceIndex() >= 0 &&
+            EnvironmentTelemetryModule::getSelectedLocalSourceIndex() < localSourceCount) {
+            bannerOptions.InitialSelected = localSourceStartIndex + EnvironmentTelemetryModule::getSelectedLocalSourceIndex();
+        } else if (localSourceCount > 0) {
+            bannerOptions.InitialSelected = localSourceStartIndex;
+        } else {
+            bannerOptions.InitialSelected = meshIndex;
+        }
+        break;
+    case EnvironmentTelemetryModule::DisplaySource::FavoriteNodesOnly:
+        bannerOptions.InitialSelected = favoritesIndex;
+        break;
+    case EnvironmentTelemetryModule::DisplaySource::Mesh:
+    default:
+        bannerOptions.InitialSelected = meshIndex;
+        break;
+    }
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuQueue = EnvironmentTelemetryMenu;
+            screen->runNow();
+            return;
+        }
+
+        if (selected >= LocalSourceBase && selected < (LocalSourceBase + MAX_LOCAL_SOURCES)) {
+            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::LocalSensor,
+                                                         selected - LocalSourceBase);
+        } else if (selected == Mesh) {
+            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::Mesh);
+        } else if (selected == FavoritesOnly) {
+            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::FavoriteNodesOnly);
+        }
+
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
 void menuHandler::nodeListMenu()
 {
     enum optionsNumbers { Back, NodePicker, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
@@ -2869,6 +2984,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case NumberTest:
         numberTest();
+        break;
+    case EnvironmentTelemetryMenu:
+        environmentTelemetryMenu();
+        break;
+    case EnvironmentTelemetrySourceMenu:
+        environmentTelemetrySourceMenu();
         break;
     case WifiToggleMenu:
         wifiToggleMenu();
