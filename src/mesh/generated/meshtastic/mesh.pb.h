@@ -1252,15 +1252,15 @@ typedef struct _meshtastic_LockdownStatus {
     /* Current lockdown state being reported. */
     meshtastic_LockdownStatus_State state;
     /* For LOCKED: machine-readable reason. Known values:
-   "needs_auth"        - storage already unlocked, client must auth
-   "token_missing"     - no boot token on flash
-   "token_expired"     - boot token wall-clock TTL elapsed
-   "token_boots_zero"  - boot token boot-count TTL exhausted
-   "token_hmac_fail"   - token tampered or wrong device
-   "token_dek_fail"    - token DEK decrypt failed
-   "token_wrong_size"  - token file corrupted
-   "token_bad_magic"   - token file corrupted
-   "not_provisioned"   - should generally use NEEDS_PROVISION state instead
+   "needs_auth"        — storage already unlocked, client must auth
+   "token_missing"     — no boot token on flash
+   "token_expired"     — boot token wall-clock TTL elapsed
+   "token_boots_zero"  — boot token boot-count TTL exhausted
+   "token_hmac_fail"   — token tampered or wrong device
+   "token_dek_fail"    — token DEK decrypt failed
+   "token_wrong_size"  — token file corrupted
+   "token_bad_magic"   — token file corrupted
+   "not_provisioned"   — should generally use NEEDS_PROVISION state instead
  Other values may be added; clients should treat unknown values as
  "locked, ask for passphrase". */
     char lock_reason[32];
@@ -1449,6 +1449,44 @@ typedef struct _meshtastic_LoRaRegionPresetMap {
     meshtastic_LoRaRegionPresets region_groups[38];
 } meshtastic_LoRaRegionPresetMap;
 
+/* A heartbeat message is sent to the node from the client to keep the connection alive.
+ This is currently only needed to keep serial connections alive, but can be used by any PhoneAPI. */
+typedef struct _meshtastic_Heartbeat {
+    /* The nonce of the heartbeat message */
+    uint32_t nonce;
+} meshtastic_Heartbeat;
+
+/* RemoteHardwarePins associated with a node */
+typedef struct _meshtastic_NodeRemoteHardwarePin {
+    /* The node_num exposing the available gpio pin */
+    uint32_t node_num;
+    /* The the available gpio pin for usage with RemoteHardware module */
+    bool has_pin;
+    meshtastic_RemoteHardwarePin pin;
+} meshtastic_NodeRemoteHardwarePin;
+
+typedef PB_BYTES_ARRAY_T(228) meshtastic_ChunkedPayload_payload_chunk_t;
+typedef struct _meshtastic_ChunkedPayload {
+    /* The ID of the entire payload */
+    uint32_t payload_id;
+    /* The total number of chunks in the payload */
+    uint16_t chunk_count;
+    /* The current chunk index in the total */
+    uint16_t chunk_index;
+    /* The binary data of the current chunk */
+    meshtastic_ChunkedPayload_payload_chunk_t payload_chunk;
+} meshtastic_ChunkedPayload;
+
+typedef PB_BYTES_ARRAY_T(228) meshtastic_ClientApiChunkedPayload_payload_chunk_t;
+/* Compact ordered chunk used to transport serialized client API messages. */
+typedef struct _meshtastic_ClientApiChunkedPayload {
+    /* The total size of the reassembled payload. This is sent only on the
+ first chunk of an ordered transfer; later chunks omit it. */
+    uint16_t payload_size;
+    /* The binary data of the current chunk */
+    meshtastic_ClientApiChunkedPayload_payload_chunk_t payload_chunk;
+} meshtastic_ClientApiChunkedPayload;
+
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
  It will support READ and NOTIFY. When a new packet arrives the device will BLE notify?
  It will sit in that descriptor until consumed by the phone,
@@ -1511,15 +1549,11 @@ typedef struct _meshtastic_FromRadio {
      illegal region+preset combination. A region that does not appear in
      any group carries no constraint info and should not be restricted. */
         meshtastic_LoRaRegionPresetMap region_presets;
+        /* Chunked client API payload. Only sent to clients that have opted in to
+     chunked API transport support. */
+        meshtastic_ClientApiChunkedPayload chunked_payload;
     };
 } meshtastic_FromRadio;
-
-/* A heartbeat message is sent to the node from the client to keep the connection alive.
- This is currently only needed to keep serial connections alive, but can be used by any PhoneAPI. */
-typedef struct _meshtastic_Heartbeat {
-    /* The nonce of the heartbeat message */
-    uint32_t nonce;
-} meshtastic_Heartbeat;
 
 /* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
  Once the write completes the phone can assume it is handled. */
@@ -1546,29 +1580,11 @@ typedef struct _meshtastic_ToRadio {
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
         /* Heartbeat message (used to keep the device connection awake on serial) */
         meshtastic_Heartbeat heartbeat;
+        /* Chunked client API payload. The reassembled payload is a serialized
+     ToRadio message and is handled through the normal PhoneAPI path. */
+        meshtastic_ClientApiChunkedPayload chunked_payload;
     };
 } meshtastic_ToRadio;
-
-/* RemoteHardwarePins associated with a node */
-typedef struct _meshtastic_NodeRemoteHardwarePin {
-    /* The node_num exposing the available gpio pin */
-    uint32_t node_num;
-    /* The the available gpio pin for usage with RemoteHardware module */
-    bool has_pin;
-    meshtastic_RemoteHardwarePin pin;
-} meshtastic_NodeRemoteHardwarePin;
-
-typedef PB_BYTES_ARRAY_T(228) meshtastic_ChunkedPayload_payload_chunk_t;
-typedef struct _meshtastic_ChunkedPayload {
-    /* The ID of the entire payload */
-    uint32_t payload_id;
-    /* The total number of chunks in the payload */
-    uint16_t chunk_count;
-    /* The current chunk index in the total */
-    uint16_t chunk_index;
-    /* The binary data of the current chunk */
-    meshtastic_ChunkedPayload_payload_chunk_t payload_chunk;
-} meshtastic_ChunkedPayload;
 
 /* Wrapper message for broken repeated oneof support */
 typedef struct _meshtastic_resend_chunks {
@@ -1717,6 +1733,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
@@ -1755,6 +1772,7 @@ extern "C" {
 #define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
 #define meshtastic_ChunkedPayload_init_default   {0, 0, 0, {0, {0}}}
+#define meshtastic_ClientApiChunkedPayload_init_default {0, {0, {0}}}
 #define meshtastic_resend_chunks_init_default    {{{NULL}, NULL}}
 #define meshtastic_ChunkedPayloadResponse_init_default {0, 0, {0}}
 #define meshtastic_Position_init_zero            {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -1794,6 +1812,7 @@ extern "C" {
 #define meshtastic_Heartbeat_init_zero           {0}
 #define meshtastic_NodeRemoteHardwarePin_init_zero {0, false, meshtastic_RemoteHardwarePin_init_zero}
 #define meshtastic_ChunkedPayload_init_zero      {0, 0, 0, {0, {0}}}
+#define meshtastic_ClientApiChunkedPayload_init_zero {0, {0, {0}}}
 #define meshtastic_resend_chunks_init_zero       {{{NULL}, NULL}}
 #define meshtastic_ChunkedPayloadResponse_init_zero {0, 0, {0}}
 
@@ -1998,6 +2017,15 @@ extern "C" {
 #define meshtastic_LoRaRegionPresets_group_index_tag 2
 #define meshtastic_LoRaRegionPresetMap_groups_tag 1
 #define meshtastic_LoRaRegionPresetMap_region_groups_tag 2
+#define meshtastic_Heartbeat_nonce_tag           1
+#define meshtastic_NodeRemoteHardwarePin_node_num_tag 1
+#define meshtastic_NodeRemoteHardwarePin_pin_tag 2
+#define meshtastic_ChunkedPayload_payload_id_tag 1
+#define meshtastic_ChunkedPayload_chunk_count_tag 2
+#define meshtastic_ChunkedPayload_chunk_index_tag 3
+#define meshtastic_ChunkedPayload_payload_chunk_tag 4
+#define meshtastic_ClientApiChunkedPayload_payload_size_tag 1
+#define meshtastic_ClientApiChunkedPayload_payload_chunk_tag 2
 #define meshtastic_FromRadio_id_tag              1
 #define meshtastic_FromRadio_packet_tag          2
 #define meshtastic_FromRadio_my_info_tag         3
@@ -2017,19 +2045,14 @@ extern "C" {
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
 #define meshtastic_FromRadio_lockdown_status_tag 18
 #define meshtastic_FromRadio_region_presets_tag  19
-#define meshtastic_Heartbeat_nonce_tag           1
+#define meshtastic_FromRadio_chunked_payload_tag 20
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
 #define meshtastic_ToRadio_disconnect_tag        4
 #define meshtastic_ToRadio_xmodemPacket_tag      5
 #define meshtastic_ToRadio_mqttClientProxyMessage_tag 6
 #define meshtastic_ToRadio_heartbeat_tag         7
-#define meshtastic_NodeRemoteHardwarePin_node_num_tag 1
-#define meshtastic_NodeRemoteHardwarePin_pin_tag 2
-#define meshtastic_ChunkedPayload_payload_id_tag 1
-#define meshtastic_ChunkedPayload_chunk_count_tag 2
-#define meshtastic_ChunkedPayload_chunk_index_tag 3
-#define meshtastic_ChunkedPayload_payload_chunk_tag 4
+#define meshtastic_ToRadio_chunked_payload_tag   8
 #define meshtastic_resend_chunks_chunks_tag      1
 #define meshtastic_ChunkedPayloadResponse_payload_id_tag 1
 #define meshtastic_ChunkedPayloadResponse_request_transfer_tag 2
@@ -2276,7 +2299,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNotification),  16) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,deviceuiConfig,deviceuiConfig),  17) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lockdown_status,lockdown_status),  18) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_presets),  19) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chunked_payload,chunked_payload),  20)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -2295,6 +2319,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,region_presets,region_preset
 #define meshtastic_FromRadio_payload_variant_deviceuiConfig_MSGTYPE meshtastic_DeviceUIConfig
 #define meshtastic_FromRadio_payload_variant_lockdown_status_MSGTYPE meshtastic_LockdownStatus
 #define meshtastic_FromRadio_payload_variant_region_presets_MSGTYPE meshtastic_LoRaRegionPresetMap
+#define meshtastic_FromRadio_payload_variant_chunked_payload_MSGTYPE meshtastic_ClientApiChunkedPayload
 
 #define meshtastic_LockdownStatus_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
@@ -2366,13 +2391,15 @@ X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_i
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,heartbeat,heartbeat),   7)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,heartbeat,heartbeat),   7) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chunked_payload,chunked_payload),   8)
 #define meshtastic_ToRadio_CALLBACK NULL
 #define meshtastic_ToRadio_DEFAULT NULL
 #define meshtastic_ToRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
 #define meshtastic_ToRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
 #define meshtastic_ToRadio_payload_variant_mqttClientProxyMessage_MSGTYPE meshtastic_MqttClientProxyMessage
 #define meshtastic_ToRadio_payload_variant_heartbeat_MSGTYPE meshtastic_Heartbeat
+#define meshtastic_ToRadio_payload_variant_chunked_payload_MSGTYPE meshtastic_ClientApiChunkedPayload
 
 #define meshtastic_Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
@@ -2455,6 +2482,12 @@ X(a, STATIC,   SINGULAR, BYTES,    payload_chunk,     4)
 #define meshtastic_ChunkedPayload_CALLBACK NULL
 #define meshtastic_ChunkedPayload_DEFAULT NULL
 
+#define meshtastic_ClientApiChunkedPayload_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   payload_size,      1) \
+X(a, STATIC,   SINGULAR, BYTES,    payload_chunk,     2)
+#define meshtastic_ClientApiChunkedPayload_CALLBACK NULL
+#define meshtastic_ClientApiChunkedPayload_DEFAULT NULL
+
 #define meshtastic_resend_chunks_FIELDLIST(X, a) \
 X(a, CALLBACK, REPEATED, UINT32,   chunks,            1)
 #define meshtastic_resend_chunks_CALLBACK pb_default_field_callback
@@ -2506,6 +2539,7 @@ extern const pb_msgdesc_t meshtastic_LoRaRegionPresetMap_msg;
 extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 extern const pb_msgdesc_t meshtastic_ChunkedPayload_msg;
+extern const pb_msgdesc_t meshtastic_ClientApiChunkedPayload_msg;
 extern const pb_msgdesc_t meshtastic_resend_chunks_msg;
 extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 
@@ -2547,6 +2581,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Heartbeat_fields &meshtastic_Heartbeat_msg
 #define meshtastic_NodeRemoteHardwarePin_fields &meshtastic_NodeRemoteHardwarePin_msg
 #define meshtastic_ChunkedPayload_fields &meshtastic_ChunkedPayload_msg
+#define meshtastic_ClientApiChunkedPayload_fields &meshtastic_ClientApiChunkedPayload_msg
 #define meshtastic_resend_chunks_fields &meshtastic_resend_chunks_msg
 #define meshtastic_ChunkedPayloadResponse_fields &meshtastic_ChunkedPayloadResponse_msg
 
@@ -2556,6 +2591,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
 #define meshtastic_BoundingBox_size              20
 #define meshtastic_ChunkedPayload_size           245
+#define meshtastic_ClientApiChunkedPayload_size  235
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     335
