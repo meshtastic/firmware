@@ -279,6 +279,12 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     memcpy(response.hash2.bytes, hash2, 32);
 
     responsePacket = allocDataProtobuf(response);
+    if (!responsePacket) {
+        LOG_WARN("Key Verification response allocation failed");
+        ignoreRequest = true;
+        resetToIdle();
+        return nullptr;
+    }
 
     // PKI-encrypt the response only if we already held the requester's key. In the bootstrap case it goes
     // out channel-encrypted so the requester (who lacks our key) can decode it and read hash1.
@@ -421,6 +427,11 @@ void KeyVerificationModule::commitVerifiedRemoteNode()
     if (node->public_key.size != 32 && crypto->getPendingPublicKey(currentRemoteNode, pending))
         node->public_key = pending;
     node->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+    // Re-commit via the bare-key primitive: writing the same bytes back is a no-op for the hot
+    // store, but it routes the TrafficManagement write-through. ManuallyVerified: the user just
+    // confirmed possession of exactly this key - the strongest provenance that cache can carry.
+    if (node->public_key.size == 32)
+        nodeDB->commitRemoteKey(currentRemoteNode, node->public_key.bytes, NodeDB::KeyCommitTrust::ManuallyVerified);
     LOG_INFO("Node 0x%08x manually verified with security number %u", currentRemoteNode, currentSecurityNumber);
     if (nodeInfoModule)
         nodeInfoModule->sendOurNodeInfo(currentRemoteNode, false, node->channel, true);

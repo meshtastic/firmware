@@ -109,7 +109,7 @@ bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &con
     return true;
 }
 
-SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
+SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", meshtastic_PortNum_SERIAL_APP)
 {
     switch (moduleConfig.serial.mode) {
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG:
@@ -331,18 +331,6 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
 }
 
 /**
- * Allocates a new mesh packet for use as a reply to a received packet.
- *
- * @return A pointer to the newly allocated mesh packet.
- */
-meshtastic_MeshPacket *SerialModuleRadio::allocReply()
-{
-    auto reply = allocDataPacket(); // Allocate a packet for sending
-
-    return reply;
-}
-
-/**
  * Sends a payload to a specified destination node.
  *
  * @param dest The destination node number.
@@ -351,7 +339,7 @@ meshtastic_MeshPacket *SerialModuleRadio::allocReply()
 void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     const meshtastic_Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
-    meshtastic_MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocDataPacket();
     if (!p)
         return;
     p->to = dest;
