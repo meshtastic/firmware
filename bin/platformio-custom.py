@@ -340,6 +340,18 @@ for lb in env.GetLibBuilders():
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
         break
 
+# DEBUG_MUTE already compiles every LOG_* call out entirely; nanopb's own error-message
+# strings are a separate mechanism it doesn't touch, so mirror the same intent into nanopb.
+debug_mute_defined = any(
+    d == "DEBUG_MUTE" or (isinstance(d, tuple) and d[0] == "DEBUG_MUTE") for d in env.get("CPPDEFINES", [])
+)
+if debug_mute_defined:
+    projenv.Append(CPPDEFINES=[("PB_NO_ERRMSG", 1)])
+    for lb in env.GetLibBuilders():
+        if lb.name == "Nanopb":
+            lb.env.Append(CPPDEFINES=[("PB_NO_ERRMSG", 1)])
+            break
+
 # Get the display resolution from macros
 def get_display_resolution(build_flags):
     # Check "DISPLAY_SIZE" to determine the screen resolution

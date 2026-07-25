@@ -202,6 +202,62 @@ void test_wrong_admin_key_does_not_decode(void)
     TEST_ASSERT_NULL(mockNodeDB->getMeshNode(ADMIN_NODE));
 }
 
+// The fallback is budget-limited against flooding; see Router.cpp for why the budget is global.
+void test_admin_key_fallback_is_rate_limited(void)
+{
+    // Start from a full bucket regardless of what earlier tests consumed (8 tokens, one per 250ms).
+    delay(2500);
+
+    uint8_t otherPub[32], otherPriv[32];
+    crypto->generateKeyPair(otherPub, otherPriv);
+    crypto->setDHPrivateKey(ourPriv);
+    setAdminKey(0, otherPub); // wrong key, so every attempt below fails and keeps its token spent
+
+    // Drain the burst with undecryptable packets, as a flooding attacker would.
+    for (int i = 0; i < 8; i++) {
+        meshtastic_MeshPacket junk = makePkiPacket(ADMIN_NODE, meshtastic_PortNum_PRIVATE_APP, 16, adminPriv);
+        TEST_ASSERT_NOT_EQUAL(DECODE_SUCCESS, perhapsDecode(&junk));
+    }
+
+    // Budget exhausted: the fallback is skipped, so even a correct admin key does not decrypt.
+    setAdminKey(0, adminPub);
+    meshtastic_MeshPacket blocked = makePkiPacket(ADMIN_NODE, meshtastic_PortNum_PRIVATE_APP, 16, adminPriv);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&blocked), "fallback should be budget-limited");
+
+    // The budget refills, so the throttle is not a permanent lockout.
+    delay(600);
+    meshtastic_MeshPacket allowed = makePkiPacket(ADMIN_NODE, meshtastic_PortNum_PRIVATE_APP, 16, adminPriv);
+    TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&allowed), "budget should refill over time");
+    assertDecodedAndLearned(&allowed, adminPub);
+}
+
+// A pending key is an unverified identity claim from whoever opened a key-verification handshake, so it
+// must decrypt only the exchange itself. Otherwise they could send DMs that look PKI-authenticated as a
+// node they never proved they are.
+void test_pending_key_decrypts_only_key_verification(void)
+{
+    // PEER is unknown to us; the handshake stashed its claimed key as pending.
+    static constexpr NodeNum PEER = 0x0C0C0C0C;
+    uint8_t peerPub[32], peerPriv[32];
+    crypto->generateKeyPair(peerPub, peerPriv);
+    crypto->setDHPrivateKey(ourPriv); // generateKeyPair changed it
+    crypto->setPendingPublicKey(PEER, peerPub);
+
+    // A DM on any other port must not decode, even though the pending key would decrypt it.
+    meshtastic_MeshPacket spoofed = makePkiPacket(PEER, meshtastic_PortNum_TEXT_MESSAGE_APP, 16, peerPriv);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&spoofed), "pending key must not decrypt a text DM");
+    TEST_ASSERT_FALSE_MESSAGE(spoofed.pki_encrypted, "spoofed DM must not be marked PKI-authenticated");
+
+    // The key-verification exchange itself still works, so bootstrapping is unaffected.
+    meshtastic_MeshPacket handshake = makePkiPacket(PEER, meshtastic_PortNum_KEY_VERIFICATION_APP, 16, peerPriv);
+    TEST_ASSERT_EQUAL_MESSAGE(DECODE_SUCCESS, perhapsDecode(&handshake), "key verification must still decrypt");
+    TEST_ASSERT_TRUE(handshake.pki_encrypted);
+
+    // A pending key is never persisted, so the peer stays unknown until verification commits it.
+    TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(PEER), "pending key must not be learned into NodeDB");
+    crypto->clearPendingPublicKey();
+}
+
 #endif // !(MESHTASTIC_EXCLUDE_PKI)
 
 void setup()
@@ -216,6 +272,8 @@ void setup()
     RUN_TEST(test_admin_key_slot2_only_decrypts);
     RUN_TEST(test_no_admin_key_unknown_sender_not_decoded);
     RUN_TEST(test_wrong_admin_key_does_not_decode);
+    RUN_TEST(test_admin_key_fallback_is_rate_limited);
+    RUN_TEST(test_pending_key_decrypts_only_key_verification);
 #endif
     exit(UNITY_END());
 }

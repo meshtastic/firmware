@@ -369,6 +369,15 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    // shutdown() latches onUnwantedPairing to actively refuse pairing (used on the factory-reset /
+    // BT-disable teardown path). The real pairing passkey callback is installed only in setup(), but a
+    // shutdown()->resumeAdvertising() re-enable cycle skips setup() entirely (see setBluetoothEnable() in
+    // main-nrf52.cpp), so restore the correct callback here - otherwise the device silently refuses all
+    // pairing until the next reboot. Mirror the mode check in setup(): only PIN modes drive a passkey-
+    // display callback, so NO_PIN (Just Works) needs no restore.
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN)
+        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode

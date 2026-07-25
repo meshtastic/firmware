@@ -230,131 +230,7 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 #endif
 }
 
-void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    char batStr[20];
-    if (powerStatus->getHasBattery()) {
-        int batV = powerStatus->getBatteryVoltageMv() / 1000;
-        int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
-
-        snprintf(batStr, sizeof(batStr), "B %01d.%02dV %3d%% %c%c", batV, batCv, powerStatus->getBatteryChargePercent(),
-                 powerStatus->getIsCharging() ? '+' : ' ', powerStatus->getHasUSB() ? 'U' : ' ');
-
-        // Line 1
-        display->drawString(x, y, batStr);
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, batStr);
-    } else {
-        // Line 1
-        display->drawString(x, y, "USB");
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, "USB");
-    }
-
-    uint32_t currentMillis = millis();
-    uint32_t seconds = currentMillis / 1000;
-    uint32_t minutes = seconds / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
-    // currentMillis %= 1000;
-    // seconds %= 60;
-    // minutes %= 60;
-    // hours %= 24;
-
-    // Show uptime as days, hours, minutes OR seconds
-    std::string uptime = UIRenderer::drawTimeDelta(days, hours, minutes, seconds);
-
-    // Line 1 (Still)
-    if (currentResolution != graphics::ScreenResolution::UltraLow) {
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-        if (config.display.heading_bold)
-            display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-
-        display->setColor(WHITE);
-    }
-    // Setup string to assemble analogClock string
-    std::string analogClock = "";
-
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
-    if (rtc_sec > 0) {
-        long hms = rtc_sec % SEC_PER_DAY;
-        // hms += tz.tz_dsttime * SEC_PER_HOUR;
-        // hms -= tz.tz_minuteswest * SEC_PER_MIN;
-        // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
-        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
-
-        // Tear apart hms into h:m:s
-        int hour, min, sec;
-        graphics::decomposeTime(rtc_sec, hour, min, sec);
-
-        char timebuf[12];
-
-        if (config.display.use_12h_clock) {
-            std::string meridiem = "am";
-            if (hour >= 12) {
-                if (hour > 12)
-                    hour -= 12;
-                meridiem = "pm";
-            }
-            if (hour == 00) {
-                hour = 12;
-            }
-            snprintf(timebuf, sizeof(timebuf), "%d:%02d:%02d%s", hour, min, sec, meridiem.c_str());
-        } else {
-            snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
-        }
-        analogClock += timebuf;
-    }
-
-    // Line 2
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
-
-    // Display Channel Utilization
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-
-#if HAS_GPS
-    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // Line 3
-        if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
-            UIRenderer::drawGpsAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-
-        // Line 4
-        UIRenderer::drawGpsCoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
-    } else {
-        UIRenderer::drawGpsPowerStatus(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-    }
-#endif
-/* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
-}
-
 // Trampoline functions for DebugInfo class access
-void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrame(display, state, x, y);
-}
-
-void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrameSettings(display, state, x, y);
-}
-
 void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     drawFrameWiFi(display, state, x, y);
@@ -743,17 +619,18 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
+    int scale = 1;
     int iconX = SCREEN_WIDTH - chirpy_width - (chirpy_width / 3);
     int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
     int textX_offset = 10;
     if (currentResolution == ScreenResolution::High) {
         textX_offset = textX_offset * 4;
-        const int scale = 2;
+        scale = 2;
+        iconX = SCREEN_WIDTH - (chirpy_width * 2) - ((chirpy_width * 2) / 3);
+        iconY = (SCREEN_HEIGHT - (chirpy_height * 2)) / 2;
         const int bytesPerRow = (chirpy_width + 7) / 8;
 
         for (int yy = 0; yy < chirpy_height; ++yy) {
-            iconX = SCREEN_WIDTH - (chirpy_width * 2) - ((chirpy_width * 2) / 3);
-            iconY = (SCREEN_HEIGHT - (chirpy_height * 2)) / 2;
             const uint8_t *rowPtr = chirpy + yy * bytesPerRow;
             for (int xx = 0; xx < chirpy_width; ++xx) {
                 const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
@@ -766,6 +643,19 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     } else {
         display->drawXbm(iconX, iconY, chirpy_width, chirpy_height, chirpy);
     }
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Colour Chirpy on colour displays. The glyph is a filled head silhouette whose eyes are holes
+    // (off pixels), so two stacked regions render the proper mascot without a second bitmap:
+    //   A) whole glyph -> green body / frame / legs
+    //   B) the eye band -> black face, with the eye holes turning white via the region's off-colour
+    // Start the face band one column in from the head's left edge (col 6) so that edge stays green,
+    // matching the green column already left on the right edge (col 31).
+    graphics::registerTFTColorRegionDirect(iconX, iconY, chirpy_width * scale, chirpy_height * scale,
+                                           graphics::TFTPalette::MeshtasticGreen, graphics::getThemeBodyBg());
+    graphics::registerTFTColorRegionDirect(iconX + 7 * scale, iconY + 12 * scale, 24 * scale, 16 * scale,
+                                           graphics::TFTPalette::Black, graphics::TFTPalette::White);
+#endif
 
     int textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("Hello") / 2);
     display->drawString(textX, getTextPositions(display)[line++], "Hello");

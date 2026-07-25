@@ -1,9 +1,21 @@
-#include "RTC.h"
 #include "configuration.h"
+#include "gps/RTC.h"
+#include <Throttle.h>
 #include <cstring>
 #include <stdarg.h>
 #include <stm32wle5xx.h>
 #include <stm32wlxx_hal.h>
+
+#if HAS_LSE
+#include <STM32LowPower.h>
+#include <STM32RTC.h>
+
+// LSEDRV is a 2-bit RCC_BDCR field where every combination is a legal drive level, so this covers all 4 values.
+static_assert((STM32WL_LSE_DRIVE & ~RCC_LSEDRIVE_HIGH) == 0,
+              "STM32WL_LSE_DRIVE must be one of RCC_LSEDRIVE_LOW/MEDIUMLOW/MEDIUMHIGH/HIGH");
+
+static bool stm32wlRtcValid = false;
+#endif
 
 // ─── Bootloader redirect ──────────────────────────────────────────────────────
 //
@@ -86,7 +98,76 @@ bool getDeviceId(uint8_t *deviceId)
     return true;
 }
 
-void cpuDeepSleep(uint32_t msecToWake) {}
+#if HAS_LSE
+// Starts the LSE crystal with a bounded timeout and, if it locks, brings up the STM32 hardware RTC on it.
+void stm32wlSetup()
+{
+    HAL_PWR_EnableBkUpAccess();
+    __HAL_RCC_LSEDRIVE_CONFIG(STM32WL_LSE_DRIVE);
+    __HAL_RCC_LSE_CONFIG(RCC_LSE_ON);
+
+    uint32_t start = millis();
+    bool lseReady = false;
+    while (Throttle::isWithinTimespanMs(start, STM32WL_LSE_TIMEOUT_MS)) {
+        if (__HAL_RCC_GET_FLAG(RCC_FLAG_LSERDY)) {
+            lseReady = true;
+            break;
+        }
+        delay(5);
+    }
+
+    if (lseReady) {
+        STM32RTC &rtc = STM32RTC::getInstance();
+        rtc.setClockSource(STM32RTC::LSE_CLOCK);
+        rtc.begin();
+        stm32wlRtcValid = true;
+        LowPower.begin();
+        LOG_INFO("STM32WL: LSE locked, hardware RTC available");
+    } else {
+        // Don't leave a failed oscillator burning current.
+        __HAL_RCC_LSE_CONFIG(RCC_LSE_OFF);
+        LOG_WARN("STM32WL: LSE failed to start within %dms (crystal missing/faulty?) - hardware RTC unavailable",
+                 STM32WL_LSE_TIMEOUT_MS);
+    }
+}
+
+// True once stm32wlSetup() has confirmed the LSE crystal is locked and the hardware RTC is running.
+bool stm32wlRtcAvailable()
+{
+    return stm32wlRtcValid;
+}
+#else
+void stm32wlSetup() {}
+#endif
+
+void cpuDeepSleep(uint32_t msecToWake)
+{
+#if HAS_LSE
+    if (!stm32wlRtcAvailable()) {
+        // Hardware can't shutdown, but firmware has already prepared itself for shutdown
+        // Do not leave the device unresponsive, reset instead
+        LOG_WARN("STM32WL: hardware RTC failed, cannot deep sleep/shutdown");
+        if (Serial) {
+            Serial.flush();
+            Serial.end();
+        }
+        HAL_NVIC_SystemReset();
+    }
+
+    if (Serial) {
+        Serial.flush();
+        Serial.end();
+    }
+
+    if (msecToWake != portMAX_DELAY) {
+        LowPower.shutdown(msecToWake);
+    } else {
+        LowPower.shutdown();
+    }
+    // RTC wakes from shutdown into MCU reset, so this code should never be reached
+    HAL_NVIC_SystemReset();
+#endif
+}
 
 // Hacks to force more code and data out.
 
