@@ -151,6 +151,7 @@ int8_t gSelectedLocalSourceIndex = -1;
 } // namespace
 
 static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
+static constexpr uint32_t LOCAL_DISPLAY_REFRESH_INTERVAL_MS = 1000;
 
 EnvironmentTelemetryModule::DisplaySource EnvironmentTelemetryModule::getDisplaySource()
 {
@@ -182,6 +183,7 @@ void EnvironmentTelemetryModule::setDisplaySource(DisplaySource source, int8_t l
         gSelectedLocalSourceIndex = localSourceIndex;
     }
     if (environmentTelemetryModule != nullptr) {
+        environmentTelemetryModule->lastLocalDisplayRefreshMs = 0;
         environmentTelemetryModule->refreshDisplayedMeasurement();
     }
 }
@@ -339,6 +341,11 @@ bool EnvironmentTelemetryModule::refreshLocalMeasurementPacket()
 void EnvironmentTelemetryModule::refreshDisplayedMeasurement()
 {
     if (shouldDisplayLocalMeasurement()) {
+        if (lastMeasurementPacket != nullptr &&
+            Throttle::isWithinTimespanMs(lastLocalDisplayRefreshMs, LOCAL_DISPLAY_REFRESH_INTERVAL_MS)) {
+            return;
+        }
+        lastLocalDisplayRefreshMs = millis();
         if (!refreshLocalMeasurementPacket()) {
             clearMeasurementPacket();
         }
@@ -931,12 +938,6 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
             else
                 p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-            if (shouldDisplayLocalMeasurement()) {
-                clearMeasurementPacket();
-                lastMeasurementPacket = packetPool.allocCopy(*p);
-            } else if (!shouldKeepCurrentRemoteDisplay()) {
-                clearMeasurementPacket();
-            }
             if (phoneOnly) {
                 LOG_INFO("Send packet to phone");
                 service->sendToPhone(p);

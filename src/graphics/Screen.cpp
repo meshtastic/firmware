@@ -2234,7 +2234,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     }
                 } else if (this->ui->getUiState()->currentFrame < moduleFrames.size()) {
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-                    MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
+                    const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
                     if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
                         menuHandler::environmentTelemetryMenu();
                     }
