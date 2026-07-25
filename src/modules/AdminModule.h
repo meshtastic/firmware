@@ -41,7 +41,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool hasOpenEditTransaction = false;
 
     uint8_t session_passkey[8] = {0};
-    uint session_time = 0;
+    uint32_t session_time = 0;        // millis() when the current session passkey was issued
+    bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
 
@@ -89,10 +90,11 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     static constexpr uint32_t kOutstandingAdminRequestMs = 300 * 1000; // same window as the session passkey
     struct OutstandingAdminRequest {
         NodeNum to;                 // 0 = free slot
+        uint32_t requestId;         // our request's packet id; the response must echo it as request_id
         uint32_t sentAtMs;          // millis() when this request went out
         pb_size_t expectedResponse; // the one response variant this request authorizes
         uint8_t moduleConfigType;   // for get_module_config_request: which ModuleConfigType we asked
-        uint8_t key[32];            // pinned destination key when the request went out over PKC
+        uint8_t key[32];            // pinned destination key when the request goes out over PKC
         bool keyValid;
     };
     OutstandingAdminRequest outstandingAdminRequests[kOutstandingAdminRequests] = {};

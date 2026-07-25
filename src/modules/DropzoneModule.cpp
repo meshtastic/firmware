@@ -68,6 +68,8 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
     // the dropzone is open
     auto dropzoneStatus = analogRead(A1) < 100 ? "OPEN" : "CLOSED";
     auto reply = allocDataPacket();
+    if (!reply)
+        return nullptr;
 
     auto node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (sensor.hasSensor()) {

@@ -1197,6 +1197,80 @@ static void test_handleSetConfig_security_acceptsSuppliedKeypair()
     TEST_ASSERT_EQUAL_MEMORY(expectedPub, config.security.public_key.bytes, 32);
 }
 
+// Issue #11073: "regenerate keys" sends a blank SecurityConfig holding only the new private key. Replacing
+// the whole struct with it wiped the admin keys, locking the owner out of remote admin.
+static void test_handleSetConfig_security_rotationPreservesAdminKeys()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, 0x22, 32);
+    config.security.admin_key_count = 2;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0xAA, 32);
+    config.security.admin_key[1].size = 32;
+    memset(config.security.admin_key[1].bytes, 0xBB, 32);
+    config.security.is_managed = true;
+    config.security.serial_enabled = true;
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+
+    // Exactly what the regenerate dialog emits.
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x33, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    uint8_t expectedPriv[32];
+    memset(expectedPriv, 0x33, 32);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_MEMORY(expectedPriv, config.security.private_key.bytes, 32);
+
+    uint8_t expectedAdmin0[32], expectedAdmin1[32];
+    memset(expectedAdmin0, 0xAA, 32);
+    memset(expectedAdmin1, 0xBB, 32);
+    TEST_ASSERT_EQUAL_UINT(2, config.security.admin_key_count);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.admin_key[0].size);
+    TEST_ASSERT_EQUAL_MEMORY(expectedAdmin0, config.security.admin_key[0].bytes, 32);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.admin_key[1].size);
+    TEST_ASSERT_EQUAL_MEMORY(expectedAdmin1, config.security.admin_key[1].bytes, 32);
+    TEST_ASSERT_TRUE(config.security.is_managed);
+    TEST_ASSERT_TRUE(config.security.serial_enabled);
+    TEST_ASSERT_EQUAL(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
+                      config.security.packet_signature_policy);
+}
+
+// The escape hatch: a SET that leaves the private key alone still clears admin keys.
+static void test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged()
+{
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.security.private_key.size = 32;
+    memset(config.security.private_key.bytes, 0x11, 32);
+    config.security.public_key.size = 32;
+    memset(config.security.public_key.bytes, 0x22, 32);
+    config.security.admin_key_count = 1;
+    config.security.admin_key[0].size = 32;
+    memset(config.security.admin_key[0].bytes, 0xAA, 32);
+
+    // Same private key we already hold, empty admin key list.
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_security_tag;
+    c.payload_variant.security.private_key.size = 32;
+    memset(c.payload_variant.security.private_key.bytes, 0x11, 32);
+    c.payload_variant.security.public_key.size = 32;
+    memset(c.payload_variant.security.public_key.bytes, 0x22, 32);
+
+    testAdmin->deferSaves();
+    testAdmin->handleSetConfig(c, false);
+
+    TEST_ASSERT_EQUAL_UINT(0, config.security.admin_key_count);
+    TEST_ASSERT_EQUAL_UINT(0, config.security.admin_key[0].size);
+}
+
 static void test_regionInfo_supportsPreset()
 {
     const RegionInfo *eu868 = getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868);
@@ -1540,6 +1614,8 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthNonZeroPreserved);
     RUN_TEST(test_handleSetConfig_security_preservesKeypairWhenPrivateOmitted);
     RUN_TEST(test_handleSetConfig_security_acceptsSuppliedKeypair);
+    RUN_TEST(test_handleSetConfig_security_rotationPreservesAdminKeys);
+    RUN_TEST(test_handleSetConfig_security_clearsAdminKeysWhenKeypairUnchanged);
     RUN_TEST(test_regionInfo_supportsPreset);
     RUN_TEST(test_checkConfigRegion_quietCheckReportsReason);
     RUN_TEST(test_handleSetConfig_fromOthers_siblingLockedPresetSwapsRegion);

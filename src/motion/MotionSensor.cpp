@@ -45,7 +45,7 @@ CompassAccelSample latestCompassAccelSample;
 } // namespace
 
 // screen is defined in main.cpp
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 MotionSensor::MotionSensor(ScanI2C::FoundDevice foundDevice)
 {

@@ -57,16 +57,6 @@ void consoleInit()
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
 }
 
-/// Print and flush an unclassified formatted console message.
-void consolePrintf(const char *format, ...)
-{
-    va_list arg;
-    va_start(arg, format);
-    console->vprintf(nullptr, format, arg);
-    va_end(arg);
-    console->flush();
-}
-
 /// Initialize console, protobuf transport, serial port, and worker thread state.
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), concurrency::OSThread("SerialConsole")
 {

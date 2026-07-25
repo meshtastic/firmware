@@ -292,16 +292,30 @@ static void test_regionPresetMap_matchesRegionTable()
         const meshtastic_LoRaPresetGroup &grp = map.groups[gi];
         const RegionInfo *r = getRegion(code);
 
-        // Group's list is non-empty, within the generated array bound, and is the
-        // region's full list.
+        // Group's list is non-empty and within the generated array bound.
         const size_t maxPresets = sizeof(grp.presets) / sizeof(grp.presets[0]);
         TEST_ASSERT_GREATER_THAN_UINT(0, grp.presets_count);
         TEST_ASSERT_LESS_OR_EQUAL_UINT((unsigned)maxPresets, grp.presets_count);
-        TEST_ASSERT_EQUAL_UINT((unsigned)r->getNumPresets(), (unsigned)grp.presets_count);
 
-        // Every advertised preset is legal in this region.
-        for (pb_size_t p = 0; p < grp.presets_count; p++)
-            TEST_ASSERT_TRUE(r->supportsPreset(grp.presets[p]));
+        // Every advertised preset must be selectable from this region: either legal here,
+        // or legal in a sibling the firmware will auto-swap us to (the EU 86x trio, which
+        // advertises the union of the trio's presets rather than just its own).
+        for (pb_size_t p = 0; p < grp.presets_count; p++) {
+            bool selectable =
+                r->supportsPreset(grp.presets[p]) || RadioInterface::regionSwapForPreset(code, grp.presets[p]) != nullptr;
+            TEST_ASSERT_TRUE(selectable);
+        }
+
+        // The region's own enforced presets must all be advertised (advertised is a
+        // superset of the enforced list, never a subset).
+        const meshtastic_Config_LoRaConfig_ModemPreset *enforced = r->getAvailablePresets();
+        for (size_t e = 0; e < r->getNumPresets(); e++) {
+            bool advertised = false;
+            for (pb_size_t p = 0; p < grp.presets_count; p++)
+                if (grp.presets[p] == enforced[e])
+                    advertised = true;
+            TEST_ASSERT_TRUE(advertised);
+        }
 
         // Default preset matches the table, is legal, and is present in the list.
         TEST_ASSERT_EQUAL(r->getDefaultPreset(), grp.default_preset);
