@@ -256,6 +256,8 @@ void tearDown(void)
 
     while (auto *status = mockService->getQueueStatusForPhone())
         mockService->releaseQueueStatusToPool(status);
+    while (auto *toPhone = mockService->getForPhone())
+        mockService->releaseToPool(toPhone);
     delete mockService;
     mockService = nullptr;
     service = nullptr;
@@ -471,6 +473,74 @@ static void test_dispatch_realNeighborInfoCannotShadowTelemetryOwner()
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
 }
 
+// A reply addressed to ourselves reaches the phone queue, with SHOULD_RELEASE reported as success.
+static void test_localReplyToSelf_isDeliveredToPhone()
+{
+    meshtastic_MeshPacket reply = meshtastic_MeshPacket_init_zero;
+    reply.from = LOCAL_NODE;
+    reply.to = LOCAL_NODE;
+    reply.id = 0xABCD1234;
+    reply.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    reply.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    reply.decoded.request_id = 0x12345678;
+
+    service->sendToMesh(packetPool.allocCopy(reply)); // default src == RX_SRC_LOCAL, as callModules sends replies
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0xABCD1234, toPhone->id);
+    TEST_ASSERT_EQUAL_UINT32(0x12345678, toPhone->decoded.request_id);
+    mockService->releaseToPool(toPhone);
+    TEST_ASSERT_NULL(mockService->getForPhone()); // exactly one delivery
+
+    meshtastic_QueueStatus *qs = mockService->getQueueStatusForPhone();
+    TEST_ASSERT_NOT_NULL(qs);
+    TEST_ASSERT_EQUAL(ERRNO_OK, qs->res);
+    mockService->releaseQueueStatusToPool(qs);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size()); // nothing went toward the radio
+}
+
+// Full loop: a phone-originated want_response request (from == 0, RX_SRC_USER) dispatched
+// through the real router must produce a module reply that reaches the phone queue.
+static void test_phoneRequest_replyReachesPhone()
+{
+    auto *replyOwner = registerDispatchModule(
+        new SyntheticReplyModule("private-owner", meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_PRIVATE_APP));
+
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.from = 0; // phone-originated, as MeshService::handleToRadio stamps it
+    request.to = LOCAL_NODE;
+    request.id = 0x5EED0001;
+    request.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    request.decoded.portnum = meshtastic_PortNum_PRIVATE_APP;
+    request.decoded.want_response = true;
+
+    service->sendToMesh(packetPool.allocCopy(request), RX_SRC_USER);
+
+    TEST_ASSERT_EQUAL_UINT32(1, replyOwner->allocReplyCalls);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_PRIVATE_APP, toPhone->decoded.portnum);
+    TEST_ASSERT_EQUAL_UINT32(0x5EED0001, toPhone->decoded.request_id);
+    TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->to);
+    mockService->releaseToPool(toPhone);
+    TEST_ASSERT_NULL(mockService->getForPhone()); // the request itself must not echo back
+
+    // One QueueStatus for the request, one for the reply, both reporting success
+    uint32_t statuses = 0;
+    while (auto *qs = mockService->getQueueStatusForPhone()) {
+        TEST_ASSERT_EQUAL(ERRNO_OK, qs->res);
+        mockService->releaseQueueStatusToPool(qs);
+        statuses++;
+    }
+    TEST_ASSERT_EQUAL_UINT32(2, statuses);
+
+    TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -495,6 +565,8 @@ void setup()
     RUN_TEST(test_dispatch_noResponderSendsNak);
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
+    RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
+    RUN_TEST(test_phoneRequest_replyReachesPhone);
     exit(UNITY_END());
 }
 
