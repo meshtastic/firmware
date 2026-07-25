@@ -404,6 +404,8 @@ A well-structured test suite follows this pattern:
 | `test_position_precision`    | Position precision helpers    |
 | `test_radio`                 | Radio interface               |
 | `test_serial`                | Serial communication          |
+| `test_module_config`         | AdminModule module config     |
+| `test_tak_config`            | TAK (ATAK) team/role values   |
 | `test_traffic_management`    | Traffic management            |
 | `test_transmit_history`      | Retransmission tracking       |
 | `test_type_conversions`      | NodeDB v25 type conversions   |
