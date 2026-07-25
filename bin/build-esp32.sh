@@ -14,6 +14,12 @@ rm -r $OUTDIR/* || true
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
 platformio pkg install -e $1
 
+# Defuse pioarduino's esptool install, which otherwise runs a network-bound
+# `uv pip install --force-reinstall` under a hard-coded 60s timeout on every esp32
+# build and fails the build when it loses that race. Must run after `pkg install`
+# (which extracts the platform) and before `pio run` (which triggers penv setup).
+bin/ci/esp32-esptool-preflight.sh
+
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f $BUILDDIR/firmware*
 
