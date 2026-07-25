@@ -46,9 +46,8 @@
 // Live in-flight packet bytes are tracked under "pktpool(live)" in the MemAudit breakdown
 static MemoryDynamic<meshtastic_MeshPacket> dynamicPool("pktpool(live)");
 Allocator<meshtastic_MeshPacket> &packetPool = dynamicPool;
-#elif defined(ARCH_STM32WL) || defined(BOARD_HAS_PSRAM)
-// On STM32 and boards with PSRAM, there isn't enough heap left over for the rest of the firmware if we allocate this statically.
-// For now, make it dynamic again.
+#elif defined(BOARD_HAS_PSRAM)
+// On boards with PSRAM, there is enough heap for dynamic memory pools
 #define MAX_PACKETS                                                                                                              \
     (MAX_RX_TOPHONE + MAX_RX_FROMRADIO + 2 * MAX_TX_QUEUE +                                                                      \
      2) // max number of packets which can be in flight (either queued from reception or queued for sending)
