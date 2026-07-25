@@ -212,7 +212,7 @@ using namespace concurrency;
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
 
 // We always create a screen object, but we only init it if we find the hardware
-graphics::Screen *screen = nullptr;
+std::unique_ptr<graphics::Screen> screen = nullptr;
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
@@ -966,15 +966,15 @@ void setup()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
 #if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
-        screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+        screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
             config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+            screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
         }
 #else
         if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
-            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+            screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
 #endif
     }
 #endif // HAS_SCREEN
