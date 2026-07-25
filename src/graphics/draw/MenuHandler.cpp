@@ -1484,67 +1484,26 @@ void menuHandler::environmentTelemetryMenu()
 void menuHandler::environmentTelemetrySourceMenu()
 {
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-    enum optionsNumbers { Back, Mesh, FavoritesOnly, LocalSourceBase = 100 };
-    static constexpr uint8_t MAX_LOCAL_SOURCES = 16;
-    static constexpr uint8_t MAX_OPTIONS = MAX_LOCAL_SOURCES + 3;
-
-    static const char *optionsArray[MAX_OPTIONS];
-    static int optionsEnumArray[MAX_OPTIONS];
-    static char localSourceLabels[MAX_LOCAL_SOURCES][32];
-
-    uint8_t optionCount = 0;
-    optionsArray[optionCount] = "Back";
-    optionsEnumArray[optionCount++] = Back;
-
-    uint8_t localSourceCount = 0;
-    if (environmentTelemetryModule != nullptr) {
-        localSourceCount = environmentTelemetryModule->getLocalSourceCount();
-    }
-    if (localSourceCount > MAX_LOCAL_SOURCES) {
-        localSourceCount = MAX_LOCAL_SOURCES;
-    }
-
-    for (uint8_t index = 0; index < localSourceCount; ++index) {
-        const char *sensorLabel = environmentTelemetryModule->getLocalSourceLabel(index);
-        strncpy(localSourceLabels[index], sensorLabel != nullptr ? sensorLabel : "Local Sensor",
-                sizeof(localSourceLabels[index]) - 1);
-        localSourceLabels[index][sizeof(localSourceLabels[index]) - 1] = '\0';
-        optionsArray[optionCount] = localSourceLabels[index];
-        optionsEnumArray[optionCount++] = LocalSourceBase + index;
-    }
-
-    optionsArray[optionCount] = "Mesh";
-    optionsEnumArray[optionCount++] = Mesh;
-    optionsArray[optionCount] = "Favorite Nodes Only";
-    optionsEnumArray[optionCount++] = FavoritesOnly;
+    enum optionsNumbers { Back, LocalSensor, Mesh, FavoritesOnly, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back", "Local Sensor", "Mesh", "Favorite Nodes Only"};
+    static int optionsEnumArray[enumEnd] = {Back, LocalSensor, Mesh, FavoritesOnly};
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Source";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
-    bannerOptions.optionsCount = optionCount;
-
-    const int localSourceStartIndex = 1;
-    const int meshIndex = localSourceStartIndex + localSourceCount;
-    const int favoritesIndex = meshIndex + 1;
+    bannerOptions.optionsCount = enumEnd;
 
     switch (EnvironmentTelemetryModule::getDisplaySource()) {
     case EnvironmentTelemetryModule::DisplaySource::LocalSensor:
-        if (EnvironmentTelemetryModule::getSelectedLocalSourceIndex() >= 0 &&
-            EnvironmentTelemetryModule::getSelectedLocalSourceIndex() < localSourceCount) {
-            bannerOptions.InitialSelected = localSourceStartIndex + EnvironmentTelemetryModule::getSelectedLocalSourceIndex();
-        } else if (localSourceCount > 0) {
-            bannerOptions.InitialSelected = localSourceStartIndex;
-        } else {
-            bannerOptions.InitialSelected = meshIndex;
-        }
+        bannerOptions.InitialSelected = LocalSensor;
         break;
     case EnvironmentTelemetryModule::DisplaySource::FavoriteNodesOnly:
-        bannerOptions.InitialSelected = favoritesIndex;
+        bannerOptions.InitialSelected = FavoritesOnly;
         break;
     case EnvironmentTelemetryModule::DisplaySource::Mesh:
     default:
-        bannerOptions.InitialSelected = meshIndex;
+        bannerOptions.InitialSelected = Mesh;
         break;
     }
 
@@ -1555,9 +1514,8 @@ void menuHandler::environmentTelemetrySourceMenu()
             return;
         }
 
-        if (selected >= LocalSourceBase && selected < (LocalSourceBase + MAX_LOCAL_SOURCES)) {
-            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::LocalSensor,
-                                                         selected - LocalSourceBase);
+        if (selected == LocalSensor) {
+            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::LocalSensor);
         } else if (selected == Mesh) {
             EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::Mesh);
         } else if (selected == FavoritesOnly) {

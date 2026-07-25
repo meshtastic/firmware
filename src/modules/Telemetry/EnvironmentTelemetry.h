@@ -48,12 +48,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     }
     virtual bool wantUIFrame() override;
     static DisplaySource getDisplaySource();
-    static int8_t getSelectedLocalSourceIndex();
-    static const char *getDisplaySourceName(DisplaySource source);
-    static void setDisplaySource(DisplaySource source, int8_t localSourceIndex = -1);
-    const char *getLocalSourceLabel() const;
-    const char *getLocalSourceLabel(uint8_t index) const;
-    uint8_t getLocalSourceCount() const;
+    static void setDisplaySource(DisplaySource source);
     bool ownsFrame(const MeshModule *module) const { return module == this; }
 #if !HAS_SCREEN
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -87,7 +82,6 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     void clearMeasurementPacket();
     bool refreshLocalMeasurementPacket();
     void refreshDisplayedMeasurement();
-    bool getEnvironmentTelemetryForLocalSource(meshtastic_Telemetry *m, uint8_t index) const;
     bool shouldDisplayLocalMeasurement() const;
     bool shouldKeepCurrentRemoteDisplay() const;
     bool shouldDisplayRemoteNode(NodeNum nodeNum) const;

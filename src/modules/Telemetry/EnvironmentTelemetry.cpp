@@ -147,7 +147,6 @@ EnvironmentTelemetryModule *environmentTelemetryModule = nullptr;
 namespace
 {
 EnvironmentTelemetryModule::DisplaySource gDisplaySource = EnvironmentTelemetryModule::DisplaySource::Mesh;
-int8_t gSelectedLocalSourceIndex = -1;
 } // namespace
 
 static constexpr uint16_t TX_HISTORY_KEY_ENVIRONMENT_TELEMETRY = 0x8002;
@@ -158,110 +157,13 @@ EnvironmentTelemetryModule::DisplaySource EnvironmentTelemetryModule::getDisplay
     return gDisplaySource;
 }
 
-int8_t EnvironmentTelemetryModule::getSelectedLocalSourceIndex()
-{
-    return gSelectedLocalSourceIndex;
-}
-
-const char *EnvironmentTelemetryModule::getDisplaySourceName(DisplaySource source)
-{
-    switch (source) {
-    case DisplaySource::LocalSensor:
-        return "Local Sensor";
-    case DisplaySource::Mesh:
-        return "Mesh";
-    case DisplaySource::FavoriteNodesOnly:
-        return "Favorite Nodes Only";
-    }
-    return "Mesh";
-}
-
-void EnvironmentTelemetryModule::setDisplaySource(DisplaySource source, int8_t localSourceIndex)
+void EnvironmentTelemetryModule::setDisplaySource(DisplaySource source)
 {
     gDisplaySource = source;
-    if (source == DisplaySource::LocalSensor && localSourceIndex >= 0) {
-        gSelectedLocalSourceIndex = localSourceIndex;
-    }
     if (environmentTelemetryModule != nullptr) {
         environmentTelemetryModule->lastLocalDisplayRefreshMs = 0;
         environmentTelemetryModule->refreshDisplayedMeasurement();
     }
-}
-
-const char *EnvironmentTelemetryModule::getLocalSourceLabel() const
-{
-    if (getDisplaySource() == DisplaySource::LocalSensor && gSelectedLocalSourceIndex >= 0) {
-        const char *selectedLabel = getLocalSourceLabel(static_cast<uint8_t>(gSelectedLocalSourceIndex));
-        if (selectedLabel != nullptr) {
-            return selectedLabel;
-        }
-    }
-
-    return getLocalSourceLabel(0);
-}
-
-const char *EnvironmentTelemetryModule::getLocalSourceLabel(uint8_t index) const
-{
-    uint8_t currentIndex = 0;
-    for (TelemetrySensor *sensor : sensors) {
-        if (sensor != nullptr && sensor->sensorName != nullptr && sensor->sensorName[0] != '\0') {
-            if (currentIndex++ == index) {
-                return sensor->sensorName;
-            }
-        }
-    }
-
-#ifndef T1000X_SENSOR_EN
-    if (ina219Sensor.hasSensor())
-        if (currentIndex++ == index)
-            return ina219Sensor.sensorName;
-    if (ina260Sensor.hasSensor())
-        if (currentIndex++ == index)
-            return ina260Sensor.sensorName;
-    if (ina3221Sensor.hasSensor())
-        if (currentIndex++ == index)
-            return ina3221Sensor.sensorName;
-    if (max17048Sensor.hasSensor())
-        if (currentIndex++ == index)
-            return max17048Sensor.sensorName;
-#endif
-#ifdef HAS_RAKPROT
-    if (rak9154Sensor.hasSensor())
-        if (currentIndex++ == index)
-            return rak9154Sensor.sensorName;
-#endif
-
-    if (index == 0) {
-        return "Local Sensor";
-    }
-    return nullptr;
-}
-
-uint8_t EnvironmentTelemetryModule::getLocalSourceCount() const
-{
-    uint8_t count = 0;
-    for (TelemetrySensor *sensor : sensors) {
-        if (sensor != nullptr && sensor->sensorName != nullptr && sensor->sensorName[0] != '\0') {
-            count++;
-        }
-    }
-
-#ifndef T1000X_SENSOR_EN
-    if (ina219Sensor.hasSensor())
-        count++;
-    if (ina260Sensor.hasSensor())
-        count++;
-    if (ina3221Sensor.hasSensor())
-        count++;
-    if (max17048Sensor.hasSensor())
-        count++;
-#endif
-#ifdef HAS_RAKPROT
-    if (rak9154Sensor.hasSensor())
-        count++;
-#endif
-
-    return count;
 }
 
 void EnvironmentTelemetryModule::clearMeasurementPacket()
@@ -316,14 +218,7 @@ bool EnvironmentTelemetryModule::shouldDisplayLocalMeasurement() const
 bool EnvironmentTelemetryModule::refreshLocalMeasurementPacket()
 {
     meshtastic_Telemetry local = meshtastic_Telemetry_init_zero;
-    bool hasTelemetry = false;
-    if (getDisplaySource() == DisplaySource::LocalSensor && gSelectedLocalSourceIndex >= 0) {
-        hasTelemetry = getEnvironmentTelemetryForLocalSource(&local, static_cast<uint8_t>(gSelectedLocalSourceIndex));
-    } else {
-        hasTelemetry = getEnvironmentTelemetry(&local);
-    }
-
-    if (!hasTelemetry) {
+    if (!getEnvironmentTelemetry(&local)) {
         return false;
     }
 
@@ -627,7 +522,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     // === First line: Show sender name + time since received (left), and first metric (right) ===
     const bool isLocalTelemetry = (getFrom(lastMeasurementPacket) == nodeDB->getNodeNum());
-    const char *sender = isLocalTelemetry ? getLocalSourceLabel() : getSenderShortName(*lastMeasurementPacket);
+    const char *sender = isLocalTelemetry ? "Local Sensor" : getSenderShortName(*lastMeasurementPacket);
     String leftStr = String(sender);
     if (!isLocalTelemetry) {
         uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
@@ -823,54 +718,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
 #endif
     return valid && hasSensor;
-}
-
-bool EnvironmentTelemetryModule::getEnvironmentTelemetryForLocalSource(meshtastic_Telemetry *m, uint8_t index) const
-{
-    m->time = getTime();
-    m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
-    m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
-
-    uint8_t currentIndex = 0;
-    for (TelemetrySensor *sensor : sensors) {
-        if (sensor != nullptr && sensor->sensorName != nullptr && sensor->sensorName[0] != '\0') {
-            if (currentIndex++ == index) {
-                return sensor->getMetrics(m);
-            }
-        }
-    }
-
-#ifndef T1000X_SENSOR_EN
-    if (ina219Sensor.hasSensor()) {
-        if (currentIndex++ == index) {
-            return ina219Sensor.getMetrics(m);
-        }
-    }
-    if (ina260Sensor.hasSensor()) {
-        if (currentIndex++ == index) {
-            return ina260Sensor.getMetrics(m);
-        }
-    }
-    if (ina3221Sensor.hasSensor()) {
-        if (currentIndex++ == index) {
-            return ina3221Sensor.getMetrics(m);
-        }
-    }
-    if (max17048Sensor.hasSensor()) {
-        if (currentIndex++ == index) {
-            return max17048Sensor.getMetrics(m);
-        }
-    }
-#endif
-#ifdef HAS_RAKPROT
-    if (rak9154Sensor.hasSensor()) {
-        if (currentIndex++ == index) {
-            return rak9154Sensor.getMetrics(m);
-        }
-    }
-#endif
-
-    return false;
 }
 
 meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
