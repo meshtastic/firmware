@@ -38,17 +38,27 @@ pkg="$core/packages/tool-esptoolpy"
 
 # --- Part A: de-fang the install command itself -------------------------------------
 #
-# Drop `--force-reinstall` so the install is cache-served rather than re-resolved, and
-# raise the 60s cap to 600s so residual slowness becomes a slow success instead of a
-# build failure. Both `--force-reinstall` call sites are patched: only the one at line
-# 811 is reachable from the minimal (env is None) path this build takes, but the file is
-# vendored third-party code and a global edit is cheaper to reason about than a targeted
-# one. The `], timeout=60, env=uv_env)` anchor is specific enough to leave the unrelated
-# timeouts at lines 414 and 887 untouched.
+# Drop whichever reinstall flag the pinned platform uses so the install is cache-served
+# rather than re-fetched, and raise the 60s cap to 600s so residual slowness becomes a
+# slow success instead of a build failure. Two spellings are handled:
+#
+#   "--force-reinstall"                  -- pioarduino 55.03.39 and earlier
+#   "--reinstall-package", "esptool"     -- meshtastic fork, cfdf56e onwards
+#
+# Both imply a uv refresh (`--reinstall` => `--refresh`, `--reinstall-package` =>
+# `--refresh-package`), so either one forces a network fetch on every build.
+#
+# Both call sites are patched. Only the second is reachable from the minimal
+# (env is None) path a CI build takes, but this is vendored third-party code and a
+# global edit is cheaper to reason about than a targeted one. The
+# `], timeout=60, env=uv_env)` anchor is specific enough to leave the unrelated 60s
+# timeouts elsewhere in the file untouched.
 patched=0
 while IFS= read -r f; do
 	tmp="$f.preflight.tmp"
 	sed -e 's/ "--force-reinstall",//g' \
+		-e 's/^[[:space:]]*"--reinstall-package",[[:space:]]*"esptool",[[:space:]]*$//' \
+		-e 's/ "--reinstall-package", "esptool",//g' \
 		-e 's/], timeout=60, env=uv_env)/], timeout=600, env=uv_env)/g' \
 		"$f" >"$tmp" && mv -f "$tmp" "$f" || {
 		rm -f "$tmp"
@@ -58,8 +68,12 @@ while IFS= read -r f; do
 	# Drop bytecode compiled from the pre-patch source so the edit actually takes effect.
 	rm -f "$(dirname "$f")/__pycache__/penv_setup."*.pyc
 
-	if grep -q -- '--force-reinstall' "$f"; then
-		echo "preflight: WARNING --force-reinstall survived in $f (upstream layout changed?)" >&2
+	# The hazard is a reinstall flag still paired with the 60s cap. Warn only when both
+	# survive, so this stays quiet once the fix lands upstream and the patterns stop
+	# matching because there is nothing left to patch.
+	if grep -qE -- '--force-reinstall|--reinstall-package' "$f" &&
+		grep -q 'timeout=60, env=uv_env)' "$f"; then
+		echo "preflight: WARNING $f still reinstalls under a 60s cap (upstream layout changed?)" >&2
 	fi
 	echo "preflight: patched $f"
 	patched=$((patched + 1))
