@@ -37,6 +37,7 @@
 #define LR1120_MAX_POWER 5
 
 // The second LR1121 is held inactive until dual-radio support is implemented.
+#define JANUS_RADIO
 #define LR1121_IRQ2_PIN 34
 #define LR1121_NRESET2_PIN 21
 #define LR1121_BUSY2_PIN 39
