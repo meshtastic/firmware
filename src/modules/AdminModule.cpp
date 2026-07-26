@@ -1299,6 +1299,11 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_traffic_management = true;
         moduleConfig.traffic_management = c.payload_variant.traffic_management;
         break;
+    case meshtastic_ModuleConfig_tak_tag:
+        LOG_INFO("Set module config: TAK");
+        moduleConfig.has_tak = true;
+        moduleConfig.tak = c.payload_variant.tak;
+        break;
 #if !MESHTASTIC_EXCLUDE_BEACON
     case meshtastic_ModuleConfig_mesh_beacon_tag: {
         LOG_INFO("Set module config: MeshBeacon");
@@ -1616,6 +1621,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             configName = "Traffic Management";
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_TAK_CONFIG:
+            configName = "TAK";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
+            res.get_module_config_response.payload_variant.tak = moduleConfig.tak;
             break;
 #if !MESHTASTIC_EXCLUDE_BEACON
         case meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG:
