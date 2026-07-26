@@ -36,8 +36,8 @@
 #include <ErriezCRC32.h>
 #include <cstdio>
 #include <cstring>
-#include <pb_decode.h>
 #include <memory>
+#include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
 

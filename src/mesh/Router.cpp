@@ -816,8 +816,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #if !(MESHTASTIC_EXCLUDE_PKI)
     meshtastic_NodeInfoLite *ourNode = nullptr;
     const bool pkiCandidate = p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) &&
-                              rawSize > MESHTASTIC_PKC_OVERHEAD &&
-                              (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0;
+                              rawSize > MESHTASTIC_PKC_OVERHEAD && (ourNode = nodeDB->getMeshNode(p->to)) != nullptr &&
+                              ourNode->public_key.size > 0;
     if (pkiCandidate && owner.is_licensed) {
         licensedPkiCandidate = true;
     } else if (pkiCandidate) {
@@ -1004,7 +1004,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     } else {
         LOG_WARN("No suitable channel found for decoding, hash was 0x%x!", p->channel);
         return (matchedChannel || pkiAttempted || licensedPkiCandidate) ? DecodeState::DECODE_FAILURE
-                                                                          : DecodeState::DECODE_OPAQUE;
+                                                                        : DecodeState::DECODE_OPAQUE;
     }
 }
 
