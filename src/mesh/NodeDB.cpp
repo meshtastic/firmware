@@ -2211,6 +2211,7 @@ void NodeDB::loadFromDisk()
 #if USERPREFS_EVENT_MODE
     // Seed only a missing event config; never overwrite normal files after a corrupt event config.
     bool eventConfigMissing = false;
+    eventProfileStorageUnavailable = false;
 #ifdef FSCom
     spiLock->lock();
     eventConfigMissing = !FSCom.exists(configFileName);
@@ -2654,7 +2655,10 @@ void NodeDB::loadFromDisk()
         spiLock->unlock();
         if (activeBackupExists && !EncryptedStorage::isEncrypted(backupFileName)) {
             LOG_INFO("Migrating %s to encrypted storage", backupFileName);
-            EncryptedStorage::migrateFile(backupFileName);
+            if (!EncryptedStorage::migrateFile(backupFileName)) {
+                LOG_ERROR("Unable to migrate %s to encrypted storage", backupFileName);
+                storageCorruptThisLoad = true;
+            }
         }
 #endif
 #endif
@@ -2670,7 +2674,10 @@ void NodeDB::loadFromDisk()
             spiLock->unlock();
             if (exists && !EncryptedStorage::isEncrypted(fn)) {
                 LOG_INFO("Migrating inactive radio profile %s to encrypted storage", fn);
-                EncryptedStorage::migrateFile(fn);
+                if (!EncryptedStorage::migrateFile(fn)) {
+                    LOG_ERROR("Unable to migrate %s to encrypted storage", fn);
+                    storageCorruptThisLoad = true;
+                }
             }
         }
 #endif
