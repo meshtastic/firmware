@@ -35,6 +35,37 @@ class LockingArduinoHal : public ArduinoHal
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
+
+    uint32_t digitalRead(uint32_t pin) override;
+
+    /**
+     * Bounded escape hatch for RadioLib's unbounded BUSY wait in LR11x0::config():
+     *
+     *     while(this->mod->hal->digitalRead(this->mod->getGpio())) { this->mod->hal->yield(); }
+     *
+     * When a DIO3 TCXO reference is configured but no TCXO is fitted, the oscillator never
+     * starts, calibration never completes, BUSY stays asserted and that loop never exits - it
+     * hangs setup() before any watchdog is running, so only a physical reset recovers the
+     * board. See https://github.com/jgromes/RadioLib/issues/1844.
+     *
+     * While armed, a watched pin held high for longer than timeoutMs makes digitalRead() report
+     * low exactly once, which is enough to break the wait. The read after that reports the pin
+     * honestly again, so RadioLib's own bounded per-command waits in Module::SPItransferStream()
+     * still see BUSY high and return RADIOLIB_ERR_SPI_CMD_TIMEOUT - letting begin() fail cleanly
+     * and the caller's TCXO/XTAL fallback run. Reporting low persistently would instead let those
+     * transfers proceed against an unresponsive chip and surface as RADIOLIB_ERR_CHIP_NOT_FOUND,
+     * which callers read as "no radio" rather than "wrong oscillator".
+     *
+     * Arm only around begin(): bootEraseFlash() legitimately holds BUSY high for up to 3 s.
+     */
+    void armBusyWatchdog(uint32_t pin, uint32_t timeoutMs);
+    void disarmBusyWatchdog() { busyWatchArmed = false; }
+
+  private:
+    uint32_t busyWatchPin = 0;
+    uint32_t busyWatchTimeoutMs = 0;
+    uint32_t busyHighSince = 0;
+    bool busyWatchArmed = false;
 };
 
 #if defined(USE_STM32WLx)

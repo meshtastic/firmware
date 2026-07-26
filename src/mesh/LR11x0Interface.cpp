@@ -44,6 +44,13 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 #define LR11X0_TCXO_DEFAULT_VOLTAGE 0
 #endif
 
+// Longest BUSY assertion tolerated during begin() before we assume the oscillator never locked.
+// A healthy begin() completes in ~400ms. 3s matches both RadioLib's own bounded BUSY wait after
+// bootEraseFlash() and the timeout proposed upstream for the calibration wait itself
+// (https://github.com/jgromes/RadioLib/issues/1844), so this never fires earlier than RadioLib
+// would have given up on its own.
+#define LR11X0_BUSY_WATCHDOG_MS 3000
+
 template <typename T>
 LR11x0Interface<T>::LR11x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                     RADIOLIB_PIN_TYPE busy)
@@ -81,7 +88,7 @@ template <typename T> bool LR11x0Interface<T>::init()
     else
         LOG_DEBUG("LR11x0 no TCXO Vref, XTAL only (DIO3 free as an IRQ)");
 #if defined(TCXO_OPTIONAL)
-    LOG_DEBUG("TCXO_OPTIONAL: oscillator type unknown, probing XTAL first and using any TCXO Vref only as fallback");
+    LOG_DEBUG("TCXO_OPTIONAL: oscillator type unknown, trying any TCXO Vref first and falling back to XTAL");
 #endif
 
     RadioLibInterface::init();
@@ -107,6 +114,12 @@ template <typename T> bool LR11x0Interface<T>::init()
     // Allow extra time for TCXO to stabilize after power-on
     delay(10);
 
+    // RadioLib's LR11x0 calibration wait is unbounded, so a configured-but-absent TCXO leaves BUSY
+    // asserted and hangs boot outright. Bound it so begin() returns and the fallbacks below can run.
+    auto *lockingHal = static_cast<LockingArduinoHal *>(module.hal);
+    lockingHal->armBusyWatchdog(module.getGpio(), LR11X0_BUSY_WATCHDOG_MS);
+    LOG_INFO("LR11x0 BUSY watchdog armed on pin %u (%ums)", module.getGpio(), LR11X0_BUSY_WATCHDOG_MS);
+
     // Timestamped brackets so a hang inside RadioLib leaves a dangling "attempt" line in the boot log
     auto tryBegin = [&](int attempt, float vref) {
         uint32_t attemptStart = millis();
@@ -116,21 +129,19 @@ template <typename T> bool LR11x0Interface<T>::init()
         return radioLibResult;
     };
 
-#if defined(TCXO_OPTIONAL)
-    // 1. XTAL, because a TCXO-first attempt hangs RadioLib's calibration wait on a bare module,
-    //    whereas XTAL fails fast and cleanly (SPI_CMD_FAILED) on a module that does have a TCXO
-    float attemptVoltage = 0;
-#else
+    // 1. Whatever Vref the variant configured. With the BUSY watchdog armed, a TCXO-first attempt on
+    //    a module with no TCXO fitted now fails cleanly instead of hanging RadioLib's calibration wait.
     float attemptVoltage = tcxoVoltage;
-#endif
     int radioLibResult = tryBegin(1, attemptVoltage);
 
 #if defined(TCXO_OPTIONAL)
-    // 2. XTAL failed with the chip present, so fall back to the TCXO if the variant configured one
+    // 2. The chip is there but would not run on the TCXO, so retry in XTAL mode
     if (radioLibResult != RADIOLIB_ERR_NONE && radioLibResult != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
-        LOG_WARN("LR11x0 XTAL init failed (err %d), retrying with TCXO Vref %f V", radioLibResult, tcxoVoltage);
-        attemptVoltage = tcxoVoltage;
+        LOG_WARN("LR11x0 TCXO init failed with Vref %f V (err %d), retrying without TCXO", tcxoVoltage, radioLibResult);
+        attemptVoltage = 0;
         radioLibResult = tryBegin(2, attemptVoltage);
+        if (radioLibResult == RADIOLIB_ERR_NONE)
+            LOG_INFO("LR11x0 init success without TCXO (XTAL mode)");
     }
 #endif
 
@@ -140,6 +151,8 @@ template <typename T> bool LR11x0Interface<T>::init()
         delay(100);
         radioLibResult = tryBegin(3, attemptVoltage);
     }
+
+    lockingHal->disarmBusyWatchdog();
 
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", radioLibResult);

@@ -48,7 +48,7 @@ uint32_t MCP23017LockingArduinoHal::digitalRead(uint32_t pin)
         uint8_t local = (uint8_t)(pin - MCP23017_VPIN_BASE);
         return (uint32_t)mcp.digitalRead(local);
     }
-    return ArduinoHal::digitalRead(pin);
+    return LockingArduinoHal::digitalRead(pin); // keep the BUSY watchdog in the path for native pins
 }
 
 void MCP23017LockingArduinoHal::attachInterrupt(uint32_t interruptNum, void (*cb)(void), uint32_t mode)

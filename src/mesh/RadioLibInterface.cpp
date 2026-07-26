@@ -40,6 +40,37 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 }
 #endif
 
+void LockingArduinoHal::armBusyWatchdog(uint32_t pin, uint32_t timeoutMs)
+{
+    busyWatchPin = pin;
+    busyWatchTimeoutMs = timeoutMs;
+    busyHighSince = 0;
+    busyWatchArmed = true;
+}
+
+uint32_t LockingArduinoHal::digitalRead(uint32_t pin)
+{
+    uint32_t value = ArduinoHal::digitalRead(pin);
+
+    // Not watching, or BUSY is behaving: restart the window
+    if (!busyWatchArmed || pin != busyWatchPin || value == GpioLevelLow) {
+        busyHighSince = 0;
+        return value;
+    }
+
+    uint32_t now = millis();
+    if (busyHighSince == 0) {
+        busyHighSince = now;
+        return value;
+    }
+    if (now - busyHighSince < busyWatchTimeoutMs)
+        return value;
+
+    busyHighSince = 0; // one-shot: the next read reports the pin honestly again
+    LOG_ERROR("BUSY (pin %u) stuck high for %ums, breaking RadioLib wait", pin, busyWatchTimeoutMs);
+    return GpioLevelLow;
+}
+
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
