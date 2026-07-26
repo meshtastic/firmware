@@ -120,6 +120,10 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                     LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
                     sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
                                routingModule->getHopLimitForResponse(*p));
+                } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0) {
+                    LOG_INFO("PKI packet from known node could not be decrypted");
+                    sendAckNak(meshtastic_Routing_Error_PKI_DECRYPT_FAILED, getFrom(p), p->id, channels.getPrimaryIndex(),
+                               routingModule->getHopLimitForResponse(*p));
                 } else {
                     // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
                     sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(),
