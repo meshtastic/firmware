@@ -42,7 +42,7 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 void InkHUD::DMApplet::onRender(bool full)
 {
     // Abort if no text message
-    if (!latestMessage->dm.sender) {
+    if (!latestMessage->dm.sender || !messageStore.isMessageVisible(latestMessage->dm)) {
         printAt(X(0.5), Y(0.5), "No DMs", CENTER, MIDDLE);
         return;
     }

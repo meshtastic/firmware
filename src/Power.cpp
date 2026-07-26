@@ -37,6 +37,7 @@
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
+#include "input/LinuxJoystick.h"
 #endif
 
 // Working USB detection for powered/charging states on the RAK platform
@@ -860,12 +861,13 @@ void Power::reboot()
 #ifdef __linux__
     if (aLinuxInputImpl)
         aLinuxInputImpl->deInit();
+    if (aLinuxJoystick)
+        aLinuxJoystick->deInit();
 #endif
     SPI.end();
     Wire.end();
     Serial1.end();
     if (screen) {
-        delete screen;
         screen = nullptr;
     }
     LOG_DEBUG("final reboot!");
@@ -903,7 +905,7 @@ void Power::shutdown()
 #if HAS_SCREEN
     messageStore.saveToFlash();
 #endif
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
 #endif

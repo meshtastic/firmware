@@ -159,6 +159,12 @@ class MeshService
      */
     void handleToRadio(meshtastic_MeshPacket &p);
 
+#if MESHTASTIC_ENABLE_FRAME_INJECTION
+    /// Test/debug seam (build-flag gated, off by default): deliver a client-supplied frame into the
+    /// receive pipeline as if it had arrived off the LoRa chip. See the definition for the wire format.
+    void injectAsReceived(meshtastic_MeshPacket &p);
+#endif
+
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
      * @return true if client devices should be sent a new set of radio configs
      */

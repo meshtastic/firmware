@@ -516,7 +516,7 @@ bool Channels::hasDefaultChannel()
  */
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
-    if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
+    if (chIndex >= getNumChannels() || getHash(chIndex) != channelHash) {
         // LOG_DEBUG("Skip channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;

@@ -222,11 +222,15 @@ meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
     return qs;
 }
 
-bool RadioLibInterface::canSleep()
+bool RadioLibInterface::canSleep(bool deepSleep)
 {
-    bool res = txQueue.empty();
+    // A packet being actively transmitted has already left the TX queue (sendingPacket), so
+    // check it separately. It only vetoes deep sleep: light sleep keeps the radio powered and
+    // the TX finishes on its own, but deep sleep powers the radio down and would truncate the
+    // packet on air.
+    bool res = txQueue.empty() && !(deepSleep && isSending());
     if (!res) { // only print debug messages if we are vetoing sleep
-        LOG_DEBUG("Radio wait to sleep, txEmpty=%d", res);
+        LOG_DEBUG("Radio wait to sleep, txEmpty=%d, txInFlight=%d", txQueue.empty(), isSending());
     }
     return res;
 }
@@ -659,6 +663,10 @@ void RadioLibInterface::handleReceiveInterrupt()
             // This allows the router and other apps on our node to sniff packets (usually routing) between other
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+            if (!mp) {
+                airTime->logAirtime(RX_LOG, rxMsec);
+                return;
+            }
 
             // Keep the assigned fields in sync with src/mqtt/MQTT.cpp:onReceiveProto
             mp->from = radioBuffer.header.from;
