@@ -2429,7 +2429,9 @@ void NodeDB::loadFromDisk()
             const meshtastic_LocalConfig standardConfig = config;
             installDefaultConfig(true);
             const meshtastic_Config_LoRaConfig eventLora = config.lora;
-            config = eventConfigFromStandard(standardConfig, eventLora);
+            config = standardConfig;
+            config.has_lora = true;
+            config.lora = eventLora;
             state = LoadFileResult::LOAD_SUCCESS;
             initializedEventConfig = true;
             LOG_INFO("Initialized event config without modifying %s", STANDARD_CONFIG_FILE_NAME);
@@ -2643,7 +2645,9 @@ void NodeDB::loadFromDisk()
             }
         }
 
-        // Backups are outside saveToDisk(), but can contain radio profile PSKs.
+        // Backups are outside saveToDisk(), but can contain radio profile PSKs. Only event builds
+        // introduce a second backup file, so leave normal-firmware backup handling unchanged.
+#if USERPREFS_EVENT_MODE
 #ifdef FSCom
         spiLock->lock();
         const bool activeBackupExists = FSCom.exists(backupFileName);
@@ -2652,6 +2656,7 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Migrating %s to encrypted storage", backupFileName);
             EncryptedStorage::migrateFile(backupFileName);
         }
+#endif
 #endif
 
         // Event firmware keeps the normal radio profile inactive, so migrate it separately.
@@ -2826,7 +2831,11 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
                        bool fullAtomic)
 {
 
-    if (shouldDeferBootPersistence(bootInitializationInProgress, configLoadComplete, configDecodeFailed)) {
+    // Only the radio profile is at risk from an unverified config load, so only defer those writes.
+    // Devicestate/nodedb/module writes must still land, otherwise boot-time recovery (e.g. loadFromDisk()
+    // restoring owner fields) is dropped and never retried.
+    if (isRadioProfileFile(filename) &&
+        shouldDeferBootPersistence(bootInitializationInProgress, configLoadComplete, configDecodeFailed)) {
         LOG_WARN("NodeDB: deferred boot write to %s until config recovery completes", filename);
         return true;
     }

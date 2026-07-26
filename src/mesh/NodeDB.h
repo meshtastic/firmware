@@ -140,15 +140,6 @@ constexpr bool hasEventProfileStorageSpace(size_t totalBytes, size_t usedBytes)
     return usedBytes <= totalBytes && totalBytes - usedBytes >= EVENT_PROFILE_STORAGE_RESERVATION_BYTES;
 }
 
-inline meshtastic_LocalConfig eventConfigFromStandard(const meshtastic_LocalConfig &standard,
-                                                      const meshtastic_Config_LoRaConfig &eventLora)
-{
-    meshtastic_LocalConfig eventConfig = standard;
-    eventConfig.has_lora = true;
-    eventConfig.lora = eventLora;
-    return eventConfig;
-}
-
 constexpr bool shouldDeferBootPersistence(bool bootInitializationInProgress, bool configLoadComplete, bool configDecodeFailed)
 {
     return bootInitializationInProgress && (!configLoadComplete || configDecodeFailed);
@@ -164,6 +155,14 @@ static constexpr const char *channelFileName = RADIO_PROFILE_STORAGE.channels;
 static constexpr const char *backupFileName = RADIO_PROFILE_STORAGE.backup;
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
+
+// An unverified config load only endangers the radio profile, so only these files take part in
+// boot-write deferral. Lives next to the path table above so the two cannot drift apart.
+inline bool isRadioProfileFile(const char *filename)
+{
+    return strcmp(filename, configFileName) == 0 || strcmp(filename, channelFileName) == 0 ||
+           strcmp(filename, backupFileName) == 0;
+}
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
