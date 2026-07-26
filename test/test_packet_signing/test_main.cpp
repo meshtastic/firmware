@@ -103,6 +103,13 @@ class MockNodeDB : public NodeDB
         nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
     }
 
+    void setLicensed(NodeNum num, bool value)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_LICENSED_MASK, value);
+    }
+
     void setLongName(NodeNum num, const char *name)
     {
         meshtastic_NodeInfoLite *n = getMeshNode(num);
@@ -1513,6 +1520,63 @@ void test_M2_unknown_dm_fails_only_after_key_exchange_timeout(void)
 #endif
 }
 
+void test_M2a_known_licensed_recipient_does_not_start_key_exchange(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setHasUser(REMOTE_NODE);
+    mockNodeDB->setLicensed(REMOTE_NODE, true);
+
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    const PacketId originalDmId = dm->id;
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouting->lastAckError);
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRouting->lastAckId);
+}
+
+void test_M2b_same_recipient_missing_key_shares_nodeinfo_request(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+
+    meshtastic_MeshPacket *first =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    meshtastic_MeshPacket *second =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_NOT_NULL(second);
+    first->id = 0xD00D0022;
+    second->id = 0xD00D0023;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(first, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(second, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(2, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+
+    meshtastic_MeshPacket nodeInfoResponse = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    nodeInfoResponse.decoded.request_id = pipelineRadio->sentPackets.front().id;
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    meshtastic_User responseUser = meshtastic_User_init_zero;
+    responseUser.is_licensed = owner.is_licensed;
+    responseUser.public_key.size = sizeof(remotePublic);
+    memcpy(responseUser.public_key.bytes, remotePublic, sizeof(remotePublic));
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
+
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(3, pipelineRadio->sendCalls);
+    TEST_ASSERT_EQUAL_HEX32(0xD00D0022, pipelineRadio->sentPackets[1].id);
+    TEST_ASSERT_EQUAL_HEX32(0xD00D0023, pipelineRadio->sentPackets[2].id);
+}
+
 void test_M3_undecryptable_dm_reports_key_state_not_no_channel(void)
 {
     meshtastic_MeshPacket dm = meshtastic_MeshPacket_init_zero;
@@ -1945,6 +2009,29 @@ void test_M14_explicit_destination_key_mismatch_fails_without_preflight(void)
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_FAILED, pipelineRouting->lastAckError);
 }
 
+void test_M14a_explicit_destination_key_sends_without_nodedb_entry(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    dm->id = 0xD00D0024;
+    dm->pki_encrypted = true;
+    dm->public_key.size = sizeof(remotePublic);
+    memcpy(dm->public_key.bytes, remotePublic, sizeof(remotePublic));
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+    TEST_ASSERT_TRUE(pipelineRadio->sentPackets.back().pki_encrypted);
+    TEST_ASSERT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
+}
+
 void test_M15_peer_key_preflight_queue_full_sends_known_key_dm(void)
 {
     enableNodeInfoForDmKeyWait();
@@ -2144,7 +2231,7 @@ void test_M19_deferred_dm_reports_the_resumed_send_result(void)
     pipelineRouter->clearPending();
 }
 
-void test_M20_weak_destination_key_refreshes_before_retry(void)
+void test_M20_weak_signed_destination_key_is_not_replaced_by_unsigned_nodeinfo(void)
 {
     enableNodeInfoForDmKeyWait();
     enablePkiForLocalNode();
@@ -2178,10 +2265,10 @@ void test_M20_weak_destination_key_refreshes_before_retry(void)
     memcpy(responseUser.public_key.bytes, remotePublic, sizeof(remotePublic));
     TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
 
-    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
-    TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
-    TEST_ASSERT_TRUE(pipelineRadio->sentPackets.back().pki_encrypted);
-    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRadio->sentPackets.back().id);
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+    TEST_ASSERT_FALSE(nodeDB->copyPublicKey(REMOTE_NODE, storedKey));
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, dm->id);
 }
 
 void test_M21_pki_admin_routing_reply_remains_pki_encrypted(void)
@@ -2591,6 +2678,8 @@ void setup()
     RUN_TEST(test_M1_unknown_dm_waits_for_nodeinfo_key_exchange_then_retries);
     RUN_TEST(test_M1a_phone_origin_unknown_dm_waits_for_nodeinfo_key_exchange);
     RUN_TEST(test_M2_unknown_dm_fails_only_after_key_exchange_timeout);
+    RUN_TEST(test_M2a_known_licensed_recipient_does_not_start_key_exchange);
+    RUN_TEST(test_M2b_same_recipient_missing_key_shares_nodeinfo_request);
     RUN_TEST(test_M3_undecryptable_dm_reports_key_state_not_no_channel);
     RUN_TEST(test_M4_peer_key_preflight_retries_original_dm_after_nodeinfo);
     RUN_TEST(test_M5_peer_key_exchange_attempt_avoids_repeated_preflight_and_preserves_mismatch);
@@ -2598,6 +2687,7 @@ void setup()
     RUN_TEST(test_M7_missing_recipient_key_fails_when_nodeinfo_cannot_queue);
     RUN_TEST(test_M13_two_peer_key_preflights_keep_independent_nodeinfo_requests);
     RUN_TEST(test_M14_explicit_destination_key_mismatch_fails_without_preflight);
+    RUN_TEST(test_M14a_explicit_destination_key_sends_without_nodedb_entry);
     RUN_TEST(test_M8_nodeinfo_reply_without_key_keeps_dm_deferred);
     RUN_TEST(test_M9_missing_recipient_key_fails_when_nodeinfo_send_is_rejected);
     RUN_TEST(test_M10_two_missing_keys_keep_independent_nodeinfo_requests);
@@ -2608,7 +2698,7 @@ void setup()
     RUN_TEST(test_M17_peer_key_rotation_invalidates_peer_key_exchange_attempt);
     RUN_TEST(test_M18_same_peer_dms_share_nodeinfo_preflight);
     RUN_TEST(test_M19_deferred_dm_reports_the_resumed_send_result);
-    RUN_TEST(test_M20_weak_destination_key_refreshes_before_retry);
+    RUN_TEST(test_M20_weak_signed_destination_key_is_not_replaced_by_unsigned_nodeinfo);
     RUN_TEST(test_M21_pki_admin_routing_reply_remains_pki_encrypted);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);

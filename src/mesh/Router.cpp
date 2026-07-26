@@ -1213,6 +1213,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // has been committed to NodeDB.
         meshtastic_NodeInfoLite_public_key_t destKey = {0, {0}};
         bool haveDestKey = nodeDB->copyPublicKey(p->to, destKey);
+        if (!haveDestKey && p->pki_encrypted && p->public_key.size == 32 &&
+            !memfll(p->public_key.bytes, 0, sizeof(p->public_key.bytes))) {
+            destKey.size = p->public_key.size;
+            memcpy(destKey.bytes, p->public_key.bytes, destKey.size);
+            haveDestKey = true;
+        }
         if (!haveDestKey && p->pki_encrypted && p->decoded.portnum == meshtastic_PortNum_KEY_VERIFICATION_APP &&
             crypto->getPendingPublicKey(p->to, destKey)) {
             haveDestKey = true;
@@ -1326,14 +1332,30 @@ Router::DeferredDmResult Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
     meshtastic_NodeInfoLite_public_key_t remoteKey = {0, {0}};
     if (nodeDB->copyPublicKey(p->to, remoteKey) || !wouldEncryptWithPKC(p, p->channel, false))
         return DeferredDmResult::NOT_APPLICABLE;
+    if (p->pki_encrypted && p->public_key.size == 32 && !memfll(p->public_key.bytes, 0, sizeof(p->public_key.bytes)))
+        return DeferredDmResult::NOT_APPLICABLE;
+    if (nodeDB->getLicenseStatus(p->to) == UserLicenseStatus::Licensed) {
+        LOG_INFO("Recipient 0x%08x is licensed; encrypted DM key exchange is unavailable", p->to);
+        return DeferredDmResult::NOT_APPLICABLE;
+    }
+
+    PacketId keyExchangeId = 0;
+    for (const auto &deferred : deferredDms) {
+        if (deferred.p && deferred.reason == DeferredDm::Reason::DESTINATION_KEY && deferred.p->to == p->to) {
+            keyExchangeId = deferred.keyExchangeId;
+            break;
+        }
+    }
 
     for (auto &deferred : deferredDms) {
         if (deferred.p)
             continue;
 
-        const PacketId keyExchangeId = nodeInfoModule->requestNodeInfo(p->to, p->channel);
-        if (!keyExchangeId)
-            return DeferredDmResult::FAILED;
+        if (!keyExchangeId) {
+            keyExchangeId = nodeInfoModule->requestNodeInfo(p->to, p->channel);
+            if (!keyExchangeId)
+                return DeferredDmResult::FAILED;
+        }
 
         deferred.p = p;
         deferred.queuedAtMs = millis();
