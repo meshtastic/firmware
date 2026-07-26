@@ -25,6 +25,7 @@
 #include "mesh/MeshRadio.h"
 #include "mesh/MeshService.h"
 #include "mesh/NodeDB.h"
+#include "mesh/PhoneAPI.h"
 #include "mesh/ReliableRouter.h"
 #include "mesh/Router.h"
 #include "mesh/SinglePortModule.h"
@@ -237,6 +238,12 @@ class AuthPipelineMqtt : public MQTT
         while (QueueEntry *entry = mqttQueue.dequeuePtr(0))
             delete entry;
     }
+};
+
+class DmPhoneAPITestShim : public PhoneAPI
+{
+  protected:
+    bool checkIsConnected() override { return true; }
 };
 
 static AuthPipelineRouter *pipelineRouter = nullptr;
@@ -2348,6 +2355,39 @@ void test_M22_redeferred_dm_reports_key_exchange_state(void)
     pipelineRouter->clearDeferredDmsForTest();
 }
 
+void test_M23_duplicate_phone_dm_replays_key_exchange_state(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+
+    meshtastic_ToRadio request = meshtastic_ToRadio_init_zero;
+    request.which_payload_variant = meshtastic_ToRadio_packet_tag;
+    request.packet = makeDecoded(0, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    request.packet.id = 0xD00D0026;
+    uint8_t requestBytes[meshtastic_ToRadio_size];
+    const size_t requestSize = pb_encode_to_bytes(requestBytes, sizeof(requestBytes), &meshtastic_ToRadio_msg, &request);
+    TEST_ASSERT_GREATER_THAN(0, requestSize);
+
+    DmPhoneAPITestShim api;
+    TEST_ASSERT_TRUE(api.handleToRadio(requestBytes, requestSize));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+    while (meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone())
+        pipelineService->releaseQueueStatusToPool(status);
+
+    TEST_ASSERT_FALSE(api.handleToRadio(requestBytes, requestSize));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+    meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone();
+    TEST_ASSERT_NOT_NULL(status);
+    TEST_ASSERT_EQUAL_HEX32(0xD00D0026, status->mesh_packet_id);
+    TEST_ASSERT_EQUAL(ERRNO_OK, status->res);
+    TEST_ASSERT_EQUAL(meshtastic_QueueStatus_State_KEY_EXCHANGE, status->state);
+    pipelineService->releaseQueueStatusToPool(status);
+    api.close();
+    pipelineRouter->clearDeferredDmsForTest();
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2737,6 +2777,7 @@ void setup()
     RUN_TEST(test_M20_weak_signed_destination_key_is_not_replaced_by_unsigned_nodeinfo);
     RUN_TEST(test_M21_pki_admin_routing_reply_remains_pki_encrypted);
     RUN_TEST(test_M22_redeferred_dm_reports_key_exchange_state);
+    RUN_TEST(test_M23_duplicate_phone_dm_replays_key_exchange_state);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

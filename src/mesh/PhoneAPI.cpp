@@ -1775,6 +1775,10 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 #endif
         if (p.id > 0 && wasSeenRecently(p.id)) {
             LOG_DEBUG("Ignore packet from phone, already seen recently");
+            if (router->isDeferredDm(p.id)) {
+                meshtastic_QueueStatus qs = router->getQueueStatus();
+                service->sendQueueStatusToPhone(qs, ERRNO_OK, p.id, meshtastic_QueueStatus_State_KEY_EXCHANGE);
+            }
             return false;
         }
 
