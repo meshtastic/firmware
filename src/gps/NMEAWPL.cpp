@@ -27,11 +27,19 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_PositionLite &pos, c
                             (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
                             geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
                             geoCoord.getDMSLonCP(), name);
+    // snprintf() returns the length that *would* have been written, which can exceed bufsz if
+    // truncated - clamp before using it as an index/size, or the checksum loop reads out of
+    // bounds and bufsz-len underflows into a huge size for the next snprintf().
+    if (len >= bufsz)
+        len = bufsz > 0 ? bufsz - 1 : 0;
+
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
     len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
+    if (len >= bufsz)
+        len = bufsz > 0 ? bufsz - 1 : 0;
     return len;
 }
 
@@ -43,11 +51,19 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const
                             (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
                             geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
                             geoCoord.getDMSLonCP(), name);
+    // snprintf() returns the length that *would* have been written, which can exceed bufsz if
+    // truncated - clamp before using it as an index/size, or the checksum loop reads out of
+    // bounds and bufsz-len underflows into a huge size for the next snprintf().
+    if (len >= bufsz)
+        len = bufsz > 0 ? bufsz - 1 : 0;
+
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
     len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
+    if (len >= bufsz)
+        len = bufsz > 0 ? bufsz - 1 : 0;
     return len;
 }
 /* -------------------------------------------
@@ -91,11 +107,19 @@ uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
         (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6, geoCoord.getDMSLonCP(), pos.fix_quality,
         pos.sats_in_view, pos.HDOP, geoCoord.getAltitude(), 'M', pos.altitude_geoidal_separation, 'M', 0, 0);
 
+    // snprintf() returns the length that *would* have been written, which can exceed bufsz if
+    // truncated - clamp before using it as an index/size, or the checksum loop reads out of
+    // bounds and bufsz-len underflows into a huge size for the next snprintf().
+    if (len >= bufsz)
+        len = bufsz > 0 ? bufsz - 1 : 0;
+
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
     len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
+    if (len >= bufsz)
+        len = bufsz > 0 ? bufsz - 1 : 0;
     return len;
 }
 

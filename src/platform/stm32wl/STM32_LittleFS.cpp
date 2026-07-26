@@ -272,8 +272,8 @@ const char *dbg_strerr_lfs(int32_t err)
         return "LFS_ERR_NOMEM";
 
     default:
-        static char errcode[10];
-        sprintf(errcode, "%ld", err);
+        static char errcode[13]; // "-2147483648\0" (INT32_MIN) is the longest possible value
+        snprintf(errcode, sizeof(errcode), "%ld", err);
         return errcode;
     }
 
