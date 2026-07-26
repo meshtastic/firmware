@@ -547,7 +547,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         if (encodeResult != meshtastic_Routing_Error_NONE) {
             packetPool.release(p_decoded);
 #if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
-            if (encodeResult == meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY && deferMissingKeyDm(p))
+            if (encodeResult == meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY &&
+                deferMissingKeyDm(p) == DeferredDmResult::DEFERRED)
                 return ERRNO_OK;
 #endif
             p->channel = 0; // Reset the channel to 0, so we don't use the failing hash again
@@ -1308,15 +1309,15 @@ uint8_t Router::deferredDmCount() const
     return count;
 }
 
-bool Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
+Router::DeferredDmResult Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
 {
     if (!nodeInfoModule || p->which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
         !IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP))
-        return false;
+        return DeferredDmResult::NOT_APPLICABLE;
 
     meshtastic_NodeInfoLite_public_key_t remoteKey = {0, {0}};
     if (nodeDB->copyPublicKey(p->to, remoteKey) || !wouldEncryptWithPKC(p, p->channel, false))
-        return false;
+        return DeferredDmResult::NOT_APPLICABLE;
 
     for (auto &deferred : deferredDms) {
         if (deferred.p)
@@ -1324,7 +1325,7 @@ bool Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
 
         const PacketId keyExchangeId = nodeInfoModule->requestNodeInfo(p->to, p->channel);
         if (!keyExchangeId)
-            return false;
+            return DeferredDmResult::FAILED;
 
         deferred.p = p;
         deferred.queuedAtMs = millis();
@@ -1333,11 +1334,11 @@ bool Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
         LOG_INFO("Deferring DM id=0x%08x to 0x%08x while requesting NodeInfo", p->id, p->to);
         setInterval(0);
         runASAP = true;
-        return true;
+        return DeferredDmResult::DEFERRED;
     }
 
     LOG_WARN("Deferred DM queue is full; cannot wait for public key of 0x%08x", p->to);
-    return false;
+    return DeferredDmResult::FAILED;
 }
 
 bool Router::deferPeerKeyDm(meshtastic_MeshPacket *p)
@@ -1717,7 +1718,6 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         packetPool.release(p);
         return;
     }
-
     if (shouldFilterReceived(p)) {
         clearRoutingAuthCache();
         LOG_DEBUG("Incoming msg was filtered from 0x%08x", p->from);

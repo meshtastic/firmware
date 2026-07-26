@@ -46,6 +46,7 @@
 // ---------------------------------------------------------------------------
 static constexpr NodeNum LOCAL_NODE = 0x0A0A0A0A;
 static constexpr NodeNum REMOTE_NODE = 0x0B0B0B0B;
+static constexpr NodeNum SECOND_REMOTE_NODE = 0x0C0C0C0C;
 
 // A "small" broadcast payload whose signed encoding easily fits a LoRa frame, and an "oversized"
 // one whose signed encoding does not, yet still encodes within a LoRa frame unsigned.
@@ -92,6 +93,13 @@ class MockNodeDB : public NodeDB
         nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, value);
     }
 
+    void setHasUser(NodeNum num)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_HAS_USER_MASK, true);
+    }
+
     void setLongName(NodeNum num, const char *name)
     {
         meshtastic_NodeInfoLite *n = getMeshNode(num);
@@ -120,7 +128,7 @@ class AuthPipelineRadio : public RadioInterface
         sendCalls++;
         sentPackets.push_back(*p);
         packetPool.release(p);
-        return ERRNO_OK;
+        return sendResult;
     }
     bool cancelSending(NodeNum, PacketId) override
     {
@@ -141,6 +149,7 @@ class AuthPipelineRadio : public RadioInterface
     void reset()
     {
         sendCalls = cancelCalls = findCalls = removeCalls = 0;
+        sendResult = ERRNO_OK;
         sentPackets.clear();
     }
 
@@ -148,6 +157,7 @@ class AuthPipelineRadio : public RadioInterface
     uint32_t cancelCalls = 0;
     uint32_t findCalls = 0;
     uint32_t removeCalls = 0;
+    ErrorCode sendResult = ERRNO_OK;
     std::vector<meshtastic_MeshPacket> sentPackets;
 };
 
@@ -1459,6 +1469,8 @@ void test_M3_undecryptable_dm_reports_key_state_not_no_channel(void)
     dm.want_ack = true;
     dm.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     dm.encrypted.size = MESHTASTIC_PKC_OVERHEAD + 1;
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setHasUser(REMOTE_NODE);
 
     pipelineRouter->sniff(&dm, nullptr);
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, pipelineRouting->lastAckError);
@@ -1466,7 +1478,6 @@ void test_M3_undecryptable_dm_reports_key_state_not_no_channel(void)
 
     uint8_t staleKey[32], unusedPrivate[32];
     crypto->generateKeyPair(staleKey, unusedPrivate);
-    mockNodeDB->addNode(REMOTE_NODE);
     mockNodeDB->setPublicKey(REMOTE_NODE, staleKey);
 
     pipelineRouter->sniff(&dm, nullptr);
@@ -1675,6 +1686,108 @@ void test_M8_nodeinfo_reply_without_key_keeps_dm_deferred(void)
     TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouting->lastAckError);
     TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRouting->lastAckId);
+}
+
+void test_M9_missing_recipient_key_fails_when_nodeinfo_send_is_rejected(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    pipelineRadio->sendResult = meshtastic_Routing_Error_NO_INTERFACE;
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    dm->want_ack = true;
+    const PacketId originalDmId = dm->id;
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouting->lastAckError);
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRouting->lastAckId);
+}
+
+void test_M10_two_missing_keys_keep_independent_nodeinfo_requests(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    meshtastic_MeshPacket *first =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    meshtastic_MeshPacket *second =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, SECOND_REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_NOT_NULL(second);
+    first->want_ack = true;
+    second->want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(first, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(second, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(2, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
+    TEST_ASSERT_EQUAL(0, pipelineRadio->cancelCalls);
+    TEST_ASSERT_EQUAL(REMOTE_NODE, pipelineRadio->sentPackets[0].to);
+    TEST_ASSERT_EQUAL(SECOND_REMOTE_NODE, pipelineRadio->sentPackets[1].to);
+}
+
+void test_M11_unknown_sender_pki_dm_reaches_terminal_nak_from_rf_ingress(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, owner.public_key.bytes);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setHasUser(REMOTE_NODE);
+
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    meshtastic_NodeInfoLite_public_key_t localKey = {sizeof(owner.public_key.bytes), {0}};
+    memcpy(localKey.bytes, owner.public_key.bytes, sizeof(owner.public_key.bytes));
+
+    meshtastic_MeshPacket dm = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    dm.id = 0xD00D0011;
+    dm.want_ack = true;
+    uint8_t encoded[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
+    const size_t encodedSize = pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_Data_msg, &dm.decoded);
+    TEST_ASSERT_GREATER_THAN(0, encodedSize);
+    crypto->setDHPrivateKey(remotePrivate);
+    TEST_ASSERT_TRUE(
+        crypto->encryptCurve25519(LOCAL_NODE, REMOTE_NODE, localKey, dm.id, encodedSize, encoded, dm.encrypted.bytes));
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    dm.encrypted.size = encodedSize + MESHTASTIC_PKC_OVERHEAD;
+    dm.channel = 0;
+    dm.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+
+    runPipelineIngress(dm);
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&dm));
+    TEST_ASSERT_EQUAL(0, pipelineModule->calls);
+
+    meshtastic_MeshPacket repeated = dm;
+    repeated.id++;
+    runPipelineIngress(repeated);
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+}
+
+void test_M12_unknown_pki_shaped_radio_packet_does_not_trigger_nak(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, owner.public_key.bytes);
+
+    meshtastic_MeshPacket forged = meshtastic_MeshPacket_init_zero;
+    forged.from = REMOTE_NODE;
+    forged.to = LOCAL_NODE;
+    forged.id = 0xD00D0012;
+    forged.want_ack = true;
+    forged.channel = 0;
+    forged.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    forged.encrypted.size = MESHTASTIC_PKC_OVERHEAD + 1;
+
+    runPipelineIngress(forged);
+    TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
+    TEST_ASSERT_FALSE(pipelineRouter->historyContains(&forged));
+    TEST_ASSERT_EQUAL(0, pipelineModule->calls);
 }
 
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
@@ -2048,6 +2161,10 @@ void setup()
     RUN_TEST(test_M6_peer_missing_our_key_retries_after_nodeinfo_response_timeout);
     RUN_TEST(test_M7_missing_recipient_key_fails_when_nodeinfo_cannot_queue);
     RUN_TEST(test_M8_nodeinfo_reply_without_key_keeps_dm_deferred);
+    RUN_TEST(test_M9_missing_recipient_key_fails_when_nodeinfo_send_is_rejected);
+    RUN_TEST(test_M10_two_missing_keys_keep_independent_nodeinfo_requests);
+    RUN_TEST(test_M11_unknown_sender_pki_dm_reaches_terminal_nak_from_rf_ingress);
+    RUN_TEST(test_M12_unknown_pki_shaped_radio_packet_does_not_trigger_nak);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

@@ -112,9 +112,11 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     friend class RoutingModule;
 
 #if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    enum class DeferredDmResult : uint8_t { NOT_APPLICABLE, DEFERRED, FAILED };
+
     /// Takes ownership when a local text DM needs a public-key exchange before it can be sent.
     /// Derived routers must call this before creating retransmission state for the packet.
-    bool deferMissingKeyDm(meshtastic_MeshPacket *p);
+    DeferredDmResult deferMissingKeyDm(meshtastic_MeshPacket *p);
     bool deferPeerKeyDm(meshtastic_MeshPacket *p);
     bool isWaitingForPeerKeyDm(NodeNum peer, PacketId id) const;
     bool hasRetriedPeerKeyDm(NodeNum peer, PacketId id);
@@ -158,6 +160,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
                     bool ackWantsAck = false);
+
+    /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
+    void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 
   private:
     /**
@@ -256,9 +261,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         PacketId requestId = 0;
     } suppressedRoutingDelivery;
 #endif
-
-    /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
-    void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 
 #ifdef PIO_UNIT_TESTING
   public:

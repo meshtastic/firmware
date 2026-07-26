@@ -19,8 +19,13 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 #if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
     // Router owns the delayed packet while it asks for the destination's NodeInfo. Do this before
     // allocating a retransmission copy, otherwise the stale copy can later emit MAX_RETRANSMIT.
-    if (deferMissingKeyDm(p))
+    const auto deferredDm = deferMissingKeyDm(p);
+    if (deferredDm == DeferredDmResult::DEFERRED)
         return ERRNO_OK;
+    if (deferredDm == DeferredDmResult::FAILED) {
+        abortSendAndNak(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, p);
+        return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
+    }
 #endif
 
     if (p->want_ack) {

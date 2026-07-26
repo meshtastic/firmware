@@ -101,8 +101,9 @@ void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 
 PacketId NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout, bool _force)
 {
-    // cancel any not yet sent (now stale) position packets
-    if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
+    // Periodic broadcasts replace stale periodic broadcasts. Directed exchanges must stay independent.
+    const bool replacePrevious = isBroadcast(dest);
+    if (replacePrevious && prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
     shorterTimeout = _shorterTimeout;
     forceSend = _force;
@@ -128,10 +129,11 @@ PacketId NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t
             p->channel = channel;
         }
 
-        prevPacketId = p->id;
+        const PacketId packetId = p->id;
+        if (replacePrevious)
+            prevPacketId = packetId;
 
-        service->sendToMesh(p, RX_SRC_LOCAL, false, false);
-        return prevPacketId;
+        return service->sendToMesh(p, RX_SRC_LOCAL, false, false) == ERRNO_OK ? packetId : 0;
     }
 
     return 0;
