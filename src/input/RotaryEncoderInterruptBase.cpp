@@ -61,14 +61,10 @@ int32_t RotaryEncoderInterruptBase::runOnce()
 
         if (pressDetected) {
             // Press-and-turn takes precedence over the press itself.
-            if (pressAndTurnEnabled() && pressAndTurnDelta != 0) {
+            if (pressAndTurnEnabled() && pressAndTurnDelta.load(std::memory_order_relaxed) != 0) {
                 // Drain in one pass: releasing the button would discard anything left over.
-                // Snapshot and clear with interrupts masked: the ISR increments this counter, and
-                // a plain load-then-subtract would drop a detent arriving in between.
-                noInterrupts();
-                int8_t pending = pressAndTurnDelta;
-                pressAndTurnDelta = 0;
-                interrupts();
+                // Exchange, so a detent arriving from the ISR mid-drain is not lost.
+                int32_t pending = pressAndTurnDelta.exchange(0, std::memory_order_relaxed);
                 LOG_DEBUG("Rotary event Press %s (%d detents)", pending > 0 ? "CW" : "CCW", pending);
                 while (pending != 0) {
                     bool cw = pending > 0;
@@ -98,7 +94,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
                 pressDetected = false;
                 pressStartTime = 0;
                 lastPressLongEventTime = 0;
-                pressAndTurnDelta = 0;
+                pressAndTurnDelta.store(0, std::memory_order_relaxed);
                 pressAndTurnFired = false;
                 this->action = ROTARY_ACTION_NONE;
             } else if (!pressAndTurnEnabled() && duration >= LONG_PRESS_DURATION &&
@@ -186,7 +182,7 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
             newState = ROTARY_EVENT_OCCURRED;
             if (this->action == ROTARY_ACTION_PRESSED) {
                 // Turning while held; runOnce() ignores this unless press-and-turn is enabled.
-                pressAndTurnDelta += (action == ROTARY_ACTION_CW) ? 1 : -1;
+                pressAndTurnDelta.fetch_add((action == ROTARY_ACTION_CW) ? 1 : -1, std::memory_order_relaxed);
             } else {
                 this->action = action;
             }

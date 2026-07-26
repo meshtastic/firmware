@@ -3,6 +3,7 @@
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
 #include "mesh/NodeDB.h"
+#include <atomic>
 
 enum RotaryEncoderInterruptBaseStateType { ROTARY_EVENT_OCCURRED, ROTARY_EVENT_CLEARED };
 enum RotaryEncoderInterruptBaseActionType { ROTARY_ACTION_NONE, ROTARY_ACTION_PRESSED, ROTARY_ACTION_CW, ROTARY_ACTION_CCW };
@@ -35,7 +36,7 @@ class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, public
     volatile int rotaryLevelB = LOW;
     volatile RotaryEncoderInterruptBaseActionType action = ROTARY_ACTION_NONE;
     // Detents counted while the button is held: positive clockwise, negative counter-clockwise.
-    volatile int8_t pressAndTurnDelta = 0;
+    std::atomic<int32_t> pressAndTurnDelta{0};
 
   private:
     // pins and events
