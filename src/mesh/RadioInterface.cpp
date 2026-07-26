@@ -1462,10 +1462,18 @@ void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
  */
 size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 {
-    assert(!sendingPacket);
-
-    // LOG_DEBUG("Send queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
-    assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag); // It should have already been encoded by now
+    // These used to be asserts, which hang forever with no diagnostic on STM32WL. Reject and release
+    // instead - the caller must treat a 0 return as "not sent, p already released".
+    if (sendingPacket) {
+        LOG_ERROR("beginSending called while a send is already in progress");
+        packetPool.release(p);
+        return 0;
+    }
+    if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag) {
+        LOG_ERROR("beginSending called with an unencrypted packet");
+        packetPool.release(p);
+        return 0;
+    }
 
     radioBuffer.header.from = p->from;
     radioBuffer.header.to = p->to;
@@ -1482,8 +1490,17 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     radioBuffer.header.flags |= (p->hop_start << PACKET_FLAGS_HOP_START_SHIFT) & PACKET_FLAGS_HOP_START_MASK;
 
     // if the sender nodenum is zero, that means uninitialized
-    assert(radioBuffer.header.from);
-    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
+    if (!radioBuffer.header.from) {
+        LOG_ERROR("beginSending called with an unset sender node num");
+        packetPool.release(p);
+        return 0;
+    }
+    if (p->encrypted.size > sizeof(radioBuffer.payload)) {
+        LOG_ERROR("beginSending: encrypted size %u exceeds radio buffer capacity %zu", p->encrypted.size,
+                  sizeof(radioBuffer.payload));
+        packetPool.release(p);
+        return 0;
+    }
     memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;

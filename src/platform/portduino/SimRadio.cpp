@@ -208,6 +208,8 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
     printPacket("Start low level send", txp);
     isReceiving = false;
     size_t numbytes = beginSending(txp);
+    if (numbytes == 0) // beginSending() already released txp and logged why
+        return;
     meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
     if (!p)
         return;

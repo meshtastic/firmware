@@ -773,6 +773,8 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);
+        if (numbytes == 0) // beginSending() already released txp and logged why
+            return false;
 
         int res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
         if (res != RADIOLIB_ERR_NONE) {
