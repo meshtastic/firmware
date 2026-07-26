@@ -71,6 +71,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /** Return Underlying interface's TX queue status */
     [[nodiscard]] meshtastic_QueueStatus getQueueStatus();
 
+    /// True while a direct message with this ID is waiting for a peer public key.
+    bool isDeferredDm(PacketId id) const;
+
     /**
      * @return our local nodenum */
     [[nodiscard]] NodeNum getNodeNum();
@@ -101,6 +104,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
   protected:
     friend class RoutingModule;
+
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    /// Takes ownership when a local text DM needs a public-key exchange before it can be sent.
+    /// Derived routers must call this before creating retransmission state for the packet.
+    bool deferMissingKeyDm(meshtastic_MeshPacket *p);
+#endif
 
     /**
      * Should this incoming filter be dropped?
@@ -203,6 +212,22 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Pop the oldest deferred local packet into out. Returns false when empty.
     bool dequeueDeferredLocal(DeferredLocal &out);
 
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    /// A missing peer key is recoverable: ask the peer for NodeInfo, then retry the original DM
+    /// after its public key is learned. The fixed queue bounds RAM held for unavailable peers.
+    struct DeferredDm {
+        meshtastic_MeshPacket *p = nullptr;
+        uint32_t queuedAtMs = 0;
+    };
+
+    static constexpr uint8_t deferredDmCapacity = 2;
+    static constexpr uint32_t deferredDmKeyWaitMs = 30 * 1000UL;
+    DeferredDm deferredDms[deferredDmCapacity];
+
+    void processDeferredDms();
+    uint8_t deferredDmCount() const;
+#endif
+
     /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 
@@ -215,6 +240,17 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     uint32_t deferredLocalDropped = 0;
     /// Number of deferred local packets currently queued.
     uint8_t deferredLocalPending() const { return deferredLocalCount; }
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    uint8_t deferredDmPending() const { return deferredDmCount(); }
+    void processDeferredDmsForTest() { processDeferredDms(); }
+    void expireDeferredDmsForTest()
+    {
+        for (auto &deferred : deferredDms) {
+            if (deferred.p)
+                deferred.queuedAtMs = millis() - deferredDmKeyWaitMs;
+        }
+    }
+#endif
 #endif
 };
 

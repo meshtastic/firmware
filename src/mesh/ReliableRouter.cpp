@@ -16,6 +16,13 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    // Router owns the delayed packet while it asks for the destination's NodeInfo. Do this before
+    // allocating a retransmission copy, otherwise the stale copy can later emit MAX_RETRANSMIT.
+    if (deferMissingKeyDm(p))
+        return ERRNO_OK;
+#endif
+
     if (p->want_ack) {
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);

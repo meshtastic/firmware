@@ -22,7 +22,11 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
      * Send our NodeInfo into the mesh
      */
     void sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0,
-                         bool _shorterTimeout = false);
+                         bool _shorterTimeout = false, bool _force = false);
+
+    /// Send a directed NodeInfo request even when the regular announcement throttle is active.
+    /// Router uses this to recover a missing direct-message public key without exposing the DM.
+    void requestNodeInfo(NodeNum dest, uint8_t channel);
 
     /**
      * Schedule an immediate NodeInfo periodic check.
@@ -49,6 +53,7 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
   private:
     bool shorterTimeout = false;
+    bool forceSend = false;
     bool suppressReplyForCurrentRequest = false;
     std::map<NodeNum, uint32_t> lastNodeInfoSeen;
 

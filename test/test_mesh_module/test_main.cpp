@@ -606,6 +606,21 @@ static void test_localReplyToSelf_isDeliveredToPhone()
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size()); // nothing went toward the radio
 }
 
+static void test_queueStatus_keyExchangeKeepsOriginalMessageId()
+{
+    constexpr PacketId messageId = 0xD00DFEED;
+    meshtastic_QueueStatus queueStatus = meshtastic_QueueStatus_init_zero;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, mockService->sendQueueStatusToPhone(queueStatus, ERRNO_OK, messageId,
+                                                                    meshtastic_QueueStatus_State_KEY_EXCHANGE));
+
+    meshtastic_QueueStatus *reported = mockService->getQueueStatusForPhone();
+    TEST_ASSERT_NOT_NULL(reported);
+    TEST_ASSERT_EQUAL_UINT32(messageId, reported->mesh_packet_id);
+    TEST_ASSERT_EQUAL(meshtastic_QueueStatus_State_KEY_EXCHANGE, reported->state);
+    mockService->releaseQueueStatusToPool(reported);
+}
+
 // Full loop: a phone-originated want_response request (from == 0, RX_SRC_USER) dispatched
 // through the real router must produce a module reply that reaches the phone queue.
 static void test_phoneRequest_replyReachesPhone()
@@ -736,6 +751,7 @@ void setup()
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
+    RUN_TEST(test_queueStatus_keyExchangeKeepsOriginalMessageId);
     RUN_TEST(test_phoneRequest_replyReachesPhone);
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);

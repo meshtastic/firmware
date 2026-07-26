@@ -181,7 +181,7 @@ class MeshService
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
     /// cache
-    void sendToMesh(meshtastic_MeshPacket *p, RxSource src = RX_SRC_LOCAL, bool ccToPhone = false);
+    void sendToMesh(meshtastic_MeshPacket *p, RxSource src = RX_SRC_LOCAL, bool ccToPhone = false, bool reportQueueStatus = true);
 
     /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
     bool cancelSending(PacketId id);
@@ -203,7 +203,8 @@ class MeshService
 
     bool isToPhoneQueueEmpty();
 
-    ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
+    ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id,
+                                     meshtastic_QueueStatus_State state = meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
 
     uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
 
