@@ -6,6 +6,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#include "ConfigCheck.h"
 #include "PortduinoGlue.h"
 #include "SHA256.h"
 #include "api/ServerAPI.h"
@@ -65,6 +66,9 @@ char *configPath = nullptr;
 char *optionMac = nullptr;
 bool verboseEnabled = false;
 bool yamlOnly = false;
+bool configCheck = false;
+// Every config file we attempted to load, in load order, for --check to report on.
+std::vector<std::string> attemptedConfigFiles;
 
 const char *argp_program_version = optstr(APP_VERSION);
 
@@ -86,9 +90,16 @@ void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 int TCPPort = SERVER_API_DEFAULT_PORT;
 bool checkConfigPort = true;
 
+// Long-only option: argp treats any key above the printable ASCII range as having no
+// single-character equivalent.
+#define OPT_CONFIG_CHECK 1001
+
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     switch (key) {
+    case OPT_CONFIG_CHECK:
+        configCheck = true;
+        break;
     case 'p':
         if (sscanf(arg, "%d", &TCPPort) < 1) {
             return ARGP_ERR_UNKNOWN;
@@ -160,13 +171,15 @@ static void checkSpidevBufsiz()
 
 void portduinoCustomInit()
 {
-    static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."},
-                                           {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
-                                           {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
-                                           {"sim", 's', 0, 0, "Run in Simulated radio mode"},
-                                           {"verbose", 'v', 0, 0, "Set log level to full debug"},
-                                           {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
-                                           {0}};
+    static struct argp_option options[] = {
+        {"port", 'p', "PORT", 0, "The TCP port to use."},
+        {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
+        {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
+        {"sim", 's', 0, 0, "Run in Simulated radio mode"},
+        {"verbose", 'v', 0, 0, "Set log level to full debug"},
+        {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
+        {"check", OPT_CONFIG_CHECK, 0, 0, "Check the configuration for problems, print a report, and exit"},
+        {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
     static char args_doc[] = "...";
@@ -310,7 +323,7 @@ void portduinoSetup()
         portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using " << configPath << " as config file" << std::endl;
         } else {
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
@@ -318,7 +331,7 @@ void portduinoSetup()
         }
     } else if (access("config.yaml", R_OK) == 0) {
         if (loadConfig("config.yaml")) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using local config.yaml as config file" << std::endl;
         } else {
             std::cout << "Unable to use local config.yaml as config file" << std::endl;
@@ -326,14 +339,14 @@ void portduinoSetup()
         }
     } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
         if (loadConfig("/etc/meshtasticd/config.yaml")) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
         } else {
             std::cout << "Unable to use /etc/meshtasticd/config.yaml as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else {
-        if (!yamlOnly)
+        if (!yamlOnly && !configCheck)
             std::cout << "No 'config.yaml' found..." << std::endl;
         portduino_config.lora_module = use_simradio;
     }
@@ -343,7 +356,8 @@ void portduinoSetup()
         for (const std::filesystem::directory_entry &entry :
              std::filesystem::directory_iterator{portduino_config.config_directory}) {
             if (ends_with(entry.path().string(), ".yaml")) {
-                std::cout << "Also using " << entry << " as additional config file" << std::endl;
+                if (!configCheck)
+                    std::cout << "Also using " << entry << " as additional config file" << std::endl;
                 // .string() rather than .c_str(): path::value_type is wchar_t on
                 // Windows, and loadConfig() takes a const char *.
                 loadConfig(entry.path().string().c_str());
@@ -356,6 +370,9 @@ void portduinoSetup()
         std::cout << portduino_config.emit_yaml() << std::endl;
         exit(EXIT_SUCCESS);
     }
+
+    if (configCheck)
+        exit(runConfigCheck(attemptedConfigFiles));
 #endif
 
     if (portduino_config.force_simradio) {
@@ -828,6 +845,10 @@ bool loadConfig(const char *configPath)
 #else
 bool loadConfig(const char *configPath)
 {
+    // Recorded even when the load below fails: a file that cannot be parsed is
+    // skipped silently for config.d entries, which is exactly what --check reports.
+    attemptedConfigFiles.push_back(configPath);
+
     YAML::Node yamlConfig;
     try {
         yamlConfig = YAML::LoadFile(configPath);
