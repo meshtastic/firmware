@@ -1485,8 +1485,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
         return 0;
     }
 
-    if (p->encrypted.size > sizeof(radioBuffer.payload)) {
-        LOG_ERROR("Packet payload size %u exceeds radioBuffer capacity %zu", p->encrypted.size, sizeof(radioBuffer.payload));
+    if (static_cast<size_t>(p->encrypted.size) > sizeof(radioBuffer.payload)) {
+        LOG_ERROR("Packet payload size %zu exceeds radioBuffer capacity %zu", static_cast<size_t>(p->encrypted.size), sizeof(radioBuffer.payload));
         packetPool.release(p);
         return 0;
     }

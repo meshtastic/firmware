@@ -371,12 +371,13 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
     // Set encrypted size larger than sizeof(radioBuffer.payload) (which is 256 - sizeof(PacketHeader))
     p->encrypted.size = testRadio->getRadioBufferPayloadCapacity() + 10;
 
+    uint32_t activeBefore = packetPool.getNumActive();
     size_t result = testRadio->beginSending(p);
+    uint32_t activeAfter = packetPool.getNumActive();
 
     TEST_ASSERT_EQUAL_UINT(0, result);
     TEST_ASSERT_NULL(testRadio->getSendingPacket());
-
-}
+    TEST_ASSERT_EQUAL_UINT(activeBefore - 1, activeAfter);
 
 static void test_deliverToReceiver_nullRouterReleasesPacket()
 {
@@ -384,12 +385,13 @@ static void test_deliverToReceiver_nullRouterReleasesPacket()
     TEST_ASSERT_NOT_NULL(p);
     p->id = 0xabcdef01;
 
+    auto *savedRouter = router;
     router = nullptr;
 
     uint32_t activeBefore = packetPool.getNumActive();
     testRadio->deliverToReceiverPublic(p);
+    router = savedRouter;
     uint32_t activeAfter = packetPool.getNumActive();
-
     // Packet p should have been released back to pool, decreasing active count by 1
     TEST_ASSERT_EQUAL_UINT(activeBefore - 1, activeAfter);
 }
