@@ -27,7 +27,10 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
         return false;
     relay->hop_limit--;
     relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
-    return Router::send(relay) == ERRNO_OK;
+    ErrorCode res = Router::send(relay);
+    if (res == ERRNO_SHOULD_RELEASE)
+        packetPool.release(relay);
+    return res == ERRNO_OK;
 }
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
@@ -483,7 +486,10 @@ int32_t NextHopRouter::doRetransmissions()
 
 void NextHopRouter::setNextTx(PendingPacket *pending)
 {
-    assert(iface);
+    if (!iface) {
+        LOG_WARN("setNextTx: no interface, cannot schedule retransmission");
+        return;
+    }
     auto d = iface->getRetransmissionMsec(pending->packet);
     pending->nextTxMsec = millis() + d;
     LOG_DEBUG("Setting next retransmission in %u msecs: ", d);

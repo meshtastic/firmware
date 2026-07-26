@@ -451,6 +451,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
     }
 
@@ -495,7 +496,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
-    assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+    if (!iface) {
+        // assert() here hangs forever on STM32WL with no diagnostic; NAK like every other error path instead.
+        abortSendAndNak(meshtastic_Routing_Error_NO_INTERFACE, p);
+        return ERRNO_NO_INTERFACES;
+    }
     return iface->send(p);
 }
 
