@@ -103,7 +103,7 @@ template <class T> class MemoryDynamic : public Allocator<T>
         if (p == nullptr)
             return;
 
-        LOG_HEAP("Freeing 0x%x", p);
+        LOG_HEAP("Freeing %p", static_cast<void *>(p));
 
         this->auditAdd(-(int32_t)sizeof(T));
         free(p);
@@ -151,21 +151,21 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         // Find the index of this pointer in our pool
         uintptr_t offset = reinterpret_cast<uintptr_t>(p) - reinterpret_cast<uintptr_t>(pool);
         if (offset % sizeof(T) != 0) {
-            LOG_WARN("Pointer 0x%x is misaligned inside static pool!", p);
+            LOG_WARN("Pointer %p is misaligned inside static pool!", static_cast<void *>(p));
             return;
         }
 
         int index = offset / sizeof(T);
         if (index >= 0 && index < MaxSize) {
             if (!used[index]) {
-                LOG_WARN("Double free detected for pool item %d at 0x%x", index, p);
+                LOG_WARN("Double free detected for pool item %d at %p", index, static_cast<void *>(p));
                 return;
             }
             used[index] = false;
             this->auditAdd(-(int32_t)sizeof(T));
-            LOG_HEAP("Released static pool item %d at 0x%x", index, p);
+            LOG_HEAP("Released static pool item %d at %p", index, static_cast<void *>(p));
         } else {
-            LOG_WARN("Pointer 0x%x not from our pool!", p);
+            LOG_WARN("Pointer %p not from our pool!", static_cast<void *>(p));
         }
     }
 
@@ -178,7 +178,7 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
             if (!used[i]) {
                 used[i] = true;
                 this->auditAdd((int32_t)sizeof(T));
-                LOG_HEAP("Allocated static pool item %d at 0x%x", i, &pool[i]);
+                LOG_HEAP("Allocated static pool item %d at %p", i, static_cast<void *>(&pool[i]));
                 return &pool[i];
             }
         }
