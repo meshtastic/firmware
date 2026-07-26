@@ -2312,6 +2312,42 @@ void test_M21_pki_admin_routing_reply_remains_pki_encrypted(void)
     admin.drainReply();
 }
 
+void test_M22_redeferred_dm_reports_key_exchange_state(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePublic);
+
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    dm->id = 0xD00D0025;
+    dm->want_ack = true;
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineService->sendToMesh(dm, RX_SRC_USER, false, true));
+    meshtastic_MeshPacket nodeInfoRequest = pipelineRadio->sentPackets.back();
+    while (meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone())
+        pipelineService->releaseQueueStatusToPool(status);
+
+    mockNodeDB->clearTestNodes();
+    meshtastic_MeshPacket nodeInfoResponse = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    nodeInfoResponse.decoded.request_id = nodeInfoRequest.id;
+    meshtastic_User responseUser = meshtastic_User_init_zero;
+    responseUser.is_licensed = owner.is_licensed;
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
+
+    meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone();
+    TEST_ASSERT_NOT_NULL(status);
+    TEST_ASSERT_EQUAL_HEX32(0xD00D0025, status->mesh_packet_id);
+    TEST_ASSERT_EQUAL(ERRNO_OK, status->res);
+    TEST_ASSERT_EQUAL(meshtastic_QueueStatus_State_KEY_EXCHANGE, status->state);
+    pipelineService->releaseQueueStatusToPool(status);
+    pipelineRouter->clearDeferredDmsForTest();
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2700,6 +2736,7 @@ void setup()
     RUN_TEST(test_M19_deferred_dm_reports_the_resumed_send_result);
     RUN_TEST(test_M20_weak_signed_destination_key_is_not_replaced_by_unsigned_nodeinfo);
     RUN_TEST(test_M21_pki_admin_routing_reply_remains_pki_encrypted);
+    RUN_TEST(test_M22_redeferred_dm_reports_key_exchange_state);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

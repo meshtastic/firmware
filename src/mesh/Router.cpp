@@ -385,7 +385,9 @@ bool Router::retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p)
         LOG_INFO("NodeInfo exchange with 0x%08x completed; retrying deferred DM id=0x%08x", p.from, dm->id);
         rememberPeerKeyExchangeAttempt(dm->to);
         const ErrorCode result = send(dm);
-        service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
+        const auto state =
+            isDeferredDm(dmId) ? meshtastic_QueueStatus_State_KEY_EXCHANGE : meshtastic_QueueStatus_State_STATE_UNSPECIFIED;
+        service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, state);
         retried = true;
     }
     return retried;
@@ -1514,7 +1516,9 @@ void Router::processDeferredDms()
                 rememberPeerKeyExchangeAttempt(p->to);
                 const PacketId dmId = p->id;
                 const ErrorCode result = send(p);
-                service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
+                const auto state = isDeferredDm(dmId) ? meshtastic_QueueStatus_State_KEY_EXCHANGE
+                                                      : meshtastic_QueueStatus_State_STATE_UNSPECIFIED;
+                service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, state);
             }
             continue;
         }
@@ -1527,7 +1531,9 @@ void Router::processDeferredDms()
             LOG_INFO("Peer key learned for 0x%08x; retrying deferred DM id=0x%08x", p->to, p->id);
             const PacketId dmId = p->id;
             const ErrorCode result = send(p);
-            service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
+            const auto state =
+                isDeferredDm(dmId) ? meshtastic_QueueStatus_State_KEY_EXCHANGE : meshtastic_QueueStatus_State_STATE_UNSPECIFIED;
+            service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, state);
         } else if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmKeyWaitMs)) {
             deferred.p = nullptr;
             deferred.queuedAtMs = 0;
