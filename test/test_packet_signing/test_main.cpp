@@ -225,7 +225,8 @@ static AuthPipelineRoutingModule *pipelineRouting = nullptr;
 static AuthPipelineModule *pipelineModule = nullptr;
 static AuthPipelineMqtt *pipelineMqtt = nullptr;
 static MeshService *pipelineService = nullptr;
-static NodeInfoModule *dmKeyWaitNodeInfo = nullptr;
+class NodeInfoTestShim;
+static NodeInfoTestShim *dmKeyWaitNodeInfo = nullptr;
 static AirTime *dmKeyWaitAirTime = nullptr;
 #if ARCH_PORTDUINO
 static bool dmKeyWaitOriginalForceSimRadio = false;
@@ -414,6 +415,7 @@ void setUp(void)
     channels.onConfigChanged();
 
     pipelineRouter->clearPending();
+    pipelineRouter->resetPeerKeyRetriesForTest();
     pipelineRouter->rxDupe = 0;
     pipelineRouter->txRelayCanceled = 0;
     pipelineRadio->reset();
@@ -957,6 +959,11 @@ class NodeInfoTestShim : public NodeInfoModule
 {
   public:
     using NodeInfoModule::handleReceivedProtobuf;
+
+    bool rejectReplies = false;
+
+  protected:
+    meshtastic_MeshPacket *allocReply() override { return rejectReplies ? nullptr : NodeInfoModule::allocReply(); }
 };
 
 static meshtastic_MeshPacket makeNodeInfoPacket(bool signed_)
@@ -1361,7 +1368,8 @@ static void enablePkiForLocalNode()
 static void enableNodeInfoForDmKeyWait()
 {
     if (!dmKeyWaitNodeInfo)
-        dmKeyWaitNodeInfo = new NodeInfoModule();
+        dmKeyWaitNodeInfo = new NodeInfoTestShim();
+    dmKeyWaitNodeInfo->rejectReplies = false;
     if (!dmKeyWaitAirTime)
         dmKeyWaitAirTime = new AirTime();
     nodeInfoModule = dmKeyWaitNodeInfo;
@@ -1399,10 +1407,13 @@ void test_M1_unknown_dm_waits_for_nodeinfo_key_exchange_then_retries(void)
     uint8_t remotePublic[32], remotePrivate[32];
     crypto->generateKeyPair(remotePublic, remotePrivate);
     crypto->setDHPrivateKey(config.security.private_key.bytes);
-    mockNodeDB->addNode(REMOTE_NODE);
-    mockNodeDB->setPublicKey(REMOTE_NODE, remotePublic);
-
-    pipelineRouter->processDeferredDmsForTest();
+    meshtastic_MeshPacket nodeInfoResponse = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    nodeInfoResponse.decoded.request_id = nodeInfoRequest.id;
+    meshtastic_User responseUser = meshtastic_User_init_zero;
+    responseUser.is_licensed = owner.is_licensed;
+    responseUser.public_key.size = sizeof(remotePublic);
+    memcpy(responseUser.public_key.bytes, remotePublic, sizeof(remotePublic));
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
     TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
     TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
     TEST_ASSERT_TRUE_MESSAGE(pipelineRadio->sentPackets.back().pki_encrypted,
@@ -1518,8 +1529,18 @@ void test_M4_peer_missing_our_key_retries_original_dm_after_nodeinfo(void)
                              "duplicate key-exchange NAK stays off the client while the exchange is pending");
     TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
 
-    pipelineRouter->retryDeferredDmsForTest();
-    pipelineRouter->processDeferredDmsForTest();
+    meshtastic_MeshPacket nodeInfoResponse = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    nodeInfoResponse.decoded.request_id = nodeInfo.id + 1;
+    meshtastic_User responseUser = meshtastic_User_init_zero;
+    responseUser.is_licensed = owner.is_licensed;
+    responseUser.public_key.size = sizeof(remotePublic);
+    memcpy(responseUser.public_key.bytes, remotePublic, sizeof(remotePublic));
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
+
+    nodeInfoResponse.decoded.request_id = nodeInfo.id;
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
     TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
     TEST_ASSERT_EQUAL(1, pipelineRouter->pendingCount());
     TEST_ASSERT_EQUAL(3, pipelineRadio->sendCalls);
@@ -1566,6 +1587,94 @@ void test_M5_peer_key_mismatch_does_not_auto_retry(void)
     TEST_ASSERT_EQUAL(0, pipelineRouter->pendingCount());
     TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
     TEST_ASSERT_FALSE(pipelineRouter->shouldSuppressRoutingDelivery(nak));
+}
+
+void test_M6_peer_missing_our_key_retries_after_nodeinfo_response_timeout(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePublic);
+
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    dm->want_ack = true;
+    const PacketId originalDmId = dm->id;
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+
+    meshtastic_MeshPacket nak = meshtastic_MeshPacket_init_zero;
+    nak.from = REMOTE_NODE;
+    nak.to = LOCAL_NODE;
+    nak.id = 0xD00D0006;
+    nak.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    nak.decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+    nak.decoded.request_id = originalDmId;
+    meshtastic_Routing routing = meshtastic_Routing_init_zero;
+    routing.error_reason = meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY;
+
+    pipelineRouter->sniff(&nak, &routing);
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
+
+    pipelineRouter->retryDeferredDmsForTest();
+    pipelineRouter->processDeferredDmsForTest();
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRouter->pendingCount());
+    TEST_ASSERT_EQUAL(3, pipelineRadio->sendCalls);
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRadio->sentPackets.back().id);
+}
+
+void test_M7_missing_recipient_key_fails_when_nodeinfo_cannot_queue(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    dmKeyWaitNodeInfo->rejectReplies = true;
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    dm->want_ack = true;
+    const PacketId originalDmId = dm->id;
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(0, pipelineRadio->sendCalls);
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouting->lastAckError);
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRouting->lastAckId);
+}
+
+void test_M8_nodeinfo_reply_without_key_keeps_dm_deferred(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    dm->want_ack = true;
+    const PacketId originalDmId = dm->id;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    meshtastic_MeshPacket nodeInfoRequest = pipelineRadio->sentPackets.back();
+
+    meshtastic_MeshPacket nodeInfoResponse = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    nodeInfoResponse.decoded.request_id = nodeInfoRequest.id;
+    meshtastic_User responseUser = meshtastic_User_init_zero;
+    responseUser.is_licensed = owner.is_licensed;
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+
+    pipelineRouter->expireDeferredDmsForTest();
+    pipelineRouter->processDeferredDmsForTest();
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouting->lastAckError);
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRouting->lastAckId);
 }
 
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
@@ -1936,6 +2045,9 @@ void setup()
     RUN_TEST(test_M3_undecryptable_dm_reports_key_state_not_no_channel);
     RUN_TEST(test_M4_peer_missing_our_key_retries_original_dm_after_nodeinfo);
     RUN_TEST(test_M5_peer_key_mismatch_does_not_auto_retry);
+    RUN_TEST(test_M6_peer_missing_our_key_retries_after_nodeinfo_response_timeout);
+    RUN_TEST(test_M7_missing_recipient_key_fails_when_nodeinfo_cannot_queue);
+    RUN_TEST(test_M8_nodeinfo_reply_without_key_keeps_dm_deferred);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

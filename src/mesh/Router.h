@@ -77,6 +77,9 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Consume a routing packet that firmware handled as an internal DM key exchange step.
     bool shouldSuppressRoutingDelivery(const meshtastic_MeshPacket &p);
 
+    /// Retry a deferred DM early when its directed NodeInfo exchange completes.
+    bool retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p);
+
     /**
      * @return our local nodenum */
     [[nodiscard]] NodeNum getNodeNum();
@@ -228,6 +231,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
         meshtastic_MeshPacket *p = nullptr;
         uint32_t queuedAtMs = 0;
+        PacketId keyExchangeId = 0;
         Reason reason = Reason::DESTINATION_KEY;
     };
 
@@ -281,6 +285,11 @@ class Router : protected concurrency::OSThread, protected PacketHistory
             if (deferred.p && deferred.reason == DeferredDm::Reason::PEER_KEY)
                 deferred.queuedAtMs = millis() - deferredDmPeerKeyWaitMs;
         }
+    }
+    void resetPeerKeyRetriesForTest()
+    {
+        for (auto &retry : peerKeyRetries)
+            retry = {};
     }
 #endif
 #endif

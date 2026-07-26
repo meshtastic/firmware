@@ -65,6 +65,9 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // NodeInfo), so the exchange above still proceeds but cannot spoof the stored name.
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel, mp.xeddsa_signed);
 
+    if (router)
+        router->retryDeferredDmOnNodeInfo(mp);
+
     bool wasBroadcast = isBroadcast(mp.to);
 
     // LOG_DEBUG("did encode");
@@ -96,7 +99,7 @@ void NodeInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
         pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_User_msg, p);
 }
 
-void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout, bool _force)
+PacketId NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout, bool _force)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
@@ -128,12 +131,15 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         prevPacketId = p->id;
 
         service->sendToMesh(p, RX_SRC_LOCAL, false, false);
+        return prevPacketId;
     }
+
+    return 0;
 }
 
-void NodeInfoModule::requestNodeInfo(NodeNum dest, uint8_t channel)
+PacketId NodeInfoModule::requestNodeInfo(NodeNum dest, uint8_t channel)
 {
-    sendOurNodeInfo(dest, true, channel, true, true);
+    return sendOurNodeInfo(dest, true, channel, true, true);
 }
 
 void NodeInfoModule::triggerImmediateNodeInfoCheck()

@@ -356,6 +356,39 @@ bool Router::shouldSuppressRoutingDelivery(const meshtastic_MeshPacket &p)
     return false;
 }
 
+bool Router::retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p)
+{
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    if (!isToUs(&p) || p.which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
+        p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP || !p.decoded.request_id)
+        return false;
+
+    for (auto &deferred : deferredDms) {
+        if (!deferred.p || deferred.p->to != p.from || deferred.keyExchangeId != p.decoded.request_id)
+            continue;
+
+        meshtastic_MeshPacket *dm = deferred.p;
+        if (deferred.reason == DeferredDm::Reason::DESTINATION_KEY) {
+            meshtastic_NodeInfoLite_public_key_t remoteKey = {0, {0}};
+            if (!nodeDB->copyPublicKey(dm->to, remoteKey))
+                return false;
+        }
+        deferred.p = nullptr;
+        deferred.queuedAtMs = 0;
+        deferred.keyExchangeId = 0;
+        LOG_INFO("NodeInfo exchange with 0x%08x completed; retrying deferred DM id=0x%08x", p.from, dm->id);
+        if (deferred.reason == DeferredDm::Reason::PEER_KEY)
+            rememberPeerKeyRetry(dm->to, dm->id);
+        service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, dm->id, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
+        send(dm);
+        return true;
+    }
+#else
+    (void)p;
+#endif
+    return false;
+}
+
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
     if (p->to == 0) {
@@ -1289,11 +1322,15 @@ bool Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
         if (deferred.p)
             continue;
 
+        const PacketId keyExchangeId = nodeInfoModule->requestNodeInfo(p->to, p->channel);
+        if (!keyExchangeId)
+            return false;
+
         deferred.p = p;
         deferred.queuedAtMs = millis();
+        deferred.keyExchangeId = keyExchangeId;
         deferred.reason = DeferredDm::Reason::DESTINATION_KEY;
         LOG_INFO("Deferring DM id=0x%08x to 0x%08x while requesting NodeInfo", p->id, p->to);
-        nodeInfoModule->requestNodeInfo(p->to, p->channel);
         setInterval(0);
         runASAP = true;
         return true;
@@ -1313,11 +1350,15 @@ bool Router::deferPeerKeyDm(meshtastic_MeshPacket *p)
         if (deferred.p)
             continue;
 
+        const PacketId keyExchangeId = nodeInfoModule->sendOurNodeInfo(p->to, false, p->channel, true, true);
+        if (!keyExchangeId)
+            return false;
+
         deferred.p = p;
         deferred.queuedAtMs = millis();
+        deferred.keyExchangeId = keyExchangeId;
         deferred.reason = DeferredDm::Reason::PEER_KEY;
         LOG_INFO("Deferring DM id=0x%08x while peer 0x%08x learns our NodeInfo", p->id, p->to);
-        nodeInfoModule->sendOurNodeInfo(p->to, false, p->channel, true, true);
         service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, p->id, meshtastic_QueueStatus_State_KEY_EXCHANGE);
         setInterval(0);
         runASAP = true;
@@ -1379,6 +1420,7 @@ void Router::processDeferredDms()
             if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmPeerKeyWaitMs)) {
                 deferred.p = nullptr;
                 deferred.queuedAtMs = 0;
+                deferred.keyExchangeId = 0;
                 LOG_INFO("Retrying deferred DM id=0x%08x after sharing our NodeInfo with 0x%08x", p->id, p->to);
                 rememberPeerKeyRetry(p->to, p->id);
                 service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, p->id,
@@ -1392,12 +1434,14 @@ void Router::processDeferredDms()
         if (nodeDB->copyPublicKey(p->to, remoteKey)) {
             deferred.p = nullptr;
             deferred.queuedAtMs = 0;
+            deferred.keyExchangeId = 0;
             LOG_INFO("Peer key learned for 0x%08x; retrying deferred DM id=0x%08x", p->to, p->id);
             service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, p->id, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
             send(p);
         } else if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmKeyWaitMs)) {
             deferred.p = nullptr;
             deferred.queuedAtMs = 0;
+            deferred.keyExchangeId = 0;
             LOG_WARN("No public key learned for 0x%08x before deferred DM id=0x%08x timed out", p->to, p->id);
             abortSendAndNak(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, p);
         }
