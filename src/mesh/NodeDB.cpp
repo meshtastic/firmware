@@ -2215,8 +2215,8 @@ void NodeDB::loadFromDisk()
     spiLock->lock();
     eventConfigMissing = !FSCom.exists(configFileName);
     if (eventConfigMissing) {
-        const size_t totalBytes = FSCom.totalBytes();
-        const size_t usedBytes = FSCom.usedBytes();
+        const size_t totalBytes = fsTotalBytes();
+        const size_t usedBytes = fsUsedBytes();
         eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
         if (eventProfileStorageUnavailable) {
             LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",

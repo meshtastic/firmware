@@ -12,6 +12,83 @@
 #include "SPILock.h"
 #include "configuration.h"
 
+#if defined(ARCH_PORTDUINO)
+#include <sys/statvfs.h>
+#endif
+
+#if defined(ARCH_NRF52) || defined(ARCH_STM32)
+// Adafruit_LittleFS (nRF52) and STM32_LittleFS both wrap littlefs v1, which predates lfs_fs_size().
+// Count the blocks currently in use with lfs_traverse() instead.
+static int fsCountBlockCb(void *ctx, lfs_block_t)
+{
+    *static_cast<size_t *>(ctx) += 1;
+    return 0;
+}
+
+size_t fsTotalBytes()
+{
+    lfs_t *fs = FSCom._getFS();
+    if (!fs || !fs->cfg)
+        return 0;
+    return (size_t)fs->cfg->block_count * (size_t)fs->cfg->block_size;
+}
+
+size_t fsUsedBytes()
+{
+    lfs_t *fs = FSCom._getFS();
+    if (!fs || !fs->cfg)
+        return 0;
+    size_t blocks = 0;
+    FSCom._lockFS();
+    int err = lfs_traverse(fs, fsCountBlockCb, &blocks);
+    FSCom._unlockFS();
+    if (err < 0)
+        return fsTotalBytes(); // report "full" so capacity checks fail safe
+    return blocks * (size_t)fs->cfg->block_size;
+}
+#elif defined(ARCH_RP2040)
+// arduino-pico reports capacity through FSInfo rather than as methods.
+size_t fsTotalBytes()
+{
+    FSInfo info;
+    return FSCom.info(info) ? (size_t)info.totalBytes : 0;
+}
+
+size_t fsUsedBytes()
+{
+    FSInfo info;
+    return FSCom.info(info) ? (size_t)info.usedBytes : 0;
+}
+#elif defined(ARCH_PORTDUINO)
+// Portduino is backed by the host filesystem; ask the OS about the volume holding the working directory.
+size_t fsTotalBytes()
+{
+    struct statvfs st;
+    if (statvfs(".", &st) != 0)
+        return 0;
+    return (size_t)st.f_blocks * (size_t)st.f_frsize;
+}
+
+size_t fsUsedBytes()
+{
+    struct statvfs st;
+    if (statvfs(".", &st) != 0)
+        return 0;
+    return (size_t)(st.f_blocks - st.f_bfree) * (size_t)st.f_frsize;
+}
+#else
+// ESP32 LittleFS and the nRF54L15 wrapper expose these directly.
+size_t fsTotalBytes()
+{
+    return FSCom.totalBytes();
+}
+
+size_t fsUsedBytes()
+{
+    return FSCom.usedBytes();
+}
+#endif
+
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 #include <SD.h>
