@@ -677,6 +677,8 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 - `test_radio/` - Radio interface
 - `test_rtc/` - RTC / time handling
 - `test_serial/` - Serial communication
+- `test_tak_config/` - TAK (ATAK) team/role value fidelity through set/save/load/get
+- `test_module_config/` - every ModuleConfig submessage survives admin set -> save -> load -> get
 - `test_traffic_management/` - Traffic management (dedup, rate-limit, hop-trim, role exceptions)
 - `test_transmit_history/` - Retransmission tracking
 - `test_type_conversions/` - NodeDB v25 type conversion (bitfield round-trips, NodeInfoLite)
