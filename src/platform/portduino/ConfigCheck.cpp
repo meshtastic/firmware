@@ -537,9 +537,34 @@ std::string moduleName()
     return it == portduino_config.loraModules.end() ? "unknown" : it->second;
 }
 
+// A pin key that is present but whose value will not convert to a number falls back
+// to RADIOLIB_NC (-1) while still being marked enabled, and initGPIOPin() then trips
+// an assertion inside LinuxGPIOPin rather than failing cleanly. Catching it here is
+// the difference between a readable report and a stack trace from a library file.
+void checkPinValues(std::vector<Finding> &findings)
+{
+    const std::string merged = "(merged configuration)";
+
+    auto report = [&](const std::string &name) {
+        findings.push_back({kError, merged, 0,
+                            name + " is set, but its value could not be read as a pin number so it resolves to -1. "
+                                   "meshtasticd aborts with an assertion when it tries to claim that line. Check for a "
+                                   "non-numeric value, or a stray line folded into it by YAML indentation"});
+    };
+
+    for (const auto *pin : portduino_config.all_pins)
+        if (pin->enabled && pin->pin < 0)
+            report(pin->config_section + "." + pin->config_name);
+    for (const auto &pin : portduino_config.extra_pins)
+        if (pin.enabled && pin.pin < 0)
+            report(pin.config_section + "." + pin.config_name);
+}
+
 void checkMergedConfig(std::vector<Finding> &findings)
 {
     const std::string merged = "(merged configuration)";
+
+    checkPinValues(findings);
 
     if (isLR11xx(portduino_config.lora_module) && !portduino_config.has_rfswitch_table)
         findings.push_back({kWarn, merged, 0,

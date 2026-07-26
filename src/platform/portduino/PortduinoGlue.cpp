@@ -845,8 +845,9 @@ bool loadConfig(const char *configPath)
 #else
 bool loadConfig(const char *configPath)
 {
-    // Recorded even when the load below fails: a file that cannot be parsed is
-    // skipped silently for config.d entries, which is exactly what --check reports.
+    // Recorded even when the load below fails. A config.d entry that will not parse
+    // is reported here as "*** Exception ..." and then skipped, and its return value
+    // is discarded by the caller, so --check needs to know it was attempted.
     attemptedConfigFiles.push_back(configPath);
 
     YAML::Node yamlConfig;
