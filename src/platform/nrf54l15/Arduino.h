@@ -1,5 +1,5 @@
 /**
- * Arduino.h — Zephyr compatibility shim for nRF54L15
+ * Arduino.h - Zephyr compatibility shim for nRF54L15
  *
  * Provides the Arduino API surface expected by Meshtastic, backed by
  * Zephyr primitives.  Only the subset actually used by Meshtastic is
@@ -69,7 +69,7 @@ typedef uint16_t word;
 #define bit(b) (1UL << (b))
 #define lowByte(w) ((uint8_t)((w)&0xff))
 #define highByte(w) ((uint8_t)((w) >> 8))
-// word(h,l) — only define if not already defined (conflicts with typedef above)
+// word(h,l) - only define if not already defined (conflicts with typedef above)
 #undef word
 #define word(h, l) ((uint16_t)(((h) << 8) | (l)))
 
@@ -121,11 +121,11 @@ static inline void interrupts() {}
 static inline void noInterrupts() {}
 #define digitalPinToInterrupt(p) (p)
 
-// ── portMAX_DELAY — freertosinc.h also defines this; let it win ──────────────
+// ── portMAX_DELAY - freertosinc.h also defines this; let it win ──────────────
 // We intentionally do NOT define portMAX_DELAY here.  freertosinc.h defines
 // it for the FreeRTOS / Meshtastic threading layer and must not be overridden.
 
-// ── Timing & system functions — declared with C linkage ──────────────────────
+// ── Timing & system functions - declared with C linkage ──────────────────────
 // buzz.cpp and others forward-declare delay() as extern "C"; keep linkage
 // consistent by wrapping in extern "C" here.
 #ifdef __cplusplus
@@ -146,7 +146,7 @@ void yield(void);
 #include <cctype>
 #include <cstdarg>
 
-// ── C++ STL — include BEFORE defining any min/max helpers ───────────────────
+// ── C++ STL - include BEFORE defining any min/max helpers ───────────────────
 // Include algorithm first so its min/max templates are in scope.
 // We must NOT define min/max as function-like macros: the C++ STL uses
 // 3-argument versions (min(a,b,comp)) that the preprocessor would treat as
@@ -188,7 +188,7 @@ static inline long random(long lo, long hi)
     return hi > lo ? lo + rand() % (hi - lo) : lo;
 }
 
-// ── GPIO — real Zephyr implementation (Phase 3) ──────────────────────────────
+// ── GPIO - real Zephyr implementation (Phase 3) ──────────────────────────────
 // Implemented in nrf54l15_arduino.cpp using Zephyr GPIO/SPI APIs.
 // Pin numbering: P0.n = n, P1.n = 16+n, P2.n = 32+n
 void pinMode(uint32_t pin, uint32_t mode);
@@ -206,12 +206,12 @@ static inline void analogWrite(uint32_t, uint32_t) {}
 static inline void analogReadResolution(int) {}
 static inline void analogWriteResolution(int) {}
 
-// ── __WFI — provided by CMSIS core_cm33.h; do NOT redefine here ─────────────
+// ── __WFI - provided by CMSIS core_cm33.h; do NOT redefine here ─────────────
 
-// ── __FlashStringHelper — Arduino PROGMEM string class (no-op on Cortex-M) ──
+// ── __FlashStringHelper - Arduino PROGMEM string class (no-op on Cortex-M) ──
 class __FlashStringHelper;
 
-// ── attachInterrupt / detachInterrupt — real Zephyr GPIO interrupt impl ──────
+// ── attachInterrupt / detachInterrupt - real Zephyr GPIO interrupt impl ──────
 typedef void (*voidFuncPtr)(void);
 void attachInterrupt(uint32_t pin, voidFuncPtr cb, int mode);
 void detachInterrupt(uint32_t pin);
@@ -685,7 +685,7 @@ class HardwareSerial : public Stream
     String readStringUntil(char) { return String(); }
 };
 
-// Uart — nRF52 BSP alias for HardwareSerial (used by GPS.h when ARCH_NRF52)
+// Uart - nRF52 BSP alias for HardwareSerial (used by GPS.h when ARCH_NRF52)
 typedef HardwareSerial Uart;
 
 extern HardwareSerial Serial;
@@ -715,7 +715,7 @@ static inline unsigned long pulseIn(uint8_t, uint8_t, unsigned long = 1000000UL)
     return 0;
 }
 
-// ── strdup / stpcpy — POSIX extensions not in Zephyr newlib ─────────────────
+// ── strdup / stpcpy - POSIX extensions not in Zephyr newlib ─────────────────
 #ifndef strdup
 static inline char *strdup(const char *s)
 {
@@ -735,14 +735,14 @@ static inline char *stpcpy(char *dst, const char *src)
 }
 #endif
 
-// ── strnstr — BSD extension not in Zephyr libc; defined in meshUtils.cpp ─────
+// ── strnstr - BSD extension not in Zephyr libc; defined in meshUtils.cpp ─────
 // Declare here so callers (GPS.cpp etc.) don't need ARCH_PORTDUINO.
 #ifndef STRNSTR
 #define STRNSTR
 char *strnstr(const char *s, const char *find, size_t slen);
 #endif
 
-// ── strlcpy — BSD extension; implementation in nrf54l15_arduino.cpp ──────────
+// ── strlcpy - BSD extension; implementation in nrf54l15_arduino.cpp ──────────
 #ifndef HAVE_STRLCPY
 #define HAVE_STRLCPY
 #ifdef __cplusplus
@@ -754,7 +754,7 @@ size_t strlcpy(char *dst, const char *src, size_t size);
 #endif
 #endif
 
-// ── setenv / getenv / tzset — Zephyr stubs for timezone support ──────────────
+// ── setenv / getenv / tzset - Zephyr stubs for timezone support ──────────────
 #include <stdlib.h>
 static inline int setenv(const char *, const char *, int)
 {
@@ -762,7 +762,7 @@ static inline int setenv(const char *, const char *, int)
 }
 static inline void tzset(void) {}
 
-// ── dbgHeapFree / dbgHeapTotal — nRF52 BSP heap diagnostics ─────────────────
+// ── dbgHeapFree / dbgHeapTotal - nRF52 BSP heap diagnostics ─────────────────
 // Used by memGet.cpp when ARCH_NRF52 is defined.  Return 0 for Phase 2.
 static inline uint32_t dbgHeapFree(void)
 {

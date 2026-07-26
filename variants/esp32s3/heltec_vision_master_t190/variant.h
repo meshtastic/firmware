@@ -8,6 +8,7 @@
 #define I2C_SCL SCL
 
 // Display (TFT)
+#define HAS_SPI_TFT 1
 #define USE_ST7789
 #define ST7789_NSS 39
 #define ST7789_RS 47  // DC

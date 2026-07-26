@@ -88,6 +88,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_PREHOP_DROP 1
 #endif
 
+// Debug/test only: let a wired client (serial/TCP) inject frames into the RX pipeline as if they had
+// arrived over LoRa - a SIMULATOR_APP ToRadio packet is delivered through the real receive path on real
+// hardware (see MeshService::injectAsReceived). This forges over-the-air traffic, so it MUST stay 0 in
+// any shipping build; enable per-build with -D MESHTASTIC_ENABLE_FRAME_INJECTION=1.
+#ifndef MESHTASTIC_ENABLE_FRAME_INJECTION
+#define MESHTASTIC_ENABLE_FRAME_INJECTION 0
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
@@ -176,6 +184,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if !defined(NUM_PA_POINTS) || !defined(TX_GAIN_LORA)
 #error "USE_KCT8103L_PA is defined, but no PA gain curve (NUM_PA_POINTS / TX_GAIN_LORA) is configured for this board."
 #endif
+#endif
+#endif
+
+#ifdef USE_KCT8103L_PA_ONLY
+#if defined(HELTEC_MESH_TOWER_V2)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 8, 7
 #endif
 #endif
 
@@ -409,6 +424,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_TFT
 #define HAS_TFT 0
 #endif
+// Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
+// -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).
+#ifndef BASEUI_HAS_GAMES
+#define BASEUI_HAS_GAMES 0
+#endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
 #endif
@@ -574,14 +594,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
-// MESHTASTIC_LOCKDOWN — runtime, client-toggleable hardening (nRF52 only)
+// MESHTASTIC_LOCKDOWN - runtime, client-toggleable hardening (nRF52 only)
 //
-// There is NO build flag to turn lockdown on or off. On nRF52 (CC310 hardware
-// crypto) the lockdown machinery is ALWAYS compiled in; whether it is ACTIVE
-// is decided entirely at runtime by EncryptedStorage::isLockdownActive()
+// Lockdown/protect support is opt-in at build time. Builds that need it pass
+// -DMESHTASTIC_ENABLE_LOCKDOWN=1. When enabled on nRF52 (CC310 hardware
+// crypto), whether it is ACTIVE is decided entirely at runtime by
+// EncryptedStorage::isLockdownActive()
 // (== a passphrase has been provisioned, i.e. /prefs/.dek exists). A device
-// that has never been provisioned — or that the operator disabled from the
-// client app — behaves exactly like stock firmware: plaintext storage, no
+// that has never been provisioned - or that the operator disabled from the
+// client app - behaves exactly like stock firmware: plaintext storage, no
 // redaction, normal logging, normal display.
 //
 // The operator toggles lockdown from the client app:
@@ -589,38 +610,53 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //               firmware generates a DEK, encrypts the stored config, and
 //               authorizes the connection.
 //   on -> off : AdminMessage.lockdown_auth { disable=true } with the
-//               passphrase — decrypts storage back to plaintext and removes
+//               passphrase - decrypts storage back to plaintext and removes
 //               the DEK / token / monotonic-counter / backoff files, then
 //               reboots into normal mode. APPROTECT is the one thing that
 //               does NOT revert (see below).
 //
-// MESHTASTIC_LOCKDOWN here is an INTERNAL capability marker, auto-defined for
-// nRF52. It gates the UI bits (lock screen, pairing-PIN handling). It is NOT
-// something a variant sets. Flash-constrained nRF52 variants that genuinely
-// cannot afford the ~tens-of-KB of crypto + access-control code may opt OUT
-// with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
+// MESHTASTIC_LOCKDOWN here is an INTERNAL capability marker. It gates the UI
+// bits (lock screen, pairing-PIN handling). Flash-constrained nRF52 variants
+// that genuinely cannot afford the ~tens-of-KB of crypto + access-control code
+// may also opt out with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
 //
-//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — per-connection auth + redaction,
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL - per-connection auth + redaction,
 //                                        gated at runtime on isLockdownActive()
-//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest
-//   MESHTASTIC_ENABLE_APPROTECT        — UICR APPROTECT capability. The actual
+//   MESHTASTIC_ENCRYPTED_STORAGE       - AES-128-CTR + HMAC-SHA256 at-rest
+//   MESHTASTIC_ENABLE_APPROTECT        - UICR APPROTECT capability. The actual
 //                                        one-way burn happens at runtime, only
 //                                        once provisioned, only on non-vulnerable
 //                                        silicon, and is STICKY: disabling
 //                                        lockdown does NOT (cannot) reverse it.
 //
-// DEBUG_MUTE is intentionally NOT coupled to lockdown — a capable-but-off
+// DEBUG_MUTE is intentionally NOT coupled to lockdown - a capable-but-off
 // device must log normally. Define DEBUG_MUTE separately for a silent build.
 //
 // -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
-// even when provisioned — for development so dev boards never lose SWD.
+// even when provisioned - for development so dev boards never lose SWD.
 // -----------------------------------------------------------------------------
-#if defined(ARCH_NRF52) && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
+#if defined(ARCH_NRF52)
+#ifndef MESHTASTIC_ENABLE_LOCKDOWN
+#define MESHTASTIC_ENABLE_LOCKDOWN 0
+#endif
+
+#if !MESHTASTIC_ENABLE_LOCKDOWN
+#undef MESHTASTIC_LOCKDOWN
+#undef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+#undef MESHTASTIC_ENCRYPTED_STORAGE
+#undef MESHTASTIC_ENABLE_APPROTECT
+#ifndef MESHTASTIC_EXCLUDE_LOCKDOWN
+#define MESHTASTIC_EXCLUDE_LOCKDOWN 1
+#endif
+#endif
+
+#if MESHTASTIC_ENABLE_LOCKDOWN && !defined(MESHTASTIC_EXCLUDE_LOCKDOWN)
 #define MESHTASTIC_LOCKDOWN 1
 #define MESHTASTIC_PHONEAPI_ACCESS_CONTROL 1
 #define MESHTASTIC_ENCRYPTED_STORAGE 1
 #ifndef MESHTASTIC_LOCKDOWN_DEBUG
 #define MESHTASTIC_ENABLE_APPROTECT 1
+#endif
 #endif
 #endif
 
@@ -635,7 +671,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 // Override at build time. Suggested:
 //   carry device:        3600  (1h sessions, periodic re-auth from phone)
-//   tower / infra node:  0     (default — relies on token TTLs only)
+//   tower / infra node:  0     (default - relies on token TTLs only)
 //
 // A future LockdownAuth.max_session_seconds proto field will let the
 // client set this per-token; until that lands the build-time value is

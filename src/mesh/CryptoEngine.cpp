@@ -116,8 +116,11 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
     size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
     if (sigLen == 0)
         return false;
-    // the XEdDSA::sign function requires at least the first 32 bytes of signature to be pre-filled with randomness
-    HardwareRNG::fill(signature, 32);
+    // XEdDSA::sign mixes signature[0..31] into the nonce as the spec's random Z (meshtastic/Crypto#3)
+    // for hedged signatures, so seed it - hardware RNG, else the seeded CSPRNG. A weak Z is still
+    // safe against nonce reuse (defense-in-depth only), so we never fail signing over it.
+    if (!HardwareRNG::fill(signature, 32))
+        CryptRNG.rand(signature, 32);
     XEdDSA::sign(signature, xeddsa_private_key, xeddsa_public_key, sigBuf, sigLen);
     return true;
 }
@@ -221,7 +224,11 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
                                      uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;
-    long extraNonceTmp = random();
+    // The extra nonce must be unpredictable: use the hardware RNG, falling back to the
+    // seeded CSPRNG only when no hardware source is available.
+    uint32_t extraNonceTmp;
+    if (!HardwareRNG::fill((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp)))
+        CryptRNG.rand((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
     auth = bytesOut + numBytes;
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
@@ -335,6 +342,32 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
         LOG_WARN("Curve25519DH step 2 failed!");
         return false;
     }
+    return true;
+}
+
+void CryptoEngine::setPendingPublicKey(uint32_t node, const uint8_t *key)
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    pendingKeyVerificationNode = node;
+    memcpy(pendingKeyVerificationPublicKey, key, 32);
+    hasPendingKeyVerificationKey = true;
+}
+
+void CryptoEngine::clearPendingPublicKey()
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    pendingKeyVerificationNode = 0;
+    memset(pendingKeyVerificationPublicKey, 0, 32);
+    hasPendingKeyVerificationKey = false;
+}
+
+bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    if (!hasPendingKeyVerificationKey || node == 0 || node != pendingKeyVerificationNode)
+        return false;
+    out.size = 32;
+    memcpy(out.bytes, pendingKeyVerificationPublicKey, 32);
     return true;
 }
 

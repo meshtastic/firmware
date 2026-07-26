@@ -31,44 +31,6 @@ SPIClass SPI_HSPI(HSPI);
 #endif // HAS_SDCARD
 
 /**
- * @brief Copies a file from one location to another.
- *
- * @param from The path of the source file.
- * @param to The path of the destination file.
- * @return true if the file was successfully copied, false otherwise.
- */
-bool copyFile(const char *from, const char *to)
-{
-#ifdef FSCom
-    // take SPI Lock
-    concurrency::LockGuard g(spiLock);
-    unsigned char cbuffer[16];
-
-    File f1 = FSCom.open(from, FILE_O_READ);
-    if (!f1) {
-        LOG_ERROR("Failed to open source file %s", from);
-        return false;
-    }
-
-    File f2 = FSCom.open(to, FILE_O_WRITE);
-    if (!f2) {
-        LOG_ERROR("Failed to open destination file %s", to);
-        return false;
-    }
-
-    while (f1.available() > 0) {
-        byte i = f1.read(cbuffer, 16);
-        f2.write(cbuffer, i);
-    }
-
-    f2.flush();
-    f2.close();
-    f1.close();
-    return true;
-#endif
-}
-
-/**
  * Renames a file from pathFrom to pathTo.
  *
  * @param pathFrom The original path of the file.
@@ -88,6 +50,9 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
+#include <cstring>
+#include <new>
+#include <stdexcept>
 #include <vector>
 
 /**
@@ -119,6 +84,93 @@ bool fsFormat()
 #endif
 }
 
+#ifdef FSCom
+namespace
+{
+bool pathEndsWithDot(const char *path)
+{
+    if (!path)
+        return false;
+
+    size_t length = strlen(path);
+    return length > 0 && path[length - 1] == '.';
+}
+
+bool copyFilePath(char *dest, size_t destSize, const char *path, bool *wasLimited)
+{
+    if (!path || destSize == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    if (strlcpy(dest, path, destSize) >= destSize) {
+        if (wasLimited)
+            *wasLimited = true;
+        return false;
+    }
+
+    return true;
+}
+
+void collectFiles(const char *dirname, uint8_t levels, size_t maxCount, std::vector<meshtastic_FileInfo> &filenames,
+                  bool *wasLimited)
+{
+    if (!dirname)
+        return;
+
+    File root = FSCom.open(dirname, FILE_O_READ);
+    if (!root)
+        return;
+    if (!root.isDirectory()) {
+        root.close();
+        return;
+    }
+
+    File file = root.openNextFile();
+    // file.name()[0] check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
+    while (file && file.name()[0]) {
+        if (filenames.size() >= maxCount) {
+            if (wasLimited)
+                *wasLimited = true;
+            file.close();
+            break;
+        }
+        const char *fileName = file.name();
+        if (file.isDirectory() && !pathEndsWithDot(fileName)) {
+            char pathBuffer[sizeof(((meshtastic_FileInfo *)nullptr)->file_name)] = {};
+#ifdef ARCH_ESP32
+            const char *subDirPath = file.path();
+#else
+            const char *subDirPath = fileName;
+#endif
+            bool hasSubDirPath = copyFilePath(pathBuffer, sizeof(pathBuffer), subDirPath, wasLimited);
+            file.close();
+
+            if (levels && hasSubDirPath) {
+                collectFiles(pathBuffer, levels - 1, maxCount, filenames, wasLimited);
+            } else if (wasLimited) {
+                *wasLimited = true;
+            }
+        } else {
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
+#ifdef ARCH_ESP32
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.path(), wasLimited);
+#else
+            bool hasFilePath = copyFilePath(fileInfo.file_name, sizeof(fileInfo.file_name), file.name(), wasLimited);
+#endif
+            if (hasFilePath && !pathEndsWithDot(fileInfo.file_name)) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+}
+} // namespace
+#endif
+
 /**
  * @brief Get the list of files in a directory.
  *
@@ -127,43 +179,40 @@ bool fsFormat()
  *
  * @param dirname The name of the directory.
  * @param levels The number of levels of subdirectories to list.
- * @return A vector of strings containing the full path of each file in the directory.
+ * @param maxCount The maximum number of files to collect before truncating the walk.
+ * @param wasLimited Optional out-param, set to true if the listing was truncated (by maxCount or low memory).
+ * @return A vector of meshtastic_FileInfo for each file in the directory.
  */
-std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels, size_t maxCount, bool *wasLimited)
 {
     std::vector<meshtastic_FileInfo> filenames = {};
+    if (wasLimited)
+        *wasLimited = false;
 #ifdef FSCom
-    File root = FSCom.open(dirname, FILE_O_READ);
-    if (!root)
-        return filenames;
-    if (!root.isDirectory())
-        return filenames;
-
-    File file = root.openNextFile();
-    while (file) {
-#ifdef ARCH_ESP32
-        const char *filepath = file.path();
-#else
-        const char *filepath = file.name();
-#endif
-        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
-            if (levels) {
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(filepath, levels - 1);
-                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
-                file.close();
-            }
-        } else {
-            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
-            strncpy(fileInfo.file_name, filepath, sizeof(fileInfo.file_name) - 1);
-            fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
-            if (!String(fileInfo.file_name).endsWith(".")) {
-                filenames.push_back(fileInfo);
-            }
-            file.close();
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS)
+    size_t reservedCount = maxCount;
+    while (reservedCount > 0) {
+        try {
+            filenames.reserve(reservedCount);
+            break;
+        } catch (const std::bad_alloc &) {
+            reservedCount /= 2;
+        } catch (const std::length_error &) {
+            reservedCount /= 2;
         }
-        file = root.openNextFile();
     }
-    root.close();
+    if (reservedCount == 0) {
+        if (wasLimited)
+            *wasLimited = true;
+        return filenames;
+    }
+    if (reservedCount < maxCount) {
+        if (wasLimited)
+            *wasLimited = true;
+        maxCount = reservedCount;
+    }
+#endif
+    collectFiles(dirname, levels, maxCount, filenames, wasLimited);
 #endif
     return filenames;
 }

@@ -27,7 +27,10 @@ class FavoritesMapApplet : public MapApplet, public SinglePortModule
     void onRender(bool full) override;
 
   protected:
+    void onActivate() override { loopbackOk = true; }
+    void onDeactivate() override { loopbackOk = false; }
     bool shouldDrawNode(meshtastic_NodeInfoLite *node) override;
+    bool enoughMarkers() override;
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     NodeNum lastFrom = 0; // Sender of most recent favorited (non-local) position packet

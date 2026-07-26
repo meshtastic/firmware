@@ -12,10 +12,10 @@
 #   defensive loops over flaky sources (pubsub handlers, device
 #   re-enumeration polls). One failed iteration shouldn't abort the loop.
 # B404 import_subprocess
-#   mcp-server wraps PlatformIO, esptool, nrfutil, picotool, and the
-#   pytest test-runner — subprocess is a load-bearing import here, not
-#   a smell. The "consider possible security implications" advisory is
-#   redundant given the file-level review already applied.
+#   the bin/ proto + fixture tooling (regen-py-protos, gen-fake-nodedb-seed,
+#   seed-json-to-proto) shells out to protoc and helper scripts — subprocess
+#   is a load-bearing import here, not a smell. The "consider possible security
+#   implications" advisory is redundant given the file-level review already applied.
 # B603 subprocess_without_shell_equals_true
 #   all subprocess calls use a static argv list; `shell=False` is the
 #   default and we never string-interpolate user input into the command.

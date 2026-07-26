@@ -10,7 +10,7 @@
     "replacements:all",
     "workarounds:all"
   ],
-  "baseBranchPatterns": ["master"],
+  "baseBranchPatterns": ["develop"],
   "forkProcessing": "enabled",
   "ignoreDeps": [
     "protobufs"

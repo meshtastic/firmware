@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iostream>
 #include <libpinedio-usb.h>
+#include <sys/time.h> // gettimeofday(), previously pulled in via libusb.h
 #include <unistd.h>
 
 extern uint32_t rebootAtMsec;
