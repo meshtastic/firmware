@@ -9,6 +9,7 @@ class AdminModuleTestShim : public AdminModule
   public:
     using AdminModule::checkPassKey; // session-key gate seam (see test_admin_session_repro)
     using AdminModule::handleGetConfig;
+    using AdminModule::handleGetModuleConfig;
     using AdminModule::handleReceivedProtobuf;
     using AdminModule::handleSetConfig;
     using AdminModule::handleSetModuleConfig;

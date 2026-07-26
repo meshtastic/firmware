@@ -82,7 +82,6 @@ CannedMessageModule::CannedMessageModule()
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
     if (newDest == 0) {
         dest = NODENUM_BROADCAST;
@@ -114,19 +113,9 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     LOG_DEBUG("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
-void CannedMessageModule::LaunchRepeatDestination()
-{
-    if (!lastDestSet) {
-        LaunchWithDestination(NODENUM_BROADCAST, 0);
-    } else {
-        LaunchWithDestination(lastDest, lastChannel);
-    }
-}
-
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
     if (newDest == 0) {
         dest = NODENUM_BROADCAST;
@@ -190,7 +179,7 @@ int CannedMessageModule::splitConfiguredMessages()
     while (i < upTo) {
         if (this->messageBuffer[i] == '|') {
             this->messageBuffer[i] = '\0'; // End previous message
-            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT)
+            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT - 1)
                 break;
             tempMessages[tempCount++] = (this->messageBuffer + i + 1);
         }
@@ -306,12 +295,6 @@ void CannedMessageModule::updateDestinationSelectionList()
         LOG_INFO("Nodes changed, forcing UI refresh.");
         screen->forceDisplay();
     }
-}
-
-// Returns true if character input is currently allowed (used for search/freetext states)
-bool CannedMessageModule::isCharInputAllowed() const
-{
-    return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
 }
 
 static int getRowHeightForEmoteText(const char *text, int minimumHeight, int emoteSpacing = 2)
@@ -1039,6 +1022,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     lastDestSet = true;
 
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;
@@ -1071,7 +1056,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
     }
@@ -1435,13 +1420,6 @@ bool CannedMessageModule::shouldDraw()
     return (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
             this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
             this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
-}
-
-// Has the user defined any canned messages?
-// Expose publicly whether canned message module is ready for use
-bool CannedMessageModule::hasMessages()
-{
-    return (this->messagesCount > 0);
 }
 
 int CannedMessageModule::getNextIndex()

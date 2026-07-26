@@ -1846,40 +1846,6 @@ void Screen::handleStartFirmwareUpdateScreen()
     setFrameImmediateDraw(frames);
 }
 
-void Screen::blink()
-{
-#ifdef MESHTASTIC_LOCKDOWN
-    // L4: defensive guard. blink() paints arbitrary geometry, not node
-    // data, so it doesn't actually leak today. But it bypasses the normal
-    // ui->update() path that the lockdown short-circuit gates, so any
-    // future change that puts content into blink would silently leak past
-    // redaction. Refuse to draw when the redaction latch is set.
-    if (meshtastic_security::shouldRedactDisplay())
-        return;
-#endif
-    setFastFramerate();
-    uint8_t count = 10;
-    dispdev->setBrightness(254);
-    while (count > 0) {
-        dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
-#if GRAPHICS_TFT_COLORING_ENABLED
-        prepareFrameColorRegions();
-#endif
-        dispdev->display();
-        delay(50);
-        dispdev->clear();
-#if GRAPHICS_TFT_COLORING_ENABLED
-        prepareFrameColorRegions();
-#endif
-        dispdev->display();
-        delay(50);
-        count = count - 1;
-    }
-    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in
-    // OLEDDisplay.
-    dispdev->setBrightness(brightness);
-}
-
 void Screen::increaseBrightness()
 {
     brightness = ((brightness + 62) > 254) ? brightness : (brightness + 62);

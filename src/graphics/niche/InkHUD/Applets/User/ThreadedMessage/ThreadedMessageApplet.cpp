@@ -217,13 +217,6 @@ bool InkHUD::ThreadedMessageApplet::approveNotification(Notification &n)
         return true;
 }
 
-// Save messages to flash via the global messageStore.
-// The global store holds messages for all channels; no per-channel file is needed.
-void InkHUD::ThreadedMessageApplet::saveMessagesToFlash()
-{
-    messageStore.saveToFlash();
-}
-
 // Messages are loaded once by InkHUD::begin() before applets start.
 // Nothing to do here at per-applet activation time.
 void InkHUD::ThreadedMessageApplet::loadMessagesFromFlash()

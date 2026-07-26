@@ -111,9 +111,6 @@ class GPS : private concurrency::OSThread
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
 
-    /// Returns true if there's valid data flow with the chip.
-    virtual bool hasFlow();
-
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 

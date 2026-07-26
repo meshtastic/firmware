@@ -102,6 +102,13 @@ lint:
     - linters: [gitleaks]
       paths:
         - test/fixtures/nodedb/seed_v25_*.jsonl
+    # checkov/CKV_SECRET_6 flags the commented-out "large4cats" example,
+    # which is the public default credential for the meshtastic.org MQTT
+    # broker rather than a real secret. Ignore the whole file so the
+    # example config stays free of lint-suppression comments.
+    - linters: [ALL]
+      paths:
+        - userPrefs.jsonc
     # The UA font's em/en dashes live only in trailing comments documenting
     # each glyph's codepoint (e.g. "8212=:2549"); rewriting them would make
     # those docs inaccurate. Glyph byte data is unaffected either way.

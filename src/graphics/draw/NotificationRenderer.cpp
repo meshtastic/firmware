@@ -207,8 +207,6 @@ void NotificationRenderer::resetBanner()
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
 
-    OnScreenKeyboardModule::instance().clearPopup();
-
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
     curSelected = 0;
@@ -1187,9 +1185,6 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
         display->setColor(WHITE);
         // Draw the virtual keyboard
         virtualKeyboard->draw(display, 0, 0);
-
-        // Draw transient popup overlay (if any) managed by OnScreenKeyboardModule
-        OnScreenKeyboardModule::instance().drawPopupOverlay(display);
     } else {
         // If virtualKeyboard is null, reset the banner to avoid getting stuck
         LOG_INFO("Virtual keyboard is null - resetting banner");
@@ -1200,13 +1195,6 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 bool NotificationRenderer::isOverlayBannerShowing()
 {
     return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
-}
-
-void NotificationRenderer::showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs)
-{
-    if (!title || !content || current_notification_type != notificationTypeEnum::text_input)
-        return;
-    OnScreenKeyboardModule::instance().showPopup(title, content, durationMs);
 }
 
 } // namespace graphics

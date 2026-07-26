@@ -137,12 +137,17 @@ void MeshService::loop()
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
 void MeshService::reloadConfig(int saveWhat)
 {
-    // If we can successfully set this radio to these settings, save them to disk
+    // Only LoRa config and channels (freq/PSK/slot) affect the radio. Saves that only touch
+    // module config, device state, or the node database (e.g. favoriting a node) have no reason
+    // to re-init the LoRa chip - skip it there to avoid an unnecessary and risky SPI reconfigure.
+    if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)) {
+        // If we can successfully set this radio to these settings, save them to disk
 
-    // This will also update the region as needed
-    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+        // This will also update the region as needed
+        nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
-    configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+        configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
+    }
     nodeDB->saveToDisk(saveWhat);
 }
 
@@ -319,13 +324,20 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
+    // callModules' loopback gate keeps RX_SRC_LOCAL packets from RoutingModule, the only module
+    // that forwards to the phone, so deliver our own reply's copy here or the client never sees it.
+    const bool localDelivery = isToUs(p);
+    if (src == RX_SRC_LOCAL && localDelivery)
+        ccToPhone = true;
+
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     ErrorCode res = router->sendLocal(p, src);
 
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */
     meshtastic_QueueStatus qs = router->getQueueStatus();
-    ErrorCode r = sendQueueStatusToPhone(qs, res, mesh_packet_id);
+    // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
+    ErrorCode r = sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id);
     if (r != ERRNO_OK) {
         LOG_DEBUG("Can't send status to phone");
     }
