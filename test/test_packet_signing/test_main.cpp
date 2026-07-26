@@ -145,6 +145,7 @@ class AuthPipelineRouter : public ReliableRouter
 {
   public:
     bool filter(meshtastic_MeshPacket *p) { return ReliableRouter::shouldFilterReceived(p); }
+    void sniff(const meshtastic_MeshPacket *p, const meshtastic_Routing *c = nullptr) { ReliableRouter::sniffReceived(p, c); }
     bool historyContains(const meshtastic_MeshPacket *p) { return wasSeenRecently(p, false); }
     void remember(const meshtastic_MeshPacket *p) { wasSeenRecently(p, true); }
     void forgetRelayer(uint8_t relay, PacketId id, NodeNum from) { removeRelayer(relay, id, from); }
@@ -174,8 +175,18 @@ class AuthPipelineRouter : public ReliableRouter
 class AuthPipelineRoutingModule : public RoutingModule
 {
   public:
-    void sendAckNak(meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false) override { ackCalls++; }
+    void sendAckNak(meshtastic_Routing_Error error, NodeNum, PacketId, ChannelIndex, uint8_t = 0, bool = false) override
+    {
+        ackCalls++;
+        lastAckError = error;
+    }
+    void reset()
+    {
+        ackCalls = 0;
+        lastAckError = meshtastic_Routing_Error_NONE;
+    }
     uint32_t ackCalls = 0;
+    meshtastic_Routing_Error lastAckError = meshtastic_Routing_Error_NONE;
 };
 
 class AuthPipelineModule : public SinglePortModule
@@ -393,7 +404,7 @@ void setUp(void)
     pipelineRouter->rxDupe = 0;
     pipelineRouter->txRelayCanceled = 0;
     pipelineRadio->reset();
-    pipelineRouting->ackCalls = 0;
+    pipelineRouting->reset();
     pipelineModule->calls = 0;
     pipelineMqtt->clearQueue();
     while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
@@ -1304,6 +1315,65 @@ void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass
     TEST_ASSERT_EQUAL_MESSAGE(3, routingAuthEvaluationCount(), "same packet ID with different bytes must be reevaluated");
 }
 
+// An addressed PKI packet with a key for the claimed sender is not a channel packet. When AEAD
+// authentication fails (for example after the sender rotates keys), report that state distinctly.
+void test_C13_undecryptable_pki_dm_reports_decrypt_failure(void)
+{
+    uint8_t localPub[32], localPriv[32], senderPub[32], senderPriv[32], stalePub[32], stalePriv[32];
+    crypto->generateKeyPair(localPub, localPriv);
+    crypto->generateKeyPair(senderPub, senderPriv);
+    crypto->generateKeyPair(stalePub, stalePriv);
+
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPub);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, stalePub);
+
+    meshtastic_Data data = meshtastic_Data_init_zero;
+    data.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    data.payload.size = 1;
+    data.payload.bytes[0] = 'x';
+    uint8_t plaintext[MAX_LORA_PAYLOAD_LEN] = {};
+    const size_t plaintextSize = pb_encode_to_bytes(plaintext, sizeof(plaintext), &meshtastic_Data_msg, &data);
+    TEST_ASSERT_GREATER_THAN(0, plaintextSize);
+
+    meshtastic_NodeInfoLite_public_key_t localKey = {32, {0}};
+    memcpy(localKey.bytes, localPub, sizeof(localPub));
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = REMOTE_NODE;
+    p.to = LOCAL_NODE;
+    p.id = 0xC300000D;
+    p.channel = 0;
+    p.want_ack = true;
+    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    crypto->setDHPrivateKey(senderPriv);
+    TEST_ASSERT_TRUE(crypto->encryptCurve25519(p.to, p.from, localKey, p.id, plaintextSize, plaintext, p.encrypted.bytes));
+    p.encrypted.size = plaintextSize + MESHTASTIC_PKC_OVERHEAD;
+    crypto->setDHPrivateKey(localPriv);
+
+    TEST_ASSERT_EQUAL(DECODE_FAILURE, perhapsDecode(&p));
+    pipelineRouter->sniff(&p);
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_DECRYPT_FAILED, pipelineRouting->lastAckError);
+
+    // A sender with no stored key remains the recoverable key-exchange case.
+    mockNodeDB->clearTestNodes();
+    pipelineRouting->reset();
+    p.id++;
+    pipelineRouter->sniff(&p);
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, pipelineRouting->lastAckError);
+
+    // Only PKI packets on the reserved direct-message channel take the new branch.
+    pipelineRouting->reset();
+    p.id++;
+    p.channel = channels.setActiveByIndex(0);
+    TEST_ASSERT_GREATER_OR_EQUAL(0, p.channel);
+    pipelineRouter->sniff(&p);
+    TEST_ASSERT_EQUAL_UINT32(1, pipelineRouting->ackCalls);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NO_CHANNEL, pipelineRouting->lastAckError);
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -1666,6 +1736,7 @@ void setup()
     RUN_TEST(test_C10_legacy_channel_dm_failure_has_no_pipeline_effects);
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
+    RUN_TEST(test_C13_undecryptable_pki_dm_reports_decrypt_failure);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
