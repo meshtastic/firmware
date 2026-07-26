@@ -26,6 +26,10 @@ void InkHUD::Persistence::loadLatestMessage()
 
     int lastBroadcastPos = -1, lastDMPos = -1, pos = 0;
     for (const StoredMessage &m : messageStore.getLiveMessages()) {
+        if (!messageStore.isMessageVisible(m)) {
+            pos++;
+            continue;
+        }
         if (m.type == MessageType::BROADCAST) {
             latestMessage.broadcast = m;
             lastBroadcastPos = pos;

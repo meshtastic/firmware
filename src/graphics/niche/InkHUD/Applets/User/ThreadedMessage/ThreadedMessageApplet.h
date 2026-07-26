@@ -46,7 +46,6 @@ class ThreadedMessageApplet : public Applet, public SinglePortModule
     bool approveNotification(Notification &n) override; // Which notifications to suppress
 
   protected:
-    void saveMessagesToFlash();
     void loadMessagesFromFlash();
 
     uint8_t channelIndex = 0;

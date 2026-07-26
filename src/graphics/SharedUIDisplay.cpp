@@ -3,8 +3,8 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Power.h"
-#include "RTC.h"
 #include "draw/NodeListRenderer.h"
+#include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
@@ -147,8 +147,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             // Transparent clock headers should inherit whatever body off-color is
             // already active under the header (important for light/inverted themes).
             const uint16_t transparentBgColor = resolveTFTOffColorAt(0, headerHeight + 1, getThemeBodyBg());
-            setAndRegisterTFTColorRole(TFTColorRole::HeaderBackground, transparentBgColor, transparentBgColor, 0, 0, screenW,
-                                       headerHeight);
+            // Intentionally skip the HeaderBackground region, as small screens draw the clock in the unused space in this region,
+            // and the transparent call was erasing segments from the clock
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, transparentBgColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, transparentBgColor);
         } else if (useInvertedHeaderStyle) {

@@ -34,7 +34,7 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
-enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
+enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
@@ -83,7 +83,7 @@ extern struct portduino_config_struct {
     std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
                                                           {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
                                                           {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
-                                                          {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}};
+                                                          {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}, {hub75, "HUB75"}};
 
     lora_module_enum lora_module;
     bool has_rfswitch_table = false;
@@ -147,6 +147,29 @@ extern struct portduino_config_struct {
     pinMapping displayBacklightPWMChannel = {"Display", "BacklightPWMChannel"};
     pinMapping displayReset = {"Display", "Reset"};
 
+    // Display -> HUB75 (Raspberry Pi RGB matrix via hzeller/rpi-rgb-led-matrix).
+    // These mirror rgb_matrix::RGBMatrix::Options + RuntimeOptions; the library owns the GPIO
+    // pins (chosen by hub75_hardware_mapping), so there are no per-pin mappings here.
+    std::string hub75_hardware_mapping = "regular";
+    int hub75_rows = 64;
+    int hub75_cols = 64;
+    int hub75_chain_length = 1;
+    int hub75_parallel = 1;
+    int hub75_pwm_bits = 11;
+    int hub75_pwm_lsb_nanoseconds = 130;
+    int hub75_brightness = 100; // percent, 1..100
+    int hub75_scan_mode = 0;
+    int hub75_row_address_type = 0;
+    int hub75_multiplexing = 0;
+    bool hub75_disable_hardware_pulsing = false;
+    bool hub75_show_refresh_rate = false;
+    bool hub75_inverse_colors = false;
+    std::string hub75_led_rgb_sequence = "RGB";
+    std::string hub75_pixel_mapper_config = "";
+    std::string hub75_panel_type = "";
+    int hub75_limit_refresh_rate_hz = 0;
+    int hub75_gpio_slowdown = 1; // RuntimeOptions; higher for faster Pis / long cables
+
     // Touchscreen
     std::string touchscreen_spi_dev = "";
     int touchscreen_spi_dev_int = 0;
@@ -160,6 +183,11 @@ extern struct portduino_config_struct {
     // Input
     std::string keyboardDevice = "";
     std::string pointerDevice = "";
+    std::string joystickDevice = "";
+    // Joystick/gamepad button map: evdev button code -> lowercase action name
+    // ("select", "cancel", "back", "up", "down", "left", "right", "user").
+    // Empty means the LinuxJoystick driver uses its built-in defaults.
+    std::map<int, std::string> joystickButtons;
     int tbDirection;
     pinMapping userButtonPin = {"Input", "User"};
     pinMapping tbUpPin = {"Input", "TrackballUp"};
@@ -418,6 +446,30 @@ extern struct portduino_config_struct {
 
             out << YAML::Key << "OffsetRotate" << YAML::Value << displayOffsetRotate;
 
+            if (displayPanel == hub75) {
+                out << YAML::Key << "HUB75" << YAML::Value << YAML::BeginMap;
+                out << YAML::Key << "HardwareMapping" << YAML::Value << hub75_hardware_mapping;
+                out << YAML::Key << "Rows" << YAML::Value << hub75_rows;
+                out << YAML::Key << "Cols" << YAML::Value << hub75_cols;
+                out << YAML::Key << "ChainLength" << YAML::Value << hub75_chain_length;
+                out << YAML::Key << "Parallel" << YAML::Value << hub75_parallel;
+                out << YAML::Key << "PWMBits" << YAML::Value << hub75_pwm_bits;
+                out << YAML::Key << "PWMLSBNanoseconds" << YAML::Value << hub75_pwm_lsb_nanoseconds;
+                out << YAML::Key << "Brightness" << YAML::Value << hub75_brightness;
+                out << YAML::Key << "ScanMode" << YAML::Value << hub75_scan_mode;
+                out << YAML::Key << "RowAddressType" << YAML::Value << hub75_row_address_type;
+                out << YAML::Key << "Multiplexing" << YAML::Value << hub75_multiplexing;
+                out << YAML::Key << "DisableHardwarePulsing" << YAML::Value << hub75_disable_hardware_pulsing;
+                out << YAML::Key << "ShowRefreshRate" << YAML::Value << hub75_show_refresh_rate;
+                out << YAML::Key << "InverseColors" << YAML::Value << hub75_inverse_colors;
+                out << YAML::Key << "RGBSequence" << YAML::Value << hub75_led_rgb_sequence;
+                out << YAML::Key << "PixelMapper" << YAML::Value << hub75_pixel_mapper_config;
+                out << YAML::Key << "PanelType" << YAML::Value << hub75_panel_type;
+                out << YAML::Key << "LimitRefreshRateHz" << YAML::Value << hub75_limit_refresh_rate_hz;
+                out << YAML::Key << "GPIOSlowdown" << YAML::Value << hub75_gpio_slowdown;
+                out << YAML::EndMap; // HUB75
+            }
+
             out << YAML::EndMap; // Display
         }
 
@@ -458,6 +510,14 @@ extern struct portduino_config_struct {
             out << YAML::Key << "KeyboardDevice" << YAML::Value << keyboardDevice;
         if (pointerDevice != "")
             out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
+        if (joystickDevice != "")
+            out << YAML::Key << "JoystickDevice" << YAML::Value << joystickDevice;
+        if (!joystickButtons.empty()) {
+            out << YAML::Key << "JoystickButtons" << YAML::Value << YAML::BeginMap;
+            for (const auto &button : joystickButtons)
+                out << YAML::Key << button.second << YAML::Value << button.first;
+            out << YAML::EndMap;
+        }
 
         for (const auto *input_pin : all_pins) {
             if (input_pin->config_section == "Input" && input_pin->enabled) {

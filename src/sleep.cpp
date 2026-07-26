@@ -190,20 +190,23 @@ void initDeepSleep()
 #endif
 }
 
-bool doPreflightSleep()
+bool doPreflightSleep(bool deepSleep)
 {
-    if (preflightSleep.notifyObservers(NULL) != 0)
+    // Observers only get a void*: non-NULL means the hardware (radio) is about to be powered
+    // down (deep sleep / shutdown), NULL means a light sleep where the radio keeps running
+    static const bool deepSleepFlag = true;
+    if (preflightSleep.notifyObservers(deepSleep ? (void *)&deepSleepFlag : NULL) != 0)
         return false; // vetoed
     else
         return true;
 }
 
 /// Tell devices we are going to sleep and wait for them to handle things
-static void waitEnterSleep(bool skipPreflight = false)
+static void waitEnterSleep(bool skipPreflight, bool deepSleep)
 {
     if (!skipPreflight) {
         uint32_t now = millis();
-        while (!doPreflightSleep()) {
+        while (!doPreflightSleep(deepSleep)) {
             delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
             if (!Throttle::isWithinTimespanMs(now,
@@ -230,7 +233,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
-    waitEnterSleep(skipPreflight);
+    waitEnterSleep(skipPreflight, true);
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
     // Full shutdown of bluetooth hardware
@@ -410,7 +413,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     return ESP_SLEEP_WAKEUP_TIMER;
 #endif
 
-    waitEnterSleep(false);
+    waitEnterSleep(false, false);
     notifyLightSleep.notifyObservers(NULL); // Button interrupts are detached here
 
     uint64_t sleepUsec = sleepMsec * 1000LL;

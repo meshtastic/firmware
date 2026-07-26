@@ -114,7 +114,10 @@ template <class T> class MemoryDynamic : public Allocator<T>
     virtual T *alloc(TickType_t maxWait) override
     {
         T *p = (T *)malloc(sizeof(T));
-        assert(p);
+        if (!p) {
+            LOG_WARN("malloc(%u) failed, heap exhausted!", (unsigned)sizeof(T));
+            return nullptr;
+        }
         this->auditAdd((int32_t)sizeof(T));
         return p;
     }
