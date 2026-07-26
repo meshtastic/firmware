@@ -1474,9 +1474,9 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     }
 
     if (sendingPacket) {
-        LOG_WARN("beginSending called while transmission active; releasing previous packet");
-        packetPool.release(sendingPacket);
-        sendingPacket = nullptr;
+        LOG_WARN("beginSending called while transmission active; dropping new packet");
+        packetPool.release(p);
+        return 0;
     }
 
     if (p->which_payload_variant != meshtastic_MeshPacket_encrypted_tag) {

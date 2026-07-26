@@ -376,7 +376,6 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
     TEST_ASSERT_EQUAL_UINT(0, result);
     TEST_ASSERT_NULL(testRadio->getSendingPacket());
 
-    packetPool.release(p);
 }
 
 static void test_deliverToReceiver_nullRouterReleasesPacket()
