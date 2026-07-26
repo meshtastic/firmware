@@ -322,8 +322,7 @@ void Router::setReceivedMessage()
 meshtastic_QueueStatus Router::getQueueStatus()
 {
     if (!iface) {
-        meshtastic_QueueStatus qs;
-        qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
+        meshtastic_QueueStatus qs = meshtastic_QueueStatus_init_zero;
         return qs;
     } else
         return iface->getQueueStatus();

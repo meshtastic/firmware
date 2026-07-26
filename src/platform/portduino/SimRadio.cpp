@@ -343,7 +343,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
 
 meshtastic_QueueStatus SimRadio::getQueueStatus()
 {
-    meshtastic_QueueStatus qs;
+    meshtastic_QueueStatus qs = meshtastic_QueueStatus_init_zero;
 
     qs.res = qs.mesh_packet_id = 0;
     qs.free = txQueue.getFree();

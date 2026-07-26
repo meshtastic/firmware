@@ -213,7 +213,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
 meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
 {
-    meshtastic_QueueStatus qs;
+    meshtastic_QueueStatus qs = meshtastic_QueueStatus_init_zero;
 
     qs.res = qs.mesh_packet_id = 0;
     qs.free = txQueue.getFree();

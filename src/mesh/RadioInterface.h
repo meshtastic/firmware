@@ -174,8 +174,7 @@ class RadioInterface
     /** Return TX queue status */
     [[nodiscard]] virtual meshtastic_QueueStatus getQueueStatus()
     {
-        meshtastic_QueueStatus qs;
-        qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
+        meshtastic_QueueStatus qs = meshtastic_QueueStatus_init_zero;
         return qs;
     }
 
