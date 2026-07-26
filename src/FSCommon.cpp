@@ -13,7 +13,7 @@
 #include "configuration.h"
 
 #if defined(ARCH_PORTDUINO)
-#include <sys/statvfs.h>
+#include <filesystem>
 #endif
 
 #if defined(ARCH_NRF52) || defined(ARCH_STM32)
@@ -60,21 +60,23 @@ size_t fsUsedBytes()
     return FSCom.info(info) ? (size_t)info.usedBytes : 0;
 }
 #elif defined(ARCH_PORTDUINO)
-// Portduino is backed by the host filesystem; ask the OS about the volume holding the working directory.
+// Portduino is backed by the host filesystem; ask the OS about the volume holding the working
+// directory. std::filesystem keeps this working on native-windows too, where statvfs() does not
+// exist. On error we report "full" so capacity checks fail safe.
 size_t fsTotalBytes()
 {
-    struct statvfs st;
-    if (statvfs(".", &st) != 0)
-        return 0;
-    return (size_t)st.f_blocks * (size_t)st.f_frsize;
+    std::error_code ec;
+    const auto info = std::filesystem::space(".", ec);
+    return ec ? 0 : (size_t)info.capacity;
 }
 
 size_t fsUsedBytes()
 {
-    struct statvfs st;
-    if (statvfs(".", &st) != 0)
-        return 0;
-    return (size_t)(st.f_blocks - st.f_bfree) * (size_t)st.f_frsize;
+    std::error_code ec;
+    const auto info = std::filesystem::space(".", ec);
+    if (ec || info.capacity < info.available)
+        return fsTotalBytes();
+    return (size_t)(info.capacity - info.available);
 }
 #else
 // ESP32 LittleFS and the nRF54L15 wrapper expose these directly.
