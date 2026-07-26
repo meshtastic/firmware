@@ -42,7 +42,7 @@ Making your own node based on this design is straightforward. There are various 
 | Waveshare    | Core1262-HF      | yes  | Ext       |                                       |
 | Waveshare    | LoRa Node Module | yes  | Int       |                                       |
 | Seeed        | Wio-SX1262       | yes  | Ext       | Cute! DIO2/TXEN are not exposed       |
-| Seeed        | Wio-LR1121       | yes  | Int       | LR1121, needs alternate rfswitch.h    |
+| Seeed        | Wio-LR1121       | yes  | Int       | LR1121, build -D LR1121_MODULE_WIO    |
 | AI-Thinker   | RA-02            | No   | Int       | SX1278 **433mhz band only**           |
 | RF Solutions | RFM95            | No   | Int       | Untested                              |
 | Ebyte        | E80-900M2213S    | Yes  | Int       | LR1121 radio                          |
@@ -55,7 +55,24 @@ The E80 from CDEbyte is the most obtainable module at present, and has been sele
 
 Naturally, CDEbyte have chosen to ignore the generic Semtech implementation of the RF switching logic and have supplied confusing and contradictory documentation, which is explained below.
 
-tl;dr: The E80 is chosen as the default. **If you wish to use another module, the table in `rfswitch.h` must be adjusted accordingly.**
+tl;dr: The E80 is chosen as the default. **If you wish to use another module, select it with an `LR1121_MODULE_*` build flag, or adjust the table in `rfswitch.h` accordingly.**
+
+`rfswitch.h` carries a matrix for each known LR1121 module, guarded by a build flag:
+
+| Build flag          | Module              |
+| ------------------- | ------------------- |
+| _(none)_            | Ebyte E80-900M2213S |
+| `LR1121_MODULE_E80` | Ebyte E80-900M2213S |
+| `LR1121_MODULE_WIO` | Seeed Wio-LR1121    |
+
+Add it to your environment in `platformio.ini`:
+
+```ini
+build_flags = ${nrf52840_base.build_flags}
+  -I variants/nrf52840/diy/nrf52_promicro_diy_tcxo
+  -D NRF52_PROMICRO_DIY
+  -D LR1121_MODULE_WIO
+```
 
 ### E80 switching - the saga
 
@@ -119,4 +136,19 @@ Tests were conducted in each of the three configurations between a known-good SX
 
 The RF switching is based on the code example given. Logically, this shows the DIO5 and DIO6 are swapped compared to the reference design.
 
-If future DIYers wish to use an alternative module, the table in `rfswitch.h` must be adjusted accordingly.
+## Seeed Wio-LR1121
+
+The Wio is the counter-example to the E80: it follows the Semtech reference exactly, so no swap is needed. Its internal switch is a Skyworks SKY13373-460LF, controlled by DIO5 (V1) and DIO6 (V2) only - there is no third control line, so DIO7 is left out of the pin list. Section 4.5 of the module datasheet, "True Table of the Internal RF Switch", gives:
+
+| V1 (DIO5) | V2 (DIO6) | Status              | RadioLib mode |
+| --------- | --------- | ------------------- | ------------- |
+| 0         | 0         | Shutdown            | `MODE_STBY`   |
+| 1         | 0         | RFI_P_LF & RFI_N_LF | `MODE_RX`     |
+| 0         | 1         | RFO_HP_LF           | `MODE_TX_HP`  |
+| 1         | 1         | RFO_LP_LF           | `MODE_TX`     |
+
+Note that the LR1121 has no GNSS or WiFi scanning, so `MODE_GNSS` and `MODE_WIFI` are left in the shutdown state.
+
+Select it with `-D LR1121_MODULE_WIO`.
+
+If future DIYers wish to use a module not listed above, add a matrix for it to `rfswitch.h` behind a new `LR1121_MODULE_*` guard.

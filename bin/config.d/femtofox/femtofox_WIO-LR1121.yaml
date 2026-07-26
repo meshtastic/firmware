@@ -13,16 +13,25 @@ Lora:
   spidev: spidev0.0 #pins are (CS=16, CLK=17, MOSI=18, MISO=19)
   spiSpeed: 2000000
 
-  # Omitted modes default to all-LOW.
+  # Internal RF switch is a Skyworks SKY13373-460LF driven by DIO5 (V1) and DIO6 (V2).
+  # Datasheet section 4.5 "True Table of the Internal RF Switch":
+  #   V1 V2  Status
+  #    0  0  Shutdown            -> MODE_STBY
+  #    1  0  RFI_P_LF & RFI_N_LF -> MODE_RX
+  #    0  1  RFO_HP_LF           -> MODE_TX_HP
+  #    1  1  RFO_LP_LF           -> MODE_TX
+  # This matches the Semtech reference topology (SWSD006):
+  # rx=RFSW0, tx=RFSW0|RFSW1, tx_hp=RFSW1.
+  # The LR1121 has no GNSS/WiFi scanning, so those modes are unused.
   rfswitch_table:
-    pins: [DIO5, DIO6, DIO7]
-    MODE_STBY: [LOW, LOW, LOW]
-    MODE_RX: [LOW, LOW, LOW]
-    MODE_TX: [LOW, HIGH, LOW]
-    MODE_TX_HP: [HIGH, LOW, LOW]
-    # MODE_TX_HF: []
-    # MODE_GNSS: []
-    MODE_WIFI: [LOW, LOW, LOW]
+    pins: [DIO5, DIO6]
+    MODE_STBY: [LOW, LOW]
+    MODE_RX: [HIGH, LOW]
+    MODE_TX: [HIGH, HIGH]
+    MODE_TX_HP: [LOW, HIGH]
+    MODE_TX_HF: [LOW, LOW]
+    MODE_GNSS: [LOW, LOW]
+    MODE_WIFI: [LOW, LOW]
 
 General:
   MACAddressSource: eth0
