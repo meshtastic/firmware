@@ -124,7 +124,8 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             } else if (!(alreadyRetriedForPeerKey = hasRetriedPeerKeyDm(p->from, p->decoded.request_id))) {
                 if (PendingPacket *pendingPacket = findPendingPacket(GlobalPacketId(p->to, p->decoded.request_id))) {
                     meshtastic_MeshPacket *retry = packetPool.allocCopy(*pendingPacket->packet);
-                    if (retry && deferPeerKeyDm(retry) == DeferredDmResult::DEFERRED) {
+                    if (retry && deferPeerKeyDm(retry, true, true) == DeferredDmResult::DEFERRED) {
+                        rememberPeerKeyRetry(p->from, p->decoded.request_id);
                         stopRetransmission(p->to, p->decoded.request_id);
                         suppressRoutingDelivery(*p);
                         deferredForPeerKey = true;

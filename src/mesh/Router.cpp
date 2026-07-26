@@ -363,7 +363,8 @@ bool Router::retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p)
         p.decoded.portnum != meshtastic_PortNum_NODEINFO_APP || !p.decoded.request_id)
         return false;
 
-    bool retried = false;
+    meshtastic_MeshPacket *retries[deferredDmCapacity] = {};
+    uint8_t retryCount = 0;
     for (auto &deferred : deferredDms) {
         if (!deferred.p || deferred.p->to != p.from || deferred.keyExchangeId != p.decoded.request_id)
             continue;
@@ -374,16 +375,18 @@ bool Router::retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p)
             if (!nodeDB->copyPublicKey(dm->to, remoteKey))
                 continue;
         }
-        deferred.p = nullptr;
-        deferred.queuedAtMs = 0;
-        deferred.keyExchangeId = 0;
+        retries[retryCount++] = dm;
+        deferred = {};
+    }
+
+    bool retried = false;
+    for (uint8_t i = 0; i < retryCount; ++i) {
+        meshtastic_MeshPacket *dm = retries[i];
+        const PacketId dmId = dm->id;
         LOG_INFO("NodeInfo exchange with 0x%08x completed; retrying deferred DM id=0x%08x", p.from, dm->id);
         rememberPeerKeyExchangeAttempt(dm->to);
-        if (deferred.reason == DeferredDm::Reason::PEER_KEY) {
-            rememberPeerKeyRetry(dm->to, dm->id);
-        }
-        service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, dm->id, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
-        send(dm);
+        const ErrorCode result = send(dm);
+        service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
         retried = true;
     }
     return retried;
@@ -1345,15 +1348,14 @@ Router::DeferredDmResult Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
     return DeferredDmResult::FAILED;
 }
 
-Router::DeferredDmResult Router::deferPeerKeyDm(meshtastic_MeshPacket *p, bool reportQueueStatus)
+Router::DeferredDmResult Router::deferPeerKeyDm(meshtastic_MeshPacket *p, bool reportQueueStatus, bool force)
 {
     if (!nodeInfoModule || p->which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
         !IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP))
         return DeferredDmResult::NOT_APPLICABLE;
 
     meshtastic_NodeInfoLite_public_key_t remoteKey = {0, {0}};
-    if (!nodeDB->copyPublicKey(p->to, remoteKey) || !wouldEncryptWithPKC(p, p->channel, true) ||
-        hasRetriedPeerKeyDm(p->to, p->id))
+    if (!nodeDB->copyPublicKey(p->to, remoteKey) || !wouldEncryptWithPKC(p, p->channel, true))
         return DeferredDmResult::NOT_APPLICABLE;
     if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, sizeof(p->public_key.bytes)) &&
         memcmp(p->public_key.bytes, remoteKey.bytes, sizeof(remoteKey.bytes)) != 0)
@@ -1366,7 +1368,7 @@ Router::DeferredDmResult Router::deferPeerKeyDm(meshtastic_MeshPacket *p, bool r
             break;
         }
     }
-    if (!keyExchangeId && hasPeerKeyExchangeAttempt(p->to))
+    if (!keyExchangeId && !force && hasPeerKeyExchangeAttempt(p->to))
         return DeferredDmResult::NOT_APPLICABLE;
 
     for (auto &deferred : deferredDms) {
@@ -1487,10 +1489,9 @@ void Router::processDeferredDms()
                 deferred.keyExchangeId = 0;
                 LOG_INFO("Retrying deferred DM id=0x%08x after NodeInfo response wait for 0x%08x", p->id, p->to);
                 rememberPeerKeyExchangeAttempt(p->to);
-                rememberPeerKeyRetry(p->to, p->id);
-                service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, p->id,
-                                                meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
-                send(p);
+                const PacketId dmId = p->id;
+                const ErrorCode result = send(p);
+                service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
             }
             continue;
         }
@@ -1501,8 +1502,9 @@ void Router::processDeferredDms()
             deferred.queuedAtMs = 0;
             deferred.keyExchangeId = 0;
             LOG_INFO("Peer key learned for 0x%08x; retrying deferred DM id=0x%08x", p->to, p->id);
-            service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, p->id, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
-            send(p);
+            const PacketId dmId = p->id;
+            const ErrorCode result = send(p);
+            service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
         } else if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmKeyWaitMs)) {
             deferred.p = nullptr;
             deferred.queuedAtMs = 0;

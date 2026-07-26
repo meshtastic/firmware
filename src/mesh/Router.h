@@ -118,7 +118,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Derived routers must call this before creating retransmission state for the packet.
     DeferredDmResult deferMissingKeyDm(meshtastic_MeshPacket *p);
     /// Takes ownership while requesting a NodeInfo exchange before a PKI DM.
-    DeferredDmResult deferPeerKeyDm(meshtastic_MeshPacket *p, bool reportQueueStatus = true);
+    DeferredDmResult deferPeerKeyDm(meshtastic_MeshPacket *p, bool reportQueueStatus = true, bool force = false);
     bool isWaitingForPeerKeyDm(NodeNum peer, PacketId id) const;
     bool hasRetriedPeerKeyDm(NodeNum peer, PacketId id);
     void rememberPeerKeyRetry(NodeNum peer, PacketId id);
@@ -245,7 +245,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
     static constexpr uint8_t deferredDmCapacity = 2;
     static constexpr uint32_t deferredDmKeyWaitMs = 30 * 1000UL;
-    static constexpr uint32_t deferredDmPeerKeyWaitMs = 10 * 1000UL;
+    static constexpr uint32_t deferredDmPeerKeyWaitMs = 2 * 1000UL;
     static constexpr uint32_t peerKeyRetryMemoryMs = 30 * 1000UL;
     static constexpr uint32_t peerKeyExchangeAttemptMs = 30 * 60 * 1000UL;
     DeferredDm deferredDms[deferredDmCapacity];
