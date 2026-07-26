@@ -342,6 +342,20 @@ bool Router::isDeferredDm(PacketId id) const
     return false;
 }
 
+bool Router::shouldSuppressRoutingDelivery(const meshtastic_MeshPacket &p)
+{
+#if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
+    if (suppressedRoutingDelivery.from == p.from && suppressedRoutingDelivery.id == p.id &&
+        suppressedRoutingDelivery.requestId == p.decoded.request_id) {
+        suppressedRoutingDelivery = {};
+        return true;
+    }
+#else
+    (void)p;
+#endif
+    return false;
+}
+
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
     if (p->to == 0) {
@@ -1277,6 +1291,7 @@ bool Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
 
         deferred.p = p;
         deferred.queuedAtMs = millis();
+        deferred.reason = DeferredDm::Reason::DESTINATION_KEY;
         LOG_INFO("Deferring DM id=0x%08x to 0x%08x while requesting NodeInfo", p->id, p->to);
         nodeInfoModule->requestNodeInfo(p->to, p->channel);
         setInterval(0);
@@ -1288,12 +1303,90 @@ bool Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
     return false;
 }
 
+bool Router::deferPeerKeyDm(meshtastic_MeshPacket *p)
+{
+    if (!nodeInfoModule || p->which_payload_variant != meshtastic_MeshPacket_decoded_tag ||
+        !IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP))
+        return false;
+
+    for (auto &deferred : deferredDms) {
+        if (deferred.p)
+            continue;
+
+        deferred.p = p;
+        deferred.queuedAtMs = millis();
+        deferred.reason = DeferredDm::Reason::PEER_KEY;
+        LOG_INFO("Deferring DM id=0x%08x while peer 0x%08x learns our NodeInfo", p->id, p->to);
+        nodeInfoModule->sendOurNodeInfo(p->to, false, p->channel, true, true);
+        service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, p->id, meshtastic_QueueStatus_State_KEY_EXCHANGE);
+        setInterval(0);
+        runASAP = true;
+        return true;
+    }
+
+    LOG_WARN("Deferred DM queue is full; cannot wait for peer 0x%08x to learn our key", p->to);
+    return false;
+}
+
+bool Router::isWaitingForPeerKeyDm(NodeNum peer, PacketId id) const
+{
+    for (const auto &deferred : deferredDms) {
+        if (deferred.p && deferred.reason == DeferredDm::Reason::PEER_KEY && deferred.p->to == peer && deferred.p->id == id)
+            return true;
+    }
+    return false;
+}
+
+bool Router::hasRetriedPeerKeyDm(NodeNum peer, PacketId id)
+{
+    for (auto &retry : peerKeyRetries) {
+        if (retry.peer != peer || retry.id != id)
+            continue;
+        if (Throttle::isWithinTimespanMs(retry.retriedAtMs, peerKeyRetryMemoryMs))
+            return true;
+        retry = {};
+        return false;
+    }
+    return false;
+}
+
+void Router::rememberPeerKeyRetry(NodeNum peer, PacketId id)
+{
+    PeerKeyRetry *slot = &peerKeyRetries[0];
+    for (auto &retry : peerKeyRetries) {
+        if ((retry.peer == peer && retry.id == id) || retry.peer == 0 ||
+            !Throttle::isWithinTimespanMs(retry.retriedAtMs, peerKeyRetryMemoryMs)) {
+            slot = &retry;
+            break;
+        }
+    }
+    *slot = {peer, id, static_cast<uint32_t>(millis())};
+}
+
+void Router::suppressRoutingDelivery(const meshtastic_MeshPacket &p)
+{
+    suppressedRoutingDelivery = {p.from, p.id, p.decoded.request_id};
+}
+
 void Router::processDeferredDms()
 {
     for (auto &deferred : deferredDms) {
         meshtastic_MeshPacket *p = deferred.p;
         if (!p)
             continue;
+
+        if (deferred.reason == DeferredDm::Reason::PEER_KEY) {
+            if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmPeerKeyWaitMs)) {
+                deferred.p = nullptr;
+                deferred.queuedAtMs = 0;
+                LOG_INFO("Retrying deferred DM id=0x%08x after sharing our NodeInfo with 0x%08x", p->id, p->to);
+                rememberPeerKeyRetry(p->to, p->id);
+                service->sendQueueStatusToPhone(getQueueStatus(), ERRNO_OK, p->id,
+                                                meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
+                send(p);
+            }
+            continue;
+        }
 
         meshtastic_NodeInfoLite_public_key_t remoteKey = {0, {0}};
         if (nodeDB->copyPublicKey(p->to, remoteKey)) {
