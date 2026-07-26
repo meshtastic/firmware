@@ -65,7 +65,6 @@ extern "C" {
 /*LED*/
 #define PIN_LED1 -1
 #define LED_STATE_ON HIGH // State when LED is lit
-#define LED_BUILTIN PIN_LED1
 #define LED_BLUE PIN_LED1
 
 /*BUZZER*/
