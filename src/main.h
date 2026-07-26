@@ -11,6 +11,7 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <SPI.h>
 #include <map>
+#include <memory>
 #if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
@@ -68,7 +69,7 @@ extern UdpMulticastHandler *udpHandler;
 #endif
 
 // Global Screen singleton.
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
