@@ -1494,6 +1494,20 @@ void test_M2_unknown_dm_fails_only_after_key_exchange_timeout(void)
     TEST_ASSERT_EQUAL(1, pipelineRouting->ackCalls);
     TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, pipelineRouting->lastAckError);
     TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRouting->lastAckId);
+    bool terminalStatusReceived = false;
+    ErrorCode finalStatus = ERRNO_OK;
+    meshtastic_QueueStatus_State finalState = meshtastic_QueueStatus_State_STATE_UNSPECIFIED;
+    while (meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone()) {
+        if (status->mesh_packet_id == originalDmId) {
+            finalStatus = status->res;
+            finalState = status->state;
+            terminalStatusReceived = status->res == meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
+        }
+        pipelineService->releaseQueueStatusToPool(status);
+    }
+    TEST_ASSERT_TRUE(terminalStatusReceived);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, finalStatus);
+    TEST_ASSERT_EQUAL(meshtastic_QueueStatus_State_STATE_UNSPECIFIED, finalState);
 #if ARCH_PORTDUINO
     portduino_config.force_simradio = dmKeyWaitOriginalForceSimRadio;
 #endif
@@ -2124,20 +2138,43 @@ void test_M19_deferred_dm_reports_the_resumed_send_result(void)
     pipelineRouter->clearPending();
 }
 
-void test_M20_weak_destination_key_fails_closed(void)
+void test_M20_weak_destination_key_refreshes_before_retry(void)
 {
+    enableNodeInfoForDmKeyWait();
     enablePkiForLocalNode();
 
     uint8_t weakPublic[32] = {0};
     mockNodeDB->addNode(REMOTE_NODE);
     mockNodeDB->setPublicKey(REMOTE_NODE, weakPublic);
+    meshtastic_NodeInfoLite_public_key_t storedKey = {0, {0}};
+    TEST_ASSERT_FALSE(nodeDB->copyPublicKey(REMOTE_NODE, storedKey));
 
     meshtastic_MeshPacket *dm =
         packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
     TEST_ASSERT_NOT_NULL(dm);
+    dm->want_ack = true;
+    const PacketId originalDmId = dm->id;
 
-    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_FAILED, perhapsEncode(dm));
-    packetPool.release(dm);
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+    meshtastic_MeshPacket nodeInfoRequest = pipelineRadio->sentPackets.back();
+
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    meshtastic_MeshPacket nodeInfoResponse = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    nodeInfoResponse.decoded.request_id = nodeInfoRequest.id;
+    meshtastic_User responseUser = meshtastic_User_init_zero;
+    responseUser.is_licensed = owner.is_licensed;
+    responseUser.public_key.size = sizeof(remotePublic);
+    memcpy(responseUser.public_key.bytes, remotePublic, sizeof(remotePublic));
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
+
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
+    TEST_ASSERT_TRUE(pipelineRadio->sentPackets.back().pki_encrypted);
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRadio->sentPackets.back().id);
 }
 
 void test_M21_pki_admin_routing_reply_remains_pki_encrypted(void)
@@ -2564,7 +2601,7 @@ void setup()
     RUN_TEST(test_M17_peer_key_rotation_invalidates_peer_key_exchange_attempt);
     RUN_TEST(test_M18_same_peer_dms_share_nodeinfo_preflight);
     RUN_TEST(test_M19_deferred_dm_reports_the_resumed_send_result);
-    RUN_TEST(test_M20_weak_destination_key_fails_closed);
+    RUN_TEST(test_M20_weak_destination_key_refreshes_before_retry);
     RUN_TEST(test_M21_pki_admin_routing_reply_remains_pki_encrypted);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);

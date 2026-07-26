@@ -3386,7 +3386,8 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             return false;
         }
     }
-    if (info->public_key.size == 32) { // if we have a key for this user already, don't overwrite with a new one
+    if (info->public_key.size == 32 && !memfll(info->public_key.bytes, 0, sizeof(info->public_key.bytes))) {
+        // If we have a usable key for this user already, don't overwrite it with a new one.
         // if the key doesn't match, don't update nodeDB at all.
         if (p.public_key.size != 32 || (memcmp(p.public_key.bytes, info->public_key.bytes, 32) != 0)) {
             LOG_WARN("Public Key mismatch, dropping NodeInfo");
@@ -3760,12 +3761,12 @@ uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
 bool NodeDB::copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
 {
     const meshtastic_NodeInfoLite *info = getMeshNode(n);
-    if (info && info->public_key.size == 32) {
+    if (info && info->public_key.size == 32 && !memfll(info->public_key.bytes, 0, sizeof(info->public_key.bytes))) {
         out = info->public_key;
         return true;
     }
 #if WARM_NODE_COUNT > 0
-    if (warmStore.copyKey(n, out.bytes)) {
+    if (warmStore.copyKey(n, out.bytes) && !memfll(out.bytes, 0, sizeof(out.bytes))) {
         out.size = 32;
         return true;
     }
@@ -3782,7 +3783,8 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     // for a node no longer in either NodeDB tier. This extends the pool of peers we can
     // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's signerProven), the
     // same first-contact trust NodeDB itself applies via updateUser().
-    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes)) {
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes) &&
+        !memfll(out.bytes, 0, sizeof(out.bytes))) {
         out.size = 32;
         return true;
     }
@@ -3798,7 +3800,8 @@ bool NodeDB::copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_k
     // A cold-tier cache key backs an authenticated decrypt only when signer-proven; unverified TOFU
     // cache keys must not. Outbound encryption still uses the opportunistic copyPublicKey().
     bool signerProven = false;
-    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) && signerProven) {
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) && signerProven &&
+        !memfll(out.bytes, 0, sizeof(out.bytes))) {
         out.size = 32;
         return true;
     }

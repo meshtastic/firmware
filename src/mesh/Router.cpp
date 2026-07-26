@@ -1512,7 +1512,10 @@ void Router::processDeferredDms()
             deferred.queuedAtMs = 0;
             deferred.keyExchangeId = 0;
             LOG_WARN("No public key learned for 0x%08x before deferred DM id=0x%08x timed out", p->to, p->id);
+            const PacketId dmId = p->id;
             abortSendAndNak(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, p);
+            service->sendQueueStatusToPhone(getQueueStatus(), meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, dmId,
+                                            meshtastic_QueueStatus_State_STATE_UNSPECIFIED);
         }
     }
 }
