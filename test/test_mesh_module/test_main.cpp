@@ -168,6 +168,96 @@ class ReplyIgnoreModule : public MeshModule
     }
 };
 
+// Sends, from inside callModules(), a self-addressed reply and a local broadcast - the fan-out an
+// AdminModule config save performs. Both go out through service->sendToMesh() while a
+// handleReceived() frame is live, so both must be deferred rather than handled re-entrantly.
+class NestedFanoutModule : public MeshModule
+{
+  public:
+    NestedFanoutModule() : MeshModule("nested-fanout", meshtastic_PortNum_PRIVATE_APP) {}
+    uint32_t handleCalls = 0;
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
+    {
+        (void)mp;
+        handleCalls++;
+
+        // (a) a reply addressed to ourselves - exercises the isToUs() deferral branch
+        meshtastic_MeshPacket *reply = router->allocForSending();
+        reply->to = LOCAL_NODE;
+        reply->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        reply->decoded.request_id = 0xBEEF;
+        service->sendToMesh(reply); // default src == RX_SRC_LOCAL
+
+        // (b) a local broadcast - exercises the broadcast branch (loopback deferred, TX immediate)
+        meshtastic_MeshPacket *bcast = router->allocForSending();
+        bcast->to = NODENUM_BROADCAST;
+        bcast->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        service->sendToMesh(bcast);
+
+        return ProcessMessage::STOP;
+    }
+};
+
+// loopbackOk so it also runs for drained RX_SRC_LOCAL packets; each generation sends the next, so
+// the drain must keep processing a chain that grows while it is draining.
+class ChainSendModule : public MeshModule
+{
+  public:
+    ChainSendModule() : MeshModule("chain-send", meshtastic_PortNum_PRIVATE_APP) { loopbackOk = true; }
+    uint32_t handleCalls = 0;
+    uint32_t maxGeneration = 0;
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
+    {
+        handleCalls++;
+        uint32_t generation = mp.decoded.request_id;
+        if (generation > maxGeneration)
+            maxGeneration = generation;
+
+        if (generation < 3) {
+            meshtastic_MeshPacket *next = router->allocForSending();
+            next->to = LOCAL_NODE;
+            next->decoded.portnum = ourPortNum;
+            next->decoded.request_id = generation + 1;
+            service->sendToMesh(next); // default src == RX_SRC_LOCAL
+        }
+        return ProcessMessage::STOP;
+    }
+};
+
+// Sends a burst of self-addressed replies from one dispatch, to overflow the deferred queue.
+class BurstSendModule : public MeshModule
+{
+  public:
+    explicit BurstSendModule(uint32_t count) : MeshModule("burst-send", meshtastic_PortNum_PRIVATE_APP), count(count) {}
+
+  protected:
+    bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override
+    {
+        (void)mp;
+        for (uint32_t i = 0; i < count; i++) {
+            meshtastic_MeshPacket *reply = router->allocForSending();
+            reply->to = LOCAL_NODE;
+            reply->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+            reply->decoded.request_id = 0x100 + i;
+            service->sendToMesh(reply); // default src == RX_SRC_LOCAL
+        }
+        return ProcessMessage::STOP;
+    }
+
+  private:
+    uint32_t count;
+};
+
 static TestModule *testModule;
 static meshtastic_MeshPacket testPacket;
 static MockNodeDB *mockNodeDB;
@@ -202,6 +292,21 @@ static void dispatch(meshtastic_PortNum port)
 {
     meshtastic_MeshPacket request = makeRequest(port);
     MeshModule::callModules(request);
+}
+
+// Dispatch a want_response==false trigger addressed to us through the real router, so a module's
+// handler runs inside a live handleReceived() frame (handleDepth == 1) and any packet it sends is
+// deferred. requestId is carried in decoded.request_id for modules that key on a generation.
+static void dispatchTrigger(meshtastic_PortNum port, uint32_t requestId = 0)
+{
+    meshtastic_MeshPacket trigger = meshtastic_MeshPacket_init_zero;
+    trigger.from = LOCAL_NODE;
+    trigger.to = LOCAL_NODE;
+    trigger.id = 0x7A190000 + requestId;
+    trigger.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    trigger.decoded.portnum = port;
+    trigger.decoded.request_id = requestId;
+    service->sendToMesh(packetPool.allocCopy(trigger), RX_SRC_USER);
 }
 
 } // namespace
@@ -541,6 +646,71 @@ static void test_phoneRequest_replyReachesPhone()
     TEST_ASSERT_EQUAL_UINT32(0, mockRoutingModule->ackNaks.size());
 }
 
+// A module that fans out a self-addressed reply and a local broadcast from inside callModules()
+// must not re-enter handleReceived(): the sends are deferred and drained flat (max depth 1).
+static void test_nestedLocalSend_isDeferred_notReentrant()
+{
+    auto *mod = registerDispatchModule(new NestedFanoutModule());
+
+    dispatchTrigger(meshtastic_PortNum_PRIVATE_APP);
+
+    // The module ran once and was never re-entered; the drain left nothing behind.
+    TEST_ASSERT_EQUAL_UINT32(1, mod->handleCalls);
+    TEST_ASSERT_EQUAL_UINT8(1, mockRouter->maxHandleDepthObserved);
+    TEST_ASSERT_EQUAL_UINT8(0, mockRouter->deferredLocalPending());
+
+    // The self-addressed reply reached the phone exactly once (composition with #11185's ccToPhone).
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(LOCAL_NODE, toPhone->to);
+    TEST_ASSERT_EQUAL_UINT32(0xBEEF, toPhone->decoded.request_id);
+    mockService->releaseToPool(toPhone);
+    TEST_ASSERT_NULL(mockService->getForPhone()); // the broadcast did not also go to the phone
+
+    // The broadcast still reached the radio TX path exactly once.
+    TEST_ASSERT_EQUAL_UINT32(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_TRUE(isBroadcast(mockRouter->sentPackets[0].to));
+}
+
+// A drained packet whose own module sends again is picked up by the same drain pass, so a chain of
+// local sends is processed breadth-first with the stack held flat (max depth 1).
+static void test_deferredChain_drainsBreadthFirst()
+{
+    auto *mod = registerDispatchModule(new ChainSendModule());
+
+    dispatchTrigger(meshtastic_PortNum_PRIVATE_APP, 1); // generation 1
+
+    // Generations 1 -> 2 -> 3 were all processed in the single outermost drain, never nesting.
+    TEST_ASSERT_EQUAL_UINT32(3, mod->handleCalls);
+    TEST_ASSERT_EQUAL_UINT32(3, mod->maxGeneration);
+    TEST_ASSERT_EQUAL_UINT8(1, mockRouter->maxHandleDepthObserved);
+    TEST_ASSERT_EQUAL_UINT8(0, mockRouter->deferredLocalPending());
+}
+
+// Overflowing the fixed deferred queue drops the excess deferrals gracefully: no crash, no leak,
+// depth still capped, and every send's phone cc still happens (return codes unchanged).
+static void test_deferredQueueOverflow_dropsGracefully()
+{
+    const uint32_t burst = 6; // deferredLocalCapacity (4) + 2 - keep in sync with Router.h
+
+    registerDispatchModule(new BurstSendModule(burst));
+
+    dispatchTrigger(meshtastic_PortNum_PRIVATE_APP);
+
+    // Two deferrals were dropped (queue full) and nothing re-entered handleReceived().
+    TEST_ASSERT_EQUAL_UINT32(2, mockRouter->deferredLocalDropped);
+    TEST_ASSERT_EQUAL_UINT8(1, mockRouter->maxHandleDepthObserved);
+    TEST_ASSERT_EQUAL_UINT8(0, mockRouter->deferredLocalPending()); // drained clean
+
+    // Return codes were unchanged: every reply still cc'd to the phone, dropped deferral or not.
+    uint32_t delivered = 0;
+    while (auto *toPhone = mockService->getForPhone()) {
+        mockService->releaseToPool(toPhone);
+        delivered++;
+    }
+    TEST_ASSERT_EQUAL_UINT32(burst, delivered);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -567,6 +737,9 @@ void setup()
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
     RUN_TEST(test_phoneRequest_replyReachesPhone);
+    RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
+    RUN_TEST(test_deferredChain_drainsBreadthFirst);
+    RUN_TEST(test_deferredQueueOverflow_dropsGracefully);
     exit(UNITY_END());
 }
 
