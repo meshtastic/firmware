@@ -117,10 +117,13 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Takes ownership when a local text DM needs a public-key exchange before it can be sent.
     /// Derived routers must call this before creating retransmission state for the packet.
     DeferredDmResult deferMissingKeyDm(meshtastic_MeshPacket *p);
-    bool deferPeerKeyDm(meshtastic_MeshPacket *p);
+    /// Takes ownership while requesting a NodeInfo exchange before a PKI DM.
+    DeferredDmResult deferPeerKeyDm(meshtastic_MeshPacket *p, bool reportQueueStatus = true);
     bool isWaitingForPeerKeyDm(NodeNum peer, PacketId id) const;
     bool hasRetriedPeerKeyDm(NodeNum peer, PacketId id);
     void rememberPeerKeyRetry(NodeNum peer, PacketId id);
+    bool hasPeerKeyExchangeAttempt(NodeNum peer);
+    void rememberPeerKeyExchangeAttempt(NodeNum peer);
     void suppressRoutingDelivery(const meshtastic_MeshPacket &p);
 #endif
 
@@ -244,6 +247,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     static constexpr uint32_t deferredDmKeyWaitMs = 30 * 1000UL;
     static constexpr uint32_t deferredDmPeerKeyWaitMs = 10 * 1000UL;
     static constexpr uint32_t peerKeyRetryMemoryMs = 30 * 1000UL;
+    static constexpr uint32_t peerKeyExchangeAttemptMs = 30 * 60 * 1000UL;
     DeferredDm deferredDms[deferredDmCapacity];
 
     struct PeerKeyRetry {
@@ -251,6 +255,13 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         PacketId id = 0;
         uint32_t retriedAtMs = 0;
     } peerKeyRetries[deferredDmCapacity];
+
+    struct PeerKeyExchangeAttempt {
+        NodeNum peer = 0;
+        uint32_t attemptedAtMs = 0;
+        uint32_t localKeyTag = 0;
+        uint32_t peerKeyTag = 0;
+    } peerKeyExchangeAttempts[8];
 
     void processDeferredDms();
     uint8_t deferredDmCount() const;
@@ -288,10 +299,23 @@ class Router : protected concurrency::OSThread, protected PacketHistory
                 deferred.queuedAtMs = millis() - deferredDmPeerKeyWaitMs;
         }
     }
+    void clearDeferredDmsForTest()
+    {
+        for (auto &deferred : deferredDms) {
+            if (deferred.p)
+                packetPool.release(deferred.p);
+            deferred = {};
+        }
+    }
     void resetPeerKeyRetriesForTest()
     {
         for (auto &retry : peerKeyRetries)
             retry = {};
+    }
+    void resetPeerKeyExchangeAttemptsForTest()
+    {
+        for (auto &attempt : peerKeyExchangeAttempts)
+            attempt = {};
     }
 #endif
 #endif

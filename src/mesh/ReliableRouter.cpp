@@ -17,9 +17,17 @@
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
 #if !MESHTASTIC_EXCLUDE_PKI && !MESHTASTIC_EXCLUDE_NODEINFO
-    // Router owns the delayed packet while it asks for the destination's NodeInfo. Do this before
-    // allocating a retransmission copy, otherwise the stale copy can later emit MAX_RETRANSMIT.
-    const auto deferredDm = deferMissingKeyDm(p);
+    // Router owns delayed DMs before creating retransmission state, otherwise a stale copy can
+    // later emit MAX_RETRANSMIT. First request that a peer refresh our NodeInfo, then recover a
+    // missing destination key when necessary.
+    auto deferredDm = deferPeerKeyDm(p, false);
+    if (deferredDm == DeferredDmResult::DEFERRED)
+        return ERRNO_OK;
+    if (deferredDm == DeferredDmResult::FAILED) {
+        abortSendAndNak(meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY, p);
+        return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
+    }
+    deferredDm = deferMissingKeyDm(p);
     if (deferredDm == DeferredDmResult::DEFERRED)
         return ERRNO_OK;
     if (deferredDm == DeferredDmResult::FAILED) {
@@ -116,7 +124,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             } else if (!(alreadyRetriedForPeerKey = hasRetriedPeerKeyDm(p->from, p->decoded.request_id))) {
                 if (PendingPacket *pendingPacket = findPendingPacket(GlobalPacketId(p->to, p->decoded.request_id))) {
                     meshtastic_MeshPacket *retry = packetPool.allocCopy(*pendingPacket->packet);
-                    if (retry && deferPeerKeyDm(retry)) {
+                    if (retry && deferPeerKeyDm(retry) == DeferredDmResult::DEFERRED) {
                         stopRetransmission(p->to, p->decoded.request_id);
                         suppressRoutingDelivery(*p);
                         deferredForPeerKey = true;
