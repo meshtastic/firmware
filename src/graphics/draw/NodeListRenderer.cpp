@@ -822,14 +822,9 @@ void drawDynamicListScreen_Location(OLEDDisplay *display, OLEDDisplayUiState *st
     }
 #endif
 
-    // === Radar overlay mode ===
-    // When bearings_view_radar is enabled (toggled via long-press menu →
-    // Tracking View), the bearings/distance frame is replaced by the
-    // circular radar minimap.
+    // Radar replaces the distance/bearings render path.
     if (uiconfig.bearings_view_radar) {
-        // RadarRenderer draws its own BT/API icon at the end of the overlay
-        // (without the full-width black wipe drawCommonFooter performs), so
-        // the radar arc and last list row stay intact when BT is connected.
+        // RadarRenderer owns the BT/API icon to avoid wiping radar content.
         graphics::RadarRenderer::drawRadarOverlay(display, x, y);
         return;
     }
