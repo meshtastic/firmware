@@ -248,6 +248,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == dest)) {
 
                 meshtastic_MeshPacket *p = allocDataPacket();
+                if (!p)
+                    return nullptr;
 
                 p->to = local ? this->packetHistory[i].to : dest; // PhoneAPI can handle original `to`
                 p->from = this->packetHistory[i].from;
@@ -304,6 +306,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForward &payload)
 {
     meshtastic_MeshPacket *p = allocDataProtobuf(payload);
+    if (!p)
+        return;
 
     p->to = dest;
 
@@ -340,6 +344,8 @@ void StoreForwardModule::sendMessage(NodeNum dest, meshtastic_StoreAndForward_Re
 void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
 {
     meshtastic_MeshPacket *pr = allocDataPacket();
+    if (!pr)
+        return;
     pr->to = dest;
     pr->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     pr->want_ack = false;

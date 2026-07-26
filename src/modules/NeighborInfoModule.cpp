@@ -110,6 +110,8 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
     // only send neighbours if we have some to send
     if (neighborInfo.neighbors_count > 0) {
         meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
+        if (!p)
+            return;
         p->to = dest;
         p->decoded.want_response = wantReplies;
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
