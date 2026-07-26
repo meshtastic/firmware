@@ -773,6 +773,14 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);
+        if (numbytes == 0) {
+            if (!sendingPacket) {
+                completeSending();
+                powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
+                startReceive();
+            }
+            return false;
+        }
 
         int res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
         if (res != RADIOLIB_ERR_NONE) {
