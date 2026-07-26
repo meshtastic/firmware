@@ -1116,7 +1116,8 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
            config.security.private_key.size == 32 && !isBroadcast(p->to) &&
            // Some portnums either make no sense to send with PKC
            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-           p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
+           (p->decoded.portnum != meshtastic_PortNum_ROUTING_APP || p->pki_encrypted) &&
+           p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
            // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
            // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
            // uses the pending key resolved into haveDestKey/destKey above.
@@ -1234,7 +1235,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *destKey.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes);
+            if (!crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes))
+                return meshtastic_Routing_Error_PKI_FAILED;
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;

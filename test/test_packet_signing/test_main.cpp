@@ -28,9 +28,11 @@
 #include "mesh/ReliableRouter.h"
 #include "mesh/Router.h"
 #include "mesh/SinglePortModule.h"
+#include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
 #include "mqtt/MQTT.h"
+#include "support/AdminModuleTestShim.h"
 #include <ErriezCRC32.h>
 #include <cstdio>
 #include <cstring>
@@ -1437,6 +1439,39 @@ void test_M1_unknown_dm_waits_for_nodeinfo_key_exchange_then_retries(void)
     TEST_ASSERT_EQUAL(0, pipelineRouting->ackCalls);
 }
 
+void test_M1a_phone_origin_unknown_dm_waits_for_nodeinfo_key_exchange(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(0, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+    dm->want_ack = true;
+    const PacketId originalDmId = dm->id;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(dm, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+    meshtastic_MeshPacket nodeInfoRequest = pipelineRadio->sentPackets.back();
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, perhapsDecode(&nodeInfoRequest));
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_NODEINFO_APP, nodeInfoRequest.decoded.portnum);
+
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    meshtastic_MeshPacket nodeInfoResponse = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    nodeInfoResponse.decoded.request_id = nodeInfoRequest.id;
+    meshtastic_User responseUser = meshtastic_User_init_zero;
+    responseUser.is_licensed = owner.is_licensed;
+    responseUser.public_key.size = sizeof(remotePublic);
+    memcpy(responseUser.public_key.bytes, remotePublic, sizeof(remotePublic));
+    TEST_ASSERT_FALSE(dmKeyWaitNodeInfo->handleReceivedProtobuf(nodeInfoResponse, &responseUser));
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(2, pipelineRadio->sendCalls);
+    TEST_ASSERT_TRUE(pipelineRadio->sentPackets.back().pki_encrypted);
+    TEST_ASSERT_EQUAL_HEX32(originalDmId, pipelineRadio->sentPackets.back().id);
+}
+
 void test_M2_unknown_dm_fails_only_after_key_exchange_timeout(void)
 {
     enableNodeInfoForDmKeyWait();
@@ -2089,6 +2124,63 @@ void test_M19_deferred_dm_reports_the_resumed_send_result(void)
     pipelineRouter->clearPending();
 }
 
+void test_M20_weak_destination_key_fails_closed(void)
+{
+    enablePkiForLocalNode();
+
+    uint8_t weakPublic[32] = {0};
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, weakPublic);
+
+    meshtastic_MeshPacket *dm =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(dm);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_FAILED, perhapsEncode(dm));
+    packetPool.release(dm);
+}
+
+void test_M21_pki_admin_routing_reply_remains_pki_encrypted(void)
+{
+    enablePkiForLocalNode();
+    uint8_t localPublic[32];
+    memcpy(localPublic, owner.public_key.bytes, sizeof(localPublic));
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePublic);
+    config.security.admin_key[0].size = sizeof(remotePublic);
+    memcpy(config.security.admin_key[0].bytes, remotePublic, sizeof(remotePublic));
+
+    AdminModuleTestShim admin;
+    meshtastic_MeshPacket request = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_ADMIN_APP, 0);
+    request.pki_encrypted = true;
+    request.public_key.size = sizeof(remotePublic);
+    memcpy(request.public_key.bytes, remotePublic, sizeof(remotePublic));
+    request.decoded.want_response = true;
+
+    meshtastic_AdminMessage message = meshtastic_AdminMessage_init_zero;
+    message.which_payload_variant = meshtastic_AdminMessage_get_channel_request_tag;
+    message.get_channel_request = 0;
+
+    admin.handleReceivedProtobuf(request, &message);
+    meshtastic_MeshPacket *reply = admin.reply();
+    TEST_ASSERT_NOT_NULL(reply);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, reply->decoded.portnum);
+    TEST_ASSERT_TRUE(reply->pki_encrypted);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_NONE, perhapsEncode(reply));
+    TEST_ASSERT_TRUE(reply->pki_encrypted);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, localPublic);
+    crypto->setDHPrivateKey(remotePrivate);
+    myNodeInfo.my_node_num = REMOTE_NODE;
+    TEST_ASSERT_EQUAL(DECODE_SUCCESS, perhapsDecode(reply));
+    myNodeInfo.my_node_num = LOCAL_NODE;
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    admin.drainReply();
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -2453,6 +2545,7 @@ void setup()
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     printf("\n=== Group M: deferred DM key exchange ===\n");
     RUN_TEST(test_M1_unknown_dm_waits_for_nodeinfo_key_exchange_then_retries);
+    RUN_TEST(test_M1a_phone_origin_unknown_dm_waits_for_nodeinfo_key_exchange);
     RUN_TEST(test_M2_unknown_dm_fails_only_after_key_exchange_timeout);
     RUN_TEST(test_M3_undecryptable_dm_reports_key_state_not_no_channel);
     RUN_TEST(test_M4_peer_key_preflight_retries_original_dm_after_nodeinfo);
@@ -2471,6 +2564,8 @@ void setup()
     RUN_TEST(test_M17_peer_key_rotation_invalidates_peer_key_exchange_attempt);
     RUN_TEST(test_M18_same_peer_dms_share_nodeinfo_preflight);
     RUN_TEST(test_M19_deferred_dm_reports_the_resumed_send_result);
+    RUN_TEST(test_M20_weak_destination_key_fails_closed);
+    RUN_TEST(test_M21_pki_admin_routing_reply_remains_pki_encrypted);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);
