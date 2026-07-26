@@ -681,22 +681,41 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
 
     default:
-        meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
-        AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllModules(mp, r, &res);
-
-        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
-            setPassKey(&res);
-            myReply = allocDataProtobuf(res);
-        } else if (mp.decoded.want_response) {
-            LOG_DEBUG("Module API did not respond to admin message. req.variant=%d", r->which_payload_variant);
-        } else if (handleResult != AdminMessageHandleResult::HANDLED) {
-            // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            LOG_DEBUG("Module API did not handle admin message %d", r->which_payload_variant);
-        }
+        handleViaModuleApi(mp, r);
         break;
     }
 
     // Allow any observers (e.g. the UI) to handle/respond
+    handleViaObservers(r);
+
+    // If asked for a response and it is not yet set, generate an 'ACK' response
+    if (mp.decoded.want_response && !myReply) {
+        myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+    }
+    if (mp.pki_encrypted && myReply) {
+        myReply->pki_encrypted = true;
+    }
+    return handled;
+}
+
+void AdminModule::handleViaModuleApi(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r)
+{
+    meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
+    AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllModules(mp, r, &res);
+
+    if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
+        setPassKey(&res);
+        myReply = allocDataProtobuf(res);
+    } else if (mp.decoded.want_response) {
+        LOG_DEBUG("Module API did not respond to admin message. req.variant=%d", r->which_payload_variant);
+    } else if (handleResult != AdminMessageHandleResult::HANDLED) {
+        // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
+        LOG_DEBUG("Module API did not handle admin message %d", r->which_payload_variant);
+    }
+}
+
+void AdminModule::handleViaObservers(const meshtastic_AdminMessage *r)
+{
     AdminMessageHandleResult observerResult = AdminMessageHandleResult::NOT_HANDLED;
     meshtastic_AdminMessage observerResponse = meshtastic_AdminMessage_init_default;
     AdminModule_ObserverData observerData = {
@@ -714,15 +733,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     } else if (observerResult == AdminMessageHandleResult::HANDLED) {
         LOG_DEBUG("Observer handled admin message");
     }
-
-    // If asked for a response and it is not yet set, generate an 'ACK' response
-    if (mp.decoded.want_response && !myReply) {
-        myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
-    }
-    if (mp.pki_encrypted && myReply) {
-        myReply->pki_encrypted = true;
-    }
-    return handled;
 }
 
 void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r)
