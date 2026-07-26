@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Arduino.h>
-#include <assert.h>
 #include <functional>
 #include <memory>
 
@@ -148,13 +147,18 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
             return;
         }
 
-        // Find the index of this pointer in our pool
-        int index = p - pool;
-        if (index >= 0 && index < MaxSize) {
-            assert(used[index]); // Should be marked as used
+        // Pointer subtraction is UB unless p actually points into pool, so find the index via address
+        // arithmetic instead - a foreign/garbage pointer must be rejected, not fed to p - pool.
+        uintptr_t offset = reinterpret_cast<uintptr_t>(p) - reinterpret_cast<uintptr_t>(pool);
+        size_t index = offset / sizeof(T);
+        if (offset % sizeof(T) == 0 && index < (size_t)MaxSize) {
+            if (!used[index]) {
+                LOG_WARN("Double release of pool item %d at 0x%x", (int)index, p);
+                return;
+            }
             used[index] = false;
             this->auditAdd(-(int32_t)sizeof(T));
-            LOG_HEAP("Released static pool item %d at 0x%x", index, p);
+            LOG_HEAP("Released static pool item %d at 0x%x", (int)index, p);
         } else {
             LOG_WARN("Pointer 0x%x not from our pool!", p);
         }
