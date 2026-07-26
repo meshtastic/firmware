@@ -378,6 +378,9 @@ bool Router::retryDeferredDmOnNodeInfo(const meshtastic_MeshPacket &p)
         deferred = {};
     }
 
+    if (retryCount)
+        clearDestinationKeyExchange(p.from, p.decoded.request_id);
+
     bool retried = false;
     for (uint8_t i = 0; i < retryCount; ++i) {
         meshtastic_MeshPacket *dm = retries[i];
@@ -1354,9 +1357,13 @@ Router::DeferredDmResult Router::deferMissingKeyDm(meshtastic_MeshPacket *p)
             continue;
 
         if (!keyExchangeId) {
-            keyExchangeId = nodeInfoModule->requestNodeInfo(p->to, p->channel);
-            if (!keyExchangeId)
-                return DeferredDmResult::FAILED;
+            keyExchangeId = recentDestinationKeyExchange(p->to);
+            if (!keyExchangeId) {
+                keyExchangeId = nodeInfoModule->requestNodeInfo(p->to, p->channel);
+                if (!keyExchangeId)
+                    return DeferredDmResult::FAILED;
+                rememberDestinationKeyExchange(p->to, keyExchangeId);
+            }
         }
 
         deferred.p = p;
@@ -1385,6 +1392,13 @@ Router::DeferredDmResult Router::deferPeerKeyDm(meshtastic_MeshPacket *p, bool r
     if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, sizeof(p->public_key.bytes)) &&
         memcmp(p->public_key.bytes, remoteKey.bytes, sizeof(remoteKey.bytes)) != 0)
         return DeferredDmResult::NOT_APPLICABLE;
+
+    for (auto &deferred : deferredDms) {
+        if (deferred.p == p && deferred.reason == DeferredDm::Reason::PEER_KEY && deferred.retryingAfterPeerKeyWait) {
+            deferred.retryingAfterPeerKeyWait = false;
+            return DeferredDmResult::NOT_APPLICABLE;
+        }
+    }
 
     PacketId keyExchangeId = 0;
     for (const auto &deferred : deferredDms) {
@@ -1495,6 +1509,42 @@ void Router::rememberPeerKeyExchangeAttempt(NodeNum peer)
              crc32Buffer(remoteKey.bytes, remoteKey.size)};
 }
 
+PacketId Router::recentDestinationKeyExchange(NodeNum peer)
+{
+    for (auto &attempt : destinationKeyExchangeAttempts) {
+        if (attempt.peer != peer)
+            continue;
+        if (Throttle::isWithinTimespanMs(attempt.attemptedAtMs, deferredDmKeyWaitMs))
+            return attempt.requestId;
+        attempt = {};
+        return 0;
+    }
+    return 0;
+}
+
+void Router::rememberDestinationKeyExchange(NodeNum peer, PacketId requestId)
+{
+    DestinationKeyExchangeAttempt *slot = &destinationKeyExchangeAttempts[0];
+    for (auto &attempt : destinationKeyExchangeAttempts) {
+        if (attempt.peer == peer || attempt.peer == 0 ||
+            !Throttle::isWithinTimespanMs(attempt.attemptedAtMs, deferredDmKeyWaitMs)) {
+            slot = &attempt;
+            break;
+        }
+    }
+    *slot = {peer, requestId, static_cast<uint32_t>(millis())};
+}
+
+void Router::clearDestinationKeyExchange(NodeNum peer, PacketId requestId)
+{
+    for (auto &attempt : destinationKeyExchangeAttempts) {
+        if (attempt.peer == peer && attempt.requestId == requestId) {
+            attempt = {};
+            return;
+        }
+    }
+}
+
 void Router::suppressRoutingDelivery(const meshtastic_MeshPacket &p)
 {
     suppressedRoutingDelivery = {p.from, p.id, p.decoded.request_id};
@@ -1509,13 +1559,12 @@ void Router::processDeferredDms()
 
         if (deferred.reason == DeferredDm::Reason::PEER_KEY) {
             if (!Throttle::isWithinTimespanMs(deferred.queuedAtMs, deferredDmPeerKeyWaitMs)) {
-                deferred.p = nullptr;
-                deferred.queuedAtMs = 0;
-                deferred.keyExchangeId = 0;
                 LOG_INFO("Retrying deferred DM id=0x%08x after NodeInfo response wait for 0x%08x", p->id, p->to);
                 rememberPeerKeyExchangeAttempt(p->to);
                 const PacketId dmId = p->id;
+                deferred.retryingAfterPeerKeyWait = true;
                 const ErrorCode result = send(p);
+                deferred = {};
                 const auto state = isDeferredDm(dmId) ? meshtastic_QueueStatus_State_KEY_EXCHANGE
                                                       : meshtastic_QueueStatus_State_STATE_UNSPECIFIED;
                 service->sendQueueStatusToPhone(getQueueStatus(), result, dmId, state);

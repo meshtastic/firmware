@@ -445,6 +445,7 @@ void setUp(void)
     pipelineRouter->clearDeferredDmsForTest();
     pipelineRouter->resetPeerKeyRetriesForTest();
     pipelineRouter->resetPeerKeyExchangeAttemptsForTest();
+    pipelineRouter->resetDestinationKeyExchangeAttemptsForTest();
     pipelineRouter->rxDupe = 0;
     pipelineRouter->txRelayCanceled = 0;
     pipelineRadio->reset();
@@ -1405,6 +1406,7 @@ static void enableNodeInfoForDmKeyWait()
     airTime = dmKeyWaitAirTime;
     pipelineRouter->resetPeerKeyRetriesForTest();
     pipelineRouter->resetPeerKeyExchangeAttemptsForTest();
+    pipelineRouter->resetDestinationKeyExchangeAttemptsForTest();
 }
 
 void test_M1_unknown_dm_waits_for_nodeinfo_key_exchange_then_retries(void)
@@ -2275,7 +2277,7 @@ void test_M20_weak_signed_destination_key_is_not_replaced_by_unsigned_nodeinfo(v
     TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
     TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
     TEST_ASSERT_FALSE(nodeDB->copyPublicKey(REMOTE_NODE, storedKey));
-    TEST_ASSERT_EQUAL_HEX32(originalDmId, dm->id);
+    TEST_ASSERT_TRUE(pipelineRouter->isDeferredDm(originalDmId));
 }
 
 void test_M21_pki_admin_routing_reply_remains_pki_encrypted(void)
@@ -2385,6 +2387,69 @@ void test_M23_duplicate_phone_dm_replays_key_exchange_state(void)
     TEST_ASSERT_EQUAL(meshtastic_QueueStatus_State_KEY_EXCHANGE, status->state);
     pipelineService->releaseQueueStatusToPool(status);
     api.close();
+    pipelineRouter->clearDeferredDmsForTest();
+}
+
+void test_M24_two_peer_key_waits_retry_without_redeferring(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+    uint8_t remotePublic[32], remotePrivate[32];
+    crypto->generateKeyPair(remotePublic, remotePrivate);
+    crypto->setDHPrivateKey(config.security.private_key.bytes);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, remotePublic);
+
+    meshtastic_MeshPacket *first =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    meshtastic_MeshPacket *second =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_NOT_NULL(second);
+    first->id = 0xD00D0029;
+    second->id = 0xD00D002A;
+    first->want_ack = second->want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(first, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(second, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(2, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+
+    pipelineRouter->retryDeferredDmsForTest();
+    pipelineRouter->processDeferredDmsForTest();
+
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(2, pipelineRouter->pendingCount());
+    TEST_ASSERT_EQUAL(3, pipelineRadio->sendCalls);
+    TEST_ASSERT_EQUAL_HEX32(0xD00D0029, pipelineRadio->sentPackets[1].id);
+    TEST_ASSERT_EQUAL_HEX32(0xD00D002A, pipelineRadio->sentPackets[2].id);
+    pipelineRouter->clearPending();
+}
+
+void test_M25_destination_key_recovery_reuses_recent_nodeinfo_request(void)
+{
+    enableNodeInfoForDmKeyWait();
+    enablePkiForLocalNode();
+
+    meshtastic_MeshPacket *first =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(first);
+    first->id = 0xD00D002B;
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(first, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+
+    pipelineRouter->expireDeferredDmsForTest();
+    pipelineRouter->processDeferredDmsForTest();
+    TEST_ASSERT_EQUAL(0, pipelineRouter->deferredDmPending());
+
+    meshtastic_MeshPacket *second =
+        packetPool.allocCopy(makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD));
+    TEST_ASSERT_NOT_NULL(second);
+    second->id = 0xD00D002C;
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->sendLocal(second, RX_SRC_USER));
+    TEST_ASSERT_EQUAL(1, pipelineRouter->deferredDmPending());
+    TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
     pipelineRouter->clearDeferredDmsForTest();
 }
 
@@ -2778,6 +2843,8 @@ void setup()
     RUN_TEST(test_M21_pki_admin_routing_reply_remains_pki_encrypted);
     RUN_TEST(test_M22_redeferred_dm_reports_key_exchange_state);
     RUN_TEST(test_M23_duplicate_phone_dm_replays_key_exchange_state);
+    RUN_TEST(test_M24_two_peer_key_waits_retry_without_redeferring);
+    RUN_TEST(test_M25_destination_key_recovery_reuses_recent_nodeinfo_request);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

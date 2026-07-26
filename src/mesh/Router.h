@@ -241,6 +241,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         uint32_t queuedAtMs = 0;
         PacketId keyExchangeId = 0;
         Reason reason = Reason::DESTINATION_KEY;
+        bool retryingAfterPeerKeyWait = false;
     };
 
     static constexpr uint8_t deferredDmCapacity = 2;
@@ -263,8 +264,17 @@ class Router : protected concurrency::OSThread, protected PacketHistory
         uint32_t peerKeyTag = 0;
     } peerKeyExchangeAttempts[8];
 
+    struct DestinationKeyExchangeAttempt {
+        NodeNum peer = 0;
+        PacketId requestId = 0;
+        uint32_t attemptedAtMs = 0;
+    } destinationKeyExchangeAttempts[8];
+
     void processDeferredDms();
     uint8_t deferredDmCount() const;
+    PacketId recentDestinationKeyExchange(NodeNum peer);
+    void rememberDestinationKeyExchange(NodeNum peer, PacketId requestId);
+    void clearDestinationKeyExchange(NodeNum peer, PacketId requestId);
 
     struct SuppressedRoutingDelivery {
         NodeNum from = 0;
@@ -315,6 +325,11 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void resetPeerKeyExchangeAttemptsForTest()
     {
         for (auto &attempt : peerKeyExchangeAttempts)
+            attempt = {};
+    }
+    void resetDestinationKeyExchangeAttemptsForTest()
+    {
+        for (auto &attempt : destinationKeyExchangeAttempts)
             attempt = {};
     }
 #endif
