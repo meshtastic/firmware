@@ -69,6 +69,8 @@ static bool isBluetoothEnabledForPowerFSM()
 
 static bool isWifiActiveForPowerFSM()
 {
+    // Configured WiFi blocks sleep even while disconnected, preventing a disconnect from triggering sleep.
+    // Builds without WiFi can still sleep when power saving is explicitly configured.
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     return isWifiAvailable();
 #else
