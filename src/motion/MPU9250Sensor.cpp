@@ -3,8 +3,7 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-// screen is defined in main.cpp
-extern graphics::Screen *screen;
+#include "main.h" // global std::unique_ptr<graphics::Screen> screen
 #endif
 
 namespace
