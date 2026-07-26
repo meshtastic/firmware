@@ -63,8 +63,12 @@ int32_t RotaryEncoderInterruptBase::runOnce()
             // Press-and-turn takes precedence over the press itself.
             if (pressAndTurnEnabled() && pressAndTurnDelta != 0) {
                 // Drain in one pass: releasing the button would discard anything left over.
+                // Snapshot and clear with interrupts masked: the ISR increments this counter, and
+                // a plain load-then-subtract would drop a detent arriving in between.
+                noInterrupts();
                 int8_t pending = pressAndTurnDelta;
-                pressAndTurnDelta -= pending;
+                pressAndTurnDelta = 0;
+                interrupts();
                 LOG_DEBUG("Rotary event Press %s (%d detents)", pending > 0 ? "CW" : "CCW", pending);
                 while (pending != 0) {
                     bool cw = pending > 0;

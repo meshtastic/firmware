@@ -144,10 +144,6 @@ bool EInkDisplay::connect()
 {
     LOG_INFO("Do EInk init");
 
-#if HAS_PWM_BACKLIGHT
-    graphics::backlightSet(PWM_BACKLIGHT_DEFAULT);
-#endif
-
 #ifdef PIN_EINK_EN
     // backlight power, HIGH is backlight on, LOW is off
     pinMode(PIN_EINK_EN, OUTPUT);

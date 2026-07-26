@@ -32,9 +32,9 @@ void backlightSet(uint8_t level);
 
 uint8_t backlightGet();
 
-void backlightOn();
+void backlightOn(); // drive the stored level
 
-void backlightOff();
+void backlightOff(); // drive 0, leaving the stored level alone
 
 void backlightToggle();
 

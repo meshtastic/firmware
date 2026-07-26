@@ -691,7 +691,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
                     type = LIS3DH;
                     logFoundDevice("LIS3DH", (uint8_t)addr.address);
-                } else if (registerValue == 0x1100 || registerValue == 0x1111) {
+                } else if ((registerValue & 0xFF00) == 0x1100) {
                     // Silan SC7A20: LIS3DH register map, but answers 0x11 here.
                     type = SC7A20;
                     logFoundDevice("SC7A20", (uint8_t)addr.address);

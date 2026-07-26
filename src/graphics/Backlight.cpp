@@ -10,24 +10,25 @@ namespace
 {
 bool pinConfigured = false;
 
+// Level restored when the backlight is switched back on after being toggled off.
 uint8_t lastOnLevel = PWM_BACKLIGHT_DEFAULT;
 
-void configurePin()
+void drive(uint8_t level)
 {
     if (!pinConfigured) {
         pinMode(PIN_PWM_BACKLIGHT, OUTPUT);
         pinConfigured = true;
     }
+    analogWrite(PIN_PWM_BACKLIGHT, level);
 }
 } // namespace
 
 void backlightSet(uint8_t level)
 {
-    configurePin();
     if (level > 0)
         lastOnLevel = level;
     uiconfig.screen_brightness = level;
-    analogWrite(PIN_PWM_BACKLIGHT, level);
+    drive(level);
 }
 
 uint8_t backlightGet()
@@ -37,20 +38,17 @@ uint8_t backlightGet()
 
 void backlightOn()
 {
-    backlightSet(uiconfig.screen_brightness > 0 ? uiconfig.screen_brightness : lastOnLevel);
+    drive(uiconfig.screen_brightness);
 }
 
 void backlightOff()
 {
-    backlightSet(0);
+    drive(0);
 }
 
 void backlightToggle()
 {
-    if (uiconfig.screen_brightness > 0)
-        backlightOff();
-    else
-        backlightOn();
+    backlightSet(uiconfig.screen_brightness > 0 ? 0 : lastOnLevel);
 }
 
 void backlightStepUp()
@@ -61,7 +59,9 @@ void backlightStepUp()
 
 void backlightStepDown()
 {
-    // Clamp at the minimum so stepping down never switches the backlight off.
+    // Leave an off backlight off; otherwise clamp at the minimum.
+    if (uiconfig.screen_brightness == 0)
+        return;
     backlightSet(uiconfig.screen_brightness <= PWM_BACKLIGHT_MIN + PWM_BACKLIGHT_STEP
                      ? PWM_BACKLIGHT_MIN
                      : uiconfig.screen_brightness - PWM_BACKLIGHT_STEP);
