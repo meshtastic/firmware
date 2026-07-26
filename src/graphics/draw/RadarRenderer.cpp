@@ -8,11 +8,10 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "main.h" // global std::unique_ptr<graphics::Screen> screen
 #include <algorithm>
 #include <cmath>
 #include <vector>
-
-extern graphics::Screen *screen;
 
 namespace graphics
 {
