@@ -160,8 +160,10 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                     }
                 } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0) {
                     const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(p->from);
-                    const auto error = (!sender || sender->public_key.size == 0) ? meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY
-                                                                                 : meshtastic_Routing_Error_PKI_FAILED;
+                    const bool hasSenderKey = sender && sender->public_key.size == 32 &&
+                                              !memfll(sender->public_key.bytes, 0, sizeof(sender->public_key.bytes));
+                    const auto error =
+                        hasSenderKey ? meshtastic_Routing_Error_PKI_FAILED : meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY;
                     LOG_INFO("Undecryptable PKI packet from 0x%08x, send error %d", p->from, error);
                     sendAckNak(error, getFrom(p), p->id, channels.getPrimaryIndex(), routingModule->getHopLimitForResponse(*p));
                 } else {

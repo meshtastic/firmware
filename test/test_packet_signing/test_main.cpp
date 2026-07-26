@@ -1538,6 +1538,12 @@ void test_M3_undecryptable_dm_reports_key_state_not_no_channel(void)
     TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Routing_Error_PKI_FAILED, pipelineRouting->lastAckError,
                               "a stored-but-wrong key is not a channel failure");
     TEST_ASSERT_EQUAL_HEX32(dm.id, pipelineRouting->lastAckId);
+
+    uint8_t weakKey[32] = {0};
+    mockNodeDB->setPublicKey(REMOTE_NODE, weakKey);
+    pipelineRouter->sniff(&dm, nullptr);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, pipelineRouting->lastAckError);
+    TEST_ASSERT_EQUAL_HEX32(dm.id, pipelineRouting->lastAckId);
     crypto->setDHPrivateKey(config.security.private_key.bytes);
 }
 
@@ -2146,6 +2152,7 @@ void test_M20_weak_destination_key_refreshes_before_retry(void)
     uint8_t weakPublic[32] = {0};
     mockNodeDB->addNode(REMOTE_NODE);
     mockNodeDB->setPublicKey(REMOTE_NODE, weakPublic);
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
     meshtastic_NodeInfoLite_public_key_t storedKey = {0, {0}};
     TEST_ASSERT_FALSE(nodeDB->copyPublicKey(REMOTE_NODE, storedKey));
 

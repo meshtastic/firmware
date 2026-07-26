@@ -3347,7 +3347,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     // Only a signed update may change the identity of a node that has proven it signs; our own record is
     // exempt. Checked before getOrCreateMeshNode so a refused update cannot evict or write the warm tier.
     const meshtastic_NodeInfoLite *existing = getMeshNode(nodeId);
-    if (nodeId != getNodeNum() && existing && nodeInfoLiteHasXeddsaSigned(existing) && !xeddsaSigned) {
+    const bool hasWeakSignerKey =
+        existing && existing->public_key.size == 32 && memfll(existing->public_key.bytes, 0, sizeof(existing->public_key.bytes));
+    if (nodeId != getNodeNum() && existing && nodeInfoLiteHasXeddsaSigned(existing) && !hasWeakSignerKey && !xeddsaSigned) {
         LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
         return false;
     }
