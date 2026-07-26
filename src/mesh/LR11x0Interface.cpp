@@ -35,6 +35,15 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 #define LR1120_MAX_POWER 13
 #endif
 
+// Vref to assume for a board that declares a TCXO may be fitted without saying at what voltage.
+// "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
+// https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
+#if defined(TCXO_OPTIONAL)
+#define LR11X0_TCXO_DEFAULT_VOLTAGE 1.6f
+#else
+#define LR11X0_TCXO_DEFAULT_VOLTAGE 0
+#endif
+
 template <typename T>
 LR11x0Interface<T>::LR11x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                     RADIOLIB_PIN_TYPE busy)
@@ -56,16 +65,14 @@ template <typename T> bool LR11x0Interface<T>::init()
     // An explicit Vref always wins; TCXO_OPTIONAL only supplies a default for boards that declare a
     // TCXO may be fitted without saying at what voltage. Both may appear in the same variant file.
 #if ARCH_PORTDUINO
-    float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
-// FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
+    // Portduino leaves dio3_tcxo_voltage at 0 whenever the YAML omits DIO3_TCXO_VOLTAGE, which is the
+    // "no explicit Vref" case, so the TCXO_OPTIONAL default still has to apply there
+    float tcxoVoltage =
+        portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000 : LR11X0_TCXO_DEFAULT_VOLTAGE;
 #elif defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR11X0_DIO3_TCXO_VOLTAGE;
-#elif defined(TCXO_OPTIONAL)
-    float tcxoVoltage = 1.6f;
 #else
-    // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
-    // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
-    float tcxoVoltage = 0;
+    float tcxoVoltage = LR11X0_TCXO_DEFAULT_VOLTAGE;
 #endif
 
     // DIO3 is free to be used as an IRQ only while no TCXO Vref is driven on it
@@ -104,9 +111,9 @@ template <typename T> bool LR11x0Interface<T>::init()
     auto tryBegin = [&](int attempt, float vref) {
         uint32_t attemptStart = millis();
         LOG_INFO("LR11x0 begin() attempt %d: tcxoVoltage=%.3fV at t=%ums", attempt, vref, attemptStart);
-        int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, vref);
-        LOG_INFO("LR11x0 begin() attempt %d returned %d after %ums", attempt, res, millis() - attemptStart);
-        return res;
+        int radioLibResult = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, vref);
+        LOG_INFO("LR11x0 begin() attempt %d returned %d after %ums", attempt, radioLibResult, millis() - attemptStart);
+        return radioLibResult;
     };
 
 #if defined(TCXO_OPTIONAL)
@@ -116,32 +123,32 @@ template <typename T> bool LR11x0Interface<T>::init()
 #else
     float attemptVoltage = tcxoVoltage;
 #endif
-    int res = tryBegin(1, attemptVoltage);
+    int radioLibResult = tryBegin(1, attemptVoltage);
 
 #if defined(TCXO_OPTIONAL)
     // 2. XTAL failed with the chip present, so fall back to the TCXO if the variant configured one
-    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
-        LOG_WARN("LR11x0 XTAL init failed (err %d), retrying with TCXO Vref %f V", res, tcxoVoltage);
+    if (radioLibResult != RADIOLIB_ERR_NONE && radioLibResult != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        LOG_WARN("LR11x0 XTAL init failed (err %d), retrying with TCXO Vref %f V", radioLibResult, tcxoVoltage);
         attemptVoltage = tcxoVoltage;
-        res = tryBegin(2, attemptVoltage);
+        radioLibResult = tryBegin(2, attemptVoltage);
     }
 #endif
 
     // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry
-    if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
-        LOG_WARN("LR11x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", res);
+    if (radioLibResult == RADIOLIB_ERR_SPI_CMD_FAILED) {
+        LOG_WARN("LR11x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", radioLibResult);
         delay(100);
-        res = tryBegin(3, attemptVoltage);
+        radioLibResult = tryBegin(3, attemptVoltage);
     }
 
     // \todo Display actual typename of the adapter, not just `LR11x0`
-    LOG_INFO("LR11x0 init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+    LOG_INFO("LR11x0 init result %d", radioLibResult);
+    if (radioLibResult == RADIOLIB_ERR_CHIP_NOT_FOUND || radioLibResult == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
     LR11x0VersionInfo_t version;
-    res = lora.getVersionInfo(&version);
-    if (res == RADIOLIB_ERR_NONE)
+    radioLibResult = lora.getVersionInfo(&version);
+    if (radioLibResult == RADIOLIB_ERR_NONE)
         LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
                   version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
 
@@ -149,12 +156,12 @@ template <typename T> bool LR11x0Interface<T>::init()
     LOG_INFO("Bandwidth set to %f", bw);
     LOG_INFO("Power output set to %d", power);
 
-    if (res == RADIOLIB_ERR_NONE)
-        res = lora.setCRC(2);
+    if (radioLibResult == RADIOLIB_ERR_NONE)
+        radioLibResult = lora.setCRC(2);
 
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
-    if (res == RADIOLIB_ERR_NONE)
-        res = lora.setRegulatorDCDC();
+    if (radioLibResult == RADIOLIB_ERR_NONE)
+        radioLibResult = lora.setRegulatorDCDC();
 
 #ifdef LR11X0_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
@@ -169,20 +176,20 @@ template <typename T> bool LR11x0Interface<T>::init()
         LOG_DEBUG("Set DIO RF switch");
     }
 
-    if (res == RADIOLIB_ERR_NONE) {
+    if (radioLibResult == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
-            res = lora.setRxBoostedGainMode(true);
-            LOG_INFO("Set RX gain to boosted mode; result: %d", res);
+            radioLibResult = lora.setRxBoostedGainMode(true);
+            LOG_INFO("Set RX gain to boosted mode; result: %d", radioLibResult);
         } else {
-            res = lora.setRxBoostedGainMode(false);
-            LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", res);
+            radioLibResult = lora.setRxBoostedGainMode(false);
+            LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", radioLibResult);
         }
     }
 
-    if (res == RADIOLIB_ERR_NONE)
+    if (radioLibResult == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
 
-    return res == RADIOLIB_ERR_NONE;
+    return radioLibResult == RADIOLIB_ERR_NONE;
 }
 
 template <typename T> bool LR11x0Interface<T>::reconfigure()
