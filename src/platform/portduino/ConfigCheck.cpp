@@ -8,12 +8,16 @@
 
 #include "yaml-cpp/eventhandler.h"
 
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <set>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace
@@ -141,7 +145,7 @@ const char *levelName(Level l)
     case kWarn:
         return "WARN ";
     default:
-        return "note ";
+        return "INFO ";
     }
 }
 
@@ -231,7 +235,14 @@ class DuplicateKeyFinder : public YAML::EventHandler
     // No advance() here: push() already consumed the collection's slot in the parent.
     // Toggling again would leave the parent expecting a value, so the next key would
     // not be recognised as one.
-    void pop() { stack.pop_back(); }
+    // Guarded: the stack only stays balanced because yaml-cpp emits matched start/end
+    // events. That is its invariant, not ours, and pop_back() on an empty vector is
+    // undefined -- too sharp an edge to leave resting on an upstream promise.
+    void pop()
+    {
+        if (!stack.empty())
+            stack.pop_back();
+    }
     std::string pathTo(const std::string &leaf) const
     {
         std::string path;
@@ -347,11 +358,333 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
     }
 }
 
+// ---------------------------------------------------------------------------
+// Value types
+// ---------------------------------------------------------------------------
+// A key with the right name but the wrong kind of value is the quietest failure of
+// all. loadConfig() reads almost everything as .as<T>(default), so a value that will
+// not convert is silently replaced by the default -- the setting simply does nothing.
+// The two reads with NO default (Logging.AsciiLogs and the TX_GAIN_LORA entries) are
+// worse: the conversion throws, loadConfig() returns false, and meshtasticd refuses
+// to start on a file this report would otherwise call clean.
+//
+// Conversions are tested by asking yaml-cpp to do them rather than by re-implementing
+// its rules, so this cannot drift from what loadConfig() actually accepts.
+
+enum ValueType { kBool, kInt, kFloat, kString, kIntList, kBoolOrFloat, kIntOrString };
+
+struct ValueSpec {
+    ValueType type;
+    bool fatal; // read without a default: a bad value stops meshtasticd outright
+};
+
+const std::map<std::string, ValueSpec> &valueSpecs()
+{
+    static const std::map<std::string, ValueSpec> s = {
+        {"Lora.spiSpeed", {kInt, false}},
+        {"Lora.gpiochip", {kInt, false}},
+        {"Lora.spidev", {kString, false}},
+        {"Lora.DIO2_AS_RF_SWITCH", {kBool, false}},
+        // Accepts a float (volts) or `true` (meaning 1.8V), so both are allowed here.
+        {"Lora.DIO3_TCXO_VOLTAGE", {kBoolOrFloat, false}},
+        {"Lora.LR1110_MAX_POWER", {kInt, false}},
+        {"Lora.LR1120_MAX_POWER", {kInt, false}},
+        {"Lora.RF95_MAX_POWER", {kInt, false}},
+        {"Lora.SX126X_MAX_POWER", {kInt, false}},
+        {"Lora.SX128X_MAX_POWER", {kInt, false}},
+        // TX_GAIN_LORA is not in this table: it accepts a list OR a bare scalar, and
+        // only the list path is fatal. See checkTxGain().
+        {"Lora.USB_PID", {kInt, false}},
+        {"Lora.USB_VID", {kInt, false}},
+        {"Lora.USB_Serialnum", {kString, false}},
+        {"General.MaxNodes", {kInt, false}},
+        {"General.MaxMessageQueue", {kInt, false}},
+        {"General.APIPort", {kInt, false}},
+        {"General.ConfigDirectory", {kString, false}},
+        {"General.AvailableDirectory", {kString, false}},
+        {"Config.DisplayMode", {kString, false}},
+        {"Config.EnableUDP", {kBool, false}},
+        {"Config.StatusMessage", {kString, false}},
+        {"Display.Panel", {kString, false}},
+        {"Display.spidev", {kString, false}},
+        {"Display.BusFrequency", {kInt, false}},
+        {"Display.Width", {kInt, false}},
+        {"Display.Height", {kInt, false}},
+        {"Display.Invert", {kBool, false}},
+        {"Display.Rotate", {kInt, false}},
+        {"Display.OffsetX", {kInt, false}},
+        {"Display.OffsetY", {kInt, false}},
+        {"Display.OffsetRotate", {kInt, false}},
+        {"Display.RGBOrder", {kBool, false}},
+        {"Display.BacklightInvert", {kBool, false}},
+        {"Touchscreen.Module", {kString, false}},
+        {"Touchscreen.spidev", {kString, false}},
+        {"Touchscreen.BusFrequency", {kInt, false}},
+        {"Touchscreen.I2CAddr", {kInt, false}},
+        {"Touchscreen.Rotate", {kBool, false}},
+        {"Input.KeyboardDevice", {kString, false}},
+        {"Input.PointerDevice", {kString, false}},
+        {"Input.JoystickDevice", {kString, false}},
+        {"Input.TrackballDirection", {kString, false}},
+        {"GPS.SerialPath", {kString, false}},
+        {"GPS.GpsdHost", {kString, false}},
+        {"GPS.GpsdPort", {kInt, false}},
+        {"I2C.I2CDevice", {kString, false}},
+        {"Logging.LogLevel", {kString, false}},
+        {"Logging.TraceFile", {kString, false}},
+        {"Logging.JSONFile", {kString, false}},
+        {"Logging.JSONFileRotate", {kInt, false}},
+        // Read as an int and as a string (the "textmessage"-style aliases).
+        {"Logging.JSONFilter", {kIntOrString, false}},
+        {"Logging.AsciiLogs", {kBool, true}},
+        {"Webserver.Port", {kInt, false}},
+        {"Webserver.RootPath", {kString, false}},
+        {"Webserver.SSLCert", {kString, false}},
+        {"Webserver.SSLKey", {kString, false}},
+        {"HostMetrics.ReportInterval", {kInt, false}},
+        {"HostMetrics.Channel", {kInt, false}},
+        {"HostMetrics.UserStringCommand", {kString, false}},
+        {"Display.HUB75.Rows", {kInt, false}},
+        {"Display.HUB75.Cols", {kInt, false}},
+        {"Display.HUB75.ChainLength", {kInt, false}},
+        {"Display.HUB75.Parallel", {kInt, false}},
+        {"Display.HUB75.PWMBits", {kInt, false}},
+        {"Display.HUB75.PWMLSBNanoseconds", {kInt, false}},
+        {"Display.HUB75.Brightness", {kInt, false}},
+        {"Display.HUB75.ScanMode", {kInt, false}},
+        {"Display.HUB75.RowAddressType", {kInt, false}},
+        {"Display.HUB75.Multiplexing", {kInt, false}},
+        {"Display.HUB75.GPIOSlowdown", {kInt, false}},
+        {"Display.HUB75.LimitRefreshRateHz", {kInt, false}},
+        {"Display.HUB75.DisableHardwarePulsing", {kBool, false}},
+        {"Display.HUB75.ShowRefreshRate", {kBool, false}},
+        {"Display.HUB75.InverseColors", {kBool, false}},
+        {"Display.HUB75.HardwareMapping", {kString, false}},
+        {"Display.HUB75.RGBSequence", {kString, false}},
+        {"Display.HUB75.PixelMapper", {kString, false}},
+        {"Display.HUB75.PanelType", {kString, false}},
+    };
+    return s;
+}
+
+const char *typeName(ValueType type)
+{
+    switch (type) {
+    case kBool:
+        return "a true/false value";
+    case kInt:
+        return "a whole number";
+    case kFloat:
+        return "a number";
+    case kIntList:
+        return "a list of whole numbers";
+    case kBoolOrFloat:
+        return "a number or true/false";
+    case kIntOrString:
+        return "a whole number or a name";
+    default:
+        return "a text value";
+    }
+}
+
+// Ask yaml-cpp to perform the same conversion loadConfig() will.
+bool converts(const YAML::Node &node, ValueType type)
+{
+    try {
+        switch (type) {
+        case kBool:
+            node.as<bool>();
+            return true;
+        case kInt:
+            node.as<int>();
+            return true;
+        case kFloat:
+            node.as<float>();
+            return true;
+        case kBoolOrFloat:
+            try {
+                node.as<float>();
+                return true;
+            } catch (const std::exception &) {
+                node.as<bool>();
+                return true;
+            }
+        case kIntOrString:
+            try {
+                node.as<int>();
+                return true;
+            } catch (const std::exception &) {
+                node.as<std::string>();
+                return true;
+            }
+        case kIntList:
+            if (!node.IsSequence())
+                return false;
+            for (const auto &item : node)
+                item.as<int>();
+            return true;
+        default:
+            node.as<std::string>();
+            return true;
+        }
+    } catch (const std::exception &) {
+        return false;
+    }
+}
+
+void checkValueType(const std::string &file, const std::string &path, const YAML::Node &value, std::vector<Finding> &findings)
+{
+    const auto spec = valueSpecs().find(path);
+    if (spec == valueSpecs().end() || converts(value, spec->second.type))
+        return;
+
+    if (spec->second.fatal)
+        findings.push_back({kError, file, lineOf(value),
+                            path + " is not " + typeName(spec->second.type) +
+                                ". This one is read without a fallback, so the conversion throws and meshtasticd "
+                                "refuses to start on this file"});
+    else
+        findings.push_back({kWarn, file, lineOf(value),
+                            path + " is not " + typeName(spec->second.type) +
+                                ", so it is silently replaced by the default and the setting does nothing"});
+}
+
+// The PA gain table. Two shapes are accepted and they fail differently: a list is read
+// element-by-element with .as<int>() and NO default, so one bad entry throws and stops
+// meshtasticd, while a bare scalar is read as .as<int>(0) and merely falls back to 0.
+// The table itself is uint16_t[22], so extra points are dropped and out-of-range values
+// wrap rather than being rejected.
+void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
+{
+    constexpr size_t kMaxPaPoints = 22;
+
+    if (node.IsSequence()) {
+        if (node.size() > kMaxPaPoints)
+            findings.push_back({kWarn, file, lineOf(node),
+                                "Lora.TX_GAIN_LORA lists " + std::to_string(node.size()) + " points but only the first " +
+                                    std::to_string(kMaxPaPoints) + " are stored; the rest are dropped"});
+        for (const auto &point : node) {
+            if (!converts(point, kInt)) {
+                findings.push_back({kError, file, lineOf(point),
+                                    "Lora.TX_GAIN_LORA entry '" + point.as<std::string>("") +
+                                        "' is not a whole number. List entries are read without a fallback, so this "
+                                        "throws and meshtasticd refuses to start on this file"});
+                continue;
+            }
+            const int value = point.as<int>();
+            // Stored into a uint16_t, so anything outside the range silently wraps.
+            if (value < 0 || value > 65535)
+                findings.push_back({kError, file, lineOf(point),
+                                    "Lora.TX_GAIN_LORA entry " + std::to_string(value) +
+                                        " does not fit the 0-65535 range it is stored in, so it wraps to a different "
+                                        "gain than the one written"});
+        }
+        return;
+    }
+
+    if (node.IsMap()) {
+        findings.push_back({kError, file, lineOf(node), "Lora.TX_GAIN_LORA must be a list of gain points, or a single number"});
+        return;
+    }
+
+    if (!converts(node, kInt))
+        findings.push_back({kWarn, file, lineOf(node),
+                            "Lora.TX_GAIN_LORA is not a whole number, so it is silently read as 0 and no PA gain is applied"});
+}
+
+// Module names are matched exactly and the accepted spellings are not consistently
+// cased (RF95 and LLCC68 are upper, sx1262 and lr1121 lower), so a plausible-looking
+// value is a common way to get an unusable config. loadConfig() exits on an unknown
+// name before printing anything useful, so name the valid set here.
+void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
+{
+    const std::string name = module.as<std::string>("");
+    if (name.empty())
+        return;
+
+    std::string valid;
+    std::string caseHint;
+    for (const auto &known : portduino_config.loraModules) {
+        if (name == known.second)
+            return;
+        valid += (valid.empty() ? "" : ", ") + known.second;
+        if (caseHint.empty() && name.size() == known.second.size() &&
+            std::equal(name.begin(), name.end(), known.second.begin(), [](char a, char b) {
+                // Cast first: tolower() on a negative char is undefined, and a stray
+                // non-ASCII byte in a hand-edited config is exactly how that happens.
+                return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+            }))
+            caseHint = known.second;
+    }
+
+    std::string message =
+        "Lora.Module '" + name + "' is not a module meshtasticd knows, and it refuses to start. Valid: " + valid;
+    if (!caseHint.empty())
+        message += ". The name is matched exactly -- did you mean '" + caseHint + "'?";
+    findings.push_back({kError, file, lineOf(module), message});
+}
+
+// NodeNum comes from the public key, not from this MAC (NodeDB.cpp), so a MAC that
+// fails to apply does not change the node's identity. What it does do is fall through
+// to the BlueZ and LoRa-serial fallbacks, and if those yield nothing meshtasticd exits
+// with "Blank MAC Address not allowed!". loadConfig() accepts MACAddress only when it
+// survives a length test and MACAddressSource only when the interface reads back, and
+// neither failure says anything, so both are checked here.
+void checkMacAddress(const std::string &file, const YAML::Node &general, std::vector<Finding> &findings)
+{
+    const YAML::Node address = general["MACAddress"];
+    const YAML::Node source = general["MACAddressSource"];
+    const std::string addressText = address ? address.as<std::string>("") : "";
+    const std::string sourceText = source ? source.as<std::string>("") : "";
+
+    if (!addressText.empty() && !sourceText.empty()) {
+        findings.push_back({kError, file, lineOf(source),
+                            "General.MACAddress and General.MACAddressSource are both set. meshtasticd refuses to start "
+                            "with both; keep whichever one you want the MAC to come from"});
+        return;
+    }
+
+    if (!addressText.empty()) {
+        std::string digits;
+        for (const char c : addressText)
+            if (c != ':' && c != '-')
+                digits += c;
+        const bool hex = digits.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos;
+        // loadConfig() strips the colons and then requires more than 11 characters;
+        // anything shorter is dropped without a word and the MAC comes from elsewhere.
+        if (digits.size() < 12 || !hex)
+            findings.push_back({kError, file, lineOf(address),
+                                "General.MACAddress '" + addressText +
+                                    "' is not 12 hex digits, so it is ignored and the MAC falls back to the Bluetooth "
+                                    "adapter or the LoRa device serial. If neither yields one, meshtasticd exits with "
+                                    "'Blank MAC Address not allowed!'"});
+    }
+
+    if (!sourceText.empty()) {
+        const std::string path = "/sys/class/net/" + sourceText + "/address";
+        std::ifstream probe(path);
+        if (!probe.good())
+            findings.push_back({kWarn, file, lineOf(source),
+                                "General.MACAddressSource '" + sourceText + "' has no " + path +
+                                    " on this machine, so the MAC reads back empty and meshtasticd asks you to set one. "
+                                    "Expected if you are checking this config on a different host"});
+    }
+}
+
 void checkSection(const std::string &file, const std::string &section, const YAML::Node &body, std::vector<Finding> &findings)
 {
     const auto &allowed = schema().at(section);
-    if (kFreeFormSections.count(section) || !body.IsMap())
+    if (kFreeFormSections.count(section))
         return;
+    // An empty section (`Lora:` with no body) is null, not a map, and is harmless:
+    // loadConfig() tests the section node before reading it. Any other non-map shape
+    // is not readable at all, so say so rather than passing the file as clean.
+    if (body.IsNull())
+        return;
+    if (!body.IsMap()) {
+        findings.push_back({kError, file, lineOf(body), "'" + section + "' is not a mapping, so nothing in it is read"});
+        return;
+    }
 
     for (const auto &entry : body) {
         const std::string key = entry.first.as<std::string>("");
@@ -366,14 +699,24 @@ void checkSection(const std::string &file, const std::string &section, const YAM
             continue;
         }
 
+        checkValueType(file, section + "." + key, value, findings);
+
         if (section == "Lora" && key == "rfswitch_table") {
             checkRfSwitchTable(file, value, findings);
+        } else if (section == "Lora" && key == "Module") {
+            checkLoraModule(file, value, findings);
+        } else if (section == "Lora" && key == "TX_GAIN_LORA") {
+            checkTxGain(file, value, findings);
         } else if (section == "Display" && key == "HUB75") {
             if (value.IsMap())
-                for (const auto &hub : value)
-                    if (!kHub75Keys.count(hub.first.as<std::string>("")))
-                        findings.push_back({kWarn, file, lineOf(hub.first),
-                                            "unknown key 'Display.HUB75." + hub.first.as<std::string>("") + "', ignored"});
+                for (const auto &hub : value) {
+                    const std::string hubKey = hub.first.as<std::string>("");
+                    if (!kHub75Keys.count(hubKey))
+                        findings.push_back(
+                            {kWarn, file, lineOf(hub.first), "unknown key 'Display.HUB75." + hubKey + "', ignored"});
+                    else
+                        checkValueType(file, "Display.HUB75." + hubKey, hub.second, findings);
+                }
         } else if (key == "Enable_Pins" || key == "ExtraPins") {
             if (value.IsSequence())
                 for (const auto &pin : value)
@@ -452,6 +795,8 @@ void checkFile(const std::string &file, std::vector<Finding> &findings, PathInde
         const std::string section = entry.first.as<std::string>("");
         if (schema().count(section)) {
             checkSection(file, section, entry.second, findings);
+            if (section == "General" && entry.second.IsMap())
+                checkMacAddress(file, entry.second, findings);
             continue;
         }
         std::string message = "unknown top-level section '" + section + "', ignored by meshtasticd";
@@ -490,7 +835,7 @@ void checkCrossFileOverlap(const PathIndex &paths, const std::map<std::string, s
         bool coveredByAncestor = false;
         std::string ancestor = entry.first;
         for (size_t dot = ancestor.rfind('.'); dot != std::string::npos; dot = ancestor.rfind('.')) {
-            ancestor = ancestor.substr(0, dot);
+            ancestor.resize(dot);
             const auto found = paths.find(ancestor);
             if (found != paths.end() && found->second.size() >= 2) {
                 coveredByAncestor = true;
@@ -499,6 +844,21 @@ void checkCrossFileOverlap(const PathIndex &paths, const std::map<std::string, s
         }
         if (coveredByAncestor)
             continue;
+
+        // The switch table is the one place "last wins" is not true. Its loader only
+        // ever writes HIGH and never writes LOW back (PortduinoGlue.cpp), so a HIGH
+        // set by an earlier file survives a later file that says LOW in that position:
+        // the effective table is the OR of every table loaded, which may be a switch
+        // state that belongs to none of them.
+        if (entry.first == "Lora.rfswitch_table") {
+            findings.push_back({kError, across, 0,
+                                "'Lora.rfswitch_table' is set in " + std::to_string(entry.second.size()) + " files (" +
+                                    describeOwners(entry.second) +
+                                    "). These do NOT override each other: the loader only ever writes HIGH, so a HIGH "
+                                    "from an earlier file survives a later file that sets LOW there, and the radio ends "
+                                    "up driving the OR of every table. Enable exactly one"});
+            continue;
+        }
 
         findings.push_back({kInfo, across, 0,
                             "'" + entry.first + "' is set in " + std::to_string(entry.second.size()) + " files (" +
@@ -576,6 +936,59 @@ void checkMergedConfig(std::vector<Finding> &findings)
         findings.push_back(
             {kWarn, merged, 0,
              "a Lora.rfswitch_table is set but Module is " + moduleName() + ", and the table is only applied to LR11xx radios"});
+
+    // An unreadable ConfigDirectory used to abort meshtasticd outright (an uncaught
+    // filesystem_error from directory_iterator); it now exits cleanly, but either way
+    // the files meant to configure the radio are not being loaded.
+    if (!portduino_config.config_directory.empty()) {
+        std::error_code error;
+        if (!std::filesystem::is_directory(portduino_config.config_directory, error))
+            findings.push_back({kError, merged, 0,
+                                "General.ConfigDirectory '" + portduino_config.config_directory +
+                                    "' is not a directory that can be read, so none of the files that were meant to be "
+                                    "loaded from it are being loaded and meshtasticd stops at startup"});
+    }
+
+    // strncpy into a char[80] that is then hard null-terminated: safe, but silently
+    // shortened, and the operator never sees the message they actually configured.
+    if (portduino_config.has_statusMessage && portduino_config.statusMessage.size() > 79)
+        findings.push_back({kWarn, merged, 0,
+                            "Config.StatusMessage is " + std::to_string(portduino_config.statusMessage.size()) +
+                                " characters and is truncated to 79 when it is stored"});
+
+    // DIO3_TCXO_VOLTAGE is in VOLTS and is multiplied by 1000. Every other Meshtastic
+    // surface talks about this in millivolts, so "1800" is the natural thing to write
+    // and silently asks for 1800V. Nothing downstream range-checks it.
+    if (portduino_config.dio3_tcxo_voltage > 3600)
+        findings.push_back({kError, merged, 0,
+                            "Lora.DIO3_TCXO_VOLTAGE resolves to " + std::to_string(portduino_config.dio3_tcxo_voltage) +
+                                " mV, which no TCXO runs at. The value is in VOLTS and is multiplied by 1000, so write "
+                                "1.8 (or true) for a 1.8V part, not 1800"});
+
+    // loadConfig() only adopts APIPort inside this range and otherwise keeps the
+    // default without a word, so an out-of-range port silently does nothing.
+    if (portduino_config.api_port != -1 && (portduino_config.api_port <= 1023 || portduino_config.api_port >= 65536))
+        findings.push_back({kWarn, merged, 0,
+                            "General.APIPort " + std::to_string(portduino_config.api_port) +
+                                " is outside 1024-65535, so it is ignored and the default port is used instead"});
+
+    if (portduino_config.webserverport != -1 && (portduino_config.webserverport <= 0 || portduino_config.webserverport >= 65536))
+        findings.push_back({kError, merged, 0,
+                            "Webserver.Port " + std::to_string(portduino_config.webserverport) + " is not a usable TCP port"});
+
+    if (portduino_config.MaxNodes <= 0)
+        findings.push_back({kError, merged, 0,
+                            "General.MaxNodes is " + std::to_string(portduino_config.MaxNodes) +
+                                ", which leaves no room for even this node's own entry"});
+
+#if !defined(HAS_HUB75_NATIVE)
+    // A build-time gap rather than a config error: the same file is valid on a
+    // meshtasticd built with rpi-rgb-led-matrix present.
+    if (portduino_config.displayPanel == hub75)
+        findings.push_back({kError, merged, 0,
+                            "Display.Panel is HUB75 but this meshtasticd was built without HUB75 support, so it exits at "
+                            "startup. Rebuild with hzeller/rpi-rgb-led-matrix installed (it provides rgbmatrix.pc)"});
+#endif
 
     if (portduino_config.lora_cs_pin.enabled && !portduino_config.lora_spi_dev.empty() &&
         portduino_config.lora_spi_dev != "ch341")

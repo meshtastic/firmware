@@ -386,6 +386,20 @@ A well-structured test suite follows this pattern:
 4. **Lifecycle tests** - state persistence, startup from blank, restart recovery
 5. **Summary test** (optional) - emits a scenario table into the log for quick CI review
 
+## Not a Unity suite: `bin/test-config-check.sh`
+
+Portduino YAML validation is tested by driving a built `meshtasticd` rather than by a
+Unity suite, because what it asserts - the exit status and printed report of
+`meshtasticd --check`, and the fact that a normal run still refuses a bad config - are
+properties of the process, not of a linkable function. Fixtures live in
+`test/fixtures/portduino-config/` (see the README there); CI runs it in
+`test_native.yml`. It is not counted in `native-suite-count`, which only tracks `test_*`
+directories.
+
+```bash
+pio run -e native && ./bin/test-config-check.sh
+```
+
 ## Existing Test Suites
 
 | Suite                        | Module Under Test             |
