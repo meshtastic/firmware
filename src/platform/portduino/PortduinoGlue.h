@@ -355,7 +355,8 @@ extern struct portduino_config_struct {
                     out << YAML::Key << "MODE_TX";
                     break;
                 case 3:
-                    out << YAML::Key << "MODE_TX_HP";
+                    // LR2021::MODE_RX_HF and LR11x0::MODE_TX_HP share the same enum value; pick the chip's name
+                    out << YAML::Key << (lora_module == use_lr2021 ? "MODE_RX_HF" : "MODE_TX_HP");
                     break;
                 case 4:
                     out << YAML::Key << "MODE_TX_HF";
