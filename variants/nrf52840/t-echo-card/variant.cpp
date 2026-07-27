@@ -39,7 +39,7 @@ void initVariant()
 // Reproduces the vendor firmware's boot sequence from
 // examples/original_test/original_test.ino. Runs before Meshtastic touches
 // PIN_POWER_EN, so the RT9080 LDO gets a clean reset pulse and peripherals
-// whose EN pins must be LOW at boot (GPS_EN, GPS_RF_EN, BUZZER) aren't left
+// whose control pins must be LOW at boot (GPS_WAKE_UP, GPS_RF_EN, BUZZER) aren't left
 // floating while the 3V3 rail is ramping.
 void earlyInitVariant()
 {
@@ -59,8 +59,8 @@ void earlyInitVariant()
     // current while the rest of setup() runs.
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, LOW);
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    digitalWrite(PIN_GPS_RESET, LOW);
+    pinMode(PIN_GPS_RF_EN, OUTPUT);
+    digitalWrite(PIN_GPS_RF_EN, LOW);
     pinMode(PIN_BUZZER, OUTPUT);
     digitalWrite(PIN_BUZZER, LOW);
 }

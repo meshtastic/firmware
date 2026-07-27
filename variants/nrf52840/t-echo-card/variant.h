@@ -140,11 +140,12 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_GPS_EN (32 + 15) // GPS_EN: P1.15 - GPS power enable
 #define GPS_EN_ACTIVE LOW
 #define PIN_GPS_STANDBY (0 + 25) // GPS_WAKE_UP: P0.25 - wakeup pin
+#define GPS_FORCE_SOFT_SLEEP     // Vendor firmware uses L76K standby rather than cycling its main rail
 #define PIN_GPS_PPS (0 + 23)     // GPS_1PPS: P0.23
 #define GPS_RX_PIN (0 + 19)      // MCU RX ← GPS's TX (vendor GPS_UART_TX / P0.19)
 #define GPS_TX_PIN (0 + 21)      // MCU TX → GPS's RX (vendor GPS_UART_RX / P0.21)
-#define PIN_GPS_RESET (0 + 29)   // GPS_RF_EN: P0.29 - RF front-end shutdown
-#define GPS_RESET_MODE LOW
+#define PIN_GPS_RF_EN (0 + 29)   // GPS_RF_EN: P0.29 - RF front-end enable
+#define GPS_RF_EN_ACTIVE HIGH
 
 #define GPS_THREAD_INTERVAL 50
 
