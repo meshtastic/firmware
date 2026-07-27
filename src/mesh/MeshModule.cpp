@@ -87,6 +87,8 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     uint8_t channelIndex =
         p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? p->channel : channels.getPrimaryIndex();
     auto r = allocAckNak(err, getFrom(p), p->id, channelIndex);
+    if (!r) // pool exhausted; callers treat a null reply as "no response"
+        return nullptr;
 
     setReplyTo(r, *p);
 
