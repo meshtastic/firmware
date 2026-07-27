@@ -185,11 +185,12 @@ class SE050CryptoEngine : public CryptoEngine
     }
 };
 
-CryptoEngine *crypto = new SE050CryptoEngine();
+static SE050CryptoEngine *se050Crypto = new SE050CryptoEngine();
+CryptoEngine *crypto = se050Crypto;
 
 void se050CryptoSelfTest()
 {
-    static_cast<SE050CryptoEngine *>(crypto)->selfTest();
+    se050Crypto->selfTest();
 }
 
 #endif

@@ -26,6 +26,10 @@ class SE050
     // Wire must already be begun by the caller - the I2C bus is shared, so this
     // class never configures or owns it.
     SE050(TwoWire &bus, uint8_t address = DEFAULT_ADDRESS) : bus(bus), address(address) {}
+    // Holds live SCP03 session state and ~2.2 KB of transaction buffers - copying would
+    // both blow RAM and clone a session only one instance may drive.
+    SE050(const SE050 &) = delete;
+    SE050 &operator=(const SE050 &) = delete;
 
     // Interface reset (S-block). The SE050 answers with its ATR, which also
     // resynchronises the block layer. Returns true and fills atrOut/atrLen on

@@ -3,6 +3,7 @@
 #if defined(HAS_SE050)
 
 #include "configuration.h"
+#include "mesh/HardwareRNG.h"
 #include <AES.h>
 #include <Arduino.h>
 #include <Curve25519.h>
@@ -90,7 +91,7 @@ size_t SE050::xfer(const uint8_t *tx, size_t txLen, uint8_t *rx, size_t rxCap)
     for (int attempt = 0; attempt < POLL_ATTEMPTS && !haveHeader; attempt++) {
         SE050_WAIT_MS(POLL_INTERVAL_MS);
         SE050_FEED_WATCHDOG(); // this loop can run for seconds
-        if (bus.requestFrom(address, (uint8_t)sizeof(header)) == sizeof(header)) {
+        if (bus.requestFrom(address, sizeof(header)) == sizeof(header)) {
             for (size_t i = 0; i < sizeof(header); i++)
                 header[i] = bus.read();
             haveHeader = (header[0] == NAD_SE_TO_HOST);
@@ -110,7 +111,7 @@ size_t SE050::xfer(const uint8_t *tx, size_t txLen, uint8_t *rx, size_t rxCap)
         return 0;
     }
     if (body > 0) {
-        if (bus.requestFrom(address, (uint8_t)body) != body) {
+        if (bus.requestFrom(address, body) != body) {
             LOG_DEBUG("SE050: body read failed (LEN=%u)", (unsigned)header[2]);
             return 0;
         }
@@ -173,7 +174,10 @@ int SE050::transceive(const uint8_t *apdu, size_t apduLen, uint8_t *resp, size_t
         return -1;
 
     uint8_t *const frame = txFrame;
-    if (5 + apduLen > sizeof(txFrame))
+    // LEN (below) is a single byte (UM11225), tighter than the txFrame capacity check alone -
+    // without this, 256-283 bytes would pass the capacity check and then silently wrap into a
+    // wrong LEN.
+    if (apduLen > 255 || 5 + apduLen > sizeof(txFrame))
         return -1;
 
     frame[0] = NAD_HOST_TO_SE;
@@ -382,8 +386,10 @@ bool SE050::openSecureChannel()
     memset(&scp, 0, sizeof(scp));
 
     uint8_t hostChallenge[8];
-    for (size_t i = 0; i < sizeof(hostChallenge); i++)
-        hostChallenge[i] = (uint8_t)random(256);
+    if (!HardwareRNG::fill(hostChallenge, sizeof(hostChallenge))) {
+        LOG_ERROR("SE050: no entropy source available for the SCP03 host challenge");
+        return false;
+    }
 
     uint8_t cardChallenge[8], cardCryptogram[8];
     if (!initializeUpdate(hostChallenge, cardChallenge, cardCryptogram))
@@ -494,12 +500,25 @@ int SE050::secureApdu(const uint8_t header[4], const uint8_t *data, int dataLen,
     if (dataLen > 0) {
         uint8_t *const padded = padBuf;
         if ((size_t)dataLen + 16 > sizeof(padBuf)) {
+            // scp.counter already advanced for a command that never reached the card, so the
+            // host and card ICVs/MCVs can no longer agree - closing the channel here (and at
+            // every other exit below that can't confirm the card is still in step) forces the
+            // next call to reopen instead of building C-MACs the card will reject forever.
+            scp.open = sessionActive = false;
             *sw = 0xFFFF;
             return -1;
         }
         memcpy(padded, data, dataLen);
         padded[dataLen] = 0x80; // SCP03 pads with 80 00 .. to the block size
         encLen = ((dataLen + 1 + 15) / 16) * 16;
+        if (encLen + 8 > 255) {
+            // Lc (below) is a single ISO7816 short-form byte, tighter than what padBuf alone
+            // allows - without this, a payload in the ~240-283 byte range would silently wrap
+            // Lc instead of getting rejected here.
+            scp.open = sessionActive = false;
+            *sw = 0xFFFF;
+            return -1;
+        }
         memset(&padded[dataLen + 1], 0, encLen - (dataLen + 1));
         uint8_t icv[16];
         encryptionIcv(false, icv);
@@ -526,13 +545,16 @@ int SE050::secureApdu(const uint8_t header[4], const uint8_t *data, int dataLen,
     uint8_t *const r = apduIn;
     int n = transceive(out, p, r, sizeof(apduIn));
     if (n < 0) {
+        scp.open = sessionActive = false;
         *sw = 0xFFFF;
         return -1;
     }
 
     // Response is [encrypted data][R-MAC 8][SW 2]. A short frame means an error
-    // was returned without a MAC.
+    // was returned without a MAC - the card processed the command, but without an R-MAC
+    // to check there's no way to confirm the ICV really stayed in step.
     if (n < 10) {
+        scp.open = sessionActive = false;
         *sw = statusWord(r, n);
         return n >= 2 ? 0 : -1;
     }
@@ -542,6 +564,7 @@ int SE050::secureApdu(const uint8_t header[4], const uint8_t *data, int dataLen,
     uint8_t *const buf = macBuf;
     if ((size_t)(16 + encRespLen + 2) > sizeof(macBuf)) {
         LOG_ERROR("SE050: response of %d bytes is too long to verify", encRespLen);
+        scp.open = sessionActive = false;
         return -1;
     }
     memcpy(buf, scp.mcv, 16); // R-MAC reads the MCV but must not advance it
@@ -552,6 +575,7 @@ int SE050::secureApdu(const uint8_t header[4], const uint8_t *data, int dataLen,
     cmac(scp.srmac, buf, 16 + encRespLen + 2, full);
     if (memcmp(full, &r[n - 10], 8) != 0) {
         LOG_ERROR("SE050: R-MAC verification failed");
+        scp.open = sessionActive = false;
         return -1;
     }
     if (encRespLen == 0)
@@ -704,6 +728,8 @@ bool SE050::identitySession()
         const uint8_t h[4] = {0x80, 0x01, 0x0B, 0x04};
         uint8_t d[] = {0x41, 0x01, 0x41};
         secureApdu(h, d, sizeof(d), false, r, sizeof(r), &sw);
+        if (sw != 0x9000 && sw != 0x6985)
+            LOG_WARN("SE050: CreateECCurve SW=%04x", sw);
     }
 
     // UserID authenticator. INS carries the AUTH_OBJECT bit (0x40). Also idempotent.
@@ -712,6 +738,8 @@ bool SE050::identitySession()
         uint8_t d[] = {0x41,        0x04,        authId[0],   authId[1],   authId[2],   authId[3],   0x42,        0x08,
                        AUTH_PIN[0], AUTH_PIN[1], AUTH_PIN[2], AUTH_PIN[3], AUTH_PIN[4], AUTH_PIN[5], AUTH_PIN[6], AUTH_PIN[7]};
         secureApdu(h, d, sizeof(d), false, r, sizeof(r), &sw);
+        if (sw != 0x9000 && sw != 0x6985)
+            LOG_WARN("SE050: WriteUserID SW=%04x", sw);
     }
 
     // Open and authenticate a UserID session nested inside the secure channel.
@@ -766,7 +794,7 @@ bool SE050::identityEnsure(uint8_t publicKey[32])
         uint8_t dRead[] = {0x41, 0x04, keyId[0], keyId[1], keyId[2], keyId[3]};
         rl = sessionApdu(hRead, dRead, sizeof(dRead), true, r, sizeof(r), &sw);
         if (sw != 0x9000) {
-            LOG_INFO("SE050: no identity yet, generating X25519 in-chip (objId %08lx)", (unsigned long)IDENTITY_OBJ);
+            LOG_INFO("SE050: no identity yet, generating X25519 in-chip (objId 0x%08x)", (unsigned)IDENTITY_OBJ);
             const uint8_t hGen[4] = {0x80, 0x01, 0x61, 0x00};
             // Policy: bound to the UserID authenticator, allowing key agreement.
             uint8_t dGen[] = {0x11, 0x09, 0x08, authId[0], authId[1], authId[2], authId[3], 0x04, 0x3C, 0x00,
@@ -782,7 +810,7 @@ bool SE050::identityEnsure(uint8_t publicKey[32])
                 return false;
             }
         } else {
-            LOG_INFO("SE050: reusing existing identity (objId %08lx)", (unsigned long)IDENTITY_OBJ);
+            LOG_INFO("SE050: reusing existing identity (objId 0x%08x)", (unsigned)IDENTITY_OBJ);
         }
         v = tlv1(r, rl, &vl);
         if (!v || vl < 32) {
@@ -830,14 +858,14 @@ bool SE050::identityImport(const uint8_t privateKey[32], uint8_t publicKeyOut[32
         if (v && vl >= 32) {
             reverse(v, onChip, 32); // the SE050 reports big-endian
             if (memcmp(onChip, pubLe, 32) == 0) {
-                LOG_INFO("SE050: node key already mirrored (objId %08lx)", (unsigned long)NODE_KEY_OBJ);
+                LOG_INFO("SE050: node key already mirrored (objId 0x%08x)", (unsigned)NODE_KEY_OBJ);
                 activeKeyObj = NODE_KEY_OBJ;
                 identityReady = true;
                 return true;
             }
         }
         if (!replaceStale) {
-            LOG_WARN("SE050: objId %08lx holds a different key - refusing to overwrite an identity", (unsigned long)NODE_KEY_OBJ);
+            LOG_WARN("SE050: objId 0x%08x holds a different key - refusing to overwrite an identity", (unsigned)NODE_KEY_OBJ);
             LOG_WARN("SE050: build with -D SE050_REPLACE_MIRROR once to discard it and mirror the current node key");
             return false;
         }
@@ -846,7 +874,7 @@ bool SE050::identityImport(const uint8_t privateKey[32], uint8_t publicKeyOut[32
         // node key that no longer exists, so nothing is lost with it - but that
         // is a judgement about this object in this stage of the port, not one
         // the driver gets to make on its own for any key it finds in the way.
-        LOG_WARN("SE050: objId %08lx holds a different key - replacing it as asked", (unsigned long)NODE_KEY_OBJ);
+        LOG_WARN("SE050: objId 0x%08x holds a different key - replacing it as asked", (unsigned)NODE_KEY_OBJ);
         const uint8_t hDelete[4] = {0x80, 0x04, 0x00, 0x28};
         uint8_t dDelete[] = {0x41, 0x04, keyId[0], keyId[1], keyId[2], keyId[3]};
         sessionApdu(hDelete, dDelete, sizeof(dDelete), false, r, sizeof(r), &sw);
@@ -863,7 +891,7 @@ bool SE050::identityImport(const uint8_t privateKey[32], uint8_t publicKeyOut[32
     reverse(privLe, privBe, 32);
     reverse(pubLe, pubBe, 32);
 
-    LOG_INFO("SE050: mirroring node key into the chip (objId %08lx)", (unsigned long)NODE_KEY_OBJ);
+    LOG_INFO("SE050: mirroring node key into the chip (objId 0x%08x)", (unsigned)NODE_KEY_OBJ);
     uint8_t d[128];
     int j = 0;
     // Policy: bound to the UserID authenticator, allowing key agreement.
@@ -962,7 +990,7 @@ bool SE050::identityEcdh(const uint8_t peerPublic[32], uint8_t shared[32])
 bool SE050::probe()
 {
     if (!open()) {
-        LOG_ERROR("SE050: bring-up failed at 0x%02x", address);
+        LOG_ERROR("SE050: bring-up failed at 0x%x", address);
         return false;
     }
 
@@ -1014,7 +1042,11 @@ bool SE050::probe()
         LOG_WARN("SE050: SCP03 secure channel not established");
         return true;
     }
-    LOG_INFO("SE050: SCP03 secure channel open (chip authenticated)");
+    // "Open", not "authenticated": the keys are NXP's public factory defaults (see
+    // SCP_KEY_ENC/MAC above), so this confirms a chip that speaks PlatformSCP03
+    // correctly, not one we trust more than an attacker with physical I2C access
+    // could. Rotating to per-device keys is a prerequisite for that claim, not done here.
+    LOG_INFO("SE050: SCP03 secure channel open");
 
     uint8_t ourPublic[32];
     if (!identityEnsure(ourPublic)) {
@@ -1039,9 +1071,11 @@ bool SE050::probe()
         return true;
     }
 
-    // dh2 destroys the private key it is given, so keep a copy for the benchmark.
+#ifdef SE050_BENCHMARK
+    // dh2 destroys the private key it is given, so keep a copy for the benchmark below.
     uint8_t benchPrivate[32];
     memcpy(benchPrivate, testPrivate, 32);
+#endif
 
     uint8_t sharedSoft[32];
     memcpy(sharedSoft, ourPublic, 32);
@@ -1061,10 +1095,13 @@ bool SE050::probe()
         LOG_ERROR("SE050: ECDH MISMATCH, soft=%s", hex);
     }
 
+#ifdef SE050_BENCHMARK
     // What one key agreement costs. Meshtastic runs a full ECDH per PKI packet, so
     // this number, not correctness, decides whether the chip can back the radio path.
     // Each round is a UserID session nested inside SCP03, which means AES-CMAC plus
     // AES-CBC over both the command and the response, all over I2C at 100 kHz.
+    // Build-time opt-in (5 extra agreements, ~300ms, on every boot) - useful during
+    // bring-up, not something a shipped device needs to redo every reset.
     constexpr int ROUNDS = 5;
     uint32_t best = UINT32_MAX, worst = 0, total = 0;
     int done = 0;
@@ -1092,6 +1129,7 @@ bool SE050::probe()
     if (done > 0)
         LOG_INFO("SE050: ECDH cost over %d rounds: min %u ms, avg %u ms, max %u ms | software %u ms (%ux)", done, best / 1000,
                  (total / done) / 1000, worst / 1000, softUs / 1000, softUs ? (total / done) / softUs : 0);
+#endif
 
     return true;
 }

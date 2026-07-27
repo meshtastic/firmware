@@ -694,7 +694,7 @@ void setup()
             // Outlives setup: the crypto engine talks to the chip for the rest of the
             // run, and reopening the secure channel per operation would be absurd.
             se050 = new SE050(se050Info.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire, se050Info.address.address);
-            if (!se050->probe()) {
+            if (se050 && !se050->probe()) {
                 delete se050;
                 se050 = nullptr;
             }
