@@ -23,12 +23,12 @@
 
 static constexpr NodeNum kLocalNode = 0x11111111;
 
-// Shared mock clock — drives HopScalingModule::nowMs()
+// Shared mock clock - drives HopScalingModule::nowMs()
 static uint32_t &mockTime = HopScalingModule::s_testNowMs;
 static constexpr uint32_t ONE_HOUR_MS = 3600UL * 1000UL;
 
 // ---------------------------------------------------------------------------
-// MockNodeDB — not used for hop decisions any more, kept for completeness
+// MockNodeDB - not used for hop decisions any more, kept for completeness
 // ---------------------------------------------------------------------------
 class MockNodeDB : public NodeDB
 {
@@ -56,7 +56,7 @@ class MockNodeDB : public NodeDB
 };
 
 // ---------------------------------------------------------------------------
-// Test shim — expose protected/private members for direct invocation
+// Test shim - expose protected/private members for direct invocation
 // ---------------------------------------------------------------------------
 class HopScalingTestShim : public HopScalingModule
 {
@@ -100,14 +100,18 @@ static MockNodeDB *mockNodeDB = nullptr;
 
 // Create deterministic IDs that produce a broad spread of 16-bit hashes.
 // HopScalingModule admission uses passesFilter(hashNodeId(nodeId), denom), NOT a raw nodeId
-// modulo check — do not assume (nodeId & (denom-1)) == 0 determines whether a node is admitted.
+// modulo check - do not assume (nodeId & (denom-1)) == 0 determines whether a node is admitted.
 static uint32_t makeDistributedNodeId(uint32_t baseId, uint32_t ordinal, uint32_t salt = 0)
 {
     return baseId + salt + (ordinal * 33u);
 }
 
+// Deterministic RNG (rngSeed/rngNext/rngRange) - shared seeded LCG.
+#include "support/DeterministicRng.h"
+static constexpr uint64_t FUZZ_SEED = 0x00F0B5CA1EULL;
+
 // ---------------------------------------------------------------------------
-// Helpers — mesh topology builders
+// Helpers - mesh topology builders
 // ---------------------------------------------------------------------------
 
 // Helper: add N nodes at a given hop with ages spread across a time range.
@@ -151,7 +155,7 @@ static void assertCompactHistogramActive(HopScalingTestShim &shim)
 // Topology builders
 // ---------------------------------------------------------------------------
 
-// Scenario A: Dense local mesh — 110 nodes, heavy at hops 0–2.
+// Scenario A: Dense local mesh - 110 nodes, heavy at hops 0-2.
 static void buildDenseLocalMesh()
 {
     mockNodeDB->clearTestNodes();
@@ -164,7 +168,7 @@ static void buildDenseLocalMesh()
     addNodesAtHop(0x7000, 6, 10, 3000);
 }
 
-// Scenario B: Spread sparse mesh — 76 nodes across hops 0–7.
+// Scenario B: Spread sparse mesh - 76 nodes across hops 0-7.
 static void buildSpreadSparseMesh()
 {
     mockNodeDB->clearTestNodes();
@@ -178,7 +182,7 @@ static void buildSpreadSparseMesh()
     addNodesAtHop(0x8000, 7, 10, 3600);
 }
 
-// Scenario C: Deep linear chain — 22 thin nodes, never reaches 40.
+// Scenario C: Deep linear chain - 22 thin nodes, never reaches 40.
 static void buildDeepLinearChain()
 {
     mockNodeDB->clearTestNodes();
@@ -192,7 +196,7 @@ static void buildDeepLinearChain()
     addNodesAtHop(0x8000, 7, 3, 3600);
 }
 
-// Scenario D: Router cluster — 71 nodes, 45 at hop 2.
+// Scenario D: Router cluster - 71 nodes, 45 at hop 2.
 static void buildRouterCluster()
 {
     mockNodeDB->clearTestNodes();
@@ -206,7 +210,7 @@ static void buildRouterCluster()
     addNodesAtHop(0x8000, 7, 3, 3600);
 }
 
-// Scenario E: Megamesh — 199 nodes (DB near capacity).
+// Scenario E: Megamesh - 199 nodes (DB near capacity).
 static void buildMegamesh()
 {
     mockNodeDB->clearTestNodes();
@@ -221,7 +225,7 @@ static void buildMegamesh()
 }
 
 // ---------------------------------------------------------------------------
-// Tests — Topology-driven hop reduction scenarios
+// Tests - Topology-driven hop reduction scenarios
 // ---------------------------------------------------------------------------
 
 void test_dense_local_telemetry()
@@ -491,7 +495,7 @@ void test_startup_blank_state()
 }
 
 // ---------------------------------------------------------------------------
-// Tests — Denominator state machine
+// Tests - Denominator state machine
 // ---------------------------------------------------------------------------
 
 void test_denominator_rises_on_overflow()
@@ -549,7 +553,7 @@ void test_filtering_denom_hold_counts_down()
     TEST_ASSERT_EQUAL_UINT8(4u, shim->getFilteringDenominator());
     TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenomHoldRollsRemaining());
 
-    // Roll 3: hold 1→0, step fires — filteringDenominator halves to max(2, samp=1) = 2.
+    // Roll 3: hold 1→0, step fires - filteringDenominator halves to max(2, samp=1) = 2.
     shim->rollHourTest();
     TEST_MSG_FMT("After hold expires: filt=1/%u samp=1/%u holdRolls=%u", shim->getFilteringDenominator(),
                  shim->getSamplingDenominator(), shim->getFilteringDenomHoldRollsRemaining());
@@ -575,10 +579,10 @@ void test_filtering_denom_steps_down_gradually()
     shim->rollHourTest(); // hold=0 (no decrement), step: 4/2=2 > 1, filt=2
     TEST_ASSERT_EQUAL_UINT8(2u, shim->getFilteringDenominator());
 
-    shim->rollHourTest(); // step: 2/2=1, not > samp=1, filt=samp=1 — converged
+    shim->rollHourTest(); // step: 2/2=1, not > samp=1, filt=samp=1 - converged
     TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenominator());
 
-    shim->rollHourTest(); // filt==samp, outer if is false — no further change
+    shim->rollHourTest(); // filt==samp, outer if is false - no further change
     TEST_ASSERT_EQUAL_UINT8(1u, shim->getFilteringDenominator());
     TEST_ASSERT_EQUAL_UINT8(HopScalingModule::DENOM_MIN, shim->getSamplingDenominator());
 
@@ -661,6 +665,57 @@ static void test_memory_layout()
 // Unity setup / teardown / main
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Fuzz - crafted-nodenum blitz of the hop histogram
+// ---------------------------------------------------------------------------
+// The scenario tests above check the scaling *math* with realistic topologies. This one is adversarial:
+// it floods samplePacketForHistogram with node numbers chosen to maximize table churn (a tiny colliding
+// pool, boundary values, broad random) plus denominator swings and hourly rolls, and asserts the fixed
+// 128-entry table's invariants hold on every step. hopCount is kept in 0..MAX_HOP: the wire caps hops at
+// 7 (3-bit protobuf field), so out-of-range hops are not a reachable input. Runs under ASan/LSan.
+void test_fuzz_nodenum_blitz(void)
+{
+    TEST_MSG_FMT("=== Fuzz: crafted-nodenum histogram blitz (seed=0x%llx) ===", (unsigned long long)FUZZ_SEED);
+    rngSeed(FUZZ_SEED);
+
+    static HopScalingTestShim shim; // static: OSThread-derived (Unity longjmp skips dtors on a failed assert)
+    shim.clear();
+    shim.setHistogramDenominator(HopScalingModule::DENOM_MIN); // sample-all: maximum admission / churn
+
+    for (unsigned k = 0; k < 40000; k++) {
+        NodeNum id;
+        switch (rngRange(4)) {
+        case 0:
+            id = rngEdgeNodeNum(&kLocalNode, 1);
+            break; // shared boundary pool (0/1/broadcast) + local node
+        case 1:
+            id = rngNext() & 0xFFu;
+            break; // tiny pool: forces hash reuse (update path) and collisions
+        default:
+            id = ((NodeNum)rngNext() << 1) ^ rngNext();
+            break; // broad random
+        }
+        uint8_t hop = (uint8_t)rngRange(HopScalingModule::MAX_HOP + 1); // 0..7, wire-bounded
+
+        shim.samplePacketForHistogram(id, hop);
+
+        // Occasionally swing the sampling denominator and roll the hour to drive trim / eviction /
+        // the hourly rolling + scaling under sustained churn. Denominators stay powers of two (1..128) -
+        // the only states the module actually produces (its passesFilter uses hash & (denom-1)).
+        if (rngRange(256) == 0)
+            shim.setHistogramDenominator((uint8_t)(1u << rngRange(8))); // 1, 2, 4, ... 128
+        if (rngRange(512) == 0) {
+            mockTime += ONE_HOUR_MS;
+            shim.rollHourTest();
+        }
+
+        // Invariants that must hold on every step regardless of input.
+        TEST_ASSERT_TRUE_MESSAGE(shim.getEntryCount() <= HopScalingModule::CAPACITY, "histogram overran CAPACITY");
+        TEST_ASSERT_TRUE_MESSAGE(shim.getFillPercentage() <= 100, "fill percentage exceeded 100");
+        TEST_ASSERT_TRUE_MESSAGE(shim.getLastRequiredHop() <= HOP_MAX, "required-hop recommendation exceeded HOP_MAX");
+    }
+}
+
 void setUp(void)
 {
     if (!mockNodeDB)
@@ -711,6 +766,9 @@ void setup()
     RUN_TEST(test_filtering_denom_hold_counts_down);
     RUN_TEST(test_filtering_denom_steps_down_gradually);
     RUN_TEST(test_full_at_denom_max_drops_entry);
+
+    printf("\n=== Fuzz ===\n");
+    RUN_TEST(test_fuzz_nodenum_blitz);
 
     printf("\n=== Summary ===\n");
     RUN_TEST(test_memory_layout);

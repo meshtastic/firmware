@@ -54,6 +54,7 @@ bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
+char NotificationRenderer::alphanumericValue[16] = {0};
 VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
 std::function<void(const std::string &)> NotificationRenderer::textInputCallback = nullptr;
 
@@ -62,6 +63,15 @@ uint32_t pow_of_10(uint32_t n)
     uint32_t ret = 1;
     for (uint32_t i = 0; i < n; i++) {
         ret *= 10;
+    }
+    return ret;
+}
+
+uint64_t pow_of_16(uint32_t n)
+{
+    uint64_t ret = 1;
+    for (uint32_t i = 0; i < n; i++) {
+        ret *= 16ULL;
     }
     return ret;
 }
@@ -197,8 +207,6 @@ void NotificationRenderer::resetBanner()
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
 
-    OnScreenKeyboardModule::instance().clearPopup();
-
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
     curSelected = 0;
@@ -251,6 +259,12 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
+    case notificationTypeEnum::pairing_pin:
+        // pairing_pin is rendered the same as text_banner - it's just a
+        // text banner. The split type exists only so the lockdown UI
+        // short-circuit in Screen.cpp can recognise the BLE pair-PIN
+        // banner as the one safe banner to composite over the LOCKED
+        // frame.
         drawAlertBannerOverlay(display, state);
         break;
     case notificationTypeEnum::node_picker:
@@ -258,6 +272,12 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         break;
     case notificationTypeEnum::number_picker:
         drawNumberPicker(display, state);
+        break;
+    case notificationTypeEnum::hex_picker:
+        drawHexPicker(display, state);
+        break;
+    case notificationTypeEnum::alphanumeric_picker:
+        drawAlphanumericPicker(display, state);
         break;
     }
 }
@@ -340,6 +360,195 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     }
 
     linePointers[lineCount++] = digits.c_str();
+    linePointers[lineCount++] = arrowPointer.c_str();
+
+    drawNotificationBox(display, state, linePointers, totalLines, 0);
+}
+
+void NotificationRenderer::drawHexPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    const char *lineStarts[MAX_LINES + 1] = {0};
+    uint16_t lineCount = 0;
+
+    // Parse lines
+    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+    lineStarts[lineCount] = alertBannerMessage;
+
+    // Find lines
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
+        lineCount++;
+    }
+    // modulo to extract
+    uint8_t this_digit = (currentNumber % (pow_of_16(numDigits - curSelected))) / (pow_of_16(numDigits - curSelected - 1));
+    // Handle input
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
+        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
+        if (this_digit == 15) {
+            currentNumber -= 15 * (pow_of_16(numDigits - curSelected - 1));
+        } else {
+            currentNumber += (pow_of_16(numDigits - curSelected - 1));
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
+               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
+        if (this_digit == 0) {
+            currentNumber += 15 * (pow_of_16(numDigits - curSelected - 1));
+        } else {
+            currentNumber -= (pow_of_16(numDigits - curSelected - 1));
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
+        if (inEvent.kbchar > 47 && inEvent.kbchar < 58) { // have a digit
+            currentNumber -= this_digit * (pow_of_16(numDigits - curSelected - 1));
+            currentNumber += (inEvent.kbchar - 48) * (pow_of_16(numDigits - curSelected - 1));
+            curSelected++;
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+        curSelected++;
+    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+        curSelected--;
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
+        resetBanner();
+        return;
+    }
+    if (curSelected == static_cast<int8_t>(numDigits)) {
+        alertBannerCallback(currentNumber);
+        resetBanner();
+        return;
+    }
+
+    inEvent.inputEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
+
+    uint16_t totalLines = lineCount + 2;
+    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
+
+    // copy the linestarts to display to the linePointers holder
+    for (uint16_t i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
+    std::string digits = " ";
+    std::string arrowPointer = " ";
+    for (uint16_t i = 0; i < numDigits; i++) {
+        // Modulo minus modulo to return just the current number
+        uint8_t digitValue = (currentNumber % (pow_of_16(numDigits - i))) / (pow_of_16(numDigits - i - 1));
+        if (digitValue < 10) {
+            digits += std::to_string(digitValue) + " ";
+        } else if (digitValue == 10) {
+            digits += "A ";
+        } else if (digitValue == 11) {
+            digits += "B ";
+        } else if (digitValue == 12) {
+            digits += "C ";
+        } else if (digitValue == 13) {
+            digits += "D ";
+        } else if (digitValue == 14) {
+            digits += "E ";
+        } else if (digitValue == 15) {
+            digits += "F ";
+        }
+
+        if (curSelected == i) {
+            arrowPointer += "^ ";
+        } else {
+            arrowPointer += "_ ";
+        }
+    }
+
+    linePointers[lineCount++] = digits.c_str();
+    linePointers[lineCount++] = arrowPointer.c_str();
+
+    drawNotificationBox(display, state, linePointers, totalLines, 0);
+}
+
+// Arcade-style initials entry. Mirrors drawHexPicker's cursor/confirm flow, but each position
+// holds a character from ALPHANUMERIC_CHARS (cycled with UP/DOWN) instead of a packed digit, and
+// the assembled string is returned through textInputCallback.
+void NotificationRenderer::drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    static const char ALPHANUMERIC_CHARS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    constexpr int ALPHANUMERIC_COUNT = sizeof(ALPHANUMERIC_CHARS) - 1; // exclude the NUL
+
+    const char *lineStarts[MAX_LINES + 1] = {0};
+    uint16_t lineCount = 0;
+
+    // Parse lines (identical to the number/hex pickers)
+    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+    lineStarts[lineCount] = alertBannerMessage;
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
+        lineCount++;
+    }
+
+    auto alphaIndex = [&](char c) -> int {
+        for (int i = 0; i < ALPHANUMERIC_COUNT; i++)
+            if (ALPHANUMERIC_CHARS[i] == c)
+                return i;
+        return 0;
+    };
+
+    // Handle input
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS ||
+        inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
+        int idx = (alphaIndex(alphanumericValue[curSelected]) + 1) % ALPHANUMERIC_COUNT;
+        alphanumericValue[curSelected] = ALPHANUMERIC_CHARS[idx];
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS ||
+               inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
+        int idx = (alphaIndex(alphanumericValue[curSelected]) + ALPHANUMERIC_COUNT - 1) % ALPHANUMERIC_COUNT;
+        alphanumericValue[curSelected] = ALPHANUMERIC_CHARS[idx];
+    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
+        char k = inEvent.kbchar;
+        if (k >= 'a' && k <= 'z')
+            k = static_cast<char>(k - 'a' + 'A');
+        if ((k >= 'A' && k <= 'Z') || (k >= '0' && k <= '9')) { // direct keyboard entry
+            alphanumericValue[curSelected] = k;
+            curSelected++;
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+        curSelected++;
+    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+        curSelected--;
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
+        resetBanner();
+        return;
+    }
+
+    if (curSelected < 0)
+        curSelected = 0;
+    if (curSelected == static_cast<int8_t>(numDigits)) {
+        auto callback = textInputCallback; // capture before clearing to avoid re-entrancy surprises
+        std::string result(alphanumericValue, numDigits);
+        textInputCallback = nullptr;
+        resetBanner();
+        if (callback)
+            callback(result);
+        return;
+    }
+
+    inEvent.inputEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
+
+    uint16_t totalLines = lineCount + 2;
+    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
+
+    for (uint16_t i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
+    std::string chars = " ";
+    std::string arrowPointer = " ";
+    for (uint16_t i = 0; i < numDigits; i++) {
+        chars += std::string(1, alphanumericValue[i]) + " ";
+        arrowPointer += (curSelected == static_cast<int8_t>(i)) ? "^ " : "_ ";
+    }
+
+    linePointers[lineCount++] = chars.c_str();
     linePointers[lineCount++] = arrowPointer.c_str();
 
     drawNotificationBox(display, state, linePointers, totalLines, 0);
@@ -921,10 +1130,9 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             // Cancel virtual keyboard - call callback with empty string to indicate timeout
             auto callback = textInputCallback; // Store callback before clearing
 
-            // Clean up first to prevent re-entry
-            delete virtualKeyboard;
-            virtualKeyboard = nullptr;
-            textInputCallback = nullptr;
+            // Clean up first to prevent re-entry. The keyboard belongs to OnScreenKeyboardModule; only stop()
+            // may free it, and it clears virtualKeyboard/textInputCallback for us.
+            OnScreenKeyboardModule::instance().stop(false);
             resetBanner();
 
             // Call callback after cleanup
@@ -943,9 +1151,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             bool handled = OnScreenKeyboardModule::processVirtualKeyboardInput(inEvent, virtualKeyboard);
             if (!handled && inEvent.inputEvent == INPUT_BROKER_CANCEL) {
                 auto callback = textInputCallback;
-                delete virtualKeyboard;
-                virtualKeyboard = nullptr;
-                textInputCallback = nullptr;
+                OnScreenKeyboardModule::instance().stop(false); // sole owner of the keyboard; also clears our aliases
                 resetBanner();
                 if (callback) {
                     callback("");
@@ -979,9 +1185,6 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
         display->setColor(WHITE);
         // Draw the virtual keyboard
         virtualKeyboard->draw(display, 0, 0);
-
-        // Draw transient popup overlay (if any) managed by OnScreenKeyboardModule
-        OnScreenKeyboardModule::instance().drawPopupOverlay(display);
     } else {
         // If virtualKeyboard is null, reset the banner to avoid getting stuck
         LOG_INFO("Virtual keyboard is null - resetting banner");
@@ -992,13 +1195,6 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 bool NotificationRenderer::isOverlayBannerShowing()
 {
     return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
-}
-
-void NotificationRenderer::showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs)
-{
-    if (!title || !content || current_notification_type != notificationTypeEnum::text_input)
-        return;
-    OnScreenKeyboardModule::instance().showPopup(title, content, durationMs);
 }
 
 } // namespace graphics

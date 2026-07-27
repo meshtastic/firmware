@@ -8,8 +8,10 @@
 #include "SX126xInterface.h"
 #include "SX128xInterface.cpp"
 #include "SX128xInterface.h"
+#ifndef ARCH_PORTDUINO_WASM // TCP socket API server excluded in the browser/wasm build
 #include "api/ServerAPI.cpp"
 #include "api/ServerAPI.h"
+#endif
 
 // We need this declaration for proper linking in derived classes
 #if RADIOLIB_EXCLUDE_SX126X != 1

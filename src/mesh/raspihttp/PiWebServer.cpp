@@ -46,7 +46,7 @@ Author: Marc Philipp Hammermann
 mail:   marchammermann@googlemail.com
 
 */
-// Mirrors the guard in PiWebServer.h — see comment there. macOS Homebrew
+// Mirrors the guard in PiWebServer.h - see comment there. macOS Homebrew
 // provides ulfius + deps; Linux pulls them via apt. Either way, this
 // translation unit only compiles when the headers are present.
 #ifdef ARCH_PORTDUINO
@@ -230,8 +230,6 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
         return U_CALLBACK_ERROR;
     }
 }
-
-static void handleWebResponse() {}
 
 /*
  * Adapt the radioapi to the Webservice handleAPIv1ToRadio

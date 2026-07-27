@@ -42,8 +42,8 @@ Sample OCV curve for Li-SOCl2 primary lithium cells (e.g. Saft cells have fresh 
 
 // LoRa
 /*
- * RAK3172   (-20–85°C) -> No TCXO
- * RAK3172-T (-40–85°C) -> 3.0V TCXO
+ * RAK3172   (-20-85°C) -> No TCXO
+ * RAK3172-T (-40-85°C) -> 3.0V TCXO
  * https://github.com/RAKWireless/RAK-STM32-RUI/blob/e5a28be8fab1a492bd9223dd425ca33a8a297d90/variants/WisDuo_RAK3172-T_Board/radio_conf.h#L91
  */
 #define TCXO_OPTIONAL
