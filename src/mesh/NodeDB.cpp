@@ -104,7 +104,7 @@ void variantDefaultConfig() {}
 void variantDefaultModuleConfig() __attribute__((weak));
 void variantDefaultModuleConfig() {}
 
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_RC52)
 
 uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
@@ -154,6 +154,7 @@ uint32_t readwrite8(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_
     return ret;
 }
 
+#ifdef HELTEC_MESH_NODE_T114
 uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
 {
     pinMode(cs, OUTPUT);
@@ -172,6 +173,57 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
     uint32_t ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
     return ID;
 }
+#endif
+
+#ifdef HELTEC_RC52
+namespace
+{
+constexpr uint32_t HELTEC_RC52_NV3001B_ID = 0x300101;
+} // namespace
+
+uint32_t get_nv3001b_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst, uint8_t en, uint8_t bl)
+{
+    pinMode(en, OUTPUT);
+    digitalWrite(en, TFT_EN_ON);
+    pinMode(bl, OUTPUT);
+    digitalWrite(bl, TFT_BACKLIGHT_ON);
+    delay(10);
+
+    pinMode(cs, OUTPUT);
+    digitalWrite(cs, HIGH);
+    pinMode(sck, OUTPUT);
+    digitalWrite(sck, LOW);
+    pinMode(mosi, OUTPUT);
+    pinMode(dc, OUTPUT);
+    pinMode(rst, OUTPUT);
+    digitalWrite(rst, LOW);
+    delay(10);
+    digitalWrite(rst, HIGH);
+    delay(10);
+
+    uint32_t rddid = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    uint32_t rdid1 = readwrite8(0xDA, 8, 0, cs, sck, mosi, dc, rst);
+    uint32_t rdid2 = readwrite8(0xDB, 8, 0, cs, sck, mosi, dc, rst);
+    uint32_t rdid3 = readwrite8(0xDC, 8, 0, cs, sck, mosi, dc, rst);
+    uint32_t rdid = (rdid1 << 16) | (rdid2 << 8) | rdid3;
+    bool present = rddid == HELTEC_RC52_NV3001B_ID || rdid == HELTEC_RC52_NV3001B_ID;
+    bool floating = rddid == 0xFFFFFF && rdid == 0xFFFFFF;
+    bool heldLow = rddid == 0x000000 && rdid == 0x000000;
+
+    LOG_INFO("Heltec RC52 NV3001B RDDID=0x%06x RDID=0x%06x", (unsigned int)rddid, (unsigned int)rdid);
+    if (!present) {
+        LOG_INFO("Heltec RC52 NV3001B display not detected%s",
+                 floating ? " (SDA floating)" : heldLow ? " (SDA low)" : "");
+        digitalWrite(bl, TFT_BACKLIGHT_OFF);
+        digitalWrite(en, TFT_EN_OFF);
+        pinMode(en, INPUT);
+        return rdid;
+    }
+
+    LOG_INFO("Heltec RC52 NV3001B display detected");
+    return HELTEC_RC52_NV3001B_ID;
+}
+#endif
 
 #endif
 
@@ -1013,12 +1065,17 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #if defined(USE_EINK) || defined(HAS_SPI_TFT) || defined(USE_SPISSD1306)
     bool hasScreen = true;
-#ifdef HELTEC_MESH_NODE_T114
+#ifdef HELTEC_RC52
+    uint32_t nv3001b_id = get_nv3001b_id(TFT_CS, TFT_SCL, TFT_SDA, TFT_RS, TFT_RST, TFT_EN, TFT_BL);
+    if (nv3001b_id != HELTEC_RC52_NV3001B_ID) {
+        hasScreen = false;
+    }
+#elif defined(HELTEC_MESH_NODE_T114)
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
     if (st7789_id == 0xFFFFFF) {
         hasScreen = false;
     }
-#endif // HELTEC_MESH_NODE_T114
+#endif // HELTEC_RC52 / HELTEC_MESH_NODE_T114
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (portduino_config.displayPanel)

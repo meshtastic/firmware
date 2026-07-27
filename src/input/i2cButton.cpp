@@ -2,22 +2,25 @@
 #include "meshUtils.h"
 
 #include "configuration.h"
+#if defined(M5STACK_UNITC6L) || defined(HELTEC_RC52)
+#include "input/InputBroker.h"
+#include "main.h"
+
+i2cButtonThread *i2cButton;
+#endif
+
 #if defined(M5STACK_UNITC6L)
 
 #include "MeshService.h"
 #include "Power.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
-#include "input/InputBroker.h"
-#include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
-
-i2cButtonThread *i2cButton;
 
 using namespace concurrency;
 
@@ -91,5 +94,160 @@ int32_t i2cButtonThread::runOnce()
         this->notifyObservers(&evt);
     }
     return 50;
+}
+#endif
+
+#if defined(HELTEC_RC52)
+
+#include "Throttle.h"
+#include <Wire.h>
+
+namespace
+{
+constexpr uint8_t TCA6408_ADDR = 0x20;
+constexpr uint8_t TCA6408_INPUT_REG = 0x00;
+constexpr uint8_t TCA6408_POLARITY_REG = 0x02;
+constexpr uint8_t TCA6408_CONFIG_REG = 0x03;
+constexpr uint8_t TCA6408_ROTARY_A_MASK = 0x01;
+constexpr uint8_t TCA6408_ROTARY_B_MASK = 0x02;
+constexpr uint32_t TCA6408_DEBOUNCE_MS = 5;
+constexpr uint32_t TCA6408_POLL_MS = 100;
+
+enum class Tca6408RotaryAction : uint8_t {
+    NONE,
+    UP,
+    DOWN
+};
+} // namespace
+
+i2cButtonThread *i2cButtonThread::instance = nullptr;
+
+i2cButtonThread::i2cButtonThread(const char *name)
+    : concurrency::OSThread(name, TCA6408_POLL_MS), _originName(name),
+      inputState(TCA6408_ROTARY_A_MASK | TCA6408_ROTARY_B_MASK)
+{
+}
+
+bool i2cButtonThread::init()
+{
+    if (!inputBroker)
+        return false;
+
+    powerSensorBus();
+    pinMode(SENSOR_INT, INPUT_PULLUP);
+    if (!writeRegister(TCA6408_POLARITY_REG, 0x00) || !writeRegister(TCA6408_CONFIG_REG, 0xFF) || !readInput(inputState)) {
+        LOG_INFO("Heltec RC52 TCA6408 rotary not detected");
+        concurrency::OSThread::disable();
+        return false;
+    }
+
+    inputBroker->registerSource(this);
+    instance = this;
+    attachInterrupt(SENSOR_INT, interruptHandler, FALLING);
+    ready = true;
+    LOG_INFO("Heltec RC52 TCA6408 rotary ready at 0x%02x", TCA6408_ADDR);
+    return true;
+}
+
+void i2cButtonThread::pollOnce()
+{
+    uint8_t newState = 0;
+    if (!readInput(newState)) {
+        LOG_DEBUG("Heltec RC52 TCA6408 rotary read failed");
+        return;
+    }
+
+    handleTransition(newState);
+    inputState = newState;
+}
+
+int32_t i2cButtonThread::runOnce()
+{
+    if (!ready)
+        return concurrency::OSThread::disable();
+
+    pollOnce();
+    return TCA6408_POLL_MS;
+}
+
+void i2cButtonThread::interruptHandler()
+{
+    if (instance && inputBroker)
+        inputBroker->requestPollSoon(instance);
+}
+
+void i2cButtonThread::powerSensorBus()
+{
+#ifdef SENSOR_POWER_CTRL_PIN
+    pinMode(SENSOR_POWER_CTRL_PIN, OUTPUT);
+    digitalWrite(SENSOR_POWER_CTRL_PIN, SENSOR_POWER_ON);
+#ifdef PERIPHERAL_WARMUP_MS
+    delay(PERIPHERAL_WARMUP_MS);
+#else
+    delay(20);
+#endif
+#endif
+}
+
+bool i2cButtonThread::writeRegister(uint8_t reg, uint8_t value)
+{
+    Wire.beginTransmission(TCA6408_ADDR);
+    Wire.write(reg);
+    Wire.write(value);
+    return Wire.endTransmission() == 0;
+}
+
+bool i2cButtonThread::readInput(uint8_t &value)
+{
+    Wire.beginTransmission(TCA6408_ADDR);
+    Wire.write(TCA6408_INPUT_REG);
+    if (Wire.endTransmission(false) != 0)
+        return false;
+    if (Wire.requestFrom(TCA6408_ADDR, static_cast<uint8_t>(1)) != 1)
+        return false;
+
+    value = Wire.read();
+    return true;
+}
+
+void i2cButtonThread::handleTransition(uint8_t newState)
+{
+    uint8_t changed = (inputState ^ newState) & (TCA6408_ROTARY_A_MASK | TCA6408_ROTARY_B_MASK);
+    Tca6408RotaryAction action = Tca6408RotaryAction::NONE;
+    bool aLow = (newState & TCA6408_ROTARY_A_MASK) == 0;
+    bool bLow = (newState & TCA6408_ROTARY_B_MASK) == 0;
+
+    if (!aLow && !bLow)
+        activeLowPhase = false;
+
+    if (!activeLowPhase && (changed & TCA6408_ROTARY_A_MASK) && aLow && !bLow) {
+        action = Tca6408RotaryAction::UP;
+        activeLowPhase = true;
+    } else if (!activeLowPhase && (changed & TCA6408_ROTARY_B_MASK) && bLow && !aLow) {
+        action = Tca6408RotaryAction::DOWN;
+        activeLowPhase = true;
+    }
+
+    if (action == Tca6408RotaryAction::NONE && !activeLowPhase && (changed & TCA6408_ROTARY_A_MASK)) {
+        bool aRising = (newState & TCA6408_ROTARY_A_MASK) != 0;
+        if (aRising && bLow)
+            action = Tca6408RotaryAction::UP;
+    }
+
+    if (action == Tca6408RotaryAction::NONE && !activeLowPhase && (changed & TCA6408_ROTARY_B_MASK)) {
+        bool bRising = (newState & TCA6408_ROTARY_B_MASK) != 0;
+        if (bRising && aLow)
+            action = Tca6408RotaryAction::DOWN;
+    }
+
+    if (action == Tca6408RotaryAction::NONE || Throttle::isWithinTimespanMs(lastEventMs, TCA6408_DEBOUNCE_MS))
+        return;
+
+    lastEventMs = millis();
+    InputEvent event = {};
+    event.source = _originName;
+    event.inputEvent = action == Tca6408RotaryAction::DOWN ? INPUT_BROKER_DOWN : INPUT_BROKER_UP;
+    LOG_DEBUG("Heltec RC52 TCA6408 rotary event %d state=0x%02x", event.inputEvent, newState);
+    notifyObservers(&event);
 }
 #endif

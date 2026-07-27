@@ -139,6 +139,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #elif defined(HELTEC_MESH_SOLAR)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
+#elif defined(HELTEC_RC52)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_RC52
 #elif defined(MUZI_BASE)
 #define HW_VENDOR meshtastic_HardwareModel_MUZI_BASE
 #elif defined(HELTEC_MESH_TOWER_V2)

@@ -51,8 +51,8 @@ uint16_t getVDDVoltage();
 
 // Weak empty variant shutdown prep function.
 // May be redefined by variant files.
-void variant_shutdown() __attribute__((weak));
-void variant_shutdown() {}
+__attribute__((noinline)) void variant_shutdown() __attribute__((weak));
+__attribute__((noinline)) void variant_shutdown() {}
 
 // Optional variant hook called each nrf52Loop(); e.g. for low-VDD System OFF.
 void variant_nrf52LoopHook(void) __attribute__((weak));
