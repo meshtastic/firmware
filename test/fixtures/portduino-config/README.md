@@ -51,7 +51,7 @@ are upper, `sx1262` and `lr1121` lower.
 
 | File                           | Expected                                                          |
 | ------------------------------ | ----------------------------------------------------------------- |
-| `rfswitch-valid.yaml`          | A full eight-mode table on an `lr1121` is clean.                  |
+| `rfswitch-valid.yaml`          | A full seven-mode table on an `lr1121` is clean.                  |
 | `rfswitch-partial.yaml`        | Legal, but the omitted modes are named - they are driven all-LOW. |
 | `rfswitch-bad-pin.yaml`        | `DIO9` is not one of DIO5/6/7/8/10.                               |
 | `rfswitch-row-length.yaml`     | Rows shorter and longer than the declared pin count.              |
@@ -104,6 +104,19 @@ if those yield nothing meshtasticd exits with "Blank MAC Address not allowed!".
 | `mac-malformed.yaml`      | `AA:BB:CC` is under 12 hex digits, so it is silently dropped.                                                                               |
 | `mac-source-missing.yaml` | Names an interface with no `/sys/class/net/<n>/address`. Warning, not an error: it is machine-dependent and may be checked on another host. |
 
+## CH341 USB-SPI adapters
+
+`spidev: ch341` is a different hardware model, not a variant of the same one. The Lora
+pins become indexes on the adapter and are driven by the usermode USB driver -
+`portduinoSetup()` skips `initGPIOPin()` for every one of them - so nothing is claimed
+from a gpiochip. This is also the only shape that works on Windows and macOS, which have
+no gpiochip, `gpiodetect` or `gpioinfo` to check anything against.
+
+| File                  | Expected                                                                      |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `usb-ch341.yaml`      | Clean, and the report lists adapter pins rather than resolved gpiochip lines. |
+| `ch341-gpiochip.yaml` | A gpiochip and line mapping alongside `ch341`: read, stored, and never used.  |
+
 ## Structure
 
 | File                      | Expected                                                                                                                                               |
@@ -113,7 +126,7 @@ if those yield nothing meshtasticd exits with "Blank MAC Address not allowed!".
 | `unknown-section.yaml`    | A top-level section meshtasticd never reads.                                                                                                           |
 | `stranded-key.yaml`       | `spidev` left at the top level instead of inside a section.                                                                                            |
 | `top-level-list.yaml`     | Document root is a sequence.                                                                                                                           |
-| `empty-file.yaml`         | Zero bytes. A warning, not an error.                                                                                                                   |
+| `empty-file.yaml`         | No content: comments only, which parse to a null document. A warning, not an error.                                                                    |
 | `malformed-indent.yaml`   | Will not parse; the report must still name the file and line.                                                                                          |
 | `pin-unknown-subkey.yaml` | A pin mapping accepts only `pin`, `gpiochip` and `line`.                                                                                               |
 | `pin-unreadable.yaml`     | A non-numeric pin resolves to -1 and trips an assertion at startup.                                                                                    |

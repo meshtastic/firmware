@@ -1,4 +1,4 @@
-# CLEAN. A full eight-mode table on an LR11xx: every mode present, every row the same
+# CLEAN. A full seven-mode table on an LR11xx: every mode present, every row the same
 # length as the pins list, every value exactly HIGH or LOW.
 Lora:
   Module: lr1121

@@ -360,13 +360,14 @@ void portduinoSetup()
         std::error_code dirError;
         std::filesystem::directory_iterator entries{portduino_config.config_directory, dirError};
         if (dirError) {
-            std::cout << "Unable to read ConfigDirectory " << portduino_config.config_directory << ": " << dirError.message()
-                      << std::endl;
             // Half a configuration is worse than none: the files that were meant to
             // supply the radio setup are missing. --check continues so the report can
             // say so with the rest of the findings.
-            if (!configCheck)
+            if (!configCheck) {
+                std::cout << "Unable to read ConfigDirectory " << portduino_config.config_directory << ": " << dirError.message()
+                          << std::endl;
                 exit(EXIT_FAILURE);
+            }
         }
         for (const std::filesystem::directory_entry &entry : entries) {
             if (ends_with(entry.path().string(), ".yaml")) {

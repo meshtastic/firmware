@@ -920,11 +920,31 @@ void checkPinValues(std::vector<Finding> &findings)
             report(pin.config_section + "." + pin.config_name);
 }
 
-void checkMergedConfig(std::vector<Finding> &findings)
+void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
 {
     const std::string merged = "(merged configuration)";
 
     checkPinValues(findings);
+
+    // portduinoSetup() skips initGPIOPin() for every Lora pin when spidev is ch341, so a
+    // gpiochip or line mapping written next to one is read, stored, and never used.
+    if (portduino_config.lora_spi_dev == "ch341") {
+        auto endsWith = [](const std::string &text, const std::string &suffix) {
+            return text.size() >= suffix.size() && text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
+        };
+        std::string ignored;
+        for (const auto &entry : paths) {
+            if (entry.first.rfind("Lora.", 0) != 0)
+                continue;
+            if (entry.first == "Lora.gpiochip" || endsWith(entry.first, ".gpiochip") || endsWith(entry.first, ".line"))
+                ignored += (ignored.empty() ? "" : ", ") + entry.first;
+        }
+        if (!ignored.empty())
+            findings.push_back({kWarn, merged, 0,
+                                "Lora.spidev is ch341, so the Lora pins are indexes on the USB adapter and are driven by "
+                                "the usermode driver rather than claimed from a gpiochip. " +
+                                    ignored + " are read but never used"});
+    }
 
     if (isLR11xx(portduino_config.lora_module) && !portduino_config.has_rfswitch_table)
         findings.push_back({kWarn, merged, 0,
@@ -1009,9 +1029,26 @@ void printSummary()
     if (portduino_config.dio3_tcxo_voltage)
         std::cout << "  DIO3 TCXO voltage : " << portduino_config.dio3_tcxo_voltage << " mV\n";
 
-    std::cout << "  RF switch table   : " << (portduino_config.has_rfswitch_table ? "set" : "not set") << "\n";
+    // setRfSwitchTable() is only ever called for an LR11xx, so "not set" reads as a gap on
+    // an SX126x when there is nothing to set. "auto" has not resolved to a module yet, so
+    // it is the one case where absence cannot be called either way.
+    const char *rfSwitch = "not needed for this module";
+    if (portduino_config.has_rfswitch_table)
+        rfSwitch = "set";
+    else if (isLR11xx(portduino_config.lora_module))
+        rfSwitch = "not set";
+    else if (portduino_config.lora_module == use_autoconf)
+        rfSwitch = "not set (module not resolved yet)";
+    std::cout << "  RF switch table   : " << rfSwitch << "\n";
 
-    std::cout << "\nResolved GPIO lines (what meshtasticd will try to claim):\n";
+    // A ch341 adapter's Lora pins are indexes on the adapter, driven by the usermode USB
+    // driver: portduinoSetup() skips initGPIOPin() for every Lora pin in that case, and
+    // hands the raw numbers to Ch341Hal. Reporting them as gpiochip lines to confirm with
+    // gpioinfo is wrong everywhere, and doubly so on Windows and macOS, which have neither.
+    const bool usbAdapter = portduino_config.lora_spi_dev == "ch341";
+
+    std::cout << (usbAdapter ? "\nCH341 adapter pins (driven over USB, not claimed from a gpiochip):\n"
+                             : "\nResolved GPIO lines (what meshtasticd will try to claim):\n");
     bool any = false;
     for (const auto *pin : portduino_config.all_pins) {
         if (!pin->enabled || pin->config_section != "Lora")
@@ -1020,12 +1057,20 @@ void printSummary()
         std::cout << "  " << pin->config_name;
         for (size_t i = pin->config_name.size(); i < 18; i++)
             std::cout << ' ';
-        std::cout << ": pin " << pin->pin << "  gpiochip" << pin->gpiochip << " line " << pin->line << "\n";
+        std::cout << ": pin " << pin->pin;
+        if (!usbAdapter)
+            std::cout << "  gpiochip" << pin->gpiochip << " line " << pin->line;
+        std::cout << "\n";
     }
     if (!any)
         std::cout << "  (none configured)\n";
-    std::cout << "\n  Confirm these against 'gpiodetect' and 'gpioinfo' on this machine. A line that\n"
-                 "  exists on the wrong chip is claimed successfully and silently does nothing.\n";
+    if (usbAdapter)
+        std::cout << "\n  These are pin indexes on the CH341 itself, so 'gpiodetect' and 'gpioinfo' say\n"
+                     "  nothing about them. Lora.gpiochip and any per-pin gpiochip/line mapping are\n"
+                     "  ignored for a ch341 device.\n";
+    else
+        std::cout << "\n  Confirm these against 'gpiodetect' and 'gpioinfo' on this machine. A line that\n"
+                     "  exists on the wrong chip is claimed successfully and silently does nothing.\n";
 }
 
 } // namespace
@@ -1055,7 +1100,7 @@ int runConfigCheck(const std::vector<std::string> &configFiles)
     for (const auto &file : configFiles)
         checkFile(file, findings, paths, sectionOwners);
     checkCrossFileOverlap(paths, sectionOwners, findings);
-    checkMergedConfig(findings);
+    checkMergedConfig(paths, findings);
 
     int errors = 0, warnings = 0;
     std::string currentFile;

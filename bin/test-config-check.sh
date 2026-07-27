@@ -277,6 +277,22 @@ assert "pin value that resolves to -1" 1 pin-unreadable.yaml check \
 	"Result: 1 error, 0 warnings"
 
 echo
+echo "CH341 USB-SPI adapters:"
+# The Lora pins of a ch341 device are indexes on the adapter, driven by the usermode
+# driver: portduinoSetup() skips initGPIOPin() for all of them. Reporting them as
+# gpiochip lines to confirm with gpioinfo is wrong on Linux and meaningless on the
+# Windows and macOS hosts where a USB adapter is the only way to attach a radio.
+assert "adapter pins are not reported as GPIO lines" 0 usb-ch341.yaml check \
+	"CH341 adapter pins (driven over USB, not claimed from a gpiochip)" \
+	"pin indexes on the CH341 itself" \
+	"Module            : sx1262" \
+	"Result: 0 errors, 0 warnings"
+assert "gpiochip mapping on a ch341 device is ignored" 0 ch341-gpiochip.yaml check \
+	"Lora.spidev is ch341" \
+	"Lora.CS.gpiochip, Lora.CS.line, Lora.gpiochip are read but never used" \
+	"Result: 0 errors, 1 warning"
+
+echo
 echo "structural faults:"
 assert "duplicate key" 1 duplicate-key.yaml check \
 	"duplicate key 'Lora.CS'" \
@@ -317,12 +333,17 @@ echo
 echo "across a config directory:"
 # Three files each opening a 'Lora:' section. Every key not repeated in the last
 # one loaded is silently reset to its default - here config.yaml's TCXO voltage.
+# The warning COUNT is deliberately not asserted: the two config.d files name
+# different modules, so which one wins - and therefore whether the LR11xx-without-a
+# switch-table warning fires - depends on the order the filesystem returns them in,
+# which is the very thing this fixture exists to demonstrate.
 assert "config.d overrides are reported" 0 configd-conflict/config.yaml check \
 	"config.d/lora-a.yaml" \
 	"config.d/lora-b.yaml" \
+	"not necessarily alphabetical" \
 	"files define a 'Lora:' section" \
 	"The file loaded last wins" \
-	"Result: 0 errors, 2 warnings"
+	"Result: 0 errors,"
 # Switch tables are the one place "last wins" is false: the loader only ever writes
 # HIGH, so the effective table is the OR of every file. Proven with --output-yaml.
 assert "switch tables across files do not override" 1 rfswitch-sticky/config.yaml check \
