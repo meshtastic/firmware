@@ -93,10 +93,8 @@ class MessageStore
     void addLiveMessage(StoredMessage &&msg);
     void addLiveMessage(const StoredMessage &msg); // convenience overload
     const std::deque<StoredMessage> &getLiveMessages() const { return liveMessages; }
+    // Add new messages from packets. Returns nullptr if the packet is filtered out.
     const StoredMessage *tryAddFromPacket(const meshtastic_MeshPacket &mp); // Incoming/outgoing -> RAM only
-    // Add new messages from packets or manual input
-    const StoredMessage &addFromPacket(const meshtastic_MeshPacket &mp);                // Incoming/outgoing → RAM only
-    void addFromString(uint32_t sender, uint8_t channelIndex, const std::string &text); // Manual add
 
     // Persistence methods (used only on boot/shutdown)
     void saveToFlash();   // Save messages to flash

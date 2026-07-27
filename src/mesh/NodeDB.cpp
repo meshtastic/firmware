@@ -31,6 +31,9 @@
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
 #include "xmodem.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -635,6 +638,7 @@ NodeDB::NodeDB()
 #endif
     sortMeshDB();
     saveToDisk(saveWhat);
+    bootInitializationInProgress = false;
 }
 
 /**
@@ -766,6 +770,12 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     // didn't touch it; clear it and persist the empty store.
     warmStore.clear();
     warmStore.saveIfDirty();
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // Factory reset forgets everything; TMM's RAM caches must not survive to resurrect
+    // identities (the device usually reboots after this, but don't rely on it).
+    if (trafficManagementModule)
+        trafficManagementModule->purgeAll();
 #endif
 
     // second, install default state (this will deal with the duplicate mac address issue)
@@ -947,6 +957,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
     config.security.admin_key_count = numAdminKeys;
+
+    // Left at COMPATIBLE when signature checking is compiled out, so we never report a policy
+    // nothing enforces (mirrors the set-config guard in AdminModule).
+#if defined(USERPREFS_CONFIG_SECURITY_PACKET_SIGNATURE_POLICY) && !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    config.security.packet_signature_policy = USERPREFS_CONFIG_SECURITY_PACKET_SIGNATURE_POLICY;
+#endif
 
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
@@ -1597,6 +1613,11 @@ void NodeDB::resetNodes(bool keepFavorites)
 #if WARM_NODE_COUNT > 0
     warmStore.clear(); // warm entries are never favorites; a DB reset clears them too
 #endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // A user-initiated DB reset forgets everything; TMM's caches must not resurrect it.
+    if (trafficManagementModule)
+        trafficManagementModule->purgeAll();
+#endif
 
     devicestate.has_rx_waypoint = false;
     saveNodeDatabaseToDisk();
@@ -1628,6 +1649,12 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
 #if WARM_NODE_COUNT > 0
     // Explicit user removal: don't let the warm tier resurrect the node
     warmStore.remove(nodeNum);
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+    // Explicit removal is full removal: the TrafficManagement caches (unified slot +
+    // NodeInfo identity cache) must not keep serving or resurrect the node either.
+    if (trafficManagementModule)
+        trafficManagementModule->purgeNode(nodeNum);
 #endif
 
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
@@ -1841,6 +1868,8 @@ bool NodeDB::enforceSatelliteCaps()
 // them if they do); otherwise tracker/sensor/tak_tracker are role-protected.
 static uint8_t warmProtectedCategory(const meshtastic_NodeInfoLite &n)
 {
+    if (nodeInfoLiteHasXeddsaSigned(&n))
+        return static_cast<uint8_t>(WarmProtected::XeddsaSigner);
     if (n.bitfield & (NODEINFO_BITFIELD_IS_FAVORITE_MASK | NODEINFO_BITFIELD_IS_IGNORED_MASK |
                       NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK))
         return static_cast<uint8_t>(WarmProtected::Flag);
@@ -2165,6 +2194,41 @@ void NodeDB::loadFromDisk()
 
     migrationSavePending = false;
     configDecodeFailed = false;
+    configLoadComplete = false;
+
+#if !USERPREFS_EVENT_MODE
+#ifdef FSCom
+    const char *eventProfileFiles[] = {EVENT_CONFIG_FILE_NAME, EVENT_CHANNEL_FILE_NAME, EVENT_BACKUP_FILE_NAME};
+    spiLock->lock();
+    for (const char *filename : eventProfileFiles) {
+        if (FSCom.exists(filename) && !FSCom.remove(filename))
+            LOG_WARN("Unable to remove stale event profile file %s", filename);
+    }
+    spiLock->unlock();
+#endif
+#endif
+
+#if USERPREFS_EVENT_MODE
+    // Seed only a missing event config; never overwrite normal files after a corrupt event config.
+    bool eventConfigMissing = false;
+    eventProfileStorageUnavailable = false;
+#ifdef FSCom
+    spiLock->lock();
+    eventConfigMissing = !FSCom.exists(configFileName);
+    if (eventConfigMissing) {
+        const size_t totalBytes = fsTotalBytes();
+        const size_t usedBytes = fsUsedBytes();
+        eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
+        if (eventProfileStorageUnavailable) {
+            LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",
+                      static_cast<unsigned>(EVENT_PROFILE_STORAGE_RESERVATION_BYTES),
+                      static_cast<unsigned>(totalBytes >= usedBytes ? totalBytes - usedBytes : 0));
+        }
+    }
+    spiLock->unlock();
+#endif
+    bool initializedEventConfig = false;
+#endif
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2354,6 +2418,31 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
+#if USERPREFS_EVENT_MODE
+    if (eventConfigMissing && state != LoadFileResult::LOAD_SUCCESS) {
+        const LoadFileResult eventConfigState = state;
+        const LoadFileResult standardConfigState =
+            loadProto(STANDARD_CONFIG_FILE_NAME, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
+                      &meshtastic_LocalConfig_msg, &config);
+        if (standardConfigState == LoadFileResult::LOAD_SUCCESS) {
+            // Preserve the user's identity and non-radio preferences, then
+            // replace only LoRa with this event build's compiled defaults.
+            const meshtastic_LocalConfig standardConfig = config;
+            installDefaultConfig(true);
+            const meshtastic_Config_LoRaConfig eventLora = config.lora;
+            config = standardConfig;
+            config.has_lora = true;
+            config.lora = eventLora;
+            state = LoadFileResult::LOAD_SUCCESS;
+            initializedEventConfig = true;
+            LOG_INFO("Initialized event config without modifying %s", STANDARD_CONFIG_FILE_NAME);
+        } else {
+            // Keep the event load outcome because loadProto() clears config before decoding.
+            // A normal decode failure must not create a replacement identity.
+            state = standardConfigState == LoadFileResult::DECODE_FAILED ? LoadFileResult::DECODE_FAILED : eventConfigState;
+        }
+    }
+#endif
     if (state == LoadFileResult::DECODE_FAILED) {
         // Config file present but undecodable this boot (corruption / torn write / transient decrypt fail).
         // loadProto() already zeroed `config`, so the keypair is gone from RAM; minting a new one would change
@@ -2375,6 +2464,7 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved config version %d", config.version);
     }
+    configLoadComplete = true;
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
@@ -2413,6 +2503,15 @@ void NodeDB::loadFromDisk()
 
 #ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
     config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
+#endif
+
+#if USERPREFS_EVENT_MODE
+    if (initializedEventConfig) {
+        // This is the first durable event-profile write.  A failed write is
+        // safe: normal files remain untouched and the next event boot retries.
+        if (!saveToDisk(SEGMENT_CONFIG))
+            LOG_ERROR("Unable to persist initial event config");
+    }
 #endif
 
     if (backupSecurity.private_key.size > 0) {
@@ -2529,7 +2628,7 @@ void NodeDB::loadFromDisk()
         const int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE,
                                 SEGMENT_NODEDATABASE};
         int toSave = 0;
-        for (int i = 0; i < 5; i++) {
+        for (size_t i = 0; i < sizeof(segments) / sizeof(segments[0]); i++) {
             if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {
                 toSave |= segments[i];
             }
@@ -2546,6 +2645,43 @@ void NodeDB::loadFromDisk()
                 EncryptedStorage::migrateFile(fn);
             }
         }
+
+        // Backups are outside saveToDisk(), but can contain radio profile PSKs. Only event builds
+        // introduce a second backup file, so leave normal-firmware backup handling unchanged.
+#if USERPREFS_EVENT_MODE
+#ifdef FSCom
+        spiLock->lock();
+        const bool activeBackupExists = FSCom.exists(backupFileName);
+        spiLock->unlock();
+        if (activeBackupExists && !EncryptedStorage::isEncrypted(backupFileName)) {
+            LOG_INFO("Migrating %s to encrypted storage", backupFileName);
+            if (!EncryptedStorage::migrateFile(backupFileName)) {
+                LOG_ERROR("Unable to migrate %s to encrypted storage", backupFileName);
+                storageCorruptThisLoad = true;
+            }
+        }
+#endif
+#endif
+
+        // Event firmware keeps the normal radio profile inactive, so migrate it separately.
+#if USERPREFS_EVENT_MODE
+#ifdef FSCom
+        const char *inactiveRadioProfileFiles[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME,
+                                                   STANDARD_BACKUP_FILE_NAME};
+        for (const char *fn : inactiveRadioProfileFiles) {
+            spiLock->lock();
+            const bool exists = FSCom.exists(fn);
+            spiLock->unlock();
+            if (exists && !EncryptedStorage::isEncrypted(fn)) {
+                LOG_INFO("Migrating inactive radio profile %s to encrypted storage", fn);
+                if (!EncryptedStorage::migrateFile(fn)) {
+                    LOG_ERROR("Unable to migrate %s to encrypted storage", fn);
+                    storageCorruptThisLoad = true;
+                }
+            }
+        }
+#endif
+#endif
     }
 #endif
 
@@ -2680,8 +2816,9 @@ bool NodeDB::disableLockdownToPlaintext()
     // plaintext->encrypted migrate loop above. Order does not matter here;
     // EncryptedStorage::removeLockdownArtifacts() (which deletes the DEK,
     // the commit point) only runs after every file is confirmed plaintext.
-    const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
-                                  nodeDatabaseFileName};
+    const char *filesToCheck[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME,
+                                  EVENT_CONFIG_FILE_NAME,    EVENT_CHANNEL_FILE_NAME,    EVENT_BACKUP_FILE_NAME,
+                                  moduleConfigFileName,      deviceStateFileName,        nodeDatabaseFileName};
     for (const char *fn : filesToCheck) {
         if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
             LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
@@ -2700,6 +2837,15 @@ bool NodeDB::disableLockdownToPlaintext()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+
+    // Only the radio profile is at risk from an unverified config load, so only defer those writes.
+    // Devicestate/nodedb/module writes must still land, otherwise boot-time recovery (e.g. loadFromDisk()
+    // restoring owner fields) is dropped and never retried.
+    if (isRadioProfileFile(filename) &&
+        shouldDeferBootPersistence(bootInitializationInProgress, configLoadComplete, configDecodeFailed)) {
+        LOG_WARN("NodeDB: deferred boot write to %s until config recovery completes", filename);
+        return true;
+    }
 
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
@@ -2953,6 +3099,19 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     spiLock->unlock();
 #endif
 
+#if USERPREFS_EVENT_MODE
+    if (eventProfileStorageUnavailable) {
+        if (saveWhat & SEGMENT_CONFIG) {
+            LOG_WARN("Skipping event config write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CONFIG;
+        }
+        if (saveWhat & SEGMENT_CHANNELS) {
+            LOG_WARN("Skipping event channel write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CHANNELS;
+        }
+    }
+#endif
+
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
         config.has_display = true;
@@ -2980,6 +3139,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+        moduleConfig.has_tak = true;
 #if !MESHTASTIC_EXCLUDE_BEACON
         moduleConfig.has_mesh_beacon = true;
 #endif
@@ -3119,6 +3279,9 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
 #include "MeshModule.h"
 #include "Throttle.h"
+
+// Minimum spacing between evictions once the node database is full.
+#define NODEDB_FULL_EVICTION_INTERVAL_MS (2 * 1000UL)
 
 static constexpr uint32_t HOPSTART_DROP_LOG_INTERVAL_MS = 15000;
 
@@ -3310,8 +3473,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
 
 /** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
+bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
+    // Only a signed update may change the identity of a node that has proven it signs; our own record is
+    // exempt. Checked before getOrCreateMeshNode so a refused update cannot evict or write the warm tier.
+    const meshtastic_NodeInfoLite *existing = getMeshNode(nodeId);
+    if (nodeId != getNodeNum() && existing && nodeInfoLiteHasXeddsaSigned(existing) && !xeddsaSigned) {
+        LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
+        return false;
+    }
+
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
         return false;
@@ -3393,6 +3564,20 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         }
     }
 
+#if HAS_TRAFFIC_MANAGEMENT
+    // Write-through: every accepted remote-identity commit lands here (NodeInfoModule,
+    // MeshService, and TMM's requester learning all funnel through updateUser; the two
+    // key-write sites that bypass it call onNodeKeyCommitted instead), so TMM's NodeInfo
+    // cache reflects the commit immediately rather than at the next reconcile pass. Runs on
+    // acceptance, not on `changed`: an identical update still proves the identity is
+    // current. `p` is the post-hygiene payload; signerKnown transfers only key-matched
+    // verified-signer status (isVerifiedSignerForKey semantics), never a bare node flag.
+    if (nodeId != getNodeNum() && trafficManagementModule) {
+        const bool signerKnown = p.public_key.size == 32 && isVerifiedSignerForKey(nodeId, p.public_key.bytes);
+        trafficManagementModule->onNodeIdentityCommitted(nodeId, p, signerKnown);
+    }
+#endif
+
     return changed;
 }
 
@@ -3407,7 +3592,19 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
-        meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
+        // mp.from is unauthenticated, so rate-limit admission once the database is full: otherwise
+        // invented node numbers churn it at packet rate and push real neighbours out.
+        meshtastic_NodeInfoLite *info = getMeshNode(getFrom(&mp));
+        if (!info) {
+            if (isFull()) {
+                if (Throttle::isWithinTimespanMs(lastFullEvictionMs, NODEDB_FULL_EVICTION_INTERVAL_MS)) {
+                    LOG_DEBUG("Node database full, defer admitting 0x%08x", mp.from);
+                    return;
+                }
+                lastFullEvictionMs = millis();
+            }
+            info = getOrCreateMeshNode(getFrom(&mp));
+        }
         if (!info) {
             return;
         }
@@ -3691,7 +3888,7 @@ uint32_t NodeDB::hotNodeLastHeard(NodeNum n) const
     return 0;
 }
 
-bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+bool NodeDB::copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
 {
     const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (info && info->public_key.size == 32) {
@@ -3705,6 +3902,97 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
     }
 #endif
     return false;
+}
+
+bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    if (copyPublicKeyAuthoritative(n, out))
+        return true;
+#if HAS_TRAFFIC_MANAGEMENT
+    // Last resort: a key the TrafficManagement NodeInfo cache learned from an observed frame
+    // for a node no longer in either NodeDB tier. This extends the pool of peers we can
+    // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's signerProven), the
+    // same first-contact trust NodeDB itself applies via updateUser().
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes)) {
+        out.size = 32;
+        return true;
+    }
+#endif
+    return false;
+}
+
+bool NodeDB::copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    if (copyPublicKeyAuthoritative(n, out))
+        return true;
+#if HAS_TRAFFIC_MANAGEMENT
+    // A cold-tier cache key backs an authenticated decrypt only when signer-proven; unverified TOFU
+    // cache keys must not. Outbound encryption still uses the opportunistic copyPublicKey().
+    bool signerProven = false;
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) && signerProven) {
+        out.size = 32;
+        return true;
+    }
+#endif
+    return false;
+}
+
+bool NodeDB::isVerifiedSignerForKey(NodeNum n, const uint8_t *key32)
+{
+    if (!key32)
+        return false;
+    // Hot store is authoritative when present; a node lives in the hot XOR warm tier, so if the
+    // hot store holds it the warm tier does not, and we decide entirely from the hot entry.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (info)
+        return info->public_key.size == 32 && nodeInfoLiteHasXeddsaSigned(info) && memcmp(info->public_key.bytes, key32, 32) == 0;
+#if WARM_NODE_COUNT > 0
+    uint8_t warmKey[32];
+    if (warmStore.copyKey(n, warmKey) && memcmp(warmKey, key32, 32) == 0)
+        return warmStore.isVerifiedSigner(n);
+#endif
+    return false;
+}
+
+bool NodeDB::isKnownXeddsaSigner(NodeNum n)
+{
+    // A node lives in the hot XOR warm tier, so the hot verdict is final when present.
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
+    if (info)
+        return nodeInfoLiteHasXeddsaSigned(info);
+#if WARM_NODE_COUNT > 0
+    return warmStore.isVerifiedSigner(n);
+#else
+    return false;
+#endif
+}
+
+void NodeDB::commitRemoteKey(NodeNum n, const uint8_t key32[32], KeyCommitTrust trust)
+{
+    if (!key32 || n == 0)
+        return;
+    // Local copy first: callers may pass the node's own key bytes back in (e.g. manual
+    // verification re-committing an already-stored key), and memcpy forbids overlap.
+    uint8_t key[32];
+    memcpy(key, key32, 32);
+
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(n);
+    if (!info)
+        return;
+    // Unconditional overwrite - deliberately NOT updateUser()'s "don't replace a known key" pin.
+    // That pin protects against unauthenticated NodeInfo broadcasts; the only callers here are
+    // possession/authority-proven (ManuallyVerified = user confirmed the key; AdminChannelProven =
+    // decrypted via the admin key with p->from bound into the AEAD nonce), i.e. exactly the paths
+    // meant to establish or rotate a key. Keep new call sites to that same trust bar.
+    memcpy(info->public_key.bytes, key, 32);
+    info->public_key.size = 32;
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Write-through, mirroring updateUser()'s identity hook: without it the TrafficManagement
+    // NodeInfo cache diverges until the next hourly reconcile.
+    if (trafficManagementModule)
+        trafficManagementModule->onNodeKeyCommitted(n, key, trust == KeyCommitTrust::ManuallyVerified);
+#endif
 }
 
 meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
@@ -3802,7 +4090,26 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
             }
+            if (warmProtOf(warm) == static_cast<uint8_t>(WarmProtected::XeddsaSigner))
+                nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
             LOG_MIGRATION("Rehydrated node 0x%08x from warm tier (key=%d)", n, lite->public_key.size == 32);
+        }
+#endif
+#if HAS_TRAFFIC_MANAGEMENT
+        // Name rehydration: the warm tier keeps a node's key but not its name, so a re-admitted
+        // long-tail node is nameless until its next NodeInfo. The TrafficManagement NodeInfo
+        // cache is much larger and often still holds the full User. Restore it - but only when
+        // its cached key matches the key we just restored from warm, so a name never attaches to
+        // a different identity than the one we encrypt to. No-op without the TMM NodeInfo cache
+        // or when no key is present (key-matched by design). CopyUserToNodeInfoLite sets only the
+        // user-related bits, so the warm-restored signer bit survives.
+        if (lite->public_key.size == 32 && !nodeInfoLiteHasUser(lite) && trafficManagementModule) {
+            meshtastic_User tmmUser = meshtastic_User_init_zero;
+            if (trafficManagementModule->copyUser(n, tmmUser) && tmmUser.public_key.size == 32 &&
+                memcmp(tmmUser.public_key.bytes, lite->public_key.bytes, 32) == 0) {
+                TypeConversions::CopyUserToNodeInfoLite(lite, tmmUser);
+                LOG_INFO("Rehydrated node 0x%08x identity from TMM NodeInfo cache", n);
+            }
         }
 #endif
         LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());

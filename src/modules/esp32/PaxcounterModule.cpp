@@ -81,6 +81,8 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     pl.uptime = millis() / 1000;
 
     meshtastic_MeshPacket *p = allocDataProtobuf(pl);
+    if (!p)
+        return false;
     p->to = dest;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;

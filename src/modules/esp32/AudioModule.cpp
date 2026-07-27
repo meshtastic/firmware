@@ -258,6 +258,8 @@ bool AudioModule::shouldDraw()
 void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
 {
     meshtastic_MeshPacket *p = allocReply();
+    if (!p)
+        return;
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
