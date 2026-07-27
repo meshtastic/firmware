@@ -56,6 +56,12 @@ using namespace Adafruit_LittleFS_Namespace;
 using namespace Adafruit_LittleFS_Namespace;
 #endif
 
+// Filesystem capacity, in bytes. Only ESP32's LittleFS and the nRF54L15 wrapper expose totalBytes()/usedBytes()
+// directly; the other backends need per-platform work (littlefs v1 traversal, FSInfo, statvfs), so callers must
+// use these helpers rather than reaching into FSCom.
+size_t fsTotalBytes();
+size_t fsUsedBytes();
+
 void fsInit();
 bool renameFile(const char *pathFrom, const char *pathTo);
 bool fsFormat();
