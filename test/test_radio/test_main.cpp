@@ -238,13 +238,10 @@ static void test_clampConfigLora_mediumTurboValidForUS()
 }
 
 // -----------------------------------------------------------------------
-// Preamble length: derived from the modem preset (MeshRadio.h) rather than
-// hard-coded in RadioInterface.
+// Preamble length, derived from the modem preset (MeshRadio.h)
 // -----------------------------------------------------------------------
 
-// Sub-GHz presets all share the standard preamble; 2.4 GHz presets share the shorter wide-LoRa one.
-// (Longer preambles do not RX at all on SX128x.) These are per-preset out of the mapping layer, so
-// assert every preset rather than a single sample.
+// Every preset must pick the standard or wide-LoRa preamble according to the band.
 static void test_modemPresetToPreambleLength_wideVsStandard()
 {
     const meshtastic_Config_LoRaConfig_ModemPreset presets[] = {

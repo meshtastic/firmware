@@ -1256,8 +1256,7 @@ void RadioInterface::applyModemConfig()
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
         uint8_t newcr;
-        // preambleLength is written straight into the member: it is a derived radio parameter just
-        // like bw and sf, and the preset is the only thing that determines it.
+        // Into the member, not a local: a derived radio parameter like bw and sf.
         modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr, preambleLength);
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
