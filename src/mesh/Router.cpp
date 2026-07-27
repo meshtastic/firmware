@@ -1035,6 +1035,9 @@ bool wouldEncryptWithPKC(const meshtastic_MeshPacket *p, ChannelIndex chIndex, b
            // Some portnums either make no sense to send with PKC
            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP &&
+           // Telemetry is shared-channel encrypted unless a caller explicitly requests PKC.
+           // The latter is used by the restricted LocalStats policy.
+           (p->decoded.portnum != meshtastic_PortNum_TELEMETRY_APP || p->pki_encrypted) &&
            // We allow Key Verification messages to be sent without a known destination key, since the point of those messages is
            // to exchange keys. The first exchange (no usable key yet) falls through to channel encryption; the follow-on packet
            // uses the pending key resolved into haveDestKey/destKey above.
