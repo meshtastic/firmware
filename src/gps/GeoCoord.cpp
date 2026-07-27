@@ -433,25 +433,12 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
     //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
 
-// Piecewise-linear cos(|latitude|) lookup, denser near 90 degrees where cos() is small and fast-
-// changing. Avoids linking cos()/sin()/acos() (~4.4KB) for a display/movement-threshold utility.
+// cos(x) minimax approx for x in [-pi/2, pi/2] ("cos_52"): https://www.ganssle.com/approx.htm
 static double cosLatitudeApprox(double latRad)
 {
-    static constexpr float kLatDeg[] = {0, 15, 30, 45, 55, 65, 72, 78, 82, 85, 87, 88.5, 89.5, 90};
-    static constexpr float kCosVal[] = {1.0f,      0.965926f, 0.866025f, 0.707107f, 0.573576f, 0.422618f, 0.309017f,
-                                        0.207912f, 0.139173f, 0.087156f, 0.052336f, 0.026177f, 0.008727f, 0.0f};
-    static_assert(sizeof(kLatDeg) / sizeof(kLatDeg[0]) == sizeof(kCosVal) / sizeof(kCosVal[0]),
-                  "kLatDeg and kCosVal must stay the same length");
-    constexpr size_t n = sizeof(kLatDeg) / sizeof(kLatDeg[0]);
-    double deg = fabs(latRad) * DEG_CONVERT;
-    if (deg >= kLatDeg[n - 1])
-        return kCosVal[n - 1];
-    size_t i = 1;
-    while (kLatDeg[i] < deg)
-        i++;
-    double x0 = kLatDeg[i - 1], x1 = kLatDeg[i];
-    double y0 = kCosVal[i - 1], y1 = kCosVal[i];
-    return y0 + (y1 - y0) * (deg - x0) / (x1 - x0);
+    constexpr double c1 = 0.9999932946, c2 = -0.4999124376, c3 = 0.0414877472, c4 = -0.0012712095;
+    double x2 = latRad * latRad;
+    return c1 + x2 * (c2 + x2 * (c3 + c4 * x2));
 }
 
 /// Approximate distance in meters via equirectangular projection (not exact spherical trig).
