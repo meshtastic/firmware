@@ -18,7 +18,10 @@ class NRF52CryptoEngine : public CryptoEngine
         } else if (_key.length > 0) {
             nRFCrypto.begin();
             nRFCrypto_AES ctx;
-            uint8_t myLen = ctx.blockLen(numBytes);
+            // Must not be uint8_t: blockLen() rounds up to the AES block size, so numBytes in
+            // 241..256 yields 256, which truncates to 0 and leaves Process() writing numBytes
+            // attacker-controlled bytes onto a zero-length stack buffer.
+            size_t myLen = ctx.blockLen(numBytes);
             char encBuf[myLen] = {0};
             ctx.begin();
             ctx.Process((char *)bytes, numBytes, _nonce, _key.bytes, _key.length, encBuf, ctx.encryptFlag, ctx.ctrMode);
