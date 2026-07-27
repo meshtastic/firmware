@@ -58,12 +58,11 @@ uint32_t LockingArduinoHal::digitalRead(uint32_t pin)
         return value;
     }
 
-    uint32_t now = millis();
     if (busyHighSince == 0) {
-        busyHighSince = now;
+        busyHighSince = millis();
         return value;
     }
-    if (now - busyHighSince < busyWatchTimeoutMs)
+    if (Throttle::isWithinTimespanMs(busyHighSince, busyWatchTimeoutMs))
         return value;
 
     busyHighSince = 0; // one-shot: the next read reports the pin honestly again

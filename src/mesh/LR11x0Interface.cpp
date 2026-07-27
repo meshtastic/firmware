@@ -51,6 +51,13 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 // would have given up on its own.
 #define LR11X0_BUSY_WATCHDOG_MS 3000
 
+// Breaking the BUSY wait leaves RadioLib's next bounded transfer reporting SPI_CMD_TIMEOUT, not
+// SPI_CMD_FAILED, so both have to count as "the chip did not talk to us"
+static inline bool lr11x0SpiFailed(int radioLibResult)
+{
+    return radioLibResult == RADIOLIB_ERR_SPI_CMD_FAILED || radioLibResult == RADIOLIB_ERR_SPI_CMD_TIMEOUT;
+}
+
 template <typename T>
 LR11x0Interface<T>::LR11x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                     RADIOLIB_PIN_TYPE busy)
@@ -146,8 +153,8 @@ template <typename T> bool LR11x0Interface<T>::init()
 #endif
 
     // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry
-    if (radioLibResult == RADIOLIB_ERR_SPI_CMD_FAILED) {
-        LOG_WARN("LR11x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", radioLibResult);
+    if (lr11x0SpiFailed(radioLibResult)) {
+        LOG_WARN("LR11x0 init failed with %d (SPI command failure), retrying after delay...", radioLibResult);
         delay(100);
         radioLibResult = tryBegin(3, attemptVoltage);
     }
@@ -156,7 +163,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", radioLibResult);
-    if (radioLibResult == RADIOLIB_ERR_CHIP_NOT_FOUND || radioLibResult == RADIOLIB_ERR_SPI_CMD_FAILED)
+    if (radioLibResult == RADIOLIB_ERR_CHIP_NOT_FOUND || lr11x0SpiFailed(radioLibResult))
         return false;
 
     LR11x0VersionInfo_t version;
