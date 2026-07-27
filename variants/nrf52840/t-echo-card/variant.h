@@ -104,25 +104,19 @@ static const uint8_t A0 = PIN_A0;
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // ───────────────────────────────────────────────────────────────────────────
-// OLED display: SSD1315 on I2C @ 0x3C (IIC_1). SSD1315 is register-compatible
-// with SSD1306, so USE_SSD1306 initializes the controller correctly.
+// OLED display: SSD1315 on I2C @ 0x3C (IIC_1).
 //
 // Viewport: the physical panel is 72×40, mapped into the SSD1315's 128×64
-// GDDRAM at columns 28..99, pages 3..7 (rows 24..63). The firmware handles
-// this by:
-//   * asking the library for GEOMETRY_72_40, which sets the framebuffer to
-//     72×40 and emits the right SETMULTIPLEX (39) / SETCOMPINS at init;
-//   * relying on SSD1306Wire's built-in horizontal auto-centering
-//     ((128 - width) / 2 = 28), so no horizontal shim is needed;
-//   * calling SSD1306Wire::setYOffset(3) in Screen.cpp when
-//     OLED_Y_OFFSET_PAGES is defined - this shifts every PAGEADDR write by
-//     three pages (24 rows) so data lands on the visible rows.
+// GDDRAM at columns 28..99, pages 3..7. TCardSSD1315Wire keeps the controller
+// in its vendor-tested 128×64 scan mode while exposing and safely transferring
+// only a 72×40 framebuffer at that offset.
 // ───────────────────────────────────────────────────────────────────────────
 #define HAS_SCREEN 1
 #define USE_SSD1306
 #define OLED_GEOMETRY_OVERRIDE GEOMETRY_72_40
 #define OLED_Y_OFFSET_PAGES 3
 #define OLED_TINY
+#define OLED_COMPACT_UI
 
 // Controls power 3V3 for all peripherals (GPS + LoRa + Sensor)
 #define PIN_POWER_EN (0 + 30) // RT9080_EN

@@ -117,11 +117,13 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
-    const int headerHeight = highlightHeight + 2;
+    const bool compactPanel = isCompactPanel(display);
+    const int headerHeight = compactPanel ? 10 : highlightHeight + 2;
     const uint16_t headerColorForRoles = getThemeHeaderBg();
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
-    const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !isTFTColoringEnabled() && !transparent_background);
+    const bool useInvertedHeaderStyle =
+        (isInverted && !force_no_invert && !isTFTColoringEnabled() && !transparent_background && !compactPanel);
 #if GRAPHICS_TFT_COLORING_ENABLED
     int statusLeftEndX = 0;
     int statusRightStartX = screenW;
@@ -165,7 +167,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
 
         // === Inverted Header Background ===
-        if (useInvertedHeaderStyle) {
+        if (compactPanel) {
+            display->setColor(BLACK);
+            display->fillRect(0, 0, screenW, headerHeight);
+            display->setColor(WHITE);
+        } else if (useInvertedHeaderStyle) {
             display->setColor(BLACK);
             display->fillRect(0, 0, screenW, headerHeight);
             display->setColor(WHITE);
@@ -176,7 +182,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             display->fillRect(0, 0, screenW, headerHeight);
 // Keep the legacy white separator for monochrome displays only when header background is visible.
 #if !GRAPHICS_TFT_COLORING_ENABLED
-            if (!transparent_background) {
+            if (!transparent_background && !compactPanel) {
                 display->setColor(WHITE);
                 if (currentResolution == ScreenResolution::High) {
                     display->drawLine(0, 20, screenW, 20);
@@ -532,11 +538,26 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     display->setColor(WHITE); // Reset for other UI
 }
 
+bool isCompactPanel(OLEDDisplay *display)
+{
+#if defined(OLED_COMPACT_UI)
+    return display->getWidth() <= 80 && display->getHeight() <= 40;
+#else
+    (void)display;
+    return false;
+#endif
+}
+
 const int *getTextPositions(OLEDDisplay *display)
 {
     static int textPositions[7]; // Static array that persists beyond function scope
 
-    if (currentResolution == ScreenResolution::High) {
+    if (isCompactPanel(display)) {
+        for (int i = 0; i < 7; ++i) {
+            const int bodyLine = (i > 0) ? i - 1 : 0;
+            textPositions[i] = 10 + bodyLine * (FONT_HEIGHT_SMALL - 5);
+        }
+    } else if (currentResolution == ScreenResolution::High) {
         textPositions[0] = textZeroLine;
         textPositions[1] = textFirstLine_medium;
         textPositions[2] = textSecondLine_medium;
@@ -561,6 +582,9 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 {
+    if (isCompactPanel(display))
+        return;
+
     if (!isAPIConnected(service->api_state))
         return;
 

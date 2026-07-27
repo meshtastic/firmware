@@ -1637,6 +1637,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
+#if !defined(OLED_COMPACT_UI)
         // === Second Row: Last GPS Fix ===
         if (gpsStatus->getLastFixMillis() > 0) {
             uint32_t delta = millis() - gpsStatus->getLastFixMillis();
@@ -1653,15 +1654,18 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             display->drawString(0, textPos[line++], "Last: ?");
         }
+#endif
 
         // === Third Row: Line 1 GPS Info ===
         UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line1");
 
+#if !defined(OLED_COMPACT_UI)
         if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
             uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line2");
         }
+#endif
 
         // === Final Row: Altitude ===
         char altitudeLine[32] = {0};
@@ -1817,18 +1821,20 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int iconSize = (currentResolution == ScreenResolution::High) ? 16 : 8;
     const int spacing = (currentResolution == ScreenResolution::High) ? 8 : 4;
     const int bigOffset = (currentResolution == ScreenResolution::High) ? 1 : 0;
+    const bool compactPanel = graphics::isCompactPanel(display);
 
     const size_t totalIcons = screen->indicatorIcons.size();
     if (totalIcons == 0)
         return;
 
-    const int navPadding = (currentResolution == ScreenResolution::High) ? 24 : 12; // padding per side
+    const int navPadding = compactPanel ? 8 : ((currentResolution == ScreenResolution::High) ? 24 : 12);
 
     int usableWidth = SCREEN_WIDTH - (navPadding * 2);
     if (usableWidth < iconSize)
         usableWidth = iconSize;
 
-    const size_t iconsPerPage = usableWidth / (iconSize + spacing);
+    const size_t iconsPerPage =
+        compactPanel ? ((usableWidth + spacing) / (iconSize + spacing)) : (usableWidth / (iconSize + spacing));
     const size_t currentPage = frameToHighlight / iconsPerPage;
     const size_t pageStart = currentPage * iconsPerPage;
     const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
@@ -1866,11 +1872,14 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     navBarPrevVisible = navBarVisible;
 #endif
 
+    if (compactPanel && !navBarVisible)
+        return;
+
     // Pre-calculate bounding rect
     const int rectX = xStart - 2 - bigOffset;
-    const int rectY = y - 2;
+    const int rectY = y - (compactPanel ? 1 : 2);
     const int rectWidth = totalWidth + 4 + (bigOffset * 2);
-    const int rectHeight = iconSize + 6;
+    const int rectHeight = iconSize + (compactPanel ? 2 : 6);
 
     // Clear background and draw border
     display->setColor(BLACK);
@@ -1912,8 +1921,9 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
             display->setColor(BLACK);
 #else
+            const int activePadding = compactPanel ? 1 : 2;
             display->setColor(WHITE);
-            display->fillRect(x - 2, y - 2, iconSize + 4, iconSize + 4);
+            display->fillRect(x - activePadding, y - activePadding, iconSize + activePadding * 2, iconSize + activePadding * 2);
             display->setColor(BLACK);
 #endif
         }

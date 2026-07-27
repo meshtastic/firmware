@@ -427,9 +427,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    const int navHeight = FONT_HEIGHT_SMALL;
+    const bool compactPanel = graphics::isCompactPanel(display);
+    const int navHeight = compactPanel ? 10 : FONT_HEIGHT_SMALL;
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
-    const int usableHeight = scrollBottom;
+    const int contentTop = compactPanel ? 0 : getTextPositions(display)[1];
+    const int usableHeight = compactPanel ? scrollBottom - contentTop : scrollBottom;
     constexpr int LEFT_MARGIN = 2;
     constexpr int RIGHT_MARGIN = 2;
     constexpr int SCROLLBAR_WIDTH = 3;
@@ -440,7 +442,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     constexpr int BUBBLE_TEXT_INDENT = 2;
 
     // Check if bubbles are enabled
-    const bool showBubbles = config.display.enable_message_bubbles;
+    const bool showBubbles = config.display.enable_message_bubbles && !compactPanel;
     const int textIndent = showBubbles ? (BUBBLE_PAD_X + BUBBLE_TEXT_INDENT) : LEFT_MARGIN;
 
     // Derived widths
@@ -679,6 +681,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Cache lines and heights
     cachedLines.swap(allLines);
     cachedHeights = calculateLineHeights(cachedLines, emotes, isHeader);
+    if (compactPanel) {
+        for (size_t i = 0; i < cachedHeights.size(); ++i) {
+            if (isHeader[i]) {
+                cachedHeights[i] = 10;
+            }
+        }
+    }
 
     std::vector<MessageBlock> blocks = buildMessageBlocks(isHeader, isMine);
 
@@ -728,8 +737,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
 
     int finalScroll = (int)scrollY;
-    int yOffset = -finalScroll + getTextPositions(display)[1];
-    const int contentTop = getTextPositions(display)[1];
+    int yOffset = -finalScroll + contentTop;
     const int contentBottom = scrollBottom; // already excludes nav line
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
@@ -907,18 +915,20 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 graphics::UIRenderer::drawStringWithEmotes(display, headerX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
                                                            true);
 
-                // Draw underline just under header text
-                int underlineY = lineY + FONT_HEIGHT_SMALL;
+                if (!compactPanel) {
+                    // Draw underline just under header text
+                    int underlineY = lineY + FONT_HEIGHT_SMALL;
 
-                int underlineW = w;
-                int maxW = rightEdge - headerX;
-                if (maxW < 0)
-                    maxW = 0;
-                if (underlineW > maxW)
-                    underlineW = maxW;
+                    int underlineW = w;
+                    int maxW = rightEdge - headerX;
+                    if (maxW < 0)
+                        maxW = 0;
+                    if (underlineW > maxW)
+                        underlineW = maxW;
 
-                for (int px = 0; px < underlineW; ++px) {
-                    display->setPixel(headerX + px, underlineY);
+                    for (int px = 0; px < underlineW; ++px) {
+                        display->setPixel(headerX + px, underlineY);
+                    }
                 }
 
                 // Draw ACK/NACK mark for our own messages
@@ -958,8 +968,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // Draw scrollbar
-    drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, getTextPositions(display)[1]);
-    graphics::drawCommonHeader(display, x, y, titleStr);
+    drawMessageScrollbar(display, usableHeight, totalHeight, finalScroll, contentTop);
+    if (!compactPanel) {
+        graphics::drawCommonHeader(display, x, y, titleStr);
+    }
     graphics::drawCommonFooter(display, x, y);
 }
 

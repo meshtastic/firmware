@@ -268,6 +268,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int nameX = (SCREEN_WIDTH - textWidth);
     display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
 
+#if !defined(OLED_COMPACT_UI)
     // === Second Row: Role ===
     auto role = DisplayFormatters::getDeviceRole(config.device.role);
     char device_role[25];
@@ -275,6 +276,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     textWidth = display->getStringWidth(device_role);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, getTextPositions(display)[line++], device_role);
+#endif
 
     // === Third Row: Radio Preset ===
     // For custom modem settings show the actual parameters; for presets use the preset name.
@@ -530,10 +532,14 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // System Uptime
+#if defined(OLED_COMPACT_UI)
+    line += 1;
+#else
     if (line < 2) {
         line += 1;
     }
     line += 1;
+#endif
 
     char appversionstr[35];
     char appversionstr_formatted[40];
@@ -568,6 +574,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
 
+#if !defined(OLED_COMPACT_UI)
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
         getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
@@ -575,9 +582,27 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
+#endif
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
         char api_state[32] = "";
+#if defined(OLED_COMPACT_UI)
+        const char *connection = "None";
+        if (service->api_state == service->STATE_BLE) {
+            connection = "BLE";
+        } else if (service->api_state == service->STATE_WIFI) {
+            connection = "WiFi";
+        } else if (service->api_state == service->STATE_SERIAL) {
+            connection = "USB";
+        } else if (service->api_state == service->STATE_PACKET) {
+            connection = "Local";
+        } else if (service->api_state == service->STATE_HTTP) {
+            connection = "HTTP";
+        } else if (service->api_state == service->STATE_ETH) {
+            connection = "Eth";
+        }
+        snprintf(api_state, sizeof(api_state), "App: %s", connection);
+#else
         const char *clientWord = nullptr;
 
         // Determine if narrow or wide screen
@@ -601,6 +626,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         } else if (service->api_state == service->STATE_ETH) {
             snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
         }
+#endif
         if (api_state[0] != '\0') {
             display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
                                 api_state);

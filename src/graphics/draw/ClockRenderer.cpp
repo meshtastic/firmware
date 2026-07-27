@@ -177,6 +177,40 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     char secondString[8];
     snprintf(secondString, sizeof(secondString), "%02d", second);
 
+    if (graphics::isCompactPanel(display)) {
+        constexpr float compactScale = 0.25f;
+        const int compactSegmentWidth = SEGMENT_WIDTH * compactScale;
+        const int compactSegmentHeight = SEGMENT_HEIGHT * compactScale;
+        const int compactDigitHeight = compactSegmentWidth * 2 + compactSegmentHeight * 3 + 8;
+        int compactTimeWidth = 0;
+
+        for (const char *character = timeString; *character; ++character) {
+            compactTimeWidth +=
+                (*character == ':') ? compactSegmentHeight + 11 : compactSegmentWidth + compactSegmentHeight * 2 + 9;
+        }
+
+        int timeX = std::max(0, (display->getWidth() - compactTimeWidth) / 2);
+        const int timeY = std::max(0, (display->getHeight() - compactDigitHeight) / 2);
+
+        for (const char *character = timeString; *character; ++character) {
+            if (*character == ':') {
+                drawSegmentedDisplayColon(display, timeX, timeY, compactScale);
+                timeX += compactSegmentHeight + 11;
+            } else {
+                drawSegmentedDisplayCharacter(display, timeX, timeY, *character - '0', compactScale);
+                timeX += compactSegmentWidth + compactSegmentHeight * 2 + 9;
+            }
+        }
+
+        if (config.display.use_12h_clock) {
+            display->setFont(FONT_SMALL);
+            const char *period = isPM ? "p" : "a";
+            display->drawString(display->getWidth() - display->getStringWidth(period), display->getHeight() - FONT_HEIGHT_SMALL,
+                                period);
+        }
+        return;
+    }
+
     static bool scaleInitialized = false;
     static float scale = 0.75f;
     static float segmentWidth = SEGMENT_WIDTH * 0.75f;
