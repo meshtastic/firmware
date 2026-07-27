@@ -119,6 +119,10 @@ bool powerHAL_isPowerLevelSafe()
 
 void powerHAL_platformInit()
 {
+    // First thing in the earliest boot hook, so the whole of boot (GPS, screen,
+    // I2C scan, radio init) runs on the buck converters, including builds where
+    // Bluetooth never comes up. No-op unless the board opts in.
+    nrf52EnableDCDC();
 
     // Enable POF power failure comparator. It will prevent writing to NVMC flash when supply voltage is too low.
     // Set to some low value as last resort - powerHAL_isPowerLevelSafe uses different method and should manage proper node
@@ -184,23 +188,113 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
     NVIC_SystemReset();
 }
 
-#ifdef NRF52_USE_DCDC
+#if defined(NRF52_USE_DCDC_REG0) || defined(NRF52_USE_DCDC_REG1)
+#define NRF52_DCDC_ENABLED
+#endif
+
+#ifdef NRF52_DCDC_ENABLED
 #include <nrf_sdm.h>
 
-// Enable the REG1 buck converter on boards with the DC/DC inductors fitted.
-// Same stage and SoftDevice-aware pattern as the vendor's MeshCore
-// NRF52BoardDCDC::begin(); REG0 (DCDCEN0) is deliberately left on its LDO to
-// match. The POWER peripheral belongs to the SoftDevice once that is enabled,
-// so pick the access method accordingly.
-static void nrf52EnableDCDC()
+// Enable the buck converters on boards with the DC/DC inductors fitted, replacing
+// the LDOs and cutting active/radio current. REG1 is the main stage (VDD -> core);
+// REG0 is the high-voltage stage and only does anything when the part is supplied
+// through VDDH. Each has its own flag because a board may fit inductors for one,
+// the other, or both.
+//
+// Enablement runs from powerHAL_platformInit(), which is the earliest hook in boot
+// and well before consoleInit() -- so nothing logged from here would reach the
+// console. Latch the outcome instead and let nrf52LogDCDCStatus() print it once the
+// console exists. The POWER peripheral belongs to the SoftDevice once that is up,
+// so pick the access method accordingly; at powerHAL time it never is, but the
+// check keeps the helper correct wherever it is called from.
+static struct {
+    bool reg0Attempted, reg1Attempted;
+    bool reg0Ok, reg1Ok;
+    uint32_t reg0Err, reg1Err;
+    bool viaSoftDevice;
+    bool highVoltageMode;
+} dcdcStatus;
+
+void nrf52EnableDCDC()
 {
     uint8_t sdEnabled = 0;
     sd_softdevice_is_enabled(&sdEnabled);
-    if (sdEnabled)
-        sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
-    else
+    dcdcStatus.viaSoftDevice = sdEnabled;
+    dcdcStatus.highVoltageMode = (NRF_POWER->MAINREGSTATUS & POWER_MAINREGSTATUS_MAINREGSTATUS_Msk) ==
+                                 (POWER_MAINREGSTATUS_MAINREGSTATUS_High << POWER_MAINREGSTATUS_MAINREGSTATUS_Pos);
+
+    // REG0 first: it is the upstream stage when both are in use.
+#ifdef NRF52_USE_DCDC_REG0
+    dcdcStatus.reg0Attempted = true;
+    if (sdEnabled) {
+        dcdcStatus.reg0Err = sd_power_dcdc0_mode_set(NRF_POWER_DCDC_ENABLE);
+        dcdcStatus.reg0Ok = (dcdcStatus.reg0Err == NRF_SUCCESS);
+    } else {
+        NRF_POWER->DCDCEN0 = 1;
+        // Pre-SoftDevice the register is ours to read, so confirm the write stuck
+        // rather than assuming it did.
+        dcdcStatus.reg0Ok = NRF_POWER->DCDCEN0 != 0;
+    }
+#endif
+
+#ifdef NRF52_USE_DCDC_REG1
+    dcdcStatus.reg1Attempted = true;
+    if (sdEnabled) {
+        dcdcStatus.reg1Err = sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+        dcdcStatus.reg1Ok = (dcdcStatus.reg1Err == NRF_SUCCESS);
+    } else {
         NRF_POWER->DCDCEN = 1;
+        dcdcStatus.reg1Ok = NRF_POWER->DCDCEN != 0;
+    }
+#endif
 }
+
+// Report what the early enablement actually achieved. Called from nrf52Setup(),
+// which runs after consoleInit(), so this is the first point the result can be seen.
+void nrf52LogDCDCStatus()
+{
+#ifdef NRF52_USE_DCDC_REG0
+    if (dcdcStatus.reg0Attempted) {
+        if (!dcdcStatus.reg0Ok)
+            LOG_ERROR("DCDC: REG0 enable FAILED (err=%lu), still on LDO", (unsigned long)dcdcStatus.reg0Err);
+        else if (dcdcStatus.highVoltageMode)
+            LOG_INFO("DCDC: REG0 buck enabled");
+        else
+            // Not an error: the flag is set but VDDH is not the supply, so REG0 is bypassed.
+            LOG_WARN("DCDC: REG0 buck enabled but part is not in high-voltage mode; no effect");
+    }
+#endif
+
+#ifdef NRF52_USE_DCDC_REG1
+    if (dcdcStatus.reg1Attempted) {
+        if (dcdcStatus.reg1Ok)
+            LOG_INFO("DCDC: REG1 buck enabled");
+        else
+            LOG_ERROR("DCDC: REG1 enable FAILED (err=%lu), still on LDO", (unsigned long)dcdcStatus.reg1Err);
+    }
+#endif
+}
+
+// Re-assert under the SoftDevice once it owns POWER. The mode persists across
+// SoftDevice enablement, but this is the unambiguously supported call in that
+// regime and it is idempotent.
+void nrf52ReassertDCDC()
+{
+#ifdef NRF52_USE_DCDC_REG0
+    uint32_t err0 = sd_power_dcdc0_mode_set(NRF_POWER_DCDC_ENABLE);
+    if (err0 != NRF_SUCCESS)
+        LOG_ERROR("DCDC: REG0 re-assert failed, err=%lu", (unsigned long)err0);
+#endif
+#ifdef NRF52_USE_DCDC_REG1
+    uint32_t err1 = sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+    if (err1 != NRF_SUCCESS)
+        LOG_ERROR("DCDC: REG1 re-assert failed, err=%lu", (unsigned long)err1);
+#endif
+}
+#else
+void nrf52EnableDCDC() {}
+void nrf52LogDCDCStatus() {}
+void nrf52ReassertDCDC() {}
 #endif
 
 void getMacAddr(uint8_t *dmac)
@@ -413,11 +507,9 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
-#ifdef NRF52_USE_DCDC
-    // First thing, so the whole boot (GPS, screen, I2C scan, radio init) runs
-    // on the buck converter, including builds where Bluetooth never comes up
-    nrf52EnableDCDC();
-#endif
+    // The buck converters were enabled back in powerHAL_platformInit(), before the
+    // console existed. This is the first point their status can actually be printed.
+    nrf52LogDCDCStatus();
 
 #ifdef ADC_V
     pinMode(ADC_V, INPUT);

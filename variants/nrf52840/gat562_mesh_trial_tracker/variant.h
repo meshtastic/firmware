@@ -231,9 +231,12 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-// Board has the DC/DC inductors fitted (vendor's MeshCore uses NRF52BoardDCDC);
-// enabling the buck converter cuts active/radio current versus the LDO.
-#define NRF52_USE_DCDC
+// Board has the REG1 DC/DC inductor fitted (vendor's MeshCore uses NRF52BoardDCDC);
+// enabling the buck converter cuts active/radio current versus the LDO. REG0 is
+// left on its LDO to match the vendor: this board is supplied through VDD, not
+// VDDH, so the high-voltage stage is bypassed and NRF52_USE_DCDC_REG0 would do
+// nothing.
+#define NRF52_USE_DCDC_REG1
 
 // Testing USB detection
 #define NRF_APM
