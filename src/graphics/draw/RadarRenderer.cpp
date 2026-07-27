@@ -91,7 +91,7 @@ static void formatDistM(char *buf, size_t len, float metres)
     }
 }
 
-/** Format metres as a number only (no unit suffix) — used for radar ring
+/** Format metres as a number only (no unit suffix) - used for radar ring
  * labels. */
 static void formatDistNum(char *buf, size_t len, float metres)
 {
@@ -165,7 +165,7 @@ static void drawMarker(OLEDDisplay *display, int px, int py, uint8_t sym)
         display->drawLine(px, py + 2, px - 2, py - 2);
         display->drawLine(px - 2, py - 2, px + 2, py - 2);
         break;
-    case 7: // — horizontal bar
+    case 7: // - horizontal bar
         display->drawLine(px - 2, py, px + 2, py);
         break;
     case 8: // ○ hollow circle
@@ -235,7 +235,7 @@ static void drawConnectionIconNoWipe(OLEDDisplay *display)
  * Draw the radar overlay (header + content) for the compass/position screen.
  *
  * Layout (128×64 OLED example):
- *   - Header row: "Radar <scale>" — drawn here so the title can include the
+ *   - Header row: "Radar <scale>" - drawn here so the title can include the
  *     current outer-ring range
  *   - Right side: circular radar with 2 px padding on all sides
  *   - Left side: node list (up to 5 closest nodes, marker + name + distance)
@@ -250,7 +250,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int sw = SCREEN_WIDTH;
     const int sh = SCREEN_HEIGHT;
 
-    // Single layout — the radar circle always uses the full height below the
+    // Single layout - the radar circle always uses the full height below the
     // header (matches the dense layout from before any footer reservation
     // existed) so its size doesn't shift when the BT/API icon appears.  Only
     // the list rows on the left reserve space, since they live in the same
@@ -267,7 +267,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int pad = (currentResolution == ScreenResolution::High) ? 9 : 4;
 
     // -----------------------------------------------------------------------
-    // Radar circle — right side, 2 px padding on all sides.
+    // Radar circle - right side, 2 px padding on all sides.
     // -----------------------------------------------------------------------
     const int radarDiam = contentH - 2 * pad;
     const int radarRadius = radarDiam / 2;
@@ -278,7 +278,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const int listRight = radarCX - radarRadius - 4; // 4 px gap between list and circle
 
     // -----------------------------------------------------------------------
-    // GPS — bail gracefully if unavailable.  No fix → no scale to report,
+    // GPS - bail gracefully if unavailable.  No fix → no scale to report,
     // so the header stays plain.
     // -----------------------------------------------------------------------
     const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -303,7 +303,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     //  2. GPS movement track (estimatedHeading)
     //  3. North-up fallback (0)
     //
-    // s_forceNorthUp overrides (1) and (2) — set via the long-press menu.
+    // s_forceNorthUp overrides (1) and (2) - set via the long-press menu.
     // -----------------------------------------------------------------------
     const bool imuAvailable = screen->hasHeading();
     const bool headingUp = imuAvailable && !s_forceNorthUp;
@@ -337,7 +337,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
             continue;
         if (favoritesOnly && !nodeInfoLiteIsFavorite(n))
             continue;
-        // Skip stale nodes — otherwise we plot ghosts at their last-known
+        // Skip stale nodes - otherwise we plot ghosts at their last-known
         // position long after they have gone offline.  Uses the firmware-wide
         // "online" threshold (NUM_ONLINE_SECS, 2 hrs) so the radar matches what
         // the rest of the UI counts as an online node.
@@ -375,7 +375,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     const float scale = niceScaleMeters(maxDistM, s_zoomLevel);
 
     // -----------------------------------------------------------------------
-    // Header — "Radar <scale>", drawn now that we know the outer-ring range.
+    // Header - "Radar <scale>", drawn now that we know the outer-ring range.
     // Keeps the scale legible in the title bar instead of overlapping the
     // inner ring.
     // -----------------------------------------------------------------------
@@ -394,7 +394,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawCircle(radarCX, radarCY, (radarRadius * ring) / 3);
 
     // -----------------------------------------------------------------------
-    // Ring distance labels — high-res only; numbers only, no unit suffix,
+    // Ring distance labels - high-res only; numbers only, no unit suffix,
     // smallest available font, right-aligned flush inside the SE arc point.
     // All 3 rings labelled; the outer ring number echoes the header scale.
     // -----------------------------------------------------------------------
@@ -407,7 +407,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
             const int ringR = (radarRadius * ring) / 3;
             char ringLabel[12];
             formatDistNum(ringLabel, sizeof(ringLabel), scale * ring / 3.0f);
-            // Centred on the ring arc, opposite N — just inside the line.
+            // Centred on the ring arc, opposite N - just inside the line.
             const int lx = radarCX + (int)(ringR * sinf(oppNBrg));
             const int ly = radarCY - (int)(ringR * cosf(oppNBrg)) - kRingFontH;
             display->drawString(lx, ly, ringLabel);
@@ -415,7 +415,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     // -----------------------------------------------------------------------
-    // North indicator — rotates in heading-up mode.
+    // North indicator - rotates in heading-up mode.
     // Top edge of the N glyph just touches ring 3 from inside.
     // -----------------------------------------------------------------------
     {
@@ -432,7 +432,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     display->setPixel(radarCX, radarCY);
 
     // -----------------------------------------------------------------------
-    // Plot remote nodes — cap at kMaxPlotted to match the list panel.
+    // Plot remote nodes - cap at kMaxPlotted to match the list panel.
     //
     // Marker symbol is the sort-position index (0..9) so every plotted node
     // gets a unique shape and matches its row in the list panel.  Using the
@@ -445,7 +445,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     // -----------------------------------------------------------------------
-    // Node list (left panel) — up to 10 closest nodes.
+    // Node list (left panel) - up to 10 closest nodes.
     //
     // Each row: marker symbol (matches the radar dot) | short name | distance.
     // -----------------------------------------------------------------------
@@ -483,7 +483,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->setTextAlignment(TEXT_ALIGN_LEFT);
     }
 
-    // No active nodes in range — the radar above is intentionally empty (rings
+    // No active nodes in range - the radar above is intentionally empty (rings
     // only).  Tell the user why, centred in the list-panel column so it doesn't
     // overlap the radar circle on the right.
     if (entries.empty()) {
@@ -496,7 +496,7 @@ void drawRadarOverlay(OLEDDisplay *display, int16_t x, int16_t y)
         display->setTextAlignment(TEXT_ALIGN_LEFT);
     }
 
-    // BT/API connection icon — drawn here (no surrounding wipe) so the radar
+    // BT/API connection icon - drawn here (no surrounding wipe) so the radar
     // circle and the last list row stay intact.  NodeListRenderer's radar
     // branch deliberately skips drawCommonFooter for the same reason.
     drawConnectionIconNoWipe(display);

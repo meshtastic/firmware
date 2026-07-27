@@ -1510,8 +1510,8 @@ void menuHandler::radarBearingsMenu()
     enum optionsNumbers { Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut };
     static const char *optionsArray[] = {
         "Back",    "Tracking View",
-        nullptr, // ToggleHeading — filled dynamically below
-        nullptr, // ToggleFavorites — filled dynamically below
+        nullptr, // ToggleHeading - filled dynamically below
+        nullptr, // ToggleFavorites - filled dynamically below
         "Zoom In", "Zoom Out",
     };
     static int optionsEnumArray[] = {Back, TrackingView, ToggleHeading, ToggleFavorites, ZoomIn, ZoomOut};
