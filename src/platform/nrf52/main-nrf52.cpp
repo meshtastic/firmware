@@ -207,18 +207,32 @@ void __attribute__((noreturn)) __assert_func(const char *file, int line, const c
 // console exists. The POWER peripheral belongs to the SoftDevice once that is up,
 // so pick the access method accordingly; at powerHAL time it never is, but the
 // check keeps the helper correct wherever it is called from.
+// reg0Err/reg1Err are only meaningful when viaSoftDevice is set: the direct-register
+// path has no API status to report, only whether the register read back as set.
 static struct {
     bool reg0Attempted, reg1Attempted;
     bool reg0Ok, reg1Ok;
     uint32_t reg0Err, reg1Err;
     bool viaSoftDevice;
+    bool stateUnknown;
+    uint32_t stateErr;
     bool highVoltageMode;
 } dcdcStatus;
 
 void nrf52EnableDCDC()
 {
     uint8_t sdEnabled = 0;
-    sd_softdevice_is_enabled(&sdEnabled);
+    uint32_t stateErr = sd_softdevice_is_enabled(&sdEnabled);
+    if (stateErr != NRF_SUCCESS) {
+        // The API documents no failure mode, but if we ever cannot tell who owns the
+        // POWER peripheral, do nothing rather than guess: writing DCDCEN directly
+        // while the SoftDevice owns POWER is undefined, and staying on the LDO costs
+        // efficiency but nothing else. nrf52LogDCDCStatus() reports this.
+        dcdcStatus.stateUnknown = true;
+        dcdcStatus.stateErr = stateErr;
+        return;
+    }
+
     dcdcStatus.viaSoftDevice = sdEnabled;
     dcdcStatus.highVoltageMode = (NRF_POWER->MAINREGSTATUS & POWER_MAINREGSTATUS_MAINREGSTATUS_Msk) ==
                                  (POWER_MAINREGSTATUS_MAINREGSTATUS_High << POWER_MAINREGSTATUS_MAINREGSTATUS_Pos);
@@ -253,10 +267,18 @@ void nrf52EnableDCDC()
 // which runs after consoleInit(), so this is the first point the result can be seen.
 void nrf52LogDCDCStatus()
 {
+    if (dcdcStatus.stateUnknown) {
+        LOG_ERROR("DCDC: SoftDevice state unreadable (err=%lu); enable skipped, still on LDO",
+                  (unsigned long)dcdcStatus.stateErr);
+        return;
+    }
+
 #ifdef NRF52_USE_DCDC_REG0
     if (dcdcStatus.reg0Attempted) {
-        if (!dcdcStatus.reg0Ok)
+        if (!dcdcStatus.reg0Ok && dcdcStatus.viaSoftDevice)
             LOG_ERROR("DCDC: REG0 enable FAILED (err=%lu), still on LDO", (unsigned long)dcdcStatus.reg0Err);
+        else if (!dcdcStatus.reg0Ok)
+            LOG_ERROR("DCDC: REG0 enable FAILED, DCDCEN0 read back 0, still on LDO");
         else if (dcdcStatus.highVoltageMode)
             LOG_INFO("DCDC: REG0 buck enabled");
         else
@@ -269,8 +291,10 @@ void nrf52LogDCDCStatus()
     if (dcdcStatus.reg1Attempted) {
         if (dcdcStatus.reg1Ok)
             LOG_INFO("DCDC: REG1 buck enabled");
-        else
+        else if (dcdcStatus.viaSoftDevice)
             LOG_ERROR("DCDC: REG1 enable FAILED (err=%lu), still on LDO", (unsigned long)dcdcStatus.reg1Err);
+        else
+            LOG_ERROR("DCDC: REG1 enable FAILED, DCDCEN read back 0, still on LDO");
     }
 #endif
 }
