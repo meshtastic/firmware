@@ -7,7 +7,7 @@
 #include <math.h>
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 #endif
 
 static constexpr int32_t QMC6309_UPDATE_INTERVAL_MS = 20;
