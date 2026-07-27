@@ -1016,7 +1016,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             }
 #endif
             display->setColor(BLACK);
-            int yOffset = 3;
+            const int yOffset = graphics::isCompactPanel(display) ? 2 : 3;
             if (current_notification_type == notificationTypeEnum::node_picker) {
                 UIRenderer::drawStringWithEmotes(display, textX, lineY - yOffset, lineBuffer, FONT_HEIGHT_SMALL, 1, false);
             } else {
