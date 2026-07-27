@@ -1,5 +1,40 @@
 #pragma once
+#include "configuration.h"
+#include "memory/FlashClass.h"
 #include <Arduino.h>
+
+// === Emote set ladder ===
+// The emote table is pure flash: 16x16 XBM bitmaps in PROGMEM plus a 146-entry
+// index. It costs no RAM, so it tiers off MESHTASTIC_FLASH_CLASS (memory/FlashClass.h)
+// rather than the RAM ladder in memory/MemClass.h.
+//
+//   EMOTE_SET_NONE     no bitmaps; emoji render as their text label
+//   EMOTE_SET_CORE     acknowledgement, alerts, mesh status, heart
+//   EMOTE_SET_STANDARD + faces, gestures and weather
+//   EMOTE_SET_FULL     + moon phases, objects, arrows, seasonal
+//
+// Compare ordinally (>=). Each section of the table in emotes.cpp carries its own
+// tier gate, so picker order is unchanged as tiers drop out. Dropping entries leaves
+// their bitmaps unreferenced and -fdata-sections/--gc-sections discards them, so the
+// saving is the index plus the bitmap data plus (at NONE, under LTO) the picker itself.
+#define EMOTE_SET_NONE 0
+#define EMOTE_SET_CORE 1
+#define EMOTE_SET_STANDARD 2
+#define EMOTE_SET_FULL 3
+
+#ifndef MESHTASTIC_EMOTE_SET
+#ifdef EXCLUDE_EMOJI // long-standing spelling of "no emotes at all"
+#define MESHTASTIC_EMOTE_SET EMOTE_SET_NONE
+#elif MESHTASTIC_FLASH_CLASS <= FLASH_CLASS_TINY
+#define MESHTASTIC_EMOTE_SET EMOTE_SET_NONE
+#elif MESHTASTIC_FLASH_CLASS == FLASH_CLASS_SMALL
+// nRF52840 is the tightest screen-capable region we ship - rak4631 sits at 97% of it
+// on develop - so this class trades the seasonal/decorative tail for headroom.
+#define MESHTASTIC_EMOTE_SET EMOTE_SET_STANDARD
+#else
+#define MESHTASTIC_EMOTE_SET EMOTE_SET_FULL
+#endif
+#endif // MESHTASTIC_EMOTE_SET
 
 namespace graphics
 {
@@ -15,7 +50,7 @@ struct Emote {
 extern const Emote emotes[/* numEmotes */];
 extern const int numEmotes;
 
-#ifndef EXCLUDE_EMOJI
+#if MESHTASTIC_EMOTE_SET > EMOTE_SET_NONE
 // === Emote Bitmaps ===
 #define thumbs_height 16
 #define thumbs_width 16
@@ -425,6 +460,6 @@ extern const unsigned char wood[] PROGMEM;
 #define beer_width 16
 #define beer_height 16
 extern const unsigned char beer[] PROGMEM;
-#endif // EXCLUDE_EMOJI
+#endif // MESHTASTIC_EMOTE_SET > EMOTE_SET_NONE
 
 } // namespace graphics
