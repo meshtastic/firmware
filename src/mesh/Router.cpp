@@ -810,12 +810,17 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     }
     bool decrypted = false;
     bool pkiAttempted = false;
+    bool licensedPkiCandidate = false;
     bool matchedChannel = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     meshtastic_NodeInfoLite *ourNode = nullptr;
-    if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && rawSize > MESHTASTIC_PKC_OVERHEAD &&
-        (ourNode = nodeDB->getMeshNode(p->to)) != nullptr && ourNode->public_key.size > 0) {
+    const bool pkiCandidate = p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) &&
+                              rawSize > MESHTASTIC_PKC_OVERHEAD && (ourNode = nodeDB->getMeshNode(p->to)) != nullptr &&
+                              ourNode->public_key.size > 0;
+    if (pkiCandidate && owner.is_licensed) {
+        licensedPkiCandidate = true;
+    } else if (pkiCandidate) {
         pkiAttempted = true;
         LOG_DEBUG("Attempt PKI decryption");
         // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
@@ -998,7 +1003,8 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         return DecodeState::DECODE_SUCCESS;
     } else {
         LOG_WARN("No suitable channel found for decoding, hash was 0x%x!", p->channel);
-        return (matchedChannel || pkiAttempted) ? DecodeState::DECODE_FAILURE : DecodeState::DECODE_OPAQUE;
+        return (matchedChannel || pkiAttempted || licensedPkiCandidate) ? DecodeState::DECODE_FAILURE
+                                                                        : DecodeState::DECODE_OPAQUE;
     }
 }
 
@@ -1064,12 +1070,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // verification at every XEdDSA-enabled receiver that knows our key.
             p->decoded.xeddsa_signature.size = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
-            // Sign broadcast packets when the Data still fits a LoRa frame with the signature
-            // attached. This must be the exact encoded-size criterion, not a payload-size
-            // heuristic: a heuristic band where we sign-then-fail-TOO_LARGE breaks packets that
+            // Licensed packets stay plaintext, so sign both broadcasts and unicasts. Normal mode
+            // continues to sign broadcasts only. Use the exact encoded size: a payload-size heuristic
+            // where we sign-then-fail-TOO_LARGE breaks packets that
             // were deliverable unsigned, and perhapsDecode() applies the mirror-image rule when
             // deciding whether an unsigned broadcast from a known signer is a downgrade.
-            if (!p->pki_encrypted && isBroadcast(p->to) && signedDataFits(&p->decoded)) {
+            if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to)) && signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
