@@ -13,7 +13,7 @@ reviews:
     drafts: false
     # Review PRs regardless of target branch.
     base_branches:
-      - ".*"
+      - .*
     # Skip Renovate dependency updates - CI gates dependencies; we review for substance, not every bump.
     ignore_usernames:
       - renovate
@@ -27,7 +27,7 @@ reviews:
     - "!protobufs/**"
 
   path_instructions:
-    - path: "bin/config.d/**"
+    - path: bin/config.d/**
       instructions: >
         meshtasticd configuration files. Bundled with meshtasticd Linux/MacOS packaging.
         Ensure configurations include metadata found in other configs.

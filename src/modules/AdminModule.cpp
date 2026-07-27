@@ -11,6 +11,7 @@
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
+#include <ErriezCRC32.h>
 #include <FSCommon.h>
 #include <Throttle.h>
 #include <ctype.h> // for better whitespace handling
@@ -68,7 +69,17 @@
 #endif
 
 AdminModule *adminModule;
-bool hasOpenEditTransaction;
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+static bool licensedIdentityWillMigrate()
+{
+    if (config.security.private_key.size != 32 || config.security.public_key.size != 32)
+        return true;
+    if (nodeDB->checkLowEntropyPublicKey(config.security.public_key))
+        return true;
+    return crc32Buffer(config.security.public_key.bytes, config.security.public_key.size) != nodeDB->getNodeNum();
+}
+#endif
 
 /// A special reserved string to indicate strings we can not share with external nodes.  We will use this 'reserved' word instead.
 /// Also, to make setting work correctly, if someone tries to set a string to this reserved value we assume they don't really want
@@ -228,6 +239,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
     }
+    // Before the switch, so every case below sees consistent transaction state.
+    expireStaleEditTransaction();
+
     switch (r->which_payload_variant) {
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
@@ -469,12 +483,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
         LOG_INFO("Begin transaction for editing settings");
         hasOpenEditTransaction = true;
+        editTransactionActivityMs = millis();
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
         disableBluetooth();
         LOG_INFO("Commit transaction for edited settings");
         hasOpenEditTransaction = false;
+        deferredEditSegments = 0;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
         flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
@@ -681,22 +697,41 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
 
     default:
-        meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
-        AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllModules(mp, r, &res);
-
-        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
-            setPassKey(&res);
-            myReply = allocDataProtobuf(res);
-        } else if (mp.decoded.want_response) {
-            LOG_DEBUG("Module API did not respond to admin message. req.variant=%d", r->which_payload_variant);
-        } else if (handleResult != AdminMessageHandleResult::HANDLED) {
-            // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            LOG_DEBUG("Module API did not handle admin message %d", r->which_payload_variant);
-        }
+        handleViaModuleApi(mp, r);
         break;
     }
 
     // Allow any observers (e.g. the UI) to handle/respond
+    handleViaObservers(r);
+
+    // If asked for a response and it is not yet set, generate an 'ACK' response
+    if (mp.decoded.want_response && !myReply) {
+        myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+    }
+    if (mp.pki_encrypted && myReply) {
+        myReply->pki_encrypted = true;
+    }
+    return handled;
+}
+
+void AdminModule::handleViaModuleApi(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r)
+{
+    meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
+    AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllModules(mp, r, &res);
+
+    if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
+        setPassKey(&res);
+        myReply = allocDataProtobuf(res);
+    } else if (mp.decoded.want_response) {
+        LOG_DEBUG("Module API did not respond to admin message. req.variant=%d", r->which_payload_variant);
+    } else if (handleResult != AdminMessageHandleResult::HANDLED) {
+        // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
+        LOG_DEBUG("Module API did not handle admin message %d", r->which_payload_variant);
+    }
+}
+
+void AdminModule::handleViaObservers(const meshtastic_AdminMessage *r)
+{
     AdminMessageHandleResult observerResult = AdminMessageHandleResult::NOT_HANDLED;
     meshtastic_AdminMessage observerResponse = meshtastic_AdminMessage_init_default;
     AdminModule_ObserverData observerData = {
@@ -714,15 +749,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     } else if (observerResult == AdminMessageHandleResult::HANDLED) {
         LOG_DEBUG("Observer handled admin message");
     }
-
-    // If asked for a response and it is not yet set, generate an 'ACK' response
-    if (mp.decoded.want_response && !myReply) {
-        myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
-    }
-    if (mp.pki_encrypted && myReply) {
-        myReply->pki_encrypted = true;
-    }
-    return handled;
 }
 
 void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r)
@@ -755,6 +781,8 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
 void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
+    bool identityUpdated = false;
+    bool channelsSanitized = false;
 
     if (*o.long_name) {
         // Apps built against the older 39-byte limit may send longer names; clamp
@@ -773,15 +801,28 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         owner.short_name[sizeof(owner.short_name) - 1] = '\0';
         sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
     }
-    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
-
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        const bool identityWillMigrate =
+            o.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && licensedIdentityWillMigrate();
+        if (identityWillMigrate)
+            sendWarning(licensedIdentityMigrationMessage);
+#endif
         owner.is_licensed = o.is_licensed;
         if (channels.ensureLicensedOperation()) {
             warnLicensedMode();
+            channelsSanitized = true;
         }
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if (owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            identityUpdated = nodeDB->generateCryptoKeyPair();
+            if (identityWillMigrate)
+                nodeDB->licensedIdentityMigrationPending = false;
+        }
+#endif
     }
+    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
     if (owner.has_is_unmessagable != o.has_is_unmessagable ||
         (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
         changed = 1;
@@ -791,7 +832,8 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE);
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
+                    (channelsSanitized ? SEGMENT_CHANNELS : 0));
     }
 }
 
@@ -994,7 +1036,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 // If we're setting region for the first time, init the region and regenerate the keys
                 if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                    if (crypto) {
+                    if (crypto && !owner.is_licensed) {
                         crypto->ensurePkiKeys(config.security, owner);
                     }
 #endif
@@ -1007,6 +1049,17 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                 }
                 // Ensure initRegion() uses the newly validated region
                 config.lora.region = validatedLora.region;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+                if (owner.is_licensed && isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+                    const bool identityWillMigrate = licensedIdentityWillMigrate();
+                    if (identityWillMigrate)
+                        sendWarning(licensedIdentityMigrationMessage);
+                    nodeDB->generateCryptoKeyPair();
+                    changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+                    if (identityWillMigrate)
+                        nodeDB->licensedIdentityMigrationPending = false;
+                }
+#endif
                 initRegion();
                 if (getEffectiveDutyCycle() < 100) {
                     validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
@@ -1015,7 +1068,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
                     //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
                     snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
                 }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
             } else {
                 //  Region validation has failed, so just copy all of the old config over the new config
                 validatedLora = oldLoraConfig;
@@ -1298,6 +1351,11 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         LOG_INFO("Set module config: Traffic Management");
         moduleConfig.has_traffic_management = true;
         moduleConfig.traffic_management = c.payload_variant.traffic_management;
+        break;
+    case meshtastic_ModuleConfig_tak_tag:
+        LOG_INFO("Set module config: TAK");
+        moduleConfig.has_tak = true;
+        moduleConfig.tak = c.payload_variant.tak;
         break;
 #if !MESHTASTIC_EXCLUDE_BEACON
     case meshtastic_ModuleConfig_mesh_beacon_tag: {
@@ -1617,6 +1675,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_traffic_management_tag;
             res.get_module_config_response.payload_variant.traffic_management = moduleConfig.traffic_management;
             break;
+        case meshtastic_AdminMessage_ModuleConfigType_TAK_CONFIG:
+            configName = "TAK";
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_tak_tag;
+            res.get_module_config_response.payload_variant.tak = moduleConfig.tak;
+            break;
 #if !MESHTASTIC_EXCLUDE_BEACON
         case meshtastic_AdminMessage_ModuleConfigType_MESHBEACON_CONFIG:
             configName = "MeshBeacon";
@@ -1816,13 +1879,35 @@ void AdminModule::reboot(int32_t seconds)
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
+// Without this, a commit that never arrives leaves the transaction open forever and every later
+// config write from any client is applied, acknowledged, and then never saved.
+void AdminModule::expireStaleEditTransaction()
+{
+    if (!hasOpenEditTransaction || Throttle::isWithinTimespanMs(editTransactionActivityMs, EDIT_TRANSACTION_IDLE_MS))
+        return;
+
+    LOG_WARN("Edit transaction abandoned for %us; committing what it applied", EDIT_TRANSACTION_IDLE_MS / 1000);
+    hasOpenEditTransaction = false;
+    int segments = deferredEditSegments;
+    deferredEditSegments = 0;
+    // No reboot: the settings are already live in RAM and the client that would expect one is gone.
+    if (segments)
+        saveChanges(segments, false);
+    flushChannelWarnings();
+}
+
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
+#ifdef PIO_UNIT_TESTING
+    lastSaveWhatForTest = saveWhat;
+#endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delay save of changes to disk until the open transaction is committed");
+        editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
+        deferredEditSegments |= saveWhat;
     }
     if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);
@@ -1870,6 +1955,17 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     // Remove PSK of primary channel for plaintext amateur usage
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        const bool identityWillMigrate = licensedIdentityWillMigrate();
+        if (identityWillMigrate)
+            sendWarning(licensedIdentityMigrationMessage);
+        nodeDB->generateCryptoKeyPair();
+        if (identityWillMigrate)
+            nodeDB->licensedIdentityMigrationPending = false;
+    }
+#endif
 
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();
