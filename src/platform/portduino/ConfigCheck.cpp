@@ -26,14 +26,9 @@ namespace
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
-// These tables mirror the keys loadConfig() actually reads in PortduinoGlue.cpp,
-// plus the pinMapping{section, name} members declared in PortduinoGlue.h. A key
-// missing from here is reported as unknown, which is the honest answer: meshtasticd
-// silently ignores anything it does not read, so an unlisted key does nothing.
-//
-// When you teach loadConfig() a new key, add it here too. CI runs --check over
-// bin/config.d/**, so an omission surfaces as a failing build rather than as a
-// misleading "unknown key" warning in front of a user.
+// Mirrors the keys loadConfig() reads: meshtasticd silently ignores anything else, so
+// an unlisted key is honestly "unknown". Teach loadConfig() a new key, add it here too --
+// CI runs --check over bin/config.d/**, so an omission fails the build rather than a user.
 
 const std::set<std::string> kLoraPinKeys = {"CS", "IRQ", "Busy", "Reset", "TXen", "RXen", "SX126X_ANT_SW", "GPIO_DETECT_PA"};
 
@@ -169,10 +164,8 @@ int lineOf(const YAML::Node &node)
 // ---------------------------------------------------------------------------
 // Duplicate key detection
 // ---------------------------------------------------------------------------
-// YAML forbids duplicate keys but yaml-cpp does not complain: it silently keeps the
-// FIRST occurrence and discards the rest, so a later override looks applied but is
-// not. The Node API cannot see this because the map is already collapsed by the time
-// it exists, so walk the raw parser event stream instead.
+// yaml-cpp silently keeps the FIRST of duplicate keys, so a later override looks applied
+// but is not. The Node API sees an already-collapsed map, so walk the parser events.
 
 class DuplicateKeyFinder : public YAML::EventHandler
 {
@@ -232,12 +225,8 @@ class DuplicateKeyFinder : public YAML::EventHandler
         advance(); // the collection itself occupies a slot in its parent
         stack.push_back(Context{isMap, true, "", {}});
     }
-    // No advance() here: push() already consumed the collection's slot in the parent.
-    // Toggling again would leave the parent expecting a value, so the next key would
-    // not be recognised as one.
-    // Guarded: the stack only stays balanced because yaml-cpp emits matched start/end
-    // events. That is its invariant, not ours, and pop_back() on an empty vector is
-    // undefined -- too sharp an edge to leave resting on an upstream promise.
+    // No advance(): push() already consumed the collection's slot in the parent. Guarded
+    // because balance rests on yaml-cpp emitting matched start/end events -- its invariant.
     void pop()
     {
         if (!stack.empty())
@@ -361,15 +350,9 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
 // ---------------------------------------------------------------------------
 // Value types
 // ---------------------------------------------------------------------------
-// A key with the right name but the wrong kind of value is the quietest failure of
-// all. loadConfig() reads almost everything as .as<T>(default), so a value that will
-// not convert is silently replaced by the default -- the setting simply does nothing.
-// The two reads with NO default (Logging.AsciiLogs and the TX_GAIN_LORA entries) are
-// worse: the conversion throws, loadConfig() returns false, and meshtasticd refuses
-// to start on a file this report would otherwise call clean.
-//
-// Conversions are tested by asking yaml-cpp to do them rather than by re-implementing
-// its rules, so this cannot drift from what loadConfig() actually accepts.
+// A wrong-typed value silently does nothing under .as<T>(default), but the two reads with
+// NO default (Logging.AsciiLogs, TX_GAIN_LORA) throw and stop meshtasticd. Conversions are
+// tested by asking yaml-cpp, so this cannot drift from what loadConfig() accepts.
 
 enum ValueType { kBool, kInt, kFloat, kString, kIntList, kBoolOrFloat, kIntOrString };
 
@@ -549,11 +532,8 @@ void checkValueType(const std::string &file, const std::string &path, const YAML
                                 ", so it is silently replaced by the default and the setting does nothing"});
 }
 
-// The PA gain table. Two shapes are accepted and they fail differently: a list is read
-// element-by-element with .as<int>() and NO default, so one bad entry throws and stops
-// meshtasticd, while a bare scalar is read as .as<int>(0) and merely falls back to 0.
-// The table itself is uint16_t[22], so extra points are dropped and out-of-range values
-// wrap rather than being rejected.
+// The PA gain table's two shapes fail differently: a bad list entry stops meshtasticd (no
+// default), a bad scalar falls back to 0. Backed by uint16_t[22], so extras drop and values wrap.
 void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Finding> &findings)
 {
     constexpr size_t kMaxPaPoints = 22;
@@ -592,10 +572,8 @@ void checkTxGain(const std::string &file, const YAML::Node &node, std::vector<Fi
                             "Lora.TX_GAIN_LORA is not a whole number, so it is silently read as 0 and no PA gain is applied"});
 }
 
-// Module names are matched exactly and the accepted spellings are not consistently
-// cased (RF95 and LLCC68 are upper, sx1262 and lr1121 lower), so a plausible-looking
-// value is a common way to get an unusable config. loadConfig() exits on an unknown
-// name before printing anything useful, so name the valid set here.
+// Module names match exactly and are inconsistently cased (RF95 upper, sx1262 lower),
+// and loadConfig() exits on an unknown name without printing the valid set, so name it here.
 void checkLoraModule(const std::string &file, const YAML::Node &module, std::vector<Finding> &findings)
 {
     const std::string name = module.as<std::string>("");
@@ -624,12 +602,8 @@ void checkLoraModule(const std::string &file, const YAML::Node &module, std::vec
     findings.push_back({kError, file, lineOf(module), message});
 }
 
-// NodeNum comes from the public key, not from this MAC (NodeDB.cpp), so a MAC that
-// fails to apply does not change the node's identity. What it does do is fall through
-// to the BlueZ and LoRa-serial fallbacks, and if those yield nothing meshtasticd exits
-// with "Blank MAC Address not allowed!". loadConfig() accepts MACAddress only when it
-// survives a length test and MACAddressSource only when the interface reads back, and
-// neither failure says anything, so both are checked here.
+// loadConfig() rejects a bad MACAddress or MACAddressSource silently, falling through to the
+// BlueZ and LoRa-serial fallbacks; if those yield nothing, meshtasticd exits on a blank MAC.
 void checkMacAddress(const std::string &file, const YAML::Node &general, std::vector<Finding> &findings)
 {
     const YAML::Node address = general["MACAddress"];
@@ -676,9 +650,8 @@ void checkSection(const std::string &file, const std::string &section, const YAM
     const auto &allowed = schema().at(section);
     if (kFreeFormSections.count(section))
         return;
-    // An empty section (`Lora:` with no body) is null, not a map, and is harmless:
-    // loadConfig() tests the section node before reading it. Any other non-map shape
-    // is not readable at all, so say so rather than passing the file as clean.
+    // An empty section (`Lora:` with no body) is null, not a map, and loadConfig() tests
+    // before reading it. Any other non-map shape is unreadable, so do not call the file clean.
     if (body.IsNull())
         return;
     if (!body.IsMap()) {
@@ -737,9 +710,8 @@ void checkSection(const std::string &file, const std::string &section, const YAM
 // ---------------------------------------------------------------------------
 // Cross-file overlap
 // ---------------------------------------------------------------------------
-// Every .yaml in the config directory is loaded into the same portduino_config, so
-// two files that set the same key are not merged: the one loaded LAST wins. Note
-// this is the opposite of the within-file rule, where yaml-cpp keeps the first.
+// Every .yaml loads into the same portduino_config, so two files setting the same key
+// are not merged: the one loaded LAST wins -- the opposite of the within-file rule.
 
 // path (below the top-level section) -> file -> line of its first appearance there
 using PathIndex = std::map<std::string, std::map<std::string, int>>;
@@ -845,11 +817,8 @@ void checkCrossFileOverlap(const PathIndex &paths, const std::map<std::string, s
         if (coveredByAncestor)
             continue;
 
-        // The switch table is the one place "last wins" is not true. Its loader only
-        // ever writes HIGH and never writes LOW back (PortduinoGlue.cpp), so a HIGH
-        // set by an earlier file survives a later file that says LOW in that position:
-        // the effective table is the OR of every table loaded, which may be a switch
-        // state that belongs to none of them.
+        // The one place "last wins" is untrue: the loader only ever writes HIGH, so the effective
+        // table is the OR of every table loaded -- a switch state belonging to none of them.
         if (entry.first == "Lora.rfswitch_table") {
             findings.push_back({kError, across, 0,
                                 "'Lora.rfswitch_table' is set in " + std::to_string(entry.second.size()) + " files (" +
@@ -865,9 +834,8 @@ void checkCrossFileOverlap(const PathIndex &paths, const std::map<std::string, s
                                 describeOwners(entry.second) + "). The file loaded last wins"});
     }
 
-    // Re-reading a "Lora:" section does not merge into the previous one. These keys
-    // are assigned unconditionally with a default (PortduinoGlue.cpp), so a later
-    // file that has a Lora section but omits them silently resets them.
+    // Sections do not merge, and these keys are assigned unconditionally with a default, so a
+    // later file with a Lora section that omits them silently resets them.
     const auto loraOwners = sectionOwners.find("Lora");
     if (loraOwners != sectionOwners.end() && loraOwners->second.size() > 1) {
         std::string files;
@@ -897,10 +865,8 @@ std::string moduleName()
     return it == portduino_config.loraModules.end() ? "unknown" : it->second;
 }
 
-// A pin key that is present but whose value will not convert to a number falls back
-// to RADIOLIB_NC (-1) while still being marked enabled, and initGPIOPin() then trips
-// an assertion inside LinuxGPIOPin rather than failing cleanly. Catching it here is
-// the difference between a readable report and a stack trace from a library file.
+// A pin whose value will not convert falls back to RADIOLIB_NC (-1) while still marked enabled,
+// and initGPIOPin() then trips an assertion inside LinuxGPIOPin rather than failing cleanly.
 void checkPinValues(std::vector<Finding> &findings)
 {
     const std::string merged = "(merged configuration)";
@@ -957,9 +923,8 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
             {kWarn, merged, 0,
              "a Lora.rfswitch_table is set but Module is " + moduleName() + ", and the table is only applied to LR11xx radios"});
 
-    // An unreadable ConfigDirectory used to abort meshtasticd outright (an uncaught
-    // filesystem_error from directory_iterator); it now exits cleanly, but either way
-    // the files meant to configure the radio are not being loaded.
+    // Either way -- the old uncaught filesystem_error abort or today's clean exit -- the files
+    // meant to configure the radio are not being loaded.
     if (!portduino_config.config_directory.empty()) {
         std::error_code error;
         if (!std::filesystem::is_directory(portduino_config.config_directory, error))
@@ -976,9 +941,8 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                             "Config.StatusMessage is " + std::to_string(portduino_config.statusMessage.size()) +
                                 " characters and is truncated to 79 when it is stored"});
 
-    // DIO3_TCXO_VOLTAGE is in VOLTS and is multiplied by 1000. Every other Meshtastic
-    // surface talks about this in millivolts, so "1800" is the natural thing to write
-    // and silently asks for 1800V. Nothing downstream range-checks it.
+    // DIO3_TCXO_VOLTAGE is in VOLTS while every other Meshtastic surface uses millivolts, so
+    // the natural "1800" silently asks for 1800V and nothing downstream range-checks it.
     if (portduino_config.dio3_tcxo_voltage > 3600)
         findings.push_back({kError, merged, 0,
                             "Lora.DIO3_TCXO_VOLTAGE resolves to " + std::to_string(portduino_config.dio3_tcxo_voltage) +
@@ -1029,9 +993,8 @@ void printSummary()
     if (portduino_config.dio3_tcxo_voltage)
         std::cout << "  DIO3 TCXO voltage : " << portduino_config.dio3_tcxo_voltage << " mV\n";
 
-    // setRfSwitchTable() is only ever called for an LR11xx, so "not set" reads as a gap on
-    // an SX126x when there is nothing to set. "auto" has not resolved to a module yet, so
-    // it is the one case where absence cannot be called either way.
+    // setRfSwitchTable() is only called for an LR11xx, so "not set" is no gap elsewhere; "auto"
+    // has not resolved to a module yet, so absence cannot be called either way.
     const char *rfSwitch = "not needed for this module";
     if (portduino_config.has_rfswitch_table)
         rfSwitch = "set";
@@ -1041,10 +1004,8 @@ void printSummary()
         rfSwitch = "not set (module not resolved yet)";
     std::cout << "  RF switch table   : " << rfSwitch << "\n";
 
-    // A ch341 adapter's Lora pins are indexes on the adapter, driven by the usermode USB
-    // driver: portduinoSetup() skips initGPIOPin() for every Lora pin in that case, and
-    // hands the raw numbers to Ch341Hal. Reporting them as gpiochip lines to confirm with
-    // gpioinfo is wrong everywhere, and doubly so on Windows and macOS, which have neither.
+    // A ch341 adapter's Lora pins are adapter indexes handed to Ch341Hal, not gpiochip lines
+    // (portduinoSetup() skips initGPIOPin()), so pointing the user at gpioinfo would be wrong.
     const bool usbAdapter = portduino_config.lora_spi_dev == "ch341";
 
     std::cout << (usbAdapter ? "\nCH341 adapter pins (driven over USB, not claimed from a gpiochip):\n"

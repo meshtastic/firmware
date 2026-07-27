@@ -354,15 +354,13 @@ void portduinoSetup()
     }
 
     if (portduino_config.config_directory != "") {
-        // The throwing form of directory_iterator turns an unreadable ConfigDirectory
-        // into an uncaught filesystem_error and a SIGABRT, which is a crash rather than
-        // a diagnosis. Take the error_code overload and fail on our own terms.
+        // The throwing form of directory_iterator turns an unreadable ConfigDirectory into an
+        // uncaught filesystem_error and a SIGABRT, so take the error_code overload instead.
         std::error_code dirError;
         std::filesystem::directory_iterator entries{portduino_config.config_directory, dirError};
         if (dirError) {
-            // Half a configuration is worse than none: the files that were meant to
-            // supply the radio setup are missing. --check continues so the report can
-            // say so with the rest of the findings.
+            // Half a configuration is worse than none. --check continues so the report can say
+            // so with the rest of the findings.
             if (!configCheck) {
                 std::cout << "Unable to read ConfigDirectory " << portduino_config.config_directory << ": " << dirError.message()
                           << std::endl;
@@ -862,9 +860,8 @@ bool loadConfig(const char *configPath)
 #else
 bool loadConfig(const char *configPath)
 {
-    // Recorded even when the load below fails. A config.d entry that will not parse
-    // is reported here as "*** Exception ..." and then skipped, and its return value
-    // is discarded by the caller, so --check needs to know it was attempted.
+    // Recorded even when the load below fails: an unparseable config.d entry is skipped and its
+    // return value discarded by the caller, so --check needs to know it was attempted.
     attemptedConfigFiles.push_back(configPath);
 
     YAML::Node yamlConfig;

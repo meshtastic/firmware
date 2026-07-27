@@ -1,27 +1,10 @@
-// Adversarial fuzzing of the Portduino YAML config checker - the "meshtasticd --check crashes on
-// the very file you asked it to diagnose" failure mode.
-//
-// Scope is deliberately narrow. yaml-cpp does the parsing and is upstream's problem (and is fuzzed
-// there); what is fuzzed here is OUR code above the parse, above all DuplicateKeyFinder, which is
-// the one hand-rolled piece: it maintains its own stack over the raw parser event stream, and its
-// balance depends on yaml-cpp emitting matched start/end events rather than on anything we enforce.
-//
-// The suite runs under the default `coverage` env (AddressSanitizer); an out-of-bounds access or a
-// use-after-free on adversarial input turns the run RED. Inputs come from a deterministic seeded
-// LCG, so a failure always reproduces from the printed seed.
-//
-// The contract under test is crash-freedom and termination, NOT that any particular finding is
-// produced - runConfigCheck() returning at all is a pass. What it *says* about well-formed faults
-// is asserted by bin/test-config-check.sh against the fixtures in test/fixtures/portduino-config.
-//
-//   Group C1  seed corpus - every checked-in fixture, unmutated, must be survivable
-//   Group C2  byte mutation of those fixtures - flips, truncation, splicing
-//   Group C3  structural torture - nesting, duplicate keys, anchors/aliases, huge scalars
-//   Group C4  random bytes - the degenerate case, mostly rejected by the parser (DISABLED, see below)
+// Adversarial fuzzing of `meshtasticd --check`, above all DuplicateKeyFinder, whose stack balance
+// rests on yaml-cpp emitting matched start/end events. The contract is crash-freedom and
+// termination only (what the report *says* is asserted by bin/test-config-check.sh); inputs come
+// from a seeded LCG, so a failure reproduces from the printed seed.
 
 // configuration.h pulls in Arduino.h, whose Common.h declares setup()/loop() inside an extern "C"
-// block. Without it they compile with C++ linkage and the framework's main() cannot find them.
-// Must come BEFORE TestUtil.h, same as the other suites.
+// block. Must come BEFORE TestUtil.h, same as the other suites.
 #include "configuration.h"
 
 #include "TestUtil.h"
@@ -45,10 +28,8 @@ static constexpr uint64_t BASE_SEED = 0xC0FFEE01ULL;
 // Where the checked-in fixtures live, relative to the repo root that `pio test` runs from.
 static const char *kFixtureDir = "test/fixtures/portduino-config";
 
-// runConfigCheck() prints a full report per call. Thousands of calls would bury the CI log, so the
-// report is sent to /dev/null for the duration of the suite and stdout restored afterwards.
-// Restores by duplicated file descriptor rather than by reopening /dev/tty: CI has no controlling
-// terminal, so the /dev/tty route would lose stdout for every later suite in the run.
+// Thousands of full reports would bury the CI log, so stdout goes to /dev/null for the suite.
+// Restored by duplicated fd: CI has no controlling terminal, so reopening /dev/tty would lose it.
 class StdoutSilencer
 {
   public:
@@ -173,8 +154,7 @@ void test_mutated_corpus(void)
 // ---------------------------------------------------------------------------
 // C3 - structural torture
 // ---------------------------------------------------------------------------
-// Shapes chosen to stress the event-stream walker rather than the parser: unbalanced-looking
-// collections, keys repeated at several depths, aliases that make one node appear in many places.
+// Shapes chosen to stress the event-stream walker rather than the parser.
 
 void test_structural_torture(void)
 {
@@ -226,10 +206,8 @@ void test_structural_torture(void)
 // ---------------------------------------------------------------------------
 // C4 - random bytes (DISABLED)
 // ---------------------------------------------------------------------------
-// Switched off to keep the suite's CI cost down. It was half of the ~6100 inputs and so about
-// half of the 8 minutes this suite took under the coverage env's AddressSanitizer, for the least
-// return of the four groups: uniform random noise is almost always rejected on the first token,
-// and the shapes that reach our code are better covered by C2 and C3. Flip to 1 to restore it.
+// Off for CI cost: half the inputs and half the runtime for the least return, since uniform noise
+// is almost always rejected on the first token. Flip to 1 to restore it.
 #define FUZZ_CONFIG_RANDOM_BYTES 0
 
 #if FUZZ_CONFIG_RANDOM_BYTES
