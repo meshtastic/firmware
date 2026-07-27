@@ -7,11 +7,13 @@ namespace graphics
 
 // Always define Emote list and count
 const Emote emotes[] = {
-#ifndef EXCLUDE_EMOJI
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_CORE
     // --- Thumbs ---
     {"\U0001F44D", thumbup, thumbs_width, thumbs_height},   // 👍 Thumbs Up
     {"\U0001F44E", thumbdown, thumbs_width, thumbs_height}, // 👎 Thumbs Down
+#endif                                                      // EMOTE_SET_CORE
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_STANDARD
     // --- Smileys (Multiple Unicode Aliases) ---
     {"\U0001F60A", smiling_eyes, smiling_eyes_width, smiling_eyes_height},                // 😊 Smiling Eyes
     {"\U0001F600", grinning, grinning_width, grinning_height},                            // 😀 Grinning Face
@@ -24,13 +26,17 @@ const Emote emotes[] = {
     {"\U0001F976", cold_face, cold_face_width, cold_face_height},       // 🥶 Cold Face
     {"\U0001F629", weary_face, weary_face_width, weary_face_height},    // 😩 Weary Face
     {"\U0001F62E", open_mouth, open_mouth_width, open_mouth_height},    // 😮 Open Mouth
+#endif                                                                  // EMOTE_SET_STANDARD
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_CORE
     // --- Question/Alert ---
     {"\u2753", question, question_width, question_height},                 // ❓ Question Mark
     {"\u203C\uFE0F", bang, bang_width, bang_height},                       // ‼️ Double Exclamation Mark
     {"\u26A0\uFE0F", caution, caution_width, caution_height},              // ⚠️ Warning Sign
     {"\U0001F4F6", antenna_bars, antenna_bars_width, antenna_bars_height}, // 📶 Antenna Bars
+#endif                                                                     // EMOTE_SET_CORE
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_STANDARD
     // --- Laughing Faces ---
     {"\U0001F602", haha, haha_width, haha_height}, // 😂 Face with Tears of Joy
     {"\U0001F923", rofl, rofl_width, rofl_height}, // 🤣 Rolling on the Floor Laughing
@@ -44,7 +50,9 @@ const Emote emotes[] = {
     {"\U0001F634", sleeping_face, sleeping_face_width, sleeping_face_height},                // 😴 Sleeping Face
     {"\U0001F440", eyes, eyes_width, eyes_height},                                           // 👀 Eyes
     {"\U0001F441\uFE0F", eye, eye_width, eye_height},                                        // 👁️ Eye
+#endif                                                                                       // EMOTE_SET_STANDARD
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_STANDARD
     // --- Gestures and People ---
     {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height},             // 👋 Waving Hand
     {"\u270C\uFE0F", peace_sign, peace_sign_width, peace_sign_height},        // ✌️ Victory Hand
@@ -55,7 +63,9 @@ const Emote emotes[] = {
     {"\U0001F937", shrug, shrug_width, shrug_height},                         // 🤷 Person Shrugging
     {"\U0001F920", cowboy, cowboy_width, cowboy_height},                      // 🤠 Cowboy Hat Face
     {"\U0001F3A7", deadmau5, deadmau5_width, deadmau5_height},                // 🎧 Headphones
+#endif                                                                        // EMOTE_SET_STANDARD
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_CORE
     // --- Symbols ---
     {"\u2714\uFE0F", check_mark, check_mark_width, check_mark_height},  // ✔️ Check Mark
     {"\u2705", check_mark, check_mark_width, check_mark_height},        // ✅ Check Mark Button
@@ -63,7 +73,9 @@ const Emote emotes[] = {
     {"\U0001F3E0", house, house_width, house_height},                   // 🏠 House
     {"\U0001F5FC", tower, tower_width, tower_height},                   // 🗼 Tokyo Tower
     {"\U0001F4AF", one_hundred, one_hundred_width, one_hundred_height}, // 💯 Hundred Points Symbol
+#endif                                                                  // EMOTE_SET_CORE
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_STANDARD
     // --- Weather ---
     {"\u2600", sun, sun_width, sun_height},                                   // ☀ Sun (without variation selector)
     {"\u2600\uFE0F", sun, sun_width, sun_height},                             // ☀️ Sun (with variation selector)
@@ -90,7 +102,9 @@ const Emote emotes[] = {
     {"\U0001F304", sunrise, sunrise_width, sunrise_height},             // 🌄 Sunrise
     {"\U0001F306", sunset, sunset_width, sunset_height},                // 🌆 Sunset
     {"\U0001F307", sunset, sunset_width, sunset_height},                // 🌇 Sunset
+#endif                                                                  // EMOTE_SET_STANDARD
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_FULL
     // --- Moon Phases ---
     {"\U0001F311", new_moon, new_moon_width, new_moon_height},                                     // 🌑 New Moon
     {"\U0001F312", waxing_crescent_moon, waxing_crescent_moon_width, waxing_crescent_moon_height}, // 🌒 Waxing Crescent Moon
@@ -102,13 +116,17 @@ const Emote emotes[] = {
     {"\U0001F318", waning_crescent_moon, waning_crescent_moon_width, waning_crescent_moon_height}, // 🌘 Waning Crescent Moon
     {"\U0001F31B", first_quarter_moon_face, first_quarter_moon_face_width,
      first_quarter_moon_face_height}, // 🌛 First Quarter Moon Face
+#endif                                // EMOTE_SET_FULL
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_STANDARD
     // --- Misc Faces ---
     {"\U0001F608", devil, devil_width, devil_height}, // 😈 Smiling Face with Horns
     {"\U0001F921", clown, clown_width, clown_height}, // 🤡 Clown Face
     {"\U0001F916", robo, robo_width, robo_height},    // 🤖 Robot Face
     {"\U0001F479", ogre, ogre_width, ogre_height},    // 👹 Ogre
+#endif                                                // EMOTE_SET_STANDARD
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_CORE
     // --- Hearts (Multiple Unicode Aliases) ---
     {"\u2665", heart, heart_width, heart_height},       // ♥ Black Heart Suit
     {"\u2665\uFE0F", heart, heart_width, heart_height}, // ♥️ Black Heart Suit (emoji presentation)
@@ -120,7 +138,9 @@ const Emote emotes[] = {
     {"\U0001F496", heart, heart_width, heart_height},   // 💖 Sparkling Heart
     {"\U0001F497", heart, heart_width, heart_height},   // 💗 Growing Heart
     {"\U0001F498", heart, heart_width, heart_height},   // 💘 Heart with Arrow
+#endif                                                  // EMOTE_SET_CORE
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_FULL
     // --- Objects ---
     {"\U0001F4A9", poo, poo_width, poo_height},                        // 💩 Pile of Poo
     {"\U0001F514", bell_icon, bell_icon_width, bell_icon_height},      // 🔔 Bell
@@ -138,7 +158,9 @@ const Emote emotes[] = {
     {"\U0001F37A", beer, beer_width, beer_height},
     {"\U0001F954", potato, potato_width, potato_height}, // 🥔 Potato
     {"\U0001FAB5", wood, wood_width, wood_height},       // 🪵 Wood
+#endif                                                   // EMOTE_SET_FULL
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_FULL
     // --- Arrows ---
     {"\u2193", downwards_arrow, downwards_arrow_width, downwards_arrow_height},          // ↓ Downwards Arrow
     {"\u2193\uFE0E", downwards_arrow, downwards_arrow_width, downwards_arrow_height},    // ↓︎ Downwards Arrow (text)
@@ -172,12 +194,16 @@ const Emote emotes[] = {
     {"\u2198", south_east_arrow, south_east_arrow_width, south_east_arrow_height},       // ↘ South East Arrow
     {"\u2198\uFE0E", south_east_arrow, south_east_arrow_width, south_east_arrow_height}, // ↘︎ South East Arrow (text)
     {"\u2198\uFE0F", south_east_arrow, south_east_arrow_width, south_east_arrow_height}, // ↘️ South East Arrow (emoji)
+#endif                                                                                   // EMOTE_SET_FULL
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_FULL
     // --- Halloween ---
     {"\U0001F383", jack_o_lantern, jack_o_lantern_width, jack_o_lantern_height}, // 🎃 Jack-O-Lantern
     {"\U0001F47B", ghost, ghost_width, ghost_height},                            // 👻 Ghost
     {"\U0001F480", skull, skull_width, skull_height},                            // 💀 Skull
+#endif                                                                           // EMOTE_SET_FULL
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_FULL
     // --- Holidays ---
     {"\U0001F384", christmas_tree, christmas_tree_width, christmas_tree_height}, // 🎄 Christmas Tree
     {"\U0001F381", wrapped_gift, wrapped_gift_width, wrapped_gift_height},       // 🎁 Wrapped Gift
@@ -186,15 +212,23 @@ const Emote emotes[] = {
     {"\u2721\uFE0F", star_of_david, star_of_david_width, star_of_david_height},  // ✡️ Star of David
     {"\u26C4", snow_man, snow_man_width, snow_man_height},                       // ⛄ Snowman
     {"\u2603\uFE0F", snow_man, snow_man_width, snow_man_height},                 // ☃️ Snowman
+#endif                                                                           // EMOTE_SET_FULL
 
+#if MESHTASTIC_EMOTE_SET >= EMOTE_SET_FULL
     // --- Misc ---
-    {"\U0001F4A8", dashing_away, dashing_away_width, dashing_away_height} // 💨 Dashing Away
-#endif
+    {"\U0001F4A8", dashing_away, dashing_away_width, dashing_away_height}, // 💨 Dashing Away
+#endif                                                                     // EMOTE_SET_FULL
 };
 
 const int numEmotes = sizeof(emotes) / sizeof(emotes[0]);
 
-#ifndef EXCLUDE_EMOJI
+#if MESHTASTIC_EMOTE_SET > EMOTE_SET_NONE
+// A mis-gated section that empties the table above EMOTE_SET_NONE would not fail to
+// build - it would ship a picker with nothing in it - so catch it here instead.
+static_assert(sizeof(emotes) / sizeof(emotes[0]) > 0, "emote set is non-empty above EMOTE_SET_NONE");
+#endif
+
+#if MESHTASTIC_EMOTE_SET > EMOTE_SET_NONE
 const unsigned char thumbup[] PROGMEM = {0x00, 0x03, 0x80, 0x04, 0x80, 0x04, 0x40, 0x04, 0x20, 0x02, 0x18,
                                          0x02, 0x06, 0x3F, 0x06, 0x40, 0x06, 0x70, 0x06, 0x40, 0x06, 0x70,
                                          0x06, 0x40, 0x06, 0x30, 0x08, 0x20, 0xF0, 0x1F, 0x00, 0x00};
