@@ -106,6 +106,12 @@ constexpr uint8_t LORA_CR_DEFAULT = 5; // LONG_FAST default
 // Default bandwidth in kHz (LONG_FAST)
 constexpr float LORA_BW_DEFAULT_KHZ = 250.0f;
 
+// Default preamble lengths, in symbols. RadioLib's default is 8; we use a longer preamble so a
+// receiver can spend more time asleep between preamble polls.
+constexpr uint16_t LORA_PREAMBLE_LENGTH_DEFAULT = 16;
+// Above 2GHz (wide LoRa, i.e. SX128x) 12 is the chip default; longer preambles do not RX at all.
+constexpr uint16_t LORA_PREAMBLE_LENGTH_WIDE_DEFAULT = 12;
+
 /// Clamp spread factor to the valid LoRa range [5, 12].
 /// Out-of-range values (including 0 from unset preset mode) return LORA_SF_DEFAULT.
 static inline uint8_t clampSpreadFactor(uint8_t sf)
@@ -203,8 +209,9 @@ static inline uint16_t clampBandwidthCode(uint16_t bwCode)
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
                                        uint8_t &cr, uint16_t &preambleLength)
 {
-    // Set consistent preamble lengths: 12 for wide LoRa, 16 for standard
-    preambleLength = wideLora ? 12 : 16;
+    // Preamble length is currently uniform across presets; it is derived here so that a future
+    // preset can override it below without touching the radio interfaces.
+    preambleLength = wideLora ? LORA_PREAMBLE_LENGTH_WIDE_DEFAULT : LORA_PREAMBLE_LENGTH_DEFAULT;
 
     switch (preset) {
     case PRESET(SHORT_TURBO):
@@ -300,6 +307,8 @@ static inline float modemPresetToBwKHz(meshtastic_Config_LoRaConfig_ModemPreset 
     return bwKHz;
 }
 
+/// Preamble length (in symbols) for a preset. Only meaningful for preset-based configs; manual
+/// LoRa configs use LORA_PREAMBLE_LENGTH_DEFAULT / LORA_PREAMBLE_LENGTH_WIDE_DEFAULT directly.
 static inline uint16_t modemPresetToPreambleLength(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora)
 {
     float bwKHz = 0;

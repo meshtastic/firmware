@@ -1256,8 +1256,9 @@ void RadioInterface::applyModemConfig()
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
         uint8_t newcr;
-        uint16_t newPreamble;
-        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr, newPreamble);
+        // preambleLength is written straight into the member: it is a derived radio parameter just
+        // like bw and sf, and the preset is the only thing that determines it.
+        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr, preambleLength);
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
             cr = newcr;
@@ -1282,6 +1283,8 @@ void RadioInterface::applyModemConfig()
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
+        // modem_preset is not meaningful here, so don't derive the preamble from it - use the band defaults.
+        preambleLength = newRegion->wideLora ? LORA_PREAMBLE_LENGTH_WIDE_DEFAULT : LORA_PREAMBLE_LENGTH_DEFAULT;
     }
 
     power = loraConfig.tx_power;
@@ -1350,9 +1353,6 @@ void RadioInterface::applyModemConfig()
 
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
-
-    // Get preamble length from the modem preset
-    preambleLength = modemPresetToPreambleLength(loraConfig.modem_preset, newRegion->wideLora);
 
     slotTimeMsec = computeSlotTimeMsec();
     preambleTimeMsec = preambleLength * (pow_of_2(sf) / bw);
