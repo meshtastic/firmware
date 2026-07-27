@@ -868,7 +868,6 @@ void Power::reboot()
     Wire.end();
     Serial1.end();
     if (screen) {
-        delete screen;
         screen = nullptr;
     }
     LOG_DEBUG("final reboot!");

@@ -21,7 +21,7 @@
 class UdpMulticastHandler final
 {
   public:
-    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(224, 0, 0, 69); }
+    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(239, 0, 0, 69); }
 
     void start()
     {
@@ -84,6 +84,8 @@ class UdpMulticastHandler final
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
+            if (!p)
+                return;
             // Unset received SNR/RSSI
             p->rx_snr = 0;
             p->rx_rssi = 0;
