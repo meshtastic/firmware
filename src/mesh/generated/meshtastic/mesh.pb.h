@@ -1103,7 +1103,13 @@ typedef struct _meshtastic_MeshPacket {
     /* The priority of this message for sending.
  See MeshPacket.Priority description for more details. */
     meshtastic_MeshPacket_Priority priority;
-    /* rssi of received packet. Only sent to phone for dispay purposes. */
+    /* rssi of received packet. Only sent to phone for dispay purposes.
+ Explicit presence: rssi 0 is a legitimate reading on some radios (SX126x can report exactly
+ 0 dBm; SX127x's formula can even go positive), so implicit-presence proto3 made an unset
+ value indistinguishable from a measured one. has_rx_rssi disambiguates; a replayed packet
+ built from history the device never restored an RSSI for should leave this field absent
+ rather than emitting 0. */
+    bool has_rx_rssi;
     int32_t rx_rssi;
     /* Describe if this message is delayed */
     meshtastic_MeshPacket_Delayed delayed;
@@ -1730,7 +1736,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1769,7 +1775,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -2194,7 +2200,7 @@ X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
-X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
+X(a, STATIC,   OPTIONAL, INT32,    rx_rssi,          12) \
 X(a, STATIC,   SINGULAR, UENUM,    delayed,          13) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,         14) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_start,        15) \

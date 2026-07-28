@@ -202,7 +202,9 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         if (ostream) {
             const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
             for (auto item : *vec) {
-                item.snr_q4 = (int32_t)(item.snr * 4.0f);
+                // Round rather than truncate: truncation wiped any |SNR| < 0.25 dB to exactly
+                // 0, which collided with the "never stored" sentinel below (defect D1).
+                item.snr_q4 = (int32_t)lroundf(item.snr * 4.0f);
                 item.snr = 0.0f;
                 if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
@@ -214,8 +216,18 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_zero;
             auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
             if (pb_decode(istream, meshtastic_NodeInfoLite_fields, &node)) {
-                if (node.snr_q4)
+                // snr_q4 is proto3 singular sint32, so a stored 0 is byte-identical to "field
+                // never written" - it cannot self-distinguish a genuine 0 dB reading (defect
+                // D2). NODEINFO_BITFIELD_HAS_SNR_MASK disambiguates going forward; legacy
+                // records (bit clear) fall back to the old `snr_q4 != 0` heuristic, which is
+                // still exact for them: the write-site gate (see updateFrom) never stored a
+                // real 0 dB reading before this bit existed, so a legacy 0 is unambiguously
+                // "unknown", not data.
+                if (node.bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK) {
                     node.snr = node.snr_q4 / 4.0f;
+                } else if (node.snr_q4) {
+                    node.snr = node.snr_q4 / 4.0f;
+                }
                 node.snr_q4 = 0;
                 vec->push_back(node);
             }
@@ -3624,8 +3636,17 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
 
-        if (mp.rx_snr)
+        // Gate on the packet actually having been received over our own radio, not on
+        // rx_snr being truthy (defect D3) - `if (mp.rx_snr)` silently refused to store a
+        // genuine 0 dB reading. TRANSPORT_LORA is set only on the real over-the-air RX path
+        // (RadioInterface.cpp); it excludes TRANSPORT_INTERNAL (locally generated/injected)
+        // and TRANSPORT_MQTT (no local RF measurement exists for those), while still covering
+        // an MQTT-origin packet a gateway rebroadcasts onto LoRa - we genuinely measured that
+        // one ourselves. Mirrors the same transport check used for the hop histogram below.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
+        }
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
@@ -3637,6 +3658,19 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // inflate the local mesh-size estimate with non-RF nodes (and they usually carry
         // hop_start==0, landing in the hop-0 bucket that pulls the recommendation lowest), so
         // exclude via_mqtt too.
+        //
+        // The std::max clamp below is deliberate, not a bug: by this point the sample has
+        // already passed the TRANSPORT_LORA && !via_mqtt filter above, so it is a genuine RF
+        // neighbor whose hop count merely can't be *proven* - getHopsAway() returns -1 (unknown)
+        // for pre-2.3.0 senders that never populated hop_start, for a still-encrypted packet
+        // whose disambiguating 2.5.0 bitfield isn't readable yet, or for an invalid
+        // hop_start < hop_limit. Counting an unproven-but-real neighbor as 0 hops is the
+        // conservative direction: bucket 0 is the one that pulls the hop-limit recommendation
+        // *lowest*. Dropping the sample instead would discard a real RF node and bias the
+        // mesh-size estimate low. This intentionally does not agree with the `hopsAway >= 0`
+        // gate below, which rejects the same -1 rather than storing it as a fabricated 0 -
+        // the histogram and the stored hops_away answer different questions ("how many hops,
+        // conservatively, for sizing" vs. "do we actually know").
         if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt &&
             hopScalingModule) {
             uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));

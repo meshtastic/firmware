@@ -1224,13 +1224,32 @@ uint32_t makeReplayPacketId(NodeNum num, uint32_t timestamp, uint32_t kind)
 
 /// Populate hop_start/hop_limit from the node's real last-known hop count (if any) so a
 /// replayed packet doesn't read as "heard directly" when it wasn't.
+///
+/// When the hop count is genuinely unknown (no stored has_hops_away), emit hop_start = 0
+/// rather than fabricating hop_start == hop_limit. A fabricated equality reads as a direct
+/// (0-hop) neighbor to any receiver - firmware included: getHopsAway() (NodeDB.cpp) treats
+/// hop_start == 0 on an un-bitfielded packet (which this replay packet always is - it never
+/// sets decoded.has_bitfield) as "unknown", not "direct". Downstream clients that don't mirror
+/// that exact convention may still render hop_start == 0 as a measurement rather than absence;
+/// this is a known residual risk, see [[phantom-zero-hop-direct-nodes]] defect C.
 void setReplayHopFields(meshtastic_MeshPacket &pkt, const meshtastic_NodeInfoLite *header)
 {
+    if (!header || !header->has_hops_away) {
+        pkt.hop_start = 0; // unknown - do not fabricate a direct-neighbor reading
+        pkt.hop_limit = 0;
+        return;
+    }
     uint8_t hopLimit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
-    uint8_t hopsAway = (header && header->has_hops_away) ? header->hops_away : 0;
+    uint8_t hopsAway = header->hops_away;
     pkt.hop_start = hopLimit;
     pkt.hop_limit = hopsAway < hopLimit ? (uint8_t)(hopLimit - hopsAway) : 0;
 }
+
+// Replayed packets deliberately leave rx_rssi absent. NodeInfoLite stores no RSSI, so there is
+// nothing to restore after a reboot - and now that rx_rssi has explicit presence on the wire,
+// absent is the honest encoding. Previously these packets carried a bare 0, which a client
+// renders as a real (if impossibly strong) reading. Note the asymmetry with rx_snr below: that
+// field is still proto3 singular, so "unknown" and "0 dB" remain indistinguishable there.
 } // namespace
 
 meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const meshtastic_PositionLite &pos)
@@ -1242,12 +1261,17 @@ meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const mesh
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.from = num;
     pkt.to = NODENUM_BROADCAST;
-    pkt.rx_time = pos.time;
+    // rx_time means "when *we* received this" - use last_heard, not the position's own GPS
+    // fix time (which is often 0 and, when present, already round-trips inside the payload
+    // via ConvertToPosition). Using pos.time here made every replayed position look like it
+    // was just heard, regardless of how stale it actually was.
+    pkt.rx_time = header ? header->last_heard : 0;
     // Stable per-node/per-fix id: replaying the same unchanged history on every
     // reconnect must not look like a brand new packet to the phone's history/dedup.
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
-    pkt.channel = 0;
+    pkt.channel = header ? header->channel : 0;
     pkt.rx_snr = header ? header->snr : 0;
+    pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated
@@ -1270,8 +1294,9 @@ meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const mes
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
-    pkt.channel = 0;
+    pkt.channel = header ? header->channel : 0;
     pkt.rx_snr = header ? header->snr : 0;
+    pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated - iOS client filters
@@ -1375,8 +1400,9 @@ meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const 
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
-    pkt.channel = 0;
+    pkt.channel = header ? header->channel : 0;
     pkt.rx_snr = header ? header->snr : 0;
+    pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated - iOS client filters
@@ -1439,8 +1465,9 @@ meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const mesht
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
-    pkt.channel = 0;
+    pkt.channel = header ? header->channel : 0;
     pkt.rx_snr = header ? header->snr : 0;
+    pkt.via_mqtt = nodeInfoLiteViaMqtt(header);
     setReplayHopFields(pkt, header);
     pkt.priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     // Mark as if heard over the air, not internally generated - client filters
