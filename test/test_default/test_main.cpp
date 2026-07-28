@@ -1,5 +1,6 @@
 // Unit tests for Default::getConfiguredOrDefaultMsScaled
 #include "Default.h"
+#include "EventMode.h"
 #include "MeshRadio.h"
 #include "TestUtil.h"
 #include "meshUtils.h"
@@ -181,6 +182,28 @@ void test_scaled_overflow_saturates()
     TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), res);
 }
 
+void test_event_mode_hop_limit_values()
+{
+    TEST_ASSERT_TRUE(event_mode::isValidHopLimit(0));
+    TEST_ASSERT_TRUE(event_mode::isValidHopLimit(HOP_MAX));
+    TEST_ASSERT_FALSE(event_mode::isValidHopLimit(-1));
+    TEST_ASSERT_FALSE(event_mode::isValidHopLimit(HOP_MAX + 1));
+
+#if USERPREFS_EVENT_MODE && defined(USERPREFS_EVENT_MODE_HOP_LIMIT)
+    TEST_ASSERT_EQUAL_UINT8(USERPREFS_EVENT_MODE_HOP_LIMIT, event_mode::hopLimit);
+#else
+    TEST_ASSERT_EQUAL_UINT8(HOP_RELIABLE, event_mode::hopLimit);
+#endif
+}
+
+void test_event_mode_relay_hop_limit()
+{
+    TEST_ASSERT_EQUAL_UINT8(0, event_mode::relayHopLimitFor(0));
+    TEST_ASSERT_EQUAL_UINT8(4, event_mode::relayHopLimitFor(5));
+    TEST_ASSERT_EQUAL_UINT8(6, event_mode::relayHopLimitFor(HOP_MAX));
+    TEST_ASSERT_EQUAL_UINT8(event_mode::relayHopLimitFor(event_mode::hopLimit), event_mode::relayHopLimit);
+}
+
 void setup()
 {
     // Small delay to match other test mains
@@ -201,6 +224,8 @@ void setup()
     RUN_TEST(test_ms_default_clamps);
     RUN_TEST(test_ms_result_is_int32_safe);
     RUN_TEST(test_scaled_overflow_saturates);
+    RUN_TEST(test_event_mode_hop_limit_values);
+    RUN_TEST(test_event_mode_relay_hop_limit);
     exit(UNITY_END());
 }
 
