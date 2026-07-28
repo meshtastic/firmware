@@ -1441,6 +1441,25 @@ void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass
     TEST_ASSERT_EQUAL_MESSAGE(3, routingAuthEvaluationCount(), "same packet ID with different bytes must be reevaluated");
 }
 
+// A local reliable send that fails before reaching the radio must not outlive the
+// immediate error as a scheduled retransmission.
+void test_C13_failed_initial_reliable_send_does_not_retry(void)
+{
+    meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    initial.id = 0xC13C13C1;
+    initial.want_ack = true;
+    initial.channel = MAX_NUM_CHANNELS; // Out of range, so encoding returns NO_CHANNEL.
+
+    auto *packet = packetPool.allocCopy(initial);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    pipelineRouter->send(packet);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "initial encoding failure must be reported to the originating client");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "failed initial send must not leave a retransmission pending");
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -1907,6 +1926,7 @@ void setup()
     RUN_TEST(test_C10_legacy_channel_dm_failure_has_no_pipeline_effects);
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
+    RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

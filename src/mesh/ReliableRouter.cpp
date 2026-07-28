@@ -16,6 +16,9 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+    const GlobalPacketId key(p);
+    const bool retransmitting = p->want_ack;
+
     if (p->want_ack) {
         DEBUG_HEAP_BEFORE;
         auto copy = packetPool.allocCopy(*p);
@@ -34,7 +37,11 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    ErrorCode result = isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
+    if (retransmitting && result != ERRNO_OK)
+        stopRetransmission(key);
+
+    return result;
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
