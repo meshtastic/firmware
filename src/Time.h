@@ -19,16 +19,18 @@
  * src/gps/RTC.h - a separate axis that can jump and be unset.
  *
  * Hot/ISR paths use getMillis() (32-bit, a drop-in for millis(), rollover-safe only with the
- * unsigned-subtraction idiom `(uint32_t)(now - then)`). getMillis64() keeps mutable static
- * carry state and is NOT ISR-safe - call it from normal task context only.
- * An interrupt landing mid-update of that state (a read-then-write with no locking) could tear
- * it, corrupting the high word for every caller afterward, not just the interrupted one.
+ * unsigned-subtraction idiom `(uint32_t)(now - then)`). getMillis64() extends it to 64 bits with
+ * a software carry: it samples the 32-bit clock and bumps a high word each time the low word
+ * wraps, so it must be polled at least once per ~49.7-day wrap window to catch every wrap -
+ * trivially satisfied by normal device activity. It keeps mutable static carry state, so it is
+ * NOT ISR-safe - call it from normal task context only. An interrupt landing mid-update of that
+ * state (a read-then-write with no locking) could tear it, corrupting the high word for every
+ * caller afterward, not just the interrupted one.
  */
 namespace Time
 {
 #ifdef PIO_UNIT_TESTING
-// Test-only virtual clock. Default: OFF - getMillis() returns real millis() so suites that
-// rely on real time are unaffected by the seam. A test opts in by calling setTestMillis().
+// Test-only virtual clock; OFF by default so suites relying on real time are unaffected.
 inline uint32_t testNowMs = 0;
 inline bool useTestClock = false;
 

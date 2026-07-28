@@ -1,13 +1,4 @@
-/**
- * @file Time.cpp
- * @brief Monotonic uptime clock with test injection and a rollover-immune 64-bit form.
- *
- * getMillis() is a thin wrapper over the platform millis() (or the injected test clock).
- * getMillis64() extends it to 64 bits with a software carry: it samples the 32-bit clock and
- * bumps a high word each time the low word wraps. The sampler must be polled at least once per
- * ~49.7-day wrap window to catch every wrap - trivially satisfied by normal device activity.
- * It keeps mutable static state, so it is not ISR-safe (documented in Time.h).
- */
+// See Time.h for the full contract.
 #include "Time.h"
 
 uint32_t Time::getMillis()

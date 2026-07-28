@@ -18,10 +18,7 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
-// Despite the name, this now reacts to two distinct quality-crossing events sharing one call
-// site: NodeInfo recheck on "we had no time source at all before" (unchanged), and rx_time
-// reconciliation on "we just reached RTCQualityFromNet or better" (new) - see
-// MeshService::reconcilePendingRxTimes(). The thresholds differ, so both checks are independent.
+// Despite the name, also fires MeshService::reconcilePendingRxTimes() on reaching net-quality time.
 static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
 {
     if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {

@@ -10,9 +10,8 @@
 #include "concurrency/OSThread.h"
 #include <memory>
 
-/// rx_time/has_rx_time for a packet observed "now": a real epoch when the wall clock is
-/// trustworthy (RTCQualityFromNet or better), otherwise a Time::getMillis() placeholder with
-/// valid left false - see Router::dispatchReceived for why the distinction matters.
+/// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
+/// Time::getMillis() placeholder with valid=false.
 struct RxTimeStamp {
     uint32_t time;
     bool valid;

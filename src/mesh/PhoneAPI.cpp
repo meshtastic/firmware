@@ -1258,9 +1258,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const mesh
     // fix time (which is often 0 and, when present, already round-trips inside the payload
     // via ConvertToPosition).
     pkt.rx_time = header ? header->last_heard : 0;
-    // rx_time has explicit presence; last_heard has no presence bit of its own, but it is only
-    // ever written from a genuine has_rx_time-gated reception (see NodeDB::updateFrom), so a
-    // truthiness check on it is exact, not a heuristic - a legacy 0 unambiguously means "never".
+    // last_heard is only ever written from a has_rx_time-gated reception (NodeDB::updateFrom),
+    // so a legacy 0 unambiguously means "never".
     pkt.has_rx_time = (header && header->last_heard != 0);
     // Stable per-node/per-fix id: replaying the same unchanged history on every
     // reconnect must not look like a brand new packet to the phone's history/dedup.
@@ -1289,9 +1288,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const mes
     // No native timestamp on telemetry packets here; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
-    // rx_time has explicit presence; last_heard has no presence bit of its own, but it is only
-    // ever written from a genuine has_rx_time-gated reception (see NodeDB::updateFrom), so a
-    // truthiness check on it is exact, not a heuristic - a legacy 0 unambiguously means "never".
+    // last_heard is only ever written from a has_rx_time-gated reception (NodeDB::updateFrom),
+    // so a legacy 0 unambiguously means "never".
     pkt.has_rx_time = (header && header->last_heard != 0);
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
     pkt.channel = header ? header->channel : 0;
@@ -1399,9 +1397,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const 
     pkt.to = NODENUM_BROADCAST;
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
-    // rx_time has explicit presence; last_heard has no presence bit of its own, but it is only
-    // ever written from a genuine has_rx_time-gated reception (see NodeDB::updateFrom), so a
-    // truthiness check on it is exact, not a heuristic - a legacy 0 unambiguously means "never".
+    // last_heard is only ever written from a has_rx_time-gated reception (NodeDB::updateFrom),
+    // so a legacy 0 unambiguously means "never".
     pkt.has_rx_time = (header && header->last_heard != 0);
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
     pkt.channel = header ? header->channel : 0;
@@ -1468,9 +1465,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const mesht
     // StatusMessage has no native timestamp; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
-    // rx_time has explicit presence; last_heard has no presence bit of its own, but it is only
-    // ever written from a genuine has_rx_time-gated reception (see NodeDB::updateFrom), so a
-    // truthiness check on it is exact, not a heuristic - a legacy 0 unambiguously means "never".
+    // last_heard is only ever written from a has_rx_time-gated reception (NodeDB::updateFrom),
+    // so a legacy 0 unambiguously means "never".
     pkt.has_rx_time = (header && header->last_heard != 0);
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
     pkt.channel = header ? header->channel : 0;

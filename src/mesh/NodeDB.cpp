@@ -3233,10 +3233,7 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 {
-    // rx_time has explicit presence: while has_rx_time is false, rx_time may hold a millis()
-    // placeholder rather than a wall-clock reading (see Router::dispatchReceived), which would
-    // otherwise subtract to a huge bogus "age" here instead of a negative one the clamp below
-    // would catch.
+    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as wall-clock.
     if (!p->has_rx_time)
         return 0;
 
@@ -3636,10 +3633,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             return;
         }
 
-        // rx_time has explicit presence: a truthy-but-unknown rx_time is now possible (a millis()
-        // placeholder pending MeshService::reconcilePendingRxTimes()), so gate on has_rx_time, not
-        // truthiness - `if (mp.rx_time)` would otherwise stamp last_heard with a boot-relative
-        // millis() count rather than a real epoch.
+        // Gate on has_rx_time, not truthiness - rx_time may hold a millis() placeholder.
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
 

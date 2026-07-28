@@ -137,10 +137,8 @@ class MeshService
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
 
-    // Rewrite any queued-for-phone packet whose rx_time is still an unresolved millis()
-    // placeholder (has_rx_time == false, see Router::dispatchReceived) into a real epoch, now
-    // that the wall clock is trustworthy. Called from RTC.cpp the moment RTC quality crosses
-    // RTCQualityFromNet - typically, the phone just connected and told us the real time.
+    // Rewrite any queued-for-phone packet still carrying a millis() rx_time placeholder into a
+    // real epoch, now that the wall clock is trustworthy.
     void reconcilePendingRxTimes();
 
     // Release QueueStatus packet to pool
