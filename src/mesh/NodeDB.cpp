@@ -219,7 +219,7 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
                 // snr_q4 = 0 is byte-identical to "field never written" but 0 dB is valid.
                 // NODEINFO_BITFIELD_HAS_SNR_MASK disambiguates going forward; legacy
                 // records (bit clear) treat this as unknown.
-                if (node.bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK) {
+                if (nodeInfoLiteHasSnr(&node)) {
                     node.snr = node.snr_q4 / 4.0f;
                 } else if (node.snr_q4) {
                     node.snr = node.snr_q4 / 4.0f;
@@ -3632,13 +3632,17 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
 
-        // Gate on the packet actually having been received over our own radio, not on
-        // rx_snr being truthy but 0 dB is valid.
-        // TRANSPORT_LORA is set only on the real over-the-air RX path
-        // (RadioInterface.cpp); it excludes TRANSPORT_INTERNAL
-        // and TRANSPORT_MQTT, while still accepting readings from an MQTT-origin packet rebroadcasts onto LoRa - we genuinely
-        // measured that one ourselves. Mirrors hop histogram below.
-        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+        // Gate on the packet actually having been received over our own radio, not on rx_snr being
+        // truthy, because 0 dB is valid. TRANSPORT_LORA is set only on the real over-the-air RX path
+        // (RadioInterface.cpp); it excludes TRANSPORT_INTERNAL and TRANSPORT_MQTT, while still accepting
+        // an MQTT-origin packet that a gateway rebroadcasts onto LoRa - we genuinely measured that one
+        // ourselves. Mirrors hop histogram below.
+        // Belt-and-braces: also require has_rx_rssi, which every genuine RF-reception site sets
+        // unconditionally alongside rx_snr - unlike PhoneAPI's replay packets, which set TRANSPORT_LORA
+        // too (so the client treats restored history as if heard over the air) but never has_rx_rssi.
+        // Replay packets don't reach updateFrom() today; this check guards against a future change that
+        // routes them back through this path silently recording a replayed rx_snr as a fresh measurement.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && mp.has_rx_rssi) {
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
             nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
         }
