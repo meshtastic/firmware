@@ -16,7 +16,7 @@
 #define USE_SX1262
 
 #define LORA_DIO0 -1 // not connected on SX1262
-#define LORA_RESET 12
+#define LORA_RESET 12 // SX1262 RESET
 #define LORA_DIO1 14 // SX1262 IRQ
 #define LORA_DIO2 13 // SX1262 BUSY
 #define LORA_DIO3    // not connected on PCB
@@ -56,15 +56,15 @@
  * GPS pins — L76K GNSS module
  */
 #define GPS_L76K
-#define PIN_GPS_RESET (42)
+#define PIN_GPS_RESET (42) // GNSS_RESET
 #define GPS_RESET_MODE LOW
-#define PIN_GPS_EN (34)
+#define PIN_GPS_EN (34) // **LCD_CS**
 #define GPS_EN_ACTIVE LOW
 #define PERIPHERAL_WARMUP_MS 1000
-#define PIN_GPS_STANDBY (40)
-#define PIN_GPS_PPS (41)
-#define GPS_TX_PIN (38) // GNSS → CPU
-#define GPS_RX_PIN (39) // CPU → GNSS
+#define PIN_GPS_STANDBY (40)  // GNSS_WAKEUP
+#define PIN_GPS_PPS (41) // GNSS_PPS
+#define GPS_TX_PIN (38) // GNSS → CPU (GNSS_RX)
+#define GPS_RX_PIN (39) // CPU → GNSS (GNSS_TX)
 #define GPS_THREAD_INTERVAL 50
 
 /*
@@ -74,7 +74,7 @@
  *   SCK  → GPIO47   LCD_RS/DC → GPIO21
  *   MOSI → GPIO33   CS        → GPIO34
  *   MISO → NC (-1)  RST       → GPIO48     [GPIO26 is PSRAM CS — do not use]
- *   BL   → GPIO35
+ *   BL   → GPIO35 
  *
  * Touch I2C (Wire, port 0 — GPIO3/4):
  *   SDA → GPIO4   RST → GPIO45
