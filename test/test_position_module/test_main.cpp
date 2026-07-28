@@ -91,10 +91,11 @@ static void test_sendToPhone_requiresIdlePhoneQueue()
 // millis() rollover: unsigned subtraction keeps the elapsed math correct across the wrap.
 static void test_sendToPhone_survivesMillisRollover()
 {
-    // lastSent 30s before the uint32 wrap, "now" 40s after it: 70s elapsed, cadence 60s.
-    TEST_ASSERT_TRUE(PositionModule::shouldSendPositionToPhone(true, true, true, 40000U, UINT32_MAX - 30000U, 60000U));
-    // Only 20s elapsed across the wrap: still held.
-    TEST_ASSERT_FALSE(PositionModule::shouldSendPositionToPhone(true, true, true, 10000U, UINT32_MAX - 30000U, 60000U));
+    constexpr uint32_t lastSent = UINT32_MAX - 29999U; // exactly 30,000 ms before the wrap to 0
+    // "now" 40s after the wrap: 70,000 ms elapsed >= the 60s cadence, so it sends.
+    TEST_ASSERT_TRUE(PositionModule::shouldSendPositionToPhone(true, true, true, 40000U, lastSent, 60000U));
+    // "now" 10s after the wrap: only 40,000 ms elapsed, still held.
+    TEST_ASSERT_FALSE(PositionModule::shouldSendPositionToPhone(true, true, true, 10000U, lastSent, 60000U));
 }
 
 // Regression: a send stamped at millis()==0 must still hold the cadence - the never-sent state
