@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Arduino.h>
+#include <cstdint>
 
 /**
  * Monotonic uptime clock - the single seam for "milliseconds since boot".

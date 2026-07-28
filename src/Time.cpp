@@ -1,5 +1,6 @@
 // See Time.h for the full contract.
 #include "Time.h"
+#include <Arduino.h>
 
 uint32_t Time::getMillis()
 {
