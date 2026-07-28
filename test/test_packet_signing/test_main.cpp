@@ -1484,6 +1484,30 @@ void test_C13_failed_initial_reliable_send_does_not_retry(void)
                                      "failed interface enqueue must not leave a retransmission pending");
 }
 
+void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
+{
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.override_duty_cycle = false;
+    initRegion();
+    airTime->utilizationTX[0] = MS_IN_HOUR;
+
+    meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    initial.id = 0xC14C14C1;
+    initial.want_ack = true;
+    auto *packet = packetPool.allocCopy(initial);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(packet));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "duty-cycle rejection must still notify the originating client");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(),
+                                     "duty-cycle rejection must retain the retry for when airtime is available");
+
+    airTime->utilizationTX[0] = 0;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -1951,6 +1975,7 @@ void setup()
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
+    RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

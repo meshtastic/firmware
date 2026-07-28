@@ -38,7 +38,8 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
     }
 
     ErrorCode result = isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
-    if (retransmitting && result != ERRNO_OK)
+    // Duty-cycle rejections may clear before the scheduled retry.
+    if (retransmitting && result != ERRNO_OK && result != meshtastic_Routing_Error_DUTY_CYCLE_LIMIT)
         stopRetransmission(key);
 
     return result;
