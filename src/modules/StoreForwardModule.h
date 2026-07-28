@@ -21,6 +21,7 @@ struct PacketHistoryStruct {
     uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
     int32_t rx_rssi;
+    bool has_rx_rssi; // whether rx_rssi was a genuine measurement (e.g. not MQTT-relayed) when captured
     float rx_snr;
     uint8_t hop_start;
     uint8_t hop_limit;

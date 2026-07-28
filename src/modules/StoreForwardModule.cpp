@@ -201,6 +201,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].emoji = (bool)p.emoji;
     this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
     this->packetHistory[this->packetHistoryTotalCount].rx_rssi = mp.rx_rssi;
+    this->packetHistory[this->packetHistoryTotalCount].has_rx_rssi = mp.has_rx_rssi;
     this->packetHistory[this->packetHistoryTotalCount].rx_snr = mp.rx_snr;
     this->packetHistory[this->packetHistoryTotalCount].hop_start = mp.hop_start;
     this->packetHistory[this->packetHistoryTotalCount].hop_limit = mp.hop_limit;
@@ -268,7 +269,7 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 p->has_rx_time = (getRTCQuality() >= RTCQualityFromNet);
                 p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
                 p->rx_rssi = this->packetHistory[i].rx_rssi;
-                p->has_rx_rssi = true; // rx_rssi has explicit presence; the stored value was a genuine measurement
+                p->has_rx_rssi = this->packetHistory[i].has_rx_rssi; // presence captured at store time, not replay time
                 p->rx_snr = this->packetHistory[i].rx_snr;
                 p->hop_start = this->packetHistory[i].hop_start;
                 p->hop_limit = this->packetHistory[i].hop_limit;
