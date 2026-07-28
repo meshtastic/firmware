@@ -78,7 +78,7 @@
  *
  * Touch I2C (Wire, port 0 — GPIO3/4):
  *   SDA → GPIO4   RST → GPIO45
- *   SCL → GPIO3   INT → not connected (polling)
+ *   SCL → GPIO18   INT → GPIO15
  */
 
 // I2C bus used for touch and peripheral scan
