@@ -267,6 +267,7 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());
+    mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
