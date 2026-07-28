@@ -216,8 +216,10 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
         return;
     if (mp->rx_snr == 0) // plausible synthetic link metadata unless the caller set it
         mp->rx_snr = 8;
-    if (mp->rx_rssi == 0)
+    if (!mp->has_rx_rssi) { // rx_rssi has explicit presence; only fabricate if the caller didn't supply a real one
         mp->rx_rssi = -40;
+        mp->has_rx_rssi = true;
+    }
     mp->rx_time = getValidTime(RTCQualityFromNet);
     LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
              mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");

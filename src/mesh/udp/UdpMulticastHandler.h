@@ -86,9 +86,13 @@ class UdpMulticastHandler final
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             if (!p)
                 return;
-            // Unset received SNR/RSSI
+            // Unset received SNR/RSSI - no local RF measurement exists for a UDP arrival. rx_rssi
+            // has explicit presence, so also clear has_rx_rssi: `mp` may have arrived already
+            // carrying a real measurement from whichever node forwarded it onto UDP, and leaving
+            // the presence bit set would misrepresent that stale value as "0 dBm over UDP".
             p->rx_snr = 0;
             p->rx_rssi = 0;
+            p->has_rx_rssi = false;
             router->enqueueReceivedMessage(p.release());
         }
     }
