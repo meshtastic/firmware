@@ -121,7 +121,7 @@ class AuthPipelineRadio : public RadioInterface
     {
         sendCalls++;
         packetPool.release(p);
-        return ERRNO_OK;
+        return failSend ? ERRNO_DISABLED : ERRNO_OK;
     }
     bool cancelSending(NodeNum, PacketId) override
     {
@@ -139,8 +139,13 @@ class AuthPipelineRadio : public RadioInterface
         return true;
     }
     uint32_t getPacketTime(uint32_t, bool = false) override { return 7; }
-    void reset() { sendCalls = cancelCalls = findCalls = removeCalls = 0; }
+    void reset()
+    {
+        sendCalls = cancelCalls = findCalls = removeCalls = 0;
+        failSend = false;
+    }
 
+    bool failSend = false;
     uint32_t sendCalls = 0;
     uint32_t cancelCalls = 0;
     uint32_t findCalls = 0;
@@ -406,6 +411,8 @@ void setUp(void)
     pipelineMqtt->clearQueue();
     while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
         packetPool.release(queued);
+    while (meshtastic_QueueStatus *queued = pipelineService->getQueueStatusForPhone())
+        pipelineService->releaseQueueStatusToPool(queued);
     resetRoutingAuthEvaluationCount();
 }
 
@@ -1441,8 +1448,7 @@ void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass
     TEST_ASSERT_EQUAL_MESSAGE(3, routingAuthEvaluationCount(), "same packet ID with different bytes must be reevaluated");
 }
 
-// A local reliable send that fails before reaching the radio must not outlive the
-// immediate error as a scheduled retransmission.
+// A local reliable send that fails before reaching the radio must not outlive the error as a scheduled retransmission.
 void test_C13_failed_initial_reliable_send_does_not_retry(void)
 {
     meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
@@ -1458,6 +1464,24 @@ void test_C13_failed_initial_reliable_send_does_not_retry(void)
                                      "initial encoding failure must be reported to the originating client");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
                                      "failed initial send must not leave a retransmission pending");
+
+    pipelineRadio->failSend = true;
+    meshtastic_MeshPacket interfaceFailure = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    interfaceFailure.id = 0xC13C13C2;
+    interfaceFailure.want_ack = true;
+    packet = packetPool.allocCopy(interfaceFailure);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    pipelineService->sendToMesh(packet, RX_SRC_USER);
+    meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone();
+    TEST_ASSERT_NOT_NULL(status);
+    TEST_ASSERT_EQUAL(ERRNO_DISABLED, status->res);
+    TEST_ASSERT_EQUAL_UINT32(interfaceFailure.id, status->mesh_packet_id);
+    pipelineService->releaseQueueStatusToPool(status);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "interface errors are reported to the client through QueueStatus, not a routing NAK");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "failed interface enqueue must not leave a retransmission pending");
 }
 
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
