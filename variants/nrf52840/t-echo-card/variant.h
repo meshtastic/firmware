@@ -107,14 +107,14 @@ static const uint8_t A0 = PIN_A0;
 // OLED display: SSD1315 on I2C @ 0x3C (IIC_1).
 //
 // Viewport: the physical panel is 72×40, mapped into the SSD1315's 128×64
-// GDDRAM at columns 28..99, pages 3..7. TCardSSD1315Wire keeps the controller
-// in its vendor-tested 128×64 scan mode while exposing and safely transferring
-// only a 72×40 framebuffer at that offset.
+// GDDRAM at columns 28..99, pages 3..7. The shared OLED driver centers the
+// 72×40 framebuffer and applies the page offset.
 // ───────────────────────────────────────────────────────────────────────────
 #define HAS_SCREEN 1
 #define USE_SSD1306
 #define OLED_GEOMETRY_OVERRIDE GEOMETRY_72_40
 #define OLED_Y_OFFSET_PAGES 3
+#define SSD1306_WIRE_I2C_FREQUENCY 100000
 #define OLED_TINY
 #define OLED_COMPACT_UI
 

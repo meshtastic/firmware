@@ -64,9 +64,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTPalette.h"
-#if defined(T_ECHO_CARD)
-#include "graphics/TCardSSD1315Wire.h"
-#endif
 #include "graphics/emotes.h"
 #include "graphics/images.h"
 #include "input/TouchScreenImpl1.h"
@@ -566,16 +563,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_HUB75)
     dispdev = new HUB75Display(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
 #elif defined(USE_SSD1306)
-#if defined(T_ECHO_CARD)
-    dispdev = new TCardSSD1315Wire(address.address, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE,
-                                   OLED_Y_OFFSET_PAGES);
-#else
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #if defined(OLED_Y_OFFSET_PAGES)
     // Shift writes to the panel's visible GDDRAM pages.
     static_cast<SSD1306Wire *>(dispdev)->setYOffset(OLED_Y_OFFSET_PAGES);
-#endif
 #endif
     isI2cScreen = true;
 #elif defined(USE_SPISSD1306)
