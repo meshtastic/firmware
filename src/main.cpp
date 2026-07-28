@@ -859,6 +859,10 @@ void setup()
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
+#ifdef OLED_MODEL_OVERRIDE
+    // Variant default for panels probeOLED() gets wrong; display.oled still wins below.
+    screen_model = OLED_MODEL_OVERRIDE;
+#endif
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO) {
         screen_model = config.display.oled;
 

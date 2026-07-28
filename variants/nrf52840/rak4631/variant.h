@@ -146,6 +146,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SDA (WB_I2C1_SDA)
 #define PIN_WIRE_SCL (WB_I2C1_SCL)
 
+// The RAK1921 is an SSD1306, but probeOLED() reads its status byte as SH1106, whose
+// +2 column offset wraps the right edge. display.oled can still override this.
+#define OLED_MODEL_OVERRIDE meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306
+
 // QSPI Pins
 #define PIN_QSPI_SCK 3
 #define PIN_QSPI_CS 26
