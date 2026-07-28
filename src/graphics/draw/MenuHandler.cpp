@@ -702,7 +702,7 @@ void menuHandler::clockMenu()
 }
 void menuHandler::messageResponseMenu()
 {
-    enum optionsNumbers { Back = 0, ViewMode, DeleteMenu, ReplyMenu, MuteChannel, Aloud, enumEnd };
+    enum optionsNumbers { Back = 0, ViewMode, DeleteMenu, ReplyMenu, MuteChannel, enumEnd };
 
     static const char *optionsArray[enumEnd];
     static int optionsEnumArray[enumEnd];
@@ -733,11 +733,6 @@ void menuHandler::messageResponseMenu()
     // Delete submenu
     optionsArray[options] = "Delete";
     optionsEnumArray[options++] = DeleteMenu;
-
-#ifdef HAS_I2S
-    optionsArray[options] = "Read Aloud";
-    optionsEnumArray[options++] = Aloud;
-#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Message Action";
@@ -776,16 +771,6 @@ void menuHandler::messageResponseMenu()
         } else if (selected == DeleteMenu) {
             menuHandler::menuQueue = menuHandler::DeleteMessagesMenu;
             screen->runNow();
-
-#ifdef HAS_I2S
-        } else if (selected == Aloud) {
-            if (const StoredMessage *latest = getNewestMessageForActiveThread()) {
-                const char *msg = MessageStore::getText(*latest);
-                if (msg && msg[0]) {
-                    audioThread->readAloud(msg);
-                }
-            }
-#endif
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -2292,7 +2277,7 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    enum optionsNumbers { Back, NumberPicker, ShowChirpy, TestAnnounce };
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy };
     static const char *optionsArray[5] = {"Back"};
     static int optionsEnumArray[5] = {Back};
     int options = 1;
@@ -2302,10 +2287,6 @@ void menuHandler::testMenu()
 
     optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
     optionsEnumArray[options++] = ShowChirpy;
-#ifdef HAS_I2S
-    optionsArray[options] = "Test Announce";
-    optionsEnumArray[options++] = TestAnnounce;
-#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Hidden Test Menu";
@@ -2320,10 +2301,6 @@ void menuHandler::testMenu()
             screen->toggleFrameVisibility("chirpy");
             screen->setFrames(Screen::FOCUS_SYSTEM);
 
-        } else if (selected == TestAnnounce) {
-#ifdef HAS_I2S
-            audioThread->readAloud("This is a test of the emergency broadcast system. This is only a test.");
-#endif
         } else {
             menuQueue = SystemBaseMenu;
             screen->runNow();
