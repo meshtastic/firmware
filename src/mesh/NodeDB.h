@@ -740,10 +740,9 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
-// snr_q4 (persisted, sint32) is proto3 singular, so a stored 0 is indistinguishable from
-// "never written" - and 0 dB is a perfectly ordinary reading. This bit disambiguates: set
-// whenever snr_q4 is written from a genuine RF measurement, tested instead of `if (snr_q4)`.
-// Legacy records (bit clear) are unambiguously "unknown" - see NodeDB.cpp for why.
+// snr_q4 (persisted, sint32) is proto3 singular, so 0 == "never written", but 0 dB is valid.
+// This bit disambiguates: whenever snr_q4 is written from a genuine RF measurement.
+// Use this instead of `if (snr_q4)`. Legacy records (bit clear) are unambiguously "unknown".
 #define NODEINFO_BITFIELD_HAS_SNR_SHIFT 10
 #define NODEINFO_BITFIELD_HAS_SNR_MASK (1u << NODEINFO_BITFIELD_HAS_SNR_SHIFT)
 // Bits 11..31 reserved for future single-bit flags.

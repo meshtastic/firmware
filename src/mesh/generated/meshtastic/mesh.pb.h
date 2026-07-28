@@ -1116,7 +1116,11 @@ typedef struct _meshtastic_MeshPacket {
     /* Describes whether this packet passed via MQTT somewhere along the path it currently took. */
     bool via_mqtt;
     /* Hop limit with which the original packet started. Sent via LoRa using three bits in the unencrypted header.
- When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled. */
+ When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled.
+ hop_start == 0 does not necessarily mean a direct (0-hop) neighbor: firmware prior to 2.3.0
+ never populated this field, so a receiver can only trust hop_start == 0 as genuine once it has
+ decoded the packet and confirmed the sender's bitfield is present (added in 2.5.0). Until then,
+ or for a sender that never sets that bitfield, treat hop_start == 0 as unknown, not direct. */
     uint8_t hop_start;
     /* Records the public key the packet was encrypted with, if applicable. */
     meshtastic_MeshPacket_public_key_t public_key;

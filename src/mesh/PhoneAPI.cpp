@@ -1222,16 +1222,9 @@ uint32_t makeReplayPacketId(NodeNum num, uint32_t timestamp, uint32_t kind)
     return h ? h : 1; // some clients treat id 0 as "unset"
 }
 
-/// Populate hop_start/hop_limit from the node's real last-known hop count (if any) so a
-/// replayed packet doesn't read as "heard directly" when it wasn't.
-///
-/// When the hop count is genuinely unknown (no stored has_hops_away), emit hop_start = 0
-/// rather than fabricating hop_start == hop_limit. A fabricated equality reads as a direct
-/// (0-hop) neighbor to any receiver - firmware included: getHopsAway() (NodeDB.cpp) treats
-/// hop_start == 0 on an un-bitfielded packet (which this replay packet always is - it never
-/// sets decoded.has_bitfield) as "unknown", not "direct". Downstream clients that don't mirror
-/// that exact convention may still render hop_start == 0 as a measurement rather than absence;
-/// this is a known residual risk, see [[phantom-zero-hop-direct-nodes]] defect C.
+/// Populate hop_start/hop_limit from the node's last-known hop count - never fabricate one.
+/// hop_start == 0 with no decoded bitfield means unknown, not a direct neighbor; clients must
+/// treat it that way too (see hop_start in mesh.proto).
 void setReplayHopFields(meshtastic_MeshPacket &pkt, const meshtastic_NodeInfoLite *header)
 {
     if (!header || !header->has_hops_away) {
@@ -1245,13 +1238,13 @@ void setReplayHopFields(meshtastic_MeshPacket &pkt, const meshtastic_NodeInfoLit
     pkt.hop_limit = hopsAway < hopLimit ? (uint8_t)(hopLimit - hopsAway) : 0;
 }
 
-// Replayed packets deliberately leave rx_rssi absent. NodeInfoLite stores no RSSI, so there is
-// nothing to restore after a reboot - and now that rx_rssi has explicit presence on the wire,
-// absent is the honest encoding. Previously these packets carried a bare 0, which a client
-// renders as a real (if impossibly strong) reading. Note the asymmetry with rx_snr below: that
-// field is still proto3 singular, so "unknown" and "0 dB" remain indistinguishable there.
 } // namespace
 
+// Replayed packets deliberately leave rx_rssi absent. NodeInfoLite stores no RSSI, and
+// rx_rssi has explicit presence on the wire, indicating "unknown".
+// Previously these packets carried a bare 0, which a client renders as a real reading.
+// Note the asymmetry with rx_snr below: that field is still proto3 singular, so "unknown" and
+//  "0 dB" remain indistinguishable there.
 meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const meshtastic_PositionLite &pos)
 {
     // Shape this exactly like a fresh live broadcast Position from the peer so the
@@ -1263,8 +1256,7 @@ meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const mesh
     pkt.to = NODENUM_BROADCAST;
     // rx_time means "when *we* received this" - use last_heard, not the position's own GPS
     // fix time (which is often 0 and, when present, already round-trips inside the payload
-    // via ConvertToPosition). Using pos.time here made every replayed position look like it
-    // was just heard, regardless of how stale it actually was.
+    // via ConvertToPosition).
     pkt.rx_time = header ? header->last_heard : 0;
     // Stable per-node/per-fix id: replaying the same unchanged history on every
     // reconnect must not look like a brand new packet to the phone's history/dedup.
