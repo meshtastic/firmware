@@ -36,8 +36,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libinput-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pipx install platformio
-
 COPY 99-platformio-udev.rules /etc/udev/rules.d/99-platformio-udev.rules
 
 USER vscode
