@@ -56,6 +56,46 @@ static void test_effectiveInterval_zeroFloorIsNoOp()
     TEST_ASSERT_EQUAL_UINT32(60000U, PositionModule::effectiveBroadcastIntervalMs(60000U, true, 0U));
 }
 
+// Local phone/UI play: positions are opt-in on the mesh, but our own position still streams to
+// the connected phone at a fixed cadence (mirroring telemetry's local delivery).
+
+// A never-sent state (lastSentMs == 0) streams immediately once a valid position exists.
+static void test_sendToPhone_firstSendIsImmediate()
+{
+    TEST_ASSERT_TRUE(PositionModule::shouldSendPositionToPhone(true, true, 5000U, 0U, 60000U));
+}
+
+static void test_sendToPhone_holdsUntilCadenceElapses()
+{
+    TEST_ASSERT_FALSE(PositionModule::shouldSendPositionToPhone(true, true, 59999U, 1U, 60000U));
+}
+
+static void test_sendToPhone_sendsWhenCadenceElapses()
+{
+    TEST_ASSERT_TRUE(PositionModule::shouldSendPositionToPhone(true, true, 60001U, 1U, 60000U));
+}
+
+// No valid local position yet (e.g. GPS has no fix since boot): nothing to stream.
+static void test_sendToPhone_requiresValidPosition()
+{
+    TEST_ASSERT_FALSE(PositionModule::shouldSendPositionToPhone(false, true, 60001U, 1U, 60000U));
+}
+
+// A backed-up toPhone queue means no client is draining it; don't pile on.
+static void test_sendToPhone_requiresIdlePhoneQueue()
+{
+    TEST_ASSERT_FALSE(PositionModule::shouldSendPositionToPhone(true, false, 60001U, 1U, 60000U));
+}
+
+// millis() rollover: unsigned subtraction keeps the elapsed math correct across the wrap.
+static void test_sendToPhone_survivesMillisRollover()
+{
+    // lastSent 30s before the uint32 wrap, "now" 40s after it: 70s elapsed, cadence 60s.
+    TEST_ASSERT_TRUE(PositionModule::shouldSendPositionToPhone(true, true, 40000U, UINT32_MAX - 30000U, 60000U));
+    // Only 20s elapsed across the wrap: still held.
+    TEST_ASSERT_FALSE(PositionModule::shouldSendPositionToPhone(true, true, 10000U, UINT32_MAX - 30000U, 60000U));
+}
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -74,6 +114,12 @@ void setup()
     RUN_TEST(test_effectiveInterval_movingKeepsConfigured);
     RUN_TEST(test_effectiveInterval_longConfiguredWinsOverFloor);
     RUN_TEST(test_effectiveInterval_zeroFloorIsNoOp);
+    RUN_TEST(test_sendToPhone_firstSendIsImmediate);
+    RUN_TEST(test_sendToPhone_holdsUntilCadenceElapses);
+    RUN_TEST(test_sendToPhone_sendsWhenCadenceElapses);
+    RUN_TEST(test_sendToPhone_requiresValidPosition);
+    RUN_TEST(test_sendToPhone_requiresIdlePhoneQueue);
+    RUN_TEST(test_sendToPhone_survivesMillisRollover);
     exit(UNITY_END());
 }
 
