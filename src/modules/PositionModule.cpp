@@ -385,19 +385,22 @@ void PositionModule::sendOurPosition()
 
 // Position broadcasts are opt-in per channel in 2.8, but our own position still plays to the
 // connected phone/UI at full precision, like telemetry does. This copy never touches the mesh.
-void PositionModule::sendOurPositionToPhone()
+// Returns true only when a packet was actually handed to the phone queue, so the caller can
+// hold off the cadence stamp (and retry soon) after a guard or allocation failure.
+bool PositionModule::sendOurPositionToPhone()
 {
     if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot())
-        return; // Same stale-restored-position guard as sendOurPosition()
+        return false; // Same stale-restored-position guard as sendOurPosition()
 
     meshtastic_MeshPacket *p = allocPositionPacket(32);
     if (p == nullptr)
-        return;
+        return false;
 
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     service->sendToPhone(p);
+    return true;
 }
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
@@ -483,12 +486,12 @@ bool PositionModule::positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int
            truncateCoordinate(aLon, precision) == truncateCoordinate(bLon, precision);
 }
 
-bool PositionModule::shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, uint32_t nowMs, uint32_t lastSentMs,
-                                               uint32_t intervalMs)
+bool PositionModule::shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, bool everSentToPhone, uint32_t nowMs,
+                                               uint32_t lastSentMs, uint32_t intervalMs)
 {
     if (!hasValidPosition || !phoneQueueEmpty)
         return false;
-    return lastSentMs == 0 || (nowMs - lastSentMs) >= intervalMs;
+    return !everSentToPhone || (nowMs - lastSentMs) >= intervalMs;
 }
 
 uint32_t PositionModule::effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs)
@@ -514,10 +517,13 @@ int32_t PositionModule::runOnce()
     uint32_t now = millis();
 
     // Local-only delivery, so it runs regardless of mesh opt-in state or channel utilization.
-    // Only send while the queue is empty (phone assumed connected), like telemetry.
-    if (shouldSendPositionToPhone(nodeDB->hasValidPosition(node), service->isToPhoneQueueEmpty(), now, lastPhoneSendMs,
-                                  sendToPhoneIntervalMs)) {
-        sendOurPositionToPhone();
+    // Only send while the queue is empty (phone assumed connected), like telemetry. The cadence
+    // stamp only advances when a packet was actually queued, so a guard or allocation failure
+    // retries on the next tick instead of waiting out a full interval.
+    if (shouldSendPositionToPhone(nodeDB->hasValidPosition(node), service->isToPhoneQueueEmpty(), hasSentPositionToPhone, now,
+                                  lastPhoneSendMs, sendToPhoneIntervalMs) &&
+        sendOurPositionToPhone()) {
+        hasSentPositionToPhone = true;
         lastPhoneSendMs = now;
     }
 
