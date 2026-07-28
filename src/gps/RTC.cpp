@@ -29,8 +29,7 @@ static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality n
         nodeInfoModule->triggerImmediateNodeInfoCheck();
     }
     if (oldQuality < RTCQualityFromNet && newQuality >= RTCQualityFromNet && service) {
-        LOG_DEBUG("Time source reached net quality (%s -> %s), reconciling pending rx_time placeholders", RtcName(oldQuality),
-                  RtcName(newQuality));
+        LOG_DEBUG("RTC net quality reached (%s -> %s), reconciling rx_time", RtcName(oldQuality), RtcName(newQuality));
         service->reconcilePendingRxTimes();
     }
 }

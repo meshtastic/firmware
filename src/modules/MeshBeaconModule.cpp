@@ -347,9 +347,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         // mistaken by MeshService::reconcilePendingRxTimes() for a genuine monotonic snapshot
         // if this packet is ever echoed back into toPhoneQueue, backdating it by our entire
         // uptime instead of leaving it correctly unknown.
-        const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-        p->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
-        p->has_rx_time = haveTime;
+        stampRxTime(p);
     };
 
     // ── Packet type decisions ────────────────────────────────────────────────

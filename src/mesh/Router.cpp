@@ -269,6 +269,19 @@ PacketId generatePacketId()
     return id;
 }
 
+RxTimeStamp computeRxTimeStamp()
+{
+    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+    return {haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis(), haveTime};
+}
+
+void stampRxTime(meshtastic_MeshPacket *p)
+{
+    const RxTimeStamp ts = computeRxTimeStamp();
+    p->rx_time = ts.time;
+    p->has_rx_time = ts.valid;
+}
+
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
@@ -283,9 +296,7 @@ meshtastic_MeshPacket *Router::allocForSending()
     // Just in case we process the packet locally - make sure it has a timestamp. rx_time has
     // explicit presence (see dispatchReceived): fall back to a Time::getMillis() placeholder,
     // not a fabricated real-looking value, when we don't have a trustworthy wall clock yet.
-    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-    p->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
-    p->has_rx_time = haveTime;
+    stampRxTime(p);
 
     return p;
 }
@@ -1319,13 +1330,12 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     // sitting in toPhoneQueue into a real epoch, backdated by elapsed uptime, the moment the
     // clock becomes trustworthy. Any other reader of rx_time must check has_rx_time first - the
     // raw value is meaningless (a monotonic snapshot, not a wall-clock reading) while it's false.
-    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-    const uint32_t rxTime = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
-    p->rx_time = rxTime;
-    p->has_rx_time = haveTime;
+    const RxTimeStamp rxStamp = computeRxTimeStamp();
+    p->rx_time = rxStamp.time;
+    p->has_rx_time = rxStamp.valid;
     if (p_encrypted) {
-        p_encrypted->rx_time = rxTime;
-        p_encrypted->has_rx_time = haveTime;
+        p_encrypted->rx_time = rxStamp.time;
+        p_encrypted->has_rx_time = rxStamp.valid;
     }
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
@@ -1464,9 +1474,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         // yet - this packet continues on through the rest of receive processing after the trace
         // dump below, so a bare 0 here would carry the same reconcilePendingRxTimes() risk
         // forward as every other rx_time write site.
-        const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-        p->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
-        p->has_rx_time = haveTime;
+        stampRxTime(p);
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif

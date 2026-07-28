@@ -255,9 +255,7 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
     // enqueueReceivedMessage below, so Router::dispatchReceived will normally overwrite this
     // anyway - but don't rely on that; a bare 0 would misdirect
     // MeshService::reconcilePendingRxTimes() if it were ever read before that happens).
-    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-    mp->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
-    mp->has_rx_time = haveTime;
+    stampRxTime(mp);
     LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
              mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");
     router->enqueueReceivedMessage(mp);
@@ -299,9 +297,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     // Time::getMillis() placeholder, not a literal 0, on the rare chance the phone connected
     // without yet handing us net-quality time - a bare 0 would misdirect
     // MeshService::reconcilePendingRxTimes() if this packet is later echoed into toPhoneQueue.
-    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-    p.rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
-    p.has_rx_time = haveTime;
+    stampRxTime(&p);
 
     IF_SCREEN(if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 &&
                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only
