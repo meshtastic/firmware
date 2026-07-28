@@ -280,8 +280,12 @@ meshtastic_MeshPacket *Router::allocForSending()
     p->to = NODENUM_BROADCAST;
     p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     p->id = generatePacketId();
-    p->rx_time =
-        getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
+    // Just in case we process the packet locally - make sure it has a timestamp. rx_time has
+    // explicit presence (see dispatchReceived): fall back to a Time::getMillis() placeholder,
+    // not a fabricated real-looking value, when we don't have a trustworthy wall clock yet.
+    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+    p->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
+    p->has_rx_time = haveTime;
 
     return p;
 }
@@ -1307,10 +1311,22 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // Also, we should set the time from the ISR and it should have msec level resolution.
     // Keep the decoded working packet and encrypted MQTT copy on the same local arrival timestamp.
-    const uint32_t rxTime = getValidTime(RTCQualityFromNet);
+    //
+    // rx_time has explicit presence. When we don't yet have a trustworthy wall clock (no GPS,
+    // and the phone hasn't connected/handed us net time yet), stash Time::getMillis() as a
+    // placeholder instead of a fabricated real-looking value - has_rx_time=false marks it as not
+    // yet known. MeshService::reconcilePendingRxTimes() rewrites any such placeholder still
+    // sitting in toPhoneQueue into a real epoch, backdated by elapsed uptime, the moment the
+    // clock becomes trustworthy. Any other reader of rx_time must check has_rx_time first - the
+    // raw value is meaningless (a monotonic snapshot, not a wall-clock reading) while it's false.
+    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+    const uint32_t rxTime = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
     p->rx_time = rxTime;
-    if (p_encrypted)
+    p->has_rx_time = haveTime;
+    if (p_encrypted) {
         p_encrypted->rx_time = rxTime;
+        p_encrypted->has_rx_time = haveTime;
+    }
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     auto decodedState = perhapsDecode(p);
@@ -1443,7 +1459,14 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #if ARCH_PORTDUINO
     // Even ignored packets get logged in the trace
     if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
-        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+        // store the arrival timestamp for the phone. rx_time has explicit presence: store a
+        // Time::getMillis() placeholder, not a literal 0, when the wall clock isn't trustworthy
+        // yet - this packet continues on through the rest of receive processing after the trace
+        // dump below, so a bare 0 here would carry the same reconcilePendingRxTimes() risk
+        // forward as every other rx_time write site.
+        const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+        p->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
+        p->has_rx_time = haveTime;
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif

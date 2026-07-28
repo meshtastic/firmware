@@ -342,7 +342,14 @@ void MeshBeaconBroadcastModule::sendBeacon()
         p->hop_limit = 0; // all beacon packets are zero hopped to limit spamming.
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         p->want_ack = false;
-        p->rx_time = getValidTime(RTCQualityFromNet);
+        // rx_time has explicit presence: store a Time::getMillis() placeholder, not a literal 0,
+        // when we don't have a trustworthy wall clock yet - a bare 0 here would later be
+        // mistaken by MeshService::reconcilePendingRxTimes() for a genuine monotonic snapshot
+        // if this packet is ever echoed back into toPhoneQueue, backdating it by our entire
+        // uptime instead of leaving it correctly unknown.
+        const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+        p->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
+        p->has_rx_time = haveTime;
     };
 
     // ── Packet type decisions ────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "main.h"
+#include "mesh/MeshService.h"
 #include "modules/NodeInfoModule.h"
 #include <Throttle.h>
 #include <sys/time.h>
@@ -17,11 +18,20 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
+// Despite the name, this now reacts to two distinct quality-crossing events sharing one call
+// site: NodeInfo recheck on "we had no time source at all before" (unchanged), and rx_time
+// reconciliation on "we just reached RTCQualityFromNet or better" (new) - see
+// MeshService::reconcilePendingRxTimes(). The thresholds differ, so both checks are independent.
 static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
 {
     if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {
         LOG_DEBUG("Time source acquired (%s -> %s), triggering NodeInfo recheck", RtcName(oldQuality), RtcName(newQuality));
         nodeInfoModule->triggerImmediateNodeInfoCheck();
+    }
+    if (oldQuality < RTCQualityFromNet && newQuality >= RTCQualityFromNet && service) {
+        LOG_DEBUG("Time source reached net quality (%s -> %s), reconciling pending rx_time placeholders", RtcName(oldQuality),
+                  RtcName(newQuality));
+        service->reconcilePendingRxTimes();
     }
 }
 

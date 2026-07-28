@@ -37,6 +37,7 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     packet.want_ack = false;
     packet.priority = meshtastic_MeshPacket_Priority_UNSET;
     packet.rx_time = 1609459200;
+    packet.has_rx_time = true; // rx_time has explicit presence; mark this synthetic reading as measured
     packet.rx_snr = 10.5f;
     packet.hop_start = 3;
     packet.rx_rssi = -85;

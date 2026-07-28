@@ -33,7 +33,9 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Suppress replies to senders we've replied to recently (12H window)
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
-        const uint32_t now = mp.rx_time ? mp.rx_time : getTime();
+        // has_rx_time, not truthiness: rx_time may hold a millis() placeholder (not a wall-clock
+        // reading) while has_rx_time is false - see Router::dispatchReceived.
+        const uint32_t now = mp.has_rx_time ? mp.rx_time : getTime();
         auto it = lastNodeInfoSeen.find(sender);
         if (it != lastNodeInfoSeen.end()) {
             uint32_t sinceLast = now >= it->second ? now - it->second : 0;

@@ -180,6 +180,36 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     return nodenum;
 }
 
+// A packet stamped with has_rx_time == false is carrying a millis() snapshot from the moment it
+// was received, not a wall-clock reading (see Router::dispatchReceived) - the device had no
+// trustworthy time source yet, commonly because it has no GPS and the phone hadn't connected.
+// Once the clock becomes trustworthy, back-calculate the real reception epoch from how much
+// uptime has elapsed since that snapshot, rather than leaving the packet stuck presence-absent
+// (or worse, silently wrong) for its remaining time in the queue.
+void MeshService::reconcilePendingRxTimes()
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch == 0) // called before the clock was actually valid - nothing to reconcile against
+        return;
+    const uint32_t nowMillis = Time::getMillis();
+
+    for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
+        meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
+        if (!p->has_rx_time) {
+            // Unsigned subtraction is wraparound-safe across a getMillis() rollover, matching
+            // the idiom already used throughout this codebase for elapsed-time math. Note this
+            // is only 32-bit-safe even though Time::getMillis64() exists: rx_time is a 32-bit
+            // wire field, so the placeholder stashed at receipt (Router::dispatchReceived) was
+            // never more than a 32-bit snapshot to begin with - a 64-bit "now" here would have
+            // nothing wider to compare against.
+            const uint32_t elapsedMs = nowMillis - p->rx_time;
+            p->rx_time = nowEpoch - (elapsedMs / 1000);
+            p->has_rx_time = true;
+        }
+        toPhoneQueue.enqueue(p, 0);
+    }
+}
+
 #if MESHTASTIC_ENABLE_FRAME_INJECTION
 // Deliver a client-supplied frame into the receive pipeline as if it arrived off the LoRa chip. Mirrors
 // the portduino SimRadio SIMULATOR_APP unwrap so the same host wire format works on real hardware: the
@@ -220,7 +250,14 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
         mp->rx_rssi = -40;
         mp->has_rx_rssi = true;
     }
-    mp->rx_time = getValidTime(RTCQualityFromNet);
+    // rx_time has explicit presence: store a Time::getMillis() placeholder, not a literal 0, when
+    // we don't have a trustworthy wall clock yet (this packet re-enters the receive pipeline via
+    // enqueueReceivedMessage below, so Router::dispatchReceived will normally overwrite this
+    // anyway - but don't rely on that; a bare 0 would misdirect
+    // MeshService::reconcilePendingRxTimes() if it were ever read before that happens).
+    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+    mp->rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
+    mp->has_rx_time = haveTime;
     LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
              mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");
     router->enqueueReceivedMessage(mp);
@@ -258,7 +295,13 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
-    p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
+    // Record the time the packet arrived from the phone. rx_time has explicit presence: store a
+    // Time::getMillis() placeholder, not a literal 0, on the rare chance the phone connected
+    // without yet handing us net-quality time - a bare 0 would misdirect
+    // MeshService::reconcilePendingRxTimes() if this packet is later echoed into toPhoneQueue.
+    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+    p.rx_time = haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis();
+    p.has_rx_time = haveTime;
 
     IF_SCREEN(if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 &&
                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only
@@ -595,6 +638,13 @@ bool MeshService::isToPhoneQueueEmpty()
 
 uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
+    // rx_time has explicit presence: while has_rx_time is false, rx_time may hold a millis()
+    // placeholder rather than a wall-clock reading (see Router::dispatchReceived), which would
+    // otherwise subtract to a huge bogus "age" here instead of a negative one the clamp below
+    // would catch.
+    if (!mp->has_rx_time)
+        return 0;
+
     uint32_t now = getTime();
 
     uint32_t last_seen = mp->rx_time;
