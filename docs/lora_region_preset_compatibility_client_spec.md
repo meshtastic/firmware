@@ -80,7 +80,7 @@ what you can receive:
 | field                               | max_count                            |
 | ----------------------------------- | ------------------------------------ |
 | `LoRaRegionPresetMap.groups`        | 8                                    |
-| `LoRaRegionPresetMap.region_groups` | 38 (= number of `RegionCode` values) |
+| `LoRaRegionPresetMap.region_groups` | 39 (= number of `RegionCode` values) |
 | `LoRaPresetGroup.presets`           | 11                                   |
 
 ---
@@ -271,14 +271,14 @@ which is why they remain distinct groups despite sharing this preset list.
 
 `region_groups` (region → group_index):
 
-| group | regions                                                                                                                                                       |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | US, EU_433, CN, JP, ANZ, ANZ_433, RU, KR, TW, IN, NZ_865, TH, UA_433, MY_433, MY_919, SG_923, PH_433, PH_868, PH_915, KZ_433, KZ_863, NP_865, BR_902, LORA_24 |
-| 1     | EU_868                                                                                                                                                        |
-| 2     | EU_866                                                                                                                                                        |
-| 3     | EU_N_868                                                                                                                                                      |
-| 4     | ITU1_2M, ITU2_2M, ITU3_2M                                                                                                                                     |
-| 5     | ITU2_125CM                                                                                                                                                    |
+| group | regions                                                                                                                                                               |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | US, EU_433, CN, JP, ANZ, ANZ_433, RU, KR, TW, IN, IN_433, NZ_865, TH, UA_433, MY_433, MY_919, SG_923, PH_433, PH_868, PH_915, KZ_433, KZ_863, NP_865, BR_902, LORA_24 |
+| 1     | EU_868                                                                                                                                                                |
+| 2     | EU_866                                                                                                                                                                |
+| 3     | EU_N_868                                                                                                                                                              |
+| 4     | ITU1_2M, ITU2_2M, ITU3_2M                                                                                                                                             |
+| 5     | ITU2_125CM                                                                                                                                                            |
 
 > Note that several groups can carry overlapping preset lists but remain distinct: groups 1,
 > 2 and 3 share the EU 86x superset yet differ in `default_preset`, and group **5** (ham

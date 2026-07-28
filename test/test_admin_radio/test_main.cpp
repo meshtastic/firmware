@@ -80,6 +80,18 @@ static void test_getRegion_returnsCorrectRegion_LORA24()
     TEST_ASSERT_TRUE(r->wideLora);
 }
 
+static void test_getRegion_returnsCorrectRegion_IN433()
+{
+    const RegionInfo *r = getRegion(meshtastic_Config_LoRaConfig_RegionCode_IN_433);
+    TEST_ASSERT_NOT_NULL(r);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_IN_433, r->code);
+    TEST_ASSERT_EQUAL_STRING("IN_433", r->name);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 433.05f, r->freqStart);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 434.79f, r->freqEnd);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 10.0f, r->dutyCycle);
+    TEST_ASSERT_EQUAL_UINT8(10, r->powerLimit);
+}
+
 static void test_getRegion_unsetCodeReturnsUnsetEntry()
 {
     const RegionInfo *r = getRegion(meshtastic_Config_LoRaConfig_RegionCode_UNSET);
@@ -1765,6 +1777,7 @@ void setup()
     RUN_TEST(test_getRegion_returnsCorrectRegion_US);
     RUN_TEST(test_getRegion_returnsCorrectRegion_EU868);
     RUN_TEST(test_getRegion_returnsCorrectRegion_LORA24);
+    RUN_TEST(test_getRegion_returnsCorrectRegion_IN433);
     RUN_TEST(test_getRegion_unsetCodeReturnsUnsetEntry);
     RUN_TEST(test_getRegion_unknownCodeFallsToUnset);
 
