@@ -26,7 +26,6 @@
 #define PIN_BUZZER 9
 
 /*CHARGE_CHECK*/
-#define DONE 8
 #define EXT_PWR_DETECT 1
 // #define EXT_CHRG_DETECT 1
 #define EXT_PWR_DETECT_VALUE LOW
