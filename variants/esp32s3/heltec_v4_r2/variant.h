@@ -58,7 +58,7 @@
 #define GPS_L76K
 #define PIN_GPS_RESET (42) // GNSS_RESET
 #define GPS_RESET_MODE LOW
-#define PIN_GPS_EN (34) // **LCD_CS**
+#define PIN_GPS_EN (34) // **LISTED AS SPIIO5,FSPICS0, SUBSPICS0 IN DOCUMENTATION**
 #define GPS_EN_ACTIVE LOW
 #define PERIPHERAL_WARMUP_MS 1000
 #define PIN_GPS_STANDBY (40)  // GNSS_WAKEUP
@@ -72,9 +72,9 @@
  *
  * Display SPI (SPI3_HOST):
  *   SCK  → GPIO47   LCD_RS/DC → GPIO21
- *   MOSI → GPIO33   CS        → GPIO34
- *   MISO → NC (-1)  RST       → GPIO48     [GPIO26 is PSRAM CS — do not use]
- *   BL   → GPIO35 
+ *   MOSI → GPIO33   CS        → GPIO45
+ *   MISO → GPIO04   RST       → GPIO48     [GPIO26 is PSRAM CS — do not use]
+ *   BL   → GPIO3 
  *
  * Touch I2C (Wire, port 0 — GPIO3/4):
  *   SDA → GPIO4   RST → GPIO45
@@ -82,5 +82,5 @@
  */
 
 // I2C bus used for touch and peripheral scan
-#define I2C_SDA 4
-#define I2C_SCL 3
+#define I2C_SDA 17
+#define I2C_SCL 18
