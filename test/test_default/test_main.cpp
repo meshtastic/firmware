@@ -204,6 +204,18 @@ void test_event_mode_relay_hop_limit()
     TEST_ASSERT_EQUAL_UINT8(event_mode::relayHopLimitFor(event_mode::hopLimit), event_mode::relayHopLimit);
 }
 
+void test_configured_or_default_hop_limit()
+{
+    config.lora.hop_limit = HOP_MAX;
+    const uint8_t result = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+
+#if USERPREFS_EVENT_MODE
+    TEST_ASSERT_EQUAL_UINT8(event_mode::hopLimit, result);
+#else
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, result);
+#endif
+}
+
 void setup()
 {
     // Small delay to match other test mains
@@ -226,6 +238,7 @@ void setup()
     RUN_TEST(test_scaled_overflow_saturates);
     RUN_TEST(test_event_mode_hop_limit_values);
     RUN_TEST(test_event_mode_relay_hop_limit);
+    RUN_TEST(test_configured_or_default_hop_limit);
     exit(UNITY_END());
 }
 
