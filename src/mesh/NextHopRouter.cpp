@@ -27,7 +27,12 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
         return false;
     relay->hop_limit--;
     relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
-    return Router::send(relay) == ERRNO_OK;
+    // The interface declines some packets (NODENUM_BROADCAST_NO_LORA) with ERRNO_SHOULD_RELEASE,
+    // which leaves the copy ours to free. Dropping it here would leak a pool slot per opaque frame.
+    ErrorCode res = Router::send(relay);
+    if (res == ERRNO_SHOULD_RELEASE)
+        packetPool.release(relay);
+    return res == ERRNO_OK;
 }
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions)
