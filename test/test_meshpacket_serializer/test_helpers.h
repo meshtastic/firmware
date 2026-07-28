@@ -63,3 +63,14 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
 
     return packet;
 }
+
+// Same as create_test_packet(), but with rx_time absent (has_rx_time = false) and a nonzero
+// millis()-style placeholder in rx_time, to verify serializers treat it as unknown, not a reading.
+static meshtastic_MeshPacket create_test_packet_no_rx_time(meshtastic_PortNum port, const uint8_t *payload, size_t payload_size,
+                                                           int payload_variant = meshtastic_MeshPacket_decoded_tag)
+{
+    meshtastic_MeshPacket packet = create_test_packet(port, payload, payload_size, payload_variant);
+    packet.rx_time = 123456; // a plausible millis() placeholder, not a real epoch
+    packet.has_rx_time = false;
+    return packet;
+}
