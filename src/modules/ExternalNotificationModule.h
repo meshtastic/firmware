@@ -23,7 +23,8 @@ extern AmbientLightingThread *ambientLightingThread;
 #endif
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&                                 \
+    !defined(CONFIG_IDF_TARGET_ESP32H2)
 #include <NonBlockingRtttl.h>
 #else
 // Noop class for portduino.
