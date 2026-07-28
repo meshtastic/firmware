@@ -880,8 +880,10 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // All hardware keys fall through to here (CardKB, physical, etc.)
 
     if (event->kbchar == INPUT_BROKER_MSG_EMOTE_LIST) {
-        updateState(CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
-        screen->forceDisplay();
+        if (graphics::numEmotes > 0) { // no picker on EXCLUDE_EMOJI builds (empty emotes[])
+            updateState(CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
+            screen->forceDisplay();
+        }
         return true;
     }
     // Confirm select (Enter)
@@ -965,6 +967,11 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 {
     int numEmotes = graphics::numEmotes;
+    if (numEmotes == 0) { // EXCLUDE_EMOJI: emotes[] is empty, any index would read out of bounds
+        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+        screen->forceDisplay();
+        return 1;
+    }
 
     // Override isDown and isSelect ONLY for emote picker behavior
     bool isUp = isUpEvent(event);
