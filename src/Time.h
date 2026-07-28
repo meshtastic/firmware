@@ -1,6 +1,4 @@
 #pragma once
-#ifndef _MT_TIME_H
-#define _MT_TIME_H
 
 #include <Arduino.h>
 
@@ -33,11 +31,13 @@ namespace Time
 // Test-only virtual clock; OFF by default so suites relying on real time are unaffected.
 inline uint32_t testNowMs = 0;
 inline bool useTestClock = false;
+inline bool clockSourceChanged = true; // forces getMillis64() to rebase its wrap accumulator
 
 inline void setTestMillis(uint32_t ms)
 {
     testNowMs = ms;
     useTestClock = true;
+    clockSourceChanged = true;
 }
 inline void advanceTestMillis(uint32_t deltaMs)
 {
@@ -49,6 +49,7 @@ inline void useRealClock()
 {
     useTestClock = false;
     testNowMs = 0;
+    clockSourceChanged = true;
 }
 #endif
 
@@ -59,5 +60,3 @@ uint32_t getMillis();
 uint64_t getMillis64();
 
 } // namespace Time
-
-#endif

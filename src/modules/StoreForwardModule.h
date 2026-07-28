@@ -12,6 +12,7 @@
 
 struct PacketHistoryStruct {
     uint32_t time;
+    bool has_rx_time; // whether `time` was a trustworthy epoch when captured, not a getTime() boot-relative fallback
     uint32_t to;
     uint32_t from;
     uint32_t id;

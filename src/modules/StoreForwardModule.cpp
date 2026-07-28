@@ -193,6 +193,9 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     }
 
     this->packetHistory[this->packetHistoryTotalCount].time = getTime();
+    // getTime() silently falls back to a boot-relative count with no RTC source at all; record
+    // whether it was actually trustworthy so replay doesn't have to guess from current quality.
+    this->packetHistory[this->packetHistoryTotalCount].has_rx_time = (getRTCQuality() >= RTCQualityFromNet);
     this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
     this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
     this->packetHistory[this->packetHistoryTotalCount].from = getFrom(&mp);
@@ -258,15 +261,7 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 p->channel = this->packetHistory[i].channel;
                 p->decoded.reply_id = this->packetHistory[i].reply_id;
                 p->rx_time = this->packetHistory[i].time;
-                // packetHistory[i].time was captured via getTime() at store time (StoreForwardModule.cpp
-                // ~line 195), which - unlike getValidTime(RTCQualityFromNet) - never hard-fails to 0; with
-                // no RTC source at all it silently returns a boot-relative seconds count instead. This
-                // module has no presence bit of its own to tell the two apart, and isn't covered by
-                // MeshService::reconcilePendingRxTimes() (a different buffer entirely), so this is only an
-                // approximation: assume the stored time is trustworthy iff our *current* clock is, since
-                // RTC quality monotonically improves and rarely regresses. A history entry stored while
-                // time-blind and never revisited will still under-report its age if quality later improves.
-                p->has_rx_time = (getRTCQuality() >= RTCQualityFromNet);
+                p->has_rx_time = this->packetHistory[i].has_rx_time; // presence captured at store time, not replay time
                 p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
                 p->rx_rssi = this->packetHistory[i].rx_rssi;
                 p->has_rx_rssi = this->packetHistory[i].has_rx_rssi; // presence captured at store time, not replay time

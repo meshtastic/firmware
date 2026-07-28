@@ -16,6 +16,15 @@ uint64_t Time::getMillis64()
     static uint32_t highWord = 0; // number of observed wraps
 
     uint32_t now = Time::getMillis();
+#ifdef PIO_UNIT_TESTING
+    // A test swapping clock sources (real <-> injected) can make `now` jump backward for
+    // reasons other than a genuine wrap - rebase rather than miscount it as one.
+    if (Time::clockSourceChanged) {
+        lastLow = now;
+        highWord = 0;
+        Time::clockSourceChanged = false;
+    }
+#endif
     if (now < lastLow)
         highWord++; // low word wrapped since last call
     lastLow = now;
