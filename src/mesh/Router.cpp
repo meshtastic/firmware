@@ -1172,7 +1172,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *destKey.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes);
+            // On failure encrypted.bytes holds no ciphertext, so continuing would put the plaintext
+            // on the air labelled pki_encrypted.
+            if (!crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes)) {
+                LOG_WARN("PKI encryption failed for destination node 0x%08x", p->to);
+                return meshtastic_Routing_Error_PKI_FAILED;
+            }
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
