@@ -1221,14 +1221,18 @@ void test_C3_invalid_repeated_packet_cannot_ack_or_change_retry_state(void)
     prior.hop_start = 2;
     prior.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     pipelineRouter->remember(&prior);
-    pipelineRouter->addPending(prior, UINT32_MAX);
+    // "Far future, so no retransmission is due." Must be a representable future time, not
+    // UINT32_MAX: doRetransmissions() compares with an unsigned half-range test, under which
+    // UINT32_MAX is ~1ms in the *past* and would fire a retransmit and rewrite nextTxMsec.
+    const uint32_t notDueTxMsec = millis() + 3600000UL;
+    pipelineRouter->addPending(prior, notDueTxMsec);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(LOCAL_NODE)->last_heard;
 
     meshtastic_MeshPacket invalid = makeSignedWirePacket(LOCAL_NODE, NODENUM_BROADCAST, id, 2, 2, 0, 0x34, false);
     runPipelineIngress(invalid);
     assertNoRejectedPipelineEffects(LOCAL_NODE, lastHeard);
     TEST_ASSERT_EQUAL(1, pipelineRouter->pendingCount());
-    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, pipelineRouter->pendingNextTx(LOCAL_NODE, id));
+    TEST_ASSERT_EQUAL_UINT32(notDueTxMsec, pipelineRouter->pendingNextTx(LOCAL_NODE, id));
 }
 
 void test_C4_invalid_fallback_packet_cannot_relay(void)
