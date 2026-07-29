@@ -27,6 +27,11 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     if (!relay)
         return false;
     relay->hop_limit--;
+#if USERPREFS_EVENT_MODE
+    const auto cappedHops = event_mode::capRelayHopFields(relay->hop_start, relay->hop_limit);
+    relay->hop_start = cappedHops.hopStart;
+    relay->hop_limit = cappedHops.hopLimit;
+#endif
     relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
     // The interface declines some packets (NODENUM_BROADCAST_NO_LORA) with ERRNO_SHOULD_RELEASE,
     // which leaves the copy ours to free. Dropping it here would leak a pool slot per opaque frame.
@@ -212,11 +217,9 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: preserving hop_limit");
                     }
 #if USERPREFS_EVENT_MODE
-                    if (tosend->hop_limit > event_mode::relayHopLimit) {
-                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                        tosend->hop_start -= (tosend->hop_limit - event_mode::relayHopLimit);
-                        tosend->hop_limit = event_mode::relayHopLimit;
-                    }
+                    const auto cappedHops = event_mode::capRelayHopFields(tosend->hop_start, tosend->hop_limit);
+                    tosend->hop_start = cappedHops.hopStart;
+                    tosend->hop_limit = cappedHops.hopLimit;
 #endif
 
                     ErrorCode res =
