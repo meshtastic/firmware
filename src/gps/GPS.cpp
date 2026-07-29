@@ -353,9 +353,6 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 #ifdef GPS_DEBUG
     std::string debugmsg = "";
 #endif
-    // A naive `millis() < startTimeout` exits immediately when the deadline is past the 32-bit
-    // wrap, truncating the read instead of waiting for the ACK. Compare with GPS::getResponse()
-    // just below, which already gets this right.
     while (!Throttle::deadlinePassed(startTimeout)) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();

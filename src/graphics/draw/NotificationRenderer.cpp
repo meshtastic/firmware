@@ -242,8 +242,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
-    // 0 means "no banner deadline set", so it has to be tested before the elapsed comparison -
-    // deadlinePassed(0) is true, 0 being ~49 days in the past.
+    // 0 means "no deadline set", and reads as long expired - test it first.
     if (alertBannerUntil > 0 && Throttle::deadlinePassed(alertBannerUntil)) {
         resetBanner();
     }
@@ -1197,8 +1196,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 
 bool NotificationRenderer::isOverlayBannerShowing()
 {
-    // alertBannerUntil == 0 means "no deadline", i.e. show indefinitely - checked first so the
-    // sentinel never reaches the comparison.
+    // Here 0 means "show indefinitely", so it must short-circuit the comparison.
     return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || !Throttle::deadlinePassed(alertBannerUntil));
 }
 

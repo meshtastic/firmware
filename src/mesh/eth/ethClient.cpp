@@ -197,10 +197,7 @@ static int32_t reconnectETH()
     }
 
 #ifndef DISABLE_NTP
-    // 12 hours is the longest interval in the firmware, so this is the site the millis() wrap hurts
-    // most: a naive compare stalls NTP renewal for up to ~24 days. Note 0 here means "renew now"
-    // (see the force at link-up above), not "disarmed" - deadlinePassed(0) is true, which is exactly
-    // the wanted behaviour, so no armed test belongs in front of it.
+    // 0 here means "renew now" (forced at link-up), not "disarmed", so it wants no armed test.
     if (isEthernetAvailable() && Throttle::deadlinePassed(ntp_renew)) {
 
         LOG_INFO("Update NTP time from %s", config.network.ntp_server);

@@ -297,8 +297,7 @@ void preFSBegin()
 extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LittleFS corruption detected: %s", reason);
-    // Still inside the backoff window. A naive compare against millis() would either skip the pause
-    // or, past the wrap, stall here for up to ~24 days with a huge delay() below.
+    // Still inside the backoff window; a wrapped compare here would delay() for weeks.
     if (!Throttle::deadlinePassed(millis_until_formatting_again)) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
         const long millis_remain = millis_until_formatting_again - millis();

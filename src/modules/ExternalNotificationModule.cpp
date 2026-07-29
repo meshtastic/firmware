@@ -79,10 +79,8 @@ int32_t ExternalNotificationModule::runOnce()
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
-        // isNagging is the armed flag; nagCycleCutoff only holds a real deadline while it is set
-        // (UINT32_MAX once stopped, 1 at boot). Short-circuit so the comparison never runs against
-        // a disarmed sentinel, while still taking the sleep path below when idle - which is what
-        // the boot-time nagCycleCutoff == 1 relied on.
+        // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
+        // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
         if (nagWindowExpired && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
@@ -96,9 +94,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (isNagging) {
             delay = (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                   : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
-            // externalTurnedOn[] holds when each output was last toggled, so these are interval
-            // checks rather than deadlines - hasElapsed() is the cheaper shape and needs no
-            // arithmetic on the stored value.
+            // externalTurnedOn[] is when each output was last toggled, so these are intervals.
             if (Throttle::hasElapsed(externalTurnedOn[0], delay)) {
                 setExternalState(0, !getExternal(0));
             }

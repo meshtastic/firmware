@@ -20,9 +20,8 @@ NodeInfoModule *nodeInfoModule;
 
 static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
 
-// The window is kept in milliseconds so the check can use Throttle, which is rollover-correct.
-// USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS is user-overridable, so guard the multiply: above
-// ~4.29M seconds it overflows uint32_t, and a window that long exceeds the millis() wrap anyway.
+// Kept in milliseconds so the check can use Throttle. The seconds value is user-overridable, so
+// guard the multiply: above ~4.29M seconds it overflows uint32_t.
 static_assert(NodeInfoReplySuppressSeconds <= UINT32_MAX / 1000UL,
               "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS is too large to express in milliseconds");
 static constexpr uint32_t NodeInfoReplySuppressMs = NodeInfoReplySuppressSeconds * 1000UL;
@@ -206,8 +205,8 @@ void NodeInfoModule::pruneLastNodeInfoCache()
         }
     }
 
-    // Evict by largest elapsed time rather than smallest stored stamp: comparing the stamps
-    // directly picks the wrong victim once some of them sit on the far side of the millis() wrap.
+    // Evict by largest elapsed time: comparing stored stamps directly picks the wrong victim once
+    // some of them sit on the far side of the millis() wrap.
     const uint32_t nowMs = Time::getMillis();
     while (!lastNodeInfoSeen.empty() && lastNodeInfoSeen.size() > maxEntries) {
         auto oldestIt = std::max_element(

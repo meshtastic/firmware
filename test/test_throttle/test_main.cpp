@@ -1,8 +1,7 @@
-// Unit tests for src/mesh/Throttle.{h,cpp} - the firmware's primary elapsed-time helper.
+// Unit tests for src/mesh/Throttle.{h,cpp} - the firmware's elapsed-time and deadline helpers.
 //
-// Throttle backs ~94 call sites, so its rollover behaviour is the single most load-bearing
-// time property in the tree. These tests drive the injected clock across the 32-bit millis()
-// wrap, which is not otherwise reachable in a test.
+// These drive the injected clock across the 32-bit millis() wrap, which is not otherwise reachable
+// in a test, and which every caller of these helpers depends on being handled correctly.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
@@ -127,12 +126,11 @@ void test_deadlinePassed_does_not_fire_early_when_deadline_wraps()
     TEST_ASSERT_FALSE(Throttle::deadlinePassed(deadline));
 }
 
-// Phase 0b: a disarmed sentinel must never reach this arithmetic. deadlinePassed() cannot know
-// about sentinels, so it reports them as passed - which is why callers test armed-ness first. These
-// assertions document that contract rather than a defect.
+// deadlinePassed() cannot know about sentinels, so it reports them as passed. This pins that
+// contract, since callers relying on it must test armed-ness first.
 void test_deadlinePassed_reads_disarmed_sentinels_as_passed()
 {
-    Time::setTestMillis(6247); // the uptime at which test_packet_signing caught this
+    Time::setTestMillis(6247);
 
     TEST_ASSERT_TRUE(Throttle::deadlinePassed(0));          // "inactive" for rebootAtMsec et al
     TEST_ASSERT_TRUE(Throttle::deadlinePassed(UINT32_MAX)); // "inactive" for nagCycleCutoff

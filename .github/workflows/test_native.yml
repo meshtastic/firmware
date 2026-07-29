@@ -57,11 +57,10 @@ jobs:
           fi
           echo "native-suite-count matches the $expected_count suite directories."
 
-  # Reject new naive deadline comparisons against millis(). `millis() > deadline` and
+  # Reject naive deadline comparisons against millis(). `millis() > deadline` and
   # `deadline < millis()` are wrong for ~24 days after the 32-bit millis() wrap: depending on which
-  # side wrapped they either stall the action or fire it immediately. Roughly 17 such sites were
-  # found and fixed at once; nothing but a guard stops number 18 from being added. The correct forms
-  # are Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
+  # side wrapped they either stall the action or fire it immediately. The correct forms are
+  # Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
   # Throttle::deadlinePassed (an absolute deadline). See .github/copilot-instructions.md.
   millis-deadline-check:
     name: Naive millis() Deadline Compare

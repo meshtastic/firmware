@@ -164,8 +164,7 @@ void BME680Sensor::updateState()
         }
     } else {
         /* Update every STATE_SAVE_PERIOD minutes */
-        // Interval since the last save, not counter * period compared to uptime: that form broke
-        // across the millis() wrap, and also overflowed uint32 once the counter passed ~198.
+        // Interval since the last save; counter * period overflows uint32 past ~198 saves.
         if (Throttle::hasElapsed(lastStateSaveMs, STATE_SAVE_PERIOD)) {
             LOG_DEBUG("%s state update every %d minutes", sensorName, STATE_SAVE_PERIOD / 60000);
             update = true;

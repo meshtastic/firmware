@@ -831,8 +831,7 @@ bool Power::setup()
 
 void Power::powerCommandsCheck()
 {
-    // Both variables use 0 for "not scheduled", so the armed test has to come first: 0 is
-    // arithmetically ~49 days in the past, and deadlinePassed() reports it as such.
+    // 0 means "not scheduled" for both, and reads as long expired - test it first.
     if (rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec)) {
         LOG_INFO("Rebooting");
         reboot();
@@ -880,10 +879,7 @@ void Power::reboot()
 #elif defined(ARCH_STM32)
     HAL_NVIC_SystemReset();
 #else
-    // Disarm so powerCommandsCheck() stops re-calling us every loop. Must be 0 (the disarm
-    // sentinel, as used for shutdownAtMsec) and not -1: UINT32_MAX only reads as "never" because
-    // the check below is a naive `millis() > deadline`. Under any rollover-correct comparison it
-    // means "expired ~49 days ago" and would reboot-loop.
+    // 0 disarms; UINT32_MAX would read as long expired and reboot-loop.
     rebootAtMsec = 0;
     LOG_WARN("FIXME implement reboot for this platform. Note that some settings "
              "require a restart to be applied");
