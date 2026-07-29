@@ -209,6 +209,7 @@ class MeshService
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
 
+    /// Seconds since the packet arrived, or SINCE_UNKNOWN if it carries no trustworthy rx_time.
     uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
 
   private:

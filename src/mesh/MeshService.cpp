@@ -12,6 +12,7 @@
 #include "Power.h"
 #include "PowerFSM.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
@@ -189,8 +190,12 @@ void MeshService::reconcilePendingRxTimes()
         return;
     const uint32_t nowMillis = Time::getMillis();
 
-    for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
+    // Rotate the queue once. TypedQueue is strictly FIFO on both backends, so dequeueing and
+    // re-enqueueing every element in turn leaves the delivery order unchanged.
+    for (int remaining = toPhoneQueue.numUsed(); remaining > 0; remaining--) {
         meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
+        if (!p) // drained from under us - nothing left to rotate
+            break;
         if (!p->has_rx_time) {
             // Unsigned subtraction is wraparound-safe; rx_time is a 32-bit wire field, so the
             // placeholder was never wider than 32 bits to begin with.
@@ -198,7 +203,11 @@ void MeshService::reconcilePendingRxTimes()
             p->rx_time = nowEpoch - (elapsedMs / 1000);
             p->has_rx_time = true;
         }
-        toPhoneQueue.enqueue(p, 0);
+        if (!toPhoneQueue.enqueue(p, 0)) { // mirrors sendToPhone()'s degrade-on-failure path
+            LOG_CRIT("Failed to requeue a packet into toPhoneQueue!");
+            releaseToPool(p);
+            fromNum++; // notify observers so the phone can resync
+        }
     }
 }
 
@@ -242,8 +251,8 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
         mp->rx_rssi = -40;
         mp->has_rx_rssi = true;
     }
-    // dispatchReceived normally overwrites this once the packet re-enters the pipeline below,
-    // but don't rely on that.
+    // dispatchReceived() restamps this when the packet re-enters the pipeline below; stamp it
+    // here anyway so the packet is never observable with an unset arrival time.
     stampRxTime(mp);
     LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
              mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");
@@ -620,9 +629,10 @@ bool MeshService::isToPhoneQueueEmpty()
 
 uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as wall-clock.
+    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // wall-clock, and don't pass it off as "just now" either.
     if (!mp->has_rx_time)
-        return 0;
+        return SINCE_UNKNOWN;
 
     uint32_t now = getTime();
 

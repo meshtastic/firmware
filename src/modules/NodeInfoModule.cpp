@@ -5,6 +5,7 @@
 #include "NodeStatus.h"
 #include "Router.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"

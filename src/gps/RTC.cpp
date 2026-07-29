@@ -18,8 +18,7 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
-// Despite the name, also fires MeshService::reconcilePendingRxTimes() on reaching net-quality time.
-static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
+static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQuality)
 {
     if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {
         LOG_DEBUG("Time source acquired (%s -> %s), triggering NodeInfo recheck", RtcName(oldQuality), RtcName(newQuality));
@@ -134,7 +133,7 @@ RTCSetResult readFromRTC()
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
-            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -180,7 +179,7 @@ RTCSetResult readFromRTC()
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
-            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -216,7 +215,7 @@ RTCSetResult readFromRTC()
                 timeStartMsec = now;
                 zeroOffsetSecs = tv.tv_sec;
                 currentQuality = RTCQualityDevice;
-                triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+                onTimeSourceQualityChanged(oldQuality, currentQuality);
             }
             return RTCSetResultSuccess;
         }
@@ -241,7 +240,7 @@ RTCSetResult readFromRTC()
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
-            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     }
@@ -387,7 +386,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #endif
 
         readFromRTC();
-        triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+        onTimeSourceQualityChanged(oldQuality, currentQuality);
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time

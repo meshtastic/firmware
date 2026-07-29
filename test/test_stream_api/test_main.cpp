@@ -1,7 +1,7 @@
 #include "MeshTypes.h"
 #include "SerialConsole.h"
 #include "TestUtil.h"
-#include "Time.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "mesh-pb-constants.h"
@@ -617,9 +617,8 @@ static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packe
     PhoneAPITestShim api;
     startHandshake(api);
 
-    // rx_time is proto3 optional: with has_rx_time false, the field is omitted from the wire
-    // entirely (not just flagged invalid), so the decoded copy reads back 0, not the in-memory
-    // placeholder - the placeholder itself never left the device.
+    // rx_time is proto3 optional, so has_rx_time false omits it from the wire entirely: the
+    // decoded copy reads back 0 and the placeholder itself never left the device.
     meshtastic_MeshPacket delivered;
     TEST_ASSERT_TRUE_MESSAGE(drainHandshakeForPacketFrom(api, sender, delivered),
                              "queued packet was not delivered during the handshake");

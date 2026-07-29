@@ -3233,9 +3233,10 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as wall-clock.
+    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // wall-clock, and don't pass it off as "just now" either.
     if (!p->has_rx_time)
-        return 0;
+        return SINCE_UNKNOWN;
 
     uint32_t now = getTime();
 

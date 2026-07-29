@@ -1,5 +1,5 @@
-// See Time.h for the full contract.
-#include "Time.h"
+// See UptimeClock.h for the full contract.
+#include "UptimeClock.h"
 #include <Arduino.h>
 
 uint32_t Time::getMillis()

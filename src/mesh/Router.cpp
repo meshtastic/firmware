@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 
 #include "configuration.h"
