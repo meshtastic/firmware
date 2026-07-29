@@ -13,7 +13,7 @@
 
 #include "configuration.h"
 #include "gps/RTC.h"
-#include "mesh/EventMode.h"
+#include "mesh/Default.h"
 #include "mesh/NextHopRouter.h"
 #include "mesh/NodeDB.h"
 #include "mesh/RadioInterface.h"
@@ -505,7 +505,7 @@ void test_rebroadcast_declined_send_releases_packet(void)
 }
 
 #if USERPREFS_EVENT_MODE
-void test_event_mode_preserves_client_forced_hop_limit(void)
+void test_event_mode_hop_behavior(void)
 {
     MockRadioInterface *mockIface = installMockIface();
     meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
@@ -516,43 +516,30 @@ void test_event_mode_preserves_client_forced_hop_limit(void)
     TEST_ASSERT_EQUAL(ERRNO_OK, shim->send(packetPool.allocCopy(p)));
     TEST_ASSERT_EQUAL_UINT8(HOP_MAX, mockIface->lastHopLimit);
     TEST_ASSERT_EQUAL_UINT8(HOP_MAX, mockIface->lastHopStart);
-}
 
-void test_event_mode_caps_decoded_relay(void)
-{
-    MockRadioInterface *mockIface = installMockIface();
-    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p = makeRebroadcastCandidate(NODENUM_BROADCAST);
     p.hop_start = HOP_MAX;
     p.hop_limit = HOP_MAX;
 
     TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
-    TEST_ASSERT_EQUAL_UINT8(event_mode::relayHopLimit, mockIface->lastHopLimit);
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(event_mode::relayHopLimit + 1), mockIface->lastHopStart);
-}
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeRelayHopLimit, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(Default::eventModeRelayHopLimit + 1), mockIface->lastHopStart);
 
-void test_event_mode_caps_opaque_relay(void)
-{
-    MockRadioInterface *mockIface = installMockIface();
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p = makeRebroadcastCandidate(NODENUM_BROADCAST);
     p.hop_start = HOP_MAX;
     p.hop_limit = HOP_MAX;
 
     TEST_ASSERT_TRUE(shim->relayOpaquePacket(&p));
-    TEST_ASSERT_EQUAL_UINT8(event_mode::relayHopLimit, mockIface->lastHopLimit);
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(event_mode::relayHopLimit + 1), mockIface->lastHopStart);
-}
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeRelayHopLimit, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(Default::eventModeRelayHopLimit + 1), mockIface->lastHopStart);
 
-void test_event_mode_preserves_unknown_opaque_hop_start(void)
-{
-    MockRadioInterface *mockIface = installMockIface();
-    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p = makeRebroadcastCandidate(NODENUM_BROADCAST);
     p.hop_start = 0;
     p.hop_limit = HOP_MAX;
 
     TEST_ASSERT_TRUE(shim->relayOpaquePacket(&p));
-    TEST_ASSERT_EQUAL_UINT8(event_mode::relayHopLimit, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeRelayHopLimit, mockIface->lastHopLimit);
     TEST_ASSERT_EQUAL_UINT8(0, mockIface->lastHopStart);
 }
 #endif
@@ -612,10 +599,7 @@ void setup()
     RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
     RUN_TEST(test_rebroadcast_declined_send_releases_packet);
 #if USERPREFS_EVENT_MODE
-    RUN_TEST(test_event_mode_preserves_client_forced_hop_limit);
-    RUN_TEST(test_event_mode_caps_decoded_relay);
-    RUN_TEST(test_event_mode_caps_opaque_relay);
-    RUN_TEST(test_event_mode_preserves_unknown_opaque_hop_start);
+    RUN_TEST(test_event_mode_hop_behavior);
 #endif
 
     exit(UNITY_END());

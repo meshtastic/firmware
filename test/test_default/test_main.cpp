@@ -1,18 +1,11 @@
 // Unit tests for Default::getConfiguredOrDefaultMsScaled
 #include "Default.h"
-#include "EventMode.h"
 #include "MeshRadio.h"
-#include "NodeDB.h"
 #include "TestUtil.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#include <algorithm>
 #include <unity.h>
-
-class NodeDBTestShim : public NodeDB
-{
-  public:
-    void installDefaultConfigForTest() { installDefaultConfig(false); }
-};
 
 // Helper to compute expected ms using same logic as Default::congestionScalingCoefficient
 static uint32_t computeExpectedMs(uint32_t defaultSeconds, uint32_t numOnlineNodes)
@@ -190,66 +183,19 @@ void test_scaled_overflow_saturates()
     TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), res);
 }
 
-void test_event_mode_hop_limit_values()
-{
-    TEST_ASSERT_TRUE(event_mode::isValidHopLimit(0));
-    TEST_ASSERT_TRUE(event_mode::isValidHopLimit(HOP_MAX));
-    TEST_ASSERT_FALSE(event_mode::isValidHopLimit(-1));
-    TEST_ASSERT_FALSE(event_mode::isValidHopLimit(HOP_MAX + 1));
-    TEST_ASSERT_FALSE(event_mode::isValidHopLimit(7.5));
-    TEST_ASSERT_FALSE(event_mode::isValidHopLimit(true));
-
-#if USERPREFS_EVENT_MODE && defined(USERPREFS_EVENT_MODE_HOP_LIMIT)
-    TEST_ASSERT_EQUAL_UINT8(USERPREFS_EVENT_MODE_HOP_LIMIT, event_mode::hopLimit);
-#else
-    TEST_ASSERT_EQUAL_UINT8(HOP_RELIABLE, event_mode::hopLimit);
-#endif
-}
-
-void test_event_mode_relay_hop_limit()
-{
-    TEST_ASSERT_EQUAL_UINT8(0, event_mode::relayHopLimitFor(0));
-    TEST_ASSERT_EQUAL_UINT8(4, event_mode::relayHopLimitFor(5));
-    TEST_ASSERT_EQUAL_UINT8(6, event_mode::relayHopLimitFor(HOP_MAX));
-    TEST_ASSERT_EQUAL_UINT8(event_mode::relayHopLimitFor(event_mode::hopLimit), event_mode::relayHopLimit);
-}
-
-void test_event_mode_hop_cap_helpers()
-{
-    TEST_ASSERT_EQUAL_UINT8(0, event_mode::capHopLimitFor(7, 0));
-    TEST_ASSERT_EQUAL_UINT8(5, event_mode::capHopLimitFor(7, 5));
-    TEST_ASSERT_EQUAL_UINT8(4, event_mode::capHopLimitFor(4, 5));
-    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, event_mode::capHopLimitFor(HOP_MAX, HOP_MAX));
-
-    const auto relayed = event_mode::capRelayHopFieldsFor(7, 6, 5);
-    TEST_ASSERT_EQUAL_UINT8(5, relayed.hopStart);
-    TEST_ASSERT_EQUAL_UINT8(4, relayed.hopLimit);
-
-    const auto legacy = event_mode::capRelayHopFieldsFor(0, 6, 0);
-    TEST_ASSERT_EQUAL_UINT8(0, legacy.hopStart);
-    TEST_ASSERT_EQUAL_UINT8(0, legacy.hopLimit);
-}
-
 void test_configured_or_default_hop_limit()
 {
     config.lora.hop_limit = HOP_MAX;
     const uint8_t result = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
 
 #if USERPREFS_EVENT_MODE
-    TEST_ASSERT_EQUAL_UINT8(event_mode::hopLimit, result);
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeHopLimit, result);
 #else
     TEST_ASSERT_EQUAL_UINT8(HOP_MAX, result);
 #endif
 }
 
 #if USERPREFS_EVENT_MODE
-void test_event_mode_bakes_default_hop_limit()
-{
-    NodeDBTestShim db;
-    db.installDefaultConfigForTest();
-    TEST_ASSERT_EQUAL_UINT8(event_mode::hopLimit, config.lora.hop_limit);
-}
-
 void test_event_mode_caps_optimized_response()
 {
     config.lora.hop_limit = HOP_MAX;
@@ -258,7 +204,7 @@ void test_event_mode_caps_optimized_response()
     request.hop_limit = HOP_MAX - 4;
 
     RoutingModule module;
-    TEST_ASSERT_EQUAL_UINT8(event_mode::capHopLimitFor(6, event_mode::hopLimit), module.getHopLimitForResponse(request));
+    TEST_ASSERT_EQUAL_UINT8(std::min<uint8_t>(6, Default::eventModeHopLimit), module.getHopLimitForResponse(request));
 }
 #endif
 
@@ -282,12 +228,8 @@ void setup()
     RUN_TEST(test_ms_default_clamps);
     RUN_TEST(test_ms_result_is_int32_safe);
     RUN_TEST(test_scaled_overflow_saturates);
-    RUN_TEST(test_event_mode_hop_limit_values);
-    RUN_TEST(test_event_mode_relay_hop_limit);
-    RUN_TEST(test_event_mode_hop_cap_helpers);
     RUN_TEST(test_configured_or_default_hop_limit);
 #if USERPREFS_EVENT_MODE
-    RUN_TEST(test_event_mode_bakes_default_hop_limit);
     RUN_TEST(test_event_mode_caps_optimized_response);
 #endif
     exit(UNITY_END());

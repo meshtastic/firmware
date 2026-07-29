@@ -6,7 +6,6 @@
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
-#include "EventMode.h"
 #include "FSCommon.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -929,7 +928,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 
 #if USERPREFS_EVENT_MODE
-    config.lora.hop_limit = event_mode::hopLimit;
+    config.lora.hop_limit = Default::eventModeHopLimit;
 #else
     config.lora.hop_limit = HOP_RELIABLE;
 #endif
