@@ -741,6 +741,10 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
         LOG_INFO("Set default channel and radio preferences!");
 
         channels.initDefaults();
+        // Defaults ship the public PSK, so strip it again before onConfigChanged() publishes hashes;
+        // loadFromDisk's sanitation is a no-op when the channel file was absent or corrupt.
+        if (owner.is_licensed)
+            channels.ensureLicensedOperation();
     }
 
     channels.onConfigChanged();
