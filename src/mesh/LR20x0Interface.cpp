@@ -382,8 +382,7 @@ template <typename T> int16_t LR20x0Interface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-// See LR11x0Interface.cpp: undo the amalgamation-scoped macro aliases so they do not
-// leak into other interface translation units included after this one.
+// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
 #undef lr20x0_rfswitch_dio_pins
 #undef lr20x0_rfswitch_table
 #undef LR20x0
