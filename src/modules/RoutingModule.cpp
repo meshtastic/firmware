@@ -66,8 +66,8 @@ uint8_t RoutingModule::getHopLimitForResponse(const meshtastic_MeshPacket &mp)
     const int8_t hopsUsed = getHopsAway(mp);
     if (hopsUsed >= 0) {
         if (hopsUsed > (int32_t)(config.lora.hop_limit)) {
-// In event mode, we never want to send packets with more than our default 3 hops.
-#if !(EVENTMODE)             // This falls through to the default.
+// In event mode, never exceed the configured event hop limit.
+#if !USERPREFS_EVENT_MODE    // This falls through to the default.
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
 #endif
         } else if (mp.hop_start == 0) {
