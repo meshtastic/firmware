@@ -465,6 +465,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        // Error returns from here own the packet, as the position-precision path below does.
+        packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
     }
 
