@@ -185,7 +185,10 @@ class SideKeyInterruptThread : public concurrency::OSThread
     {
         const uint32_t now = millis();
 
-        if (!Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
+        // 0 means no block armed. deadlinePassed(0) only reads as passed for the first half of
+        // each millis() wrap cycle, so a device that never light-sleeps would falsely stay
+        // blocked for ~24.8 days every ~49.7 days without this guard.
+        if (touchResumeBlockUntilMs != 0 && !Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
             resetStateAndStop();
             return OSThread::disable();
         }
@@ -280,7 +283,8 @@ class SideKeyInterruptThread : public concurrency::OSThread
         if (touchLightSleepActive) {
             return;
         }
-        if (!Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
+        // See the runOnce() guard above for why 0 must be tested separately.
+        if (touchResumeBlockUntilMs != 0 && !Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
             return;
         }
         if (state != State::REST) {
@@ -579,8 +583,9 @@ bool readTouch(int16_t *x, int16_t *y)
     }
 
     // Let buses and peripherals settle briefly after light-sleep wake.
-    // 0 means "no block active"; !deadlinePassed(0) is false, so it needs no separate armed test.
-    if (!Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
+    // 0 means "no block active". deadlinePassed(0) only reads as passed for the first half of each
+    // millis() wrap cycle, so a device that never light-sleeps would falsely stay blocked here.
+    if (touchResumeBlockUntilMs != 0 && !Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
         return false;
     }
 

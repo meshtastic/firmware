@@ -297,8 +297,10 @@ void preFSBegin()
 extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LittleFS corruption detected: %s", reason);
-    // Still inside the backoff window; a wrapped compare here would delay() for weeks.
-    if (!Throttle::deadlinePassed(millis_until_formatting_again)) {
+    // 0 means no backoff armed yet (first-ever corruption) - test that before the elapsed check,
+    // since deadlinePassed(0) only reads as passed for the first half of each wrap cycle and a miss
+    // here would delay() for weeks.
+    if (millis_until_formatting_again != 0 && !Throttle::deadlinePassed(millis_until_formatting_again)) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
         const long millis_remain = millis_until_formatting_again - millis();
         LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);

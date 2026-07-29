@@ -1,5 +1,6 @@
 #include "airtime.h"
 #include "NodeDB.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include <string.h>
 
@@ -60,7 +61,7 @@ void AirTime::syncNow()
 {
     // Use monotonic uptime rather than RTC/network time; user, GPS, or NTP clock changes
     // must not move airtime accounting backward or forward.
-    uint32_t nowMsec = millis();
+    uint32_t nowMsec = Time::getMillis();
 
     if (firstTime) {
         memset(this->utilizationTX, 0, sizeof(this->utilizationTX));
