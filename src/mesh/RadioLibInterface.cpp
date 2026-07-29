@@ -1,11 +1,11 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
-#include "endian.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "endian.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -637,8 +637,9 @@ void RadioLibInterface::handleReceiveInterrupt()
         // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
         LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
                   "nextHop=0x%x relay=0x%x)",
-                  state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
-                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+                  state, meshLe32toH(radioBuffer.header.id), meshLe32toH(radioBuffer.header.from),
+                  meshLe32toH(radioBuffer.header.to), radioBuffer.header.flags, iface->getSNR(), lround(iface->getRSSI()),
+                  radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
