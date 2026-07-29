@@ -767,6 +767,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send config: bluetooth");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_bluetooth_tag;
             fromRadioScratch.config.payload_variant.bluetooth = config.bluetooth;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!getAdminAuthorized()) {
+                // The pairing PIN is a shared secret; never expose it to an unauthenticated client.
+                fromRadioScratch.config.payload_variant.bluetooth.fixed_pin = 0;
+            }
+#endif
             break;
         case meshtastic_Config_security_tag:
             LOG_DEBUG("Send config: security");
