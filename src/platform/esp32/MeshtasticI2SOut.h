@@ -8,7 +8,8 @@
 
 /**
  * BackgroundAudio's ESP32I2SAudio, corrected for Meshtastic's hardware and driven
- * synchronously from AudioThread instead of from a background task.
+ * synchronously from AudioThread's feeder task (or the main loop as fallback) instead
+ * of from upstream's IRQ-notified background task.
  *
  * Three things upstream gets wrong for this firmware, none of which has a public
  * API workaround - hence the subclass:
@@ -30,20 +31,33 @@
  *     `#define I2S_PORT I2S_NUM_0`). AUTO would take port 0 when it is free and then
  *     codec2's i2s_driver_install fails. Do not "simplify" this back to AUTO.
  *
- * It also declines to start upstream's priority-2 FreeRTOS task. We feed the DMA from
- * the main loop with a zero-timeout write, so we never need availableForWrite() nor
- * onTransmit(). That matters for correctness, not just simplicity - see writeFrames().
+ * It also declines to start upstream's priority-2 FreeRTOS task. AudioThread runs its
+ * own feeder task, but that is not the same thing: upstream's task exists to maintain
+ * availableForWrite() from ISR notifications, which is the machinery this subclass
+ * avoids - our feeder uses the same ask-the-IDF-directly zero-timeout write. That
+ * matters for correctness, not just simplicity - see writeFrames().
  */
 class MeshtasticI2SOut : public ESP32I2SAudio
 {
   public:
-    // 8 buffers x 128 frames = 1024 frames = 4096 bytes = 46.4ms at 22050Hz. Chosen to
-    // be byte-identical to the ESP8266Audio geometry this replaces (AudioOutputI2S
-    // called SetBuffers(8, 128 * 4)), so keypress feedback latency does not change.
-    // begin() preloads every descriptor with silence, so this figure is also the delay
-    // before the first sample is audible - relevant to playClick()/playChirp().
-    static constexpr size_t kDmaBuffers = 8;
-    static constexpr size_t kDmaFrames = 128;
+    // 16 buffers x 256 frames = 4096 frames = 16KB = 185ms at 22050Hz. The ring is the
+    // only slack between the cooperative main loop and an audible dropout: pump() runs
+    // from OSThread ticks, and a 320x240 TFT frame push under spiLock is 30-60ms,
+    // transitions run those back-to-back at 30fps, and a screen wake can hog the loop
+    // for ~200ms - the ESP8266Audio-era 8 x 128 ring (46ms) underran on all of those,
+    // which was audible as stuttering exactly when a notification redraws the screen.
+    // The DMA RAM is only held while a melody is playing, and startup latency does not
+    // scale with the depth: AudioThread preloads the ring with real samples via
+    // preloadFrames() before start(), so the first note is audible after the short amp
+    // lead-in rather than after a ring's worth of silence.
+    static constexpr size_t kDmaBuffers = 16;
+    static constexpr size_t kDmaFrames = 256;
+
+    // The ESP8266Audio-era geometry, kept as a fallback when internal DMA-capable RAM
+    // is too fragmented at playback time for the full ring: degraded jitter tolerance
+    // beats no audio at all.
+    static constexpr size_t kDmaBuffersFallback = 8;
+    static constexpr size_t kDmaFramesFallback = 128;
 
     MeshtasticI2SOut(int8_t bclk, int8_t ws, int8_t dout, int8_t mclk) : ESP32I2SAudio(bclk, ws, dout, mclk)
     {
@@ -55,15 +69,17 @@ class MeshtasticI2SOut : public ESP32I2SAudio
     virtual ~MeshtasticI2SOut() { end(); }
 
     /**
-     * Allocate and start the I2S channel. Reimplements ESP32I2SAudio::begin() rather
-     * than delegating to it: upstream wraps four ESP-IDF calls in assert(), and nothing
-     * in the PlatformIO build defines NDEBUG (the sdkconfig
-     * CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE only reaches the IDF component
-     * build), so those are live abort() calls on a device with no console.
+     * Allocate and initialize the I2S channel, leaving it disabled so the caller can
+     * preload the DMA ring with real samples (preloadFrames()) before start() clocks it
+     * out. Reimplements ESP32I2SAudio::begin() rather than delegating to it: upstream
+     * wraps four ESP-IDF calls in assert(), and nothing in the PlatformIO build defines
+     * NDEBUG (the sdkconfig CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE only reaches
+     * the IDF component build), so those are live abort() calls on a device with no
+     * console.
      */
     bool begin() override
     {
-        if (_running)
+        if (_running || _tx_handle)
             return false;
 
         i2s_chan_config_t chanCfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
@@ -72,6 +88,16 @@ class MeshtasticI2SOut : public ESP32I2SAudio
         chanCfg.auto_clear = true; // send zeros, not the last buffer, when we stop feeding
 
         esp_err_t err = i2s_new_channel(&chanCfg, &_tx_handle, nullptr);
+        if (err == ESP_ERR_NO_MEM && (_buffers != kDmaBuffersFallback || _bufferWords != kDmaFramesFallback)) {
+            LOG_WARN("I2S: no DMA memory for %ux%u ring, falling back to %ux%u", (unsigned)_buffers, (unsigned)_bufferWords,
+                     (unsigned)kDmaBuffersFallback, (unsigned)kDmaFramesFallback);
+            _buffers = kDmaBuffersFallback;
+            _bufferWords = kDmaFramesFallback;
+            chanCfg.dma_desc_num = _buffers;
+            chanCfg.dma_frame_num = _bufferWords;
+            _tx_handle = nullptr;
+            err = i2s_new_channel(&chanCfg, &_tx_handle, nullptr);
+        }
         if (err != ESP_OK) {
             LOG_ERROR("I2S: i2s_new_channel failed: %d", err);
             _tx_handle = nullptr;
@@ -114,7 +140,49 @@ class MeshtasticI2SOut : public ESP32I2SAudio
             _totalAvailable = info.total_dma_buf_size;
         }
 
-        // Preload silence so enabling the channel does not clock out uninitialized DMA.
+        return true;
+    }
+
+    /**
+     * Load frames into the still-disabled DMA ring, between begin() and start(). Returns
+     * the number of frames accepted; zero once the ring is full (callers carry the
+     * remainder into their first writeFrames()). Starting playback from a preloaded ring
+     * means the first note is audible almost immediately AND the ring starts at maximum
+     * depth, so a main-loop stall right at notification time - the common case, since the
+     * same event kicks off the screen redraw - cannot underrun it.
+     */
+    size_t preloadFrames(const int16_t *interleavedLR, size_t frames)
+    {
+        if (_running || !_tx_handle || !interleavedLR || !frames)
+            return 0;
+
+        const uint8_t *buffer = (const uint8_t *)interleavedLR;
+        size_t remaining = frames * kBytesPerFrame;
+        size_t total = 0;
+
+        // Like i2s_channel_write, preload stops at a descriptor boundary; loop until it
+        // makes no further progress. Descriptors are frame-aligned so 'loaded' is too.
+        while (remaining) {
+            size_t loaded = 0;
+            if (i2s_channel_preload_data(_tx_handle, (void *)buffer, remaining, &loaded) != ESP_OK || !loaded)
+                break;
+            buffer += loaded;
+            remaining -= loaded;
+            total += loaded;
+        }
+        return total / kBytesPerFrame;
+    }
+
+    /**
+     * Enable the channel after begin()/preloadFrames(). Whatever the caller did not
+     * preload is padded with silence first, so enabling never clocks out uninitialized
+     * DMA (the tail of a short melody, or the whole ring if nothing was preloaded).
+     */
+    bool start()
+    {
+        if (_running || !_tx_handle)
+            return false;
+
         int16_t silence[2] = {0, 0};
         size_t loaded = 0;
         do {
@@ -122,7 +190,7 @@ class MeshtasticI2SOut : public ESP32I2SAudio
                 break;
         } while (loaded);
 
-        err = i2s_channel_enable(_tx_handle);
+        esp_err_t err = i2s_channel_enable(_tx_handle);
         if (err != ESP_OK) {
             LOG_ERROR("I2S: i2s_channel_enable failed: %d", err);
             releaseChannel();
@@ -216,6 +284,10 @@ class MeshtasticI2SOut : public ESP32I2SAudio
         _totalAvailable = 0;
         _frames = 0;
         _irqs = 0;
+        // If this playback ran on the fallback geometry, let the next one try the full
+        // ring again - the DMA RAM shortage may have been transient.
+        _buffers = kDmaBuffers;
+        _bufferWords = kDmaFrames;
     }
 };
 
