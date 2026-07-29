@@ -878,7 +878,11 @@ void Power::reboot()
 #elif defined(ARCH_STM32)
     HAL_NVIC_SystemReset();
 #else
-    rebootAtMsec = -1;
+    // Disarm so powerCommandsCheck() stops re-calling us every loop. Must be 0 (the disarm
+    // sentinel, as used for shutdownAtMsec) and not -1: UINT32_MAX only reads as "never" because
+    // the check below is a naive `millis() > deadline`. Under any rollover-correct comparison it
+    // means "expired ~49 days ago" and would reboot-loop.
+    rebootAtMsec = 0;
     LOG_WARN("FIXME implement reboot for this platform. Note that some settings "
              "require a restart to be applied");
 #endif
