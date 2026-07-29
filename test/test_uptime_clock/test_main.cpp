@@ -1,10 +1,8 @@
 // Unit tests for src/UptimeClock.{h,cpp} - the monotonic uptime seam.
-// Covers: test-clock injection, getMillis64() low-word fidelity, rollover across 0xFFFFFFFF,
-// and that ordinary forward steps do not register a spurious wrap.
+// Covers: test-clock injection, stepping the injected clock, and the real-clock fallback.
 //
-// getMillis64() keeps persistent static carry state across calls, so tests assert on the
-// *delta* between two consecutive samples rather than absolute high-word values - that makes
-// each test independent of suite ordering.
+// Wrap behaviour is not tested here because getMillis() is a plain 32-bit read with no wrap
+// handling of its own - the wrap is handled by the consumers, and is tested in test_throttle/.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
@@ -32,43 +30,13 @@ void test_advanceTestMillis_steps_clock()
     TEST_ASSERT_EQUAL_UINT32(1500, Time::getMillis());
 }
 
-// --- getMillis64 low word ---
-
-void test_getMillis64_low_word_matches_getMillis()
+// Advancing past 0xFFFFFFFF wraps like millis() does, rather than saturating. This is the property
+// the Throttle wrap tests are built on, so it is worth pinning here too.
+void test_advanceTestMillis_wraps_like_millis()
 {
-    Time::setTestMillis(0x0BADF00D);
-    uint64_t v = Time::getMillis64();
-    TEST_ASSERT_EQUAL_UINT32(0x0BADF00D, static_cast<uint32_t>(v & 0xFFFFFFFFu));
-}
-
-// --- rollover immunity (the headline behaviour) ---
-
-void test_getMillis64_increments_high_word_on_wrap()
-{
-    // Must cross the wrap with advanceTestMillis(), not a second setTestMillis(): setTestMillis()
-    // sets clockSourceChanged, which makes getMillis64() rebase its accumulator and swallow the
-    // wrap. See the note in setup() - this is a real limitation of the shipped injection API.
     Time::setTestMillis(0xFFFFFF00u);
-    uint64_t a = Time::getMillis64();
-    Time::advanceTestMillis(0x200u); // 0xFFFFFF00 + 0x200 wraps to 0x00000100
-    uint64_t b = Time::getMillis64();
-
-    // High word advanced by exactly one; low word reflects the new value.
-    TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(a >> 32) + 1, static_cast<uint32_t>(b >> 32));
-    TEST_ASSERT_EQUAL_UINT32(0x00000100u, static_cast<uint32_t>(b & 0xFFFFFFFFu));
-    // And b is strictly greater than a despite the 32-bit value going "backwards".
-    TEST_ASSERT_TRUE(b > a);
-}
-
-void test_getMillis64_no_spurious_wrap_on_forward_step()
-{
-    Time::setTestMillis(0x00001000u);
-    uint64_t a = Time::getMillis64();
-    Time::setTestMillis(0x00002000u);
-    uint64_t b = Time::getMillis64();
-
-    TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(a >> 32), static_cast<uint32_t>(b >> 32)); // no wrap
-    TEST_ASSERT_EQUAL_UINT64((uint64_t)0x1000u, b - a);                                       // exact delta
+    Time::advanceTestMillis(0x200u);
+    TEST_ASSERT_EQUAL_UINT32(0x00000100u, Time::getMillis());
 }
 
 // --- real clock fallback ---
@@ -88,9 +56,7 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_getMillis_returns_injected_value);
     RUN_TEST(test_advanceTestMillis_steps_clock);
-    RUN_TEST(test_getMillis64_low_word_matches_getMillis);
-    RUN_TEST(test_getMillis64_increments_high_word_on_wrap);
-    RUN_TEST(test_getMillis64_no_spurious_wrap_on_forward_step);
+    RUN_TEST(test_advanceTestMillis_wraps_like_millis);
     RUN_TEST(test_real_clock_advances_when_not_injected);
     exit(UNITY_END());
 }

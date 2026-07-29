@@ -20,6 +20,13 @@ NodeInfoModule *nodeInfoModule;
 
 static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
 
+// The window is kept in milliseconds so the check can use Throttle, which is rollover-correct.
+// USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS is user-overridable, so guard the multiply: above
+// ~4.29M seconds it overflows uint32_t, and a window that long exceeds the millis() wrap anyway.
+static_assert(NodeInfoReplySuppressSeconds <= UINT32_MAX / 1000UL,
+              "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS is too large to express in milliseconds");
+static constexpr uint32_t NodeInfoReplySuppressMs = NodeInfoReplySuppressSeconds * 1000UL;
+
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
     suppressReplyForCurrentRequest = false;
@@ -36,15 +43,12 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         const NodeNum sender = getFrom(&mp);
         // A local dedup window, not a wall-clock reading - uptime avoids RTC-quality jumps and
         // replayed packets' stale rx_time perturbing it.
-        const uint32_t now = (uint32_t)(Time::getMillis64() / 1000);
+        const uint32_t nowMs = Time::getMillis();
         auto it = lastNodeInfoSeen.find(sender);
-        if (it != lastNodeInfoSeen.end()) {
-            uint32_t sinceLast = now >= it->second ? now - it->second : 0;
-            if (sinceLast < NodeInfoReplySuppressSeconds) {
-                suppressReplyForCurrentRequest = true;
-            }
+        if (it != lastNodeInfoSeen.end() && Throttle::isWithinTimespanMs(it->second, NodeInfoReplySuppressMs)) {
+            suppressReplyForCurrentRequest = true;
         }
-        lastNodeInfoSeen[sender] = now;
+        lastNodeInfoSeen[sender] = nowMs;
         pruneLastNodeInfoCache();
     }
 
@@ -202,10 +206,15 @@ void NodeInfoModule::pruneLastNodeInfoCache()
         }
     }
 
+    // Evict by largest elapsed time rather than smallest stored stamp: comparing the stamps
+    // directly picks the wrong victim once some of them sit on the far side of the millis() wrap.
+    const uint32_t nowMs = Time::getMillis();
     while (!lastNodeInfoSeen.empty() && lastNodeInfoSeen.size() > maxEntries) {
-        auto oldestIt = std::min_element(lastNodeInfoSeen.begin(), lastNodeInfoSeen.end(),
-                                         [](const std::pair<const NodeNum, uint32_t> &lhs,
-                                            const std::pair<const NodeNum, uint32_t> &rhs) { return lhs.second < rhs.second; });
+        auto oldestIt = std::max_element(
+            lastNodeInfoSeen.begin(), lastNodeInfoSeen.end(),
+            [nowMs](const std::pair<const NodeNum, uint32_t> &lhs, const std::pair<const NodeNum, uint32_t> &rhs) {
+                return (uint32_t)(nowMs - lhs.second) < (uint32_t)(nowMs - rhs.second);
+            });
         lastNodeInfoSeen.erase(oldestIt);
     }
 }
