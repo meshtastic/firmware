@@ -216,8 +216,10 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
         return;
     if (mp->rx_snr == 0) // plausible synthetic link metadata unless the caller set it
         mp->rx_snr = 8;
-    if (mp->rx_rssi == 0)
+    if (!mp->has_rx_rssi) { // rx_rssi has explicit presence; only fabricate if the caller didn't supply a real one
         mp->rx_rssi = -40;
+        mp->has_rx_rssi = true;
+    }
     mp->rx_time = getValidTime(RTCQualityFromNet);
     LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
              mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");
@@ -324,13 +326,20 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
+    // callModules' loopback gate keeps RX_SRC_LOCAL packets from RoutingModule, the only module
+    // that forwards to the phone, so deliver our own reply's copy here or the client never sees it.
+    const bool localDelivery = isToUs(p);
+    if (src == RX_SRC_LOCAL && localDelivery)
+        ccToPhone = true;
+
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     ErrorCode res = router->sendLocal(p, src);
 
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */
     meshtastic_QueueStatus qs = router->getQueueStatus();
-    ErrorCode r = sendQueueStatusToPhone(qs, res, mesh_packet_id);
+    // SHOULD_RELEASE means "caller frees", not a send failure, so don't report it as one.
+    ErrorCode r = sendQueueStatusToPhone(qs, (res == ERRNO_SHOULD_RELEASE && localDelivery) ? ERRNO_OK : res, mesh_packet_id);
     if (r != ERRNO_OK) {
         LOG_DEBUG("Can't send status to phone");
     }

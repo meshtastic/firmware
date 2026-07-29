@@ -40,6 +40,7 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     packet.rx_snr = 10.5f;
     packet.hop_start = 3;
     packet.rx_rssi = -85;
+    packet.has_rx_rssi = true; // rx_rssi has explicit presence; mark this synthetic reading as measured
     packet.delayed = meshtastic_MeshPacket_Delayed_NO_DELAY;
 
     // Set decoded variant

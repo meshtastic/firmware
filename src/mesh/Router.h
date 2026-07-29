@@ -160,8 +160,62 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      */
     void handleReceived(meshtastic_MeshPacket *p, RxSource src = RX_SRC_RADIO);
 
+    /**
+     * The body of handleReceived(): decode, run modules, publish to MQTT. Split out so the
+     * depth-guarded drain in handleReceived() can process a deferred packet without re-entering
+     * the drain (and without touching handleDepth) - keeping the stack flat.
+     */
+    void dispatchReceived(meshtastic_MeshPacket *p, RxSource src);
+
+    /**
+     * Route a packet addressed to us (or a local broadcast we loop back) into handleReceived().
+     * Called synchronously at the top level, but if a module sends this from inside callModules()
+     * (handleDepth > 0) the packet is copied into the deferred queue instead, so we never stack a
+     * second handleReceived() on top of a module handler - that nesting is what overflows the
+     * nRF52 task stack on a config save. Does not consume p; the caller's existing free path is
+     * unchanged.
+     */
+    void deliverLocal(meshtastic_MeshPacket *p, RxSource src);
+
+    /// Depth of handleReceived() frames currently on the stack. >0 means a module is dispatching,
+    /// so a locally-sent loopback packet must be deferred rather than handled synchronously.
+    uint8_t handleDepth = 0;
+
+    /// A local loopback packet whose handleReceived() was deferred because it was produced from
+    /// inside callModules(). The queue owns the packet; its RxSource travels with it so the drain
+    /// dispatches it with the origin the sender intended (RX_SRC_LOCAL stays local).
+    struct DeferredLocal {
+        meshtastic_MeshPacket *p;
+        RxSource src;
+    };
+
+    /// Fixed, small ring buffer of deferred local packets. A config save fans out only a few
+    /// loopback packets (a self-addressed reply plus a nodeinfo/config broadcast or two), so four
+    /// slots cover the realistic nesting. On overflow the deferral is dropped (the packet still
+    /// followed its normal non-loopback path) rather than blocking or growing the heap.
+    static constexpr uint8_t deferredLocalCapacity = 4;
+    DeferredLocal deferredLocalQueue[deferredLocalCapacity];
+    uint8_t deferredLocalHead = 0;  // index of the oldest queued entry
+    uint8_t deferredLocalCount = 0; // entries currently queued
+
+    /// Queue a deferred local packet. Returns false (and queues nothing) when full.
+    bool enqueueDeferredLocal(meshtastic_MeshPacket *p, RxSource src);
+    /// Pop the oldest deferred local packet into out. Returns false when empty.
+    bool dequeueDeferredLocal(DeferredLocal &out);
+
     /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
+
+#ifdef PIO_UNIT_TESTING
+  public:
+    /// High-water mark of handleDepth across this Router's life. The deferral must keep it at 1:
+    /// a nested local send may never re-enter handleReceived() synchronously.
+    uint8_t maxHandleDepthObserved = 0;
+    /// Count of deferrals dropped because the queue was full or a copy could not be allocated.
+    uint32_t deferredLocalDropped = 0;
+    /// Number of deferred local packets currently queued.
+    uint8_t deferredLocalPending() const { return deferredLocalCount; }
+#endif
 };
 
 enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_OPAQUE, DECODE_FATAL, DECODE_POLICY_REJECT };

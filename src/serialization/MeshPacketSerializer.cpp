@@ -426,7 +426,9 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     jsonObj["channel"] = (Json::UInt)mp->channel;
     jsonObj["type"] = msgType;
     jsonObj["sender"] = nodeDB->getNodeId();
-    if (mp->rx_rssi != 0)
+    // rx_rssi has explicit presence on the wire (unlike rx_snr): trust has_rx_rssi rather than a
+    // != 0 heuristic, since 0 dBm is a legitimate reading on some radios.
+    if (mp->has_rx_rssi)
         jsonObj["rssi"] = (int)mp->rx_rssi;
     if (mp->rx_snr != 0)
         jsonObj["snr"] = (float)mp->rx_snr;
@@ -456,7 +458,9 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
     jsonObj["channel"] = (Json::UInt)mp->channel;
     jsonObj["want_ack"] = mp->want_ack;
 
-    if (mp->rx_rssi != 0)
+    // rx_rssi has explicit presence on the wire (unlike rx_snr): trust has_rx_rssi rather than a
+    // != 0 heuristic, since 0 dBm is a legitimate reading on some radios.
+    if (mp->has_rx_rssi)
         jsonObj["rssi"] = (int)mp->rx_rssi;
     if (mp->rx_snr != 0)
         jsonObj["snr"] = (float)mp->rx_snr;
