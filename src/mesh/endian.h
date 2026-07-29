@@ -1,20 +1,7 @@
 #pragma once
 
-/**
- * Little-endian byte-swap utilities for mesh radio packet headers.
- *
- * The mesh radio wire format is little-endian. On big-endian hosts
- * (e.g. Linux native on MIPS or PowerPC routers) these helpers swap
- * bytes; on all little-endian targets (ESP32, nRF52, STM32, RP2040,
- * x86, aarch64) they are no-ops.
- *
- * Uses compiler builtins instead of <endian.h> because htole32() is
- * not declared on every libc/toolchain combination (reported on an
- * OpenWRT MIPS toolchain). Same detection pattern as
- * src/platform/stm32wl/littlefs/lfs_util.h.
- *
- * Fixes: https://github.com/meshtastic/firmware/issues/6764
- */
+// The mesh radio wire format is little-endian. These helpers convert between
+// host and wire byte order: byte swaps on big-endian hosts, no-ops otherwise.
 
 #include <stdint.h>
 
@@ -35,7 +22,7 @@ static inline uint64_t meshLe64toH(uint64_t v)
 {
     return __builtin_bswap64(v);
 }
-#else
+#elif defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 // Little-endian host: no conversion needed.
 static inline uint32_t meshHtoLe32(uint32_t v)
 {
@@ -53,4 +40,6 @@ static inline uint64_t meshLe64toH(uint64_t v)
 {
     return v;
 }
+#else
+#error "Unable to determine target byte order: __BYTE_ORDER__ is not defined by this compiler"
 #endif
