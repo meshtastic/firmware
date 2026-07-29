@@ -1276,8 +1276,9 @@ void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
         if (queued)
             return;
         if (!stillNested) {
-            // The drain finished first, so nothing would pick this up; deliver it here instead.
-            dispatchReceived(copy, src);
+            // The drain finished first, so nothing would pick this up. Go through handleReceived()
+            // rather than dispatchReceived() so a loopback from its modules still defers.
+            handleReceived(copy, src);
             packetPool.release(copy);
             return;
         }
