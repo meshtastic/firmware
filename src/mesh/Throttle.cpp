@@ -35,3 +35,14 @@ bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs)
     uint32_t now = Time::getMillis();
     return (now - lastExecutionMs) < timeSpanMs;
 }
+
+/// @brief Check whether an absolute deadline has arrived, correctly across the millis() wrap
+/// @param deadlineMs The deadline, as a millis() value
+/// See the header for the range limit and the sentinel requirement.
+bool Throttle::deadlinePassed(uint32_t deadlineMs)
+{
+    // Unsigned half-range: the deadline is in the past iff the elapsed difference has not wrapped
+    // past 2^31. Anything further ahead lands in the top half and reads as "not yet". Unlike
+    // casting the difference to int32_t, this is fully defined behaviour for every input.
+    return (uint32_t)(Time::getMillis() - deadlineMs) < 0x80000000u;
+}

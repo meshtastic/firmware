@@ -232,9 +232,10 @@ void EInkDynamicDisplay::checkForPromotion()
 // Is it too soon for another frame of this type?
 void EInkDynamicDisplay::checkRateLimiting()
 {
-    // Sanity check: millis() overflow - just let the update run..
-    if (previousRunMs > millis())
-        return;
+    // No millis()-overflow special case is needed: every check below goes through Throttle, whose
+    // unsigned subtraction is already correct across the wrap. The old guard returned early
+    // whenever previousRunMs > millis(), which after a wrap disabled rate limiting entirely until
+    // the next successful update rewrote previousRunMs.
 
     // Skip update: too soon for BACKGROUND
     if (frameFlags == BACKGROUND) {

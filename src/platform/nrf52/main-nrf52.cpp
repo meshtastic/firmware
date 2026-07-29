@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "mesh/Throttle.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <InternalFileSystem.h>
@@ -296,7 +297,9 @@ void preFSBegin()
 extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LittleFS corruption detected: %s", reason);
-    if (millis_until_formatting_again > millis()) {
+    // Still inside the backoff window. A naive compare against millis() would either skip the pause
+    // or, past the wrap, stall here for up to ~24 days with a huge delay() below.
+    if (!Throttle::deadlinePassed(millis_until_formatting_again)) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
         const long millis_remain = millis_until_formatting_again - millis();
         LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);

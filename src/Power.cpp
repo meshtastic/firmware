@@ -831,12 +831,14 @@ bool Power::setup()
 
 void Power::powerCommandsCheck()
 {
-    if (rebootAtMsec && millis() > rebootAtMsec) {
+    // Both variables use 0 for "not scheduled", so the armed test has to come first: 0 is
+    // arithmetically ~49 days in the past, and deadlinePassed() reports it as such.
+    if (rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec)) {
         LOG_INFO("Rebooting");
         reboot();
     }
 
-    if (shutdownAtMsec && millis() > shutdownAtMsec) {
+    if (shutdownAtMsec && Throttle::deadlinePassed(shutdownAtMsec)) {
         shutdownAtMsec = 0;
         shutdown();
     }

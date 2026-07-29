@@ -90,6 +90,63 @@ void test_long_interval_survives_wrap()
     TEST_ASSERT_TRUE(Throttle::hasElapsed(lastRun, dayMs));
 }
 
+// --- deadlinePassed() ---
+
+void test_deadlinePassed_basic()
+{
+    Time::setTestMillis(10000);
+    TEST_ASSERT_FALSE(Throttle::deadlinePassed(10001)); // 1ms in the future
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(10000));  // exactly now counts as passed
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(9999));   // 1ms in the past
+}
+
+// The property the naive `millis() > deadline` compare fails: a deadline set before the wrap must
+// fire once, and only once, after the wrap.
+void test_deadlinePassed_survives_millis_wrap()
+{
+    Time::setTestMillis(0xFFFFFF00u); // 256ms before the wrap
+    const uint32_t deadline = 0xFFFFFF00u + 500;
+
+    TEST_ASSERT_FALSE(Throttle::deadlinePassed(deadline)); // not yet
+    Time::advanceTestMillis(400);                          // 0x00000094 - wrapped, still not due
+    TEST_ASSERT_FALSE(Throttle::deadlinePassed(deadline));
+    Time::advanceTestMillis(100); // exactly due, past the wrap
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(deadline));
+    Time::advanceTestMillis(60000); // stays passed
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(deadline));
+}
+
+// The naive compare's actual failure mode, pinned so a regression is unmistakable: before the wrap
+// the deadline is numerically smaller than now, so `millis() > deadline` would fire it early.
+void test_deadlinePassed_does_not_fire_early_when_deadline_wraps()
+{
+    Time::setTestMillis(0xFFFFFF00u);
+    const uint32_t deadline = 0xFFFFFF00u + 1000; // wraps to 0x000002E8
+
+    TEST_ASSERT_TRUE(deadline < Time::getMillis()); // the naive compare would fire here
+    TEST_ASSERT_FALSE(Throttle::deadlinePassed(deadline));
+}
+
+// Phase 0b: a disarmed sentinel must never reach this arithmetic. deadlinePassed() cannot know
+// about sentinels, so it reports them as passed - which is why callers test armed-ness first. These
+// assertions document that contract rather than a defect.
+void test_deadlinePassed_reads_disarmed_sentinels_as_passed()
+{
+    Time::setTestMillis(6247); // the uptime at which test_packet_signing caught this
+
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(0));          // "inactive" for rebootAtMsec et al
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(UINT32_MAX)); // "inactive" for nagCycleCutoff
+
+    // The guarded form every caller must use.
+    const uint32_t disarmed = 0;
+    TEST_ASSERT_FALSE(disarmed && Throttle::deadlinePassed(disarmed));
+
+    // And it still holds after a wrap.
+    Time::setTestMillis(0xFFFFFF00u);
+    Time::advanceTestMillis(1000);
+    TEST_ASSERT_FALSE(disarmed && Throttle::deadlinePassed(disarmed));
+}
+
 // --- execute() ---
 
 static int executeCount = 0;
@@ -153,6 +210,10 @@ void setup()
     RUN_TEST(test_hasElapsed_boundary_is_inclusive);
     RUN_TEST(test_isWithinTimespan_survives_millis_wrap);
     RUN_TEST(test_long_interval_survives_wrap);
+    RUN_TEST(test_deadlinePassed_basic);
+    RUN_TEST(test_deadlinePassed_survives_millis_wrap);
+    RUN_TEST(test_deadlinePassed_does_not_fire_early_when_deadline_wraps);
+    RUN_TEST(test_deadlinePassed_reads_disarmed_sentinels_as_passed);
     RUN_TEST(test_execute_runs_first_time_then_throttles);
     RUN_TEST(test_execute_survives_millis_wrap);
     exit(UNITY_END());

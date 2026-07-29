@@ -353,7 +353,10 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 #ifdef GPS_DEBUG
     std::string debugmsg = "";
 #endif
-    while (millis() < startTimeout) {
+    // A naive `millis() < startTimeout` exits immediately when the deadline is past the 32-bit
+    // wrap, truncating the read instead of waiting for the ACK. Compare with GPS::getResponse()
+    // just below, which already gets this right.
+    while (!Throttle::deadlinePassed(startTimeout)) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
@@ -1523,7 +1526,7 @@ int32_t GPS::runOnce()
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
-            } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < millis()) {
+            } else if (!hasValidLocation || prev_fixQual == 0 || Throttle::deadlinePassed(fixHoldEnds + GPS_THREAD_INTERVAL)) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
@@ -1551,7 +1554,8 @@ int32_t GPS::runOnce()
         }
 
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
-        bool holdExpired = (fixHoldEnds != 0 && millis() > fixHoldEnds);
+        // 0 means "not holding", so it stays in front of the elapsed test.
+        bool holdExpired = (fixHoldEnds != 0 && Throttle::deadlinePassed(fixHoldEnds));
         if (shouldPublish || tooLong || holdExpired) {
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;

@@ -10,6 +10,7 @@
 #include "input/InputBroker.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "sleep.h"
 #include <cstring>
 
@@ -184,7 +185,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
     {
         const uint32_t now = millis();
 
-        if (now < touchResumeBlockUntilMs) {
+        if (!Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
             resetStateAndStop();
             return OSThread::disable();
         }
@@ -279,8 +280,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
         if (touchLightSleepActive) {
             return;
         }
-        const uint32_t now = millis();
-        if (now < touchResumeBlockUntilMs) {
+        if (!Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
             return;
         }
         if (state != State::REST) {
@@ -579,7 +579,8 @@ bool readTouch(int16_t *x, int16_t *y)
     }
 
     // Let buses and peripherals settle briefly after light-sleep wake.
-    if (millis() < touchResumeBlockUntilMs) {
+    // 0 means "no block active"; !deadlinePassed(0) is false, so it needs no separate armed test.
+    if (!Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
         return false;
     }
 
@@ -601,7 +602,7 @@ bool readTouch(int16_t *x, int16_t *y)
     }
 
     // After a recovery pulse, emit a brief "released" window so gesture state can reset.
-    if (suppressUntilMs != 0 && millis() < suppressUntilMs) {
+    if (suppressUntilMs != 0 && !Throttle::deadlinePassed(suppressUntilMs)) {
         return false;
     }
 #endif

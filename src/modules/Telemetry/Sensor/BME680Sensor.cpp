@@ -7,6 +7,7 @@
 #include "FSCommon.h"
 #include "SPILock.h"
 #include "TelemetrySensor.h"
+#include "mesh/Throttle.h"
 
 #if __has_include(<Adafruit_BME680.h>)
 #include <cmath>
@@ -163,10 +164,13 @@ void BME680Sensor::updateState()
         }
     } else {
         /* Update every STATE_SAVE_PERIOD minutes */
-        if ((stateUpdateCounter * STATE_SAVE_PERIOD) < millis()) {
+        // Interval since the last save, not counter * period compared to uptime: that form broke
+        // across the millis() wrap, and also overflowed uint32 once the counter passed ~198.
+        if (Throttle::hasElapsed(lastStateSaveMs, STATE_SAVE_PERIOD)) {
             LOG_DEBUG("%s state update every %d minutes", sensorName, STATE_SAVE_PERIOD / 60000);
             update = true;
             stateUpdateCounter++;
+            lastStateSaveMs = millis();
         }
     }
 

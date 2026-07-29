@@ -259,8 +259,13 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     const uint32_t now = millis();
     const uint32_t endCalibrationAt = screen->getEndCalibration();
     uint32_t timeRemaining = 0;
-    if (endCalibrationAt > now) {
-        timeRemaining = (endCalibrationAt - now + 999) / 1000;
+    // Signed difference, matching the correct check in ::runOnce(): a plain `endCalibrationAt > now`
+    // collapses the countdown to 0 for the whole calibration whenever the deadline sits on the far
+    // side of the 32-bit millis() wrap. This needs the magnitude, not just the sign, so it takes the
+    // signed-delta form rather than Throttle::deadlinePassed().
+    const int32_t remainingMs = (int32_t)(endCalibrationAt - now);
+    if (remainingMs > 0) {
+        timeRemaining = ((uint32_t)remainingMs + 999) / 1000;
     }
 
     int16_t compassX = 0, compassY = 0;

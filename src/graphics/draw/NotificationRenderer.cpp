@@ -12,6 +12,7 @@
 #include "graphics/images.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "mesh/Throttle.h"
 #if HAS_BUTTON
 #include "input/ButtonThread.h"
 #endif
@@ -233,7 +234,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     // Handle text_input notifications first - they have their own timeout/banner logic
     if (current_notification_type == notificationTypeEnum::text_input) {
         // Check for timeout and reset if needed for text input
-        if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+        if (alertBannerUntil > 0 && Throttle::deadlinePassed(alertBannerUntil)) {
             resetBanner();
             return;
         }
@@ -241,7 +242,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
-    if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+    // 0 means "no banner deadline set", so it has to be tested before the elapsed comparison -
+    // deadlinePassed(0) is true, 0 being ~49 days in the past.
+    if (alertBannerUntil > 0 && Throttle::deadlinePassed(alertBannerUntil)) {
         resetBanner();
     }
 
@@ -1194,7 +1197,9 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 
 bool NotificationRenderer::isOverlayBannerShowing()
 {
-    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+    // alertBannerUntil == 0 means "no deadline", i.e. show indefinitely - checked first so the
+    // sentinel never reaches the comparison.
+    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || !Throttle::deadlinePassed(alertBannerUntil));
 }
 
 } // namespace graphics
