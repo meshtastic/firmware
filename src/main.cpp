@@ -795,10 +795,6 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
 #endif
 
-#ifdef HAS_SDCARD
-    setupSDCard();
-#endif
-
     // Hello
     printInfo();
 #ifdef BUILD_EPOCH
@@ -839,6 +835,11 @@ void setup()
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         tftSetup();
     }
+#endif
+// SD card init after TFT/LGFX so that LGFX owns spi_bus_initialize(SPI3_HOST) first;
+// SPI_HSPI.begin() then adds the card as a second device on the already-running bus.
+#ifdef HAS_SDCARD
+    setupSDCard();
 #endif
 
     router = new ReliableRouter();
