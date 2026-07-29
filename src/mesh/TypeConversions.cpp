@@ -10,6 +10,9 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     meshtastic_NodeInfo info = meshtastic_NodeInfo_init_default;
 
     info.num = lite->num;
+    // NodeInfo.snr (wire) is still proto3 singular float - unlike NodeInfoLite.snr_q4, it has no
+    // presence bit and cannot distinguish a genuine 0 dB from "unknown". nodeInfoLiteHasSnr(lite)
+    // is available if a future NodeInfo revision needs to carry that distinction to clients.
     info.snr = lite->snr;
     info.last_heard = lite->last_heard;
     info.channel = lite->channel;

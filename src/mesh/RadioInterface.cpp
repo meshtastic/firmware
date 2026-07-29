@@ -881,7 +881,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
     if (p->rx_snr != 0.0)
         out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);
-    if (p->rx_rssi != 0)
+    if (p->has_rx_rssi) // rx_rssi has explicit presence; a != 0 check would hide a genuine 0 dBm reading
         out += DEBUG_PORT.mt_sprintf(" rxRSSI=%i", p->rx_rssi);
     if (p->via_mqtt != 0)
         out += DEBUG_PORT.mt_sprintf(" via MQTT");
