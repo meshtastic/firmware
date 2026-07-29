@@ -202,7 +202,9 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
         if (ostream) {
             const auto *vec = static_cast<const std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
             for (auto item : *vec) {
-                item.snr_q4 = (int32_t)(item.snr * 4.0f);
+                // Round rather than truncate: truncation wiped any |SNR| < 0.25 dB to exactly
+                // 0, which collided with the "never stored" sentinel below.
+                item.snr_q4 = (int32_t)lroundf(item.snr * 4.0f);
                 item.snr = 0.0f;
                 if (!pb_encode_tag_for_field(ostream, iter))
                     return false;
@@ -214,8 +216,14 @@ bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostre
             meshtastic_NodeInfoLite node = meshtastic_NodeInfoLite_init_zero;
             auto *vec = static_cast<std::vector<meshtastic_NodeInfoLite> *>(iter->pData);
             if (pb_decode(istream, meshtastic_NodeInfoLite_fields, &node)) {
-                if (node.snr_q4)
+                // snr_q4 = 0 is byte-identical to "field never written" but 0 dB is valid.
+                // NODEINFO_BITFIELD_HAS_SNR_MASK disambiguates going forward; legacy
+                // records (bit clear) treat this as unknown.
+                if (nodeInfoLiteHasSnr(&node)) {
                     node.snr = node.snr_q4 / 4.0f;
+                } else if (node.snr_q4) {
+                    node.snr = node.snr_q4 / 4.0f;
+                }
                 node.snr_q4 = 0;
                 vec->push_back(node);
             }
@@ -638,6 +646,7 @@ NodeDB::NodeDB()
 #endif
     sortMeshDB();
     saveToDisk(saveWhat);
+    bootInitializationInProgress = false;
 }
 
 /**
@@ -831,7 +840,7 @@ void NodeDB::installDefaultNodeDatabase()
 void NodeDB::installDefaultConfig(bool preserveKey = false)
 {
     uint8_t private_key_temp[32];
-    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size > 0;
+    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size == 32;
     if (shouldPreserveKey) {
         memcpy(private_key_temp, config.security.private_key.bytes, config.security.private_key.size);
     }
@@ -1959,6 +1968,13 @@ void NodeDB::installDefaultDeviceState()
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
     owner.has_is_unmessagable = true;
     owner.is_unmessagable = false;
+
+#ifdef HAS_HAM_2M_ONLY
+    // Ham-band-only hardware defaults to licensed operation. The user can still flip this off later
+    // (e.g. a commercial operator on an adjacent allocation who wants to keep encryption on) - we
+    // only set the default here, not on every boot.
+    owner.is_licensed = true;
+#endif
 }
 
 // We reserve a few nodenums for future use
@@ -2193,6 +2209,41 @@ void NodeDB::loadFromDisk()
 
     migrationSavePending = false;
     configDecodeFailed = false;
+    configLoadComplete = false;
+
+#if !USERPREFS_EVENT_MODE
+#ifdef FSCom
+    const char *eventProfileFiles[] = {EVENT_CONFIG_FILE_NAME, EVENT_CHANNEL_FILE_NAME, EVENT_BACKUP_FILE_NAME};
+    spiLock->lock();
+    for (const char *filename : eventProfileFiles) {
+        if (FSCom.exists(filename) && !FSCom.remove(filename))
+            LOG_WARN("Unable to remove stale event profile file %s", filename);
+    }
+    spiLock->unlock();
+#endif
+#endif
+
+#if USERPREFS_EVENT_MODE
+    // Seed only a missing event config; never overwrite normal files after a corrupt event config.
+    bool eventConfigMissing = false;
+    eventProfileStorageUnavailable = false;
+#ifdef FSCom
+    spiLock->lock();
+    eventConfigMissing = !FSCom.exists(configFileName);
+    if (eventConfigMissing) {
+        const size_t totalBytes = fsTotalBytes();
+        const size_t usedBytes = fsUsedBytes();
+        eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
+        if (eventProfileStorageUnavailable) {
+            LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",
+                      static_cast<unsigned>(EVENT_PROFILE_STORAGE_RESERVATION_BYTES),
+                      static_cast<unsigned>(totalBytes >= usedBytes ? totalBytes - usedBytes : 0));
+        }
+    }
+    spiLock->unlock();
+#endif
+    bool initializedEventConfig = false;
+#endif
 
     meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
 
@@ -2382,6 +2433,31 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
+#if USERPREFS_EVENT_MODE
+    if (eventConfigMissing && state != LoadFileResult::LOAD_SUCCESS) {
+        const LoadFileResult eventConfigState = state;
+        const LoadFileResult standardConfigState =
+            loadProto(STANDARD_CONFIG_FILE_NAME, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig),
+                      &meshtastic_LocalConfig_msg, &config);
+        if (standardConfigState == LoadFileResult::LOAD_SUCCESS) {
+            // Preserve the user's identity and non-radio preferences, then
+            // replace only LoRa with this event build's compiled defaults.
+            const meshtastic_LocalConfig standardConfig = config;
+            installDefaultConfig(true);
+            const meshtastic_Config_LoRaConfig eventLora = config.lora;
+            config = standardConfig;
+            config.has_lora = true;
+            config.lora = eventLora;
+            state = LoadFileResult::LOAD_SUCCESS;
+            initializedEventConfig = true;
+            LOG_INFO("Initialized event config without modifying %s", STANDARD_CONFIG_FILE_NAME);
+        } else {
+            // Keep the event load outcome because loadProto() clears config before decoding.
+            // A normal decode failure must not create a replacement identity.
+            state = standardConfigState == LoadFileResult::DECODE_FAILED ? LoadFileResult::DECODE_FAILED : eventConfigState;
+        }
+    }
+#endif
     if (state == LoadFileResult::DECODE_FAILED) {
         // Config file present but undecodable this boot (corruption / torn write / transient decrypt fail).
         // loadProto() already zeroed `config`, so the keypair is gone from RAM; minting a new one would change
@@ -2403,6 +2479,7 @@ void NodeDB::loadFromDisk()
     } else {
         LOG_INFO("Loaded saved config version %d", config.version);
     }
+    configLoadComplete = true;
 
     // Coerce LoRa config fields derived from presets while bootstrapping.
     // Some clients/UI components display bandwidth/spread_factor directly from config even in preset mode.
@@ -2441,6 +2518,15 @@ void NodeDB::loadFromDisk()
 
 #ifdef USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY
     config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
+#endif
+
+#if USERPREFS_EVENT_MODE
+    if (initializedEventConfig) {
+        // This is the first durable event-profile write.  A failed write is
+        // safe: normal files remain untouched and the next event boot retries.
+        if (!saveToDisk(SEGMENT_CONFIG))
+            LOG_ERROR("Unable to persist initial event config");
+    }
 #endif
 
     if (backupSecurity.private_key.size > 0) {
@@ -2557,7 +2643,7 @@ void NodeDB::loadFromDisk()
         const int segments[] = {SEGMENT_CONFIG, SEGMENT_MODULECONFIG, SEGMENT_CHANNELS, SEGMENT_DEVICESTATE,
                                 SEGMENT_NODEDATABASE};
         int toSave = 0;
-        for (int i = 0; i < 5; i++) {
+        for (size_t i = 0; i < sizeof(segments) / sizeof(segments[0]); i++) {
             if (!EncryptedStorage::isEncrypted(filesToCheck[i])) {
                 toSave |= segments[i];
             }
@@ -2574,6 +2660,43 @@ void NodeDB::loadFromDisk()
                 EncryptedStorage::migrateFile(fn);
             }
         }
+
+        // Backups are outside saveToDisk(), but can contain radio profile PSKs. Only event builds
+        // introduce a second backup file, so leave normal-firmware backup handling unchanged.
+#if USERPREFS_EVENT_MODE
+#ifdef FSCom
+        spiLock->lock();
+        const bool activeBackupExists = FSCom.exists(backupFileName);
+        spiLock->unlock();
+        if (activeBackupExists && !EncryptedStorage::isEncrypted(backupFileName)) {
+            LOG_INFO("Migrating %s to encrypted storage", backupFileName);
+            if (!EncryptedStorage::migrateFile(backupFileName)) {
+                LOG_ERROR("Unable to migrate %s to encrypted storage", backupFileName);
+                storageCorruptThisLoad = true;
+            }
+        }
+#endif
+#endif
+
+        // Event firmware keeps the normal radio profile inactive, so migrate it separately.
+#if USERPREFS_EVENT_MODE
+#ifdef FSCom
+        const char *inactiveRadioProfileFiles[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME,
+                                                   STANDARD_BACKUP_FILE_NAME};
+        for (const char *fn : inactiveRadioProfileFiles) {
+            spiLock->lock();
+            const bool exists = FSCom.exists(fn);
+            spiLock->unlock();
+            if (exists && !EncryptedStorage::isEncrypted(fn)) {
+                LOG_INFO("Migrating inactive radio profile %s to encrypted storage", fn);
+                if (!EncryptedStorage::migrateFile(fn)) {
+                    LOG_ERROR("Unable to migrate %s to encrypted storage", fn);
+                    storageCorruptThisLoad = true;
+                }
+            }
+        }
+#endif
+#endif
     }
 #endif
 
@@ -2613,6 +2736,11 @@ void NodeDB::loadFromDisk()
         optInDisableTelemetryBroadcast(moduleConfig);
         moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
         saveToDisk(SEGMENT_MODULECONFIG);
+    }
+
+    if (channels.ensureLicensedOperation()) {
+        LOG_WARN("Licensed operation removed persisted channel encryption/admin access");
+        saveToDisk(SEGMENT_CHANNELS);
     }
 #if ARCH_PORTDUINO
     // set any config overrides
@@ -2708,8 +2836,9 @@ bool NodeDB::disableLockdownToPlaintext()
     // plaintext->encrypted migrate loop above. Order does not matter here;
     // EncryptedStorage::removeLockdownArtifacts() (which deletes the DEK,
     // the commit point) only runs after every file is confirmed plaintext.
-    const char *filesToCheck[] = {configFileName, moduleConfigFileName, channelFileName, deviceStateFileName,
-                                  nodeDatabaseFileName};
+    const char *filesToCheck[] = {STANDARD_CONFIG_FILE_NAME, STANDARD_CHANNEL_FILE_NAME, STANDARD_BACKUP_FILE_NAME,
+                                  EVENT_CONFIG_FILE_NAME,    EVENT_CHANNEL_FILE_NAME,    EVENT_BACKUP_FILE_NAME,
+                                  moduleConfigFileName,      deviceStateFileName,        nodeDatabaseFileName};
     for (const char *fn : filesToCheck) {
         if (!EncryptedStorage::migrateFileToPlaintext(fn)) {
             LOG_ERROR("NodeDB: failed to revert %s to plaintext; aborting disable (device stays in lockdown)", fn);
@@ -2728,6 +2857,15 @@ bool NodeDB::disableLockdownToPlaintext()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+
+    // Only the radio profile is at risk from an unverified config load, so only defer those writes.
+    // Devicestate/nodedb/module writes must still land, otherwise boot-time recovery (e.g. loadFromDisk()
+    // restoring owner fields) is dropped and never retried.
+    if (isRadioProfileFile(filename) &&
+        shouldDeferBootPersistence(bootInitializationInProgress, configLoadComplete, configDecodeFailed)) {
+        LOG_WARN("NodeDB: deferred boot write to %s until config recovery completes", filename);
+        return true;
+    }
 
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
@@ -2981,6 +3119,19 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     spiLock->unlock();
 #endif
 
+#if USERPREFS_EVENT_MODE
+    if (eventProfileStorageUnavailable) {
+        if (saveWhat & SEGMENT_CONFIG) {
+            LOG_WARN("Skipping event config write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CONFIG;
+        }
+        if (saveWhat & SEGMENT_CHANNELS) {
+            LOG_WARN("Skipping event channel write: insufficient profile storage at boot");
+            saveWhat &= ~SEGMENT_CHANNELS;
+        }
+    }
+#endif
+
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
         config.has_display = true;
@@ -3008,6 +3159,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
         moduleConfig.has_statusmessage = true;
+        moduleConfig.has_tak = true;
 #if !MESHTASTIC_EXCLUDE_BEACON
         moduleConfig.has_mesh_beacon = true;
 #endif
@@ -3480,8 +3632,20 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
 
-        if (mp.rx_snr)
+        // Gate on the packet actually having been received over our own radio, not on rx_snr being
+        // truthy, because 0 dB is valid. TRANSPORT_LORA is set only on the real over-the-air RX path
+        // (RadioInterface.cpp); it excludes TRANSPORT_INTERNAL and TRANSPORT_MQTT, while still accepting
+        // an MQTT-origin packet that a gateway rebroadcasts onto LoRa - we genuinely measured that one
+        // ourselves. Mirrors hop histogram below.
+        // Belt-and-braces: also require has_rx_rssi, which every genuine RF-reception site sets
+        // unconditionally alongside rx_snr - unlike PhoneAPI's replay packets, which set TRANSPORT_LORA
+        // too (so the client treats restored history as if heard over the air) but never has_rx_rssi.
+        // Replay packets don't reach updateFrom() today; this check guards against a future change that
+        // routes them back through this path silently recording a replayed rx_snr as a fresh measurement.
+        if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && mp.has_rx_rssi) {
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+            nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_HAS_SNR_MASK, true);
+        }
 
         nodeInfoLiteSetBit(info, NODEINFO_BITFIELD_VIA_MQTT_MASK,
                            mp.via_mqtt); // Store if we received this packet via MQTT
@@ -3493,6 +3657,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // inflate the local mesh-size estimate with non-RF nodes (and they usually carry
         // hop_start==0, landing in the hop-0 bucket that pulls the recommendation lowest), so
         // exclude via_mqtt too.
+        //
+        // The std::max clamp below is deliberate, not a bug: Counting an unproven-but-real neighbor as 0 hops is the
+        // conservative direction. This intentionally does not agree with the `hopsAway >= 0`
+        // gate below, which rejects the same -1 rather than storing it as a fabricated 0 -
+        // the histogram and the stored hops_away serve different purposes.
         if (mp.transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && !mp.via_mqtt &&
             hopScalingModule) {
             uint8_t hopCount = std::max(int8_t(0), getHopsAway(mp));
@@ -4029,15 +4198,14 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
 bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    // Only generate keys for non-licensed users and if the LoRa region is set. The native simulator
-    // boots region-UNSET but still needs a keypair so PKI-encrypted DMs work between sim nodes, so
-    // allow keygen there regardless of region.
+    // Generate identity keys once a LoRa region is set. Licensed operation still needs the identity
+    // key for plaintext signatures, even though the key is never used for PKI encryption.
     bool regionBlocksKeygen = config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #if ARCH_PORTDUINO
     if (portduino_config.lora_module == use_simradio)
         regionBlocksKeygen = false;
 #endif
-    if (owner.is_licensed || regionBlocksKeygen) {
+    if (regionBlocksKeygen) {
         return false;
     }
 
@@ -4087,13 +4255,28 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         LOG_DEBUG("Set DH private key for crypto operations");
         crypto->setDHPrivateKey(config.security.private_key.bytes);
 
-        // Conditionally create new identity based on parameter
-        createNewIdentity();
+        if (createNewIdentity() && owner.is_licensed)
+            licensedIdentityMigrationPending = true;
     }
     return keygenSuccess;
 #else
     return false;
 #endif
+}
+
+bool NodeDB::notifyPendingLicensedIdentityMigration()
+{
+    if (!licensedIdentityMigrationPending || !service)
+        return false;
+    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+    if (!notification)
+        return false;
+    notification->level = meshtastic_LogRecord_Level_WARNING;
+    notification->time = getValidTime(RTCQualityFromNet);
+    snprintf(notification->message, sizeof(notification->message), "%s", LICENSED_IDENTITY_MIGRATION_WARNING);
+    service->sendClientNotification(notification);
+    licensedIdentityMigrationPending = false;
+    return true;
 }
 
 bool NodeDB::createNewIdentity()
@@ -4198,6 +4381,13 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                 channelFile = backup.channels;
                 LOG_DEBUG("Restored channels");
             }
+
+            if (owner.is_licensed && channels.ensureLicensedOperation()) {
+                restoreWhat |= SEGMENT_CHANNELS;
+                LOG_WARN("Licensed operation sanitized restored channel encryption/admin access");
+            }
+            if (restoreWhat & SEGMENT_CHANNELS)
+                channels.onConfigChanged();
 
             success = saveToDisk(restoreWhat);
             if (success) {

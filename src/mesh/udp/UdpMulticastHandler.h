@@ -21,7 +21,7 @@
 class UdpMulticastHandler final
 {
   public:
-    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(224, 0, 0, 69); }
+    UdpMulticastHandler() : isRunning(false) { udpIpAddress = IPAddress(239, 0, 0, 69); }
 
     void start()
     {
@@ -84,9 +84,15 @@ class UdpMulticastHandler final
             mp.pki_encrypted = false;
             mp.public_key.size = 0;
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
-            // Unset received SNR/RSSI
+            if (!p)
+                return;
+            // Unset received SNR/RSSI - no local RF measurement exists for a UDP arrival. rx_rssi
+            // has explicit presence, so also clear has_rx_rssi: `mp` may have arrived already
+            // carrying a real measurement from whichever node forwarded it onto UDP, and leaving
+            // the presence bit set would misrepresent that stale value as "0 dBm over UDP".
             p->rx_snr = 0;
             p->rx_rssi = 0;
+            p->has_rx_rssi = false;
             router->enqueueReceivedMessage(p.release());
         }
     }
