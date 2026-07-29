@@ -380,8 +380,9 @@ template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-// Undo the ARCH_PORTDUINO macro aliases. This would pollute
-// `portduino_config.portduino_config.rfswitch_dio_pins`.
+// Undo the ARCH_PORTDUINO aliases for `portduino_config.rfswitch_dio_pins` /
+// `.rfswitch_table` so they do not leak into the interface translation units
+// included after this one by InterfacesTemplates.cpp.
 #undef rfswitch_dio_pins
 #undef rfswitch_table
 #endif

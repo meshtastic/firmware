@@ -11,6 +11,8 @@
 
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
+#include <cstdio>  // snprintf
+#include <cstdlib> // setenv
 #include <thread>
 #endif
 
@@ -60,8 +62,8 @@ void tftSetup(void)
         } else
 #elif defined(USE_FRAMEBUFFER)
         if (portduino_config.displayPanel == fb) {
-            // Config-driven display rotation:, amount from yaml Display.OffsetRotate
-            // (1=90°, 2=180°, 3=270°)
+            // Config-driven display rotation, amount from yaml Display.OffsetRotate
+            // (1=90 deg, 2=180 deg, 3=270 deg)
             char rbuf[4];
             snprintf(rbuf, sizeof(rbuf), "%d", portduino_config.displayRotate ? (portduino_config.displayOffsetRotate & 3) : 0);
             setenv("MESHTASTIC_FB_ROTATION", rbuf, 1);
