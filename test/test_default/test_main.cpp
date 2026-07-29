@@ -190,6 +190,7 @@ void test_configured_or_default_hop_limit()
 
 #if USERPREFS_EVENT_MODE
     TEST_ASSERT_EQUAL_UINT8(Default::eventModeHopLimit, result);
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeHopLimit, Default::getConfiguredOrDefaultHopLimit(Default::eventModeHopLimit));
 #else
     TEST_ASSERT_EQUAL_UINT8(HOP_MAX, result);
 #endif
