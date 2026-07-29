@@ -1227,6 +1227,7 @@ NodeNum Router::getNodeNum()
 
 bool Router::enqueueDeferredLocal(meshtastic_MeshPacket *p, RxSource src)
 {
+    concurrency::LockGuard g(&deferredLock);
     if (deferredLocalCount >= deferredLocalCapacity)
         return false;
     uint8_t tail = (deferredLocalHead + deferredLocalCount) % deferredLocalCapacity;
@@ -1238,6 +1239,7 @@ bool Router::enqueueDeferredLocal(meshtastic_MeshPacket *p, RxSource src)
 
 bool Router::dequeueDeferredLocal(DeferredLocal &out)
 {
+    concurrency::LockGuard g(&deferredLock);
     if (deferredLocalCount == 0)
         return false;
     out = deferredLocalQueue[deferredLocalHead];
@@ -1249,7 +1251,12 @@ bool Router::dequeueDeferredLocal(DeferredLocal &out)
 void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
 {
     // Top level: handle synchronously, exactly as before the depth guard existed.
-    if (handleDepth == 0) {
+    bool nested;
+    {
+        concurrency::LockGuard g(&deferredLock);
+        nested = handleDepth > 0;
+    }
+    if (!nested) {
         handleReceived(p, src);
         return;
     }
@@ -1278,21 +1285,25 @@ void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
  */
 void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 {
-    handleDepth++;
+    {
+        concurrency::LockGuard g(&deferredLock);
+        handleDepth++;
 #ifdef PIO_UNIT_TESTING
-    if (handleDepth > maxHandleDepthObserved)
-        maxHandleDepthObserved = handleDepth;
+        if (handleDepth > maxHandleDepthObserved)
+            maxHandleDepthObserved = handleDepth;
 #endif
+    }
 
     dispatchReceived(p, src);
 
-    // Only the outermost frame drains. Deferred packets were produced by modules sending from
-    // inside dispatchReceived()'s callModules(); process them here, after the triggering frame has
-    // unwound, so a second handleReceived() never sits on top of a module handler. handleDepth
-    // stays >= 1 through the drain, so a drained packet whose own modules send more loopback
-    // packets enqueues them for this same loop rather than recursing: the stack stays flat and
-    // processing is breadth-first.
-    if (handleDepth == 1) {
+    // Only the outermost frame drains, after the triggering frame unwound, so a second
+    // handleReceived() never sits on a module handler. Depth stays >=1, keeping the drain flat.
+    bool outermost;
+    {
+        concurrency::LockGuard g(&deferredLock);
+        outermost = handleDepth == 1;
+    }
+    if (outermost) {
         DeferredLocal d;
         while (dequeueDeferredLocal(d)) {
             dispatchReceived(d.p, d.src);
@@ -1300,7 +1311,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         }
     }
 
-    handleDepth--;
+    {
+        concurrency::LockGuard g(&deferredLock);
+        handleDepth--;
+    }
 }
 
 void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)

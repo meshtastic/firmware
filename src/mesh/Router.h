@@ -7,6 +7,7 @@
 #include "PacketHistory.h"
 #include "PointerQueue.h"
 #include "RadioInterface.h"
+#include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
 #include <memory>
 
@@ -191,6 +192,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Depth of handleReceived() frames currently on the stack. >0 means a module is dispatching,
     /// so a locally-sent loopback packet must be deferred rather than handled synchronously.
     uint8_t handleDepth = 0;
+
+    /// Guards handleDepth and the deferred ring below. nRF52 drives the router from the BLE task as
+    /// well as the loop task, so both are read-modify-written from two tasks.
+    concurrency::Lock deferredLock;
 
     /// A local loopback packet whose handleReceived() was deferred because it was produced from
     /// inside callModules(). The queue owns the packet; its RxSource travels with it so the drain
