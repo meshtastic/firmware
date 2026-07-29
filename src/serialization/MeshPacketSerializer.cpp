@@ -420,7 +420,8 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     }
 
     jsonObj["id"] = (Json::UInt)mp->id;
-    jsonObj["timestamp"] = (Json::UInt)mp->rx_time;
+    // Emit 0 rather than leak a millis() placeholder when has_rx_time is false.
+    jsonObj["timestamp"] = mp->has_rx_time ? (Json::UInt)mp->rx_time : 0;
     jsonObj["to"] = (Json::UInt)mp->to;
     jsonObj["from"] = (Json::UInt)mp->from;
     jsonObj["channel"] = (Json::UInt)mp->channel;
@@ -452,7 +453,8 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
 
     jsonObj["id"] = (Json::UInt)mp->id;
     jsonObj["time_ms"] = (double)millis();
-    jsonObj["timestamp"] = (Json::UInt)mp->rx_time;
+    // Emit 0 rather than leak a millis() placeholder when has_rx_time is false.
+    jsonObj["timestamp"] = mp->has_rx_time ? (Json::UInt)mp->rx_time : 0;
     jsonObj["to"] = (Json::UInt)mp->to;
     jsonObj["from"] = (Json::UInt)mp->from;
     jsonObj["channel"] = (Json::UInt)mp->channel;

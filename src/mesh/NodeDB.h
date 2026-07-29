@@ -166,10 +166,15 @@ inline bool isRadioProfileFile(const char *filename)
            strcmp(filename, backupFileName) == 0;
 }
 
+/// "No trustworthy arrival time", as distinct from "zero seconds ago". Deliberately huge so the
+/// display formatters fall into their existing unknown-age branches ("unknown age" / "?").
+inline constexpr uint32_t SINCE_UNKNOWN = UINT32_MAX;
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
-/// Given a packet, return how many seconds in the past (vs now) it was received
+/// Given a packet, return how many seconds in the past (vs now) it was received,
+/// or SINCE_UNKNOWN if it carries no trustworthy rx_time.
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
 /// Outcome of mapping a single on-wire last-byte (next_hop / relay_node) back to a full NodeNum.

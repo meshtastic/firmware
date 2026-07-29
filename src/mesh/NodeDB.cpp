@@ -3237,6 +3237,11 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 {
+    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // wall-clock, and don't pass it off as "just now" either.
+    if (!p->has_rx_time)
+        return SINCE_UNKNOWN;
+
     uint32_t now = getTime();
 
     int delta = (int)(now - p->rx_time);
@@ -3633,7 +3638,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             return;
         }
 
-        if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
+        // Gate on has_rx_time, not truthiness - rx_time may hold a millis() placeholder.
+        if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
 
         // Gate on the packet actually having been received over our own radio, not on rx_snr being

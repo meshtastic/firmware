@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 
 #include "configuration.h"
@@ -269,6 +270,19 @@ PacketId generatePacketId()
     return id;
 }
 
+RxTimeStamp computeRxTimeStamp()
+{
+    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+    return {haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis(), haveTime};
+}
+
+void stampRxTime(meshtastic_MeshPacket *p)
+{
+    const RxTimeStamp ts = computeRxTimeStamp();
+    p->rx_time = ts.time;
+    p->has_rx_time = ts.valid;
+}
+
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
@@ -280,8 +294,8 @@ meshtastic_MeshPacket *Router::allocForSending()
     p->to = NODENUM_BROADCAST;
     p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     p->id = generatePacketId();
-    p->rx_time =
-        getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
+    // Just in case we process the packet locally - make sure it has a timestamp.
+    stampRxTime(p);
 
     return p;
 }
@@ -1305,12 +1319,15 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     if (src == RX_SRC_RADIO)
         applyRoutingAuthCache(p);
 
-    // Also, we should set the time from the ISR and it should have msec level resolution.
     // Keep the decoded working packet and encrypted MQTT copy on the same local arrival timestamp.
-    const uint32_t rxTime = getValidTime(RTCQualityFromNet);
-    p->rx_time = rxTime;
-    if (p_encrypted)
-        p_encrypted->rx_time = rxTime;
+    // See computeRxTimeStamp() for the placeholder/has_rx_time semantics.
+    const RxTimeStamp rxStamp = computeRxTimeStamp();
+    p->rx_time = rxStamp.time;
+    p->has_rx_time = rxStamp.valid;
+    if (p_encrypted) {
+        p_encrypted->rx_time = rxStamp.time;
+        p_encrypted->has_rx_time = rxStamp.valid;
+    }
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     auto decodedState = perhapsDecode(p);
@@ -1443,7 +1460,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #if ARCH_PORTDUINO
     // Even ignored packets get logged in the trace
     if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
-        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+        // Store the arrival timestamp for the phone before it's traced.
+        stampRxTime(p);
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif
