@@ -681,15 +681,9 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         if (compatible)
             return true;
 
-        // In Balanced, preserve legacy unsigned-unicast compatibility and only reject the class a
-        // signing node always signs: a non-PKI broadcast whose signed encoding would still fit the
-        // LoRa frame. Canonical sizing removes unknown protobuf fields before mirroring the
-        // sender-side signedDataFits() gate, so this counts the same fields that gate counted.
-        // Unicast packets and broadcasts too big to carry a signature are never signed, so they
-        // must not be hard-failed here even for a known signer (PKI already returned above).
-        // isKnownXeddsaSigner consults the warm tier too: a signer evicted from the hot store
-        // must not become impersonatable via unsigned broadcasts until it is re-heard.
-        if (nodeDB->isKnownXeddsaSigner(p->from) && isBroadcast(p->to)) {
+        // Balanced rejects only what a signer always signs: non-PKI broadcasts whose signed encoding
+        // would have fit, plus unicasts on ham where licensed senders sign too. Mirrors perhapsEncode.
+        if (nodeDB->isKnownXeddsaSigner(p->from) && (isBroadcast(p->to) || owner.is_licensed)) {
             size_t canonicalSize;
             if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
