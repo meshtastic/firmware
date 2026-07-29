@@ -1227,7 +1227,6 @@ NodeNum Router::getNodeNum()
 
 bool Router::enqueueDeferredLocal(meshtastic_MeshPacket *p, RxSource src)
 {
-    concurrency::LockGuard g(&deferredLock);
     if (deferredLocalCount >= deferredLocalCapacity)
         return false;
     uint8_t tail = (deferredLocalHead + deferredLocalCount) % deferredLocalCapacity;
@@ -1239,7 +1238,6 @@ bool Router::enqueueDeferredLocal(meshtastic_MeshPacket *p, RxSource src)
 
 bool Router::dequeueDeferredLocal(DeferredLocal &out)
 {
-    concurrency::LockGuard g(&deferredLock);
     if (deferredLocalCount == 0)
         return false;
     out = deferredLocalQueue[deferredLocalHead];
@@ -1265,8 +1263,25 @@ void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
     // handleReceived() drains it once the current dispatch unwinds, instead of stacking another
     // handleReceived() frame on top of the module handler (nRF52 stack overflow on config save).
     meshtastic_MeshPacket *copy = packetPool.allocCopy(*p);
-    if (copy && enqueueDeferredLocal(copy, src))
-        return;
+    if (copy) {
+        // Re-check depth under the lock that also gates the drain's decrement, so a drain finishing
+        // while we allocated cannot leave this copy stranded in the ring.
+        bool stillNested = false, queued = false;
+        {
+            concurrency::LockGuard g(&deferredLock);
+            stillNested = handleDepth > 0;
+            if (stillNested)
+                queued = enqueueDeferredLocal(copy, src);
+        }
+        if (queued)
+            return;
+        if (!stillNested) {
+            // The drain finished first, so nothing would pick this up; deliver it here instead.
+            dispatchReceived(copy, src);
+            packetPool.release(copy);
+            return;
+        }
+    }
 
     // Pool exhausted or queue full: drop the deferral. Leak-free and degraded but safe - the
     // packet still followed its normal non-loopback path (SHOULD_RELEASE, or the TX path for a
@@ -1304,8 +1319,17 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         outermost = handleDepth == 1;
     }
     if (outermost) {
-        DeferredLocal d;
-        while (dequeueDeferredLocal(d)) {
+        // Drop to zero only while the ring is observed empty under the lock, so an enqueuer that
+        // re-checks depth either lands in the ring we still drain, or sees 0 and delivers itself.
+        for (;;) {
+            DeferredLocal d;
+            {
+                concurrency::LockGuard g(&deferredLock);
+                if (!dequeueDeferredLocal(d)) {
+                    handleDepth--;
+                    return;
+                }
+            }
             dispatchReceived(d.p, d.src);
             packetPool.release(d.p);
         }

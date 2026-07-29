@@ -215,8 +215,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     uint8_t deferredLocalCount = 0; // entries currently queued
 
     /// Queue a deferred local packet. Returns false (and queues nothing) when full.
+    /// Caller must hold deferredLock: the enqueue decision is atomic with the drain's depth update.
     bool enqueueDeferredLocal(meshtastic_MeshPacket *p, RxSource src);
     /// Pop the oldest deferred local packet into out. Returns false when empty.
+    /// Caller must hold deferredLock.
     bool dequeueDeferredLocal(DeferredLocal &out);
 
     /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
