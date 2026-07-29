@@ -927,7 +927,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.override_frequency = USERPREFS_LORACONFIG_OVERRIDE_FREQUENCY;
 #endif
 
+#if USERPREFS_EVENT_MODE
+    config.lora.hop_limit = Default::eventModeHopLimit;
+#else
     config.lora.hop_limit = HOP_RELIABLE;
+#endif
 #ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
     config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
