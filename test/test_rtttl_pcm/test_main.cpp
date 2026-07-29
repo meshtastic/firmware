@@ -1,3 +1,8 @@
+// Arduino.h must come first: it declares setup()/loop() with the linkage portduino's
+// main.cpp expects. Without it this file's definitions get C++ mangling and the
+// coverage build fails to link (RtttlPcm.h itself is deliberately Arduino-free).
+#include <Arduino.h>
+
 #include "audio/RtttlPcm.h"
 #include <cstring>
 #include <string>
