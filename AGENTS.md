@@ -81,7 +81,15 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 - **Never edit or commit files under `src/mesh/generated/`.** They are regenerated from the [`meshtastic/protobufs`](https://github.com/meshtastic/protobufs) repo by the `update_protobufs.yml` workflow (entry point: `bin/regen-protos.sh`). Local edits will be overwritten and create merge conflicts. If a `.proto` change is needed, open a PR against the protobufs repo first, then let the workflow re-sync this repo.
 - **`confirm=True` on destructive MCP tools is a real gate, not a formality.** Don't bypass it via auto-approve settings.
 - **Keep code comments minimal - one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
-- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check - raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
+- **Never compare against `millis()` directly. Use `Throttle`.** `src/mesh/Throttle.h` is the sanctioned way to ask about time, and CI enforces this (`millis-deadline-check` in `.github/workflows/test_native.yml` fails the PR on a new `millis() >` / `< millis()` comparison).
+  - `Throttle::isWithinTimespanMs(lastMs, intervalMs)` - true while still inside the cooldown.
+  - `Throttle::hasElapsed(lastMs, intervalMs)` - its complement, true once the interval has passed (inclusive `>=`). Prefer this to spelling `!isWithinTimespanMs(...)`.
+  - `Throttle::execute(&lastMs, intervalMs, func)` - function-pointer form that updates the timestamp on fire.
+  - `Throttle::deadlinePassed(deadlineMs)` - for a stored absolute deadline that cannot be re-expressed as "interval since an event".
+
+  Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: for ~24 days after the 32-bit wrap it either stalls the action or fires it immediately. All four helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), so all ~94 of its call sites are time-injectable and a native test can drive the wrap with `Time::setTestMillis()`.
+
+  **Sentinel hazard.** If a deadline variable also encodes "inactive" (`0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff`), test that sentinel _before_ the elapsed comparison - every such value is arithmetically far in the past, so a correct comparison fires on it immediately. Write `if (deadline && Throttle::deadlinePassed(deadline))`.
 
 ## Typical agent workflows
 

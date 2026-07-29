@@ -336,7 +336,15 @@ firmware/
 - Use `assert()` for invariants that should never fail
 - C++17 features are available (`std::optional`, structured bindings, `if constexpr`, etc.)
 - **Keep code comments minimal - one or two lines, max.** Comment only when the _why_ isn't obvious from the code; never restate what the next line does. No multi-paragraph block comments explaining straightforward changes. The diff and commit message carry the rationale; the code carries the behavior.
-- **Use `Throttle` for time-based rate limiting, not raw `millis()` math.** `src/mesh/Throttle.h` provides `Throttle::isWithinTimespanMs(lastMs, intervalMs)` (returns true while inside the cooldown) and `Throttle::execute(&lastMs, intervalMs, func)` (function-pointer form that updates the timestamp on fire). Use these for any "did N ms pass since X" check - raw `millis() > lastMs + N` is rollover-unsafe (breaks after ~49.7 days) and inconsistent with the rest of the codebase. The helpers compute `now - lastMs` with unsigned subtraction, which wraps correctly.
+- **Never compare against `millis()` directly. Use `Throttle`.** `src/mesh/Throttle.h` is the sanctioned way to ask about time, and CI enforces this (`millis-deadline-check` in `.github/workflows/test_native.yml` fails the PR on a new `millis() >` / `< millis()` comparison).
+  - `Throttle::isWithinTimespanMs(lastMs, intervalMs)` - true while still inside the cooldown.
+  - `Throttle::hasElapsed(lastMs, intervalMs)` - its complement, true once the interval has passed (inclusive `>=`). Prefer this to spelling `!isWithinTimespanMs(...)`.
+  - `Throttle::execute(&lastMs, intervalMs, func)` - function-pointer form that updates the timestamp on fire.
+  - `Throttle::deadlinePassed(deadlineMs)` - for a stored absolute deadline that cannot be re-expressed as "interval since an event". Uses an unsigned half-range compare; reads deadlines more than ~24.8 days out as already passed, which no interval in this firmware approaches (the longest is 24 h).
+
+  Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: for ~24 days after the 32-bit wrap it either stalls the action or fires it immediately. All four helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), which means every one of its ~94 call sites is time-injectable - a native test can drive `Time::setTestMillis(0xFFFFFF00)` across the wrap. There is deliberately no 64-bit millis; see the note in `UptimeClock.h`.
+
+  **Sentinel hazard.** If a deadline variable also encodes "inactive" - `0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff` - test that sentinel _before_ the elapsed comparison. Every such value is arithmetically far in the past, so a correct comparison reads it as "expired" and fires immediately: `rebootAtMsec = -1` meaning "never" is what would have become a reboot loop. Write `if (deadline && Throttle::deadlinePassed(deadline))`, and never fold the sentinel into the helper.
 
 ### Naming Conventions
 
