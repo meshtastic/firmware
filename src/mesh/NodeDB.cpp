@@ -3504,10 +3504,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
-    // Only a signed update may change the identity of a node that has proven it signs; our own record is
-    // exempt. Checked before getOrCreateMeshNode so a refused update cannot evict or write the warm tier.
-    // isKnownXeddsaSigner consults the warm tier as well: getMeshNode() alone misses a signer that
-    // has been evicted, and this check runs before getOrCreateMeshNode() rehydrates it.
+    // Only a signed update may change the identity of a proven signer; our own record is exempt.
+    // Checked before getOrCreateMeshNode so a refusal cannot evict; isKnownXeddsaSigner covers the warm tier.
     if (nodeId != getNodeNum() && isKnownXeddsaSigner(nodeId) && !xeddsaSigned) {
         LOG_WARN("Refusing unsigned identity update for node 0x%08x that previously signed", nodeId);
         return false;

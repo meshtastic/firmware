@@ -688,7 +688,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
             if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
             if (canonicalSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
-                LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
+                LOG_WARN("Dropping unsigned packet from 0x%08x that previously signed", p->from);
                 return false;
             }
         }
