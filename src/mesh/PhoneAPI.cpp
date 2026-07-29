@@ -1855,7 +1855,12 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         p.want_ack = true;
     }
 
-    lastPortNumToRadio[p.decoded.portnum] = millis();
+    // Only the rate-limited ports above are ever read back, so recording any other portnum would let
+    // a client grow this map without bound by cycling through them.
+    if (IS_ONE_OF(p.decoded.portnum, meshtastic_PortNum_TRACEROUTE_APP, meshtastic_PortNum_POSITION_APP,
+                  meshtastic_PortNum_WAYPOINT_APP, meshtastic_PortNum_ALERT_APP, meshtastic_PortNum_TELEMETRY_APP,
+                  meshtastic_PortNum_TEXT_MESSAGE_APP))
+        lastPortNumToRadio[p.decoded.portnum] = millis();
     service->handleToRadio(p);
     return true;
 }
