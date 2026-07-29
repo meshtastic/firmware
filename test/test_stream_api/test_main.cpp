@@ -566,16 +566,35 @@ static bool drainHandshakeForPacketFrom(PhoneAPITestShim &api, NodeNum from, mes
     return false;
 }
 
+/// Swaps in a scratch NodeDB and the injected clock, restoring both plus the RTC on destruction.
+/// Unity's TEST_ASSERT longjmps out on failure, so cleanup must not live at the end of the test.
+class ScopedTimeFixture
+{
+  public:
+    ScopedTimeFixture(uint32_t startMillis) : previous(nodeDB)
+    {
+        resetRTCStateForTests();
+        nodeDB = &instance;
+        Time::setTestMillis(startMillis);
+    }
+    ~ScopedTimeFixture()
+    {
+        nodeDB = previous;
+        Time::useRealClock();
+        resetRTCStateForTests();
+    }
+
+  private:
+    NodeDB instance;
+    NodeDB *previous;
+};
+
 // Time given at the start of the handshake, before the queued packet is drained: reconciliation
 // (fired by the RTC quality crossing hook in RTC.cpp) rewrites the placeholder in place.
 static void test_time_given_at_handshake_start_reconciles_queued_packet(void)
 {
-    resetRTCStateForTests();
     ScopedMeshService scopedService;
-    NodeDB testNodeDB;
-    NodeDB *const savedNodeDB = nodeDB;
-    nodeDB = &testNodeDB;
-    Time::setTestMillis(5000);
+    ScopedTimeFixture timeFixture(5000);
 
     const NodeNum sender = 0x12345678;
     queuePendingTimePlaceholderPacket(sender, 2000); // "received" 3s before the test's current millis()
@@ -595,21 +614,14 @@ static void test_time_given_at_handshake_start_reconciles_queued_packet(void)
     TEST_ASSERT_UINT32_WITHIN(2, (uint32_t)networkTime.tv_sec - 3, delivered.rx_time);
 
     api.close();
-    nodeDB = savedNodeDB;
-    Time::useRealClock();
-    resetRTCStateForTests();
 }
 
 // Time given at the end - after the queued packet already left via the handshake: the delivered
 // copy keeps its unresolved placeholder, since reconciliation can only rewrite what's still queued.
 static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packet(void)
 {
-    resetRTCStateForTests();
     ScopedMeshService scopedService;
-    NodeDB testNodeDB;
-    NodeDB *const savedNodeDB = nodeDB;
-    nodeDB = &testNodeDB;
-    Time::setTestMillis(5000);
+    ScopedTimeFixture timeFixture(5000);
 
     const NodeNum sender = 0x12345678;
     queuePendingTimePlaceholderPacket(sender, 2000);
@@ -636,9 +648,6 @@ static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packe
     TEST_ASSERT_EQUAL_UINT32(0u, delivered.rx_time);
 
     api.close();
-    nodeDB = savedNodeDB;
-    Time::useRealClock();
-    resetRTCStateForTests();
 }
 
 /// Unity per-test setup; fixtures are local to each test.
