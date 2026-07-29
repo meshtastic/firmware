@@ -20,6 +20,9 @@
 #include "meshUtils.h" // for pow_of_2
 #include "sleep.h"
 #include <assert.h>
+#ifdef ARCH_ESP32
+#include "driver/gpio.h"
+#endif
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <string.h>
@@ -373,6 +376,13 @@ extern SPIClass SPI1;
 std::unique_ptr<RadioInterface> initLoRa()
 {
     std::unique_ptr<RadioInterface> rIf = nullptr;
+
+#ifdef ARCH_ESP32
+    // RadioLib calls detachInterrupt() on the IRQ pin before attaching a new one. On ESP32 this
+    // invokes gpio_isr_handler_remove() which requires gpio_install_isr_service() to have been
+    // called first. Install it here so the call is a no-op if it arrives again later.
+    gpio_install_isr_service(0);
+#endif
 
 #if ARCH_PORTDUINO
     SPISettings loraSpiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);

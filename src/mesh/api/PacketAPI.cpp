@@ -17,26 +17,19 @@ PacketAPI *PacketAPI::create(PacketServer *_server)
 }
 
 PacketAPI::PacketAPI(PacketServer *_server)
-    : concurrency::OSThread("PacketAPI"), isConnected(false), programmingMode(false), server(_server)
+    : concurrency::OSThread("PacketAPI"), isConnected(false), server(_server)
 {
     api_type = TYPE_PACKET;
 }
 
 int32_t PacketAPI::runOnce()
 {
-    bool success = false;
-#ifndef ARCH_PORTDUINO
-    if (config.bluetooth.enabled) {
-        if (!programmingMode) {
-            // in programmingMode we don't send any packets to the client except this one notify
-            programmingMode = true;
-            success = notifyProgrammingMode();
-        }
-    } else
-#endif
-    {
-        success = sendPacket();
-    }
+    // Always run the full config sync regardless of bluetooth state. The device-ui (MUI) must
+    // receive deviceuiConfig first so its state advances past eBootScreenDone before the
+    // bluetooth config arrives; only then does updateBluetoothConfig() skip enterProgrammingMode().
+    // Sending only the bluetooth config via notifyProgrammingMode() when BT is enabled caused the
+    // TFT screen to be permanently stuck on the ">> Programming mode <<" screen.
+    bool success = sendPacket();
     success |= receivePacket();
     return success ? 10 : 50;
 }
@@ -107,21 +100,6 @@ bool PacketAPI::sendPacket(void)
     return false;
 }
 
-bool PacketAPI::notifyProgrammingMode(void)
-{
-    // tell the client we are in programming mode by sending only the bluetooth config state
-    LOG_INFO("force client into programmingMode");
-    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.id = nodeDB->getNodeNum();
-    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_tag;
-    fromRadioScratch.config.which_payload_variant = meshtastic_Config_bluetooth_tag;
-    fromRadioScratch.config.payload_variant.bluetooth = config.bluetooth;
-    return server->sendPacket(DataPacket<meshtastic_FromRadio>(0, fromRadioScratch));
-}
-
-/**
- * return true if we got (once!) contact from our client and the server send queue is not full
- */
 bool PacketAPI::checkIsConnected()
 {
     isConnected |= server->hasData();
