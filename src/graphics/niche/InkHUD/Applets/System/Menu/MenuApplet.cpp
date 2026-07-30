@@ -632,9 +632,12 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         const uint8_t index = cursor - 1;
         constexpr uint8_t optionCount = sizeof(SMART_INTERVAL_OPTIONS) / sizeof(SMART_INTERVAL_OPTIONS[0]);
         if (index < optionCount && config.position.broadcast_smart_minimum_interval_secs != SMART_INTERVAL_OPTIONS[index].value) {
-            // Read live by PositionModule::minimumTimeThreshold every send - no reboot needed.
+            // NOT read live, despite the sibling distance option below being so:
+            // PositionModule::minimumTimeThreshold is a const member initialised once when the
+            // module is constructed, so this only takes effect after a restart. Matches the
+            // AdminModule path, which also reboots for this field.
             config.position.broadcast_smart_minimum_interval_secs = SMART_INTERVAL_OPTIONS[index].value;
-            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         }
         break;
     }

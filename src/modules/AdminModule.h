@@ -51,6 +51,13 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     int lastSaveWhatForTest = 0;
 #endif
 
+    // While a transaction is open, saveChanges() defers the write - so the per-field reboot and
+    // radio-reload decisions computed in handleSetConfig would otherwise be thrown away, and the
+    // commit would fall back to the defaults (both true) and always reboot + reconfigure. These
+    // accumulate the deferred decisions so the commit does the least work the batch actually needs.
+    bool deferredShouldReboot = false;
+    bool deferredRadioAffected = false;
+
     uint8_t session_passkey[8] = {0};
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time

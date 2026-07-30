@@ -2315,6 +2315,19 @@ static void test_toggleTelemetryScreen_togglesBackOffAgain()
     TEST_ASSERT_FALSE(moduleConfig.telemetry.power_screen_enabled);
 }
 
+// saveToDisk(SEGMENT_MODULECONFIG) only serialises a sub-message whose has_* flag is set, so a
+// field can be assigned, "saved", and still never reach disk - exactly the TAK bug fixed upstream
+// in #11216. Drive the real toggle and assert the save path sets has_telemetry, rather than
+// asserting values the test itself just wrote.
+static void test_toggleTelemetryScreen_savePathSetsHasTelemetry()
+{
+    moduleConfig.has_telemetry = false;
+
+    graphics::menuHandler::toggleTelemetryScreen(moduleConfig.telemetry.air_quality_screen_enabled);
+
+    TEST_ASSERT_TRUE(moduleConfig.has_telemetry);
+}
+
 // -----------------------------------------------------------------------
 // Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
 // -----------------------------------------------------------------------
@@ -2551,6 +2564,7 @@ void setup()
     RUN_TEST(test_toggleTelemetryScreen_persistsWithoutRadioReloadOrReboot);
     RUN_TEST(test_toggleTelemetryScreen_togglesBackOffAgain);
     RUN_TEST(test_setSmartPositionEnabled_persistsWithoutReboot);
+    RUN_TEST(test_toggleTelemetryScreen_savePathSetsHasTelemetry);
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
