@@ -877,11 +877,11 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += DEBUG_PORT.mt_sprintf(" len=%d", p->encrypted.size + sizeof(PacketHeader));
     }
 
-    if (p->rx_time != 0)
+    if (p->has_rx_time) // rx_time has explicit presence; a millis() placeholder isn't a real reading to print
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
     if (p->rx_snr != 0.0)
         out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);
-    if (p->rx_rssi != 0)
+    if (p->has_rx_rssi) // rx_rssi has explicit presence; a != 0 check would hide a genuine 0 dBm reading
         out += DEBUG_PORT.mt_sprintf(" rxRSSI=%i", p->rx_rssi);
     if (p->via_mqtt != 0)
         out += DEBUG_PORT.mt_sprintf(" via MQTT");
@@ -1022,7 +1022,8 @@ const RegionInfo *RadioInterface::regionSwapForPreset(meshtastic_Config_LoRaConf
  * receives the human-readable failure reason.
  * Returns false if not compatible.
  */
-bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen)
+bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig, char *errBuf, size_t errLen,
+                                       bool prospectiveLicensedOwner)
 {
     const RegionInfo *newRegion = getRegion(loraConfig.region);
 
@@ -1034,7 +1035,7 @@ bool RadioInterface::checkConfigRegion(const meshtastic_Config_LoRaConfig &loraC
     }
 
     // If you are not licensed, you can't use ham regions.
-    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed) {
+    if (newRegion->profile->licensedOnly && !devicestate.owner.is_licensed && !prospectiveLicensedOwner) {
         if (errBuf)
             snprintf(errBuf, errLen, "Region %s requires licensed mode", newRegion->name);
         return false;

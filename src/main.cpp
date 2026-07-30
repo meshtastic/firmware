@@ -212,7 +212,7 @@ using namespace concurrency;
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
 
 // We always create a screen object, but we only init it if we find the hardware
-graphics::Screen *screen = nullptr;
+std::unique_ptr<graphics::Screen> screen = nullptr;
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
@@ -966,15 +966,15 @@ void setup()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
 #if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
-        screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+        screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
             config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+            screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
         }
 #else
         if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
-            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+            screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
 #endif
     }
 #endif // HAS_SCREEN
@@ -1078,6 +1078,7 @@ void setup()
         nodeDB->hasWarned = true;
     }
 #endif
+    nodeDB->notifyPendingLicensedIdentityMigration();
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputBroker->Init();
@@ -1279,6 +1280,8 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
+    // Range test is always excluded as of 2.8
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_RANGETEST_CONFIG;
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
