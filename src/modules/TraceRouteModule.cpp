@@ -12,7 +12,7 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 TraceRouteModule *traceRouteModule;
 
@@ -305,6 +305,15 @@ void TraceRouteModule::updateNextHops(const meshtastic_MeshPacket &p, meshtastic
         }
         uint8_t nextHopByte = nodeDB->getLastByteOfNodeNum(nextHop);
 
+        // The route array is unauthenticated payload, so only learn from it when the node it names as our
+        // next hop is the one that actually relayed this packet to us. Otherwise a forged response could
+        // point any node's next_hop anywhere. relay_node is 0 for MQTT-sourced packets, which cannot
+        // corroborate an RF route either.
+        if (p.relay_node == NO_RELAY_NODE || nextHopByte != p.relay_node) {
+            LOG_DEBUG("Ignore traceroute next-hop 0x%02x, packet was relayed by 0x%02x", nextHopByte, p.relay_node);
+            return;
+        }
+
         // For the rest of the nodes in the route, set their next-hop
         // Note: if we are the last in the route, this loop will not run
         for (int8_t i = nextHopIndex; i < r->route_count; i++) {
@@ -413,7 +422,11 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
     }
 
     if (*snr_count < ROUTE_SIZE) {
-        snr_list[*snr_count] = (int8_t)(snr * 4); // Convert SNR to 1 byte
+        // Clamp before the cast: q4-scaled SNR at or below the demodulation floor can reach
+        // -128 (=-32dB), which is bit-identical to the INT8_MIN "unknown SNR" sentinel used
+        // throughout this file. Reserve -128 for the sentinel; clamp real readings to -127.
+        int32_t q4 = clamp<int32_t>(lroundf(snr * 4.0f), -127, 127);
+        snr_list[*snr_count] = (int8_t)q4;
         *snr_count += 1;
     }
     if (SNRonly)

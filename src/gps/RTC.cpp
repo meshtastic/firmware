@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "main.h"
+#include "mesh/MeshService.h"
 #include "modules/NodeInfoModule.h"
 #include <Throttle.h>
 #include <sys/time.h>
@@ -17,11 +18,15 @@ uint32_t lastSetFromPhoneNtpOrGps = 0;
 static uint32_t lastTimeValidationWarning = 0;
 static const uint32_t TIME_VALIDATION_WARNING_INTERVAL_MS = 15000; // 15 seconds
 
-static void triggerNodeInfoCheckOnTimeSource(RTCQuality oldQuality, RTCQuality newQuality)
+static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQuality)
 {
     if (oldQuality == RTCQualityNone && newQuality > RTCQualityNone && nodeInfoModule) {
         LOG_DEBUG("Time source acquired (%s -> %s), triggering NodeInfo recheck", RtcName(oldQuality), RtcName(newQuality));
         nodeInfoModule->triggerImmediateNodeInfoCheck();
+    }
+    if (oldQuality < RTCQualityFromNet && newQuality >= RTCQualityFromNet && service) {
+        LOG_DEBUG("RTC net quality reached (%s -> %s), reconciling rx_time", RtcName(oldQuality), RtcName(newQuality));
+        service->reconcilePendingRxTimes();
     }
 }
 
@@ -128,7 +133,7 @@ RTCSetResult readFromRTC()
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
-            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -174,7 +179,7 @@ RTCSetResult readFromRTC()
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
-            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     } else {
@@ -210,7 +215,7 @@ RTCSetResult readFromRTC()
                 timeStartMsec = now;
                 zeroOffsetSecs = tv.tv_sec;
                 currentQuality = RTCQualityDevice;
-                triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+                onTimeSourceQualityChanged(oldQuality, currentQuality);
             }
             return RTCSetResultSuccess;
         }
@@ -235,7 +240,7 @@ RTCSetResult readFromRTC()
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
-            triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+            onTimeSourceQualityChanged(oldQuality, currentQuality);
         }
         return RTCSetResultSuccess;
     }
@@ -319,7 +324,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #else
             rtc.initI2C();
 #endif
-            tm *t = gmtime(&tv->tv_sec);
+            // tv_sec is a long, which is not time_t everywhere: on Windows
+            // time_t is 64-bit while long is 32-bit. Copy before taking &.
+            time_t setSecs = tv->tv_sec;
+            tm *t = gmtime(&setSecs);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
@@ -341,7 +349,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #else
             rtc.begin(Wire);
 #endif
-            tm *t = gmtime(&tv->tv_sec);
+            // tv_sec is a long, which is not time_t everywhere: on Windows
+            // time_t is 64-bit while long is 32-bit. Copy before taking &.
+            time_t setSecs = tv->tv_sec;
+            tm *t = gmtime(&setSecs);
             rtc.setDateTime(*t);
             LOG_DEBUG("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900, t->tm_mon + 1,
                       t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
@@ -355,7 +366,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #else
             ArtronShop_RX8130CE rtc(&Wire);
 #endif
-            tm *t = gmtime(&tv->tv_sec);
+            // tv_sec is a long, which is not time_t everywhere: on Windows
+            // time_t is 64-bit while long is 32-bit. Copy before taking &.
+            time_t setSecs = tv->tv_sec;
+            tm *t = gmtime(&setSecs);
             if (rtc.setTime(*t)) {
                 LOG_DEBUG("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
                           t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
@@ -372,7 +386,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #endif
 
         readFromRTC();
-        triggerNodeInfoCheckOnTimeSource(oldQuality, currentQuality);
+        onTimeSourceQualityChanged(oldQuality, currentQuality);
         return RTCSetResultSuccess;
     } else {
         return RTCSetResultNotSet; // RTC was already set with a higher quality time
