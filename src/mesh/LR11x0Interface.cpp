@@ -177,17 +177,8 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     }
 
     const float frequency = getFreq();
-    const RegionInfo *region = getRegion(config.lora.region);
-    const LR11x0ConfigApplyParams params = {sf,
-                                            bw,
-                                            cr,
-                                            syncWord,
-                                            preambleLength,
-                                            frequency,
-                                            power,
-                                            config.lora.sx126x_rx_boosted_gain,
-                                            wideLora() && frequency > 1000.0f,
-                                            static_cast<int8_t>(region->powerLimit)};
+    const LR11x0ConfigApplyParams params = makeLR11x0ConfigApplyParams(sf, bw, cr, syncWord, preambleLength, frequency, power,
+                                                                       config.lora.sx126x_rx_boosted_gain, wideLora());
     ConfigApplyOps ops(*this);
     LR11x0ApplyStep failedStep = LR11x0ApplyStep::COUNT;
     const int error = LR11x0ConfigApply<ConfigApplyOps>::run(ops, params, &failedStep);

@@ -26,8 +26,16 @@ struct LR11x0ConfigApplyParams {
     int8_t outputPower;
     bool boostedGain;
     bool wideBand;
-    int8_t maxPower;
 };
+
+inline LR11x0ConfigApplyParams makeLR11x0ConfigApplyParams(uint8_t spreadingFactor, float bandwidth, uint8_t codingRate,
+                                                           uint8_t syncWord, uint16_t preambleLength, float frequency,
+                                                           int8_t outputPower, bool boostedGain, bool supportsWideBand)
+{
+    return {spreadingFactor, bandwidth,      codingRate,
+            syncWord,        preambleLength, frequency,
+            outputPower,     boostedGain,    supportsWideBand && frequency > 1000.0f};
+}
 
 inline const char *lr11x0ApplyStepName(LR11x0ApplyStep step)
 {
