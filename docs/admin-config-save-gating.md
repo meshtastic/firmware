@@ -66,9 +66,10 @@ does not opt out keeps the historical behavior. `AdminModule::saveChanges`
 | `set_fixed_position` / `remove_fixed_position`                          | **No** (was yes)   | Rode `SEGMENT_CONFIG` only because `fixed_position` shares the Config file.                              |
 | `set_channel`                                                           | **Yes**            | Real frequency-slot/PSK change ([`:1445`](../src/modules/AdminModule.cpp#L1445)).                        |
 
-Why this matters beyond tidiness: the reconfigure is a live `setStandby()` + SPI reprogram on
-the admin/BLE callback thread - the exact sequence that crashed the WisMesh Tag on a
-favorite (#11146). Removing it for non-LoRa saves closes the rest of that crash class and
+Why this matters beyond tidiness: the reconfigure is a live `setStandby()` + SPI reprogram run
+from the admin-message handler on the main task, while the radio is active - the exact
+sequence that crashed the WisMesh Tag on a favorite (#11146). Removing it for non-LoRa saves
+closes the rest of that crash class and
 avoids a needless RX gap on the mesh radio.
 
 ---
@@ -159,7 +160,7 @@ is worth.
    `reloadConfig(changes)` calls in `src/graphics/draw/MenuHandler.cpp` and
    `src/graphics/niche/InkHUD/Applets/System/Menu/MenuApplet.cpp` still reload on any Config
    save (they pass only `saveWhat`; the default `radioAffected=true` preserves this).
-   **Why untouched:** this work was scoped to the AdminModule (BLE/admin-thread) crash class.
+   **Why untouched:** this work was scoped to the AdminModule (client admin-message) crash class.
    The menu paths are a mix of genuinely-radio changes (region/preset) and incidental ones
    (role, display units), run on the UI thread. Each is marked with a
    `// TODO(radioAffected)` note (`audit` vs `radio-affecting`) for a future per-site pass.
@@ -194,19 +195,28 @@ reboot don't happen in the host build - so the two claims that matter most (the 
 
 Run against a real node through the
 [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) harness
-(`MESHTASTIC_FIRMWARE_ROOT` → this checkout), with a BLE client connected **for the whole
-test** and the serial log open - the connected-BLE state is what made the original bug fire,
-so it must be held throughout. A nRF52840 SX126x board (e.g. WisMesh Tag) is the reference
-target; the crash was reproduced there.
+(`MESHTASTIC_FIRMWARE_ROOT` → this checkout), with the serial log open. A nRF52840 SX126x
+board (e.g. WisMesh Tag) is the reference target; the crash was reproduced there.
+
+**Transport: serial is sufficient - the on-device menus are not needed, and neither is BLE.**
+These operations are all client-protocol admin messages (`ToRadio`), carried identically over
+serial (`SerialConsole`/`StreamAPI`) or BLE; the on-device button/screen menus are a separate
+code path this work did not touch. Crucially, on nRF52 the BLE `onWrite` callback only
+_queues_ the packet - `handleToRadio` → `saveChanges` → `reloadConfig` (the reconfigure) runs
+on the **main FreeRTOS task** ([`NimbleBluetooth.cpp:135`](../src/nimble/NimbleBluetooth.cpp#L135)),
+exactly where `SerialConsole` (an `OSThread`) services the serial stream. So the code and
+thread under test are the same whichever transport you use, and the original crash was
+serial-proven. Drive the admin messages over USB serial (e.g. the `meshtastic --port` CLI);
+use BLE only if you specifically want to reproduce the exact user-facing conditions.
 
 ### 1. Radio-reload / crash validation (regression guard for `babeef08d`)
 
 Confirms the non-LoRa config saves no longer run the live radio reconfigure - the
-`setStandby()` + SPI reprogram on the admin/BLE thread that rebooted the WisMesh Tag on a
-favorite (#11146).
+`setStandby()` + SPI reprogram (on the main task, while the radio is active) that rebooted the
+WisMesh Tag on a favorite (#11146).
 
-Over BLE, with the connection up, perform each of: toggle Bluetooth `enabled`, change the
-WiFi PSK, rotate the security keypair, favorite/unfavorite a node.
+Perform each of: toggle Bluetooth `enabled`, change the WiFi PSK, rotate the security
+keypair, favorite/unfavorite a node.
 
 - **Pass:** no radio re-init in the serial log before any reboot (no modem-reconfigure /
   `setStandby` / re-`init` lines), and no watchdog reboot-loop. Saves that legitimately
@@ -222,8 +232,8 @@ left on the reboot path (`gps_mode`, `gps_enabled`, `gps_update_interval`, `gps_
 
 - item 3 above) can actually apply live and be reclassified.
 
-For each candidate field, one at a time, on a GPS-equipped node: change only that field over
-BLE and observe.
+For each candidate field, one at a time, on a GPS-equipped node: change only that field (over
+serial, as above) and observe.
 
 - **Pass (→ reclassify as live):** the new value takes visible effect (e.g. GPS poll cadence
   changes, mode switches) **and** no reboot banner appears. Only then add the field to the
