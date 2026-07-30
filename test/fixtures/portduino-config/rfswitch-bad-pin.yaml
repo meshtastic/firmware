@@ -1,0 +1,6 @@
+# FAULT: DIO9 is not a switch pin. Only DIO5, DIO6, DIO7, DIO8 and DIO10 exist.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5, DIO9, DIO7]
+    MODE_STBY: [LOW, LOW, LOW]

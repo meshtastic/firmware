@@ -102,6 +102,14 @@ lint:
     - linters: [gitleaks]
       paths:
         - test/fixtures/nodedb/seed_v25_*.jsonl
+    # Deliberately broken YAML: these are the inputs to bin/test-config-check.sh,
+    # which asserts that `meshtasticd --check` reports each planted fault. Prettier
+    # rejects the duplicate keys and bad indentation that are the whole point of
+    # them, so the directory is exempt. The README there is normal prose and stays
+    # linted.
+    - linters: [ALL]
+      paths:
+        - test/fixtures/portduino-config/**/*.yaml
     # checkov/CKV_SECRET_6 flags the commented-out "large4cats" example,
     # which is the public default credential for the meshtastic.org MQTT
     # broker rather than a real secret. Ignore the whole file so the
