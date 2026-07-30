@@ -137,6 +137,10 @@ class MeshService
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
 
+    // Rewrite any queued-for-phone packet still carrying a millis() rx_time placeholder into a
+    // real epoch, now that the wall clock is trustworthy.
+    void reconcilePendingRxTimes();
+
     // Release QueueStatus packet to pool
     void releaseQueueStatusToPool(meshtastic_QueueStatus *p) { queueStatusPool.release(p); }
 
@@ -205,6 +209,7 @@ class MeshService
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
 
+    /// Seconds since the packet arrived, or SINCE_UNKNOWN if it carries no trustworthy rx_time.
     uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
 
   private:

@@ -11,6 +11,8 @@
 
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
+#include <cstdio>
+#include <cstdlib>
 #include <thread>
 #endif
 
@@ -72,9 +74,13 @@ void tftSetup(void)
             else
                 displayConfig.device(DisplayDriverConfig::device_t::X11);
         } else if (portduino_config.displayPanel == fb) {
-            if (portduino_config.displayWidth && portduino_config.displayHeight)
-                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::FB, (uint16_t)portduino_config.displayWidth,
-                                                    (uint16_t)portduino_config.displayHeight);
+            if (portduino_config.displayWidth && portduino_config.displayHeight) {
+                displayConfig.device(DisplayDriverConfig::device_t::FB)
+                             .panel(DisplayDriverConfig::panel_config_t{.type = panels[portduino_config.displayPanel],
+                                                                        .panel_width = (uint16_t)portduino_config.displayWidth,
+                                                                        .panel_height = (uint16_t)portduino_config.displayHeight,
+                                                                        .offset_rotation = (uint8_t)portduino_config.displayOffsetRotate });
+            }
             else
                 displayConfig.device(DisplayDriverConfig::device_t::FB);
         } else {

@@ -10,6 +10,17 @@
 #include "concurrency/OSThread.h"
 #include <memory>
 
+/// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
+/// Time::getMillis() placeholder with valid=false.
+struct RxTimeStamp {
+    uint32_t time;
+    bool valid;
+};
+RxTimeStamp computeRxTimeStamp();
+
+/// Stamp p->rx_time/p->has_rx_time with computeRxTimeStamp().
+void stampRxTime(meshtastic_MeshPacket *p);
+
 /**
  * A mesh aware router that supports multiple interfaces.
  */
