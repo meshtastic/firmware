@@ -651,6 +651,38 @@ static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packe
     api.close();
 }
 
+// The NodeDB half of the same transition: a node heard while the clock was untrusted gets no
+// last_heard at all (the arrival instant waits in the RAM sidecar as uptime seconds), and the
+// clock-valid hook backfills it to the real epoch of the sighting - so the phone reads
+// "last heard: unknown" only until time arrives, never a boot-relative value.
+static void test_node_heard_before_time_gets_last_heard_backfilled(void)
+{
+    ScopedMeshService scopedService;
+    ScopedTimeFixture timeFixture(5000);
+
+    const NodeNum sender = 0x22334455;
+    meshtastic_MeshPacket heard = meshtastic_MeshPacket_init_zero;
+    heard.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    heard.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    heard.from = sender;
+    heard.to = NODENUM_BROADCAST;
+    heard.rx_time = 2; // uptime-seconds placeholder: "arrived at uptime 2s"
+    heard.has_rx_time = false;
+    nodeDB->updateFrom(heard);
+
+    const meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(sender);
+    TEST_ASSERT_NOT_NULL(info);
+    TEST_ASSERT_EQUAL_UINT32(0u, info->last_heard); // absent, never a boot-relative stamp
+
+    struct timeval networkTime;
+    networkTime.tv_sec = time(NULL) + SEC_PER_DAY;
+    networkTime.tv_usec = 0;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &networkTime));
+
+    // Heard at uptime 2s, clock arrived at uptime 5s: the sighting dates to nowEpoch - 3.
+    TEST_ASSERT_UINT32_WITHIN(2, (uint32_t)networkTime.tv_sec - 3, info->last_heard);
+}
+
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
 /// Unity per-test teardown; fixtures clean themselves up.
@@ -675,6 +707,7 @@ void setup()
     RUN_TEST(test_want_config_includes_status_message_module_config);
     RUN_TEST(test_time_given_at_handshake_start_reconciles_queued_packet);
     RUN_TEST(test_time_given_at_handshake_end_does_not_rewrite_already_sent_packet);
+    RUN_TEST(test_node_heard_before_time_gets_last_heard_backfilled);
     // usingProtobufs intentionally has no reset path, so this must run last.
     RUN_TEST(test_serial_console_suppresses_raw_output_in_protobuf_mode);
     exit(UNITY_END());

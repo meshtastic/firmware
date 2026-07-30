@@ -5,6 +5,7 @@
 #include "detect/ScanI2CTwoWire.h"
 #include "main.h"
 #include "mesh/MeshService.h"
+#include "mesh/NodeDB.h"
 #include "modules/NodeInfoModule.h"
 #include <Throttle.h>
 #include <sys/time.h>
@@ -26,9 +27,12 @@ static void onTimeSourceQualityChanged(RTCQuality oldQuality, RTCQuality newQual
         LOG_DEBUG("Time source acquired (%s -> %s), triggering NodeInfo recheck", RtcName(oldQuality), RtcName(newQuality));
         nodeInfoModule->triggerImmediateNodeInfoCheck();
     }
-    if (oldQuality < RTCQualityFromNet && newQuality >= RTCQualityFromNet && service) {
+    if (oldQuality < RTCQualityFromNet && newQuality >= RTCQualityFromNet) {
         LOG_DEBUG("RTC net quality reached (%s -> %s), reconciling rx_time", RtcName(oldQuality), RtcName(newQuality));
-        service->reconcilePendingRxTimes();
+        if (service)
+            service->reconcilePendingRxTimes();
+        if (nodeDB)
+            nodeDB->backfillHeardAt();
     }
 }
 

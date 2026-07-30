@@ -19,6 +19,7 @@
 #include "SafeFile.h"
 #include "TransmitHistory.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "error.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -3492,16 +3493,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
             // Special case for CLIENT_BASE: is_favorite has special meaning, and we don't want to automatically set it
             // without the user doing so deliberately. We don't normally expect users to use a CLIENT_BASE to send DMs or to add
-            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll set
-            // last_heard to now, so that the add_contact node doesn't immediately get evicted.
-            info->last_heard = getTime();
+            // contacts, but we should make sure it doesn't auto-favorite in case they do. Instead, as a workaround, we'll
+            // stamp the contact as heard now, so that the add_contact node doesn't immediately get evicted.
+            stampContactHeardNow(info);
         } else {
             // Normal case: set is_favorite to prevent expiration.
             // last_heard will remain as-is (or remain 0 if this entry wasn't in the nodeDB).
-            // If the protected cap refuses the favorite, fall back to stamping last_heard so the
+            // If the protected cap refuses the favorite, fall back to a heard-now stamp so the
             // contact still isn't the first eviction victim.
             if (!setProtectedFlag(info, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true))
-                info->last_heard = getTime();
+                stampContactHeardNow(info);
         }
 
         // As the clients will begin sending the contact with DMs, we want to strictly check if the node is manually verified
@@ -3657,6 +3658,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // Gate on has_rx_time, not truthiness - rx_time may hold an uptime-seconds placeholder.
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
+        else if (mp.rx_time)
+            // The placeholder is the packet's arrival instant in uptime seconds. Keep it in the
+            // RAM sidecar so the clock-valid transition can date this sighting; last_heard itself
+            // only ever holds a real epoch or 0.
+            recordHeardWhileClockUntrusted(getFrom(&mp), mp.rx_time);
 
         // Gate on the packet actually having been received over our own radio, not on rx_snr being
         // truthy, because 0 dB is valid. TRANSPORT_LORA is set only on the real over-the-air RX path
@@ -4072,6 +4078,78 @@ meshtastic_Config_DeviceConfig_Role NodeDB::getNodeRole(NodeNum n)
     return meshtastic_Config_DeviceConfig_Role_CLIENT;
 }
 
+void NodeDB::recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptime)
+{
+    // Update in place if the node already has a stamp.
+    for (auto &h : heardAt) {
+        if (h.num == num) {
+            h.heardAtUptimeSecs = heardAtUptime;
+            return;
+        }
+    }
+    // Otherwise take an empty slot, or reuse the oldest stamp.
+    NodeHeardAt *victim = &heardAt[0];
+    for (auto &h : heardAt) {
+        if (h.num == 0) {
+            victim = &h;
+            break;
+        }
+        if (h.heardAtUptimeSecs < victim->heardAtUptimeSecs)
+            victim = &h;
+    }
+    victim->num = num;
+    victim->heardAtUptimeSecs = heardAtUptime;
+}
+
+uint32_t NodeDB::heardAtUptimeSecs(NodeNum num) const
+{
+    for (const auto &h : heardAt) {
+        if (h.num == num)
+            return h.heardAtUptimeSecs;
+    }
+    return 0;
+}
+
+uint32_t NodeDB::evictionRecency(const meshtastic_NodeInfoLite *n) const
+{
+    const uint32_t stamp = heardAtUptimeSecs(n->num);
+    // A RAM stamp means heard this boot but not yet datable: more recent than anything dated
+    // before this boot. The 2^31 bias keeps stamps above every pre-2038 epoch while preserving
+    // their order among themselves.
+    return stamp ? 0x80000000u + stamp : n->last_heard;
+}
+
+void NodeDB::stampContactHeardNow(meshtastic_NodeInfoLite *info)
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch)
+        info->last_heard = nowEpoch;
+    else
+        recordHeardWhileClockUntrusted(info->num, Time::getUptimeSecs());
+}
+
+void NodeDB::backfillHeardAt()
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch == 0) // called before the clock was actually valid - nothing to date against
+        return;
+    const uint32_t nowUptimeSecs = Time::getUptimeSecs();
+    for (auto &h : heardAt) {
+        if (h.num == 0)
+            continue;
+        meshtastic_NodeInfoLite *info = getMeshNode(h.num);
+        if (info) {
+            // Both stamps come off the monotonic uptime counter, so the elapsed term is exact at
+            // any age. Skip (rather than clamp) the pathological elapsed > epoch case, and never
+            // move last_heard backwards - the node may have been re-heard with a trusted clock.
+            const uint32_t elapsedSecs = nowUptimeSecs - h.heardAtUptimeSecs;
+            if (elapsedSecs < nowEpoch && nowEpoch - elapsedSecs > info->last_heard)
+                info->last_heard = nowEpoch - elapsedSecs;
+        }
+        h = {}; // evicted or converted either way, the stamp's job is done
+    }
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
@@ -4091,14 +4169,17 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 const bool isFavoriteNode = nodeInfoLiteIsFavorite(cand);
                 const bool isIgnored = nodeInfoLiteIsIgnored(cand);
                 const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
+                // last_heard, except that nodes heard this boot before the clock became trusted
+                // rank by their RAM arrival stamp instead of the 0 in the stored field.
+                const uint32_t candRecency = evictionRecency(cand);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavoriteNode && !isIgnored && !isVerified && cand->last_heard < oldest) {
-                    oldest = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && !isVerified && candRecency < oldest) {
+                    oldest = candRecency;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 && cand->last_heard < oldestBoring) {
-                    oldestBoring = cand->last_heard;
+                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 && candRecency < oldestBoring) {
+                    oldestBoring = candRecency;
                     oldestBoringIndex = i;
                 }
             }
