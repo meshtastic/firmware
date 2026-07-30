@@ -81,6 +81,14 @@ jobs:
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --initial --output-file coverage_base.info
           sed -i -e "s#${PWD}#.#" coverage_base.info # Make paths relative.
 
+      - name: Config check tests
+        # Drives the same binary against test/fixtures/portduino-config: asserts that
+        # `--check` reports each planted fault, and that a normal run still refuses the
+        # configs it should. Runs before the simulator test because it is seconds long
+        # and a failure here explains a lot of downstream weirdness.
+        timeout-minutes: 5
+        run: ./bin/test-config-check.sh .pio/build/coverage/meshtasticd
+
       - name: Integration test
         # Cap the whole step: if the simulator ever fails to exit (e.g. the
         # exit_simulator admin path regresses again) the job must fail fast,
