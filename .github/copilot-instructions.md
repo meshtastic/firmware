@@ -646,6 +646,10 @@ Variants can specify their support level in `platformio.ini`:
 
 - `custom_meshtastic_support_level = 1` - Actively supported, built on every PR
 - `custom_meshtastic_support_level = 2` - Supported, built on merge to main branches
+- `board_level = pr` - Built on PRs for fast feedback. Exactly one board per
+  platform (the most feature-complete one) carries this flag; do not add it to
+  new variants. The full matrix runs in the merge queue.
+- (no `board_level`) - Default: built on full runs (merge queue, releases)
 - `board_level = extra` - Extra builds, only on full releases
 
 ### Running Workflows Locally
