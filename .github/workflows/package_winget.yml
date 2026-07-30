@@ -2,15 +2,6 @@ name: Validate winget manifest
 
 on:
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Release tag holding the MSI, e.g. v2.8.0.1e982fa
-        required: true
-        type: string
-      version:
-        description: winget package version, e.g. 2.8.0
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -24,24 +15,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download the MSI from the release
+      - name: Resolve the newest release and download its MSI
+        id: release
         shell: pwsh
         run: |
+          $tag = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+          if (-not $tag) { throw 'No releases found.' }
           New-Item -ItemType Directory -Force -Path release/download | Out-Null
-          gh release download $env:RELEASE_TAG --pattern '*.msi' --dir release/download
-          Get-ChildItem release/download
+          gh release download $tag --pattern '*.msi' --dir release/download
+          $msi = Get-ChildItem release/download/*.msi | Select-Object -First 1
+          if (-not $msi) { throw "Release $tag carries no MSI asset." }
+          $version = [regex]::Match($msi.Name, '^meshtasticd-([0-9][0-9A-Za-z.\-]*)-(?:x64|arm64)\.msi$').Groups[1].Value
+          if (-not $version) { throw "Cannot parse a version out of $($msi.Name)." }
+          "tag=$tag", "version=$version", "msi=$($msi.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
 
       - name: Generate manifests for the published MSI
         shell: pwsh
-        run: |
-          $msi = (Get-ChildItem release/download/*.msi | Select-Object -First 1).FullName
-          ./bin/build-winget-package.ps1 -MsiPath $msi -Version $env:PKG_VERSION -ReleaseTag $env:RELEASE_TAG -Validate
+        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -ReleaseTag $env:RELEASE_TAG -Validate
         env:
-          PKG_VERSION: ${{ inputs.version }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          MSI_PATH: ${{ steps.release.outputs.msi }}
+          PKG_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
 
       - name: Verify the manifest URL resolves to the published asset
         shell: pwsh
@@ -59,6 +55,6 @@ jobs:
       - name: Upload the manifests as an artifact
         uses: actions/upload-artifact@v7
         with:
-          name: winget-manifests-${{ inputs.version }}
+          name: winget-manifests-${{ steps.release.outputs.version }}
           overwrite: true
           path: release/winget/manifests/
