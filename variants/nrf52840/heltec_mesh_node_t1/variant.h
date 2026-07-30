@@ -155,7 +155,6 @@ extern "C" {
 
 // Power / USB
 
-#define NRF_APM   // USB VBUS detection via nrfx_power_usbstatus_get() - no dedicated charging IC on this board
 #define HAS_RTC 0 // No external RTC fitted
 
 #ifdef __cplusplus

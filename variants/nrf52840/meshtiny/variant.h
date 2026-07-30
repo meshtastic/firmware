@@ -166,9 +166,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-// Testing USB detection
-#define NRF_APM
-
 #define PIN_3V3_EN (34)
 
 // Battery
