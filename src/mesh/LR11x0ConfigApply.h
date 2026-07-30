@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MeshRadio.h"
+
 #include <stdint.h>
 
 enum class LR11x0ApplyStep : uint8_t {
@@ -28,13 +30,24 @@ struct LR11x0ConfigApplyParams {
     bool wideBand;
 };
 
+struct LR11x0BandPolicy {
+    bool wideBand;
+    int8_t maxPower;
+};
+
+inline LR11x0BandPolicy lr11x0BandPolicyFor(const RegionInfo &region, bool supportsWideBand, int8_t subGhzMaxPower,
+                                            int8_t wideBandMaxPower)
+{
+    return {region.wideLora && supportsWideBand, region.wideLora ? wideBandMaxPower : subGhzMaxPower};
+}
+
 inline LR11x0ConfigApplyParams makeLR11x0ConfigApplyParams(uint8_t spreadingFactor, float bandwidth, uint8_t codingRate,
                                                            uint8_t syncWord, uint16_t preambleLength, float frequency,
-                                                           int8_t outputPower, bool boostedGain, bool supportsWideBand)
+                                                           int8_t outputPower, bool boostedGain,
+                                                           const LR11x0BandPolicy &bandPolicy)
 {
-    return {spreadingFactor, bandwidth,      codingRate,
-            syncWord,        preambleLength, frequency,
-            outputPower,     boostedGain,    supportsWideBand && frequency > 1000.0f};
+    return {spreadingFactor, bandwidth,   codingRate,  syncWord,           preambleLength,
+            frequency,       outputPower, boostedGain, bandPolicy.wideBand};
 }
 
 inline const char *lr11x0ApplyStepName(LR11x0ApplyStep step)

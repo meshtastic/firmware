@@ -1,4 +1,5 @@
 #include "LR11x0ConfigApply.h"
+#include "LR11x0Interface.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
@@ -89,14 +90,6 @@ class TestableRadioLibInterface : public RadioLibInterface
     uint32_t applyCount() const { return reconfigureCount; }
     uint32_t startSendCount() const { return startSendCalls; }
 
-    LR11x0ConfigApplyParams lr11x0ParamsForTest(bool supportsWideBand, int8_t maximumPower)
-    {
-        RadioLibInterface::reconfigure();
-        limitPower(maximumPower);
-        return makeLR11x0ConfigApplyParams(sf, bw, cr, syncWord, preambleLength, getFreq(), power,
-                                           config.lora.sx126x_rx_boosted_gain, supportsWideBand);
-    }
-
     bool reconfigure() override
     {
         ++reconfigureCount;
@@ -140,6 +133,16 @@ class TestableRadioLibInterface : public RadioLibInterface
     bool requestDuringChannelCheckAccepted = false;
     bool useBaseStartSend = false;
     uint32_t startSendCalls = 0;
+};
+
+class TestableLR1121Interface : public LR11x0Interface<LR1121>
+{
+  public:
+    TestableLR1121Interface() : LR11x0Interface(nullptr, 0, 0, 0, 0) {}
+
+    using LR11x0Interface<LR1121>::makeReconfigureParams;
+
+    bool wideLora() override { return true; }
 };
 
 static void test_bwCodeToKHz_specialMappings()
@@ -343,14 +346,15 @@ static void test_lr11x0Apply_returnsFirstOperationFailure()
 
 static void test_lr11x0Apply_usesProductionParameters()
 {
+    TestableLR1121Interface testLR1121;
+
     config.lora = lora24Config();
     config.lora.use_preset = true;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.tx_power = 30;
 
     FakeLR11x0Ops lora24Ops;
-    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE,
-                      LR11x0ConfigApply<FakeLR11x0Ops>::run(lora24Ops, testRadioLib->lr11x0ParamsForTest(true, 13)));
+    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE, LR11x0ConfigApply<FakeLR11x0Ops>::run(lora24Ops, testLR1121.makeReconfigureParams()));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, lora24Ops.receivedBandwidth);
     TEST_ASSERT_TRUE(lora24Ops.receivedWideBand);
     TEST_ASSERT_EQUAL_INT8(10, lora24Ops.receivedOutputPower);
@@ -361,8 +365,7 @@ static void test_lr11x0Apply_usesProductionParameters()
     config.lora.tx_power = 30;
 
     FakeLR11x0Ops usOps;
-    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE,
-                      LR11x0ConfigApply<FakeLR11x0Ops>::run(usOps, testRadioLib->lr11x0ParamsForTest(true, 22)));
+    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE, LR11x0ConfigApply<FakeLR11x0Ops>::run(usOps, testLR1121.makeReconfigureParams()));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 250.0f, usOps.receivedBandwidth);
     TEST_ASSERT_FALSE(usOps.receivedWideBand);
     TEST_ASSERT_EQUAL_INT8(22, usOps.receivedOutputPower);

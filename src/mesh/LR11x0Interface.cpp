@@ -168,17 +168,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 
 template <typename T> bool LR11x0Interface<T>::reconfigure()
 {
-    RadioLibInterface::reconfigure();
-
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
-        limitPower(LR1120_MAX_POWER);
-    } else {
-        limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
-    }
-
-    const float frequency = getFreq();
-    const LR11x0ConfigApplyParams params = makeLR11x0ConfigApplyParams(sf, bw, cr, syncWord, preambleLength, frequency, power,
-                                                                       config.lora.sx126x_rx_boosted_gain, wideLora());
+    const LR11x0ConfigApplyParams params = makeReconfigureParams();
     ConfigApplyOps ops(*this);
     LR11x0ApplyStep failedStep = LR11x0ApplyStep::COUNT;
     const int error = LR11x0ConfigApply<ConfigApplyOps>::run(ops, params, &failedStep);
@@ -191,6 +181,18 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     finishStartReceive();
     receiveStartedDuringReconfigure = true;
     return true;
+}
+
+template <typename T> LR11x0ConfigApplyParams LR11x0Interface<T>::makeReconfigureParams()
+{
+    RadioLibInterface::reconfigure();
+
+    const LR11x0BandPolicy bandPolicy =
+        lr11x0BandPolicyFor(*getRegion(config.lora.region), wideLora(), LR1110_MAX_POWER, LR1120_MAX_POWER);
+    limitPower(bandPolicy.maxPower);
+
+    return makeLR11x0ConfigApplyParams(sf, bw, cr, syncWord, preambleLength, getFreq(), power, config.lora.sx126x_rx_boosted_gain,
+                                       bandPolicy);
 }
 
 template <typename T> void LR11x0Interface<T>::disableInterrupt()
