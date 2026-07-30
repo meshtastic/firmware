@@ -342,7 +342,9 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
         snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
         changes |= SEGMENT_MODULECONFIG;
     }
-    // Notify UI that changes are being applied
+    // Live change, not a reboot: covers the e-ink redraw while the radio reconfigures. See the
+    // two-jobs note on InkHUD::notifyApplyingChanges() - this call is not interchangeable with the
+    // ones that sit beside CONFIG_APPLY_REBOOT below.
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
     // LoRa config applies live via configChanged observer -> RadioInterface::reconfigure(); no reboot needed.
     service->applyConfigChange(changes, CONFIG_APPLY_RADIO);
@@ -372,7 +374,7 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     // LoRa config applies live via configChanged observer -> RadioInterface::reconfigure(); no reboot needed.
     service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_RADIO);
 
-    // Notify UI that changes are being applied
+    // Live change, not a reboot (see applyLoRaRegion above).
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
 }
 
