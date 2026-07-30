@@ -345,7 +345,7 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
     // LoRa config applies live via configChanged observer -> RadioInterface::reconfigure(); no reboot needed.
-    service->reloadConfig(changes, /*radioAffected=*/true); // region change is a LoRa radio parameter
+    service->applyConfigChange(changes, CONFIG_APPLY_RADIO);
 }
 
 static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
@@ -355,12 +355,10 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
 
     config.device.role = role;
 
-    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // device role, not LoRa
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
 
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
 static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
@@ -372,22 +370,10 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     config.lora.modem_preset = preset;
 
     // LoRa config applies live via configChanged observer -> RadioInterface::reconfigure(); no reboot needed.
-    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/true); // modem preset is a LoRa radio parameter
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_RADIO);
 
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-}
-
-// Used for non-LoRa config fields only - LoRa region/preset go through the dedicated
-// applyLoRaRegion/applyLoRaPreset helpers above so the reload can request the radio reconfigure.
-static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
-{
-    service->reloadConfig(changes, /*radioAffected=*/false);
-
-    if (reboot) {
-        InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-    }
 }
 
 static const char *getTimezoneLabelFromValue(const char *tzdef)
@@ -446,7 +432,7 @@ static void applyTimezone(const char *tz)
 
     setenv("TZ", config.device.tzdef, 1);
 
-    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // timezone, not LoRa
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
 }
 
 // Perform action for a menu item, then change page
@@ -550,7 +536,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         else
             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
 
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         break;
 
     case SET_RECENTS: {
@@ -597,7 +583,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case TOGGLE_12H_CLOCK:
         config.display.use_12h_clock = !config.display.use_12h_clock;
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         break;
 
     case TOGGLE_GPS:
@@ -619,14 +605,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             break;
         }
         // GPS driver is toggled live above (matches MenuHandler.cpp's equivalent) - no reboot needed.
-        service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // GPS mode, not LoRa
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
 #endif
         break;
 
     case TOGGLE_SMART_POSITION:
         // Read live by PositionModule's smart-broadcast path every send - no reboot needed.
         config.position.position_broadcast_smart_enabled = !config.position.position_broadcast_smart_enabled;
-        applyConfigReload(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         break;
 
     case SET_POSITION_BROADCAST_INTERVAL: {
@@ -635,7 +621,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         if (index < optionCount && config.position.position_broadcast_secs != POSITION_BROADCAST_OPTIONS[index].value) {
             // Read live by PositionModule's broadcast scheduler every cycle - no reboot needed.
             config.position.position_broadcast_secs = POSITION_BROADCAST_OPTIONS[index].value;
-            applyConfigReload(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         }
         break;
     }
@@ -646,7 +632,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         if (index < optionCount && config.position.broadcast_smart_minimum_interval_secs != SMART_INTERVAL_OPTIONS[index].value) {
             // Read live by PositionModule::minimumTimeThreshold every send - no reboot needed.
             config.position.broadcast_smart_minimum_interval_secs = SMART_INTERVAL_OPTIONS[index].value;
-            applyConfigReload(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         }
         break;
     }
@@ -657,7 +643,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         if (index < optionCount && config.position.broadcast_smart_minimum_distance != SMART_DISTANCE_OPTIONS[index]) {
             // Read live by PositionModule's smart-position distance check every send - no reboot needed.
             config.position.broadcast_smart_minimum_distance = SMART_DISTANCE_OPTIONS[index];
-            applyConfigReload(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         }
         break;
     }
@@ -667,7 +653,8 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         constexpr uint8_t optionCount = sizeof(GPS_UPDATE_INTERVAL_OPTIONS) / sizeof(GPS_UPDATE_INTERVAL_OPTIONS[0]);
         if (index < optionCount && config.position.gps_update_interval != GPS_UPDATE_INTERVAL_OPTIONS[index].value) {
             config.position.gps_update_interval = GPS_UPDATE_INTERVAL_OPTIONS[index].value;
-            applyConfigReload(SEGMENT_CONFIG, true);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
+            InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
         }
         break;
     }
@@ -677,18 +664,18 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         LOG_INFO("Enabling Bluetooth");
         config.network.wifi_enabled = false;
         config.bluetooth.enabled = true;
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        // TODO: why 2 s rather than the usual DEFAULT_REBOOT_SECONDS? Undocumented; preserved
+        // verbatim here. Check whether the short delay is load-bearing for wifi recovery.
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT, 2);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + 2000;
         break;
 
         // Power / Network (ESP32-only)
 #if defined(ARCH_ESP32)
     case TOGGLE_POWER_SAVE:
         config.power.is_power_saving = !config.power.is_power_saving;
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 
     case TOGGLE_WIFI:
@@ -699,9 +686,8 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             config.bluetooth.enabled = false;
         }
 
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 #endif
     // ADC Calibration
@@ -740,7 +726,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
         config.power.adc_multiplier_override = newMult;
 
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
 
         LOG_INFO("ADC calibrated: measured=%.3fV base=%.4f new=%.4f", measuredV, baseMult, newMult);
 
@@ -754,7 +740,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         constexpr uint8_t optionCount = sizeof(DISPLAY_TIMEOUT_OPTIONS) / sizeof(DISPLAY_TIMEOUT_OPTIONS[0]);
         if (index < optionCount) {
             config.display.screen_on_secs = DISPLAY_TIMEOUT_OPTIONS[index].seconds;
-            nodeDB->saveToDisk(SEGMENT_CONFIG);
+            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         }
         break;
     }
@@ -765,7 +751,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         else
             config.display.units = meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL;
 
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         break;
 
     // Bluetooth
@@ -777,14 +763,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             config.network.wifi_enabled = false;
         }
 
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 
     case TOGGLE_BLUETOOTH_PAIR_MODE:
         config.bluetooth.fixed_pin = !config.bluetooth.fixed_pin;
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
         break;
 
     // Regions
@@ -1075,14 +1060,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_CHANNEL_UPLINK: {
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.uplink_enabled = !ch.settings.uplink_enabled;
-        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
         break;
     }
 
     case TOGGLE_CHANNEL_DOWNLINK: {
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.downlink_enabled = !ch.settings.downlink_enabled;
-        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
         break;
     }
 
@@ -1097,7 +1082,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         else
             ch.settings.module_settings.position_precision = 13; // default
 
-        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
         break;
     }
 
@@ -1116,7 +1101,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             ch.settings.module_settings.position_precision = POSITION_PRECISION_OPTIONS[index].value;
         }
 
-        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
         break;
     }
 

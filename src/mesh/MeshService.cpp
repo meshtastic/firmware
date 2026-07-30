@@ -156,6 +156,13 @@ void MeshService::reloadConfig(int saveWhat, bool radioAffected)
     nodeDB->saveToDisk(saveWhat);
 }
 
+void MeshService::applyConfigChange(int saveWhat, uint8_t flags, int32_t rebootSeconds)
+{
+    reloadConfig(saveWhat, (flags & CONFIG_APPLY_RADIO) != 0);
+    if (flags & CONFIG_APPLY_REBOOT)
+        requestReboot(rebootSeconds);
+}
+
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
 void MeshService::reloadOwner(bool shouldSave)
 {

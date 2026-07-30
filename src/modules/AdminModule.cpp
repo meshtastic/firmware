@@ -1898,10 +1898,9 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
 
 void AdminModule::reboot(int32_t seconds)
 {
-    LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
         screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    requestReboot(seconds);
 }
 
 // Without this, a commit that never arrives leaves the transaction open forever and every later
@@ -1926,15 +1925,19 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool radioAffecte
 #ifdef PIO_UNIT_TESTING
     lastSaveWhatForTest = saveWhat;
 #endif
-    if (!hasOpenEditTransaction) {
-        LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat, radioAffected); // Calls saveToDisk among other things
-    } else {
-        LOG_INFO("Delay disk save until open transaction commits");
+    // The one thing menus have no concept of: while a remote-admin edit transaction is open the
+    // write is deferred to the commit, so a multi-field set doesn't hit flash once per field.
+    if (hasOpenEditTransaction) {
+        LOG_INFO("Delay save of changes to disk until the open transaction is committed");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
         deferredEditSegments |= saveWhat;
+        return;
     }
-    if (shouldReboot && !hasOpenEditTransaction) {
+    LOG_INFO("Save changes to disk");
+    // reboot() rather than the CONFIG_APPLY_REBOOT flag: AdminModule also raises its own
+    // "Rebooting..." banner, which applyConfigChange() deliberately knows nothing about.
+    service->applyConfigChange(saveWhat, radioAffected ? CONFIG_APPLY_RADIO : CONFIG_APPLY_NONE);
+    if (shouldReboot) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
 }

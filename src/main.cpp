@@ -1266,6 +1266,14 @@ uint32_t rebootAtMsec;     // If not zero we will reboot at this time (used to r
 uint32_t shutdownAtMsec;   // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for OTA handoff)
 
+void requestReboot(int32_t seconds)
+{
+    LOG_INFO("Reboot in %d seconds", seconds);
+    // A negative delay means "now"; rebootAtMsec == 0 is the immediate-reboot sentinel. Remote
+    // admin relies on this, so keep the branch even though menu callers always pass a positive.
+    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+}
+
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
 volatile bool lockdownReloadPending;  // see main.h - deferred NodeDB reload after lockdown unlock
 volatile bool lockdownDisablePending; // see main.h - deferred decrypt-revert after lockdown disable
