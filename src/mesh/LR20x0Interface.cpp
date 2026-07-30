@@ -187,8 +187,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     }
 
     const float freq = getFreq();
-    const bool bandHop =
-        (lr20x0LastFreqMHz > 0) && ((lr20x0LastFreqMHz > 1500.0f) != (freq > 1500.0f));
+    const bool bandHop = (lr20x0LastFreqMHz > 0) && ((lr20x0LastFreqMHz > 1500.0f) != (freq > 1500.0f));
 
     if (bandHop) {
         LOG_INFO("LR20x0 LF/HF band hop %.1f -> %.1f MHz, full begin()", lr20x0LastFreqMHz, freq);
