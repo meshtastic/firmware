@@ -343,8 +343,7 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     }
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-    // TODO(radioAffected): audit
-    service->reloadConfig(changes);
+    service->reloadConfig(changes, /*radioAffected=*/true); // region change is a LoRa radio parameter
 
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
@@ -358,8 +357,7 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
 
-    // TODO(radioAffected): audit
-    service->reloadConfig(SEGMENT_CONFIG);
+    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // device role, not LoRa
 
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
@@ -376,8 +374,7 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     config.lora.modem_preset = preset;
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
-    // TODO(radioAffected): audit
-    service->reloadConfig(SEGMENT_CONFIG);
+    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/true); // modem preset is a LoRa radio parameter
 
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
@@ -385,11 +382,12 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
+// Used for non-LoRa config fields only - LoRa region/preset go through the dedicated
+// applyLoRaRegion/applyLoRaPreset helpers above so the reload can request the radio reconfigure.
 static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
 {
     nodeDB->saveToDisk(changes);
-    // TODO(radioAffected): audit
-    service->reloadConfig(changes);
+    service->reloadConfig(changes, /*radioAffected=*/false);
 
     if (reboot) {
         InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
@@ -454,8 +452,7 @@ static void applyTimezone(const char *tz)
     setenv("TZ", config.device.tzdef, 1);
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
-    // TODO(radioAffected): audit
-    service->reloadConfig(SEGMENT_CONFIG);
+    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // timezone, not LoRa
 }
 
 // Perform action for a menu item, then change page
@@ -620,8 +617,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             break;
         }
         nodeDB->saveToDisk(SEGMENT_CONFIG);
-        // TODO(radioAffected): audit
-        service->reloadConfig(SEGMENT_CONFIG);
+        service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // GPS mode, not LoRa
 #endif
         break;
 
@@ -1074,8 +1070,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.uplink_enabled = !ch.settings.uplink_enabled;
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
-        // TODO(radioAffected): radio-affecting
-        service->reloadConfig(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
 
@@ -1083,8 +1078,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.downlink_enabled = !ch.settings.downlink_enabled;
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
-        // TODO(radioAffected): radio-affecting
-        service->reloadConfig(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
 
@@ -1100,8 +1094,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             ch.settings.module_settings.position_precision = 13; // default
 
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
-        // TODO(radioAffected): radio-affecting
-        service->reloadConfig(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
 
@@ -1121,8 +1114,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         }
 
         nodeDB->saveToDisk(SEGMENT_CHANNELS);
-        // TODO(radioAffected): radio-affecting
-        service->reloadConfig(SEGMENT_CHANNELS);
+        service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
 
