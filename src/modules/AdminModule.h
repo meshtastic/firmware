@@ -28,6 +28,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     friend class AdminModuleTestShim; // test/support/AdminModuleTestShim.h - native tests reach the private handlers/state
 
   public:
+    enum class MenuLoRaTransition : uint8_t { NONE, ENTER_LICENSED, EXIT_LICENSED };
+
     /** Constructor
      * name is for debugging output
      */
@@ -102,6 +104,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
   public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
     bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers);
+    bool requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &incoming,
+                               MenuLoRaTransition transition = MenuLoRaTransition::NONE);
     void completeLoRaConfigApply(const RadioConfigApplyRequest &request);
 
     /// Note an admin request leaving this node for a remote, so that remote's response is
@@ -174,7 +178,17 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
         bool warnPresetChange = false;
         bool fanDisabled = false;
     };
-    bool prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, PreparedLoRaConfig &prepared);
+    struct StagedMenuLoRaTransition {
+        MenuLoRaTransition type = MenuLoRaTransition::NONE;
+        meshtastic_HamParameters ham = meshtastic_HamParameters_init_zero;
+    };
+    bool prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
+                           PreparedLoRaConfig &prepared);
+    bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
+                           const StagedMenuLoRaTransition &transition);
+    bool validateHamParameters(const meshtastic_HamParameters &params) const;
+    int applyEnterLicensedMode(const meshtastic_HamParameters &params);
+    int applyStagedMenuLoRaTransition();
     void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
     void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
     void warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora);
@@ -201,6 +215,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
     static constexpr uint32_t LORA_CONFIG_APPLY_TIMEOUT_MS = 60 * 1000;
     PreparedLoRaConfig pendingLoRaConfig;
+    StagedMenuLoRaTransition pendingMenuLoRaTransition;
     bool loRaConfigApplyPending = false;
     bool finalizingLoRaConfig = false;
     int deferredLoRaSaveSegments = 0;

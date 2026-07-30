@@ -126,9 +126,10 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
     }
 }
 
-bool requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &candidate)
+bool requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &candidate,
+                           AdminModule::MenuLoRaTransition transition = AdminModule::MenuLoRaTransition::NONE)
 {
-    if (!adminModule || !adminModule->requestLoRaConfig(candidate, false)) {
+    if (!adminModule || !adminModule->requestMenuLoRaConfig(candidate, transition)) {
         LOG_WARN("Unable to queue LoRa configuration change from menu");
         return false;
     }
@@ -188,22 +189,12 @@ void menuHandler::OnboardMessage()
     screen->showOverlayBanner(bannerOptions);
 }
 
-static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam, bool clearLicensedOverrides = false)
+static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region,
+                            AdminModule::MenuLoRaTransition transition = AdminModule::MenuLoRaTransition::NONE)
 {
-    if (isHam && adminModule) {
-        meshtastic_HamParameters hamParams = meshtastic_HamParameters_init_zero;
-        strncpy(hamParams.call_sign, "N0CALL", sizeof(hamParams.call_sign) - 1);
-        strncpy(hamParams.short_name, "N0CL", sizeof(hamParams.short_name));
-        hamParams.tx_power = config.lora.tx_power;
-        hamParams.frequency = config.lora.override_frequency;
-        adminModule->handleSetHamMode(hamParams);
-    }
-
     auto candidate = config.lora;
     candidate.region = region;
     candidate.channel_num = 0; // Reset to default channel
-    if (clearLicensedOverrides)
-        candidate.override_duty_cycle = false;
 
     // Reconcile the preset with the explicitly chosen region: a preset locked to another
     // region would leave config.lora invalid until applyModemConfig() repairs it with
@@ -217,7 +208,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
         candidate.modem_preset = newRegion->getDefaultPreset();
     }
 
-    requestMenuLoRaConfig(candidate);
+    requestMenuLoRaConfig(candidate, transition);
 }
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
@@ -315,7 +306,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 menuQueue = LicensedToNormalConfirm;
                 screen->runNow();
             } else {
-                applyLoraRegion(selectedRegion, false);
+                applyLoraRegion(selectedRegion);
             }
         });
 
@@ -342,7 +333,7 @@ void menuHandler::hamModeConfirmMenu()
     confirmBanner.optionsCount = 2;
     confirmBanner.bannerCallback = [](int selected) {
         if (selected == 1)
-            applyLoraRegion(pendingRegion, true);
+            applyLoraRegion(pendingRegion, AdminModule::MenuLoRaTransition::ENTER_LICENSED);
     };
     screen->showOverlayBanner(confirmBanner);
 }
@@ -355,11 +346,8 @@ void menuHandler::licensedToNormalConfirmMenu()
     confirmBanner.optionsArrayPtr = confirmOptions;
     confirmBanner.optionsCount = 2;
     confirmBanner.bannerCallback = [](int selected) {
-        if (selected == 1) {
-            owner.is_licensed = false;
-            service->reloadOwner(false);
-        }
-        applyLoraRegion(pendingRegion, false, selected == 1);
+        applyLoraRegion(pendingRegion,
+                        selected == 1 ? AdminModule::MenuLoRaTransition::EXIT_LICENSED : AdminModule::MenuLoRaTransition::NONE);
     };
     screen->showOverlayBanner(confirmBanner);
 }

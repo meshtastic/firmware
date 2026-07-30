@@ -485,6 +485,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                                             LORA_CONFIG_APPLY_TIMEOUT_MS)) {
                 loRaConfigApplyPending = false;
                 pendingLoRaConfig = PreparedLoRaConfig{};
+                pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
                 sendWarningAndLog("Radio configuration apply could not be queued; previous configuration retained");
             }
             if (unrelatedSegments)
@@ -875,7 +876,8 @@ static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incomi
                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
 }
 
-bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, PreparedLoRaConfig &prepared)
+bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
+                                    PreparedLoRaConfig &prepared)
 {
     prepared = PreparedLoRaConfig{};
     prepared.previous = config.lora;
@@ -917,12 +919,12 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     }
 
     if (prepared.candidate.region != activeRegion->code) {
-        const bool regionValid = RadioInterface::checkConfigRegion(prepared.candidate);
+        const bool regionValid = RadioInterface::checkConfigRegion(prepared.candidate, nullptr, 0, prospectiveLicensedOwner);
         const RadioInterface::LoRaConfigNormalization validation = RadioInterface::normalizeConfigLora(prepared.candidate, false);
         if (regionValid && validation.valid) {
             if (isRegionUnset && prepared.candidate.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                if (owner.is_licensed) {
+                if (prospectiveLicensedOwner) {
                     prepared.generateLicensedIdentity = true;
                     prepared.warnLicensedIdentityMigration = licensedIdentityWillMigrate();
                     prepared.saveWhat |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
@@ -983,7 +985,8 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     }
 
     const RegionInfo *candidateRegion = getRegion(prepared.candidate.region);
-    if (prepared.candidate.tx_power == 0 || (prepared.candidate.tx_power > candidateRegion->powerLimit && !owner.is_licensed)) {
+    if (prepared.candidate.tx_power == 0 ||
+        (prepared.candidate.tx_power > candidateRegion->powerLimit && !prospectiveLicensedOwner)) {
         prepared.candidate.tx_power = candidateRegion->powerLimit;
     }
     if (prepared.candidate.tx_power == 0)
@@ -1042,14 +1045,50 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 
 bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers)
 {
+    return requestLoRaConfig(incoming, fromOthers, owner.is_licensed, StagedMenuLoRaTransition{});
+}
+
+bool AdminModule::requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, MenuLoRaTransition transition)
+{
+    auto candidate = incoming;
+    StagedMenuLoRaTransition staged;
+    staged.type = transition;
+    bool prospectiveLicensedOwner = owner.is_licensed;
+
+    if (transition == MenuLoRaTransition::ENTER_LICENSED) {
+        prospectiveLicensedOwner = true;
+        candidate.override_duty_cycle = true;
+        candidate.tx_enabled = false;
+        strncpy(staged.ham.call_sign, "N0CALL", sizeof(staged.ham.call_sign) - 1);
+        strncpy(staged.ham.short_name, "N0CL", sizeof(staged.ham.short_name));
+    } else if (transition == MenuLoRaTransition::EXIT_LICENSED) {
+        prospectiveLicensedOwner = false;
+        candidate.override_duty_cycle = false;
+        candidate.override_frequency = 0;
+        candidate.tx_enabled = true;
+    }
+
+    return requestLoRaConfig(candidate, false, prospectiveLicensedOwner, staged);
+}
+
+bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
+                                    const StagedMenuLoRaTransition &transition)
+{
     if (loRaConfigApplyPending || !service)
         return false;
 
     PreparedLoRaConfig prepared;
-    if (!prepareLoRaConfig(incoming, fromOthers, prepared))
+    if (!prepareLoRaConfig(incoming, fromOthers, prospectiveLicensedOwner, prepared))
         return false;
 
     pendingLoRaConfig = prepared;
+    pendingMenuLoRaTransition = transition;
+    if (transition.type == MenuLoRaTransition::ENTER_LICENSED) {
+        pendingLoRaConfig.generateLicensedIdentity = false;
+        pendingLoRaConfig.warnLicensedIdentityMigration = false;
+        pendingMenuLoRaTransition.ham.tx_power = prepared.candidate.tx_power;
+        pendingMenuLoRaTransition.ham.frequency = prepared.candidate.override_frequency;
+    }
     if (hasOpenEditTransaction) {
         editTransactionActivityMs = millis();
         return true;
@@ -1059,6 +1098,7 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     if (!service->requestLoRaConfig(prepared.previous, prepared.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS)) {
         loRaConfigApplyPending = false;
         pendingLoRaConfig = PreparedLoRaConfig{};
+        pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
         return false;
     }
     return true;
@@ -1073,6 +1113,7 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
     if (result == RadioConfigApplyResult::APPLIED) {
         config.has_lora = true;
         config.lora = pendingLoRaConfig.candidate;
+        const int saveWhat = pendingLoRaConfig.saveWhat | applyStagedMenuLoRaTransition();
         if (pendingLoRaConfig.updateFrequencySlotFlags) {
             RadioInterface::uses_default_frequency_slot = pendingLoRaConfig.usesDefaultFrequencySlot;
             RadioInterface::uses_custom_channel_name = pendingLoRaConfig.usesCustomChannelName;
@@ -1128,7 +1169,7 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
 #endif
 
         finalizingLoRaConfig = true;
-        saveChanges(pendingLoRaConfig.saveWhat, false, false);
+        saveChanges(saveWhat, false, false);
         finalizingLoRaConfig = false;
         if (pendingLoRaConfig.warnPresetChange)
             warnOnLoraPresetChange(pendingLoRaConfig.previous, pendingLoRaConfig.candidate);
@@ -1146,6 +1187,7 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
 
     loRaConfigApplyPending = false;
     pendingLoRaConfig = PreparedLoRaConfig{};
+    pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
     const int deferredSegments = deferredLoRaSaveSegments;
     const bool deferredReboot = deferredLoRaSaveReboot;
     const bool deferredNotify = deferredLoRaSaveNotify;
@@ -2006,8 +2048,10 @@ void AdminModule::expireStaleEditTransaction()
 
     LOG_WARN("Edit transaction abandoned for %us; committing what it applied", EDIT_TRANSACTION_IDLE_MS / 1000);
     hasOpenEditTransaction = false;
-    if (!loRaConfigApplyPending && pendingLoRaConfig.saveWhat != 0)
+    if (!loRaConfigApplyPending && pendingLoRaConfig.saveWhat != 0) {
         pendingLoRaConfig = PreparedLoRaConfig{};
+        pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
+    }
     int segments = deferredEditSegments;
     deferredEditSegments = 0;
     // No reboot: the settings are already live in RAM and the client that would expect one is gone.
@@ -2059,10 +2103,9 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 #endif
 }
 
-void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+bool AdminModule::validateHamParameters(const meshtastic_HamParameters &params) const
 {
-    // Validate ham parameters before setting since this would bypass validation in the owner struct
-    const char *fieldsToCheck[] = {p.call_sign, p.short_name};
+    const char *fieldsToCheck[] = {params.call_sign, params.short_name};
     const char *fieldNames[] = {"call_sign", "short_name"};
     for (int i = 0; i < 2; i++) {
         if (*fieldsToCheck[i]) {
@@ -2071,22 +2114,25 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
                 start++;
             if (*start == '\0') {
                 LOG_WARN("Rejected ham %s: must contain at least 1 non-whitespace character", fieldNames[i]);
-                return;
+                return false;
             }
         }
     }
+    return true;
+}
 
-    // Set call sign and override lora limitations for licensed use
-    strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+int AdminModule::applyEnterLicensedMode(const meshtastic_HamParameters &params)
+{
+    strncpy(owner.long_name, params.call_sign, sizeof(owner.long_name));
     owner.long_name[sizeof(owner.long_name) - 1] = '\0';
     sanitizeUtf8(owner.long_name, sizeof(owner.long_name));
-    strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
+    strncpy(owner.short_name, params.short_name, sizeof(owner.short_name));
     owner.short_name[sizeof(owner.short_name) - 1] = '\0';
     sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
-    config.lora.tx_power = p.tx_power;
-    config.lora.override_frequency = p.frequency;
+    config.lora.tx_power = params.tx_power;
+    config.lora.override_frequency = params.frequency;
     // Set node info broadcast interval to 10 minutes
     // For FCC minimum call-sign announcement
     config.device.node_info_broadcast_secs = 600;
@@ -2110,12 +2156,34 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     }
     channels.onConfigChanged();
 
-    if (strcmp(p.call_sign, "N0CALL") == 0) {
+    if (strcmp(params.call_sign, "N0CALL") == 0) {
         config.lora.tx_enabled = false;
     }
 
     service->reloadOwner(false);
-    saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    return SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS;
+}
+
+int AdminModule::applyStagedMenuLoRaTransition()
+{
+    const StagedMenuLoRaTransition staged = pendingMenuLoRaTransition;
+    pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
+
+    if (staged.type == MenuLoRaTransition::ENTER_LICENSED)
+        return applyEnterLicensedMode(staged.ham);
+    if (staged.type == MenuLoRaTransition::EXIT_LICENSED) {
+        owner.is_licensed = false;
+        service->reloadOwner(false);
+        return SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+    }
+    return 0;
+}
+
+void AdminModule::handleSetHamMode(const meshtastic_HamParameters &params)
+{
+    if (!validateHamParameters(params))
+        return;
+    saveChanges(applyEnterLicensedMode(params));
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

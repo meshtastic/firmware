@@ -58,6 +58,19 @@ class MockMeshService : public MeshService
     }
 };
 
+class ConfigChangedCounter : public Observer<void *>
+{
+  public:
+    uint32_t count = 0;
+
+  protected:
+    int onNotify(void *) override
+    {
+        count++;
+        return 0;
+    }
+};
+
 static MockMeshService *mockMeshService;
 
 class ScriptedConfigApplyRadio : public RadioInterface
@@ -65,6 +78,11 @@ class ScriptedConfigApplyRadio : public RadioInterface
   public:
     bool requestConfigApply(RadioConfigApplyRequest *request) override
     {
+        if (rejectNextRequest) {
+            rejectNextRequest = false;
+            request->result.store(RadioConfigApplyResult::BUSY);
+            return false;
+        }
         if (pendingRequest) {
             request->result.store(RadioConfigApplyResult::BUSY);
             return false;
@@ -88,11 +106,13 @@ class ScriptedConfigApplyRadio : public RadioInterface
     const RadioConfigApplyRequest *pending() const { return pendingRequest; }
 
     uint32_t requests() const { return requestCount; }
+    void rejectNext() { rejectNextRequest = true; }
 
     void reset()
     {
         pendingRequest = nullptr;
         requestCount = 0;
+        rejectNextRequest = false;
         setConfigApplyTxInhibit(false);
     }
 
@@ -102,6 +122,7 @@ class ScriptedConfigApplyRadio : public RadioInterface
   private:
     RadioConfigApplyRequest *pendingRequest = nullptr;
     uint32_t requestCount = 0;
+    bool rejectNextRequest = false;
 };
 
 static Router *savedRouter;
@@ -1808,19 +1829,296 @@ static void test_editTransaction_loraFailure_savesOnlyUnrelatedSegments()
     TEST_ASSERT_EQUAL(previous.region, testAdmin->persistedLoRa().region);
 }
 
-static void test_menuLoRaHelper_usesValidatedAsyncRequestPath()
+struct LicensedMenuSnapshot {
+    meshtastic_User owner;
+    meshtastic_Config_DeviceConfig device;
+    meshtastic_Config_LoRaConfig lora;
+    meshtastic_Config_SecurityConfig security;
+    meshtastic_ChannelFile channels;
+    meshtastic_LocalModuleConfig moduleConfig;
+    bool migrationPending;
+};
+
+static void configureLicensedMenuBaseline(bool licensed)
+{
+    if (!adminRadioGlobalsActive)
+        replaceAdminRadioGlobals();
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    configureLoRaTransactionBaseline(licensed ? meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M
+                                              : meshtastic_Config_LoRaConfig_RegionCode_US);
+
+    owner = meshtastic_User_init_zero;
+    strncpy(owner.long_name, licensed ? "N0CALL" : "Before", sizeof(owner.long_name) - 1);
+    strncpy(owner.short_name, licensed ? "N0CL" : "BFR", sizeof(owner.short_name) - 1);
+    owner.is_licensed = licensed;
+
+    config.device = meshtastic_Config_DeviceConfig_init_zero;
+    config.device.node_info_broadcast_secs = 1234;
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    config.security = meshtastic_Config_SecurityConfig_init_zero;
+    config.lora.override_duty_cycle = licensed;
+    config.lora.override_frequency = licensed ? 145.5f : 144.5f;
+    config.lora.tx_power = licensed ? 127 : 30;
+    config.lora.tx_enabled = !licensed;
+    initRegion();
+
+    installEncryptedAndAdminChannels();
+    if (licensed)
+        channels.ensureLicensedOperation();
+
+    if (licensed) {
+        config.security.private_key.size = 32;
+        config.security.public_key.size = 32;
+        owner.public_key.size = 32;
+        memset(config.security.private_key.bytes, 0x11, 32);
+        memset(config.security.public_key.bytes, 0x22, 32);
+        memset(owner.public_key.bytes, 0x22, 32);
+    }
+    nodeDB->licensedIdentityMigrationPending = true;
+}
+
+static meshtastic_Config_LoRaConfig makeMenuRegionCandidate(meshtastic_Config_LoRaConfig_RegionCode region)
+{
+    auto candidate = config.lora;
+    candidate.region = region;
+    candidate.channel_num = 0;
+    candidate.use_preset = true;
+    candidate.modem_preset = getRegion(region)->getDefaultPreset();
+    return candidate;
+}
+
+static LicensedMenuSnapshot captureLicensedMenuSnapshot()
+{
+    return {
+        owner, config.device, config.lora, config.security, channelFile, moduleConfig, nodeDB->licensedIdentityMigrationPending};
+}
+
+static void assertLicensedMenuSnapshot(const LicensedMenuSnapshot &expected)
+{
+    TEST_ASSERT_EQUAL_MEMORY(&expected.owner, &owner, sizeof(owner));
+    TEST_ASSERT_EQUAL_MEMORY(&expected.device, &config.device, sizeof(config.device));
+    TEST_ASSERT_EQUAL_MEMORY(&expected.lora, &config.lora, sizeof(config.lora));
+    TEST_ASSERT_EQUAL_MEMORY(&expected.security, &config.security, sizeof(config.security));
+    TEST_ASSERT_EQUAL_MEMORY(&expected.channels, &channelFile, sizeof(channelFile));
+    TEST_ASSERT_EQUAL_MEMORY(&expected.moduleConfig, &moduleConfig, sizeof(moduleConfig));
+    TEST_ASSERT_EQUAL(expected.migrationPending, nodeDB->licensedIdentityMigrationPending);
+}
+
+static void test_menuLoRaHelper_ordinaryQueueSuccessBusyAndNoSyncPersistence()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
     const auto previous = config.lora;
-    const auto candidate =
+    const auto first =
         makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    const auto second =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+    ConfigChangedCounter configChanges;
+    configChanges.observe(&mockMeshService->configChanged);
 
-    TEST_ASSERT_TRUE(testAdmin->requestLoRaConfig(candidate, false));
+    TEST_ASSERT_TRUE(testAdmin->requestMenuLoRaConfig(first));
+    TEST_ASSERT_FALSE(testAdmin->requestMenuLoRaConfig(second));
 
     TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->requests());
     TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
     TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
     TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+    TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
+    TEST_ASSERT_EQUAL_UINT32(0, configChanges.count);
+}
+
+static void test_menuLoRaHelper_queueRejectionDiscardsLicensedTransitions()
+{
+    const AdminModule::MenuLoRaTransition transitions[] = {AdminModule::MenuLoRaTransition::ENTER_LICENSED,
+                                                           AdminModule::MenuLoRaTransition::EXIT_LICENSED};
+
+    for (const auto transition : transitions) {
+        configureLicensedMenuBaseline(transition == AdminModule::MenuLoRaTransition::EXIT_LICENSED);
+        const auto target = transition == AdminModule::MenuLoRaTransition::ENTER_LICENSED
+                                ? meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M
+                                : meshtastic_Config_LoRaConfig_RegionCode_US;
+        const auto candidate = makeMenuRegionCandidate(target);
+        const auto before = captureLicensedMenuSnapshot();
+        scriptedRadio->reset();
+        scriptedRadio->rejectNext();
+        capturedWarnings.clear();
+
+        TEST_ASSERT_FALSE(testAdmin->requestMenuLoRaConfig(candidate, transition));
+
+        assertLicensedMenuSnapshot(before);
+        TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+        TEST_ASSERT_NULL(scriptedRadio->pending());
+        TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->requests());
+        TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+        TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
+        TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+    }
+}
+
+static void test_menuLoRaHelper_busyDiscardsLicensedTransitions()
+{
+    const AdminModule::MenuLoRaTransition transitions[] = {AdminModule::MenuLoRaTransition::ENTER_LICENSED,
+                                                           AdminModule::MenuLoRaTransition::EXIT_LICENSED};
+
+    for (const auto transition : transitions) {
+        configureLicensedMenuBaseline(transition == AdminModule::MenuLoRaTransition::EXIT_LICENSED);
+        const auto ordinary = makeLoRaCandidate(config.lora.region, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+        TEST_ASSERT_TRUE(testAdmin->requestMenuLoRaConfig(ordinary));
+        const auto before = captureLicensedMenuSnapshot();
+        const auto target = transition == AdminModule::MenuLoRaTransition::ENTER_LICENSED
+                                ? meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M
+                                : meshtastic_Config_LoRaConfig_RegionCode_US;
+
+        TEST_ASSERT_FALSE(testAdmin->requestMenuLoRaConfig(makeMenuRegionCandidate(target), transition));
+
+        assertLicensedMenuSnapshot(before);
+        TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->requests());
+        TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+        TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
+
+        scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+        mockMeshService->loop();
+        scriptedRadio->reset();
+        capturedWarnings.clear();
+    }
+}
+
+static void assertMenuTransitionTerminalFailures(AdminModule::MenuLoRaTransition transition)
+{
+    const RadioConfigApplyResult failures[] = {RadioConfigApplyResult::TIMED_OUT,
+                                               RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK,
+                                               RadioConfigApplyResult::ROLLBACK_FAILED};
+
+    for (const auto result : failures) {
+        configureLicensedMenuBaseline(transition == AdminModule::MenuLoRaTransition::EXIT_LICENSED);
+        const auto target = transition == AdminModule::MenuLoRaTransition::ENTER_LICENSED
+                                ? meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M
+                                : meshtastic_Config_LoRaConfig_RegionCode_US;
+        const auto before = captureLicensedMenuSnapshot();
+        scriptedRadio->reset();
+        capturedWarnings.clear();
+
+        TEST_ASSERT_TRUE(testAdmin->requestMenuLoRaConfig(makeMenuRegionCandidate(target), transition));
+        assertLicensedMenuSnapshot(before);
+        TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+
+        scriptedRadio->complete(result);
+        mockMeshService->loop();
+
+        assertLicensedMenuSnapshot(before);
+        TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+        TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+        TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
+        TEST_ASSERT_EQUAL_INT(1, warningsContaining("Radio configuration apply failed"));
+        TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
+    }
+}
+
+static void test_menuLoRaHelper_enterLicensedTerminalFailuresLeaveSnapshotUnchanged()
+{
+    assertMenuTransitionTerminalFailures(AdminModule::MenuLoRaTransition::ENTER_LICENSED);
+}
+
+static void test_menuLoRaHelper_exitLicensedTerminalFailuresLeaveSnapshotUnchanged()
+{
+    assertMenuTransitionTerminalFailures(AdminModule::MenuLoRaTransition::EXIT_LICENSED);
+}
+
+static void test_menuLoRaHelper_enterLicensedAppliesOnceAfterRadioSuccess()
+{
+    configureLicensedMenuBaseline(false);
+    const auto candidate = makeMenuRegionCandidate(meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M);
+    const auto before = captureLicensedMenuSnapshot();
+
+    TEST_ASSERT_TRUE(testAdmin->requestMenuLoRaConfig(candidate, AdminModule::MenuLoRaTransition::ENTER_LICENSED));
+
+    assertLicensedMenuSnapshot(before);
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->candidate.override_duty_cycle);
+    TEST_ASSERT_EQUAL_INT8(30, scriptedRadio->pending()->candidate.tx_power);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 144.5f, scriptedRadio->pending()->candidate.override_frequency);
+    TEST_ASSERT_FALSE(scriptedRadio->pending()->candidate.tx_enabled);
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    TEST_ASSERT_EQUAL_STRING("N0CALL", owner.long_name);
+    TEST_ASSERT_EQUAL_STRING("N0CL", owner.short_name);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M, config.lora.region);
+    TEST_ASSERT_TRUE(config.lora.override_duty_cycle);
+    TEST_ASSERT_EQUAL_INT8(30, config.lora.tx_power);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 144.5f, config.lora.override_frequency);
+    TEST_ASSERT_FALSE(config.lora.tx_enabled);
+    TEST_ASSERT_EQUAL_UINT32(600, config.device.node_info_broadcast_secs);
+    TEST_ASSERT_EQUAL(meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY, config.device.rebroadcast_mode);
+    assertLicensedChannelsSanitized();
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    TEST_ASSERT_EQUAL_UINT(32, config.security.private_key.size);
+    TEST_ASSERT_EQUAL_UINT(32, config.security.public_key.size);
+    TEST_ASSERT_EQUAL_UINT(32, owner.public_key.size);
+    TEST_ASSERT_FALSE(nodeDB->licensedIdentityMigrationPending);
+#endif
+    TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
+    TEST_ASSERT_EQUAL_INT(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | SEGMENT_CHANNELS,
+                          testAdmin->persistedSegments());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("Licensed mode activated"));
+}
+
+static void test_menuLoRaHelper_exitLicensedAppliesNormalizedStateOnceAfterRadioSuccess()
+{
+    configureLicensedMenuBaseline(true);
+    const auto securityBefore = config.security;
+    const auto channelsBefore = channelFile;
+    const auto candidate = makeMenuRegionCandidate(meshtastic_Config_LoRaConfig_RegionCode_US);
+
+    TEST_ASSERT_TRUE(testAdmin->requestMenuLoRaConfig(candidate, AdminModule::MenuLoRaTransition::EXIT_LICENSED));
+
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_FALSE(scriptedRadio->pending()->candidate.override_duty_cycle);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, scriptedRadio->pending()->candidate.override_frequency);
+    TEST_ASSERT_EQUAL_INT8(getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->powerLimit,
+                           scriptedRadio->pending()->candidate.tx_power);
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->candidate.tx_enabled);
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_FALSE(config.lora.override_duty_cycle);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, config.lora.override_frequency);
+    TEST_ASSERT_EQUAL_INT8(getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->powerLimit, config.lora.tx_power);
+    TEST_ASSERT_TRUE(config.lora.tx_enabled);
+    TEST_ASSERT_EQUAL_MEMORY(&securityBefore, &config.security, sizeof(config.security));
+    TEST_ASSERT_EQUAL_MEMORY(&channelsBefore, &channelFile, sizeof(channelFile));
+    TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
+    TEST_ASSERT_EQUAL_INT(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE,
+                          testAdmin->persistedSegments());
+}
+
+static void test_setHamMode_directProtobufPathRemainsImmediate()
+{
+    configureLicensedMenuBaseline(false);
+    meshtastic_HamParameters params = meshtastic_HamParameters_init_zero;
+    strncpy(params.call_sign, "K1ABC", sizeof(params.call_sign) - 1);
+    strncpy(params.short_name, "K1A", sizeof(params.short_name) - 1);
+    params.tx_power = 20;
+    params.frequency = 145.5f;
+
+    testAdmin->handleSetHamMode(params);
+
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    TEST_ASSERT_EQUAL_STRING("K1ABC", owner.long_name);
+    TEST_ASSERT_EQUAL_STRING("K1A", owner.short_name);
+    TEST_ASSERT_TRUE(config.lora.override_duty_cycle);
+    TEST_ASSERT_EQUAL_INT8(20, config.lora.tx_power);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 145.5f, config.lora.override_frequency);
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
 }
 
 static void test_setLoraConfig_invalidRegionRejectedBeforeTransaction()
@@ -2432,7 +2730,14 @@ void setup()
     RUN_TEST(test_editTransaction_commit_queuesOneRadioApply);
     RUN_TEST(test_editTransaction_expiry_doesNotPersistUnappliedLora);
     RUN_TEST(test_editTransaction_loraFailure_savesOnlyUnrelatedSegments);
-    RUN_TEST(test_menuLoRaHelper_usesValidatedAsyncRequestPath);
+    RUN_TEST(test_menuLoRaHelper_ordinaryQueueSuccessBusyAndNoSyncPersistence);
+    RUN_TEST(test_menuLoRaHelper_queueRejectionDiscardsLicensedTransitions);
+    RUN_TEST(test_menuLoRaHelper_busyDiscardsLicensedTransitions);
+    RUN_TEST(test_menuLoRaHelper_enterLicensedTerminalFailuresLeaveSnapshotUnchanged);
+    RUN_TEST(test_menuLoRaHelper_exitLicensedTerminalFailuresLeaveSnapshotUnchanged);
+    RUN_TEST(test_menuLoRaHelper_enterLicensedAppliesOnceAfterRadioSuccess);
+    RUN_TEST(test_menuLoRaHelper_exitLicensedAppliesNormalizedStateOnceAfterRadioSuccess);
+    RUN_TEST(test_setHamMode_directProtobufPathRemainsImmediate);
     RUN_TEST(test_setLoraConfig_invalidRegionRejectedBeforeTransaction);
     RUN_TEST(test_setLoraConfig_remoteInvalidRejectedBeforeTransaction);
     RUN_TEST(test_setLoraConfig_doesNotMutateOrSaveBeforeHardwareSuccess);

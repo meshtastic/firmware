@@ -317,7 +317,7 @@ static uint8_t regionPresetCount = 0;
 
 static bool requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &candidate)
 {
-    if (!adminModule || !adminModule->requestLoRaConfig(candidate, false)) {
+    if (!adminModule || !adminModule->requestMenuLoRaConfig(candidate)) {
         LOG_WARN("Unable to queue LoRa configuration change from InkHUD menu");
         return false;
     }
