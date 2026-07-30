@@ -946,7 +946,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         // only them takes effect with no restart. Everything else - GPS driver mode/timing and GPIO pin
         // assignments - stays on the reboot path. Fails safe: neutralize the known-live fields in a copy,
         // then reboot if any *other* byte differs, so a newly-added PositionConfig field reboots until it
-        // is explicitly cleared as live here. See plan-narrow-reboot-trigger.
+        // is explicitly cleared as live here. See docs/admin-config-save-gating.md.
         {
             meshtastic_Config_PositionConfig live = config.position, incoming = c.payload_variant.position;
             incoming.position_broadcast_secs = live.position_broadcast_secs;

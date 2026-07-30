@@ -1,9 +1,9 @@
 # AdminModule config-save side effects: radio-reload & reboot gating
 
-**Status:** Implemented
+**Status:** Implementation complete; hardware validation outstanding
 **Date:** 2026-07-23
 **Area:** `src/modules/AdminModule.cpp` (`handleSetConfig`, `saveChanges`), `src/mesh/MeshService.cpp` (`reloadConfig`), `src/mesh/NodeDB.h` (`SEGMENT_*`)
-**Commits:** `babeef08d` (radio-reload), `65c27f813` + `273fa8d0a` (segment docs / TODO markers), `71d711867` (reboot Tier 1), `cc9abdbbc` (reboot Tier 2)
+**Reference:** meshtastic/firmware#11181 (commit SHAs omitted - they do not survive rebase or squash merge)
 
 Saving a config over the phone/BLE used to do more than persist bytes: it could re-init the
 LoRa radio **and** reboot the device, on config that touched neither. This document records
@@ -161,18 +161,49 @@ is worth.
    Separating the few that plausibly don't need one (canned messages, ambient lighting,
    status message) needs a per-module audit - its own effort, not part of this work.
 
-5. **On-device menu `reloadConfig` sites** - 27 `reloadConfig(SEGMENT_CONFIG)` /
-   `reloadConfig(changes)` calls in `src/graphics/draw/MenuHandler.cpp` and
-   `src/graphics/niche/InkHUD/Applets/System/Menu/MenuApplet.cpp` still reload on any Config
-   save (they pass only `saveWhat`; the default `radioAffected=true` preserves this).
-   **Why untouched:** this work was scoped to the AdminModule (client admin-message) crash class.
-   The menu paths are a mix of genuinely-radio changes (region/preset) and incidental ones
-   (role, display units), run on the UI thread. Each is marked with a
-   `// TODO(radioAffected)` note (`audit` vs `radio-affecting`) for a future per-site pass.
+5. ~~**On-device menu `reloadConfig` sites**~~ - **now done, see "On-device menus" below.**
+   These were initially left alone as out of scope, then migrated in the same PR.
 
 For contrast, `set_channel` ([`:1445`](../src/modules/AdminModule.cpp#L1445)) and
 `restore_preferences` ([`:1911`](../src/modules/AdminModule.cpp#L1911)) also still reload -
 but that is _correct_, not conservative: both genuinely change LoRa/channel state.
+
+---
+
+## On-device menus (`applyConfigChange`)
+
+Both UIs go through one entry point on `MeshService`, so a menu action states the same two
+decisions AdminModule does rather than inheriting defaults:
+
+```cpp
+void applyConfigChange(int saveWhat, uint8_t flags, int32_t rebootSeconds = DEFAULT_REBOOT_SECONDS);
+
+enum ConfigApplyFlags : uint8_t {
+    CONFIG_APPLY_NONE = 0,        // persist only
+    CONFIG_APPLY_RADIO = 1 << 0,  // region/preset/freq/channel/PSK - re-init the LoRa chip
+    CONFIG_APPLY_REBOOT = 1 << 1, // field only takes effect after a restart
+};
+```
+
+`flags` has no default: the point is that every call site says what it wants. A flags enum
+rather than two bools because `reboot` and `radioAffected` are both bools, sat in different
+positions across the helpers this replaced, and transposing them compiled silently. InkHUD's
+`applyConfigReload(changes, reboot)` took `reboot` exactly where `reloadConfig` and
+`saveChanges` take `radioAffected`.
+
+Notes for anyone extending this:
+
+- `reloadConfig(X, /*radioAffected=*/false)` is **exactly equivalent** to `saveToDisk(X)` - the
+  save is unconditional, outside the guard. So never pair them: that writes the file twice.
+- **AdminModule keeps using `saveChanges`**, not `applyConfigChange` directly. It owns the
+  edit-transaction deferral, without which a multi-field remote set writes flash per field.
+- Reboots go through `requestReboot()` (`src/main.h`). It carries no UI: BaseUI already renders
+  the notice at draw time from `rebootAtMsec`, while InkHUD's e-ink only draws when pushed and so
+  raises `notifyApplyingChanges()` explicitly.
+- `rebootSeconds` exists for one caller - InkHUD's wifi-recovery path uses a shorter delay than
+  `DEFAULT_REBOOT_SECONDS`.
+- UI-only state stays out of this: BaseUI `uiconfig` fields use `saveUIConfig()`, and InkHUD has
+  its own non-protobuf `Persistence::Settings` store. Neither is in the `/prefs` protobuf tree.
 
 ---
 
@@ -258,9 +289,8 @@ a cheap confidence test but not a gate.
 
 - To stop a config field from reloading the radio on an **AdminModule/client config save**: it
   already doesn't, unless it's `lora`. Do **not** widen `radioAffected` to non-LoRa config -
-  only `RadioInterface::reconfigure()` (which reads `config.lora`) consumes it. This does not
-  apply to the on-device menu `reloadConfig` sites (item 5 above), which still reload on any
-  Config save regardless of field - that is a separate, untouched code path.
+  only `RadioInterface::reconfigure()` (which reads `config.lora`) consumes it. The on-device
+  menus are now gated the same way, via `applyConfigChange` (see below).
 - To move a field off the reboot path: confirm it is consumed live (read from `config` at use
   time, no cached/driver state), add it to the live set in the relevant `handleSetConfig`
   case, and add a native case asserting no reboot on its change. For anything driver- or
