@@ -109,6 +109,11 @@ lint:
     - linters: [ALL]
       paths:
         - userPrefs.jsonc
+    # CKV_GHA_7 wants workflow_dispatch inputs empty, but the manual winget validation run
+    # needs a tag and version. Ignored at file level to keep the workflow suppression-free.
+    - linters: [checkov]
+      paths:
+        - .github/workflows/package_winget.yml
     # The UA font's em/en dashes live only in trailing comments documenting
     # each glyph's codepoint (e.g. "8212=:2549"); rewriting them would make
     # those docs inaccurate. Glyph byte data is unaffected either way.

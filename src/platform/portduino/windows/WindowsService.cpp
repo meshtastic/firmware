@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <mutex>
 #include <thread>
 
 // SERVICE_WIN32_OWN_PROCESS ignores the name, but the SCM still wants a non-null entry.
@@ -19,15 +20,24 @@ static const wchar_t *serviceName = L"meshtasticd";
 static const DWORD PENDING_WAIT_HINT_MS = 15000;
 
 // The SCM calls the control handler on its own thread, so a stop landing during the
-// START_PENDING poll runs reportStatus() concurrently. Hence per-call status, atomic counter.
+// START_PENDING poll races the startup reports. statusMutex orders them.
 static std::atomic<SERVICE_STATUS_HANDLE> statusHandle{nullptr};
-static std::atomic<DWORD> checkPoint{1};
+static std::atomic<bool> stopping{false};
+static std::mutex statusMutex;
+static DWORD checkPoint = 1;
 static HANDLE readyEvent = nullptr;
 
 static void reportStatus(DWORD state, DWORD waitHintMs)
 {
     SERVICE_STATUS_HANDLE handle = statusHandle.load();
     if (!handle)
+        return;
+
+    std::lock_guard<std::mutex> lock(statusMutex);
+    // Latch the stop so a startup report queued behind it cannot walk the state back.
+    if (state == SERVICE_STOP_PENDING || state == SERVICE_STOPPED)
+        stopping.store(true);
+    else if (stopping.load())
         return;
 
     SERVICE_STATUS status = {};
@@ -73,7 +83,7 @@ static void WINAPI serviceMain(DWORD, LPWSTR *)
     // A cold node DB can push setup() past the SCM's 30 s start timeout, so keep the
     // transition alive with a fresh checkpoint until setup() signals ready.
     reportStatus(SERVICE_START_PENDING, PENDING_WAIT_HINT_MS);
-    while (WaitForSingleObject(readyEvent, 5000) == WAIT_TIMEOUT)
+    while (!stopping.load() && WaitForSingleObject(readyEvent, 5000) == WAIT_TIMEOUT)
         reportStatus(SERVICE_START_PENDING, PENDING_WAIT_HINT_MS);
     reportStatus(SERVICE_RUNNING, 0);
 
