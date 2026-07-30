@@ -174,8 +174,8 @@ class MeshService
      *        includes SEGMENT_CONFIG/SEGMENT_CHANNELS; the save-to-disk always happens. Defaults
      *        to true so callers that only pass saveWhat keep the historical bitmask behavior.
      */
-    void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS,
-                      bool radioAffected = true);
+    virtual void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS,
+                              bool radioAffected = true);
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);

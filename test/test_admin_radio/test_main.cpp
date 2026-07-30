@@ -2170,6 +2170,31 @@ static void test_reloadConfig_moduleConfigSegment_skipsReload()
     TEST_ASSERT_EQUAL_INT(0, counter.count);
 }
 
+// reloadConfig() ends with an unconditional nodeDB->saveToDisk(saveWhat), *outside* the
+// radioAffected guard. So with the flag false it is exactly equivalent to calling
+// saveToDisk(saveWhat) directly - which is what licenses deleting the nine
+// `saveToDisk(X); reloadConfig(X, ...)` double-writes from the InkHUD menu. If that
+// equivalence ever stops holding, those deletions become silent data loss, so assert it here
+// rather than trusting the reading of the code.
+static void test_reloadConfig_radioAffectedFalse_isEquivalentToSaveToDisk()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    // Distinguishable value so we can tell a write happened at all.
+    config.position.position_broadcast_secs = 4321;
+
+    const int savesBefore = mockMeshService->reloadCalls;
+    service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false);
+
+    // No radio reconfigure...
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    // ...and exactly one pass through reloadConfig, i.e. one save, not two.
+    TEST_ASSERT_EQUAL_INT(savesBefore + 1, mockMeshService->reloadCalls);
+    // The in-memory value survives the call (nothing clobbers config on the save path).
+    TEST_ASSERT_EQUAL_UINT32(4321, config.position.position_broadcast_secs);
+}
+
 // -----------------------------------------------------------------------
 // Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
 // -----------------------------------------------------------------------
@@ -2204,26 +2229,24 @@ static void test_toggleNodeMuted_unknownNodeDoesNothing()
     TEST_ASSERT_NULL(nodeDB->getMeshNode(0xDEADBEEF));
 }
 
-// CHARACTERIZATION OF A KNOWN DEFECT, not an endorsement. Flipping one NodeInfoLite bit currently
-// calls bare nodeDB->saveToDisk(), which rewrites all five segments. saveToDisk() is not virtual,
-// so the mask is observed through its effect: every prefs file reappears after being removed.
-//
-// A pending fix narrows this to SEGMENT_NODEDATABASE. When it lands, only nodes.proto should come
-// back and this assertion is EXPECTED to change - that diff is the point, so the improvement is
-// visible instead of silent.
-static void test_toggleNodeMuted_currentlyRewritesEverySegment()
+// This was a characterization of a known defect: flipping one NodeInfoLite bit called bare
+// nodeDB->saveToDisk(), rewriting all five segments. That fix has now landed, so the assertion
+// is inverted as its earlier form said it would be - only nodes.proto comes back, and the other
+// four stay gone. saveToDisk() is not virtual, so the mask is still observed through its effect.
+static void test_toggleNodeMuted_writesOnlyTheNodeDatabase()
 {
     nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
 
-    const char *segmentFiles[] = {configFileName, moduleConfigFileName, deviceStateFileName, channelFileName,
-                                  nodeDatabaseFileName};
-    for (const char *f : segmentFiles)
+    const char *otherSegments[] = {configFileName, moduleConfigFileName, deviceStateFileName, channelFileName};
+    for (const char *f : otherSegments)
         FSCom.remove(f);
+    FSCom.remove(nodeDatabaseFileName);
 
     graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
 
-    for (const char *f : segmentFiles)
-        TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(f), f);
+    TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(nodeDatabaseFileName), nodeDatabaseFileName);
+    for (const char *f : otherSegments)
+        TEST_ASSERT_FALSE_MESSAGE(FSCom.exists(f), f);
 }
 #endif // HAS_SCREEN
 
@@ -2398,11 +2421,12 @@ void setup()
     RUN_TEST(test_setConfigPosition_gpsModeChange_schedulesReboot);
     RUN_TEST(test_reloadConfig_moduleConfigSegment_skipsReload);
     RUN_TEST(test_moduleConfigTelemetryScreenFlags_liveInModuleConfig);
+    RUN_TEST(test_reloadConfig_radioAffectedFalse_isEquivalentToSaveToDisk);
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
     RUN_TEST(test_toggleNodeMuted_unknownNodeDoesNothing);
-    RUN_TEST(test_toggleNodeMuted_currentlyRewritesEverySegment);
+    RUN_TEST(test_toggleNodeMuted_writesOnlyTheNodeDatabase);
 #endif
 
     exit(UNITY_END());

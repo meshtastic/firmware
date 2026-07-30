@@ -355,8 +355,6 @@ static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
 
     config.device.role = role;
 
-    nodeDB->saveToDisk(SEGMENT_CONFIG);
-
     service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // device role, not LoRa
 
     // Notify UI that changes are being applied
@@ -373,7 +371,6 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     config.lora.use_preset = true;
     config.lora.modem_preset = preset;
 
-    nodeDB->saveToDisk(SEGMENT_CONFIG);
     // LoRa config applies live via configChanged observer -> RadioInterface::reconfigure(); no reboot needed.
     service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/true); // modem preset is a LoRa radio parameter
 
@@ -385,7 +382,6 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
 // applyLoRaRegion/applyLoRaPreset helpers above so the reload can request the radio reconfigure.
 static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)
 {
-    nodeDB->saveToDisk(changes);
     service->reloadConfig(changes, /*radioAffected=*/false);
 
     if (reboot) {
@@ -450,7 +446,6 @@ static void applyTimezone(const char *tz)
 
     setenv("TZ", config.device.tzdef, 1);
 
-    nodeDB->saveToDisk(SEGMENT_CONFIG);
     service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // timezone, not LoRa
 }
 
@@ -623,7 +618,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             // NOT_PRESENT do nothing
             break;
         }
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
         // GPS driver is toggled live above (matches MenuHandler.cpp's equivalent) - no reboot needed.
         service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // GPS mode, not LoRa
 #endif
@@ -1081,7 +1075,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_CHANNEL_UPLINK: {
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.uplink_enabled = !ch.settings.uplink_enabled;
-        nodeDB->saveToDisk(SEGMENT_CHANNELS);
         service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
@@ -1089,7 +1082,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_CHANNEL_DOWNLINK: {
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.downlink_enabled = !ch.settings.downlink_enabled;
-        nodeDB->saveToDisk(SEGMENT_CHANNELS);
         service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
@@ -1105,7 +1097,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         else
             ch.settings.module_settings.position_precision = 13; // default
 
-        nodeDB->saveToDisk(SEGMENT_CHANNELS);
         service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
@@ -1125,7 +1116,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             ch.settings.module_settings.position_precision = POSITION_PRECISION_OPTIONS[index].value;
         }
 
-        nodeDB->saveToDisk(SEGMENT_CHANNELS);
         service->reloadConfig(SEGMENT_CHANNELS, /*radioAffected=*/true); // channel/PSK is a LoRa radio parameter
         break;
     }
