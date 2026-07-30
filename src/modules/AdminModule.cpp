@@ -926,7 +926,7 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
                 RadioInterface::validateConfigRegion(prepared.candidate);
             else
                 RadioInterface::publishLoRaConfigDiagnostics(validation);
-            prepared.candidate = prepared.previous;
+            return false;
         }
     }
 
@@ -947,17 +947,13 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
                 } else {
                     RadioInterface::publishLoRaConfigDiagnostics(validation);
                     RadioInterface::publishLoRaConfigDiagnostics(swappedValidation);
-                    prepared.candidate = prepared.previous;
-                    regionSideEffectsPending = false;
+                    LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+                    return false;
                 }
             } else {
                 RadioInterface::publishLoRaConfigDiagnostics(validation);
-                prepared.candidate = prepared.previous;
-                regionSideEffectsPending = false;
-            }
-            if (prepared.candidate.region == prepared.previous.region &&
-                prepared.candidate.modem_preset == prepared.previous.modem_preset) {
                 LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+                return false;
             }
         } else {
             prepared.warnInvalidClientCorrection = true;
