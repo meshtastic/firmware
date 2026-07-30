@@ -5,7 +5,9 @@
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
+#include "gps/RTC.h"
 #include <cstdint>
+#include <sys/time.h>
 #include <unity.h>
 
 void setUp(void)
@@ -15,6 +17,7 @@ void setUp(void)
 void tearDown(void)
 {
     Time::useRealClock(); // don't leak the fake clock into other suites
+    resetRTCStateForTests();
 }
 
 // --- injection ---
@@ -96,6 +99,48 @@ void test_getUptimeSecs_stays_exact_across_the_wrap()
     TEST_ASSERT_EQUAL_UINT32(4294968u, Time::getUptimeSecs());
 }
 
+// --- getTime(): the wall clock must not retreat at the millis() wrap ---
+
+// Epoch used by the wall-clock cases; must sit between BUILD_EPOCH (stamped at build time) and
+// BUILD_EPOCH + 40 years or perhapsSetRTC() rejects it as implausible - so derive it.
+#ifdef BUILD_EPOCH
+static constexpr uint32_t kTestEpoch = (uint32_t)BUILD_EPOCH + 3600;
+#else
+static constexpr uint32_t kTestEpoch = 1800000000u;
+#endif
+
+void test_getTime_stays_exact_across_the_wrap()
+{
+    resetRTCStateForTests();
+    Time::setTestMillis(0xFFFFFF00u); // 256ms short of the wrap
+
+    struct timeval tv = {};
+    tv.tv_sec = kTestEpoch;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &tv));
+    TEST_ASSERT_EQUAL_UINT32(kTestEpoch, getTime(false));
+
+    Time::advanceTestMillis(400u * 1000u); // crosses the wrap partway through
+    // With a 32-bit anchor this read came back 49.7 days in the past.
+    TEST_ASSERT_EQUAL_UINT32(kTestEpoch + 400, getTime(false));
+}
+
+// The anchor must also be correct when the time-set itself happens after a counted wrap, i.e.
+// when the monotonic clock is already past 32-bit range.
+void test_getTime_anchored_after_a_wrap_is_exact()
+{
+    resetRTCStateForTests();
+    Time::setTestMillis(0xFFFFFF00u);
+    Time::getMillisMonotonic();      // latch the pre-wrap value
+    Time::advanceTestMillis(0x200u); // cross the wrap; monotonic is now > 2^32
+
+    struct timeval tv = {};
+    tv.tv_sec = kTestEpoch;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &tv));
+
+    Time::advanceTestMillis(100u * 1000u);
+    TEST_ASSERT_EQUAL_UINT32(kTestEpoch + 100, getTime(false));
+}
+
 // --- real clock fallback ---
 
 void test_real_clock_advances_when_not_injected()
@@ -119,6 +164,8 @@ void setup()
     RUN_TEST(test_monotonic_counts_every_wrap_when_read_each_window);
     RUN_TEST(test_monotonic_misses_a_wrap_not_read_within_the_window);
     RUN_TEST(test_getUptimeSecs_stays_exact_across_the_wrap);
+    RUN_TEST(test_getTime_stays_exact_across_the_wrap);
+    RUN_TEST(test_getTime_anchored_after_a_wrap_is_exact);
     RUN_TEST(test_real_clock_advances_when_not_injected);
     exit(UNITY_END());
 }

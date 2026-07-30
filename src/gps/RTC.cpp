@@ -1,4 +1,5 @@
 #include "gps/RTC.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
@@ -37,8 +38,10 @@ RTCQuality getRTCQuality()
 }
 
 // stuff that really should be in in the instance instead...
-static uint32_t
-    timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
+// The monotonic (Time::getMillisMonotonic) instant that corresponds to zeroOffsetSecs. 64-bit so
+// getTime()'s elapsed term cannot wrap: with a 32-bit anchor the wall clock silently fell back
+// 49.7 days once the device outlived one millis() cycle after its last time-set.
+static uint64_t timeStartMs64;
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
 #ifdef PIO_UNIT_TESTING
@@ -70,11 +73,11 @@ static struct timeval mockSystemTime = {};
 {
     struct timeval tv;
     if (readSystemTime(&tv)) {
-        uint32_t now = millis();
+        const uint64_t now = Time::getMillisMonotonic();
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
         if (currentQuality == RTCQualityNone) {
             LOG_DEBUG("Seed time from system clock: %lu", (unsigned long)printableEpoch);
-            timeStartMsec = now;
+            timeStartMs64 = now;
             zeroOffsetSecs = tv.tv_sec;
         } else {
             LOG_DEBUG("Ignore system clock fallback (%lu); current RTC quality is %s", (unsigned long)printableEpoch,
@@ -100,7 +103,7 @@ RTCSetResult readFromRTC()
     [[maybe_unused]] struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
     if (rtc_found.address == RV3028_RTC) {
-        uint32_t now = millis();
+        const uint64_t now = Time::getMillisMonotonic();
         Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
         rtc.initI2C(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
@@ -131,7 +134,7 @@ RTCSetResult readFromRTC()
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
-            timeStartMsec = now;
+            timeStartMs64 = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
             onTimeSourceQualityChanged(oldQuality, currentQuality);
@@ -149,7 +152,7 @@ RTCSetResult readFromRTC()
         SensorPCF85063 rtc;
 
 #endif
-        uint32_t now = millis();
+        const uint64_t now = Time::getMillisMonotonic();
 
 #if WIRE_INTERFACES_COUNT == 2
         rtc.begin(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
@@ -177,7 +180,7 @@ RTCSetResult readFromRTC()
                   t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
-            timeStartMsec = now;
+            timeStartMs64 = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
             onTimeSourceQualityChanged(oldQuality, currentQuality);
@@ -188,7 +191,7 @@ RTCSetResult readFromRTC()
     }
 #elif defined(RX8130CE_RTC)
     if (rtc_found.address == RX8130CE_RTC) {
-        uint32_t now = millis();
+        const uint64_t now = Time::getMillisMonotonic();
 #ifdef MUZI_BASE
         ArtronShop_RX8130CE rtc(&Wire1);
 #else
@@ -213,7 +216,7 @@ RTCSetResult readFromRTC()
 #endif
             if (currentQuality == RTCQualityNone) {
                 RTCQuality oldQuality = currentQuality;
-                timeStartMsec = now;
+                timeStartMs64 = now;
                 zeroOffsetSecs = tv.tv_sec;
                 currentQuality = RTCQualityDevice;
                 onTimeSourceQualityChanged(oldQuality, currentQuality);
@@ -223,7 +226,7 @@ RTCSetResult readFromRTC()
     }
 #elif HAS_LSE
     if (stm32wlRtcAvailable()) {
-        uint32_t now = millis();
+        const uint64_t now = Time::getMillisMonotonic();
         tv.tv_sec = STM32RTC::getInstance().getEpoch();
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
@@ -238,7 +241,7 @@ RTCSetResult readFromRTC()
 #endif
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
-            timeStartMsec = now;
+            timeStartMs64 = now;
             zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
             onTimeSourceQualityChanged(oldQuality, currentQuality);
@@ -263,7 +266,8 @@ RTCSetResult readFromRTC()
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 {
     static uint32_t lastSetMsec = 0;
-    uint32_t now = millis();
+    const uint64_t now64 = Time::getMillisMonotonic();
+    const uint32_t now = (uint32_t)now64; // low word == getMillis(); fine for the Throttle-checked stamps below
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
@@ -314,7 +318,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         }
 
         // This delta value works on all platforms
-        timeStartMsec = now;
+        timeStartMs64 = now64;
         zeroOffsetSecs = tv->tv_sec;
         // If this platform has a settable RTC, set it
 #ifdef RV3028_RTC
@@ -486,10 +490,13 @@ int32_t getTZOffset()
  */
 uint32_t getTime(bool local)
 {
+    // 64-bit monotonic elapsed term: a 32-bit one wraps after 49.7 days of uptime, walking the
+    // wall clock back one full cycle per wrap on any node that outlives its last time-set.
+    const uint64_t elapsedSecs = (Time::getMillisMonotonic() - timeStartMs64) / 1000;
     if (local) {
-        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs + getTZOffset();
+        return elapsedSecs + zeroOffsetSecs + getTZOffset();
     } else {
-        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+        return elapsedSecs + zeroOffsetSecs;
     }
 }
 
@@ -509,7 +516,7 @@ void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
 {
     currentQuality = RTCQualityNone;
     zeroOffsetSecs = 0;
-    timeStartMsec = millis() - (secondsSinceBoot * 1000);
+    timeStartMs64 = Time::getMillisMonotonic() - ((uint64_t)secondsSinceBoot * 1000);
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
 }
@@ -538,7 +545,7 @@ void setReadFromRTCUseSystemTimeForTests(bool enabled)
 void resetRTCStateForTests()
 {
     currentQuality = RTCQualityNone;
-    timeStartMsec = 0;
+    timeStartMs64 = 0;
     zeroOffsetSecs = 0;
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
