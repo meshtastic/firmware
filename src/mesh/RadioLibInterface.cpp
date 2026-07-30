@@ -4,6 +4,7 @@
 #include "PowerMon.h"
 #include "SPILock.h"
 #include "Throttle.h"
+#include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
@@ -216,14 +217,18 @@ bool RadioLibInterface::requestConfigApply(RadioConfigApplyRequest *request)
     if (request == nullptr)
         return false;
 
-    if (pendingConfigApply != nullptr) {
-        request->result.store(RadioConfigApplyResult::BUSY);
-        return false;
+    {
+        concurrency::LockGuard lock(&configApplyLock);
+        if (pendingConfigApply != nullptr) {
+            request->result.store(RadioConfigApplyResult::BUSY);
+            return false;
+        }
+
+        request->result.store(RadioConfigApplyResult::PENDING);
+        configApplyBarrier = true;
+        pendingConfigApply = request;
     }
 
-    pendingConfigApply = request;
-    configApplyBarrier = true;
-    request->result.store(RadioConfigApplyResult::PENDING);
     notify(CONFIG_APPLY_PENDING, false);
     LOG_DEBUG("radio_config_apply queued");
     return true;
@@ -232,21 +237,43 @@ bool RadioLibInterface::requestConfigApply(RadioConfigApplyRequest *request)
 void RadioLibInterface::finishConfigApply(RadioConfigApplyRequest *request)
 {
     const auto result = request->result.load();
-    pendingConfigApply = nullptr;
-    configApplyBarrier = false;
+    {
+        concurrency::LockGuard lock(&configApplyLock);
+        assert(pendingConfigApply == request);
+        pendingConfigApply = nullptr;
+        configApplyBarrier = false;
+    }
     LOG_DEBUG("radio_config_apply resume result=%u", static_cast<unsigned>(result));
 
     if (!txQueue.empty())
         setTransmitDelay();
 }
 
+bool RadioLibInterface::configApplyBarrierIsSet()
+{
+    concurrency::LockGuard lock(&configApplyLock);
+    return configApplyBarrier;
+}
+
+meshtastic_MeshPacket *RadioLibInterface::dequeueTxPacketIfConfigApplyAllowed()
+{
+    concurrency::LockGuard lock(&configApplyLock);
+    return configApplyBarrier ? nullptr : txQueue.dequeue();
+}
+
 void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
 {
-    RadioConfigApplyRequest *request = pendingConfigApply;
+    (void)nowMsec;
+
+    RadioConfigApplyRequest *request;
+    {
+        concurrency::LockGuard lock(&configApplyLock);
+        request = pendingConfigApply;
+    }
     if (request == nullptr)
         return;
 
-    if (static_cast<uint32_t>(nowMsec - request->requestedAtMsec) > request->timeoutMsec) {
+    if (!Throttle::isWithinTimespanMs(request->requestedAtMsec, request->timeoutMsec)) {
         request->result.store(RadioConfigApplyResult::TIMED_OUT);
         finishConfigApply(request);
         return;
@@ -508,7 +535,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
-        if (configApplyBarrier) {
+        if (configApplyBarrierIsSet()) {
             break;
         }
 
@@ -527,11 +554,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // The beacon's target radio config is invalid (bad preset/region, or an
                     // unlicensed node keying up on a ham-only region). Drop the packet - never
                     // transmit it on the current (home) config - and move on to the next queued packet.
-                    LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", txp->id);
-                    meshtastic_MeshPacket *bad = txQueue.dequeue();
-                    MeshBeaconModule::clearTargetRadioSettings(bad);
-                    packetPool.release(bad);
-                    setTransmitDelay();
+                    meshtastic_MeshPacket *bad = dequeueTxPacketIfConfigApplyAllowed();
+                    if (bad != nullptr) {
+                        LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", bad->id);
+                        MeshBeaconModule::clearTargetRadioSettings(bad);
+                        packetPool.release(bad);
+                        setTransmitDelay();
+                    }
                 } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
                     setTransmitDelay();
 #endif
@@ -547,10 +576,11 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
                         // actual transmission as short as possible
-                        txp = txQueue.dequeue();
-                        assert(txp);
-                        startSend(txp);
-                        LOG_DEBUG("%d packets remain in the TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                        txp = dequeueTxPacketIfConfigApplyAllowed();
+                        if (txp != nullptr) {
+                            startSend(txp);
+                            LOG_DEBUG("%d packets remain in the TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                        }
                     }
                 }
             }
@@ -852,6 +882,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
 #endif
         packetPool.release(txp);
+        setTransmitDelay();
         return false;
     } else {
         configHardwareForSend(); // must be after setStandby

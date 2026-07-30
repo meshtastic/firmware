@@ -2,6 +2,7 @@
 
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
+#include "concurrency/Lock.h"
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
@@ -60,6 +61,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     RadioConfigApplyRequest *pendingConfigApply = nullptr;
     bool configApplyBarrier = false;
+    concurrency::Lock configApplyLock;
 
     /**
      * Raw ISR handler that just calls our polymorphic method
@@ -268,17 +270,21 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();
     void finishConfigApply(RadioConfigApplyRequest *request);
+    bool configApplyBarrierIsSet();
+    meshtastic_MeshPacket *dequeueTxPacketIfConfigApplyAllowed();
 
     static void timerCallback(void *p1, uint32_t p2);
 
     virtual void onNotify(uint32_t notification) override;
 
+  protected:
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
      *  @return true if packet was sent
      */
     virtual bool startSend(meshtastic_MeshPacket *txp);
 
+  private:
     meshtastic_QueueStatus getQueueStatus();
 
   protected:
