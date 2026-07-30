@@ -12,6 +12,10 @@
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#ifndef LR20X0_RFSWITCH_NATIVE
+#define lr20x0_rfswitch_dio_pins rfswitch_dio_pins
+#define lr20x0_rfswitch_table rfswitch_table
+#endif
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #define lr20x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
@@ -24,20 +28,14 @@ static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
 };
 #endif
 
-// Particular boards might define a different max power based on what their hardware can do, default to max power output if not
-// specified (may be dangerous if using external PA and LR20x0 power config forgotten)
-#if ARCH_PORTDUINO
-#define LR2021_MAX_POWER portduino_config.lr2021_max_power
-#endif
+// LR2021 power limits are handled intrinsically by RadioLib's setOutputPower()/checkOutputPower(),
+// which clamps to -9..22 dBm (sub-GHz PA) or -19..12 dBm (HF PA) based on the frequency band.
+// No module-level override is needed - the chip enforces its own limits.
 #ifndef LR2021_MAX_POWER
 #define LR2021_MAX_POWER 22
 #endif
 
 // the 2.4G part maxes at 12dBm
-
-#if ARCH_PORTDUINO
-#define LR2021_MAX_POWER_HF portduino_config.lr2021_max_power_hf
-#endif
 #ifndef LR2021_MAX_POWER_HF
 #define LR2021_MAX_POWER_HF 12
 #endif
@@ -80,12 +78,25 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-#ifdef LR2021_IRQ_DIO_NUM
+    // irqDioNum: set from compile-time macros or portduino config.
+    // Note: must be set before lora.begin() so config() programs the correct DIO.
+    // On ARCH_PORTDUINO, runtime YAML config takes precedence over compile-time macros.
+    // The user is responsible for ensuring IRQ_DIO_NUM doesn't conflict with RF switch pins.
+#if ARCH_PORTDUINO
+    if (portduino_config.lr2021_irq_dio_num >= 5 && portduino_config.lr2021_irq_dio_num <= 11) {
+        lora.irqDioNum = portduino_config.lr2021_irq_dio_num;
+        LOG_DEBUG("Set irqDioNum %d (from config)", lora.irqDioNum);
+    } else if (portduino_config.lr2021_irq_dio_num != 0) {
+        LOG_WARN("IRQ_DIO_NUM %d out of range (5-11), using default %d", portduino_config.lr2021_irq_dio_num, lora.irqDioNum);
+    } else {
+        LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+    }
+#elif defined(LR2021_IRQ_DIO_NUM)
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
 #elif defined(IRQ_DIO_NUM)
     lora.irqDioNum = IRQ_DIO_NUM;
-    LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+    LOG_DEBUG("Set irqDioNum %d (compile-time)", lora.irqDioNum);
 #else
     LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
 #endif

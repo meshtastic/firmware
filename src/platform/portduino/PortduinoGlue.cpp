@@ -899,6 +899,19 @@ bool loadConfig(const char *configPath)
                 portduino_config.lr1110_max_power = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["LR1120_MAX_POWER"])
                 portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+            if (yamlConfig["Lora"]["IRQ_DIO_NUM"]) {
+                int dio = yamlConfig["Lora"]["IRQ_DIO_NUM"].as<int>(0);
+                if (dio == 0 || (dio >= 5 && dio <= 11))
+                    portduino_config.lr2021_irq_dio_num = dio;
+                else
+                    LOG_WARN("IRQ_DIO_NUM %d out of range (0 or 5-11), ignored", dio);
+            } else if (yamlConfig["Lora"]["LR2021_IRQ_DIO_NUM"]) {
+                int dio = yamlConfig["Lora"]["LR2021_IRQ_DIO_NUM"].as<int>(0);
+                if (dio == 0 || (dio >= 5 && dio <= 11))
+                    portduino_config.lr2021_irq_dio_num = dio;
+                else
+                    LOG_WARN("LR2021_IRQ_DIO_NUM %d out of range (0 or 5-11), ignored", dio);
+            }
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
@@ -965,18 +978,34 @@ bool loadConfig(const char *configPath)
             }
             if (yamlConfig["Lora"]["rfswitch_table"]) {
                 portduino_config.has_rfswitch_table = true;
-                portduino_config.rfswitch_table[0].mode = LR11x0::MODE_STBY;
-                portduino_config.rfswitch_table[1].mode = LR11x0::MODE_RX;
-                portduino_config.rfswitch_table[2].mode = LR11x0::MODE_TX;
-                portduino_config.rfswitch_table[3].mode = LR11x0::MODE_TX_HP;
-                portduino_config.rfswitch_table[4].mode = LR11x0::MODE_TX_HF;
-                portduino_config.rfswitch_table[5].mode = LR11x0::MODE_GNSS;
-                portduino_config.rfswitch_table[6].mode = LR11x0::MODE_WIFI;
-                portduino_config.rfswitch_table[7] = END_OF_MODE_TABLE;
+
+                // LR2021 OpMode_t differs from LR11x0: slot 3 = RX_HF (not TX_HP), slot 4 = TX_HF; no TX_HP/GNSS/WIFI.
+                // Using LR11x0 modes for LR2021 would program incorrect DIO RF switch config bits.
+#if !RADIOLIB_EXCLUDE_LR2021
+                if (portduino_config.lora_module == use_lr2021) {
+                    portduino_config.rfswitch_table[0].mode = LR2021::MODE_STBY;
+                    portduino_config.rfswitch_table[1].mode = LR2021::MODE_RX;
+                    portduino_config.rfswitch_table[2].mode = LR2021::MODE_TX;
+                    portduino_config.rfswitch_table[3].mode = LR2021::MODE_RX_HF;
+                    portduino_config.rfswitch_table[4].mode = LR2021::MODE_TX_HF;
+                    portduino_config.rfswitch_table[5] = END_OF_MODE_TABLE;
+                } else
+#endif
+                {
+                    portduino_config.rfswitch_table[0].mode = LR11x0::MODE_STBY;
+                    portduino_config.rfswitch_table[1].mode = LR11x0::MODE_RX;
+                    portduino_config.rfswitch_table[2].mode = LR11x0::MODE_TX;
+                    portduino_config.rfswitch_table[3].mode = LR11x0::MODE_TX_HP;
+                    portduino_config.rfswitch_table[4].mode = LR11x0::MODE_TX_HF;
+                    portduino_config.rfswitch_table[5].mode = LR11x0::MODE_GNSS;
+                    portduino_config.rfswitch_table[6].mode = LR11x0::MODE_WIFI;
+                    portduino_config.rfswitch_table[7] = END_OF_MODE_TABLE;
+                }
 
                 for (int i = 0; i < 5; i++) {
 
                     // set up the pin array first
+                    // DIO pin constants are the same for LR11x0 and LR2021 (both use LRXXXX_DIOx)
                     if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO5")
                         portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO5;
                     if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO6")
@@ -995,14 +1024,25 @@ bool loadConfig(const char *configPath)
                         portduino_config.rfswitch_table[1].values[i] = HIGH;
                     if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX"][i].as<std::string>("") == "HIGH")
                         portduino_config.rfswitch_table[2].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HP"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[3].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[4].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_GNSS"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[5].values[i] = HIGH;
-                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_WIFI"][i].as<std::string>("") == "HIGH")
-                        portduino_config.rfswitch_table[6].values[i] = HIGH;
+#if !RADIOLIB_EXCLUDE_LR2021
+                    if (portduino_config.lora_module == use_lr2021) {
+                        // LR2021: slot 3 = MODE_RX_HF (not TX_HP), slot 4 = MODE_TX_HF
+                        if (yamlConfig["Lora"]["rfswitch_table"]["MODE_RX_HF"][i].as<std::string>("") == "HIGH")
+                            portduino_config.rfswitch_table[3].values[i] = HIGH;
+                        if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
+                            portduino_config.rfswitch_table[4].values[i] = HIGH;
+                    } else
+#endif
+                    {
+                        if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HP"][i].as<std::string>("") == "HIGH")
+                            portduino_config.rfswitch_table[3].values[i] = HIGH;
+                        if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
+                            portduino_config.rfswitch_table[4].values[i] = HIGH;
+                        if (yamlConfig["Lora"]["rfswitch_table"]["MODE_GNSS"][i].as<std::string>("") == "HIGH")
+                            portduino_config.rfswitch_table[5].values[i] = HIGH;
+                        if (yamlConfig["Lora"]["rfswitch_table"]["MODE_WIFI"][i].as<std::string>("") == "HIGH")
+                            portduino_config.rfswitch_table[6].values[i] = HIGH;
+                    }
                 }
             }
         }
