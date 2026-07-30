@@ -99,6 +99,8 @@ static const char LICENSED_IDENTITY_MIGRATION_WARNING[] =
 #define SEGMENT_CHANNELS 8
 #define SEGMENT_NODEDATABASE 16
 
+// DeviceState versions used to be defined in the .proto file but really only this function cares.
+// So changed to a #define here.
 #define DEVICESTATE_CUR_VER 25
 // Lowest on-disk version we still know how to load. v24 saves are migrated
 // at boot via the parallel deviceonly_legacy descriptor and re-saved as v25.

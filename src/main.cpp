@@ -1268,10 +1268,18 @@ bool suppressRebootBanner; // If true, suppress "Rebooting..." overlay (used for
 
 void requestReboot(int32_t seconds)
 {
+    // rebootAtMsec == 0 means "no reboot pending" everywhere it is read (Power::powerCommandsCheck
+    // tests `if (rebootAtMsec && ...)`, and both the reboot banner and the portduino/lockdown
+    // checks treat 0 as idle). So a negative delay *cancels* a pending reboot rather than bringing
+    // it forward - which is what admin.proto documents for reboot_seconds ("<0 to cancel reboot").
+    // Menu callers always pass a positive; the branch exists for that remote-admin cancel.
+    if (seconds < 0) {
+        LOG_INFO("Reboot cancelled");
+        rebootAtMsec = 0;
+        return;
+    }
     LOG_INFO("Reboot in %d seconds", seconds);
-    // A negative delay means "now"; rebootAtMsec == 0 is the immediate-reboot sentinel. Remote
-    // admin relies on this, so keep the branch even though menu callers always pass a positive.
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    rebootAtMsec = millis() + seconds * 1000;
 }
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)

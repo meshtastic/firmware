@@ -589,6 +589,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_GPS:
+        // The gps->enable()/disable() calls below are new: this used to write gps_mode and reload
+        // the radio, leaving the driver in its old state until the next boot. Driving the driver
+        // here is what makes CONFIG_APPLY_NONE correct - it matches MenuHandler::GPSToggleMenu(),
+        // which has always done it this way.
 #if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
             config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
@@ -638,6 +642,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             // AdminModule path, which also reboots for this field.
             config.position.broadcast_smart_minimum_interval_secs = SMART_INTERVAL_OPTIONS[index].value;
             service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_REBOOT);
+            InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
         }
         break;
     }
@@ -1062,17 +1067,24 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     // Channels
+    //
+    // These four only touch a channel's uplink/downlink MQTT flags or its position_precision -
+    // never the name, PSK or frequency slot. The channel hash that RadioInterface::reconfigure()
+    // derives the frequency from is computed from name+PSK only, and RadioInterface is the sole
+    // observer of configChanged, so there is nothing for a radio reload to do here. They carried
+    // CONFIG_APPLY_RADIO purely because the old reloadConfig(SEGMENT_CHANNELS) inferred it from
+    // the bitmask. Persist only, like the BaseUI channel-mute action.
     case TOGGLE_CHANNEL_UPLINK: {
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.uplink_enabled = !ch.settings.uplink_enabled;
-        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_NONE);
         break;
     }
 
     case TOGGLE_CHANNEL_DOWNLINK: {
         auto &ch = channels.getByIndex(selectedChannelIndex);
         ch.settings.downlink_enabled = !ch.settings.downlink_enabled;
-        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_NONE);
         break;
     }
 
@@ -1087,7 +1099,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         else
             ch.settings.module_settings.position_precision = 13; // default
 
-        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_NONE);
         break;
     }
 
@@ -1106,20 +1118,20 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             ch.settings.module_settings.position_precision = POSITION_PRECISION_OPTIONS[index].value;
         }
 
-        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_RADIO);
+        service->applyConfigChange(SEGMENT_CHANNELS, CONFIG_APPLY_NONE);
         break;
     }
 
     case RESET_NODEDB_ALL:
         InkHUD::getInstance()->notifyApplyingChanges();
         nodeDB->resetNodes();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        requestReboot();
         break;
 
     case RESET_NODEDB_KEEP_FAVORITES:
         InkHUD::getInstance()->notifyApplyingChanges();
         nodeDB->resetNodes(1);
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        requestReboot();
         break;
 
     case WIPE_MESSAGES_ALL:

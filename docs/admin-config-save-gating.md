@@ -53,18 +53,24 @@ if (radioAffected && (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)))
 ```
 
 The bitmask gate is **retained** (so the ~35 non-AdminModule callers are unaffected) and
-`radioAffected` only ever _suppresses_ the reload. It defaults to `true`, so any caller that
-does not opt out keeps the historical behavior. `AdminModule::saveChanges`
-([`:1846`](../src/modules/AdminModule.cpp#L1846)) threads it through; `handleSetConfig`
-([`:836`](../src/modules/AdminModule.cpp#L836)) sets `radioAffected = true`
-([`:845`](../src/modules/AdminModule.cpp#L845)) only in the `lora_tag` case.
+`radioAffected` only ever _suppresses_ the reload. `MeshService::reloadConfig` still defaults it
+to `true`, so any external caller that does not opt out keeps the historical behavior.
+
+`AdminModule::saveChanges(saveWhat, shouldReboot, radioAffected)` threads it through, and there it
+has **no default** - every one of its call sites states the answer. That is not stylistic: see
+"Edit transactions" below for why an inherited `true` stops being harmless once a transaction is
+open. `handleSetConfig` sets `radioAffected = true` only in the `lora_tag` case.
 
 | Admin operation                                                         | Reloads radio now? | Notes                                                                                                    |
 | ----------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------- |
 | `set_config` → `lora`                                                   | **Yes**            | The only config that feeds `RadioInterface::reconfigure()` (reads `config.lora`). Region swaps included. |
 | `set_config` → device/position/power/network/display/bluetooth/security | **No** (was yes)   | Persist `SEGMENT_CONFIG`, but none affect the modem.                                                     |
 | `set_fixed_position` / `remove_fixed_position`                          | **No** (was yes)   | Rode `SEGMENT_CONFIG` only because `fixed_position` shares the Config file.                              |
-| `set_channel`                                                           | **Yes**            | Real frequency-slot/PSK change ([`:1445`](../src/modules/AdminModule.cpp#L1445)).                        |
+| `set_module_config`                                                     | **No**             | No module config feeds `reconfigure()`. Previously only the segment mask stopped it.                     |
+| `set_owner`                                                             | **No**             | Node metadata. Still reboots (pre-existing) - that axis was left alone.                                  |
+| favorite / ignore / mute node                                           | **No**             | Node-DB bits. The #11146 crash path.                                                                     |
+| `set_channel`                                                           | **Yes**            | Real frequency-slot/PSK change.                                                                          |
+| `set_ham_mode`                                                          | **Yes**            | Rewrites `config.lora.tx_enabled` and strips channel PSKs.                                               |
 
 Why this matters beyond tidiness: the reconfigure is a live `setStandby()` + SPI reprogram. It
 is _invoked_ from the admin-message handler on the main task (BLE `onWrite` only queues, so
@@ -121,6 +127,43 @@ for schema growth.
 
 ---
 
+## Edit transactions - where both axes nearly got lost
+
+Read this before adding a `saveChanges()` call site.
+
+A client may bracket a run of admin messages in `begin_edit_settings` / `commit_edit_settings`.
+While the transaction is open, `saveChanges()` **defers**: it writes nothing and returns, so a
+multi-field set doesn't hit flash once per field. The commit then performs a single save under a
+**fixed full-segment mask**.
+
+Two consequences, both easy to miss:
+
+1. **The per-field decisions had nowhere to go.** Everything the two axes above compute happens
+   inside `handleSetConfig`, whose `saveChanges()` call is the one being deferred. The commit's
+   own `saveChanges()` originally passed nothing, so it took the parameter defaults - reboot and
+   reconfigure, on every commit, whatever was edited. Phone apps write config through
+   transactions, so **none of the narrowing above reached them.** `deferredShouldReboot` and
+   `deferredRadioAffected` now accumulate (`|=`) the deferred answers; the commit consumes them
+   and clears them, so a stray second commit cannot inherit the previous transaction's answer.
+
+2. **The segment bitmask stops protecting you.** Outside a transaction, a node-DB-only save
+   physically cannot reach the radio: `saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)` is zero
+   whatever `radioAffected` says. Inside one, the commit saves under the full mask, so that gate
+   always passes and `radioAffected` becomes the _only_ thing deciding it. An accidental `true` -
+   inherited from a default, on a call site that never thought about the radio - then reaches the
+   live SX126x reconfigure at commit. Favoriting a node from the phone app would have gone
+   straight back through the #11146 crash path.
+
+   That is why `AdminModule::saveChanges` gives `radioAffected` **no default**. Do not add one
+   back. The nested `saveChanges()` inside the `position_tag` case is the subtle instance: an
+   inner call on an unrelated segment can opt the whole transaction in.
+
+Covered natively: see the "Edit-transaction deferral" block in `test_admin_radio`, which asserts
+both axes independently across a commit (node-DB, module-config and nested-position batches
+reconfigure nothing; a LoRa batch still does; a GPS-mode batch reboots without reconfiguring).
+
+---
+
 ## Operations intentionally left unchanged ("third tier")
 
 These were audited and deliberately **not** narrowed. Each still reloads and/or reboots as
@@ -128,17 +171,10 @@ before. The common thread: the reload/reboot is either genuinely required, or re
 would need real state-tracking / hardware verification that carries more risk than the saving
 is worth.
 
-1. **`commit_edit_settings`** ([`:474`](../src/modules/AdminModule.cpp#L474)) - commits a
-   whole edit transaction with a fixed
-   `SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE`
-   save (default `radioAffected=true`, `shouldReboot=true`), so it reloads and reboots on
-   **every** commit regardless of what was actually edited.
-   **Why untouched:** narrowing it requires the transaction to track _which_ segments were
-   dirtied (and whether LoRa/reboot-relevant fields were among them) as individual sets ran
-   under `hasOpenEditTransaction`, then OR them at commit - a real state-tracking change, not
-   a one-line gate. Risk is also lower here: edit transactions are rarely
-   node-DB-metadata-only, so the wasteful case is less common. Deferred to its own pass; the
-   same tracking would let it decide both `radioAffected` and `requiresReboot`.
+1. ~~**`commit_edit_settings`**~~ - **now done, see "Edit transactions" below.** Initially
+   deferred to its own pass (it needed real state-tracking rather than a one-line gate), then
+   done in the same PR once it became clear the deferral was discarding every decision the rest
+   of this work computes.
 
 2. **`network` / `bluetooth` beyond the Tier-1 no-op gate** - a _real_ change still reboots.
    **Why untouched:** these restart the WiFi/Ethernet and BLE stacks. Applying a live change
@@ -201,7 +237,16 @@ Notes for anyone extending this:
   the notice at draw time from `rebootAtMsec`, while InkHUD's e-ink only draws when pushed and so
   raises `notifyApplyingChanges()` explicitly.
 - `rebootSeconds` exists for one caller - InkHUD's wifi-recovery path uses a shorter delay than
-  `DEFAULT_REBOOT_SECONDS`.
+  `DEFAULT_REBOOT_SECONDS`. A **negative** value cancels a pending reboot rather than bringing it
+  forward (`rebootAtMsec == 0` means "none pending" everywhere it is read), matching
+  `admin.proto`'s `reboot_seconds`.
+- Every `CONFIG_APPLY_REBOOT` site in the InkHUD menu pairs with a `notifyApplyingChanges()`, and
+  must keep doing so - see the two-jobs note on that method in `InkHUD.h`.
+- `CONFIG_APPLY_RADIO` means the **modem**, not the segment. The channel menu's uplink/downlink
+  and `position_precision` actions write `SEGMENT_CHANNELS` but touch no name, PSK or frequency
+  slot, so they persist only; the frequency the radio derives comes from the name+PSK hash, and
+  `RadioInterface` is the sole observer of `configChanged`. They carried the flag at first purely
+  because the old `reloadConfig(SEGMENT_CHANNELS)` inferred it from the bitmask.
 - UI-only state stays out of this: BaseUI `uiconfig` fields use `saveUIConfig()`, and InkHUD has
   its own non-protobuf `Persistence::Settings` store. Neither is in the `/prefs` protobuf tree.
 
@@ -217,6 +262,12 @@ Native coverage lives in `test/test_admin_radio/test_main.cpp`:
 - **Reboot:** each of position/network/bluetooth asserts `rebootAtMsec` stays `0` on a no-op
   set and is armed on a real change; a position broadcast-interval change asserts **no**
   reboot, while `gps_mode` and `rx_gpio` changes assert a reboot.
+- **Edit transactions:** the same two axes asserted across a `begin` / set / `commit` sequence,
+  where the segment bitmask no longer backstops `radioAffected`. Node-DB, module-config and
+  nested-position batches must commit without reconfiguring; a LoRa batch must still reconfigure
+  (and not reboot); a `gps_mode` batch must reboot without reconfiguring. Also pinned: nothing is
+  written until the commit, the flags don't leak into the next transaction, and a commit with no
+  matching begin is inert.
 
 The harness defers `reboot()` to `rebootAtMsec` (it does not exit), which is the signal the
 reboot tests assert on.
@@ -245,7 +296,7 @@ thread under test are the same whichever transport you use, and the original cra
 serial-proven. Drive the admin messages over USB serial (e.g. the `meshtastic --port` CLI);
 use BLE only if you specifically want to reproduce the exact user-facing conditions.
 
-### 1. Radio-reload / crash validation (regression guard for `babeef08d`)
+### 1. Radio-reload / crash validation (regression guard for the favorite-node fix)
 
 Confirms the non-LoRa config saves no longer run the live radio reconfigure - the main-task
 `setStandby()` + SPI reprogram that collided with the radio's off-main worker thread over the
@@ -261,6 +312,12 @@ keypair, favorite/unfavorite a node.
   reconfigure _before_ it is the failure.
 - **Positive control:** a `lora` config change and a `set_channel` **should** show the
   reconfigure - proves the path still fires when it should.
+
+**Then repeat the favorite/unfavorite case wrapped in `begin_edit_settings` /
+`commit_edit_settings`** - that is the shape a phone app actually sends, and until the deferred
+flags landed it was the one shape where the segment bitmask could not stop the reconfigure (see
+"Edit transactions"). Pass criteria are the same, measured at the commit. Watch for a
+reconfigure that appears only at the commit, not during the individual sets.
 
 ### 2. Position live-apply - expanding the Tier-2 live set (outstanding)
 
@@ -290,7 +347,7 @@ a cheap confidence test but not a gate.
 - To stop a config field from reloading the radio on an **AdminModule/client config save**: it
   already doesn't, unless it's `lora`. Do **not** widen `radioAffected` to non-LoRa config -
   only `RadioInterface::reconfigure()` (which reads `config.lora`) consumes it. The on-device
-  menus are now gated the same way, via `applyConfigChange` (see below).
+  menus are now gated the same way, via `applyConfigChange` (see "On-device menus" above).
 - To move a field off the reboot path: confirm it is consumed live (read from `config` at use
   time, no cached/driver state), add it to the live set in the relevant `handleSetConfig`
   case, and add a native case asserting no reboot on its change. For anything driver- or

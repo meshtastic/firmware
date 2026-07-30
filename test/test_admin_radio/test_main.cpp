@@ -1850,8 +1850,9 @@ static void test_setChannel_stillTriggersRadioReload()
 // display/bluetooth/security - must persist without firing the live SX126x reconfigure.
 // This is the same crash class as the WisMesh Tag favorite-node bug, reached through a
 // different admin message (a WiFi PSK change, a Bluetooth toggle, a keypair rotation, ...).
-// See plan-narrow-radio-reload-trigger.md. As with the node-DB tests above, these run
-// outside an edit transaction so saveChanges() reaches reloadConfig() directly.
+// See docs/admin-config-save-gating.md. As with the node-DB tests above, these run
+// outside an edit transaction so saveChanges() reaches reloadConfig() directly; the
+// deferred-transaction equivalents are further down.
 // -----------------------------------------------------------------------
 
 // Dispatch a set_config admin message carrying one Config sub-message.
@@ -2384,6 +2385,230 @@ static void test_toggleNodeMuted_writesOnlyTheNodeDatabase()
 #endif // HAS_SCREEN
 
 // -----------------------------------------------------------------------
+// Edit-transaction deferral: the per-field radio/reboot decisions must survive it
+//
+// Every test above runs outside a transaction, where reloadConfig()'s
+// `saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)` bitmask independently blocks a node-DB-only
+// save from reaching the radio. Inside a transaction that safety net is gone: saveChanges()
+// defers, and the commit persists under a fixed full-segment mask, so the bitmask passes and
+// the only thing left deciding whether the SX126x is reconfigured is the accumulated
+// radioAffected flag. Phone apps write config through transactions, so this is the path that
+// matters most - and the one where an accidentally-defaulted `radioAffected = true` would
+// silently reopen the WisMesh Tag favorite crash (#11146).
+//
+// These assert both axes independently: reloadCalls (did we write at all, and once) and
+// configChanged (did the radio actually get reconfigured).
+// -----------------------------------------------------------------------
+
+static const NodeNum TXN_NODE_NUM = 0x0BADF00D;
+
+// Dispatch a set_module_config admin message carrying one ModuleConfig sub-message.
+static void sendSetModuleConfig(const meshtastic_ModuleConfig &mc)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_module_config_tag;
+    m.set_module_config = mc;
+    sendAdmin(m);
+}
+
+// The headline guard: favoriting a node inside a transaction must not reconfigure the radio when
+// the transaction commits. Outside a transaction the segment bitmask makes this unreachable; here
+// it is reachable, and only radioAffected=false keeps it shut.
+static void test_transaction_favoriteNode_doesNotReloadRadioAtCommit()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TXN_NODE_NUM);
+    nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false); // known start state
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_favorite_node_tag;
+    m.set_favorite_node = TXN_NODE_NUM;
+    sendAdmin(m);
+
+    // Deferred: nothing written, nothing reconfigured, while the transaction is open.
+    TEST_ASSERT_EQUAL_INT(0, mockMeshService->reloadCalls);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, mockMeshService->reloadCalls); // written exactly once, at the commit
+    TEST_ASSERT_EQUAL_INT(0, counter.count);                // ...but the radio was left alone
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);              // ...and so was the reboot
+    TEST_ASSERT_TRUE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TXN_NODE_NUM)));
+}
+
+// Same shape via the muted-node handler, which flips unconditionally (no protected-cap gate).
+static void test_transaction_toggleMutedNode_doesNotReloadRadioAtCommit()
+{
+    nodeDB->getOrCreateMeshNode(TXN_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_toggle_muted_node_tag;
+    m.toggle_muted_node = TXN_NODE_NUM;
+    sendAdmin(m);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// Module config never feeds RadioInterface::reconfigure() (which reads config.lora), so a
+// module-config set inside a transaction must not reconfigure at commit either.
+static void test_transaction_moduleConfigSet_doesNotReloadRadioAtCommit()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_ModuleConfig mc = meshtastic_ModuleConfig_init_zero;
+    mc.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
+    mc.payload_variant.telemetry = moduleConfig.telemetry;
+    mc.payload_variant.telemetry.device_update_interval = moduleConfig.telemetry.device_update_interval + 60;
+    sendSetModuleConfig(mc);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// The position case makes a *nested* saveChanges() call when the GPS is switched off with no
+// fixed position. That inner call must not opt the whole transaction into a radio reload.
+static void test_transaction_positionGpsOffNestedSave_doesNotReloadRadioAtCommit()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED; // known start state
+    config.position.fixed_position = false;                                      // required for the nested-save branch
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// Regression guard the other way: a real LoRa change inside a transaction must still reconfigure
+// the radio - once, at the commit. Narrowing must not have swallowed the legitimate case.
+static void test_transaction_loraSet_stillReloadsRadioAtCommit()
+{
+    usePresetLongFast();
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count); // still deferred
+
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+    // LoRa applies live via the configChanged observer, so the region-already-set case must not
+    // also reboot - the two axes are decided separately.
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// ...and the reboot axis on its own: a boot-only field inside a transaction reboots at the commit
+// without dragging the radio reconfigure along with it.
+static void test_transaction_gpsModeSet_reboots_butDoesNotReloadRadio()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED; // known start state
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec); // deferred until the commit
+
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// A batch whose every member is live-appliable must come out of the commit doing neither.
+static void test_transaction_liveOnlyBatch_neitherRebootsNorReloads()
+{
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.position_broadcast_secs = config.position.position_broadcast_secs + 60;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// The accumulated decisions are per-transaction: a LoRa transaction must not leave the next,
+// node-DB-only transaction reconfiguring the radio.
+static void test_transaction_flagsDoNotLeakIntoTheNextTransaction()
+{
+    usePresetLongFast();
+    nodeDB->getOrCreateMeshNode(TXN_NODE_NUM);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+    sendCommitEdit();
+
+    // Second transaction: node-DB metadata only. Start counting after the first commit.
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_toggle_muted_node_tag;
+    m.toggle_muted_node = TXN_NODE_NUM;
+    sendAdmin(m);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+// A commit with no matching begin still persists (harmless), but must not invent a radio reload
+// or a reboot out of the parameter defaults.
+static void test_commitWithoutBegin_persistsButDoesNotReloadOrReboot()
+{
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_INT(1, mockMeshService->reloadCalls);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -2571,6 +2796,17 @@ void setup()
     RUN_TEST(test_toggleNodeMuted_unknownNodeDoesNothing);
     RUN_TEST(test_toggleNodeMuted_writesOnlyTheNodeDatabase);
 #endif
+
+    // Edit-transaction deferral (the path phone apps use)
+    RUN_TEST(test_transaction_favoriteNode_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_toggleMutedNode_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_moduleConfigSet_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_positionGpsOffNestedSave_doesNotReloadRadioAtCommit);
+    RUN_TEST(test_transaction_loraSet_stillReloadsRadioAtCommit);
+    RUN_TEST(test_transaction_gpsModeSet_reboots_butDoesNotReloadRadio);
+    RUN_TEST(test_transaction_liveOnlyBatch_neitherRebootsNorReloads);
+    RUN_TEST(test_transaction_flagsDoNotLeakIntoTheNextTransaction);
+    RUN_TEST(test_commitWithoutBegin_persistsButDoesNotReloadOrReboot);
 
     exit(UNITY_END());
 }

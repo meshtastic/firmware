@@ -93,7 +93,8 @@ extern uint32_t rebootAtMsec;
 extern uint32_t shutdownAtMsec;
 extern bool suppressRebootBanner;
 
-/** Schedule a reboot `seconds` from now, or immediately if `seconds` is negative.
+/** Schedule a reboot `seconds` from now. A negative `seconds` *cancels* a pending reboot, matching
+ * admin.proto's reboot_seconds ("<0 to cancel reboot") - it does not reboot immediately.
  *
  * Deliberately carries no UI: BaseUI already renders the notice at draw time whenever
  * rebootAtMsec is set and suppressRebootBanner is clear (see Screen.cpp), so raising a banner

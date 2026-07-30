@@ -428,9 +428,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             sendWarningAndLog("Unable to switch to the OTA partition.");
         }
 #endif
-        int s = 1; // Reboot in 1 second, hard coded
-        LOG_INFO("Reboot in %d seconds", s);
-        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        // requestReboot() rather than this->reboot(): the OTA handoff has already raised its own
+        // firmware-update screen and set suppressRebootBanner, so it must not get the banner too.
+        requestReboot(1); // 1 second, hard coded
         break;
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
@@ -491,8 +491,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Commit settings edit transaction");
         hasOpenEditTransaction = false;
         deferredEditSegments = 0;
+        // Consume the accumulated decisions, then clear them: a stray second commit, or one with no
+        // matching begin, must not inherit the previous transaction's answer.
+        const bool commitReboot = deferredShouldReboot, commitRadio = deferredRadioAffected;
+        deferredShouldReboot = false;
+        deferredRadioAffected = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE,
-                    deferredShouldReboot, deferredRadioAffected);
+                    commitReboot, commitRadio);
         flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
     }
@@ -525,7 +530,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
             if (nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true)) {
-                saveChanges(SEGMENT_NODEDATABASE, false);
+                saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
             } else if (mp.from == 0) { // local request from the phone - tell the user why it didn't take
@@ -541,7 +546,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, false);
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
             if (screen)
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
@@ -559,7 +564,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if HAS_SCREEN || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
                 messageStore.deleteAllMessagesFromNode(node->num);
 #endif
-                saveChanges(SEGMENT_NODEDATABASE, false);
+                saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
 #if HAS_SCREEN
                 if (screen)
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -577,7 +582,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_ignored_node);
         if (node != NULL) {
             nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
         }
         break;
     }
@@ -586,7 +591,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->toggle_muted_node);
         if (node != NULL) {
             nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_IS_MUTED_MASK, !nodeInfoLiteIsMuted(node));
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
         }
         break;
     }
@@ -833,8 +838,11 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
+        // shouldReboot=true is pre-existing behaviour for a name/licence change and is left alone
+        // here; radioAffected is false because none of the owner record feeds the modem.
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
-                    (channelsSanitized ? SEGMENT_CHANNELS : 0));
+                        (channelsSanitized ? SEGMENT_CHANNELS : 0),
+                    /*shouldReboot=*/true, /*radioAffected=*/false);
     }
 }
 
@@ -968,7 +976,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             // SEGMENT_CONFIG is deliberately omitted here: config.position hasn't been updated to the
             // incoming value yet, so saving it now would persist stale data. The final saveChanges()
             // below re-saves SEGMENT_CONFIG once config.position is current.
-            saveChanges(SEGMENT_NODEDATABASE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
         }
         config.position = c.payload_variant.position;
         break;
@@ -1471,7 +1479,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     }
 #endif
     }
-    saveChanges(SEGMENT_MODULECONFIG, shouldReboot);
+    // No module config feeds RadioInterface::reconfigure() - that reads config.lora only.
+    saveChanges(SEGMENT_MODULECONFIG, shouldReboot, /*radioAffected=*/false);
     return true;
 }
 
@@ -1501,8 +1510,8 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS, false);
-    warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
+    saveChanges(SEGMENT_CHANNELS, false, /*radioAffected=*/true); // real frequency-slot / PSK change
+    warnOnChannelSet(channels.getByIndex(cc.index));              // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
         flushChannelWarnings();
@@ -1917,12 +1926,19 @@ void AdminModule::expireStaleEditTransaction()
     hasOpenEditTransaction = false;
     int segments = deferredEditSegments;
     deferredEditSegments = 0;
+    // Same consume-and-clear as a real commit: an abandoned transaction must not leave its
+    // decisions behind for the next one.
+    const bool expiredRadio = deferredRadioAffected;
+    deferredShouldReboot = false;
+    deferredRadioAffected = false;
     // No reboot: the settings are already live in RAM and the client that would expect one is gone.
     if (segments)
-        saveChanges(segments, false);
+        saveChanges(segments, /*shouldReboot=*/false, expiredRadio);
     flushChannelWarnings();
 }
 
+// radioAffected is mandatory here - see the note on the declaration in AdminModule.h for why it
+// must not be allowed to default now that the deferred transaction flags accumulate it.
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool radioAffected)
 {
 #ifdef PIO_UNIT_TESTING
@@ -2012,7 +2028,9 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     }
 
     service->reloadOwner(false);
-    saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    // HAM mode rewrites config.lora.tx_enabled and strips channel PSKs - genuinely a radio change.
+    saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS, /*shouldReboot=*/true,
+                /*radioAffected=*/true);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

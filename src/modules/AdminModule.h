@@ -62,7 +62,17 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
-    void saveChanges(int saveWhat, bool shouldReboot = true, bool radioAffected = true);
+    /** Persist `saveWhat`, deferring to the commit if an edit transaction is open.
+     *
+     * `radioAffected` has deliberately **no default**. It used to default to true, which was
+     * harmless while reloadConfig()'s `saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS)` bitmask
+     * still gated the reconfigure - a node-DB-only save could not reach the radio whatever it
+     * asked for. That stopped being true once the deferred flags below started accumulating the
+     * value: inside a transaction the commit saves under a fixed full mask, so the bitmask no
+     * longer gates anything and an accidental `true` reaches the live SX126x reconfigure. Making
+     * it mandatory means a new call site has to think about it rather than inherit the answer.
+     */
+    void saveChanges(int saveWhat, bool shouldReboot, bool radioAffected);
 
     /**
      * Getters

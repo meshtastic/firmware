@@ -1819,12 +1819,12 @@ void menuHandler::resetNodeDBMenu()
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
             disableBluetooth();
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            requestReboot();
         } else if (selected == 2) {
             LOG_INFO("Initiate node-db reset, keep favorites");
             nodeDB->resetNodes(1);
             disableBluetooth();
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            requestReboot();
         } else if (selected == 0) {
             menuQueue = NodeBaseMenu;
             screen->runNow();
@@ -2322,7 +2322,7 @@ void menuHandler::rebootMenu()
             IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
             messageStore.saveToFlash();
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            requestReboot();
         } else {
             menuQueue = PowerMenu;
             screen->runNow();
