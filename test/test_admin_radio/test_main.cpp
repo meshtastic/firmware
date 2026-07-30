@@ -2041,6 +2041,76 @@ static void test_reloadConfig_radioAffectedFalse_skipsReload()
     TEST_ASSERT_EQUAL_INT(0, counter.count);
 }
 
+static void test_setConfigBluetooth_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigBluetooth_realChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_bluetooth_tag;
+    c.payload_variant.bluetooth = config.bluetooth;
+    c.payload_variant.bluetooth.enabled = !config.bluetooth.enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigNetwork_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigNetwork_realChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_network_tag;
+    c.payload_variant.network = config.network;
+    c.payload_variant.network.wifi_enabled = !config.network.wifi_enabled;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// A boot-only field (GPIO) must still reboot - this stays true through Tier 2.
+static void test_setConfigPosition_gpioChange_schedulesReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = config.position.rx_gpio + 1;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_noopSet_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position; // byte-identical to current
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
 // -----------------------------------------------------------------------
 // Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
 // -----------------------------------------------------------------------
@@ -2259,6 +2329,12 @@ void setup()
     RUN_TEST(test_reloadConfig_defaultRadioAffected_stillReloads);
     RUN_TEST(test_reloadConfig_radioAffectedFalse_skipsReload);
 
+    RUN_TEST(test_setConfigPosition_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpioChange_schedulesReboot);
+    RUN_TEST(test_setConfigNetwork_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigNetwork_realChange_schedulesReboot);
+    RUN_TEST(test_setConfigBluetooth_noopSet_doesNotReboot);
+    RUN_TEST(test_setConfigBluetooth_realChange_schedulesReboot);
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
