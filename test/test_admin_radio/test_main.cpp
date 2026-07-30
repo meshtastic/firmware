@@ -1764,6 +1764,41 @@ static void test_setFavoriteNode_skipsRadioReload_butPersists()
     TEST_ASSERT_TRUE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TEST_NODE_NUM)));
 }
 
+// The clear-side twin of each set: removal is a node-DB write too, so it must not reconfigure
+// the radio either. Set and clear travel different admin tags, so one holding says nothing
+// about the other.
+static void test_removeFavoriteNode_skipsRadioReload()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_FAVORITE_MASK, true);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_favorite_node_tag;
+    m.remove_favorite_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsFavorite(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+static void test_removeIgnoredNode_skipsRadioReload()
+{
+    meshtastic_NodeInfoLite *node = nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    nodeDB->setProtectedFlag(node, NODEINFO_BITFIELD_IS_IGNORED_MASK, true);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_remove_ignored_node_tag;
+    m.remove_ignored_node = TEST_NODE_NUM;
+    sendAdmin(m);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsIgnored(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
 static void test_setIgnoredNode_skipsRadioReload_butPersists()
 {
     nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
@@ -1792,6 +1827,19 @@ static void test_toggleMutedNode_skipsRadioReload_butPersists()
 
     TEST_ASSERT_EQUAL_INT(0, counter.count);
     TEST_ASSERT_TRUE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+}
+
+// Regression guard on the other side of the gate: a real LoRa config/channel change must still
+// reconfigure the radio, so the saveWhat check cannot have swallowed the legitimate case.
+static void test_setChannel_stillTriggersRadioReload()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1));
+
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
 }
 
 // -----------------------------------------------------------------------
@@ -1992,8 +2040,11 @@ void setup()
 
     // Node-DB metadata saves must not reconfigure the radio
     RUN_TEST(test_setFavoriteNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_removeFavoriteNode_skipsRadioReload);
     RUN_TEST(test_setIgnoredNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_removeIgnoredNode_skipsRadioReload);
     RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
+    RUN_TEST(test_setChannel_stillTriggersRadioReload);
 
 #if HAS_SCREEN
     // Node menu mute toggle
