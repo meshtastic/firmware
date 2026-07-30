@@ -175,6 +175,7 @@ template <typename T> bool LR20x0Interface<T>::init()
 template <typename T> bool LR20x0Interface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
+    const meshtastic_Config_LoRaConfig &loraConfig = getActiveLoRaConfig();
 
     // set mode to standby
     setStandby();
@@ -195,7 +196,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     err = lora.setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
 
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
+    if (loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR2021_MAX_POWER_HF);
     } else {
         limitPower(LR2021_MAX_POWER); // default clamp for non-wide freq range
@@ -212,7 +213,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     assert(err == RADIOLIB_ERR_NONE);
 
     // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
-    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    err = lora.setRxBoostedGainMode(loraConfig.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
 

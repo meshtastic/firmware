@@ -185,6 +185,7 @@ template <typename T> bool SX126xInterface<T>::init()
 template <typename T> bool SX126xInterface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
+    const meshtastic_Config_LoRaConfig &loraConfig = getActiveLoRaConfig();
 
     // set mode to standby
     setStandby();
@@ -235,7 +236,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     }
 
     // Apply RX gain mode - valid in STDBY (datasheet §9.6), matches resetAGC() pattern
-    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
+    err = lora.setRxBoostedGainMode(loraConfig.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("SX126X setRxBoostedGainMode %s%d", radioLibErr, err);
 

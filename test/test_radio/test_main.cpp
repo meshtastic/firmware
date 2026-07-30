@@ -89,9 +89,11 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     uint32_t applyCount() const { return reconfigureCount; }
     uint32_t startSendCount() const { return startSendCalls; }
+    meshtastic_Config_LoRaConfig_RegionCode appliedRegion(size_t index) const { return appliedRegions[index]; }
 
     bool reconfigure() override
     {
+        appliedRegions[reconfigureCount] = getActiveLoRaConfig().region;
         ++reconfigureCount;
         return reconfigureResults[reconfigureCount - 1];
     }
@@ -128,6 +130,7 @@ class TestableRadioLibInterface : public RadioLibInterface
     meshtastic_MeshPacket inFlightPacket = meshtastic_MeshPacket_init_zero;
     bool activelyReceiving = false;
     bool reconfigureResults[2] = {true, true};
+    meshtastic_Config_LoRaConfig_RegionCode appliedRegions[2] = {};
     size_t reconfigureCount = 0;
     RadioConfigApplyRequest *requestDuringChannelCheck = nullptr;
     bool requestDuringChannelCheckAccepted = false;
@@ -371,19 +374,26 @@ static void test_lr11x0Apply_usesProductionParameters()
     TEST_ASSERT_EQUAL_INT8(22, usOps.receivedOutputPower);
 }
 
-static void test_configApply_idle_success_commitsCandidate()
+static void test_configApply_idle_success_keepsCandidatePrivate()
 {
     auto oldConfig = usConfig();
     auto candidate = lora24Config();
     RadioConfigApplyRequest request{oldConfig, candidate, 1000, 5000};
     config.lora = oldConfig;
+    initRegion();
+    RadioInterface::uses_default_frequency_slot = false;
+    RadioInterface::uses_custom_channel_name = false;
 
     testRadio->scriptApply(true, true);
     TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
     testRadio->serviceConfigApply(1000);
 
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
-    TEST_ASSERT_EQUAL(candidate.region, config.lora.region);
+    TEST_ASSERT_EQUAL(oldConfig.region, config.lora.region);
+    TEST_ASSERT_EQUAL(oldConfig.region, myRegion->code);
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_TRUE(testRadio->getFreq() > 2000.0f);
 }
 
 static void test_configApply_applyFailure_rollsBack()
@@ -392,6 +402,9 @@ static void test_configApply_applyFailure_rollsBack()
     auto candidate = lora24Config();
     RadioConfigApplyRequest request{oldConfig, candidate, 1000, 5000};
     config.lora = oldConfig;
+    initRegion();
+    RadioInterface::uses_default_frequency_slot = false;
+    RadioInterface::uses_custom_channel_name = false;
 
     testRadio->scriptApply(false, true);
     TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
@@ -399,12 +412,18 @@ static void test_configApply_applyFailure_rollsBack()
 
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK, request.result.load());
     TEST_ASSERT_EQUAL(oldConfig.region, config.lora.region);
+    TEST_ASSERT_EQUAL(oldConfig.region, myRegion->code);
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
 }
 
 static void test_configApply_rollbackFailure_inhibitsTx()
 {
     RadioConfigApplyRequest request{usConfig(), lora24Config(), 1000, 5000};
     config.lora = request.previous;
+    initRegion();
+    RadioInterface::uses_default_frequency_slot = false;
+    RadioInterface::uses_custom_channel_name = false;
     testRadio->scriptApply(false, false);
 
     TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
@@ -412,6 +431,10 @@ static void test_configApply_rollbackFailure_inhibitsTx()
 
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::ROLLBACK_FAILED, request.result.load());
     TEST_ASSERT_TRUE(testRadio->configApplyTxInhibited());
+    TEST_ASSERT_EQUAL(request.previous.region, config.lora.region);
+    TEST_ASSERT_EQUAL(request.previous.region, myRegion->code);
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
 }
 
 static void test_configApply_secondRequest_rejectedBusy()
@@ -445,6 +468,8 @@ static void test_configApply_activeTx_waits_withoutCompletingPacket()
     TEST_ASSERT_TRUE(stillSending);
     TEST_ASSERT_EQUAL_UINT32(0, appliesWhileSending);
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
+    TEST_ASSERT_EQUAL(request.previous.region, config.lora.region);
+    TEST_ASSERT_EQUAL(request.candidate.region, testRadioLib->appliedRegion(0));
 }
 
 static void test_configApply_barrier_keepsQueuedPacketQueued()
@@ -550,6 +575,8 @@ static void test_configApply_applyFailure_rollsBackRadioLib()
 
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK, request.result.load());
     TEST_ASSERT_EQUAL(request.previous.region, config.lora.region);
+    TEST_ASSERT_EQUAL(request.candidate.region, testRadioLib->appliedRegion(0));
+    TEST_ASSERT_EQUAL(request.previous.region, testRadioLib->appliedRegion(1));
     TEST_ASSERT_FALSE(testRadioLib->configApplyTxInhibited());
 }
 
@@ -859,7 +886,7 @@ void setup()
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_lr11x0Apply_returnsFirstOperationFailure);
     RUN_TEST(test_lr11x0Apply_usesProductionParameters);
-    RUN_TEST(test_configApply_idle_success_commitsCandidate);
+    RUN_TEST(test_configApply_idle_success_keepsCandidatePrivate);
     RUN_TEST(test_configApply_applyFailure_rollsBack);
     RUN_TEST(test_configApply_rollbackFailure_inhibitsTx);
     RUN_TEST(test_configApply_secondRequest_rejectedBusy);

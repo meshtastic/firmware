@@ -4,6 +4,7 @@
 #endif
 #include "ProtobufModule.h"
 #include "mesh/RadioConfigApply.h"
+#include "mesh/RadioInterface.h"
 #include "meshUtils.h"
 #include <sys/types.h>
 #if HAS_WIFI
@@ -50,6 +51,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void expireStaleEditTransaction();
 #ifdef PIO_UNIT_TESTING
     int lastSaveWhatForTest = 0;
+    int persistedSaveWhatForTest = 0;
+    uint32_t persistenceCountForTest = 0;
+    meshtastic_Config_LoRaConfig persistedLoRaForTest = meshtastic_Config_LoRaConfig_init_zero;
 #endif
 
     uint8_t session_passkey[8] = {0};
@@ -141,11 +145,24 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool messageIsResponse(const meshtastic_AdminMessage *r);
     bool messageIsRequest(const meshtastic_AdminMessage *r);
     struct PreparedLoRaConfig {
+        static constexpr size_t MAX_DELAYED_DIAGNOSTICS = RadioInterface::MAX_LORA_CONFIG_DIAGNOSTICS;
         meshtastic_Config_LoRaConfig previous;
         meshtastic_Config_LoRaConfig candidate;
+        RadioInterface::LoRaConfigDiagnostic delayedDiagnostics[MAX_DELAYED_DIAGNOSTICS] = {};
         int saveWhat = 0;
         char mqttRootBefore[32] = {};
+        uint8_t delayedDiagnosticCount = 0;
+        uint8_t invalidCodingRate = 0;
+        uint8_t invalidSpreadFactor = 0;
+        uint16_t invalidBandwidth = 0;
         bool regionChanged = false;
+        bool updateFrequencySlotFlags = false;
+        bool usesDefaultFrequencySlot = false;
+        bool usesCustomChannelName = false;
+        bool warnCodingRateNormalization = false;
+        bool warnSpreadFactorNormalization = false;
+        bool warnBandwidthNormalization = false;
+        bool warnInvalidClientCorrection = false;
         bool ensurePkiKeys = false;
         bool generateLicensedIdentity = false;
         bool warnLicensedIdentityMigration = false;
@@ -185,6 +202,10 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     static constexpr uint32_t LORA_CONFIG_APPLY_TIMEOUT_MS = 60 * 1000;
     PreparedLoRaConfig pendingLoRaConfig;
     bool loRaConfigApplyPending = false;
+    bool finalizingLoRaConfig = false;
+    int deferredLoRaSaveSegments = 0;
+    bool deferredLoRaSaveReboot = false;
+    bool deferredLoRaSaveNotify = false;
 };
 
 static constexpr const char *licensedModeMessage =

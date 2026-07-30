@@ -1726,6 +1726,48 @@ static void test_setLoraConfig_doesNotMutateOrSaveBeforeHardwareSuccess()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, scriptedRadio->pending()->candidate.modem_preset);
 }
 
+static void test_setLoraConfig_normalizationSideEffectsWaitForHardwareSuccess()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    testAdmin->deferSaves();
+    RadioInterface::uses_default_frequency_slot = false;
+    RadioInterface::uses_custom_channel_name = false;
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    candidate.channel_num = UINT32_MAX;
+
+    sendSetLora(candidate);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+    TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
+
+    scriptedRadio->complete(RadioConfigApplyResult::TIMED_OUT);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
+
+    capturedWarnings.clear();
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    sendSetLora(candidate);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_TRUE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code);
+    TEST_ASSERT_EQUAL_INT(2, (int)capturedWarnings.size());
+    error_code = meshtastic_CriticalErrorCode_NONE;
+}
+
 static void test_setLoraConfig_success_appliesSideEffectsThenPersists()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
@@ -1784,6 +1826,9 @@ static void test_setLoraConfig_failure_keepsOldConfigAndWarns()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
     testAdmin->deferSaves();
+    RadioInterface::uses_default_frequency_slot = false;
+    RadioInterface::uses_custom_channel_name = false;
+    error_code = meshtastic_CriticalErrorCode_NONE;
     const auto candidate =
         makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
 
@@ -1798,6 +1843,9 @@ static void test_setLoraConfig_failure_keepsOldConfigAndWarns()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, myRegion->code);
     TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
     TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("Radio configuration apply failed"));
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
 
@@ -1808,15 +1856,45 @@ static void test_setLoraConfig_failure_keepsOldConfigAndWarns()
 
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
     TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("Radio configuration apply failed"));
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
     TEST_ASSERT_EQUAL_UINT32(2, scriptedRadio->requests());
+}
+
+static void test_setLoraConfig_concurrentSavePersistsAfterTerminalResult()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    const auto unrelatedRole = meshtastic_Config_DeviceConfig_Role_CLIENT_BASE;
+
+    sendSetLora(candidate);
+    config.device.role = unrelatedRole;
+    testAdmin->saveUnrelatedConfig(SEGMENT_CONFIG);
+
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL(unrelatedRole, config.device.role);
+
+    scriptedRadio->complete(RadioConfigApplyResult::TIMED_OUT);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CONFIG);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, testAdmin->persistedLoRa().region);
+    TEST_ASSERT_EQUAL(unrelatedRole, config.device.role);
 }
 
 static void test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecoveryFailure()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
     testAdmin->deferSaves();
+    RadioInterface::uses_default_frequency_slot = false;
+    RadioInterface::uses_custom_channel_name = false;
+    error_code = meshtastic_CriticalErrorCode_NONE;
     const auto candidate =
         makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
 
@@ -1831,6 +1909,9 @@ static void test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecov
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, myRegion->code);
     TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
     TEST_ASSERT_TRUE(scriptedRadio->configApplyTxInhibited());
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("radio recovery failed"));
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
 }
@@ -2169,8 +2250,10 @@ void setup()
 
     // Asynchronous LoRa config transaction
     RUN_TEST(test_setLoraConfig_doesNotMutateOrSaveBeforeHardwareSuccess);
+    RUN_TEST(test_setLoraConfig_normalizationSideEffectsWaitForHardwareSuccess);
     RUN_TEST(test_setLoraConfig_success_appliesSideEffectsThenPersists);
     RUN_TEST(test_setLoraConfig_failure_keepsOldConfigAndWarns);
+    RUN_TEST(test_setLoraConfig_concurrentSavePersistsAfterTerminalResult);
     RUN_TEST(test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecoveryFailure);
     RUN_TEST(test_setLoraConfig_busy_returnsBadRequest);
     RUN_TEST(test_setLoraConfig_regionSideEffects_doNotRunBeforeSuccess);

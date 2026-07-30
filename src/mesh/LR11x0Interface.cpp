@@ -186,12 +186,13 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
 template <typename T> LR11x0ConfigApplyParams LR11x0Interface<T>::makeReconfigureParams()
 {
     RadioLibInterface::reconfigure();
+    const meshtastic_Config_LoRaConfig &loraConfig = getActiveLoRaConfig();
 
     const LR11x0BandPolicy bandPolicy =
-        lr11x0BandPolicyFor(*getRegion(config.lora.region), wideLora(), LR1110_MAX_POWER, LR1120_MAX_POWER);
+        lr11x0BandPolicyFor(*getRegion(loraConfig.region), wideLora(), LR1110_MAX_POWER, LR1120_MAX_POWER);
     limitPower(bandPolicy.maxPower);
 
-    return makeLR11x0ConfigApplyParams(sf, bw, cr, syncWord, preambleLength, getFreq(), power, config.lora.sx126x_rx_boosted_gain,
+    return makeLR11x0ConfigApplyParams(sf, bw, cr, syncWord, preambleLength, getFreq(), power, loraConfig.sx126x_rx_boosted_gain,
                                        bandPolicy);
 }
 

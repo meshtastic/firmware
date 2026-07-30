@@ -28,6 +28,10 @@ class AdminModuleTestShim : public AdminModule
         editTransactionActivityMs = millis();
     }
     int savedSegments() const { return lastSaveWhatForTest; }
+    int persistedSegments() const { return persistedSaveWhatForTest; }
+    uint32_t persistenceCount() const { return persistenceCountForTest; }
+    const meshtastic_Config_LoRaConfig &persistedLoRa() const { return persistedLoRaForTest; }
+    void saveUnrelatedConfig(int segments) { saveChanges(segments, false); }
     bool loRaConfigPending() const { return loRaConfigApplyPending; }
 
     bool editTransactionOpen() const { return hasOpenEditTransaction; }

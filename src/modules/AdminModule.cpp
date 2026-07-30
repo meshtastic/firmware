@@ -875,24 +875,37 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 
     LOG_INFO("Set config: LoRa");
 
+    auto delayDiagnostics = [&prepared](const RadioInterface::LoRaConfigNormalization &normalization) {
+        for (uint8_t i = 0;
+             i < normalization.diagnosticCount && prepared.delayedDiagnosticCount < PreparedLoRaConfig::MAX_DELAYED_DIAGNOSTICS;
+             ++i) {
+            prepared.delayedDiagnostics[prepared.delayedDiagnosticCount++] = normalization.diagnostics[i];
+        }
+    };
+
     if (prepared.candidate.coding_rate != clampCodingRate(prepared.candidate.coding_rate)) {
-        LOG_WARN("Invalid coding_rate %d, setting to %d", prepared.candidate.coding_rate, LORA_CR_DEFAULT);
+        prepared.warnCodingRateNormalization = true;
+        prepared.invalidCodingRate = prepared.candidate.coding_rate;
         prepared.candidate.coding_rate = LORA_CR_DEFAULT;
     }
 
     if (prepared.candidate.spread_factor != clampSpreadFactor(prepared.candidate.spread_factor)) {
-        LOG_WARN("Invalid spread_factor %d, setting to %d", prepared.candidate.spread_factor, LORA_SF_DEFAULT);
+        prepared.warnSpreadFactorNormalization = true;
+        prepared.invalidSpreadFactor = prepared.candidate.spread_factor;
         prepared.candidate.spread_factor = LORA_SF_DEFAULT;
     }
 
     const uint16_t clampedBandwidth = clampBandwidthCode(prepared.candidate.bandwidth);
     if (!prepared.candidate.use_preset && prepared.candidate.bandwidth != clampedBandwidth) {
-        LOG_WARN("Invalid bandwidth %d, setting to %d", prepared.candidate.bandwidth, clampedBandwidth);
+        prepared.warnBandwidthNormalization = true;
+        prepared.invalidBandwidth = prepared.candidate.bandwidth;
         prepared.candidate.bandwidth = clampedBandwidth;
     }
 
     if (prepared.candidate.region != activeRegion->code) {
-        if (RadioInterface::validateConfigRegion(prepared.candidate) && RadioInterface::validateConfigLora(prepared.candidate)) {
+        const bool regionValid = RadioInterface::checkConfigRegion(prepared.candidate);
+        const RadioInterface::LoRaConfigNormalization validation = RadioInterface::normalizeConfigLora(prepared.candidate, false);
+        if (regionValid && validation.valid) {
             if (isRegionUnset && prepared.candidate.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
                 if (owner.is_licensed) {
@@ -909,26 +922,51 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
                 prepared.candidate.tx_enabled = false;
             regionSideEffectsPending = true;
         } else {
+            if (!regionValid)
+                RadioInterface::validateConfigRegion(prepared.candidate);
+            else
+                RadioInterface::publishLoRaConfigDiagnostics(validation);
             prepared.candidate = prepared.previous;
         }
     }
 
-    if (!RadioInterface::validateConfigLora(prepared.candidate)) {
+    RadioInterface::LoRaConfigNormalization validation = RadioInterface::normalizeConfigLora(prepared.candidate, false);
+    if (!validation.valid) {
         if (fromOthers) {
             const RegionInfo *swapRegion =
                 prepared.candidate.use_preset
                     ? RadioInterface::regionSwapForPreset(prepared.candidate.region, prepared.candidate.modem_preset)
                     : nullptr;
-            if (swapRegion)
+            if (swapRegion) {
                 prepared.candidate.region = swapRegion->code;
-            if (!swapRegion || !RadioInterface::validateConfigLora(prepared.candidate)) {
-                LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+                const RadioInterface::LoRaConfigNormalization swappedValidation =
+                    RadioInterface::normalizeConfigLora(prepared.candidate, false);
+                if (swappedValidation.valid) {
+                    delayDiagnostics(validation);
+                    validation = swappedValidation;
+                } else {
+                    RadioInterface::publishLoRaConfigDiagnostics(validation);
+                    RadioInterface::publishLoRaConfigDiagnostics(swappedValidation);
+                    prepared.candidate = prepared.previous;
+                    regionSideEffectsPending = false;
+                }
+            } else {
+                RadioInterface::publishLoRaConfigDiagnostics(validation);
                 prepared.candidate = prepared.previous;
                 regionSideEffectsPending = false;
             }
+            if (prepared.candidate.region == prepared.previous.region &&
+                prepared.candidate.modem_preset == prepared.previous.modem_preset) {
+                LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+            }
         } else {
-            LOG_WARN("Invalid LoRa config received from client, using corrected values");
-            RadioInterface::clampConfigLora(prepared.candidate);
+            prepared.warnInvalidClientCorrection = true;
+            delayDiagnostics(validation);
+            const RadioInterface::LoRaConfigNormalization corrected =
+                RadioInterface::normalizeConfigLora(prepared.candidate, true);
+            delayDiagnostics(corrected);
+            prepared.candidate = corrected.config;
+            validation = corrected;
         }
         if (prepared.candidate.region != prepared.previous.region)
             regionSideEffectsPending = true;
@@ -979,6 +1017,16 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 #endif
 
     prepared.warnPresetChange = prepared.candidate.modem_preset != prepared.previous.modem_preset;
+    const RadioInterface::LoRaConfigNormalization finalValidation =
+        RadioInterface::normalizeConfigLora(prepared.candidate, false);
+    prepared.updateFrequencySlotFlags = finalValidation.updatesFrequencySlotFlags;
+    prepared.usesDefaultFrequencySlot = finalValidation.usesDefaultFrequencySlot;
+    prepared.usesCustomChannelName = finalValidation.usesCustomChannelName;
+    if (prepared.candidate.override_frequency != 0) {
+        prepared.updateFrequencySlotFlags = true;
+        prepared.usesDefaultFrequencySlot = false;
+        prepared.usesCustomChannelName = RadioInterface::uses_custom_channel_name;
+    }
     return true;
 }
 
@@ -1009,6 +1057,23 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
     if (result == RadioConfigApplyResult::APPLIED) {
         config.has_lora = true;
         config.lora = pendingLoRaConfig.candidate;
+        if (pendingLoRaConfig.updateFrequencySlotFlags) {
+            RadioInterface::uses_default_frequency_slot = pendingLoRaConfig.usesDefaultFrequencySlot;
+            RadioInterface::uses_custom_channel_name = pendingLoRaConfig.usesCustomChannelName;
+        }
+        if (pendingLoRaConfig.warnCodingRateNormalization)
+            LOG_WARN("Invalid coding_rate %d, setting to %d", pendingLoRaConfig.invalidCodingRate, LORA_CR_DEFAULT);
+        if (pendingLoRaConfig.warnSpreadFactorNormalization)
+            LOG_WARN("Invalid spread_factor %d, setting to %d", pendingLoRaConfig.invalidSpreadFactor, LORA_SF_DEFAULT);
+        if (pendingLoRaConfig.warnBandwidthNormalization)
+            LOG_WARN("Invalid bandwidth %d, setting to %d", pendingLoRaConfig.invalidBandwidth, config.lora.bandwidth);
+        if (pendingLoRaConfig.warnInvalidClientCorrection)
+            LOG_WARN("Invalid LoRa config received from client, using corrected values");
+        RadioInterface::LoRaConfigNormalization delayedNormalization;
+        delayedNormalization.diagnosticCount = pendingLoRaConfig.delayedDiagnosticCount;
+        for (uint8_t i = 0; i < pendingLoRaConfig.delayedDiagnosticCount; ++i)
+            delayedNormalization.diagnostics[i] = pendingLoRaConfig.delayedDiagnostics[i];
+        RadioInterface::publishLoRaConfigDiagnostics(delayedNormalization);
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
         if (pendingLoRaConfig.ensurePkiKeys && crypto && !owner.is_licensed)
@@ -1046,7 +1111,9 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
             gps->enable();
 #endif
 
+        finalizingLoRaConfig = true;
         saveChanges(pendingLoRaConfig.saveWhat, false, false);
+        finalizingLoRaConfig = false;
         if (pendingLoRaConfig.warnPresetChange)
             warnOnLoraPresetChange(pendingLoRaConfig.previous, pendingLoRaConfig.candidate);
         if (!hasOpenEditTransaction)
@@ -1062,6 +1129,14 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
     }
 
     loRaConfigApplyPending = false;
+    const int deferredSegments = deferredLoRaSaveSegments;
+    const bool deferredReboot = deferredLoRaSaveReboot;
+    const bool deferredNotify = deferredLoRaSaveNotify;
+    deferredLoRaSaveSegments = 0;
+    deferredLoRaSaveReboot = false;
+    deferredLoRaSaveNotify = false;
+    if (deferredSegments)
+        saveChanges(deferredSegments, deferredReboot, deferredNotify);
 }
 
 bool AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
@@ -1927,8 +2002,20 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool notifyConfig
 #ifdef PIO_UNIT_TESTING
     lastSaveWhatForTest = saveWhat;
 #endif
+    if (loRaConfigApplyPending && !finalizingLoRaConfig) {
+        LOG_INFO("Delay save of changes to disk until LoRa configuration apply completes");
+        deferredLoRaSaveSegments |= saveWhat;
+        deferredLoRaSaveReboot = deferredLoRaSaveReboot || shouldReboot;
+        deferredLoRaSaveNotify = deferredLoRaSaveNotify || notifyConfigChange;
+        return;
+    }
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
+#ifdef PIO_UNIT_TESTING
+        persistedSaveWhatForTest |= saveWhat;
+        persistenceCountForTest++;
+        persistedLoRaForTest = config.lora;
+#endif
         if (notifyConfigChange) {
             service->reloadConfig(saveWhat);
         } else {

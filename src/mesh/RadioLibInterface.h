@@ -269,7 +269,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();
-    void finishConfigApply(RadioConfigApplyRequest *request);
+    void finishConfigApply(RadioConfigApplyRequest *request, RadioConfigApplyResult result);
     bool configApplyBarrierIsSet();
     meshtastic_MeshPacket *dequeueTxPacketIfConfigApplyAllowed();
 

@@ -109,8 +109,9 @@ class RadioInterface
     uint32_t lastTxStart = 0L;
     RadioConfigApplyRequest *configApplyRequest = nullptr;
     bool configApplyTxInhibit = false;
+    const meshtastic_Config_LoRaConfig *configApplyLoraConfig = nullptr;
 
-    uint32_t computeSlotTimeMsec();
+    uint32_t computeSlotTimeMsec(const RegionInfo *region = nullptr);
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
@@ -259,6 +260,41 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
+    enum class LoRaConfigDiagnosticType : uint8_t {
+        NONE,
+        REGION_SWAP_DEFERRED,
+        REGION_SWAPPED,
+        INVALID_PRESET,
+        BANDWIDTH_TOO_WIDE,
+        INVALID_CHANNEL,
+    };
+
+    struct LoRaConfigDiagnostic {
+        LoRaConfigDiagnosticType type = LoRaConfigDiagnosticType::NONE;
+        meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        meshtastic_Config_LoRaConfig_RegionCode replacementRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        meshtastic_Config_LoRaConfig_ModemPreset preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        float requestedBandwidthKHz = 0;
+        uint32_t channel = 0;
+        uint32_t maxChannel = 0;
+        bool corrected = false;
+    };
+
+    static constexpr size_t MAX_LORA_CONFIG_DIAGNOSTICS = 6;
+    struct LoRaConfigNormalization {
+        meshtastic_Config_LoRaConfig config = meshtastic_Config_LoRaConfig_init_zero;
+        LoRaConfigDiagnostic diagnostics[MAX_LORA_CONFIG_DIAGNOSTICS] = {};
+        uint8_t diagnosticCount = 0;
+        bool valid = true;
+        bool updatesFrequencySlotFlags = false;
+        bool usesDefaultFrequencySlot = false;
+        bool usesCustomChannelName = false;
+    };
+
+    static LoRaConfigNormalization normalizeConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    static void publishLoRaConfigDiagnostics(const LoRaConfigNormalization &normalization);
+    static void commitLoRaConfigFrequencyFlags(const LoRaConfigNormalization &normalization);
+
     static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
@@ -311,6 +347,10 @@ class RadioInterface
      * Save the channel we selected for later reuse.
      */
     virtual void saveChannelNum(uint32_t savedChannelNum);
+
+    const meshtastic_Config_LoRaConfig &getActiveLoRaConfig() const;
+    const RegionInfo *getActiveRegion() const;
+    bool reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig);
 
     /**
      * Get current RSSI reading from the radio.

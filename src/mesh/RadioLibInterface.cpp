@@ -234,15 +234,15 @@ bool RadioLibInterface::requestConfigApply(RadioConfigApplyRequest *request)
     return true;
 }
 
-void RadioLibInterface::finishConfigApply(RadioConfigApplyRequest *request)
+void RadioLibInterface::finishConfigApply(RadioConfigApplyRequest *request, RadioConfigApplyResult result)
 {
-    const auto result = request->result.load();
     {
         concurrency::LockGuard lock(&configApplyLock);
         assert(pendingConfigApply == request);
         pendingConfigApply = nullptr;
         configApplyBarrier = false;
     }
+    request->result.store(result);
     LOG_DEBUG("radio_config_apply resume result=%u", static_cast<unsigned>(result));
 
     if (!txQueue.empty())
@@ -274,8 +274,7 @@ void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
         return;
 
     if (!Throttle::isWithinTimespanMs(request->requestedAtMsec, request->timeoutMsec)) {
-        request->result.store(RadioConfigApplyResult::TIMED_OUT);
-        finishConfigApply(request);
+        finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
         return;
     }
 
@@ -295,23 +294,22 @@ void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
 #endif
 
     LOG_DEBUG("radio_config_apply apply");
-    config.lora = request->candidate;
-    if (reconfigure()) {
-        request->result.store(RadioConfigApplyResult::APPLIED);
+    RadioConfigApplyResult result;
+    if (reconfigureConfig(request->candidate)) {
+        result = RadioConfigApplyResult::APPLIED;
         startReceive();
     } else {
         LOG_DEBUG("radio_config_apply rollback");
-        config.lora = request->previous;
-        if (reconfigure()) {
-            request->result.store(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+        if (reconfigureConfig(request->previous)) {
+            result = RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK;
             startReceive();
         } else {
             setConfigApplyTxInhibit(true);
-            request->result.store(RadioConfigApplyResult::ROLLBACK_FAILED);
+            result = RadioConfigApplyResult::ROLLBACK_FAILED;
         }
     }
 
-    finishConfigApply(request);
+    finishConfigApply(request, result);
 }
 
 meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
