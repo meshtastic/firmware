@@ -170,48 +170,35 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
 
-    // set mode to standby
-    setStandby();
-
-    // configure publicly accessible settings
-    int err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setBandwidth(bw, wideLora() && (getFreq() > 1000.0f));
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-
-    err = lora.setSyncWord(syncWord);
-    assert(err == RADIOLIB_ERR_NONE);
-
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR1120_MAX_POWER);
     } else {
         limitPower(LR1110_MAX_POWER); // default clamp for non-wide freq range
     }
 
-    err = lora.setPreambleLength(preambleLength);
-    assert(err == RADIOLIB_ERR_NONE);
-
-    err = lora.setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
+    const float frequency = getFreq();
+    const RegionInfo *region = getRegion(config.lora.region);
+    const LR11x0ConfigApplyParams params = {sf,
+                                            bw,
+                                            cr,
+                                            syncWord,
+                                            preambleLength,
+                                            frequency,
+                                            power,
+                                            config.lora.sx126x_rx_boosted_gain,
+                                            wideLora() && frequency > 1000.0f,
+                                            static_cast<int8_t>(region->powerLimit)};
+    ConfigApplyOps ops(*this);
+    LR11x0ApplyStep failedStep = LR11x0ApplyStep::COUNT;
+    const int error = LR11x0ConfigApply<ConfigApplyOps>::run(ops, params, &failedStep);
+    if (error != RADIOLIB_ERR_NONE) {
+        LOG_ERROR("LR11x0 reconfigure %s %s%d", lr11x0ApplyStepName(failedStep), radioLibErr, error);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        return false;
+    }
 
-    err = lora.setOutputPower(power);
-    assert(err == RADIOLIB_ERR_NONE);
-
-    // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
-    err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
-
-    startReceive(); // restart receiving
-
+    finishStartReceive();
+    receiveStartedDuringReconfigure = true;
     return true;
 }
 
@@ -220,23 +207,35 @@ template <typename T> void LR11x0Interface<T>::disableInterrupt()
     lora.clearIrqAction();
 }
 
-template <typename T> void LR11x0Interface<T>::setStandby()
+template <typename T> int LR11x0Interface<T>::setStandby(bool completePacket)
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
-    int err = lora.standby();
+    const int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE) {
         LOG_DEBUG("LR11x0 standby failed with error %d", err);
+        return err;
     }
-
-    assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
-    completeSending(); // If we were sending, not anymore
+    if (completePacket)
+        completeSending();
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> int LR11x0Interface<T>::setStandbyForReconfigure()
+{
+    return setStandby(false);
+}
+
+template <typename T> void LR11x0Interface<T>::setStandby()
+{
+    receiveStartedDuringReconfigure = false;
+    assert(setStandby(true) == RADIOLIB_ERR_NONE);
 }
 
 /**
@@ -255,6 +254,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR11x0Interface<T>::configHardwareForSend()
 {
+    receiveStartedDuringReconfigure = false;
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -266,6 +266,10 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
+    if (receiveStartedDuringReconfigure) {
+        receiveStartedDuringReconfigure = false;
+        return;
+    }
 
     setStandby();
 
@@ -278,12 +282,15 @@ template <typename T> void LR11x0Interface<T>::startReceive()
         LOG_ERROR("StartReceive error: %d", err);
     assert(err == RADIOLIB_ERR_NONE);
 
-    RadioLibInterface::startReceive();
+    finishStartReceive();
+#endif
+}
 
-    // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+template <typename T> void LR11x0Interface<T>::finishStartReceive()
+{
+    RadioLibInterface::startReceive();
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
-#endif
 }
 
 /** Is the channel currently active? */

@@ -1,3 +1,4 @@
+#include "LR11x0ConfigApply.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
@@ -258,6 +259,86 @@ static meshtastic_Config_LoRaConfig usConfig()
 static meshtastic_Config_LoRaConfig lora24Config()
 {
     return makeLoraConfig(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
+}
+
+static LR11x0ConfigApplyParams paramsFor(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    const RegionInfo *region = getRegion(loraConfig.region);
+    return {11,
+            250.0f,
+            5,
+            0x12,
+            16,
+            region->freqStart,
+            10,
+            false,
+            region->wideLora && region->freqStart > 1000.0f,
+            static_cast<int8_t>(region->powerLimit)};
+}
+
+class FakeLR11x0Ops
+{
+  public:
+    void failAt(LR11x0ApplyStep step, int error)
+    {
+        failedStep = step;
+        failure = error;
+    }
+
+    bool calledAfter(LR11x0ApplyStep step) const
+    {
+        for (size_t i = static_cast<size_t>(step) + 1; i < sizeof(called) / sizeof(called[0]); i++)
+            if (called[i])
+                return true;
+        return false;
+    }
+
+    int standby() { return call(LR11x0ApplyStep::STANDBY); }
+    int setSpreadingFactor(uint8_t) { return call(LR11x0ApplyStep::SPREADING_FACTOR); }
+    int setBandwidth(float, bool) { return call(LR11x0ApplyStep::BANDWIDTH); }
+    int setCodingRate(uint8_t, bool) { return call(LR11x0ApplyStep::CODING_RATE); }
+    int setSyncWord(uint8_t) { return call(LR11x0ApplyStep::SYNC_WORD); }
+    int setPreambleLength(uint16_t) { return call(LR11x0ApplyStep::PREAMBLE); }
+    int setFrequency(float) { return call(LR11x0ApplyStep::FREQUENCY); }
+    int setOutputPower(int8_t) { return call(LR11x0ApplyStep::OUTPUT_POWER); }
+    int setRxBoostedGainMode(bool) { return call(LR11x0ApplyStep::RX_GAIN); }
+    int startReceive() { return call(LR11x0ApplyStep::START_RECEIVE); }
+
+  private:
+    int call(LR11x0ApplyStep step)
+    {
+        called[static_cast<size_t>(step)] = true;
+        return step == failedStep ? failure : RADIOLIB_ERR_NONE;
+    }
+
+    LR11x0ApplyStep failedStep = LR11x0ApplyStep::COUNT;
+    int failure = RADIOLIB_ERR_NONE;
+    bool called[static_cast<size_t>(LR11x0ApplyStep::COUNT)] = {};
+};
+
+static void test_lr11x0Apply_returnsFirstOperationFailure()
+{
+    static const LR11x0ApplyStep steps[] = {
+        LR11x0ApplyStep::STANDBY,   LR11x0ApplyStep::SPREADING_FACTOR, LR11x0ApplyStep::BANDWIDTH, LR11x0ApplyStep::CODING_RATE,
+        LR11x0ApplyStep::SYNC_WORD, LR11x0ApplyStep::PREAMBLE,         LR11x0ApplyStep::FREQUENCY, LR11x0ApplyStep::OUTPUT_POWER,
+        LR11x0ApplyStep::RX_GAIN,   LR11x0ApplyStep::START_RECEIVE,
+    };
+    const LR11x0ConfigApplyParams params = paramsFor(usConfig());
+
+    for (const auto step : steps) {
+        FakeLR11x0Ops ops;
+        ops.failAt(step, RADIOLIB_ERR_INVALID_FREQUENCY);
+
+        TEST_ASSERT_EQUAL(RADIOLIB_ERR_INVALID_FREQUENCY, LR11x0ConfigApply<FakeLR11x0Ops>::run(ops, params));
+        TEST_ASSERT_FALSE(ops.calledAfter(step));
+    }
+}
+
+static void test_lr11x0Apply_usesWideBandParamsForLora24()
+{
+    TEST_ASSERT_TRUE(paramsFor(lora24Config()).wideBand);
+    TEST_ASSERT_EQUAL_INT8(10, paramsFor(lora24Config()).maxPower);
+    TEST_ASSERT_FALSE(paramsFor(usConfig()).wideBand);
 }
 
 static void test_configApply_idle_success_commitsCandidate()
@@ -746,6 +827,8 @@ void setup()
     RUN_TEST(test_applyModemConfig_mediumTurbo);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
+    RUN_TEST(test_lr11x0Apply_returnsFirstOperationFailure);
+    RUN_TEST(test_lr11x0Apply_usesWideBandParamsForLora24);
     RUN_TEST(test_configApply_idle_success_commitsCandidate);
     RUN_TEST(test_configApply_applyFailure_rollsBack);
     RUN_TEST(test_configApply_rollbackFailure_inhibitsTx);

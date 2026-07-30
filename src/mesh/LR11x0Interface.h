@@ -1,5 +1,6 @@
 #pragma once
 #if RADIOLIB_EXCLUDE_LR11X0 != 1
+#include "LR11x0ConfigApply.h"
 #include "RadioLibInterface.h"
 
 /**
@@ -73,5 +74,36 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     virtual void setStandby() override;
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
+
+  private:
+    class ConfigApplyOps
+    {
+      public:
+        explicit ConfigApplyOps(LR11x0Interface<T> &radio) : radio(radio) {}
+
+        int standby() { return radio.setStandbyForReconfigure(); }
+        int setSpreadingFactor(uint8_t spreadingFactor) { return radio.lora.setSpreadingFactor(spreadingFactor); }
+        int setBandwidth(float bandwidth, bool wideBand) { return radio.lora.setBandwidth(bandwidth, wideBand); }
+        int setCodingRate(uint8_t codingRate, bool interleaving) { return radio.lora.setCodingRate(codingRate, interleaving); }
+        int setSyncWord(uint8_t syncWord) { return radio.lora.setSyncWord(syncWord); }
+        int setPreambleLength(uint16_t preambleLength) { return radio.lora.setPreambleLength(preambleLength); }
+        int setFrequency(float frequency) { return radio.lora.setFrequency(frequency); }
+        int setOutputPower(int8_t outputPower) { return radio.lora.setOutputPower(outputPower); }
+        int setRxBoostedGainMode(bool boostedGain) { return radio.lora.setRxBoostedGainMode(boostedGain); }
+        int startReceive()
+        {
+            return radio.lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS,
+                                           RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+        }
+
+      private:
+        LR11x0Interface<T> &radio;
+    };
+
+    int setStandbyForReconfigure();
+    int setStandby(bool completePacket);
+    void finishStartReceive();
+
+    bool receiveStartedDuringReconfigure = false;
 };
 #endif
