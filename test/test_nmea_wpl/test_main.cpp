@@ -2,7 +2,9 @@
 #include "NMEAWPL.h"
 #include "TestUtil.h"
 #include "mesh-pb-constants.h"
+#include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <unity.h>
 
@@ -46,6 +48,9 @@ static uint32_t emittedChecksum(const char *buf)
 {
     const char *star = strrchr(buf, '*');
     TEST_ASSERT_NOT_NULL(star);
+    TEST_ASSERT_TRUE(isxdigit((unsigned char)star[1]));
+    TEST_ASSERT_TRUE(isxdigit((unsigned char)star[2]));
+    TEST_ASSERT_TRUE(star[3] == '\r' || star[3] == '\0');
     unsigned parsed = 0;
     TEST_ASSERT_EQUAL_INT(1, sscanf(star + 1, "%02X", &parsed));
     return parsed;
@@ -93,6 +98,7 @@ void test_gga_checksum(void)
 
 void test_crlf_prefix_does_not_change_checksum(void)
 {
+    const uint32_t fixtureChecksum = 0x69;
     char withPrefix[128];
     char withoutPrefix[128];
     meshtastic_PositionLite lite = makePositionLite();
@@ -101,7 +107,8 @@ void test_crlf_prefix_does_not_change_checksum(void)
     printWPL(withPrefix, sizeof(withPrefix), lite, "Test", false);
     printWPL(withoutPrefix, sizeof(withoutPrefix), pos, "Test", false);
 
-    TEST_ASSERT_EQUAL_UINT32(emittedChecksum(withoutPrefix), emittedChecksum(withPrefix));
+    TEST_ASSERT_EQUAL_UINT32(fixtureChecksum, emittedChecksum(withPrefix));
+    TEST_ASSERT_EQUAL_UINT32(fixtureChecksum, emittedChecksum(withoutPrefix));
 }
 
 void test_zero_sized_buffer_writes_nothing(void)
