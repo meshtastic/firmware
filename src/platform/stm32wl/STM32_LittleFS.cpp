@@ -273,7 +273,7 @@ const char *dbg_strerr_lfs(int32_t err)
 
     default:
         static char errcode[13];
-        snprintf(errcode, sizeof(errcode), "%ld", err);
+        snprintf(errcode, sizeof(errcode), "%ld", (long)err);
         return errcode;
     }
 

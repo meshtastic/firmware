@@ -40,6 +40,9 @@ static uint32_t nmeaChecksum(const char *buf)
 
 uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_PositionLite &pos, const char *name, bool isCaltopoMode)
 {
+    if (bufsz == 0)
+        return 0;
+
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     char type = isCaltopoMode ? 'P' : 'N';
     uint32_t len = snprintf(buf, bufsz, "\r\n$G%cWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", type, geoCoord.getDMSLatDeg(),
@@ -54,6 +57,9 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_PositionLite &pos, c
 
 uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const char *name, bool isCaltopoMode)
 {
+    if (bufsz == 0)
+        return 0;
+
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     char type = isCaltopoMode ? 'P' : 'N';
     uint32_t len = snprintf(buf, bufsz, "$G%cWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", type, geoCoord.getDMSLatDeg(),
@@ -89,6 +95,9 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const
 
 uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
 {
+    if (bufsz == 0)
+        return 0;
+
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     time_t timestamp = pos.timestamp;
 
