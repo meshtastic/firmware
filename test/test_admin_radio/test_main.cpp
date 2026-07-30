@@ -2272,6 +2272,49 @@ static void test_applyConfigChange_rebootFlag_setsRebootAtMsec()
     TEST_ASSERT_EQUAL_INT(0, counter.count); // reboot flag alone must not touch the radio
 }
 
+// Read live by PositionModule every send, so this must persist without rebooting - that reboot
+// is what PR #11181 removed, and this pins it down.
+static void test_setSmartPositionEnabled_persistsWithoutReboot()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+    config.position.position_broadcast_smart_enabled = false;
+
+    graphics::menuHandler::setSmartPositionEnabled(true);
+
+    TEST_ASSERT_TRUE(config.position.position_broadcast_smart_enabled);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+
+    graphics::menuHandler::setSmartPositionEnabled(false);
+    TEST_ASSERT_FALSE(config.position.position_broadcast_smart_enabled);
+}
+
+// The bug fixed in commit 1: this used to change the flag and never persist it.
+static void test_toggleTelemetryScreen_persistsWithoutRadioReloadOrReboot()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+    rebootAtMsec = 0;
+    moduleConfig.telemetry.environment_screen_enabled = false;
+    const int before = mockMeshService->reloadCalls;
+
+    graphics::menuHandler::toggleTelemetryScreen(moduleConfig.telemetry.environment_screen_enabled);
+
+    TEST_ASSERT_TRUE(moduleConfig.telemetry.environment_screen_enabled); // flipped
+    TEST_ASSERT_EQUAL_INT(before + 1, mockMeshService->reloadCalls);     // and persisted
+    TEST_ASSERT_EQUAL_INT(0, counter.count);                             // a screen pref is not a radio change
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);                           // and needs no reboot
+}
+
+static void test_toggleTelemetryScreen_togglesBackOffAgain()
+{
+    moduleConfig.telemetry.power_screen_enabled = true;
+    graphics::menuHandler::toggleTelemetryScreen(moduleConfig.telemetry.power_screen_enabled);
+    TEST_ASSERT_FALSE(moduleConfig.telemetry.power_screen_enabled);
+}
+
 // -----------------------------------------------------------------------
 // Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
 // -----------------------------------------------------------------------
@@ -2505,6 +2548,9 @@ void setup()
     RUN_TEST(test_applyConfigChange_noRebootFlag_leavesRebootAtMsecClear);
     RUN_TEST(test_applyConfigChange_radioAndRebootCompose);
     RUN_TEST(test_applyConfigChange_customRebootSeconds_isHonoured);
+    RUN_TEST(test_toggleTelemetryScreen_persistsWithoutRadioReloadOrReboot);
+    RUN_TEST(test_toggleTelemetryScreen_togglesBackOffAgain);
+    RUN_TEST(test_setSmartPositionEnabled_persistsWithoutReboot);
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);

@@ -2017,12 +2017,9 @@ void menuHandler::GPSSmartPositionMenu()
             menuQueue = PositionBaseMenu;
             screen->runNow();
         } else if (selected == 1) {
-            // Read live by PositionModule's smart-broadcast path every send - no reboot needed.
-            config.position.position_broadcast_smart_enabled = true;
-            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
+            setSmartPositionEnabled(true);
         } else if (selected == 2) {
-            config.position.position_broadcast_smart_enabled = false;
-            service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
+            setSmartPositionEnabled(false);
         }
     };
     bannerOptions.InitialSelected = config.position.position_broadcast_smart_enabled ? 1 : 2;
@@ -2754,20 +2751,15 @@ void menuHandler::frameTogglesMenu()
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_env_telemetry) {
-            // These three live in moduleConfig, not the hiddenFrames blob that
-            // toggleFrameVisibility() persists, so they need their own save.
-            moduleConfig.telemetry.environment_screen_enabled = !moduleConfig.telemetry.environment_screen_enabled;
-            service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
+            toggleTelemetryScreen(moduleConfig.telemetry.environment_screen_enabled);
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_aq_telemetry) {
-            moduleConfig.telemetry.air_quality_screen_enabled = !moduleConfig.telemetry.air_quality_screen_enabled;
-            service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
+            toggleTelemetryScreen(moduleConfig.telemetry.air_quality_screen_enabled);
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_power) {
-            moduleConfig.telemetry.power_screen_enabled = !moduleConfig.telemetry.power_screen_enabled;
-            service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
+            toggleTelemetryScreen(moduleConfig.telemetry.power_screen_enabled);
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         }
@@ -3091,8 +3083,23 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     menuQueue = MenuNone;
 }
 
-// Flips the mute bit on a node and persists. Returns without writing if the node is unknown, so a
-// stale pickedNodeNum can't cause a pointless flash write.
+// One telemetry screen flag, flipped and persisted. These live in moduleConfig rather than the
+// hiddenFrames blob that Screen::toggleFrameVisibility() writes, so they need their own save.
+void menuHandler::toggleTelemetryScreen(bool &flag)
+{
+    flag = !flag;
+    service->applyConfigChange(SEGMENT_MODULECONFIG, CONFIG_APPLY_NONE);
+}
+
+// Read live by PositionModule's smart-broadcast path on every send, so no reboot is needed.
+void menuHandler::setSmartPositionEnabled(bool enabled)
+{
+    config.position.position_broadcast_smart_enabled = enabled;
+    service->applyConfigChange(SEGMENT_CONFIG, CONFIG_APPLY_NONE);
+}
+
+// Flips the mute bit on a node and persists just the node database. Returns without writing if
+// the node is unknown, so a stale pickedNodeNum can't cause a pointless flash write.
 void menuHandler::toggleNodeMuted(uint32_t nodeNum)
 {
     meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(nodeNum);
