@@ -446,6 +446,7 @@ jobs:
       - gather-artifacts
       - build-debian-src
       - package-pio-deps-native-tft
+      - Windows
       # - MacOS
     steps:
       - name: Checkout
@@ -496,6 +497,13 @@ jobs:
           merge-multiple: true
           path: ./output/pio-deps-native-tft
 
+      - name: Download the Windows MSI
+        uses: actions/download-artifact@v8
+        with:
+          pattern: meshtasticd-msi-*-${{ needs.version.outputs.long }}
+          merge-multiple: true
+          path: ./output/windows-msi
+
       - name: Zip Linux sources
         working-directory: output
         run: |
@@ -527,6 +535,7 @@ jobs:
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{ needs.version.outputs.long }}.json
           gh release upload v${{ needs.version.outputs.long }} ./output/meshtasticd-${{ needs.version.outputs.deb }}-src.zip
           gh release upload v${{ needs.version.outputs.long }} ./output/platformio-deps-native-tft-${{ needs.version.outputs.long }}.zip
+          gh release upload v${{ needs.version.outputs.long }} ./output/windows-msi/*.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

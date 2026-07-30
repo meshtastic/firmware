@@ -42,6 +42,9 @@
 // Defined in WindowsMacAddr.cpp, which keeps <iphlpapi.h> out of this TU: it
 // pulls in RPC/OLE headers that collide with the Arduino API.
 bool portduinoWindowsPrimaryMac(uint8_t *dmac);
+#include "windows/WindowsService.h"
+// Long-only: -s is already --sim, and argp needs a key outside the char range.
+#define OPT_SERVICE 0x100
 #endif
 
 #ifdef __APPLE__
@@ -112,6 +115,11 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     case 'y':
         yamlOnly = true;
         break;
+#ifdef _WIN32
+    case OPT_SERVICE:
+        windowsServiceInit();
+        break;
+#endif
     case ARGP_KEY_ARG:
         return 0;
     default:
@@ -166,6 +174,9 @@ void portduinoCustomInit()
                                            {"sim", 's', 0, 0, "Run in Simulated radio mode"},
                                            {"verbose", 'v', 0, 0, "Set log level to full debug"},
                                            {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
+#ifdef _WIN32
+                                           {"service", OPT_SERVICE, 0, 0, "Run as a Windows service"},
+#endif
                                            {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
