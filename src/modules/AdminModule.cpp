@@ -484,7 +484,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             if (!service->requestLoRaConfig(pendingLoRaConfig.previous, pendingLoRaConfig.candidate,
                                             LORA_CONFIG_APPLY_TIMEOUT_MS)) {
                 loRaConfigApplyPending = false;
-                pendingLoRaConfig = PreparedLoRaConfig{};
+                memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
                 pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
                 sendWarningAndLog("Radio configuration apply could not be queued; previous configuration retained");
             }
@@ -879,7 +879,7 @@ static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incomi
 bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
                                     PreparedLoRaConfig &prepared)
 {
-    prepared = PreparedLoRaConfig{};
+    memset(&prepared, 0, sizeof(prepared));
     prepared.previous = config.lora;
     prepared.candidate = incoming;
     prepared.saveWhat = SEGMENT_CONFIG;
@@ -1097,7 +1097,7 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     loRaConfigApplyPending = true;
     if (!service->requestLoRaConfig(prepared.previous, prepared.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS)) {
         loRaConfigApplyPending = false;
-        pendingLoRaConfig = PreparedLoRaConfig{};
+        memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
         pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
         return false;
     }
@@ -1186,7 +1186,7 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
     }
 
     loRaConfigApplyPending = false;
-    pendingLoRaConfig = PreparedLoRaConfig{};
+    memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
     pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
     const int deferredSegments = deferredLoRaSaveSegments;
     const bool deferredReboot = deferredLoRaSaveReboot;
@@ -2049,7 +2049,7 @@ void AdminModule::expireStaleEditTransaction()
     LOG_WARN("Edit transaction abandoned for %us; committing what it applied", EDIT_TRANSACTION_IDLE_MS / 1000);
     hasOpenEditTransaction = false;
     if (!loRaConfigApplyPending && pendingLoRaConfig.saveWhat != 0) {
-        pendingLoRaConfig = PreparedLoRaConfig{};
+        memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
         pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
     }
     int segments = deferredEditSegments;
