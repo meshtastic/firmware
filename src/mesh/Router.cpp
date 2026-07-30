@@ -1249,7 +1249,12 @@ bool Router::dequeueDeferredLocal(DeferredLocal &out)
 void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
 {
     // Top level: handle synchronously, exactly as before the depth guard existed.
-    if (handleDepth == 0) {
+    bool nested;
+    {
+        concurrency::LockGuard g(&deferredLock);
+        nested = handleDepth > 0;
+    }
+    if (!nested) {
         handleReceived(p, src);
         return;
     }
@@ -1258,8 +1263,26 @@ void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
     // handleReceived() drains it once the current dispatch unwinds, instead of stacking another
     // handleReceived() frame on top of the module handler (nRF52 stack overflow on config save).
     meshtastic_MeshPacket *copy = packetPool.allocCopy(*p);
-    if (copy && enqueueDeferredLocal(copy, src))
-        return;
+    if (copy) {
+        // Re-check depth under the lock that also gates the drain's decrement, so a drain finishing
+        // while we allocated cannot leave this copy stranded in the ring.
+        bool stillNested = false, queued = false;
+        {
+            concurrency::LockGuard g(&deferredLock);
+            stillNested = handleDepth > 0;
+            if (stillNested)
+                queued = enqueueDeferredLocal(copy, src);
+        }
+        if (queued)
+            return;
+        if (!stillNested) {
+            // The drain finished first, so nothing would pick this up. Go through handleReceived()
+            // rather than dispatchReceived() so a loopback from its modules still defers.
+            handleReceived(copy, src);
+            packetPool.release(copy);
+            return;
+        }
+    }
 
     // Pool exhausted or queue full: drop the deferral. Leak-free and degraded but safe - the
     // packet still followed its normal non-loopback path (SHOULD_RELEASE, or the TX path for a
@@ -1278,29 +1301,39 @@ void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
  */
 void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 {
-    handleDepth++;
+    {
+        concurrency::LockGuard g(&deferredLock);
+        handleDepth++;
 #ifdef PIO_UNIT_TESTING
-    if (handleDepth > maxHandleDepthObserved)
-        maxHandleDepthObserved = handleDepth;
+        if (handleDepth > maxHandleDepthObserved)
+            maxHandleDepthObserved = handleDepth;
 #endif
+    }
 
     dispatchReceived(p, src);
 
-    // Only the outermost frame drains. Deferred packets were produced by modules sending from
-    // inside dispatchReceived()'s callModules(); process them here, after the triggering frame has
-    // unwound, so a second handleReceived() never sits on top of a module handler. handleDepth
-    // stays >= 1 through the drain, so a drained packet whose own modules send more loopback
-    // packets enqueues them for this same loop rather than recursing: the stack stays flat and
-    // processing is breadth-first.
-    if (handleDepth == 1) {
+    // Decide "am I the last frame" and drop the depth in one critical section. Splitting them lets
+    // two frames both read the same pre-decrement value, skip the drain, and strand the ring.
+    for (;;) {
         DeferredLocal d;
-        while (dequeueDeferredLocal(d)) {
-            dispatchReceived(d.p, d.src);
-            packetPool.release(d.p);
+        {
+            concurrency::LockGuard g(&deferredLock);
+            if (handleDepth > 1) {
+                // Another frame is still live and will own the drain once it is last.
+                handleDepth--;
+                return;
+            }
+            if (!dequeueDeferredLocal(d)) {
+                // Last frame and nothing queued, so zero is reached only with the ring empty.
+                handleDepth--;
+                return;
+            }
         }
+        // Depth stays at 1 across the drain, so a loopback from these modules defers instead of
+        // recursing, and dispatch runs outside the lock.
+        dispatchReceived(d.p, d.src);
+        packetPool.release(d.p);
     }
-
-    handleDepth--;
 }
 
 void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
