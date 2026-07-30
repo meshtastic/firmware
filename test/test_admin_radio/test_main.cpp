@@ -2111,6 +2111,31 @@ static void test_setConfigPosition_noopSet_doesNotReboot()
     TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
 }
 
+static void test_setConfigPosition_gpsModeChange_schedulesReboot()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED; // known start state
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_liveFieldChange_doesNotReboot()
+{
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.position_broadcast_secs = config.position.position_broadcast_secs + 60;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
 // -----------------------------------------------------------------------
 // Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
 // -----------------------------------------------------------------------
@@ -2335,6 +2360,8 @@ void setup()
     RUN_TEST(test_setConfigNetwork_realChange_schedulesReboot);
     RUN_TEST(test_setConfigBluetooth_noopSet_doesNotReboot);
     RUN_TEST(test_setConfigBluetooth_realChange_schedulesReboot);
+    RUN_TEST(test_setConfigPosition_liveFieldChange_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpsModeChange_schedulesReboot);
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
