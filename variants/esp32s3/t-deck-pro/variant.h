@@ -43,6 +43,8 @@
 
 // TCA8418 keyboard
 #define KB_BL_PIN 42
+#define KB_INT 15
+#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 // microphone PCM5102A
 #define PCM5102A_SCK 47
