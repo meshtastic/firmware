@@ -3254,7 +3254,7 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 
 uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // rx_time may be an uptime-seconds placeholder while has_rx_time is false - don't age it as
     // wall-clock, and don't pass it off as "just now" either.
     if (!p->has_rx_time)
         return SINCE_UNKNOWN;
@@ -3654,7 +3654,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             return;
         }
 
-        // Gate on has_rx_time, not truthiness - rx_time may hold a millis() placeholder.
+        // Gate on has_rx_time, not truthiness - rx_time may hold an uptime-seconds placeholder.
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
 

@@ -273,7 +273,7 @@ PacketId generatePacketId()
 RxTimeStamp computeRxTimeStamp()
 {
     const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
-    return {haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis(), haveTime};
+    return {haveTime ? getValidTime(RTCQualityFromNet) : Time::getUptimeSecs(), haveTime};
 }
 
 void stampRxTime(meshtastic_MeshPacket *p)

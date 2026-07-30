@@ -12,7 +12,9 @@
 #include <memory>
 
 /// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
-/// Time::getMillis() placeholder with valid=false.
+/// Time::getUptimeSecs() placeholder with valid=false. Uptime seconds are monotonic (the wrap is
+/// counted, not suffered), so reconciliation is exact at any age - and a placeholder that leaks
+/// needs ~50 years of uptime to be mistaken for an epoch, where milliseconds took 18.3 days.
 struct RxTimeStamp {
     uint32_t time;
     bool valid;

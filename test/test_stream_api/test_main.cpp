@@ -526,14 +526,14 @@ static void test_want_config_includes_status_message_module_config(void)
 }
 
 /// Queue a packet as Router::dispatchReceived would have, before any time source existed.
-static void queuePendingTimePlaceholderPacket(NodeNum from, uint32_t placeholderMillis)
+static void queuePendingTimePlaceholderPacket(NodeNum from, uint32_t placeholderUptimeSecs)
 {
     meshtastic_MeshPacket pending = meshtastic_MeshPacket_init_zero;
     pending.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
     pending.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     pending.from = from;
     pending.to = NODENUM_BROADCAST;
-    pending.rx_time = placeholderMillis;
+    pending.rx_time = placeholderUptimeSecs; // computeRxTimeStamp() stamps Time::getUptimeSecs()
     pending.has_rx_time = false;
     service->sendToPhone(packetPool.allocCopy(pending));
 }
@@ -574,6 +574,7 @@ class ScopedTimeFixture
     ScopedTimeFixture(uint32_t startMillis) : previous(nodeDB)
     {
         resetRTCStateForTests();
+        Time::resetMonotonicForTests(); // uptime-seconds placeholders assume no carried wrap
         nodeDB = &instance;
         Time::setTestMillis(startMillis);
     }
@@ -597,7 +598,7 @@ static void test_time_given_at_handshake_start_reconciles_queued_packet(void)
     ScopedTimeFixture timeFixture(5000);
 
     const NodeNum sender = 0x12345678;
-    queuePendingTimePlaceholderPacket(sender, 2000); // "received" 3s before the test's current millis()
+    queuePendingTimePlaceholderPacket(sender, 2); // "received" at uptime 2s, 3s before the fixture's 5000ms now
 
     PhoneAPITestShim api;
     startHandshake(api);
@@ -624,7 +625,7 @@ static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packe
     ScopedTimeFixture timeFixture(5000);
 
     const NodeNum sender = 0x12345678;
-    queuePendingTimePlaceholderPacket(sender, 2000);
+    queuePendingTimePlaceholderPacket(sender, 2);
 
     PhoneAPITestShim api;
     startHandshake(api);

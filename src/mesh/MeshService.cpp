@@ -181,14 +181,14 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     return nodenum;
 }
 
-// Back-calculate the real epoch for any queued packet still carrying a millis() rx_time
+// Back-calculate the real epoch for any queued packet still carrying an uptime-seconds rx_time
 // placeholder, now that the clock is trustworthy.
 void MeshService::reconcilePendingRxTimes()
 {
     const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
     if (nowEpoch == 0) // called before the clock was actually valid - nothing to reconcile against
         return;
-    const uint32_t nowMillis = Time::getMillis();
+    const uint32_t nowUptimeSecs = Time::getUptimeSecs();
 
     // Rotate the queue once. TypedQueue is strictly FIFO on both backends, so dequeueing and
     // re-enqueueing every element in turn leaves the delivery order unchanged.
@@ -197,11 +197,15 @@ void MeshService::reconcilePendingRxTimes()
         if (!p) // drained from under us - nothing left to rotate
             break;
         if (!p->has_rx_time) {
-            // Unsigned subtraction is wraparound-safe; rx_time is a 32-bit wire field, so the
-            // placeholder was never wider than 32 bits to begin with.
-            const uint32_t elapsedMs = nowMillis - p->rx_time;
-            p->rx_time = nowEpoch - (elapsedMs / 1000);
-            p->has_rx_time = true;
+            // Both stamps come off the monotonic uptime counter, so the elapsed term is exact at
+            // any age - there is no wrap window to alias in. If the elapsed time somehow exceeds
+            // the epoch itself, leave the packet un-dated (absent, never wrong) rather than
+            // fabricating a pre-1970 value.
+            const uint32_t elapsedSecs = nowUptimeSecs - p->rx_time;
+            if (elapsedSecs < nowEpoch) {
+                p->rx_time = nowEpoch - elapsedSecs;
+                p->has_rx_time = true;
+            }
         }
         if (!toPhoneQueue.enqueue(p, 0)) { // mirrors sendToPhone()'s degrade-on-failure path
             LOG_CRIT("Failed to requeue a packet into toPhoneQueue!");
@@ -629,7 +633,7 @@ bool MeshService::isToPhoneQueueEmpty()
 
 uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
-    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // rx_time may be an uptime-seconds placeholder while has_rx_time is false - don't age it as
     // wall-clock, and don't pass it off as "just now" either.
     if (!mp->has_rx_time)
         return SINCE_UNKNOWN;
