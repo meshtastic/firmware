@@ -28,6 +28,10 @@ namespace graphics
 namespace NodeListRenderer
 {
 
+// Y position of the first row (either column) in the current list screen, set by
+// drawNodeListScreen(). Used by entry renderers that need to special-case the top row.
+static int16_t firstRowY = 0;
+
 // Function moved from Screen.cpp to NodeListRenderer.cpp since it's primarily used here
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display)
 {
@@ -363,10 +367,16 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         const int gap = 1;
         const int totalWidth = hopCountWidth + gap + hop_width;
         const int hopX = barsRightEdge - totalWidth;
-        const int iconY = y + (FONT_HEIGHT_SMALL - hop_height) / 2;
+        int iconY = y + (FONT_HEIGHT_SMALL - hop_height) / 2;
+
+#if defined(MESHNOLOGY_W12)
+        if (y == firstRowY) {
+            iconY += 1; // Nudge the hop icon down 1px on the top row to avoid the two color display
+        }
+#endif
 
         display->drawString(hopX, y, hopCount);
-        display->drawXbm(hopX + hopCountWidth + gap, iconY, hop_width, hop_height, hop);
+        display->drawXbm(hopX + hopCountWidth + gap, iconY, hop_width, hop_height, imghop);
     }
 }
 
@@ -606,6 +616,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     // Space below header
     y += COMMON_HEADER_HEIGHT;
+    firstRowY = y;
 
     int totalColumns = 1; // Default to 1 column
 

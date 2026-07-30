@@ -963,7 +963,7 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
             curX += display->getStringWidth(hopCount) + 2;
 
             const int iconY = yPos + (FONT_HEIGHT_SMALL - hop_height) / 2;
-            display->drawXbm(curX, iconY, hop_width, hop_height, hop);
+            display->drawXbm(curX, iconY, hop_width, hop_height, imghop);
             curX += hop_width + 1;
         }
     }
@@ -1586,7 +1586,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        drawSatelliteIcon(display, x, textPos[line]);
+        drawSatelliteIcon(display, x, textPos[line] + 1);
         int xOffset = (currentResolution == ScreenResolution::High) ? 6 : 0;
         display->drawString(x + 11 + xOffset, textPos[line++], displayLine);
     } else {
