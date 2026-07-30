@@ -2,11 +2,27 @@
 #if HAS_SCREEN
 #include "emotes.h"
 
+// Extra glyphs for emoji that show up in node names but are not in the list below.
+// Both headers define EMOTES_TW_LIST; pick the one matching the display's line
+// height. The node list advances by FONT_HEIGHT_SMALL - 3 (about 10px on 128x64),
+// so a 16x16 glyph there bleeds into the neighbouring row.
+#if defined(EMOTES_TW_10X10)
+#include "graphics/emotes_tw_10x10.h"
+#elif defined(EMOTES_TW_16X16)
+#include "graphics/emotes_tw_16x16.h"
+#endif
+
 namespace graphics
 {
 
 // Always define Emote list and count
 const Emote emotes[] = {
+// Ahead of the stock entries: findEmoteAt takes the longest match and, on equal
+// length, whichever came first - so an added glyph only overrides the stock
+// rendering of the same emoji if it sits in front of it.
+#if defined(EMOTES_TW_LIST)
+    EMOTES_TW_LIST
+#endif
 #ifndef EXCLUDE_EMOJI
     // --- Thumbs ---
     {"\U0001F44D", thumbup, thumbs_width, thumbs_height},   // 👍 Thumbs Up
