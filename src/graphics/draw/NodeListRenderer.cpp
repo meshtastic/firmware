@@ -368,7 +368,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         const int totalWidth = hopCountWidth + gap + hop_width;
         const int hopX = barsRightEdge - totalWidth;
 
-#if defined(MESHNOLOGY_W12)
+#if defined(BICOLOR_OLED_DISPLAY)
         int iconY = y + (FONT_HEIGHT_SMALL - hop_height) / 2;
         if (y == firstRowY) {
             iconY += 1; // Nudge the hop icon down 1px on the top row to avoid the two color display

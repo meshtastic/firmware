@@ -185,8 +185,8 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     if (!scaleInitialized) {
 #ifdef DISPLAY_FORCE_SMALL_FONTS
         float screenwidth_target_ratio = 0.70f; // Target 70% of display width (adjustable)
-#elif defined(MESHNOLOGY_W12)
-        float screenwidth_target_ratio = 0.60f; // Forced for MESHNOLOGY_W12 due to two color display
+#elif defined(BICOLOR_OLED_DISPLAY)
+        float screenwidth_target_ratio = 0.60f; // Forced for BICOLOR_OLED_DISPLAY due to two color display
 #else
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
 #endif
@@ -317,7 +317,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t radius = (std::min(display->getWidth(), display->getHeight()) / 2) * 0.9;
 #ifdef T_WATCH_S3
     radius = (display->getWidth() / 2) * 0.8;
-#elif defined(MESHNOLOGY_W12)
+#elif defined(BICOLOR_OLED_DISPLAY)
     centerY += 6;
     radius = (display->getHeight() / 2) * 0.7;
 #endif
