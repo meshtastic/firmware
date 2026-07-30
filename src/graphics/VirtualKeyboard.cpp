@@ -5,10 +5,15 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
-#if defined(TINYLORA_ADVANCED_IME)
+#if defined(VK_HAS_CJK_IME)
+#if defined(CJK_IME_ZHUYIN)
+// bpmf_engine.h (and with it the composer and the dictionary) arrives through
+// VirtualKeyboard.h, which needs the engine type for its member.
+#elif defined(TINYLORA_ADVANCED_IME)
 #include "pinyin_trie_helpers.h"
 #else
 #include <pinyin_simple_backend.h>
+#endif
 #endif
 #include <Arduino.h>
 #include <vector>
@@ -82,6 +87,7 @@ void VirtualKeyboard::initializeKeyboard()
     static_assert(LAYOUT_ROWS == KEYBOARD_ROWS, "LAYOUT rows must equal KEYBOARD_ROWS");
     static_assert(LAYOUT_COLS == KEYBOARD_COLS, "LAYOUT cols must equal KEYBOARD_COLS");
 
+#if defined(VK_HAS_CJK_IME)
 #if defined(TINYLORA_ADVANCED_IME)
     displayList = {};
     selectionPos = {};
@@ -90,6 +96,7 @@ void VirtualKeyboard::initializeKeyboard()
     selectList = "";
     selectListLayout = {};
     selectListOffset = 0;
+#endif
 #endif
 
     // Initialize all keys to empty first
@@ -234,8 +241,13 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
     // Header uses the standard small (which may be larger on big screens)
     display->setFont(FONT_SMALL);
     int headerHeight = 0;
+#if defined(VK_HAS_CJK_IME)
     int chineseArea = (IMEStatus == ACTIVE) ? 12 : 0;
     if (!headerText.empty() && IMEStatus == INACTIVE) {
+#else
+    int chineseArea = 0;
+    if (!headerText.empty()) {
+#endif
         // Draw header and reserve exact font height (plus a tighter gap) to maximize input area
         display->drawString(offsetX + 2, offsetY, headerText.c_str());
         // On very small screens (e.g., 128x64), push the input box as close as possible to the header
@@ -284,7 +296,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
     display->setFont(FONT_SMALL);
 
     // Chinese selecting area display
-
+#if defined(VK_HAS_CJK_IME)
     if (IMEStatus == ACTIVE) {
         std::string currentPinyin = inputText.substr(processedWords, inputText.length() - processedWords);
 #if defined(TINYLORA_ADVANCED_IME)
@@ -319,6 +331,58 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
                 break;
             }
         }
+#elif defined(CJK_IME_ZHUYIN)
+        // Zhuyin backend: the engine returns whole-word candidates. Pack them into
+        // the same selectList/selectListLayout structure the pinyin path fills, so
+        // selectChineseChar()/getChineseChar() work unchanged - each layout entry
+        // is one candidate word rather than one Han character.
+        uint8_t gotChars = 0;
+        selectList = "";
+        selectListLayout = {};
+        if (currentPinyin.empty()) {
+            // Nothing is being composed: predict words that continue the last
+            // committed character (中 → 中文 / 中國). The engine remembers that the
+            // list came from prediction, which selectChineseChar() needs in order
+            // to strip that leading character when one is chosen.
+            std::string lastChar;
+            size_t e = processedWords <= inputText.size() ? (size_t)processedWords : inputText.size();
+            if (e > 0) {
+                size_t s = e - 1;
+                while (s > 0 && ((uint8_t)inputText[s] & 0xC0) == 0x80)
+                    s--;
+                lastChar = inputText.substr(s, e - s);
+            }
+            bpmfEngine.predictAfter(lastChar);
+        } else {
+            bpmfEngine.searchFor(currentPinyin);
+        }
+        const std::vector<std::string> &zcands = bpmfEngine.candidates();
+        selectListfulllen = (int)zcands.size();
+        // Fit as many candidates as the row physically holds rather than a fixed
+        // count: two-character phrases are twice as wide as single characters, so a
+        // hard "9 per page" overflows the candidate area once phrases appear. Page
+        // by pixel width (room kept on the right for the ">" paging marker); a page
+        // of single characters still shows ~9, a page of phrases ~6, and mixed
+        // pages fill to the edge. Paging advances by however many actually fit.
+        const int candAreaW = display->getWidth() - 10;
+        for (size_t zi = (size_t)selectListOffset; zi < zcands.size() && gotChars < 9; zi++) {
+            uint8_t hlw = display->getStringWidth(selectList.c_str(), selectList.length(), true);
+            uint8_t cw = display->getStringWidth(zcands[zi].c_str(), zcands[zi].length(), true);
+            if (gotChars > 0 && (int)(hlw + cw) > candAreaW)
+                break; // next candidate would overflow - leave it for the following page
+            if (cursorCol == gotChars) {
+                // Underline spans the whole candidate word, not a fixed single-char
+                // width - a two-character phrase (中文) must show one line under both
+                // glyphs, otherwise only its first character appears selected.
+                display->drawHorizontalLine(hlw, boxHeight, cw);
+                display->drawHorizontalLine(hlw, boxHeight + 1, cw);
+            }
+            selectList.append(zcands[zi]);
+            selectListLayout.push_back((uint8_t)zcands[zi].size());
+            gotChars++;
+        }
+        selectableChars = gotChars;
+        display->drawString(0, boxHeight - chineseArea, selectList.c_str());
 #else
         uint8_t gotChars = 0;
         uint8_t copiedBytes = 0;
@@ -353,12 +417,25 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         selectableChars = gotChars;
         display->drawString(0, boxHeight - chineseArea, selectList.c_str());
 #endif
-        display->drawString(display->width() - 10, boxHeight - chineseArea, ">");
-        if (cursorCol == 9) {
-            display->drawHorizontalLine(display->width() - 10, boxHeight, display->getStringWidth(">"));
-            display->drawHorizontalLine(display->width() - 10, boxHeight + 1, display->getStringWidth(">"));
+        // Hide the paging marker when the candidates fit on one page, otherwise it
+        // suggests a next page that does not exist. With several pages it is drawn on
+        // every one of them, and pressing it on the last wraps back to the first. The
+        // pinyin path keeps drawing it unconditionally: its selectListOffset is a byte
+        // offset and does not carry the same meaning.
+#if defined(CJK_IME_ZHUYIN)
+        const bool showPagingMarker = hasMultipleCandidatePages();
+#else
+        const bool showPagingMarker = true;
+#endif
+        if (showPagingMarker) {
+            display->drawString(display->width() - 10, boxHeight - chineseArea, ">");
+            if (cursorCol == 9) {
+                display->drawHorizontalLine(display->width() - 10, boxHeight, display->getStringWidth(">"));
+                display->drawHorizontalLine(display->width() - 10, boxHeight + 1, display->getStringWidth(">"));
+            }
         }
     }
+#endif
 
     // Text rendering: multi-line if space allows (>= 2 lines), else single-line with leading ellipsis
     const int textX = boxX + 2;
@@ -372,6 +449,31 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
     auto drawText = [&](int16_t x, int16_t y, const std::string &text) { display->drawString(x, y, text.c_str()); };
 #endif
 
+    // Text actually drawn in the box. Defaults to the raw buffer.
+    std::string renderText = inputText;
+#if defined(CJK_IME_ZHUYIN)
+    // The composing zhuyin (the tail of inputText past processedWords) is drawn with the
+    // 10x10 CJK font, where the symbols sit flush against each other and a syllable like
+    // ㄋㄧㄠ is hard to read. For display only, put a space between each composing symbol.
+    // inputText itself is left untouched - it still feeds submitText() and the candidate
+    // lookup, which must not see the padding.
+    if (IMEStatus == ACTIVE && processedWords < inputText.size()) {
+        renderText.assign(inputText, 0, processedWords);
+        bool first = true;
+        for (size_t i = processedWords; i < inputText.size();) {
+            unsigned char lead = (unsigned char)inputText[i];
+            size_t clen = (lead < 0x80) ? 1 : (lead < 0xE0) ? 2 : (lead < 0xF0) ? 3 : 4;
+            if (i + clen > inputText.size())
+                clen = inputText.size() - i;
+            if (!first)
+                renderText.push_back(' ');
+            first = false;
+            renderText.append(inputText, i, clen);
+            i += clen;
+        }
+    }
+#endif
+
     if (maxLines >= 2) {
         // Inner bounds for caret clamping
         const int innerLeft = boxX + 1;
@@ -382,7 +484,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         // Wrap text greedily into lines that fit maxTextWidth
         std::vector<std::string> lines;
         {
-            std::string remaining = inputText;
+            std::string remaining = renderText;
             while (!remaining.empty()) {
                 int bestLen = 0;
                 for (int len = 1; len <= (int)remaining.size(); ++len) {
@@ -457,7 +559,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
             display->drawVerticalLine(caretX, cursorTop, cursorH);
         }
     } else {
-        std::string displayText = inputText;
+        std::string displayText = renderText;
         int textW = textWidth(displayText);
         std::string scrolled = displayText;
         if (textW > maxTextWidth) {
@@ -534,14 +636,31 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
         // Keep literal text labels for the action keys on the rightmost column
         keyText = (key.type == VK_BACKSPACE) ? "BACK" : (key.type == VK_ENTER) ? "ENTER" : (key.type == VK_SPACE) ? "SPACE" : "";
         if (key.type == VK_ESC) {
+#if defined(CJK_IME_ZHUYIN)
+            keyText = (IMEStatus == ACTIVE) ? "TW ESC" : "EN ESC";
+#elif defined(VK_HAS_CJK_IME)
             keyText = (IMEStatus == ACTIVE) ? "CN ESC" : "EN ESC";
+#else
+            keyText = "EN ESC";
+#endif
         }
     } else {
-        char c = getCharForKey(key, false);
-        keyText = (key.character == ' ' || key.character == '_') ? "_" : std::string(1, c);
-        // Show the common "/" pairing next to "?" like on a real keyboard
-        if (key.type == VK_CHAR && key.character == '?') {
-            keyText = "?/";
+#if defined(CJK_IME_ZHUYIN)
+        // In Chinese mode a key face shows the Bopomofo symbol its grid position maps
+        // to; positions with no mapping (the tone slots, the "?" key) stay blank. Latin
+        // mode keeps the original ASCII labels.
+        if (IMEStatus == ACTIVE) {
+            const bpmf::Symbol *sym = bpmf::screen_symbol(key.character);
+            keyText = sym ? std::string(sym->utf8) : "";
+        } else
+#endif
+        {
+            char c = getCharForKey(key, false);
+            keyText = (key.character == ' ' || key.character == '_') ? "_" : std::string(1, c);
+            // Show the common "/" pairing next to "?" like on a real keyboard
+            if (key.type == VK_CHAR && key.character == '?') {
+                keyText = "?/";
+            }
         }
     }
 
@@ -562,8 +681,20 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
     } else {
         textX = x + (width - textWidth) / 2;
     }
+#if defined(CJK_IME_ZHUYIN)
+    // Bopomofo key faces go through the CJK glyph path: drawUtf8Glyph paints a full
+    // OLED_CJK_SIZE pixels starting at y + OLEDDISPLAY_UTF8_TOP_PADDING, which is
+    // taller than KEY_HEIGHT. Centring on FONT_HEIGHT_SMALL therefore pushes the
+    // bottom row off screen, and symbols with a stroke down there lose it.
+    const bool cjkLabel = (IMEStatus == ACTIVE && key.type == VK_CHAR && !keyText.empty());
+    const int cjkGlyphSpan = OLED_CJK_SIZE + OLEDDISPLAY_UTF8_TOP_PADDING;
+#endif
+
     int contentTop = y;
     int contentH = height;
+    bool pendingHighlight = false;
+    int highlightY = 0;
+    int highlightH = 0;
     if (selected) {
         display->setColor(WHITE);
         bool isAction = (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC);
@@ -592,13 +723,16 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
             contentTop = hlY;
             contentH = hlH;
         } else {
-            int hlY = y + 1;
-            int hlH = height + 1;
-            if (hlH < 1)
-                hlH = 1;
-            display->fillRect(x, hlY, width, hlH);
-            contentTop = hlY;
-            contentH = hlH;
+            highlightY = y + 1;
+            highlightH = height + 1;
+            if (highlightH < 1)
+                highlightH = 1;
+            // Deferred until the label position is final: a Bopomofo key face may be
+            // clamped back on screen, and the box has to follow it. Otherwise the black
+            // glyph lands outside the white box and disappears entirely.
+            pendingHighlight = true;
+            contentTop = highlightY;
+            contentH = highlightH;
         }
         display->setColor(BLACK);
     } else {
@@ -606,6 +740,24 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
     }
 
     int centeredTextY = contentTop + (contentH - fontH) / 2;
+#if defined(CJK_IME_ZHUYIN)
+    if (cjkLabel) {
+        const int maxTextY = display->getHeight() - cjkGlyphSpan;
+        if (centeredTextY > maxTextY)
+            centeredTextY = maxTextY;
+        if (centeredTextY < 0)
+            centeredTextY = 0;
+        if (pendingHighlight) {
+            highlightY = centeredTextY + OLEDDISPLAY_UTF8_TOP_PADDING;
+            highlightH = OLED_CJK_SIZE;
+        }
+    }
+#endif
+    if (pendingHighlight) {
+        display->setColor(WHITE);
+        display->fillRect(x, highlightY, width, highlightH);
+        display->setColor(BLACK);
+    }
     if (key.type == VK_CHAR) {
         if (keyText.size() == 1) {
             char ch = keyText[0];
@@ -824,17 +976,24 @@ void VirtualKeyboard::handleLongPress()
         selectChineseChar(candidateCursor);
         return;
     }
-#else
+#elif defined(VK_HAS_CJK_IME)
     if (IMEStatus == ACTIVE && cursorCol <= 8) {
         selectChineseChar(cursorCol);
         return;
     }
 #endif
 
+#if defined(VK_HAS_CJK_IME)
     if (IMEStatus == ACTIVE && cursorCol == 9) {
-        showNextSelection();
+#if defined(CJK_IME_ZHUYIN)
+        // draw() omits ">" when there is only one page, so a long press must not page
+        // either -- the same do-nothing behaviour as a candidate slot with no candidate.
+        if (hasMultipleCandidatePages())
+#endif
+            showNextSelection();
         return;
     }
+#endif
 
     // Don't handle press if the key is empty (but allow special keys)
     if (key.character == 0 && key.type == VK_CHAR) {
@@ -952,7 +1111,37 @@ void VirtualKeyboard::handleT9Character(char c)
 
 void VirtualKeyboard::insertCharacter(char c)
 {
+#if defined(VK_HAS_CJK_IME)
     if (IMEStatus == ACTIVE) {
+#if defined(CJK_IME_ZHUYIN)
+        // The on-screen Daqian layout puts Bopomofo symbols on the digit and letter
+        // keys, so look the key up first and emit the symbol; only an unmapped key is
+        // treated as a literal character. Picking a candidate is a joystick long press
+        // (see handleLongPress), so digits are not selection keys here and fall
+        // straight through to the symbol lookup.
+        if (c == ' ' && inputText.length() > processedWords) {
+            // Space types the neutral tone while composing -- the grid has no room for
+            // a fourth tone key, see BpmfComposer.h. With nothing composing it stays a
+            // literal space and falls through to the ordinary character branch.
+            const bpmf::Symbol *tone5 = bpmf::tone5_symbol();
+            if (selectListOffset != 0)
+                selectListOffset = 0; // candidates are recomputed, go back to page one
+            inputText += tone5->utf8;
+            inputTextLayout.push_back((uint8_t)strlen(tone5->utf8));
+        } else if (const bpmf::Symbol *sym = bpmf::screen_symbol(c)) {
+            if (selectListOffset != 0)
+                selectListOffset = 0; // reset offset when input more chars.
+            inputText += sym->utf8;
+            inputTextLayout.push_back((uint8_t)strlen(sym->utf8));
+        } else if (c == '0') {
+            showNextSelection();
+        } else if (inputText.length() == processedWords) { // not composing zhuyin
+            inputText += c;
+            inputTextLayout.push_back(1);
+            processedWords++;
+        }
+    } else
+#else
         if (c >= '1' && c <= '9'
 #if defined(TINYLORA_ADVANCED_IME)
             && !displayList.empty()
@@ -985,7 +1174,10 @@ void VirtualKeyboard::insertCharacter(char c)
             inputTextLayout.push_back(1);
             processedWords++; // let it go.
         }
-    } else {
+    } else
+#endif // CJK_IME_ZHUYIN
+#endif // VK_HAS_CJK_IME
+    {
         if (inputText.length() < 160) { // Reasonable text length limit
             inputText += c;
             inputTextLayout.push_back(1);
@@ -1034,6 +1226,7 @@ void VirtualKeyboard::submitText()
     // Only submit if text is not empty
     if (!inputText.empty() && onTextEntered) {
         // Store callback and text to submit before clearing callback
+#if defined(VK_HAS_CJK_IME)
 #if defined(TINYLORA_ADVANCED_IME)
         displayList = {};
         selectionPos = {};
@@ -1044,6 +1237,7 @@ void VirtualKeyboard::submitText()
         selectListOffset = 0;
 #if defined(GAT562_T9_KEYBOARD)
         candidateCursor = 0;
+#endif
 #endif
 #endif
 
@@ -1062,6 +1256,15 @@ void VirtualKeyboard::submitText()
         if (screen) {
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         }
+    }
+}
+
+void VirtualKeyboard::cancelInput()
+{
+    if (onTextEntered) {
+        auto callback = onTextEntered;
+        onTextEntered = nullptr;
+        callback(std::string());
     }
 }
 
@@ -1107,6 +1310,7 @@ bool VirtualKeyboard::isTimedOut() const
 
 void VirtualKeyboard::toggleIME()
 {
+#if defined(VK_HAS_CJK_IME)
     if (IMEStatus == ACTIVE) { // reset vars
 #if defined(TINYLORA_ADVANCED_IME)
         displayList = {};
@@ -1127,6 +1331,7 @@ void VirtualKeyboard::toggleIME()
 #endif
     }
     IMEStatus == ACTIVE ? IMEStatus = INACTIVE : IMEStatus = ACTIVE;
+#endif
 }
 
 uint8_t VirtualKeyboard::getUtf8Length(const char *c, uint8_t pos)
@@ -1149,6 +1354,7 @@ uint8_t VirtualKeyboard::getUtf8Length(const char *c, uint8_t pos)
     return 0;
 }
 
+#if defined(VK_HAS_CJK_IME)
 #if !defined(TINYLORA_ADVANCED_IME)
 uint8_t VirtualKeyboard::getChineseChar(uint8_t c)
 {
@@ -1171,7 +1377,39 @@ void VirtualKeyboard::selectChineseChar(uint8_t chridx)
 #endif
     int pinyinLength = inputText.length() - processedWords;
     inputText.erase(inputText.length() - pinyinLength, inputText.length());
+#if defined(CJK_IME_ZHUYIN)
+    // Each Bopomofo input unit is a 3-byte symbol and inputTextLayout holds one entry
+    // per symbol (value 3), so the composing region has fewer entries than bytes.
+    // Erasing entries by the byte count pinyinLength, as the pinyin path does, runs the
+    // iterator past begin() and corrupts the layout vector -- intermittent heap
+    // corruption and reboots. Remove entries from the back until their lengths add up
+    // to the byte count instead.
+    {
+        int bytesToRemove = pinyinLength;
+        while (bytesToRemove > 0 && !inputTextLayout.empty()) {
+            bytesToRemove -= inputTextLayout.back();
+            inputTextLayout.pop_back();
+        }
+    }
+#else
     inputTextLayout.erase(inputTextLayout.end() - pinyinLength, inputTextLayout.end());
+#endif
+#if defined(CJK_IME_ZHUYIN)
+    if (bpmfEngine.isPrediction()) {
+        // A prediction word starts with the character already committed (中 for the
+        // candidate 中文); remove that trailing character so appending the whole word
+        // yields 中文, not 中中文. In prediction mode nothing is composing, so the
+        // erase above was a no-op and inputTextLayout ends with that committed char.
+        if (!inputTextLayout.empty()) {
+            uint8_t lastLen = inputTextLayout.back();
+            inputTextLayout.pop_back();
+            if (inputText.size() >= lastLen)
+                inputText.erase(inputText.size() - lastLen);
+            if (processedWords >= lastLen)
+                processedWords -= lastLen;
+        }
+    }
+#endif
 #if defined(TINYLORA_ADVANCED_IME)
     std::string word = displayList[chridx];
 #else
@@ -1187,9 +1425,19 @@ void VirtualKeyboard::selectChineseChar(uint8_t chridx)
     }
     resultsOffset = 0;
 #else
-    uint8_t charLength = getUtf8Length(word.c_str(), 0);
-    inputTextLayout.push_back(charLength);
-    processedWords += charLength;
+    // A candidate may be more than one character (multi-character phrases in the
+    // zhuyin dictionary), so commit every character: one layout entry each and
+    // advance processedWords over the whole word. Handling only the first
+    // character would leave the tail sitting past processedWords, where it is
+    // mistaken for composing zhuyin and blocks all further candidates.
+    for (size_t len = 0; len < word.length();) {
+        uint8_t charLength = getUtf8Length(word.c_str(), (uint8_t)len);
+        if (charLength == 0)
+            break; // malformed UTF-8 guard; avoid an infinite loop
+        inputTextLayout.push_back(charLength);
+        processedWords += charLength;
+        len += charLength;
+    }
     selectListOffset = 0;
 #if defined(GAT562_T9_KEYBOARD)
     candidateCursor = 0;
@@ -1197,12 +1445,32 @@ void VirtualKeyboard::selectChineseChar(uint8_t chridx)
 #endif
 }
 
+#if defined(CJK_IME_ZHUYIN)
+bool VirtualKeyboard::hasMultipleCandidatePages() const
+{
+    // selectListOffset is a candidate index and selectListfulllen the candidate count
+    // in this path; selectableChars is how many of them the current page fit. Testing
+    // the total against one page's worth (rather than "is there anything after this
+    // page") keeps the marker on the last page, where showNextSelection() wraps back
+    // to the first - otherwise paging becomes a dead end at the end of the list.
+    return selectableChars > 0 && selectListfulllen > selectableChars;
+}
+#endif
+
 void VirtualKeyboard::showNextSelection()
 {
 #if defined(TINYLORA_ADVANCED_IME)
     uint8_t listlen = displayList.size();
     uint8_t nextOffset = resultsOffset + listlen;
     resultsOffset = nextOffset > resultsfulllen ? 0 : nextOffset;
+#elif defined(CJK_IME_ZHUYIN)
+    // In the zhuyin path selectListOffset is a candidate index and selectListfulllen the
+    // candidate count (see draw()), unlike the pinyin path where both are byte offsets.
+    // Advance by the number of candidates shown on the current page, not selectList's
+    // byte length; otherwise a single page overshoots the count and wraps to 0, so
+    // long-pressing '>' appears to do nothing.
+    uint8_t nextOffset = selectListOffset + selectableChars;
+    selectListOffset = nextOffset >= selectListfulllen ? 0 : nextOffset;
 #else
     uint8_t listlen = selectList.length();
     uint8_t nextOffset = selectListOffset + listlen;
@@ -1239,6 +1507,7 @@ void VirtualKeyboard::showPrevSelection()
 #endif
 }
 #endif
+#endif // VK_HAS_CJK_IME
 
 } // namespace graphics
 #endif
