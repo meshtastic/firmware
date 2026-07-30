@@ -13,10 +13,10 @@
 #include "sleep.h"
 #include <cstring>
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-#include "graphics/niche/InkHUD/InkHUD.h"
-#include "graphics/niche/InkHUD/Persistence.h"
-#include "graphics/niche/InkHUD/SystemApplet.h"
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/InkHUD.h"
+#include "graphics/niche/Persistence.h"
+#include "graphics/niche/SystemApplet.h"
 
 // Bridges touch events from TouchScreenImpl1 directly into InkHUD,
 // bypassing the InputBroker (which is excluded in InkHUD builds).
@@ -76,7 +76,7 @@ class TouchInkHUDBridge : public Observer<const InputEvent *>
 };
 
 static TouchInkHUDBridge touchBridge;
-#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#endif // MESHTASTIC_INCLUDE_INKHUD
 
 TouchDrvGT911 touch;
 
@@ -110,7 +110,7 @@ uint32_t lastTouchIndicatorMs = 0;
 void showTouchIndicator(const char *text)
 {
 #if HAS_SCREEN
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
     // InkHUD builds render a dedicated bottom-edge "TOUCH OFF" overlay instead of popup banners.
     (void)text;
     return;
@@ -350,7 +350,7 @@ SideKeyInterruptThread *SideKeyInterruptThread::instance = nullptr;
 SideKeyInterruptThread *sideKeyThread = nullptr;
 #endif
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
 void refreshTouchIndicatorInInkHUD(bool async = true)
 {
     auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
@@ -434,7 +434,7 @@ void t5TouchSetForcedByTimeout(bool forced)
         touchNeedsWake = false;
     }
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
     if (!touchLightSleepActive) {
         refreshTouchIndicatorInInkHUD();
         touchIndicatorRefreshPending = false;
@@ -492,7 +492,7 @@ void setTouchInputEnabled(bool enabled, bool showIndicator)
         }
     }
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
     if (showIndicator && !touchLightSleepActive) {
         refreshTouchIndicatorInInkHUD();
         touchIndicatorRefreshPending = false;
@@ -521,7 +521,7 @@ struct TouchLightSleepObserver {
     int onLightSleep(void *)
     {
         touchLightSleepActive = true;
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
         // Render touch-off overlay before sleeping so user sees touch is unavailable.
         touchIndicatorRefreshPending = true;
         refreshTouchIndicatorInInkHUD(false);
@@ -552,7 +552,7 @@ struct TouchLightSleepEndObserver {
         touchStateEpoch++;
         touchResumeBlockUntilMs = millis() + 150;
         touchIndicatorRefreshPending = !isTouchInputEnabled();
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
         // Clear sleep-time touch overlay after wake.
         touchIndicatorRefreshPending = true;
         refreshTouchIndicatorInInkHUD();
@@ -568,7 +568,7 @@ struct TouchLightSleepEndObserver {
 
 bool readTouch(int16_t *x, int16_t *y)
 {
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
     static uint32_t suppressUntilMs = 0;
     static uint32_t seenTouchStateEpoch = 0;
 
@@ -610,7 +610,7 @@ bool readTouch(int16_t *x, int16_t *y)
         int16_t raw_x;
         int16_t raw_y;
         if (touch.getPoint(&raw_x, &raw_y)) {
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
             // Transform raw GT911 axes to visual-frame coordinates for the current display rotation.
             // rotation=3 is the physical identity (device's default orientation).
             switch (NicheGraphics::InkHUD::InkHUD::getInstance()->persistence->settings.rotation) {
@@ -657,7 +657,7 @@ void lateInitVariant()
         // Match LilyGO sample behavior: GT911 center/home capacitive key callback.
         touch.setHomeButtonCallback(
             [](void *user_data) {
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
                 if (!homeCapButtonEventsEnabled) {
                     return;
                 }
@@ -691,7 +691,7 @@ void lateInitVariant()
 #endif
         touchScreenImpl1 = new TouchScreenImpl1(EPD_WIDTH, EPD_HEIGHT, readTouch);
         touchScreenImpl1->init();
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
         touchBridge.observe(touchScreenImpl1);
 #endif
     } else {

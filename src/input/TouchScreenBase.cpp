@@ -193,9 +193,9 @@ int32_t TouchScreenBase::runOnce()
 void TouchScreenBase::hapticFeedback()
 {
 #ifdef T_WATCH_S3
-    drv.setWaveform(0, 75);
-    drv.setWaveform(1, 0); // end waveform
-    drv.go();
+    hapticDriver.setWaveform(0, 75);
+    hapticDriver.setWaveform(1, 0); // end waveform
+    hapticDriver.go();
 #endif
 }
 

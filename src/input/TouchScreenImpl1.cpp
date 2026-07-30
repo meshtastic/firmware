@@ -7,9 +7,9 @@
 #include "sleep.h"
 #include <cstring>
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-#include "graphics/niche/InkHUD/InkHUD.h"
-#include "graphics/niche/InkHUD/SystemApplet.h"
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+#include "graphics/niche/InkHUD.h"
+#include "graphics/niche/SystemApplet.h"
 #endif
 
 #if ARCH_PORTDUINO
@@ -109,7 +109,7 @@ bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
 
 bool TouchScreenImpl1::fastTapModeEnabled() const
 {
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#ifdef MESHTASTIC_INCLUDE_INKHUD
     const auto *inkhud = NicheGraphics::InkHUD::InkHUD::getInstance();
     if (!inkhud) {
         return false;
