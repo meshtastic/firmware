@@ -2329,6 +2329,126 @@ static void test_toggleTelemetryScreen_savePathSetsHasTelemetry()
     TEST_ASSERT_TRUE(moduleConfig.has_telemetry);
 }
 
+// A GPIO reassignment is boot-only however it arrives: the pin is claimed during GPS construction.
+static void test_setConfigPosition_gpioChangeStillReboots()
+{
+    config.position.rx_gpio = 0; // known start state
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_gpsDisableIsLive_doesNotReboot()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED; // known start state
+    config.position.fixed_position = true; // keep the nested clearLocalPosition save out of this test
+    rebootAtMsec = 0;
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(meshtastic_Config_PositionConfig_GpsMode_DISABLED, (int)config.position.gps_mode);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+static void test_setConfigPosition_gpsEnableIsLive_doesNotReboot()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED; // known start state
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(meshtastic_Config_PositionConfig_GpsMode_ENABLED, (int)config.position.gps_mode); // persisted
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count); // and still no reason to touch the radio
+}
+
+// ...and so does the reverse: there is no driver to enable until a boot has constructed one.
+static void test_setConfigPosition_gpsFromNotPresent_stillReboots()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT; // known start state
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// The exemption is for gps_mode alone - it must not smuggle a genuinely boot-only field past the
+// memcmp fail-safe when both change in the same set.
+static void test_setConfigPosition_gpsToggleWithGpioChange_stillReboots()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED; // known start state
+    config.position.rx_gpio = 0;
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// The live exemption is exactly one pair. Declaring the GPS absent tears down state that only
+// boot rebuilds, so it stays on the reboot path...
+static void test_setConfigPosition_gpsToNotPresent_stillReboots()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED; // known start state
+    config.position.fixed_position = true;
+    rebootAtMsec = 0;
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
+    sendSetConfig(c);
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+}
+
+// ...and the reboot axis on its own: a boot-only field inside a transaction reboots at the commit
+// without dragging the radio reconfigure along with it. rx_gpio rather than gps_mode - the latter
+// is applied live now, so it would no longer exercise the reboot axis at all.
+static void test_transaction_gpioSet_reboots_butDoesNotReloadRadio()
+{
+    config.position.rx_gpio = 0; // known start state
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.rx_gpio = 17;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec); // deferred until the commit
+
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_EQUAL(0, rebootAtMsec);
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
 // -----------------------------------------------------------------------
 // Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
 // -----------------------------------------------------------------------
@@ -2888,6 +3008,13 @@ void setup()
     RUN_TEST(test_toggleTelemetryScreen_togglesBackOffAgain);
     RUN_TEST(test_setSmartPositionEnabled_persistsWithoutReboot);
     RUN_TEST(test_toggleTelemetryScreen_savePathSetsHasTelemetry);
+    RUN_TEST(test_setConfigPosition_gpioChangeStillReboots);
+    RUN_TEST(test_setConfigPosition_gpsEnableIsLive_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpsDisableIsLive_doesNotReboot);
+    RUN_TEST(test_setConfigPosition_gpsToNotPresent_stillReboots);
+    RUN_TEST(test_setConfigPosition_gpsFromNotPresent_stillReboots);
+    RUN_TEST(test_setConfigPosition_gpsToggleWithGpioChange_stillReboots);
+    RUN_TEST(test_transaction_gpioSet_reboots_butDoesNotReloadRadio);
 #if HAS_SCREEN
     // Node menu mute toggle
     RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);

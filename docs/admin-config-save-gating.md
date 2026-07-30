@@ -117,13 +117,22 @@ directly from `config` each send/schedule cycle:
 | `broadcast_smart_minimum_distance`        | No                | Read live in the smart-position path              |
 | `position_flags`                          | No                | Read live per outgoing position                   |
 | `fixed_position`                          | No                | Read live; also has dedicated live admin handlers |
-| `gps_mode`, `gps_enabled`                 | **Yes**           | GPS driver state                                  |
+| `gps_mode` (`ENABLED` ↔ `DISABLED`)       | No                | Driver toggled live, as the menus do (see below)  |
+| `gps_mode` (any `NOT_PRESENT` transition) | **Yes**           | Driver object only exists from boot               |
+| `gps_enabled`                             | **Yes**           | GPS driver state                                  |
 | `gps_update_interval`, `gps_attempt_time` | **Yes**           | GPS subsystem timing                              |
 | `rx_gpio`, `tx_gpio`, `gps_en_gpio`       | **Yes**           | GPIO pin (re)assignment                           |
 
 The gate neutralizes the live fields in a copy and reboots if any _other_ byte differs, so a
 newly-added `PositionConfig` field reboots until it is explicitly cleared as live - fail-safe
 for schema growth.
+
+`gps_mode` is neutralized conditionally, by `isLiveGpsModeToggle()`, and only because the same
+case then calls `gps->enable()`/`gps->disable()` - the pattern `MenuHandler::GPSToggleMenu()`
+and InkHUD's `TOGGLE_GPS` have always used. Suppressing the reboot **without** driving the
+driver would leave the receiver in its old state until the next boot. `NOT_PRESENT` stays on
+the reboot path in both directions: `gps` is constructed once at boot and only when `gps_mode`
+is not `NOT_PRESENT` ([`main.cpp`](../src/main.cpp)), so there is nothing to enable.
 
 ---
 
@@ -330,8 +339,14 @@ reconfigure that appears only at the commit, not during the individual sets.
 ### 2. Position live-apply - expanding the Tier-2 live set (outstanding)
 
 The only reason to touch a node for the _reboot_ work: decide whether the GPS-timing fields
-left on the reboot path (`gps_mode`, `gps_enabled`, `gps_update_interval`, `gps_attempt_time` -
-item 3 above) can actually apply live and be reclassified.
+left on the reboot path (`gps_enabled`, `gps_update_interval`, `gps_attempt_time` - item 3
+above) can actually apply live and be reclassified.
+
+`gps_mode` has already been reclassified for the `ENABLED` ↔ `DISABLED` pair, on the strength
+of the driver call now made alongside it. **That one still wants a hardware pass**: toggle GPS
+off and on from the app and confirm the receiver actually stops and restarts (fix lost, then
+reacquired) with no reboot banner - the failure mode to look for is config saying one thing
+while the receiver keeps doing the other.
 
 For each candidate field, one at a time, on a GPS-equipped node: change only that field (over
 serial, as above) and observe.

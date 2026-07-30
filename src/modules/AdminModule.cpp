@@ -867,6 +867,16 @@ static void reconcileAccelerometerThread(bool wasOn, bool nowOn, bool otherFeatu
 }
 #endif
 
+// Only ENABLED <-> DISABLED can be applied live: the GPS object is built once at boot, and only
+// when gps_mode is not NOT_PRESENT (main.cpp), so NOT_PRESENT transitions need the reboot.
+static bool isLiveGpsModeToggle(meshtastic_Config_PositionConfig_GpsMode from, meshtastic_Config_PositionConfig_GpsMode to)
+{
+    auto runnable = [](meshtastic_Config_PositionConfig_GpsMode m) {
+        return m == meshtastic_Config_PositionConfig_GpsMode_ENABLED || m == meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+    };
+    return from != to && runnable(from) && runnable(to);
+}
+
 // A "regenerate keys" client sends a blank SecurityConfig holding only the new private key, rather than the
 // config it read from us. Detect that shape - new private key, every other field at its proto default - so it
 // isn't mistaken for "and clear everything else".
@@ -954,10 +964,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.has_position = true;
         // Reboot only when a field that can't be applied live changed. PositionModule reads these fields
         // directly from config every send/schedule cycle (verified in PositionModule.cpp), so changing
-        // only them takes effect with no restart. Everything else - GPS driver mode/timing and GPIO pin
-        // assignments - stays on the reboot path. Fails safe: neutralize the known-live fields in a copy,
+        // only them takes effect with no restart; gps_mode joins them when the driver call below applies
+        // it. Everything else - GPS timing and GPIO pin assignments - stays on the reboot path.
+        // Fails safe: neutralize the known-live fields in a copy,
         // then reboot if any *other* byte differs, so a newly-added PositionConfig field reboots until it
         // is explicitly cleared as live here. See docs/admin-config-save-gating.md.
+        const bool gpsToggledLive = isLiveGpsModeToggle(config.position.gps_mode, c.payload_variant.position.gps_mode);
         {
             meshtastic_Config_PositionConfig live = config.position, incoming = c.payload_variant.position;
             incoming.position_broadcast_secs = live.position_broadcast_secs;
@@ -965,6 +977,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             incoming.broadcast_smart_minimum_distance = live.broadcast_smart_minimum_distance;
             incoming.position_flags = live.position_flags;
             incoming.fixed_position = live.fixed_position;
+            if (gpsToggledLive)
+                incoming.gps_mode = live.gps_mode;
             requiresReboot = (memcmp(&live, &incoming, sizeof(live)) != 0);
         }
         // If we have turned off the GPS (disabled or not present) and we're not using fixed position,
@@ -979,6 +993,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             saveChanges(SEGMENT_NODEDATABASE, false, /*radioAffected=*/false);
         }
         config.position = c.payload_variant.position;
+#if !MESHTASTIC_EXCLUDE_GPS
+        // Driving the driver is what earns the suppressed reboot: writing gps_mode alone leaves the
+        // receiver in its old state until next boot. As MenuHandler::GPSToggleMenu(), minus the beep.
+        if (gpsToggledLive && gps) {
+            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                gps->enable();
+            else
+                gps->disable();
+        }
+#endif
         break;
     } // case meshtastic_Config_position_tag
     case meshtastic_Config_power_tag:
@@ -1933,7 +1957,7 @@ void AdminModule::expireStaleEditTransaction()
     deferredRadioAffected = false;
     // No reboot: the settings are already live in RAM and the client that would expect one is gone.
     if (segments)
-        saveChanges(segments, /*shouldReboot=*/false, expiredRadio);
+        saveChanges(segments, false, expiredRadio);
     flushChannelWarnings();
 }
 
