@@ -106,6 +106,7 @@ class AccelerometerThread : public concurrency::OSThread
             break;
 #if __has_include(<Adafruit_LIS3DH.h>)
         case ScanI2C::DeviceType::LIS3DH:
+        case ScanI2C::DeviceType::SC7A20:
             sensor = new LIS3DHSensor(device);
             break;
 #endif
