@@ -29,14 +29,19 @@ class AdminModuleTestShim : public AdminModule
     {
         hasOpenEditTransaction = true;
         editTransactionActivityMs = millis();
+        enabled = true;
+        setIntervalFromNow(EDIT_TRANSACTION_IDLE_MS);
         deferredShouldReboot = false;
         deferredRadioAffected = false;
     }
     int savedSegments() const { return lastSaveWhatForTest; }
 
     bool editTransactionOpen() const { return hasOpenEditTransaction; }
+    bool editTransactionTimerEnabled() const { return enabled; }
+    unsigned long editTransactionTimerInterval() const { return editTransactionTimerIntervalForTest(); }
     // Backdate past the idle window so a test sees an abandoned transaction without waiting it out.
     void ageEditTransaction() { editTransactionActivityMs = millis() - EDIT_TRANSACTION_IDLE_MS - 1; }
+    int32_t runTransactionTimer() { return runOnce(); }
 
     // Setters may allocate an error reply from packetPool; drain it each iteration or the pool leaks.
     void drainReply()

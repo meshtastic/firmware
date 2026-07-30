@@ -10,6 +10,7 @@
 #include "SPILock.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
+#include "mesh/mesh-pb-constants.h"
 #include "meshUtils.h"
 #include <ErriezCRC32.h>
 #include <FSCommon.h>
@@ -68,6 +69,10 @@
 
 AdminModule *adminModule;
 
+#ifdef PIO_UNIT_TESTING
+uint32_t disableBluetoothCallCountForTest = 0;
+#endif
+
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 static bool licensedIdentityWillMigrate()
 {
@@ -90,6 +95,37 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
     if (strcmp(buf, secretReserved) == 0) {
         strncpy(buf, currentVal, bufsz);
     }
+}
+
+template <size_t MaxSize> static NOINLINE bool protobufsEqual(const pb_msgdesc_t *fields, const void *left, const void *right)
+{
+    // NOINLINE limits peak stack use to this frame: two MaxSize encode buffers.
+    uint8_t leftBytes[MaxSize], rightBytes[MaxSize];
+    const size_t leftSize = pb_encode_to_bytes(leftBytes, sizeof(leftBytes), fields, left);
+    const size_t rightSize = pb_encode_to_bytes(rightBytes, sizeof(rightBytes), fields, right);
+    return leftSize == rightSize && memcmp(leftBytes, rightBytes, leftSize) == 0;
+}
+
+static NOINLINE bool loraRadioConfigChanged(const meshtastic_Config_LoRaConfig &oldConfig,
+                                            const meshtastic_Config_LoRaConfig &newConfig)
+{
+    auto oldEffective = oldConfig;
+    auto newEffective = newConfig;
+    if (oldEffective.use_preset && newEffective.use_preset) {
+        oldEffective.bandwidth = newEffective.bandwidth = 0;
+        oldEffective.spread_factor = newEffective.spread_factor = 0;
+        oldEffective.coding_rate = newEffective.coding_rate = 0;
+    }
+    newEffective.hop_limit = oldEffective.hop_limit;
+    newEffective.tx_enabled = oldEffective.tx_enabled;
+    newEffective.override_duty_cycle = oldEffective.override_duty_cycle;
+    // The admin setter applies this immediately through RF95_FAN_EN where supported.
+    newEffective.pa_fan_disabled = oldEffective.pa_fan_disabled;
+    newEffective.ignore_incoming_count = oldEffective.ignore_incoming_count;
+    memcpy(newEffective.ignore_incoming, oldEffective.ignore_incoming, sizeof(newEffective.ignore_incoming));
+    newEffective.ignore_mqtt = oldEffective.ignore_mqtt;
+    newEffective.config_ok_to_mqtt = oldEffective.config_ok_to_mqtt;
+    return !protobufsEqual<meshtastic_Config_LoRaConfig_size>(&meshtastic_Config_LoRaConfig_msg, &oldEffective, &newEffective);
 }
 
 /**
@@ -480,10 +516,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
         LOG_INFO("Begin settings edit transaction");
+        if (!hasOpenEditTransaction) {
+            deferredEditSegments = 0;
+            deferredShouldReboot = false;
+            deferredRadioAffected = false;
+        }
         hasOpenEditTransaction = true;
         editTransactionActivityMs = millis();
-        deferredShouldReboot = false;
-        deferredRadioAffected = false;
+        enabled = true;
+        setIntervalFromNow(EDIT_TRANSACTION_IDLE_MS);
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
@@ -496,6 +537,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         const bool commitReboot = deferredShouldReboot, commitRadio = deferredRadioAffected;
         deferredShouldReboot = false;
         deferredRadioAffected = false;
+        disable();
+        if (commitReboot)
+            disableBluetooth();
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE,
                     commitReboot, commitRadio);
         flushChannelWarnings(); // one coalesced message for everything edited in this transaction
@@ -1028,13 +1072,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     case meshtastic_Config_network_tag: {
         LOG_INFO("Set config: WiFi");
         config.has_network = true;
+        auto incoming = c.payload_variant.network;
+        writeSecret(incoming.wifi_psk, sizeof(incoming.wifi_psk), config.network.wifi_psk);
         // No-op set must not reboot; any real change still restarts the network stack. memcmp fails safe.
-        if (memcmp(&config.network, &c.payload_variant.network, sizeof(config.network)) == 0)
+        if (memcmp(&config.network, &incoming, sizeof(config.network)) == 0)
             requiresReboot = false;
-        char prevPsk[sizeof(config.network.wifi_psk)];
-        memcpy(prevPsk, config.network.wifi_psk, sizeof(prevPsk));
-        config.network = c.payload_variant.network;
-        writeSecret(config.network.wifi_psk, sizeof(config.network.wifi_psk), prevPsk);
+        config.network = incoming;
         break;
     }
     case meshtastic_Config_display_tag:
@@ -1064,7 +1107,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         LOG_INFO("Set config: LoRa");
         config.has_lora = true;
-        radioAffected = true; // the only sub-message that legitimately needs a live radio reconfigure
 
         if (validatedLora.coding_rate != clampCodingRate(validatedLora.coding_rate)) {
             LOG_WARN("Invalid coding_rate %d, set to %d", validatedLora.coding_rate, LORA_CR_DEFAULT);
@@ -1211,6 +1253,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         }
 #endif
 
+        radioAffected = loraRadioConfigChanged(oldLoraConfig, validatedLora);
         config.lora = validatedLora; // Finally, return the validated config back to the main config
         if (validatedLora.modem_preset != oldLoraConfig.modem_preset) {
             pendingOldLora = oldLoraConfig;
@@ -1230,6 +1273,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         break;
     case meshtastic_Config_security_tag: {
         LOG_INFO("Set config: Security");
+        const auto oldSecurity = config.security;
         meshtastic_Config_SecurityConfig incoming = c.payload_variant.security;
         // Preserve our keypair when a SET omits the private key but we already hold one: regenerating would
         // change our NodeNum (== crc32(public_key)) and orphan us on the mesh. A SET without the key is a
@@ -1276,10 +1320,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             LOG_WARN(warning);
             sendWarning(warning);
         }
+        requiresReboot = !protobufsEqual<meshtastic_Config_SecurityConfig_size>(&meshtastic_Config_SecurityConfig_msg,
+                                                                                &oldSecurity, &config.security);
 
         changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
-
-        requiresReboot = true;
 
         break;
     }
@@ -1302,12 +1346,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
     bool shouldReboot = true;
-    // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
-    // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction && !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag,
-                                              meshtastic_ModuleConfig_serial_tag, meshtastic_ModuleConfig_statusmessage_tag)) {
-        disableBluetooth();
-    }
 
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
@@ -1319,14 +1357,13 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (!MQTT::isValidConfig(c.payload_variant.mqtt)) {
             return false;
         }
-        // Disable Bluetooth to prevent interference during MQTT configuration
-        disableBluetooth();
         moduleConfig.has_mqtt = true;
         {
-            char prevPass[sizeof(moduleConfig.mqtt.password)];
-            memcpy(prevPass, moduleConfig.mqtt.password, sizeof(prevPass));
-            moduleConfig.mqtt = c.payload_variant.mqtt;
-            writeSecret(moduleConfig.mqtt.password, sizeof(moduleConfig.mqtt.password), prevPass);
+            auto incoming = c.payload_variant.mqtt;
+            writeSecret(incoming.password, sizeof(incoming.password), moduleConfig.mqtt.password);
+            shouldReboot = !protobufsEqual<meshtastic_ModuleConfig_MQTTConfig_size>(&meshtastic_ModuleConfig_MQTTConfig_msg,
+                                                                                    &moduleConfig.mqtt, &incoming);
+            moduleConfig.mqtt = incoming;
         }
 #endif
         break;
@@ -1340,6 +1377,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         }
         disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
         moduleConfig.has_serial = true;
+        shouldReboot = !protobufsEqual<meshtastic_ModuleConfig_SerialConfig_size>(
+            &meshtastic_ModuleConfig_SerialConfig_msg, &moduleConfig.serial, &c.payload_variant.serial);
         moduleConfig.serial = c.payload_variant.serial;
         break;
     case meshtastic_ModuleConfig_external_notification_tag:
@@ -1359,6 +1398,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_telemetry_tag:
         LOG_INFO("Set module config: Telemetry");
+        shouldReboot = !moduleConfig.has_telemetry ||
+                       !protobufsEqual<meshtastic_ModuleConfig_TelemetryConfig_size>(
+                           &meshtastic_ModuleConfig_TelemetryConfig_msg, &moduleConfig.telemetry, &c.payload_variant.telemetry);
         moduleConfig.has_telemetry = true;
         moduleConfig.telemetry = c.payload_variant.telemetry;
         break;
@@ -1503,6 +1545,8 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     }
 #endif
     }
+    if (shouldReboot && !hasOpenEditTransaction)
+        disableBluetooth();
     // No module config feeds RadioInterface::reconfigure() - that reads config.lora only.
     saveChanges(SEGMENT_MODULECONFIG, shouldReboot, /*radioAffected=*/false);
     return true;
@@ -1510,6 +1554,10 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
+    const ChannelIndex oldPrimaryIndex = channels.getPrimaryIndex();
+    char oldPrimaryName[32];
+    snprintf(oldPrimaryName, sizeof(oldPrimaryName), "%s", channels.getName(oldPrimaryIndex));
+
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
         warnLicensedMode();
@@ -1534,8 +1582,13 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
     }
     if (clamped)
         sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS, false, /*radioAffected=*/true); // real frequency-slot / PSK change
-    warnOnChannelSet(channels.getByIndex(cc.index));              // passes the saved channel
+    const ChannelIndex newPrimaryIndex = channels.getPrimaryIndex();
+    const bool usesChannelNameForFrequency = config.lora.override_frequency == 0 && RadioInterface::uses_default_frequency_slot &&
+                                             getRegion(config.lora.region)->overrideSlot == OVERRIDE_SLOT_DEFAULT_CHANNEL_HASH;
+    const bool radioAffected = usesChannelNameForFrequency && (oldPrimaryIndex != newPrimaryIndex ||
+                                                               strcmp(oldPrimaryName, channels.getName(newPrimaryIndex)) != 0);
+    saveChanges(SEGMENT_CHANNELS, false, radioAffected);
+    warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
         flushChannelWarnings();
@@ -1952,13 +2005,27 @@ void AdminModule::expireStaleEditTransaction()
     deferredEditSegments = 0;
     // Same consume-and-clear as a real commit: an abandoned transaction must not leave its
     // decisions behind for the next one.
-    const bool expiredRadio = deferredRadioAffected;
+    const bool expiredReboot = deferredShouldReboot, expiredRadio = deferredRadioAffected;
     deferredShouldReboot = false;
     deferredRadioAffected = false;
-    // No reboot: the settings are already live in RAM and the client that would expect one is gone.
+    disable();
+    // Boot-only changes must still take effect if the client disappears. Persisting without this
+    // reboot would leave runtime behavior out of sync with the stored configuration.
+    if (expiredReboot)
+        disableBluetooth();
     if (segments)
-        saveChanges(segments, false, expiredRadio);
+        saveChanges(segments, expiredReboot, expiredRadio);
     flushChannelWarnings();
+}
+
+int32_t AdminModule::runOnce()
+{
+    expireStaleEditTransaction();
+    if (!hasOpenEditTransaction)
+        return disable();
+
+    const uint32_t elapsed = millis() - editTransactionActivityMs;
+    return elapsed < EDIT_TRANSACTION_IDLE_MS ? EDIT_TRANSACTION_IDLE_MS - elapsed : 1;
 }
 
 // radioAffected is mandatory here - see the note on the declaration in AdminModule.h for why it
@@ -1977,6 +2044,8 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool radioAffecte
         deferredRadioAffected |= radioAffected;
         LOG_INFO("Delay save of changes to disk until the open transaction is committed");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
+        enabled = true;
+        setIntervalFromNow(EDIT_TRANSACTION_IDLE_MS);
         deferredEditSegments |= saveWhat;
         return;
     }
@@ -2057,8 +2126,10 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
                 /*radioAffected=*/true);
 }
 
-AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
+AdminModule::AdminModule()
+    : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg), concurrency::OSThread("AdminTimeout")
 {
+    disable();
     // restrict to the admin channel for rx
     // boundChannel = Channels::adminChannel;
 }
@@ -2564,6 +2635,9 @@ void AdminModule::warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &old
 
 void disableBluetooth()
 {
+#ifdef PIO_UNIT_TESTING
+    disableBluetoothCallCountForTest++;
+#endif
 #if HAS_BLUETOOTH
 #ifdef ARCH_ESP32
     if (nimbleBluetooth)

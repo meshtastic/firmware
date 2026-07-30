@@ -3,6 +3,7 @@
 #include <esp_ota_ops.h>
 #endif
 #include "ProtobufModule.h"
+#include "concurrency/OSThread.h"
 #include "meshUtils.h"
 #include <sys/types.h>
 #if HAS_WIFI
@@ -21,7 +22,9 @@ struct AdminModule_ObserverData {
 /**
  * Admin module for admin messages
  */
-class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
+class AdminModule : public ProtobufModule<meshtastic_AdminMessage>,
+                    public Observable<AdminModule_ObserverData *>,
+                    private concurrency::OSThread
 {
     friend class AdminModuleTestShim; // test/support/AdminModuleTestShim.h - native tests reach the private handlers/state
 
@@ -37,6 +40,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *p) override;
+    virtual int32_t runOnce() override;
 
   private:
     bool hasOpenEditTransaction = false;
@@ -49,6 +53,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void expireStaleEditTransaction();
 #ifdef PIO_UNIT_TESTING
     int lastSaveWhatForTest = 0;
+    unsigned long editTransactionTimerIntervalForTest() const { return interval; }
 #endif
 
     // While a transaction is open, saveChanges() defers the write - so the per-field reboot and
