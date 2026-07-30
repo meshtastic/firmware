@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  MSI for meshtasticd on Windows. Installs the binary under Program Files, registers it as an
-  auto-starting LocalSystem service, and seeds %ProgramData%\Meshtastic\config.yaml without ever
-  overwriting one that is already there.
-
-  Built by bin/build-winget-package.ps1, which supplies the preprocessor variables below.
--->
+<!-- Built by bin/build-winget-package.ps1, which supplies the preprocessor variables below. -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <!-- ProductCode is derived from the version by the build script so the winget manifest can

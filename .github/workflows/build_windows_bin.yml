@@ -151,7 +151,9 @@ jobs:
 
       - name: Build the MSI and winget manifests
         shell: pwsh
-        run: ./bin/build-winget-package.ps1 -ReleaseTag v${{ steps.version.outputs.long }} -Validate
+        run: ./bin/build-winget-package.ps1 -ReleaseTag "v$env:LONG_VERSION" -Validate
+        env:
+          LONG_VERSION: ${{ steps.version.outputs.long }}
 
       - name: Store the MSI and winget manifests as an artifact
         uses: actions/upload-artifact@v7

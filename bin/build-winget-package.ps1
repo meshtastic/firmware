@@ -6,22 +6,10 @@
     Builds the meshtasticd MSI and the winget manifests that install it.
 
 .DESCRIPTION
-    The MSI (packaging/windows/meshtasticd.wxs) drops meshtasticd.exe into Program Files,
-    registers it as an auto-starting LocalSystem service, and seeds
-    %ProgramData%\Meshtastic\config.yaml without overwriting an existing one.
+    Writes the MSI and the three winget manifests into -OutputDirectory. The installer manifest
+    pins the MSI's SHA256, so the file must be published unchanged at -InstallerUrl.
 
-    Writes into -OutputDirectory:
-
-        meshtasticd-<Version>-<Architecture>.msi
-        manifests/m/Meshtastic/Meshtasticd/<Version>/Meshtastic.Meshtasticd.yaml
-        manifests/m/Meshtastic/Meshtasticd/<Version>/Meshtastic.Meshtasticd.installer.yaml
-        manifests/m/Meshtastic/Meshtasticd/<Version>/Meshtastic.Meshtasticd.locale.en-US.yaml
-
-    The installer manifest pins the MSI's SHA256, so the file must be published unchanged at
-    -InstallerUrl.
-
-    Requires the WiX toolset, pinned below v6: v6 and later refuse to build without accepting
-    the Open Source Maintenance Fee EULA.
+    WiX is required, pinned below v6, which refuses to build without accepting the OSMF EULA:
 
         dotnet tool install --global wix --version 5.0.2
         wix extension add -g WixToolset.Util.wixext/5.0.2

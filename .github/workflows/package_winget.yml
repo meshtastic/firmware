@@ -28,16 +28,20 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release/download | Out-Null
-          gh release download ${{ inputs.release_tag }} --pattern '*.msi' --dir release/download
+          gh release download $env:RELEASE_TAG --pattern '*.msi' --dir release/download
           Get-ChildItem release/download
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
 
       - name: Generate manifests for the published MSI
         shell: pwsh
         run: |
           $msi = (Get-ChildItem release/download/*.msi | Select-Object -First 1).FullName
-          ./bin/build-winget-package.ps1 -MsiPath $msi -Version ${{ inputs.version }} -ReleaseTag ${{ inputs.release_tag }} -Validate
+          ./bin/build-winget-package.ps1 -MsiPath $msi -Version $env:PKG_VERSION -ReleaseTag $env:RELEASE_TAG -Validate
+        env:
+          PKG_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
 
       - name: Verify the manifest URL resolves to the published asset
         shell: pwsh
