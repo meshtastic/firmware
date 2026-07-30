@@ -156,8 +156,8 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 #ifndef DISABLE_WELCOME_UNSET
 
     if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        if (disabled || !config.lora.tx_enabled) {
-            LOG_WARN("send - !config.lora.tx_enabled");
+        if (disabled || !config.lora.tx_enabled || configApplyTxInhibited()) {
+            LOG_WARN("send - LoRa Tx disabled or inhibited");
             packetPool.release(p);
             return ERRNO_DISABLED;
         }
@@ -170,8 +170,8 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
 #else
 
-    if (disabled || !config.lora.tx_enabled) {
-        LOG_WARN("send - !config.lora.tx_enabled");
+    if (disabled || !config.lora.tx_enabled || configApplyTxInhibited()) {
+        LOG_WARN("send - LoRa Tx disabled or inhibited");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -209,6 +209,82 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
     packetPool.release(p);
     return ERRNO_DISABLED;
 #endif
+}
+
+bool RadioLibInterface::requestConfigApply(RadioConfigApplyRequest *request)
+{
+    if (request == nullptr)
+        return false;
+
+    if (pendingConfigApply != nullptr) {
+        request->result.store(RadioConfigApplyResult::BUSY);
+        return false;
+    }
+
+    pendingConfigApply = request;
+    configApplyBarrier = true;
+    request->result.store(RadioConfigApplyResult::PENDING);
+    notify(CONFIG_APPLY_PENDING, false);
+    LOG_DEBUG("radio_config_apply queued");
+    return true;
+}
+
+void RadioLibInterface::finishConfigApply(RadioConfigApplyRequest *request)
+{
+    const auto result = request->result.load();
+    pendingConfigApply = nullptr;
+    configApplyBarrier = false;
+    LOG_DEBUG("radio_config_apply resume result=%u", static_cast<unsigned>(result));
+
+    if (!txQueue.empty())
+        setTransmitDelay();
+}
+
+void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
+{
+    RadioConfigApplyRequest *request = pendingConfigApply;
+    if (request == nullptr)
+        return;
+
+    if (static_cast<uint32_t>(nowMsec - request->requestedAtMsec) > request->timeoutMsec) {
+        request->result.store(RadioConfigApplyResult::TIMED_OUT);
+        finishConfigApply(request);
+        return;
+    }
+
+    if (sendingPacket != nullptr) {
+        LOG_DEBUG("radio_config_apply wait_tx");
+        return;
+    }
+
+    if (isActivelyReceiving())
+        return;
+
+#if !MESHTASTIC_EXCLUDE_BEACON
+    if (MeshBeaconModule::reconfigureForBeaconTX(this, nullptr)) {
+        notify(CONFIG_APPLY_PENDING, false);
+        return;
+    }
+#endif
+
+    LOG_DEBUG("radio_config_apply apply");
+    config.lora = request->candidate;
+    if (reconfigure()) {
+        request->result.store(RadioConfigApplyResult::APPLIED);
+        startReceive();
+    } else {
+        LOG_DEBUG("radio_config_apply rollback");
+        config.lora = request->previous;
+        if (reconfigure()) {
+            request->result.store(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+            startReceive();
+        } else {
+            setConfigApplyTxInhibit(true);
+            request->result.store(RadioConfigApplyResult::ROLLBACK_FAILED);
+        }
+    }
+
+    finishConfigApply(request);
 }
 
 meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
@@ -426,10 +502,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
     case ISR_POLL_TICK:
         handleSoftwareLoraIrqPoll();
         break;
+    case CONFIG_APPLY_PENDING:
+        break;
     case TRANSMIT_DELAY_COMPLETED:
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
+        if (configApplyBarrier) {
+            break;
+        }
+
         if (!txQueue.empty()) {
             if (!canSendImmediately()) {
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
@@ -479,6 +561,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
     default:
         assert(0); // We expected to receive a valid notification from the ISR
     }
+
+    serviceConfigApply(millis());
 }
 
 void RadioLibInterface::setTransmitDelay()
@@ -758,8 +842,8 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
-    if (disabled || !config.lora.tx_enabled) {
-        LOG_WARN("Drop Tx packet because LoRa Tx disabled");
+    if (disabled || !config.lora.tx_enabled || configApplyTxInhibited()) {
+        LOG_WARN("Drop Tx packet because LoRa Tx disabled or inhibited");
 #if !MESHTASTIC_EXCLUDE_BEACON
         // This packet may have already triggered a beacon radio switch in TRANSMIT_DELAY_COMPLETED;
         // since it never reaches completeSending() here, restore the radio so it isn't left on the

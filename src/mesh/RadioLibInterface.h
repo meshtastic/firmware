@@ -56,7 +56,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
   protected:
     /// Used as our notification from the ISR
-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK };
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, ISR_POLL_TICK, CONFIG_APPLY_PENDING };
+
+    RadioConfigApplyRequest *pendingConfigApply = nullptr;
+    bool configApplyBarrier = false;
 
     /**
      * Raw ISR handler that just calls our polymorphic method
@@ -176,6 +179,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
+    bool requestConfigApply(RadioConfigApplyRequest *request) override;
+    void serviceConfigApply(uint32_t nowMsec) override;
+
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
      *
@@ -261,6 +267,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();
+    void finishConfigApply(RadioConfigApplyRequest *request);
 
     static void timerCallback(void *p1, uint32_t p2);
 

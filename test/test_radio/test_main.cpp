@@ -1,13 +1,16 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
+#include "RadioLibInterface.h"
 #include "TestUtil.h"
+#include "airtime.h"
 #include <unity.h>
 
 #include "meshtastic/config.pb.h"
 #include "support/MockMeshService.h"
 
 static MockMeshService *mockMeshService;
+static AirTime *testAirTime;
 
 // Test shim to expose protected radio parameters set by applyModemConfig()
 class TestableRadioInterface : public RadioInterface
@@ -39,6 +42,65 @@ class TestableRadioInterface : public RadioInterface
   private:
     bool reconfigureResults[2] = {true, true};
     size_t reconfigureCount = 0;
+};
+
+class TestableRadioLibInterface : public RadioLibInterface
+{
+  public:
+    TestableRadioLibInterface() : RadioLibInterface(nullptr, 0, 0, 0, 0) {}
+
+    void setSendingForTest(bool sending) { sendingPacket = sending ? &inFlightPacket : nullptr; }
+
+    void finishTxForTest() { sendingPacket = nullptr; }
+    bool sendingForTest() const { return sendingPacket != nullptr; }
+
+    ErrorCode enqueuePacketForTest(meshtastic_MeshPacket *packet) { return send(packet); }
+
+    uint32_t queuedPacketCount()
+    {
+        const auto status = static_cast<RadioInterface *>(this)->getQueueStatus();
+        return status.maxlen - status.free;
+    }
+
+    void fireTransmitDelayForTest()
+    {
+        notify(TRANSMIT_DELAY_COMPLETED, true);
+        checkNotification();
+    }
+
+    void clearPendingNotificationForTest() { checkNotification(); }
+
+    uint32_t applyCount() const { return reconfigureCount; }
+    uint32_t startSendCount() const { return startSendCalls; }
+
+    bool reconfigure() override
+    {
+        ++reconfigureCount;
+        return true;
+    }
+
+    void startReceive() override {}
+
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+
+  protected:
+    void disableInterrupt() override {}
+    void enableInterrupt(void (*)()) override {}
+    int16_t getCurrentRSSI() override { return -120; }
+    bool isChannelActive() override { return false; }
+    bool isActivelyReceiving() override { return false; }
+    void addReceiveMetadata(meshtastic_MeshPacket *) override {}
+
+    bool startSend(meshtastic_MeshPacket *) override
+    {
+        ++startSendCalls;
+        return true;
+    }
+
+  private:
+    meshtastic_MeshPacket inFlightPacket = meshtastic_MeshPacket_init_zero;
+    uint32_t reconfigureCount = 0;
+    uint32_t startSendCalls = 0;
 };
 
 static void test_bwCodeToKHz_specialMappings()
@@ -149,6 +211,7 @@ static void test_clampConfigLora_validPresetUnchanged()
 // -----------------------------------------------------------------------
 
 static TestableRadioInterface *testRadio;
+static TestableRadioLibInterface *testRadioLib;
 
 static meshtastic_Config_LoRaConfig makeLoraConfig(meshtastic_Config_LoRaConfig_RegionCode region)
 {
@@ -218,6 +281,84 @@ static void test_configApply_secondRequest_rejectedBusy()
     TEST_ASSERT_TRUE(testRadio->requestConfigApply(&first));
     TEST_ASSERT_FALSE(testRadio->requestConfigApply(&second));
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::BUSY, second.result.load());
+}
+
+static void test_configApply_activeTx_waits_withoutCompletingPacket()
+{
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), 1000, 5000};
+    config.lora = request.previous;
+    testRadioLib->setSendingForTest(true);
+
+    TEST_ASSERT_TRUE(testRadioLib->requestConfigApply(&request));
+    testRadioLib->serviceConfigApply(1000);
+
+    const auto resultWhileSending = request.result.load();
+    const bool stillSending = testRadioLib->sendingForTest();
+    const uint32_t appliesWhileSending = testRadioLib->applyCount();
+
+    testRadioLib->finishTxForTest();
+    testRadioLib->serviceConfigApply(1001);
+    testRadioLib->clearPendingNotificationForTest();
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::PENDING, resultWhileSending);
+    TEST_ASSERT_TRUE(stillSending);
+    TEST_ASSERT_EQUAL_UINT32(0, appliesWhileSending);
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
+}
+
+static void test_configApply_barrier_keepsQueuedPacketQueued()
+{
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), 1000, 5000};
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    config.lora = request.previous;
+    config.lora.tx_enabled = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, testRadioLib->enqueuePacketForTest(&packet));
+    TEST_ASSERT_TRUE(testRadioLib->requestConfigApply(&request));
+
+    testRadioLib->fireTransmitDelayForTest();
+    const uint32_t queuedPackets = testRadioLib->queuedPacketCount();
+    const uint32_t startedPackets = testRadioLib->startSendCount();
+
+    testRadioLib->serviceConfigApply(1000);
+    testRadioLib->fireTransmitDelayForTest();
+
+    TEST_ASSERT_EQUAL_UINT32(1, queuedPackets);
+    TEST_ASSERT_EQUAL_UINT32(0, startedPackets);
+}
+
+static void test_configApply_completion_resumesQueuedTraffic()
+{
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), 1000, 5000};
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    config.lora = request.previous;
+    config.lora.tx_enabled = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, testRadioLib->enqueuePacketForTest(&packet));
+    TEST_ASSERT_TRUE(testRadioLib->requestConfigApply(&request));
+    testRadioLib->serviceConfigApply(1000);
+    testRadioLib->fireTransmitDelayForTest();
+
+    TEST_ASSERT_EQUAL_UINT32(1, testRadioLib->startSendCount());
+}
+
+static void test_configApply_timeout_doesNotAbortTx()
+{
+    const uint32_t requestedAtMsec = millis();
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), requestedAtMsec, 5000};
+    config.lora = request.previous;
+    testRadioLib->setSendingForTest(true);
+
+    TEST_ASSERT_TRUE(testRadioLib->requestConfigApply(&request));
+    testRadioLib->serviceConfigApply(request.requestedAtMsec + request.timeoutMsec + 1);
+
+    const auto result = request.result.load();
+    const bool stillSending = testRadioLib->sendingForTest();
+    testRadioLib->finishTxForTest();
+    testRadioLib->clearPendingNotificationForTest();
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::TIMED_OUT, result);
+    TEST_ASSERT_TRUE(stillSending);
 }
 
 // After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
@@ -426,9 +567,20 @@ void setUp(void)
     initRegion();
 
     testRadio = new TestableRadioInterface();
+    testAirTime = new AirTime();
+    airTime = testAirTime;
+
+    testRadioLib = new TestableRadioLibInterface();
 }
 void tearDown(void)
 {
+    delete testRadioLib;
+    testRadioLib = nullptr;
+
+    airTime = nullptr;
+    delete testAirTime;
+    testAirTime = nullptr;
+
     delete testRadio;
     testRadio = nullptr;
     service = nullptr;
@@ -464,6 +616,10 @@ void setup()
     RUN_TEST(test_configApply_applyFailure_rollsBack);
     RUN_TEST(test_configApply_rollbackFailure_inhibitsTx);
     RUN_TEST(test_configApply_secondRequest_rejectedBusy);
+    RUN_TEST(test_configApply_activeTx_waits_withoutCompletingPacket);
+    RUN_TEST(test_configApply_barrier_keepsQueuedPacketQueued);
+    RUN_TEST(test_configApply_completion_resumesQueuedTraffic);
+    RUN_TEST(test_configApply_timeout_doesNotAbortTx);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
     exit(UNITY_END());
