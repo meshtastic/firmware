@@ -32,14 +32,17 @@ ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
     auto &p = mp.decoded;
     char matchCompare[54];
     auto incomingMessage = reinterpret_cast<const char *>(p.payload.bytes);
-    sprintf(matchCompare, "%s conditions", owner.short_name);
-    if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
+    // payload.bytes is not NUL-terminated, so a comparison longer than the received size would read
+    // whatever the previous occupant of the packet left behind.
+    const size_t received = p.payload.size;
+    snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.short_name);
+    if (received >= strlen(matchCompare) && strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
     }
 
-    sprintf(matchCompare, "%s conditions", owner.long_name);
-    if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
+    snprintf(matchCompare, sizeof(matchCompare), "%s conditions", owner.long_name);
+    if (received >= strlen(matchCompare) && strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
         LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
     }
