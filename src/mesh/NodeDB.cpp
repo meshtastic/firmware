@@ -1610,7 +1610,7 @@ void NodeDB::resetNodes(bool keepFavorites)
         // Compact favorites into contiguous low slots: zeroing in place leaves one above
         // numMeshNodes, invisible to every `i < numMeshNodes` scan yet still serialized to flash.
         for (size_t i = 1; i < meshNodes->size(); i++) {
-            meshtastic_NodeInfoLite &node = meshNodes->at(i);
+            const meshtastic_NodeInfoLite &node = meshNodes->at(i);
             if (nodeInfoLiteIsFavorite(&node)) {
                 if (numMeshNodes != i)
                     meshNodes->at(numMeshNodes) = node;
