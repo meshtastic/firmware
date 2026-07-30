@@ -120,15 +120,6 @@ void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), rp2040
 void esp32ReleaseBluetoothMemoryIfUnused();
 #endif
 
-#ifdef ARCH_NRF52
-// DC/DC buck converter control. nrf52EnableDCDC() runs from powerHAL_platformInit(),
-// which is before consoleInit(), so the outcome is latched and reported later by
-// nrf52LogDCDCStatus(). nrf52ReassertDCDC() re-applies the mode once the SoftDevice
-// owns the POWER peripheral. All three are no-ops unless the board sets
-// NRF52_USE_DCDC_REG0 and/or NRF52_USE_DCDC_REG1.
-void nrf52EnableDCDC(), nrf52LogDCDCStatus(), nrf52ReassertDCDC();
-#endif
-
 meshtastic_DeviceMetadata getDeviceMetadata();
 #if !MESHTASTIC_EXCLUDE_I2C
 void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, ScanI2C::DeviceType deviceType,

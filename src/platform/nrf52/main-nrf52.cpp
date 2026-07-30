@@ -22,6 +22,7 @@
 #include "Power.h"
 #include "PowerMon.h"
 #include "error.h"
+#include "main-nrf52.h"
 #include "main.h"
 #include "meshUtils.h"
 #include <power/PowerHAL.h>
