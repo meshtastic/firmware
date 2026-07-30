@@ -1312,33 +1312,27 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     dispatchReceived(p, src);
 
-    // Only the outermost frame drains, after the triggering frame unwound, so a second
-    // handleReceived() never sits on a module handler. Depth stays >=1, keeping the drain flat.
-    bool outermost;
-    {
-        concurrency::LockGuard g(&deferredLock);
-        outermost = handleDepth == 1;
-    }
-    if (outermost) {
-        // Drop to zero only while the ring is observed empty under the lock, so an enqueuer that
-        // re-checks depth either lands in the ring we still drain, or sees 0 and delivers itself.
-        for (;;) {
-            DeferredLocal d;
-            {
-                concurrency::LockGuard g(&deferredLock);
-                if (!dequeueDeferredLocal(d)) {
-                    handleDepth--;
-                    return;
-                }
+    // Decide "am I the last frame" and drop the depth in one critical section. Splitting them lets
+    // two frames both read the same pre-decrement value, skip the drain, and strand the ring.
+    for (;;) {
+        DeferredLocal d;
+        {
+            concurrency::LockGuard g(&deferredLock);
+            if (handleDepth > 1) {
+                // Another frame is still live and will own the drain once it is last.
+                handleDepth--;
+                return;
             }
-            dispatchReceived(d.p, d.src);
-            packetPool.release(d.p);
+            if (!dequeueDeferredLocal(d)) {
+                // Last frame and nothing queued, so zero is reached only with the ring empty.
+                handleDepth--;
+                return;
+            }
         }
-    }
-
-    {
-        concurrency::LockGuard g(&deferredLock);
-        handleDepth--;
+        // Depth stays at 1 across the drain, so a loopback from these modules defers instead of
+        // recursing, and dispatch runs outside the lock.
+        dispatchReceived(d.p, d.src);
+        packetPool.release(d.p);
     }
 }
 
