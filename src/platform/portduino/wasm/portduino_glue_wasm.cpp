@@ -274,6 +274,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
     config.lora = validated;
     initRegion(); // repoint myRegion at the new region table
     if (service)
+        // TODO(radioAffected): radio-affecting
         service->reloadConfig(SEGMENT_CONFIG); // reconfigure radio (new freq) + persist
     wasm_fs_sync();                            // browser: flush config.proto to IndexedDB
     return 0;
