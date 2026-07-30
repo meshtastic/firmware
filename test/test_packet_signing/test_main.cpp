@@ -22,6 +22,7 @@
 // compiled out unless both PKI and XEdDSA are enabled (e.g. stm32 sets MESHTASTIC_EXCLUDE_XEDDSA).
 #if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
 
+#include "UptimeClock.h"
 #include "mesh/Channels.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshRadio.h"
@@ -1224,7 +1225,7 @@ void test_C3_invalid_repeated_packet_cannot_ack_or_change_retry_state(void)
     // "Far future, so no retransmission is due." Must be a representable future time, not
     // UINT32_MAX: doRetransmissions() compares with an unsigned half-range test, under which
     // UINT32_MAX is ~1ms in the *past* and would fire a retransmit and rewrite nextTxMsec.
-    const uint32_t notDueTxMsec = millis() + 3600000UL;
+    const uint32_t notDueTxMsec = Time::getMillis() + 3600000UL;
     pipelineRouter->addPending(prior, notDueTxMsec);
     const uint32_t lastHeard = mockNodeDB->getMeshNode(LOCAL_NODE)->last_heard;
 

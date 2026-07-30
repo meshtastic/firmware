@@ -75,7 +75,7 @@ jobs:
       - name: Reject millis() used directly in a deadline comparison
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           allowlist=".github/millis-deadline-allowlist.txt"
 
           # Flag millis() directly adjacent to a comparison operator, in either order. The correct

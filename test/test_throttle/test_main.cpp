@@ -107,7 +107,7 @@ void test_deadlinePassed_survives_millis_wrap()
     const uint32_t deadline = 0xFFFFFF00u + 500;
 
     TEST_ASSERT_FALSE(Throttle::deadlinePassed(deadline)); // not yet
-    Time::advanceTestMillis(400);                          // 0x00000094 - wrapped, still not due
+    Time::advanceTestMillis(400);                          // 0x00000090 - wrapped, still not due
     TEST_ASSERT_FALSE(Throttle::deadlinePassed(deadline));
     Time::advanceTestMillis(100); // exactly due, past the wrap
     TEST_ASSERT_TRUE(Throttle::deadlinePassed(deadline));
@@ -124,6 +124,22 @@ void test_deadlinePassed_does_not_fire_early_when_deadline_wraps()
 
     TEST_ASSERT_TRUE(deadline < Time::getMillis()); // the naive compare would fire here
     TEST_ASSERT_FALSE(Throttle::deadlinePassed(deadline));
+}
+
+// deadlinePassedAt() judges against a caller-supplied now, so a loop that snapshots the clock once
+// gets one instant for every entry - including across the wrap, where the clock has moved on.
+void test_deadlinePassedAt_uses_the_supplied_now()
+{
+    Time::setTestMillis(0xFFFFFF00u);
+    const uint32_t now = Time::getMillis();
+    const uint32_t deadline = 0xFFFFFF00u + 500; // wraps to 0x000000F4
+
+    TEST_ASSERT_FALSE(Throttle::deadlinePassedAt(now, deadline));
+    TEST_ASSERT_TRUE(Throttle::deadlinePassedAt(deadline, deadline));     // inclusive boundary
+    TEST_ASSERT_TRUE(Throttle::deadlinePassedAt(deadline + 1, deadline)); // past the wrap
+    Time::advanceTestMillis(60000);                                       // clock moved, snapshot did not
+    TEST_ASSERT_FALSE(Throttle::deadlinePassedAt(now, deadline));
+    TEST_ASSERT_TRUE(Throttle::deadlinePassed(deadline));
 }
 
 // deadlinePassed() cannot know about sentinels, so it reports them as passed. This pins that
@@ -211,6 +227,7 @@ void setup()
     RUN_TEST(test_deadlinePassed_basic);
     RUN_TEST(test_deadlinePassed_survives_millis_wrap);
     RUN_TEST(test_deadlinePassed_does_not_fire_early_when_deadline_wraps);
+    RUN_TEST(test_deadlinePassedAt_uses_the_supplied_now);
     RUN_TEST(test_deadlinePassed_reads_disarmed_sentinels_as_passed);
     RUN_TEST(test_execute_runs_first_time_then_throttles);
     RUN_TEST(test_execute_survives_millis_wrap);

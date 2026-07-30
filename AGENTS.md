@@ -86,8 +86,9 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
   - `Throttle::hasElapsed(lastMs, intervalMs)` - its complement, true once the interval has passed (inclusive `>=`). Prefer this to spelling `!isWithinTimespanMs(...)`.
   - `Throttle::execute(&lastMs, intervalMs, func)` - function-pointer form that updates the timestamp on fire.
   - `Throttle::deadlinePassed(deadlineMs)` - for a stored absolute deadline that cannot be re-expressed as "interval since an event".
+  - `Throttle::deadlinePassedAt(nowMs, deadlineMs)` - the same test against a caller-supplied `now`, for a loop that snapshots the clock once and tests many deadlines. Snapshot from `Time::getMillis()`.
 
-  Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: for ~24 days after the 32-bit wrap it either stalls the action or fires it immediately. All four helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), so all ~94 of its call sites are time-injectable and a native test can drive the wrap with `Time::setTestMillis()`.
+  Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: for ~24 days after the 32-bit wrap it either stalls the action or fires it immediately. All five helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), so all ~94 of its call sites are time-injectable and a native test can drive the wrap with `Time::setTestMillis()`.
 
   **Sentinel hazard.** If a deadline variable also encodes "inactive" (`0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff`), test that sentinel _before_ the elapsed comparison - every such value is arithmetically far in the past, so a correct comparison fires on it immediately. Write `if (deadline && Throttle::deadlinePassed(deadline))`.
 

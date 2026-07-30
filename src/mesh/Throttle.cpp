@@ -41,7 +41,5 @@ bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs)
 /// See the header for the range limit and the sentinel requirement.
 bool Throttle::deadlinePassed(uint32_t deadlineMs)
 {
-    // Unsigned half-range rather than a cast to int32_t, which is implementation-defined once the
-    // difference exceeds INT32_MAX. Deadlines further ahead than 2^31 ms land in the top half.
-    return (uint32_t)(Time::getMillis() - deadlineMs) < 0x80000000u;
+    return deadlinePassedAt(Time::getMillis(), deadlineMs);
 }

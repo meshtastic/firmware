@@ -28,4 +28,13 @@ class Throttle
     /// for that separately, first: every such value is arithmetically far in the past, so it reads
     /// as passed.
     static bool deadlinePassed(uint32_t deadlineMs);
+
+    /// deadlinePassed() against a caller-supplied "now", for a loop that snapshots the time once and
+    /// tests many deadlines against it. Same range limit and sentinel rules as above.
+    static bool deadlinePassedAt(uint32_t nowMs, uint32_t deadlineMs)
+    {
+        // Passed iff now - deadline has not wrapped past 2^31 ms; further-ahead deadlines land in
+        // the top half. Not an int32_t cast, which is implementation-defined beyond INT32_MAX.
+        return (uint32_t)(nowMs - deadlineMs) < 0x80000000u;
+    }
 };
