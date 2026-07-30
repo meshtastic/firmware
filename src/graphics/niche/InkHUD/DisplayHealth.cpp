@@ -40,7 +40,7 @@ void InkHUD::DisplayHealth::forceUpdateType(Drivers::EInk::UpdateTypes type)
 
 // Find out which update type the DisplayHealth has chosen for us
 // Calling this method consumes the result, and resets for the next update
-Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType()
+Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType(bool fastSupported)
 {
     LOG_DEBUG("FULL-update debt:%f", debt);
 
@@ -52,6 +52,14 @@ Drivers::EInk::UpdateTypes InkHUD::DisplayHealth::decideUpdateType()
     UpdateTypes finalDecision = workingDecision;
     workingDecision = UpdateTypes::UNSPECIFIED;
     forced = false;
+
+    if (!fastSupported && finalDecision != UpdateTypes::FULL) {
+        LOG_DEBUG("FAST unsupported: using FULL");
+        debt = 0.0;
+        if (OSThread::enabled)
+            endMaintenance();
+        return UpdateTypes::FULL;
+    }
 
     // Check whether we've paid off enough debt to stop unprovoked refreshing (if in progress)
     // This maintenance behavior will also have opportunity to halt itself when the timer next fires,

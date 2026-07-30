@@ -1,10 +1,7 @@
 // InkHUD setup for the RockBase IoT NM-EPD-420.
 //
-// Display: 4.2" 400×300 panel (GDEY042Z98 tri-color). InkHUD drives it as monochrome
-// through the HINK_E042A87 driver (same SSD16xx controller / 400×300 geometry); the
-// red channel is left unpopulated for now. Larger 400×300 area lets us run two tiles
-// side-by-side comfortably, so the default layout exposes messages on the left and a
-// rotating set of sensor/heard/position applets on the right.
+// Display: 4.2" 400×300 tri-color panel. The board-specific driver detects SSD1683
+// or UC8179 and keeps InkHUD monochrome; SSD1683 can use differential B/W refresh.
 //
 // LoRa and EPD share no SPI bus (EPD = FSPI/default, LoRa = HSPI), so InkHUD's EPD
 // transactions and Router TX do not contend for the SPI mutex.
@@ -25,7 +22,7 @@
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
-#include "graphics/niche/Drivers/EInk/HINK_E042A87.h"
+#include "graphics/niche/Drivers/EInk/NMEPD420.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 #include "buzz.h"
@@ -40,8 +37,8 @@ void setupNicheGraphics()
     SPIClass *hspi = new SPIClass(HSPI);
     hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
 
-    Drivers::EInk *driver = new Drivers::HINK_E042A87;
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
+    Drivers::EInk *driver = new Drivers::NMEPD420;
+    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
     inkhud->setDriver(driver);

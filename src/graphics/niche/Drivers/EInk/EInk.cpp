@@ -2,6 +2,8 @@
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
+#include "mesh/Throttle.h"
+
 using namespace NicheGraphics::Drivers;
 
 // Separate from EInk::begin method, as derived class constructors can probably supply these parameters as constants
@@ -28,11 +30,12 @@ bool EInk::supports(UpdateTypes type)
 // The expectedDuration argument allows us to delay the start of this checking, if we know "roughly" how long an update takes.
 // Potentially, a display without hardware BUSY could rely entirely on "expectedDuration",
 // provided its isUpdateDone() override always returns true.
-void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration)
+void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration, uint32_t timeout)
 {
     updateRunning = true;
     pollingInterval = interval;
     pollingBegunAt = millis();
+    pollingTimeout = timeout;
 
     // To minimize load, we can choose to delay polling for a few seconds, if we know roughly how long the update will take
     // By default, expectedDuration is 0, and we'll start polling immediately
@@ -46,8 +49,7 @@ void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration)
 int32_t EInk::runOnce()
 {
     // Check for polling timeout
-    // Manually set at 10 seconds, in case some big task holds up the firmware's cooperative multitasking
-    if (millis() - pollingBegunAt > 10000)
+    if (!Throttle::isWithinTimespanMs(pollingBegunAt, pollingTimeout))
         failed = true;
 
     // Handle failure

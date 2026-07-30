@@ -407,7 +407,7 @@ Drivers::EInk::UpdateTypes InkHUD::Renderer::decideUpdateType()
         }
     }
 
-    return displayHealth.decideUpdateType();
+    return displayHealth.decideUpdateType(driver->supports(Drivers::EInk::UpdateTypes::FAST));
 }
 
 // Run the drawing operations of any user applets which are currently displayed

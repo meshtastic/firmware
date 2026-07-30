@@ -169,6 +169,12 @@ bool EInkDynamicDisplay::determineMode()
 #endif
     checkFastRequested();
 
+    if (refresh == FAST && !supportsFastRefresh()) {
+        refresh = FULL;
+        reason = FAST_UNSUPPORTED;
+        LOG_DEBUG("refresh=FULL, reason=FAST_UNSUPPORTED, frameFlags=0x%x", frameFlags);
+    }
+
     if (refresh == UNSPECIFIED)
         LOG_WARN("There was a flaw in the determineMode() logic");
 
@@ -196,14 +202,14 @@ void EInkDynamicDisplay::checkInitialized()
         // Undo GxEPD2_BW::partialWindow(), if set by developer in EInkDisplay::connect()
         configForFullRefresh();
 
-        // Clear any existing image, so we can draw logo with fast-refresh, but also to set GxEPD2_EPD::_initial_write
-        adafruitDisplay->clearScreen();
+        if (supportsFastRefresh()) {
+            // Initialize the controller's differential buffers before the first fast refresh.
+            adafruitDisplay->clearScreen();
+            addFrameFlag(DEMAND_FAST);
+        }
 
         LOG_DEBUG("initialized, ");
         initialized = true;
-
-        // Use a fast-refresh for the next frame; no skipping or else blank screen when waking from deep sleep
-        addFrameFlag(DEMAND_FAST);
     }
 }
 

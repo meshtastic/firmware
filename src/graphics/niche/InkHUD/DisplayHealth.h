@@ -28,7 +28,7 @@ class DisplayHealth : protected concurrency::OSThread
 
     void requestUpdateType(Drivers::EInk::UpdateTypes type);
     void forceUpdateType(Drivers::EInk::UpdateTypes type);
-    Drivers::EInk::UpdateTypes decideUpdateType();
+    Drivers::EInk::UpdateTypes decideUpdateType(bool fastSupported);
 
     uint8_t fastPerFull = 5;      // Ideal number of fast refreshes between full refreshes
     float stressMultiplier = 2.0; // How bad for the display are extra fast refreshes beyond fastPerFull?

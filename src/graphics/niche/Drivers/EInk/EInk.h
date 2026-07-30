@@ -31,14 +31,15 @@ class EInk : private concurrency::OSThread
     virtual void begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst = -1) = 0;
     virtual void update(uint8_t *imageData, UpdateTypes type) = 0; // Change the display image
     void await();                                                  // Wait for an in-progress update to complete before proceeding
-    bool supports(UpdateTypes type);                               // Can display perform a certain update type
+    virtual bool supports(UpdateTypes type);                       // Can display perform a certain update type
     bool busy() { return updateRunning; }                          // Display able to update right now?
 
     const uint16_t width; // Public so that NicheGraphics implementations can access. Safe because const.
     const uint16_t height;
 
   protected:
-    void beginPolling(uint32_t interval, uint32_t expectedDuration); // Begin checking repeatedly if update finished
+    void beginPolling(uint32_t interval, uint32_t expectedDuration,
+                      uint32_t timeout = 10000);                      // Begin checking repeatedly if update finished
     virtual bool isUpdateDone() = 0;                                 // Check once if update finished
     virtual void finalizeUpdate() {}                                 // Run any post-update code
     bool failed = false;                                             // If an error occurred during update
@@ -50,6 +51,7 @@ class EInk : private concurrency::OSThread
     bool updateRunning = false;             // see EInk::busy()
     uint32_t pollingInterval = 0;           // How often to check if update complete (ms)
     uint32_t pollingBegunAt = 0;            // To timeout during polling
+    uint32_t pollingTimeout = 10000;         // Maximum time to wait for BUSY to release
 };
 
 } // namespace NicheGraphics::Drivers

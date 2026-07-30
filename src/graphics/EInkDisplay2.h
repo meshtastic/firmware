@@ -5,6 +5,11 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
+#if defined(NM_EPD_420) && defined(GXEPD2_DRIVER_0)
+#include "NMEPD420SSD1683.h"
+#include "NMEPD420UC8179.h"
+#endif
+
 #ifdef GXEPD2_DRIVER_0 // If variant has multiple possible display models
 #include "GxEPD2Multi.h"
 #endif
@@ -75,6 +80,8 @@ class EInkDisplay : public OLEDDisplay
 
     // Connect to the display
     virtual bool connect() override;
+
+    bool supportsFastRefresh() const;
 
 #ifdef GXEPD2_DRIVER_0
     // AdafruitGFX display object - wrapper for multiple drivers

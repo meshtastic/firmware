@@ -138,6 +138,17 @@ void EInkDisplay::setDetected(uint8_t detected)
     (void)detected;
 }
 
+bool EInkDisplay::supportsFastRefresh() const
+{
+    if (!adafruitDisplay)
+        return false;
+#ifdef GXEPD2_DRIVER_0
+    return adafruitDisplay->epd2.m_epd2->hasFastPartialUpdate;
+#else
+    return adafruitDisplay->epd2.hasFastPartialUpdate;
+#endif
+}
+
 // Connect to the display - variant specific
 bool EInkDisplay::connect()
 {
@@ -213,7 +224,7 @@ bool EInkDisplay::connect()
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) ||                 \
     defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) ||         \
-    defined(MINI_EPAPER_S3) || defined(NM_EPD_420)
+    defined(MINI_EPAPER_S3)
     {
 #if defined(TLORA_T3S3_EPAPER)
         // T3-S3 shares HSPI with the SD card; preconfigure the panel control pins.
@@ -288,7 +299,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(3);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213)
+#elif defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) || defined(NM_EPD_420)
 
     // Detect display model, before starting SPI
     EInkDetectionResult displayModel = detectEInk();
@@ -303,7 +314,11 @@ bool EInkDisplay::connect()
 
     // Init GxEPD2
     adafruitDisplay->init();
+#if defined(NM_EPD_420)
+    adafruitDisplay->setRotation(0);
+#else
     adafruitDisplay->setRotation(3);
+#endif
 
 #endif
 

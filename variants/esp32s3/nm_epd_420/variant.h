@@ -7,16 +7,16 @@
 // as VEXT_ENABLE so the existing peripheral-power code path drives it at boot. The EPD
 // power is hard-wired to 3V3 on this board, so toggling VEXT does not affect the display.
 
-#define LED_PIN 47 // Onboard WS2812 (single pixel)
-
 // Buttons
 #define BUTTON_PIN 0               // BOOT — RTC GPIO, wakes from deep sleep
 #define PIN_BUTTON2 45             // USER button
 #define ALT_BUTTON_PIN PIN_BUTTON2 // Auxiliary input
 
-// I²C
-#define I2C_SDA SDA
-#define I2C_SCL SCL
+// I²C (AHT20 + ES8311 shared bus). Board json has no Arduino-core variant folder, so the
+// framework falls back to the generic esp32s3 pins (SDA=8/SCL=9) — must not use those macros:
+// 9 collides with the LoRa HSPI SCK. Official pin map: SDA=39, SCL=38.
+#define I2C_SDA 39
+#define I2C_SCL 38
 
 // E-Ink display (FSPI / SPI2). 4.2" 400×300 tri-color (B/W/R) — driven as B/W in firmware.
 #define PIN_EINK_CS 46
@@ -54,6 +54,7 @@
 
 // LoRa — SX1262 on HSPI, matches Heltec Vision Master E290 wiring exactly
 #define USE_SX1262
+#define SX126X_POWER_EN 47
 
 #define LORA_DIO0 RADIOLIB_NC // SX1262 has no DIO0
 #define LORA_RESET 12

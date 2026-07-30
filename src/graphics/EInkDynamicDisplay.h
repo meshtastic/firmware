@@ -60,6 +60,7 @@ class EInkDynamicDisplay : public EInkDisplay, protected concurrency::NotifiedWo
         EXCEEDED_RATELIMIT_FULL,
         FLAGGED_COSMETIC,
         FLAGGED_DEMAND_FAST,
+        FAST_UNSUPPORTED,
         EXCEEDED_LIMIT_FASTREFRESH,
         EXCEEDED_GHOSTINGLIMIT,
         FRAME_MATCHED_PREVIOUS,
