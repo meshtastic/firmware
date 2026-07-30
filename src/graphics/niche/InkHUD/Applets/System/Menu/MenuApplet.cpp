@@ -10,6 +10,7 @@
 #include "Power.h"
 #include "Router.h"
 #include "airtime.h"
+#include "buzz.h"
 #include "gps/RTC.h"
 #include "graphics/niche/InkHUD/Applets/Bases/Map/MapApplet.h"
 #include "graphics/niche/Utils/FlashData.h"
@@ -343,9 +344,8 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     }
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+    // LoRa config applies live via configChanged observer -> RadioInterface::reconfigure(); no reboot needed.
     service->reloadConfig(changes, /*radioAffected=*/true); // region change is a LoRa radio parameter
-
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
 static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
@@ -374,12 +374,11 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     config.lora.modem_preset = preset;
 
     nodeDB->saveToDisk(SEGMENT_CONFIG);
+    // LoRa config applies live via configChanged observer -> RadioInterface::reconfigure(); no reboot needed.
     service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/true); // modem preset is a LoRa radio parameter
 
     // Notify UI that changes are being applied
     InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
 }
 
 // Used for non-LoRa config fields only - LoRa region/preset go through the dedicated
@@ -610,28 +609,39 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 #if !MESHTASTIC_EXCLUDE_GPS && HAS_GPS
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
             config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+            if (gps != nullptr) {
+                playGPSEnableBeep();
+                gps->enable();
+            }
         } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+            if (gps != nullptr) {
+                playGPSDisableBeep();
+                gps->disable();
+            }
         } else {
             // NOT_PRESENT do nothing
             break;
         }
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+        // GPS driver is toggled live above (matches MenuHandler.cpp's equivalent) - no reboot needed.
         service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // GPS mode, not LoRa
 #endif
         break;
 
     case TOGGLE_SMART_POSITION:
+        // Read live by PositionModule's smart-broadcast path every send - no reboot needed.
         config.position.position_broadcast_smart_enabled = !config.position.position_broadcast_smart_enabled;
-        applyConfigReload(SEGMENT_CONFIG, true);
+        applyConfigReload(SEGMENT_CONFIG);
         break;
 
     case SET_POSITION_BROADCAST_INTERVAL: {
         const uint8_t index = cursor - 1;
         constexpr uint8_t optionCount = sizeof(POSITION_BROADCAST_OPTIONS) / sizeof(POSITION_BROADCAST_OPTIONS[0]);
         if (index < optionCount && config.position.position_broadcast_secs != POSITION_BROADCAST_OPTIONS[index].value) {
+            // Read live by PositionModule's broadcast scheduler every cycle - no reboot needed.
             config.position.position_broadcast_secs = POSITION_BROADCAST_OPTIONS[index].value;
-            applyConfigReload(SEGMENT_CONFIG, true);
+            applyConfigReload(SEGMENT_CONFIG);
         }
         break;
     }
@@ -640,8 +650,9 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         const uint8_t index = cursor - 1;
         constexpr uint8_t optionCount = sizeof(SMART_INTERVAL_OPTIONS) / sizeof(SMART_INTERVAL_OPTIONS[0]);
         if (index < optionCount && config.position.broadcast_smart_minimum_interval_secs != SMART_INTERVAL_OPTIONS[index].value) {
+            // Read live by PositionModule::minimumTimeThreshold every send - no reboot needed.
             config.position.broadcast_smart_minimum_interval_secs = SMART_INTERVAL_OPTIONS[index].value;
-            applyConfigReload(SEGMENT_CONFIG, true);
+            applyConfigReload(SEGMENT_CONFIG);
         }
         break;
     }
@@ -650,8 +661,9 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         const uint8_t index = cursor - 1;
         constexpr uint8_t optionCount = sizeof(SMART_DISTANCE_OPTIONS) / sizeof(SMART_DISTANCE_OPTIONS[0]);
         if (index < optionCount && config.position.broadcast_smart_minimum_distance != SMART_DISTANCE_OPTIONS[index]) {
+            // Read live by PositionModule's smart-position distance check every send - no reboot needed.
             config.position.broadcast_smart_minimum_distance = SMART_DISTANCE_OPTIONS[index];
-            applyConfigReload(SEGMENT_CONFIG, true);
+            applyConfigReload(SEGMENT_CONFIG);
         }
         break;
     }

@@ -2019,15 +2019,14 @@ void menuHandler::GPSSmartPositionMenu()
             menuQueue = PositionBaseMenu;
             screen->runNow();
         } else if (selected == 1) {
+            // Read live by PositionModule's smart-broadcast path every send - no reboot needed.
             config.position.position_broadcast_smart_enabled = true;
             saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // position field, not LoRa
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 2) {
             config.position.position_broadcast_smart_enabled = false;
             saveUIConfig();
             service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // position field, not LoRa
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
     bannerOptions.InitialSelected = config.position.position_broadcast_smart_enabled ? 1 : 2;
@@ -2171,8 +2170,8 @@ void menuHandler::GPSPositionBroadcastMenu()
 
         if (selected != 0) {
             saveUIConfig();
+            // Read live by PositionModule's broadcast scheduler every cycle - no reboot needed.
             service->reloadConfig(SEGMENT_CONFIG, /*radioAffected=*/false); // position field, not LoRa
-            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
     };
 
