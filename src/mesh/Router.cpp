@@ -5,6 +5,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PositionPrecision.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 
 #include "configuration.h"
@@ -269,6 +270,19 @@ PacketId generatePacketId()
     return id;
 }
 
+RxTimeStamp computeRxTimeStamp()
+{
+    const bool haveTime = getRTCQuality() >= RTCQualityFromNet;
+    return {haveTime ? getValidTime(RTCQualityFromNet) : Time::getMillis(), haveTime};
+}
+
+void stampRxTime(meshtastic_MeshPacket *p)
+{
+    const RxTimeStamp ts = computeRxTimeStamp();
+    p->rx_time = ts.time;
+    p->has_rx_time = ts.valid;
+}
+
 meshtastic_MeshPacket *Router::allocForSending()
 {
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
@@ -280,8 +294,8 @@ meshtastic_MeshPacket *Router::allocForSending()
     p->to = NODENUM_BROADCAST;
     p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     p->id = generatePacketId();
-    p->rx_time =
-        getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
+    // Just in case we process the packet locally - make sure it has a timestamp.
+    stampRxTime(p);
 
     return p;
 }
@@ -451,6 +465,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        // Error returns from here own the packet, as the position-precision path below does.
+        packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
     }
 
@@ -619,7 +635,9 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
     if (p->decoded.xeddsa_signature.size == XEDDSA_SIGNATURE_SIZE) {
         meshtastic_NodeInfoLite_public_key_t senderKey = {0, {0}};
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
-        if (nodeDB->copyPublicKey(p->from, senderKey)) {
+        // Authoritative keys only: verifying against an opportunistic cache key would let a planted
+        // key mark its own node a signer, the trust loop #11116 closed on the decrypt path.
+        if (nodeDB->copyPublicKeyAuthoritative(p->from, senderKey)) {
             p->xeddsa_signed =
                 crypto->xeddsa_verify(senderKey.bytes, p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes,
                                       p->decoded.payload.size, p->decoded.xeddsa_signature.bytes);
@@ -667,20 +685,14 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         if (compatible)
             return true;
 
-        // In Balanced, preserve legacy unsigned-unicast compatibility and only reject the class a
-        // signing node always signs: a non-PKI broadcast whose signed encoding would still fit the
-        // LoRa frame. Canonical sizing removes unknown protobuf fields before mirroring the
-        // sender-side signedDataFits() gate, so this counts the same fields that gate counted.
-        // Unicast packets and broadcasts too big to carry a signature are never signed, so they
-        // must not be hard-failed here even for a known signer (PKI already returned above).
-        // isKnownXeddsaSigner consults the warm tier too: a signer evicted from the hot store
-        // must not become impersonatable via unsigned broadcasts until it is re-heard.
-        if (nodeDB->isKnownXeddsaSigner(p->from) && isBroadcast(p->to)) {
+        // Balanced rejects only what a signer always signs: non-PKI broadcasts whose signed encoding
+        // would have fit, plus unicasts on ham where licensed senders sign too. Mirrors perhapsEncode.
+        if (nodeDB->isKnownXeddsaSigner(p->from) && (isBroadcast(p->to) || owner.is_licensed)) {
             size_t canonicalSize;
             if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
             if (canonicalSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
-                LOG_WARN("Dropping unsigned broadcast from 0x%08x that previously signed", p->from);
+                LOG_WARN("Dropping unsigned packet from 0x%08x that previously signed", p->from);
                 return false;
             }
         }
@@ -1158,7 +1170,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *destKey.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes);
+            // On failure encrypted.bytes holds no ciphertext, so continuing would put the plaintext
+            // on the air labelled pki_encrypted.
+            if (!crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes)) {
+                LOG_WARN("PKI encryption failed for destination node 0x%08x", p->to);
+                return meshtastic_Routing_Error_PKI_FAILED;
+            }
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
@@ -1305,12 +1322,15 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
     if (src == RX_SRC_RADIO)
         applyRoutingAuthCache(p);
 
-    // Also, we should set the time from the ISR and it should have msec level resolution.
     // Keep the decoded working packet and encrypted MQTT copy on the same local arrival timestamp.
-    const uint32_t rxTime = getValidTime(RTCQualityFromNet);
-    p->rx_time = rxTime;
-    if (p_encrypted)
-        p_encrypted->rx_time = rxTime;
+    // See computeRxTimeStamp() for the placeholder/has_rx_time semantics.
+    const RxTimeStamp rxStamp = computeRxTimeStamp();
+    p->rx_time = rxStamp.time;
+    p->has_rx_time = rxStamp.valid;
+    if (p_encrypted) {
+        p_encrypted->rx_time = rxStamp.time;
+        p_encrypted->has_rx_time = rxStamp.valid;
+    }
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     auto decodedState = perhapsDecode(p);
@@ -1443,7 +1463,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #if ARCH_PORTDUINO
     // Even ignored packets get logged in the trace
     if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
-        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+        // Store the arrival timestamp for the phone before it's traced.
+        stampRxTime(p);
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
 #endif

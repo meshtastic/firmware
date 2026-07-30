@@ -215,7 +215,12 @@ const StoredMessage *MessageStore::tryAddFromPacket(const meshtastic_MeshPacket 
     sm.channelIndex = packet.channel;
 
     const char *payload = reinterpret_cast<const char *>(packet.decoded.payload.bytes);
-    size_t len = strnlen(payload, MAX_MESSAGE_SIZE - 1);
+    // payload.bytes is not NUL-terminated, so bound by the received size too: a shorter message
+    // stored after a longer one would otherwise pick up the previous occupant's trailing bytes.
+    size_t avail = packet.decoded.payload.size;
+    if (avail > MAX_MESSAGE_SIZE - 1)
+        avail = MAX_MESSAGE_SIZE - 1;
+    size_t len = strnlen(payload, avail);
     sm.textOffset = storeTextInPool(payload, len);
     sm.textLength = len;
 

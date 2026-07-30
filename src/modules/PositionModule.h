@@ -45,6 +45,12 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     // Effective min interval: stationary positions are held to stationaryFloorMs (when that is the
     // longer of the two); otherwise the normal configured interval.
     static uint32_t effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs);
+    // Pure local-play policy: stream our own position to the phone/UI when we have a valid
+    // position, the phone queue is idle, and the cadence has elapsed. everSentToPhone (rather
+    // than a lastSentMs sentinel) marks the never-sent state, so a send stamped at millis()==0
+    // still honors the cadence.
+    static bool shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, bool everSentToPhone, uint32_t nowMs,
+                                          uint32_t lastSentMs, uint32_t intervalMs);
 
   protected:
     /** Called to handle a particular incoming message
@@ -63,7 +69,14 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     virtual int32_t runOnce() override;
 
   private:
-    meshtastic_MeshPacket *allocPositionPacket();
+    meshtastic_MeshPacket *allocPositionPacket(uint32_t atPrecision);
+    // Streams our own position to the connected phone/UI at full precision without touching the
+    // mesh. Keeps the local view alive now that mesh position sharing is opt-in. Returns true
+    // only when a packet was handed to the phone queue.
+    bool sendOurPositionToPhone();
+    bool hasSentPositionToPhone = false;
+    uint32_t lastPhoneSendMs = 0;
+    static constexpr uint32_t sendToPhoneIntervalMs = 60 * 1000; // Matches telemetry's local cadence
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
     // True when our position is unchanged since the last broadcast: it truncates to the same
     // precision grid cell, so re-sending would be a duplicate that traffic management dedups
