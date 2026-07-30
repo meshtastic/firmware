@@ -234,9 +234,8 @@ keypair, favorite/unfavorite a node.
 ### 2. Position live-apply - expanding the Tier-2 live set (outstanding)
 
 The only reason to touch a node for the _reboot_ work: decide whether the GPS-timing fields
-left on the reboot path (`gps_mode`, `gps_enabled`, `gps_update_interval`, `gps_attempt_time`
-
-- item 3 above) can actually apply live and be reclassified.
+left on the reboot path (`gps_mode`, `gps_enabled`, `gps_update_interval`, `gps_attempt_time` -
+item 3 above) can actually apply live and be reclassified.
 
 For each candidate field, one at a time, on a GPS-equipped node: change only that field (over
 serial, as above) and observe.
@@ -257,9 +256,11 @@ a cheap confidence test but not a gate.
 
 ## Extending this safely
 
-- To stop a config field from reloading the radio: it already doesn't, unless it's `lora`.
-  Do **not** widen `radioAffected` to non-LoRa config - only `RadioInterface::reconfigure()`
-  (which reads `config.lora`) consumes it.
+- To stop a config field from reloading the radio on an **AdminModule/client config save**: it
+  already doesn't, unless it's `lora`. Do **not** widen `radioAffected` to non-LoRa config -
+  only `RadioInterface::reconfigure()` (which reads `config.lora`) consumes it. This does not
+  apply to the on-device menu `reloadConfig` sites (item 5 above), which still reload on any
+  Config save regardless of field - that is a separate, untouched code path.
 - To move a field off the reboot path: confirm it is consumed live (read from `config` at use
   time, no cached/driver state), add it to the live set in the relevant `handleSetConfig`
   case, and add a native case asserting no reboot on its change. For anything driver- or
