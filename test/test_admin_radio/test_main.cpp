@@ -2608,6 +2608,104 @@ static void test_commitWithoutBegin_persistsButDoesNotReloadOrReboot()
     TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
 }
 
+// The abandonment path retires a transaction *outside* commit_edit_settings, so it decides both
+// axes on its own. It must reach the same answers the commit would have, not fall back to the
+// old implicit "reload the radio" - an abandoned display-only batch has no more business
+// reprogramming the SX126x than a committed one does.
+static void test_abandonedTransaction_liveOnlyBatch_expiresWithoutReloadOrReboot()
+{
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.position_broadcast_secs = config.position.position_broadcast_secs + 60;
+    sendSetConfig(c);
+
+    const int before = mockMeshService->reloadCalls;
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata(); // any later admin message retires the stale transaction
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(before + 1, mockMeshService->reloadCalls); // the deferred write still lands
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// The guard the other way: abandonment must not lose a real LoRa change's reconfigure either.
+static void test_abandonedTransaction_loraSet_stillReloadsRadioOnExpiry()
+{
+    usePresetLongFast();
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count); // deferred, as for any open transaction
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, counter.count);
+}
+
+// Reboot is the one axis abandonment deliberately drops: the settings are already live in RAM and
+// the client that asked for the restart is, by definition, gone.
+static void test_abandonedTransaction_rebootingFieldDoesNotRebootOnExpiry()
+{
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED; // known start state
+    rebootAtMsec = 0;
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_position_tag;
+    c.payload_variant.position = config.position;
+    c.payload_variant.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+    sendSetConfig(c);
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
+// Expiry must consume-and-clear the accumulated decisions, not just read them. A begin would reset
+// them anyway, so the leak only shows through the one path that consumes them without a begin: a
+// stray commit. Left uncleared, it inherits the abandoned LoRa transaction's answer and reloads.
+static void test_abandonedTransaction_flagsDoNotLeakIntoAStrayCommit()
+{
+    usePresetLongFast();
+
+    sendBeginEdit();
+    meshtastic_Config c = meshtastic_Config_init_zero;
+    c.which_payload_variant = meshtastic_Config_lora_tag;
+    c.payload_variant.lora = config.lora;
+    c.payload_variant.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST;
+    sendSetConfig(c);
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata(); // abandoned, not committed - this is where the flags must be cleared
+
+    // Start counting after the expiry, so only the stray commit's reload would register.
+    rebootAtMsec = 0;
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    sendCommitEdit(); // no matching begin
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_EQUAL_UINT32(0, rebootAtMsec);
+}
+
 // -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
@@ -2807,6 +2905,10 @@ void setup()
     RUN_TEST(test_transaction_liveOnlyBatch_neitherRebootsNorReloads);
     RUN_TEST(test_transaction_flagsDoNotLeakIntoTheNextTransaction);
     RUN_TEST(test_commitWithoutBegin_persistsButDoesNotReloadOrReboot);
+    RUN_TEST(test_abandonedTransaction_liveOnlyBatch_expiresWithoutReloadOrReboot);
+    RUN_TEST(test_abandonedTransaction_loraSet_stillReloadsRadioOnExpiry);
+    RUN_TEST(test_abandonedTransaction_rebootingFieldDoesNotRebootOnExpiry);
+    RUN_TEST(test_abandonedTransaction_flagsDoNotLeakIntoAStrayCommit);
 
     exit(UNITY_END());
 }

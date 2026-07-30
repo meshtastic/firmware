@@ -285,16 +285,24 @@ Run against a real node through the
 (`MESHTASTIC_FIRMWARE_ROOT` → this checkout), with the serial log open. A nRF52840 SX126x
 board (e.g. WisMesh Tag) is the reference target; the crash was reproduced there.
 
-**Transport: serial is sufficient - the on-device menus are not needed, and neither is BLE.**
-These operations are all client-protocol admin messages (`ToRadio`), carried identically over
-serial (`SerialConsole`/`StreamAPI`) or BLE; the on-device button/screen menus are a separate
-code path this work did not touch. Crucially, on nRF52 the BLE `onWrite` callback only
-_queues_ the packet - `handleToRadio` → `saveChanges` → `reloadConfig` (the reconfigure) runs
-on the **main FreeRTOS task** ([`NimbleBluetooth.cpp:135`](../src/nimble/NimbleBluetooth.cpp#L135)),
+The scenarios below cover the **AdminModule / client-protocol path only**. The on-device menu
+path was also migrated by this PR (see "On-device menus" above) and is a genuinely separate
+code path - it needs its own validation pass, driven by the buttons and screen on the board,
+and none of the transport reasoning in this section extends to it.
+
+**Transport for the admin path: serial is sufficient, and BLE is not needed.** These
+operations are all client-protocol admin messages (`ToRadio`), carried identically over serial
+(`SerialConsole`/`StreamAPI`) or BLE. Crucially, on nRF52 the BLE `onWrite` callback only
+_queues_ the packet - `handleToRadio` → `saveChanges` → `applyConfigChange` (the reconfigure)
+runs on the **main FreeRTOS task** ([`NimbleBluetooth.cpp:135`](../src/nimble/NimbleBluetooth.cpp#L135)),
 exactly where `SerialConsole` (an `OSThread`) services the serial stream. So the code and
 thread under test are the same whichever transport you use, and the original crash was
 serial-proven. Drive the admin messages over USB serial (e.g. the `meshtastic --port` CLI);
 use BLE only if you specifically want to reproduce the exact user-facing conditions.
+
+The menu path reaches the same `MeshService::applyConfigChange` on the same main task, so it
+inherits the same reasoning about _what_ runs - but only a menu-driven pass exercises the
+menu call sites' own flag choices, which is what this PR changed there.
 
 ### 1. Radio-reload / crash validation (regression guard for the favorite-node fix)
 
