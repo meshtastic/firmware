@@ -3,6 +3,7 @@
 #include <esp_ota_ops.h>
 #endif
 #include "ProtobufModule.h"
+#include "mesh/RadioConfigApply.h"
 #include "meshUtils.h"
 #include <sys/types.h>
 #if HAS_WIFI
@@ -55,7 +56,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
-    void saveChanges(int saveWhat, bool shouldReboot = true);
+    void saveChanges(int saveWhat, bool shouldReboot = true, bool notifyConfigChange = true);
 
     /**
      * Getters
@@ -84,7 +85,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleSetChannel(const meshtastic_Channel &cc);
 
   protected:
-    void handleSetConfig(const meshtastic_Config &c, bool fromOthers);
+    bool handleSetConfig(const meshtastic_Config &c, bool fromOthers);
 
 #ifdef PIO_UNIT_TESTING
   protected:
@@ -96,6 +97,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
   public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
+    bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers);
+    void completeLoRaConfigApply(const RadioConfigApplyRequest &request);
 
     /// Note an admin request leaving this node for a remote, so that remote's response is
     /// accepted. Called from the client-to-mesh path (MeshService::handleToRadio).
@@ -137,6 +140,24 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
     bool messageIsResponse(const meshtastic_AdminMessage *r);
     bool messageIsRequest(const meshtastic_AdminMessage *r);
+    struct PreparedLoRaConfig {
+        meshtastic_Config_LoRaConfig previous;
+        meshtastic_Config_LoRaConfig candidate;
+        int saveWhat = 0;
+        char mqttRootBefore[32] = {};
+        bool regionChanged = false;
+        bool ensurePkiKeys = false;
+        bool generateLicensedIdentity = false;
+        bool warnLicensedIdentityMigration = false;
+        bool updateMqttRoot = false;
+        bool enableGps = false;
+        bool setFemLna = false;
+        bool femLnaEnabled = false;
+        bool warnFemNormalization = false;
+        bool warnPresetChange = false;
+        bool fanDisabled = false;
+    };
+    bool prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, PreparedLoRaConfig &prepared);
     void sendWarning(const char *format, ...) __attribute__((format(printf, 2, 3)));
     void sendWarningAndLog(const char *format, ...) __attribute__((format(printf, 2, 3)));
     void warnOnLoraPresetChange(const meshtastic_Config_LoRaConfig &oldLora, const meshtastic_Config_LoRaConfig &newLora);
@@ -160,6 +181,10 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool pendingWarningNameIssue = false; // any queued warning was about a channel name
     bool pendingWarningPskIssue = false;  // any queued warning was about a PSK
     bool pendingLicenseWarning = false;   // a licensed-mode notice is queued for this transaction
+
+    static constexpr uint32_t LORA_CONFIG_APPLY_TIMEOUT_MS = 60 * 1000;
+    PreparedLoRaConfig pendingLoRaConfig;
+    bool loRaConfigApplyPending = false;
 };
 
 static constexpr const char *licensedModeMessage =

@@ -120,9 +120,53 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     return 0;
 }
 
+bool MeshService::requestLoRaConfig(const meshtastic_Config_LoRaConfig &previous, const meshtastic_Config_LoRaConfig &candidate,
+                                    uint32_t timeoutMsec)
+{
+    if (loRaConfigApplyPending || !router)
+        return false;
+
+    RadioInterface *radio = router->getRadioIface();
+    if (!radio)
+        return false;
+
+    RadioConfigApplyRequest &request = loRaConfigApplyRequests[nextLoRaConfigApply];
+    request.previous = previous;
+    request.candidate = candidate;
+    request.requestedAtMsec = millis();
+    request.timeoutMsec = timeoutMsec;
+    request.result.store(RadioConfigApplyResult::IDLE);
+
+    if (!radio->requestConfigApply(&request))
+        return false;
+
+    activeLoRaConfigApply = nextLoRaConfigApply;
+    nextLoRaConfigApply ^= 1;
+    loRaConfigApplyPending = true;
+    return true;
+}
+
+RadioConfigApplyResult MeshService::pollLoRaConfigApply() const
+{
+    if (!loRaConfigApplyPending)
+        return RadioConfigApplyResult::IDLE;
+
+    const RadioConfigApplyRequest &request = loRaConfigApplyRequests[activeLoRaConfigApply];
+    RadioInterface *radio = router ? router->getRadioIface() : nullptr;
+    return radio ? radio->pollConfigApply(request) : request.result.load();
+}
+
 /// Do idle processing (mostly processing messages which have been queued from the radio)
 void MeshService::loop()
 {
+    if (loRaConfigApplyPending) {
+        const RadioConfigApplyResult result = pollLoRaConfigApply();
+        if (result != RadioConfigApplyResult::IDLE && result != RadioConfigApplyResult::PENDING && adminModule) {
+            adminModule->completeLoRaConfigApply(loRaConfigApplyRequests[activeLoRaConfigApply]);
+            loRaConfigApplyPending = false;
+        }
+    }
+
     if (lastQueueStatus.free == 0) { // check if there is now free space in TX queue
         meshtastic_QueueStatus qs = router->getQueueStatus();
         if (qs.free != lastQueueStatus.free)

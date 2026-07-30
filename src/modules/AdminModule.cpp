@@ -316,30 +316,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_set_config_tag: {
         LOG_DEBUG("Client set config");
 
-        // Non-LoRa configs need no further validation.
-        if (r->set_config.which_payload_variant != meshtastic_Config_lora_tag) {
-            LOG_DEBUG("Non-LoRa config, applying directly");
-            handleSetConfig(r->set_config, fromOthers);
+        if (r->set_config.which_payload_variant == meshtastic_Config_lora_tag &&
+            r->set_config.payload_variant.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
+            (!RadioLibInterface::instance || !RadioLibInterface::instance->wideLora())) {
+            LOG_WARN("Radio hardware does not support 2.4 GHz; rejecting LORA_24 region");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
             break;
         }
 
-        // Only LORA_24 requires hardware capability validation.
-        if (r->set_config.payload_variant.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
-            LOG_DEBUG("LoRa config, region is not LORA_24, applying directly");
-            handleSetConfig(r->set_config, fromOthers);
-            break;
-        }
-
-        // Hardware supports 2.4 GHz - apply the config.
-        // Fail closed: null instance is treated as incapable.
-        if (RadioLibInterface::instance && RadioLibInterface::instance->wideLora()) {
-            LOG_DEBUG("LORA_24 requested, radio hardware supports 2.4 GHz, applying");
-            handleSetConfig(r->set_config, fromOthers);
-            break;
-        }
-
-        LOG_WARN("Radio hardware does not support 2.4 GHz; rejecting LORA_24 region");
-        myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        if (!handleSetConfig(r->set_config, fromOthers))
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         break;
     }
 
@@ -875,14 +861,217 @@ static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incomi
                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
 }
 
-void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
+bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, PreparedLoRaConfig &prepared)
 {
+    prepared = PreparedLoRaConfig{};
+    prepared.previous = config.lora;
+    prepared.candidate = incoming;
+    prepared.saveWhat = SEGMENT_CONFIG;
+    prepared.fanDisabled = incoming.pa_fan_disabled;
+
+    const bool isRegionUnset = prepared.previous.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    const RegionInfo *activeRegion = myRegion ? myRegion : getRegion(prepared.previous.region);
+    bool regionSideEffectsPending = false;
+
+    LOG_INFO("Set config: LoRa");
+
+    if (prepared.candidate.coding_rate != clampCodingRate(prepared.candidate.coding_rate)) {
+        LOG_WARN("Invalid coding_rate %d, setting to %d", prepared.candidate.coding_rate, LORA_CR_DEFAULT);
+        prepared.candidate.coding_rate = LORA_CR_DEFAULT;
+    }
+
+    if (prepared.candidate.spread_factor != clampSpreadFactor(prepared.candidate.spread_factor)) {
+        LOG_WARN("Invalid spread_factor %d, setting to %d", prepared.candidate.spread_factor, LORA_SF_DEFAULT);
+        prepared.candidate.spread_factor = LORA_SF_DEFAULT;
+    }
+
+    const uint16_t clampedBandwidth = clampBandwidthCode(prepared.candidate.bandwidth);
+    if (!prepared.candidate.use_preset && prepared.candidate.bandwidth != clampedBandwidth) {
+        LOG_WARN("Invalid bandwidth %d, setting to %d", prepared.candidate.bandwidth, clampedBandwidth);
+        prepared.candidate.bandwidth = clampedBandwidth;
+    }
+
+    if (prepared.candidate.region != activeRegion->code) {
+        if (RadioInterface::validateConfigRegion(prepared.candidate) && RadioInterface::validateConfigLora(prepared.candidate)) {
+            if (isRegionUnset && prepared.candidate.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+                if (owner.is_licensed) {
+                    prepared.generateLicensedIdentity = true;
+                    prepared.warnLicensedIdentityMigration = licensedIdentityWillMigrate();
+                    prepared.saveWhat |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+                } else {
+                    prepared.ensurePkiKeys = true;
+                }
+#endif
+                prepared.candidate.tx_enabled = true;
+            }
+            if (!isRegionUnset && prepared.candidate.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+                prepared.candidate.tx_enabled = false;
+            regionSideEffectsPending = true;
+        } else {
+            prepared.candidate = prepared.previous;
+        }
+    }
+
+    if (!RadioInterface::validateConfigLora(prepared.candidate)) {
+        if (fromOthers) {
+            const RegionInfo *swapRegion =
+                prepared.candidate.use_preset
+                    ? RadioInterface::regionSwapForPreset(prepared.candidate.region, prepared.candidate.modem_preset)
+                    : nullptr;
+            if (swapRegion)
+                prepared.candidate.region = swapRegion->code;
+            if (!swapRegion || !RadioInterface::validateConfigLora(prepared.candidate)) {
+                LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
+                prepared.candidate = prepared.previous;
+                regionSideEffectsPending = false;
+            }
+        } else {
+            LOG_WARN("Invalid LoRa config received from client, using corrected values");
+            RadioInterface::clampConfigLora(prepared.candidate);
+        }
+        if (prepared.candidate.region != prepared.previous.region)
+            regionSideEffectsPending = true;
+    }
+
+    const RegionInfo *candidateRegion = getRegion(prepared.candidate.region);
+    if (prepared.candidate.tx_power == 0 || (prepared.candidate.tx_power > candidateRegion->powerLimit && !owner.is_licensed)) {
+        prepared.candidate.tx_power = candidateRegion->powerLimit;
+    }
+    if (prepared.candidate.tx_power == 0)
+        prepared.candidate.tx_power = 17;
+
+    prepared.regionChanged = regionSideEffectsPending;
+    if (prepared.regionChanged) {
+        const RegionInfo *effectiveRegion = getRegion(prepared.candidate.region);
+#ifdef REGULATORY_LORA_REGIONCODE
+        effectiveRegion = getRegion(REGULATORY_LORA_REGIONCODE);
+#endif
+        float dutyCycle = effectiveRegion->dutyCycle;
+        if (effectiveRegion->code == meshtastic_Config_LoRaConfig_RegionCode_EU_866)
+            dutyCycle = IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE)
+                            ? 10.0f
+                            : 2.5f;
+        if (dutyCycle < 100)
+            prepared.candidate.ignore_mqtt = true;
+
+        if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
+            prepared.updateMqttRoot = true;
+            strncpy(prepared.mqttRootBefore, moduleConfig.mqtt.root, sizeof(prepared.mqttRootBefore) - 1);
+        }
+        prepared.saveWhat |= SEGMENT_MODULECONFIG;
+    }
+
+#if HAS_LORA_FEM
+    if (loraFEMInterface.isLnaCanControl()) {
+        prepared.setFemLna = true;
+        prepared.femLnaEnabled = prepared.candidate.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED;
+    } else if (prepared.candidate.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
+        prepared.candidate.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
+        prepared.warnFemNormalization = true;
+    }
+#endif
+
+#if !MESHTASTIC_EXCLUDE_GPS
+    prepared.enableGps = prepared.candidate.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr &&
+                         !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+#endif
+
+    prepared.warnPresetChange = prepared.candidate.modem_preset != prepared.previous.modem_preset;
+    return true;
+}
+
+bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers)
+{
+    if (loRaConfigApplyPending || !service)
+        return false;
+
+    PreparedLoRaConfig prepared;
+    if (!prepareLoRaConfig(incoming, fromOthers, prepared))
+        return false;
+
+    pendingLoRaConfig = prepared;
+    loRaConfigApplyPending = true;
+    if (!service->requestLoRaConfig(prepared.previous, prepared.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS)) {
+        loRaConfigApplyPending = false;
+        return false;
+    }
+    return true;
+}
+
+void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request)
+{
+    if (!loRaConfigApplyPending)
+        return;
+
+    const RadioConfigApplyResult result = request.result.load();
+    if (result == RadioConfigApplyResult::APPLIED) {
+        config.has_lora = true;
+        config.lora = pendingLoRaConfig.candidate;
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        if (pendingLoRaConfig.ensurePkiKeys && crypto && !owner.is_licensed)
+            crypto->ensurePkiKeys(config.security, owner);
+        if (pendingLoRaConfig.generateLicensedIdentity) {
+            if (pendingLoRaConfig.warnLicensedIdentityMigration)
+                sendWarning(licensedIdentityMigrationMessage);
+            nodeDB->generateCryptoKeyPair();
+            if (pendingLoRaConfig.warnLicensedIdentityMigration)
+                nodeDB->licensedIdentityMigrationPending = false;
+        }
+#endif
+
+        if (pendingLoRaConfig.regionChanged)
+            initRegion();
+
+        if (pendingLoRaConfig.updateMqttRoot &&
+            strncmp(moduleConfig.mqtt.root, pendingLoRaConfig.mqttRootBefore, sizeof(moduleConfig.mqtt.root)) == 0) {
+            snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
+        }
+
+#ifdef RF95_FAN_EN
+        digitalWrite(RF95_FAN_EN, pendingLoRaConfig.fanDisabled ? LOW ^ 0 : HIGH ^ 0);
+#endif
+
+#if HAS_LORA_FEM
+        if (pendingLoRaConfig.setFemLna)
+            loraFEMInterface.setLNAEnable(pendingLoRaConfig.femLnaEnabled);
+        if (pendingLoRaConfig.warnFemNormalization)
+            LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
+#endif
+
+#if !MESHTASTIC_EXCLUDE_GPS
+        if (pendingLoRaConfig.enableGps && gps != nullptr && !gps->isEnabled())
+            gps->enable();
+#endif
+
+        saveChanges(pendingLoRaConfig.saveWhat, false, false);
+        if (pendingLoRaConfig.warnPresetChange)
+            warnOnLoraPresetChange(pendingLoRaConfig.previous, pendingLoRaConfig.candidate);
+        if (!hasOpenEditTransaction)
+            flushChannelWarnings();
+    } else {
+        config.lora = pendingLoRaConfig.previous;
+        initRegion();
+        if (result == RadioConfigApplyResult::ROLLBACK_FAILED) {
+            sendWarningAndLog("Radio configuration apply failed; radio recovery failed and transmission remains inhibited");
+        } else {
+            sendWarningAndLog("Radio configuration apply failed; previous configuration retained");
+        }
+    }
+
+    loRaConfigApplyPending = false;
+}
+
+bool AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
+{
+    if (c.which_payload_variant == meshtastic_Config_lora_tag)
+        return requestLoRaConfig(c.payload_variant.lora, fromOthers);
+
     auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
-    bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
-    bool loraPresetWarnPending = false;
-    meshtastic_Config_LoRaConfig pendingOldLora = {}, pendingNewLora = {};
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag: {
@@ -1000,168 +1189,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         config.display = c.payload_variant.display;
         break;
 
-    case meshtastic_Config_lora_tag: {
-        // Wrap the entire case in a block to scope variables and avoid crossing initialization
-        auto oldLoraConfig = config.lora;
-        auto validatedLora = c.payload_variant.lora;
-
-        LOG_INFO("Set config: LoRa");
-        config.has_lora = true;
-
-        if (validatedLora.coding_rate != clampCodingRate(validatedLora.coding_rate)) {
-            LOG_WARN("Invalid coding_rate %d, setting to %d", validatedLora.coding_rate, LORA_CR_DEFAULT);
-            validatedLora.coding_rate = LORA_CR_DEFAULT;
-        }
-
-        if (validatedLora.spread_factor != clampSpreadFactor(validatedLora.spread_factor)) {
-            LOG_WARN("Invalid spread_factor %d, setting to %d", validatedLora.spread_factor, LORA_SF_DEFAULT);
-            validatedLora.spread_factor = LORA_SF_DEFAULT;
-        }
-
-        // A custom (non-preset) config that leaves bandwidth at its proto zero-value otherwise slips
-        // through validateConfigLora() and persists as 0, while the radio silently falls back to the
-        // default (config.lora.bandwidth then reads back 0 even though the radio runs at 250kHz).
-        // Coerce it here like coding_rate/spread_factor so the stored config matches the radio. In
-        // preset mode bandwidth 0 is expected (the preset supplies it), so leave it untouched.
-        const uint16_t clampedBandwidth = clampBandwidthCode(validatedLora.bandwidth);
-        if (!validatedLora.use_preset && validatedLora.bandwidth != clampedBandwidth) {
-            LOG_WARN("Invalid bandwidth %d, setting to %d", validatedLora.bandwidth, clampedBandwidth);
-            validatedLora.bandwidth = clampedBandwidth;
-        }
-
-        // If we're setting a new region, check the region is valid and then init the region or discard the change
-        if (validatedLora.region != myRegion->code) {
-            //  Region has changed so check whether it is valid for e.g. licensing conditions and if the lora config is valid
-            if (RadioInterface::validateConfigRegion(validatedLora) && RadioInterface::validateConfigLora(validatedLora)) {
-                // If we're setting region for the first time, init the region and regenerate the keys
-                if (isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                    if (crypto && !owner.is_licensed) {
-                        crypto->ensurePkiKeys(config.security, owner);
-                    }
-#endif
-                    // new region is valid and we're coming from an unset region, so enable tx
-                    validatedLora.tx_enabled = true;
-                }
-                // If we're unsetting the region for some reason, disable tx
-                if (!isRegionUnset && validatedLora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-                    validatedLora.tx_enabled = false;
-                }
-                // Ensure initRegion() uses the newly validated region
-                config.lora.region = validatedLora.region;
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-                if (owner.is_licensed && isRegionUnset && validatedLora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-                    const bool identityWillMigrate = licensedIdentityWillMigrate();
-                    if (identityWillMigrate)
-                        sendWarning(licensedIdentityMigrationMessage);
-                    nodeDB->generateCryptoKeyPair();
-                    changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
-                    if (identityWillMigrate)
-                        nodeDB->licensedIdentityMigrationPending = false;
-                }
-#endif
-                initRegion();
-                if (getEffectiveDutyCycle() < 100) {
-                    validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-                }
-                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-                }
-                changes |= SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
-            } else {
-                //  Region validation has failed, so just copy all of the old config over the new config
-                validatedLora = oldLoraConfig;
-            }
-        } // end of new region handling
-
-        if (!RadioInterface::validateConfigLora(validatedLora)) {
-            if (fromOthers) {
-                // A preset locked to a sibling EU region still swaps the region for remote admin;
-                // any other invalid config is rejected outright.
-                const RegionInfo *swapRegion =
-                    validatedLora.use_preset
-                        ? RadioInterface::regionSwapForPreset(validatedLora.region, validatedLora.modem_preset)
-                        : NULL;
-                if (swapRegion) {
-                    validatedLora.region = swapRegion->code;
-                }
-                if (!swapRegion || !RadioInterface::validateConfigLora(validatedLora)) {
-                    LOG_WARN("Invalid LoRa config received from another node, rejecting changes");
-                    // Rejecting means rejecting everything: a partial restore of region/preset
-                    // could still apply other fields the validation already deemed invalid.
-                    validatedLora = oldLoraConfig;
-                }
-            } else {
-                LOG_WARN("Invalid LoRa config received from client, using corrected values");
-                RadioInterface::clampConfigLora(validatedLora);
-            }
-            // A preset locked to a sibling EU region swaps the region during the clamp;
-            // apply the same housekeeping as an explicit region change.
-            if (validatedLora.region != oldLoraConfig.region) {
-                config.lora.region = validatedLora.region;
-                initRegion();
-                if (getEffectiveDutyCycle() < 100) {
-                    validatedLora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-                }
-                if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-                    //  Default root is in use, so subscribe to the appropriate MQTT topic for this region
-                    snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-                }
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
-            }
-            //  use_preset and bandwidth are coerced into valid values by the check.
-        }
-
-        // All LoRa radio changes apply live via configChanged observer → reconfigure().
-        // reconfigure() puts the radio in standby, reprograms all modem parameters, and restarts receive.
-        requiresReboot = false;
-
-#if defined(ARCH_PORTDUINO)
-        // If running on portduino and using SimRadio, do not require reboot
-        if (SimRadio::instance) {
-            requiresReboot = false;
-        }
-#endif
-
-#ifdef RF95_FAN_EN
-        // Turn PA off if disabled by config
-        if (c.payload_variant.lora.pa_fan_disabled) {
-            digitalWrite(RF95_FAN_EN, LOW ^ 0);
-        } else {
-            digitalWrite(RF95_FAN_EN, HIGH ^ 0);
-        }
-#endif
-
-#if HAS_LORA_FEM
-        // Apply FEM LNA mode from config (only meaningful on hardware that supports it)
-        // Note that a rejected lora config will revert this as well.
-        if (loraFEMInterface.isLnaCanControl()) {
-            loraFEMInterface.setLNAEnable(validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED);
-        } else if (validatedLora.fem_lna_mode != meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT) {
-            // Hardware FEM does not support LNA control; normalize stored config to match actual capability
-            LOG_WARN("FEM LNA mode configured but current FEM does not support LNA control; normalizing to NOT_PRESENT");
-            validatedLora.fem_lna_mode = meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT;
-        }
-#endif
-
-#if !MESHTASTIC_EXCLUDE_GPS
-        // Enable gps if it was previously disabled due to region not being set
-        if (!requiresReboot && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && gps != nullptr &&
-            !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-            gps->enable();
-        }
-#endif
-
-        config.lora = validatedLora; // Finally, return the validated config back to the main config
-        if (validatedLora.modem_preset != oldLoraConfig.modem_preset) {
-            pendingOldLora = oldLoraConfig;
-            pendingNewLora = validatedLora;
-            loraPresetWarnPending = true;
-        }
-
-        break;
-    }
     case meshtastic_Config_bluetooth_tag:
         LOG_INFO("Set config: Bluetooth");
         config.has_bluetooth = true;
@@ -1231,11 +1258,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     } // end of switch case which_payload_variant
 
     saveChanges(changes, requiresReboot);
-    if (loraPresetWarnPending)
-        warnOnLoraPresetChange(pendingOldLora, pendingNewLora);
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
     if (!hasOpenEditTransaction)
         flushChannelWarnings();
+    return true;
 } // end of handleSetConfig
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -1896,14 +1922,20 @@ void AdminModule::expireStaleEditTransaction()
     flushChannelWarnings();
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool notifyConfigChange)
 {
 #ifdef PIO_UNIT_TESTING
     lastSaveWhatForTest = saveWhat;
 #endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        if (notifyConfigChange) {
+            service->reloadConfig(saveWhat);
+        } else {
+            if (saveWhat & (SEGMENT_CONFIG | SEGMENT_CHANNELS))
+                nodeDB->resetRadioConfig();
+            nodeDB->saveToDisk(saveWhat);
+        }
     } else {
         LOG_INFO("Delay save of changes to disk until the open transaction is committed");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
@@ -2436,8 +2468,8 @@ void AdminModule::warnOnChannelSet(const meshtastic_Channel &cc)
 /**
  * @brief Scan all channels for preset-name conflicts after a modem preset change is committed.
  *
- * Called from handleSetConfig() after the LoRa config has been saved, and only when
- * modem_preset actually changed (rejected configs are never passed here). For every
+ * Called after the LoRa config has been applied and its save has been scheduled, and only
+ * when modem_preset actually changed (rejected configs are never passed here). For every
  * named, non-disabled channel two checks are performed:
  *
  * - Name matches the *old* preset (case-insensitive, spaces stripped): the channel

@@ -28,6 +28,7 @@ class AdminModuleTestShim : public AdminModule
         editTransactionActivityMs = millis();
     }
     int savedSegments() const { return lastSaveWhatForTest; }
+    bool loRaConfigPending() const { return loRaConfigApplyPending; }
 
     bool editTransactionOpen() const { return hasOpenEditTransaction; }
     // Backdate past the idle window so a test sees an abandoned transaction without waiting it out.
