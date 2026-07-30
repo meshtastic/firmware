@@ -23,20 +23,22 @@ jobs:
           if (-not $tag) { throw 'No releases found.' }
           New-Item -ItemType Directory -Force -Path release/download | Out-Null
           gh release download $tag --pattern '*.msi' --dir release/download
-          $msi = Get-ChildItem release/download/*.msi | Select-Object -First 1
-          if (-not $msi) { throw "Release $tag carries no MSI asset." }
-          $version = [regex]::Match($msi.Name, '^meshtasticd-([0-9][0-9A-Za-z.\-]*)-(?:x64|arm64)\.msi$').Groups[1].Value
-          if (-not $version) { throw "Cannot parse a version out of $($msi.Name)." }
-          "tag=$tag", "version=$version", "msi=$($msi.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $msis = @(Get-ChildItem release/download/*.msi)
+          if ($msis.Count -eq 0) { throw "Release $tag carries no MSI asset." }
+          if ($msis.Count -gt 1) { throw "Release $tag carries $($msis.Count) MSIs; this validates one architecture." }
+          $parsed = [regex]::Match($msis[0].Name, '^meshtasticd-([0-9][0-9A-Za-z.\-]*)-(x64|arm64)\.msi$')
+          if (-not $parsed.Success) { throw "Cannot parse version and architecture out of $($msis[0].Name)." }
+          "tag=$tag", "version=$($parsed.Groups[1].Value)", "arch=$($parsed.Groups[2].Value)", "msi=$($msis[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate manifests for the published MSI
         shell: pwsh
-        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -ReleaseTag $env:RELEASE_TAG -Validate
+        run: ./bin/build-winget-package.ps1 -MsiPath $env:MSI_PATH -Version $env:PKG_VERSION -Architecture $env:PKG_ARCH -ReleaseTag $env:RELEASE_TAG -Validate
         env:
           MSI_PATH: ${{ steps.release.outputs.msi }}
           PKG_VERSION: ${{ steps.release.outputs.version }}
+          PKG_ARCH: ${{ steps.release.outputs.arch }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
 
       - name: Verify the manifest URL resolves to the published asset
