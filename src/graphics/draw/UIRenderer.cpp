@@ -40,7 +40,7 @@ static bool gBootSplashBoldPass = false;
 
 static inline void drawSatelliteIcon(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    int yOffset = (currentResolution == ScreenResolution::High) ? -5 : 1;
+    int yOffset = (currentResolution == ScreenResolution::High) ? -5 : 2;
     if (currentResolution == ScreenResolution::High) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y + yOffset, imgGPS_width, imgGPS_height, imgGPS, display);
     } else {
