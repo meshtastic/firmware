@@ -2764,15 +2764,20 @@ void menuHandler::frameTogglesMenu()
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_env_telemetry) {
+            // These three live in moduleConfig, not the hiddenFrames blob that
+            // toggleFrameVisibility() persists, so they need their own save.
             moduleConfig.telemetry.environment_screen_enabled = !moduleConfig.telemetry.environment_screen_enabled;
+            service->reloadConfig(SEGMENT_MODULECONFIG, /*radioAffected=*/false); // module config, not LoRa
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_aq_telemetry) {
             moduleConfig.telemetry.air_quality_screen_enabled = !moduleConfig.telemetry.air_quality_screen_enabled;
+            service->reloadConfig(SEGMENT_MODULECONFIG, /*radioAffected=*/false); // module config, not LoRa
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == show_power) {
             moduleConfig.telemetry.power_screen_enabled = !moduleConfig.telemetry.power_screen_enabled;
+            service->reloadConfig(SEGMENT_MODULECONFIG, /*radioAffected=*/false); // module config, not LoRa
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         }
