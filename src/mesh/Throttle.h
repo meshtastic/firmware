@@ -18,8 +18,8 @@ class Throttle
     }
 
     /// True once an absolute deadline has arrived. Use this rather than comparing against millis()
-    /// directly, which breaks for ~24 days after the 32-bit wrap - either stalling the action or
-    /// firing it immediately, depending on which side wrapped.
+    /// directly: that inverts while the deadline sits on the far side of the 32-bit wrap, so the
+    /// action either fires immediately or blocks for about the interval it should have waited.
     ///
     /// Use this when the site stores a deadline; use hasElapsed() when it stores the time of the
     /// last event, which allows the full ~49.7 day range instead of ~24.8 days ahead.

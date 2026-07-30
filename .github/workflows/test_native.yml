@@ -58,8 +58,9 @@ jobs:
           echo "native-suite-count matches the $expected_count suite directories."
 
   # Reject naive deadline comparisons against millis(). `millis() > deadline` and
-  # `deadline < millis()` are wrong for ~24 days after the 32-bit millis() wrap: depending on which
-  # side wrapped they either stall the action or fire it immediately. The correct forms are
+  # `deadline < millis()` invert while the deadline sits on the far side of the 32-bit wrap: the
+  # action fires immediately, or blocks for about the interval it should have waited. The correct
+  # forms are
   # Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
   # Throttle::deadlinePassed (an absolute deadline). See .github/copilot-instructions.md.
   millis-deadline-check:
@@ -116,7 +117,7 @@ jobs:
           done < /tmp/millis-hits.tsv
 
           if [[ $violations -gt 0 ]]; then
-            echo "::error title=Naive millis() deadline compare::$violations line(s) compare against millis() directly, which breaks for ~24 days after the 32-bit wrap - the action either stalls or fires immediately. Use Throttle::deadlinePassed(deadline) for a stored absolute deadline, or Throttle::hasElapsed(lastEvent, intervalMs) for an interval. If a match genuinely is not a deadline test (an uptime threshold, say), add it to $allowlist with a reason."
+            echo "::error title=Naive millis() deadline compare::$violations line(s) compare against millis() directly, which inverts while the deadline is on the far side of the 32-bit wrap - the action fires immediately, or blocks for about the interval it should have waited. Use Throttle::deadlinePassed(deadline) for a stored absolute deadline, or Throttle::hasElapsed(lastEvent, intervalMs) for an interval. If a match genuinely is not a deadline test (an uptime threshold, say), add it to $allowlist with a reason."
             exit 1
           fi
           echo "No naive millis() deadline comparisons in src/ (allowlist: $(wc -l < /tmp/millis-allowed.tsv) entr(y/ies))."

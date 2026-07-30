@@ -1,7 +1,7 @@
 # Allowlist for the millis-deadline-check guard in .github/workflows/test_native.yml.
 #
-# That guard rejects comparisons made directly against millis(), because they break for ~24 days
-# after the 32-bit wrap. Use Throttle::deadlinePassed(deadline) or
+# That guard rejects comparisons made directly against millis(), because they invert while the
+# deadline sits on the far side of the 32-bit wrap. Use Throttle::deadlinePassed(deadline) or
 # Throttle::hasElapsed(lastEvent, intervalMs) instead - see .github/copilot-instructions.md.
 #
 # Only add a line here when the comparison genuinely is not a deadline test. The usual valid case is
