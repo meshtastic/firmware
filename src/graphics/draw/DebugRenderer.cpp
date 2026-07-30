@@ -38,7 +38,7 @@
 using namespace meshtastic;
 
 // External variables
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 extern PowerStatus *powerStatus;
 extern NodeStatus *nodeStatus;
 extern GPSStatus *gpsStatus;
