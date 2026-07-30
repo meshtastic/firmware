@@ -18,12 +18,27 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
 
-    // Override reconfigure to call the base which invokes applyModemConfig()
-    bool reconfigure() override { return RadioInterface::reconfigure(); }
+    // Override reconfigure to call the base which invokes applyModemConfig().
+    bool reconfigure() override
+    {
+        RadioInterface::reconfigure();
+        return reconfigureResults[reconfigureCount++];
+    }
+
+    void scriptApply(bool applyResult, bool rollbackResult)
+    {
+        reconfigureResults[0] = applyResult;
+        reconfigureResults[1] = rollbackResult;
+        reconfigureCount = 0;
+    }
 
     // Stubs for pure virtual methods required by RadioInterface
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
+
+  private:
+    bool reconfigureResults[2] = {true, true};
+    size_t reconfigureCount = 0;
 };
 
 static void test_bwCodeToKHz_specialMappings()
@@ -134,6 +149,76 @@ static void test_clampConfigLora_validPresetUnchanged()
 // -----------------------------------------------------------------------
 
 static TestableRadioInterface *testRadio;
+
+static meshtastic_Config_LoRaConfig makeLoraConfig(meshtastic_Config_LoRaConfig_RegionCode region)
+{
+    meshtastic_Config_LoRaConfig loraConfig = meshtastic_Config_LoRaConfig_init_zero;
+    loraConfig.region = region;
+    return loraConfig;
+}
+
+static meshtastic_Config_LoRaConfig usConfig()
+{
+    return makeLoraConfig(meshtastic_Config_LoRaConfig_RegionCode_US);
+}
+
+static meshtastic_Config_LoRaConfig lora24Config()
+{
+    return makeLoraConfig(meshtastic_Config_LoRaConfig_RegionCode_LORA_24);
+}
+
+static void test_configApply_idle_success_commitsCandidate()
+{
+    auto oldConfig = usConfig();
+    auto candidate = lora24Config();
+    RadioConfigApplyRequest request{oldConfig, candidate, 1000, 5000};
+    config.lora = oldConfig;
+
+    testRadio->scriptApply(true, true);
+    TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
+    testRadio->serviceConfigApply(1000);
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
+    TEST_ASSERT_EQUAL(candidate.region, config.lora.region);
+}
+
+static void test_configApply_applyFailure_rollsBack()
+{
+    auto oldConfig = usConfig();
+    auto candidate = lora24Config();
+    RadioConfigApplyRequest request{oldConfig, candidate, 1000, 5000};
+    config.lora = oldConfig;
+
+    testRadio->scriptApply(false, true);
+    TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
+    testRadio->serviceConfigApply(1000);
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK, request.result.load());
+    TEST_ASSERT_EQUAL(oldConfig.region, config.lora.region);
+}
+
+static void test_configApply_rollbackFailure_inhibitsTx()
+{
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), 1000, 5000};
+    config.lora = request.previous;
+    testRadio->scriptApply(false, false);
+
+    TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
+    testRadio->serviceConfigApply(1000);
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::ROLLBACK_FAILED, request.result.load());
+    TEST_ASSERT_TRUE(testRadio->configApplyTxInhibited());
+}
+
+static void test_configApply_secondRequest_rejectedBusy()
+{
+    RadioConfigApplyRequest first{usConfig(), lora24Config(), 1000, 5000};
+    RadioConfigApplyRequest second{usConfig(), lora24Config(), 1000, 5000};
+
+    TEST_ASSERT_TRUE(testRadio->requestConfigApply(&first));
+    TEST_ASSERT_FALSE(testRadio->requestConfigApply(&second));
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::BUSY, second.result.load());
+}
 
 // After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
 // CR should come from the preset (5 for LONG_FAST), not from the zero default.
@@ -375,6 +460,10 @@ void setup()
     RUN_TEST(test_applyModemConfig_mediumTurbo);
     RUN_TEST(test_clampConfigLora_mediumTurboInvalidForEU868);
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
+    RUN_TEST(test_configApply_idle_success_commitsCandidate);
+    RUN_TEST(test_configApply_applyFailure_rollsBack);
+    RUN_TEST(test_configApply_rollbackFailure_inhibitsTx);
+    RUN_TEST(test_configApply_secondRequest_rejectedBusy);
     RUN_TEST(test_regionPresetMap_coversAllRegionsWithinBounds);
     RUN_TEST(test_regionPresetMap_matchesRegionTable);
     exit(UNITY_END());

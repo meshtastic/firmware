@@ -14,6 +14,7 @@
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
 #include "main.h"
@@ -910,6 +911,66 @@ bool RadioInterface::reconfigure()
 {
     applyModemConfig();
     return true;
+}
+
+bool RadioInterface::requestConfigApply(RadioConfigApplyRequest *request)
+{
+    if (request == nullptr)
+        return false;
+
+    if (configApplyRequest != nullptr) {
+        request->result.store(RadioConfigApplyResult::BUSY);
+        return false;
+    }
+
+    request->result.store(RadioConfigApplyResult::PENDING);
+    configApplyRequest = request;
+    return true;
+}
+
+void RadioInterface::serviceConfigApply(uint32_t nowMsec)
+{
+    (void)nowMsec;
+
+    if (configApplyRequest == nullptr)
+        return;
+
+    RadioConfigApplyRequest *request = configApplyRequest;
+    if (!Throttle::isWithinTimespanMs(request->requestedAtMsec, request->timeoutMsec)) {
+        request->result.store(RadioConfigApplyResult::TIMED_OUT);
+        configApplyRequest = nullptr;
+        return;
+    }
+
+    config.lora = request->candidate;
+    if (reconfigure()) {
+        request->result.store(RadioConfigApplyResult::APPLIED);
+    } else {
+        config.lora = request->previous;
+        if (reconfigure()) {
+            request->result.store(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+        } else {
+            setConfigApplyTxInhibit(true);
+            request->result.store(RadioConfigApplyResult::ROLLBACK_FAILED);
+        }
+    }
+
+    configApplyRequest = nullptr;
+}
+
+RadioConfigApplyResult RadioInterface::pollConfigApply(const RadioConfigApplyRequest &request) const
+{
+    return request.result.load();
+}
+
+void RadioInterface::setConfigApplyTxInhibit(bool inhibited)
+{
+    configApplyTxInhibit = inhibited;
+}
+
+bool RadioInterface::configApplyTxInhibited() const
+{
+    return configApplyTxInhibit;
 }
 
 bool RadioInterface::init()

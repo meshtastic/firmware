@@ -4,6 +4,7 @@
 #include "MeshTypes.h"
 #include "Observer.h"
 #include "PointerQueue.h"
+#include "RadioConfigApply.h"
 #include "airtime.h"
 #include "error.h"
 #include <memory>
@@ -11,9 +12,6 @@
 #if HAS_LORA_FEM
 #include "LoRaFEMInterface.h"
 #endif
-
-// Forward decl to avoid a direct include of generated config headers / full LoRaConfig definition in this widely-included file.
-typedef struct _meshtastic_Config_LoRaConfig meshtastic_Config_LoRaConfig;
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
@@ -109,6 +107,8 @@ class RadioInterface
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
+    RadioConfigApplyRequest *configApplyRequest = nullptr;
+    bool configApplyTxInhibit = false;
 
     uint32_t computeSlotTimeMsec();
 
@@ -196,6 +196,12 @@ class RadioInterface
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
     virtual bool reconfigure();
+
+    virtual bool requestConfigApply(RadioConfigApplyRequest *request);
+    virtual void serviceConfigApply(uint32_t nowMsec);
+    virtual RadioConfigApplyResult pollConfigApply(const RadioConfigApplyRequest &request) const;
+    virtual void setConfigApplyTxInhibit(bool inhibited);
+    virtual bool configApplyTxInhibited() const;
 
     /** The delay to use for retransmitting dropped packets */
     [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
@@ -326,11 +332,7 @@ class RadioInterface
 
     int notifyDeepSleepCb(void *unused = NULL);
 
-    int reloadConfig(void *unused)
-    {
-        reconfigure();
-        return 0;
-    }
+    int reloadConfig(void *unused) { return reconfigure() ? 0 : 1; }
 };
 
 std::unique_ptr<RadioInterface> initLoRa();
