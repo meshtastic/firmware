@@ -40,6 +40,13 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
   private:
     bool hasOpenEditTransaction = false;
+    // Each deferred write restarts the clock, so this bounds the gap between writes, not the length
+    // of the edit; a bulk import sends them milliseconds apart.
+    static constexpr uint32_t EDIT_TRANSACTION_IDLE_MS = 60 * 1000;
+    uint32_t editTransactionActivityMs = 0; // millis() of the last save this transaction deferred
+    int deferredEditSegments = 0;           // segments that transaction has touched but not yet saved
+    /// Retire an open edit transaction whose client stopped talking, persisting what it applied.
+    void expireStaleEditTransaction();
 #ifdef PIO_UNIT_TESTING
     int lastSaveWhatForTest = 0;
 #endif

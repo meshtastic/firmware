@@ -140,7 +140,7 @@ jobs:
     secrets: inherit
 
   MacOS:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +155,7 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -182,7 +182,7 @@ jobs:
     uses: ./.github/workflows/test_native.yml
 
   build-wasm:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     # Build the WebAssembly portduino node ([env:native-wasm]) as part of normal CI,
     # like the other platforms. It's a dedicated job (not a row in the `build`
     # matrix) because its artifact is meshnode.{mjs,wasm} - not a flashable
@@ -191,7 +191,7 @@ jobs:
     uses: ./.github/workflows/build_portduino_wasm.yml
 
   docker:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     permissions: # Needed for pushing to GHCR.
       contents: read
       packages: write
