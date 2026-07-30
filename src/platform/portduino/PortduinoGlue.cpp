@@ -6,6 +6,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#include "ConfigCheck.h"
 #include "PortduinoGlue.h"
 #include "SHA256.h"
 #include "api/ServerAPI.h"
@@ -65,6 +66,9 @@ char *configPath = nullptr;
 char *optionMac = nullptr;
 bool verboseEnabled = false;
 bool yamlOnly = false;
+bool configCheck = false;
+// Every config file we attempted to load, in load order, for --check to report on.
+std::vector<std::string> attemptedConfigFiles;
 
 const char *argp_program_version = optstr(APP_VERSION);
 
@@ -86,9 +90,16 @@ void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 int TCPPort = SERVER_API_DEFAULT_PORT;
 bool checkConfigPort = true;
 
+// Long-only option: argp treats any key above the printable ASCII range as having no
+// single-character equivalent.
+#define OPT_CONFIG_CHECK 1001
+
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     switch (key) {
+    case OPT_CONFIG_CHECK:
+        configCheck = true;
+        break;
     case 'p':
         if (sscanf(arg, "%d", &TCPPort) < 1) {
             return ARGP_ERR_UNKNOWN;
@@ -160,13 +171,15 @@ static void checkSpidevBufsiz()
 
 void portduinoCustomInit()
 {
-    static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."},
-                                           {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
-                                           {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
-                                           {"sim", 's', 0, 0, "Run in Simulated radio mode"},
-                                           {"verbose", 'v', 0, 0, "Set log level to full debug"},
-                                           {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
-                                           {0}};
+    static struct argp_option options[] = {
+        {"port", 'p', "PORT", 0, "The TCP port to use."},
+        {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
+        {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
+        {"sim", 's', 0, 0, "Run in Simulated radio mode"},
+        {"verbose", 'v', 0, 0, "Set log level to full debug"},
+        {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
+        {"check", OPT_CONFIG_CHECK, 0, 0, "Check the configuration for problems, print a report, and exit"},
+        {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
     static char args_doc[] = "...";
@@ -310,40 +323,54 @@ void portduinoSetup()
         portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using " << configPath << " as config file" << std::endl;
-        } else {
+        } else if (!configCheck) {
+            // In check mode the path is already in attemptedConfigFiles, so fall through
+            // to runConfigCheck() and let it report the parse error with a file and line.
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else if (access("config.yaml", R_OK) == 0) {
         if (loadConfig("config.yaml")) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using local config.yaml as config file" << std::endl;
-        } else {
+        } else if (!configCheck) {
             std::cout << "Unable to use local config.yaml as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
         if (loadConfig("/etc/meshtasticd/config.yaml")) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
-        } else {
+        } else if (!configCheck) {
             std::cout << "Unable to use /etc/meshtasticd/config.yaml as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else {
-        if (!yamlOnly)
+        if (!yamlOnly && !configCheck)
             std::cout << "No 'config.yaml' found..." << std::endl;
         portduino_config.lora_module = use_simradio;
     }
 
     if (portduino_config.config_directory != "") {
-        std::string filetype = ".yaml";
-        for (const std::filesystem::directory_entry &entry :
-             std::filesystem::directory_iterator{portduino_config.config_directory}) {
+        // The throwing form of directory_iterator turns an unreadable ConfigDirectory into an
+        // uncaught filesystem_error and a SIGABRT, so take the error_code overload instead.
+        std::error_code dirError;
+        std::filesystem::directory_iterator entries{portduino_config.config_directory, dirError};
+        if (dirError) {
+            // Half a configuration is worse than none. --check continues so the report can say
+            // so with the rest of the findings.
+            if (!configCheck) {
+                std::cout << "Unable to read ConfigDirectory " << portduino_config.config_directory << ": " << dirError.message()
+                          << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        for (const std::filesystem::directory_entry &entry : entries) {
             if (ends_with(entry.path().string(), ".yaml")) {
-                std::cout << "Also using " << entry << " as additional config file" << std::endl;
+                if (!configCheck)
+                    std::cout << "Also using " << entry << " as additional config file" << std::endl;
                 // .string() rather than .c_str(): path::value_type is wchar_t on
                 // Windows, and loadConfig() takes a const char *.
                 loadConfig(entry.path().string().c_str());
@@ -352,6 +379,11 @@ void portduinoSetup()
     }
 
 #ifndef ARCH_PORTDUINO_WASM
+    // --check wins over --output-yaml: asking for validation and getting a config dump
+    // with no report at all would be the more surprising of the two outcomes.
+    if (configCheck)
+        exit(runConfigCheck(attemptedConfigFiles));
+
     if (yamlOnly) {
         std::cout << portduino_config.emit_yaml() << std::endl;
         exit(EXIT_SUCCESS);
@@ -828,6 +860,10 @@ bool loadConfig(const char *configPath)
 #else
 bool loadConfig(const char *configPath)
 {
+    // Recorded even when the load below fails: an unparseable config.d entry is skipped and its
+    // return value discarded by the caller, so --check needs to know it was attempted.
+    attemptedConfigFiles.push_back(configPath);
+
     YAML::Node yamlConfig;
     try {
         yamlConfig = YAML::LoadFile(configPath);
@@ -886,7 +922,9 @@ bool loadConfig(const char *configPath)
                         break;
                     }
                 }
-                if (!found) {
+                if (!found && !configCheck) {
+                    // --check names the valid modules in its report; exiting here would
+                    // replace that with a bare one-liner.
                     std::cerr << "Unknown Lora.Module: " << moduleName << std::endl;
                     exit(EXIT_FAILURE);
                 }
@@ -899,6 +937,10 @@ bool loadConfig(const char *configPath)
                 portduino_config.lr1110_max_power = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["LR1120_MAX_POWER"])
                 portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+            if (yamlConfig["Lora"]["LR2021_MAX_POWER"])
+                portduino_config.lr2021_max_power = yamlConfig["Lora"]["LR2021_MAX_POWER"].as<int>(22);
+            if (yamlConfig["Lora"]["LR2021_MAX_POWER_HF"])
+                portduino_config.lr2021_max_power_hf = yamlConfig["Lora"]["LR2021_MAX_POWER_HF"].as<int>(12);
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
@@ -1077,7 +1119,9 @@ bool loadConfig(const char *configPath)
                 }
             }
 #if !defined(HAS_HUB75_NATIVE)
-            if (portduino_config.displayPanel == hub75) {
+            if (portduino_config.displayPanel == hub75 && !configCheck) {
+                // --check still validates the rest of the file and reports this as a
+                // finding, so it must not exit from inside the load.
                 std::cerr << "HUB75 display panel selected, but this build does not support HUB75" << std::endl;
                 exit(EXIT_FAILURE);
             }
@@ -1221,8 +1265,12 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["General"]["AvailableDirectory"]).as<std::string>("/etc/meshtasticd/available.d/");
             if ((yamlConfig["General"]["MACAddress"]).as<std::string>("") != "" &&
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
-                std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
-                exit(EXIT_FAILURE);
+                // --check reports this as a finding against the file it came from, so
+                // exiting here would kill the report before it is printed.
+                if (!configCheck) {
+                    std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
             }
             if (checkConfigPort) {
                 portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
@@ -1245,7 +1293,10 @@ bool loadConfig(const char *configPath)
                 portduino_config.mac_address.end());
         }
     } catch (YAML::Exception &e) {
-        std::cout << "*** Exception " << e.what() << std::endl;
+        // The check report repeats this against the file it came from, so printing it
+        // here too would only put a stray line above the report.
+        if (!configCheck)
+            std::cout << "*** Exception " << e.what() << std::endl;
         return false;
     }
     return true;
