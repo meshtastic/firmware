@@ -1,9 +1,9 @@
 // Unit tests for src/airtime.{h,cpp} - AirTime::syncNow() and its rolling windows.
 //
 // syncNow() replaced a per-second runOnce() tick with monotonic-uptime bucket rotation so windows
-// stay correct across light sleep, but that rewrite has its own hand-rolled wrap-safe arithmetic
-// (unlike most of this tree, which just calls Throttle) and had no test coverage at all. These
-// tests exercise the rotation/decay math directly, including across the 32-bit millis() wrap.
+// stay correct across light sleep. It now takes its seconds from Time::getUptimeSecs(); these
+// tests exercise the rotation/decay math on top of that, including across the 32-bit millis()
+// wrap, which also covers the AirTime-polls-the-wrap-counter composition end to end.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
@@ -11,7 +11,12 @@
 #include <cstdint>
 #include <unity.h>
 
-void setUp(void) {}
+void setUp(void)
+{
+    // Absolute uptime assertions (e.g. getSecondsSinceBoot()) must not inherit wraps counted by
+    // an earlier case that moved the test clock backwards via setTestMillis().
+    Time::resetMonotonicForTests();
+}
 void tearDown(void)
 {
     Time::useRealClock(); // don't leak the fake clock into other suites

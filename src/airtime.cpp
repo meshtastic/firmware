@@ -60,8 +60,9 @@ void AirTime::airtimeRotatePeriod()
 void AirTime::syncNow()
 {
     // Use monotonic uptime rather than RTC/network time; user, GPS, or NTP clock changes
-    // must not move airtime accounting backward or forward.
-    uint32_t nowMsec = Time::getMillis();
+    // must not move airtime accounting backward or forward. Reading it here is also the
+    // firmware's guaranteed once-per-second poll of Time::getMillisMonotonic()'s wrap carry.
+    uint32_t nowSecs = Time::getUptimeSecs();
 
     if (firstTime) {
         memset(this->utilizationTX, 0, sizeof(this->utilizationTX));
@@ -72,9 +73,7 @@ void AirTime::syncNow()
         memset(air_period_tx, 0, sizeof(air_period_tx));
         memset(air_period_rx, 0, sizeof(air_period_rx));
 
-        this->secSinceBoot = nowMsec / 1000;
-        // Keep the checkpoint on a whole-second boundary so elapsedSecs advances predictably.
-        this->lastSyncMsec = nowMsec - (nowMsec % 1000);
+        this->secSinceBoot = nowSecs;
         this->lastUtilPeriod = this->getPeriodUtilMinute();
         this->lastUtilPeriodTX = this->getPeriodUtilHour();
         this->airtimes.lastPeriodIndex = this->currentPeriodIndex();
@@ -82,15 +81,12 @@ void AirTime::syncNow()
         return;
     }
 
-    uint32_t elapsedMsec = nowMsec - this->lastSyncMsec;
-    uint32_t elapsedSecs = elapsedMsec / 1000;
-    if (elapsedSecs == 0) {
+    if (nowSecs == this->secSinceBoot) {
         return;
     }
 
     uint32_t oldSecSinceBoot = this->secSinceBoot;
-    this->secSinceBoot += elapsedSecs;
-    this->lastSyncMsec += elapsedSecs * 1000;
+    this->secSinceBoot = nowSecs;
 
     // Historical airtime reports use 1-hour buckets. If multiple hours elapsed while
     // asleep, rotate each crossed bucket or clear the whole report window.
