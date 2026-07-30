@@ -1,15 +1,18 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "trunk.io",
+  "editor.defaultFormatter": "vscode.json-language-features",
   "trunk.enableWindows": true,
   "files.insertFinalNewline": false,
   "files.trimFinalNewlines": false,
   "cmake.configureOnOpen": false,
   "[cpp]": {
-    "editor.defaultFormatter": "trunk.io"
+    "editor.defaultFormatter": "ms-vscode.cpptools"
   },
   "[powershell]": {
     "editor.defaultFormatter": "ms-vscode.powershell"
   },
-  "idf.currentSetup": "C:\\esp\\v6.0.1\\esp-idf"
+  "idf.currentSetup": "C:\\esp\\v6.0.1\\esp-idf",
+  "protobuf.externalLinter.enabled": true,
+  "protobuf.externalLinter.linter": "buf",
+  "protobuf.externalLinter.bufPath": "c:\\Users\\John\\AppData\\Roaming\\Code\\User\\globalStorage\\drblury.protobuf-vsc\\bin\\buf.exe"
 }
