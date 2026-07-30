@@ -18,6 +18,22 @@ its 4-bit cached role acts as a final fallback when all three identity tiers mis
 Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
 `src/modules/TrafficManagementModule.{h,cpp}`, sizing in `src/mesh/mesh-pb-constants.h`.
 
+**Memory classes.** The warm tier (§2) and unified cache (§3) size themselves from
+`MESHTASTIC_MEM_CLASS` (`src/memory/MemClass.h`), which ranks a build by _usable app heap after
+platform overheads_ (SoftDevice, WiFi+BLE stacks) rather than by raw RAM or chip family. The hot
+store (§1) is flash-shaped and the NodeInfo cache (§4) is present-or-absent, so neither is classed:
+
+| Class  | Heap                  | Parts                                        |
+| ------ | --------------------- | -------------------------------------------- |
+| LARGE  | PSRAM or host         | ESP32-S3 with PSRAM, portduino/native        |
+| MEDIUM | ~250-500 KB, no PSRAM | ESP32-S3/C6/P4 without PSRAM                 |
+| SMALL  | ~100-250 KB           | classic ESP32/S2/C3, nRF52840, RP2040/RP2350 |
+| TINY   | <32 KB                | STM32WL                                      |
+
+An unclassified chip lands in SMALL on purpose: small caches are a recoverable default, an
+exhausted heap is not. Where a capacity table names a specific part beside these classes, that
+part is deliberately class-deviant and the reason is given under the table.
+
 ---
 
 ## 1. NodeDB hot store (authoritative)
@@ -26,8 +42,6 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   flattened fields (names, role, public key, bitfield flags such as `HAS_XEDDSA_SIGNED`;
   position/telemetry live in satellite stores reached via copy-out accessors, not nested
   members). Everything else in this document is a cache or a fallback for it.
-- **Capacity:** `MAX_NUM_NODES`, per platform - 250 on native, 120 on nRF52840/generic
-  ESP32, 10 on STM32WL (see `mesh-pb-constants.h`).
 - **Eviction:** oldest non-protected node when full (`getOrCreateMeshNode`). On eviction
   the node's essentials are **absorbed into the warm tier** (see §2); on re-admission the
   warm record is rehydrated back (`take()`), including the signer bit.
@@ -45,6 +59,17 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
     warm-evicted signer be impersonated with unsigned frames.
   - `getNodeRole(n)` - hot store, then the role cached in the warm tier, else `CLIENT`.
 
+**Capacity** - `MAX_NUM_NODES` (`mesh-pb-constants.h`):
+
+| ESP32-S3        | Native | nRF52840, generic ESP32 | STM32WL |
+| --------------- | ------ | ----------------------- | ------- |
+| 250 / 200 / 100 | 250    | 120                     | 10      |
+
+This one is flash-shaped rather than heap-shaped, so it is unclassed: `nodes.proto` has to fit the
+filesystem. ESP32-S3 is the only runtime tier, picked at boot from the flash chip (>=15 MB />=7 MB
+/ smaller); the 120 covers nRF52840 plus generic ESP32 including C3, and is what keeps `nodes.proto`
+inside the stock 28 KB LittleFS.
+
 ## 2. Warm tier - `WarmNodeStore` (NodeDB-owned)
 
 - **What:** the "long-tail" second tier. When a node ages out of the hot store, a minimal
@@ -53,13 +78,24 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
 - **Entry:** exactly 40 bytes - `num(4) | last_heard(4) | public_key(32)`. The low 7 bits
   of `last_heard` are omitted, and replaced with metadata (role: 4 bits, protected
   category: 2, signer bit: 1), leaving ~128 s recency resolution - plenty for LRU ranking.
-- **Capacity:** `WARM_NODE_COUNT` (100 on constrained parts; platform-tiered).
 - **Eviction:** LRU by `last_heard`, with keyed entries outranking keyless; keyless
   candidates never displace keyed entries.
 - **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring below LittleFS
   (append/replay/compact); everywhere else `/prefs/warm.dat`.
 - **Membership invariant:** a node lives in the hot **XOR** warm tier. `take()` removes
   the warm record when the node is re-admitted hot, restoring role/protected/signer bits.
+
+**Capacity** - `WARM_NODE_COUNT` (`mesh-pb-constants.h`):
+
+| LARGE | MEDIUM | RP2040 / RP2350 | nRF52840 | SMALL | TINY |
+| ----- | ------ | --------------- | -------- | ----- | ---- |
+| 2000  | 150    | 150             | 100      | 100   | 0    |
+
+TINY's 0 disables the tier outright. At 40 B/entry, LARGE costs ~80 KB and lives in PSRAM, MEDIUM
+~6 KB of heap. Both named parts are class-deviant on purpose: RP2040/RP2350 is bounded so the
+`warm.dat` write fits the 8 s watchdog (#10746) rather than by RAM, and nRF52840 dropped from 200 to
+100 because its RAM cache is calloc'd from the ~115 KB heap arena shared with SoftDevice, which
+2.8.0 field reports showed at 99% use.
 
 ## 3. TMM unified cache (base, traffic state)
 
@@ -76,14 +112,21 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   `node(4) | pos_fingerprint(1) | rate_count(1) | unknown_count(1) | pos_time(1) | rate_unknown_time(1) | next_hop(1)`
   = 10 bytes, all platforms. Timestamps are free-running modular ticks (uint8 / nibbles)
   with presence carried by non-zero sentinels - no epochs, no absolute time.
-- **Capacity:** `TRAFFIC_MANAGEMENT_CACHE_SIZE`, per memory class: 2048 (PSRAM S3 /
-  native), 500 (medium), 400 (small), 250 (nRF52840 - deliberately class-deviant for heap
-  headroom), 0 when `HAS_TRAFFIC_MANAGEMENT=0`. Variant-overridable.
 - **Eviction:** linear scan; insertion on a full cache evicts the stalest entry,
   preferring to keep entries with a `next_hop` hint **or** a cached special (non-`CLIENT`)
   role - the long-tail state this cache exists to retain (`findOrCreateEntry`'s `preferred`
   test covers both, not just `next_hop`).
 - **Persistence:** none - RAM/PSRAM only, rebuilt from traffic.
+
+**Capacity** - `TRAFFIC_MANAGEMENT_CACHE_SIZE` (`mesh-pb-constants.h`), variant-overridable:
+
+| LARGE | MEDIUM | SMALL | nRF52840 | `HAS_TRAFFIC_MANAGEMENT=0` |
+| ----- | ------ | ----- | -------- | -------------------------- |
+| 2048  | 500    | 400   | 250      | 0                          |
+
+At 10 B/entry that is ~5 KB on MEDIUM and ~2.5 KB on nRF52840, which is class-deviant for the same
+heap reason as the warm tier (its class would give 400); 250 entries still tracks over 2x the
+120-node hot store, and LRU victim recycling absorbs busier meshes.
 
 ## 4. TMM NodeInfo payload cache (extended, the ephemeral third tier)
 
@@ -101,10 +144,19 @@ Sources of truth: `src/mesh/NodeDB.{h,cpp}`, `src/mesh/WarmNodeStore.h`,
   `keySignerProven`, `hasObserved`, `hasFullUser`, `isMember`. (The direct-response throttle
   no longer keeps per-entry state here - it is a pair of separate RAM tables; see the module
   doc.)
-- **Capacity:** `kNodeInfoCacheEntries = 2000`, linear scan (NodeInfo traffic is
-  low-rate).
 - **Persistence:** none - this tier is deliberately ephemeral; it reconstructs from NodeDB
   seeding plus observed traffic after every boot.
+
+**Capacity** - `kNodeInfoCacheEntries` (`TrafficManagementModule.h`), gated by
+`TMM_HAS_NODEINFO_CACHE`:
+
+| ESP32 + PSRAM | Native unit-test builds | Everything else |
+| ------------- | ----------------------- | --------------- |
+| 2000          | 2000                    | not compiled    |
+
+Not class-tiered: the array is either compiled or it isn't. ESP32+PSRAM is the production home (in
+PSRAM); native test builds put the same 2000 entries on the plain heap so the trust and retention
+paths run in CI. Linear scan in every build - NodeInfo traffic is low-rate.
 
 ### Trust & provenance model
 
@@ -172,22 +224,14 @@ rehydration.
 
 ### Tick clocks and wrap safety
 
-All TMM timestamps are free-running modular ticks (uint8 or nibble) from `clockMs()`; modular
-subtraction is correct only while the true age stays below the counter period, so every clock
-needs something to clear expired state before it aliases.
-
-| Clock              | Tick / period  | Window          | Kept honest by                                     |
-| ------------------ | -------------- | --------------- | -------------------------------------------------- |
-| pos                | 6 min / 25.6 h | <=255 ticks     | 60 s sweep (margin as low as 1 tick at the clamp)  |
-| rate               | 5 min / 80 min | <=15 ticks      | sweep + read-time window reset (`isRateLimited()`) |
-| unknown            | 1 min / 16 min | 12 ticks        | sweep + read-time window reset                     |
-| NodeInfo `obsTick` | 3 min / 12.8 h | 120 ticks (6 h) | sweep only                                         |
-
-`obsTick` is the sharp case: `maintainNodeInfoCacheLocked()` clearing `hasObserved` is the
-_sole_ guarantee the 6 h serve gate never reads an aliased stamp. That makes the sweep a
-compile-time invariant - guarded by `TMM_HAS_NODEINFO_CACHE` **alone** (never
-`TRAFFIC_MANAGEMENT_CACHE_SIZE`, which a variant may zero independently), mirroring `purgeAll()`:
-a build that has the cache always has its sweep.
+This cache's `obsTick` recency stamp, like the unified cache's pos/rate/unknown stamps, is a
+free-running modular tick rather than an absolute time, and depends on the maintenance sweep to
+clear expired state before it aliases. The per-clock periods, windows, and what keeps each honest
+are documented with the module in
+[traffic_management_module.md](traffic_management_module.md#tick-clocks-and-wrap-safety). The sharp
+case for this tier is `obsTick`: the sweep clearing `hasObserved` is the _sole_ guarantee the 6 h
+serve gate never reads an aliased stamp, which is why it is a compile-time invariant guarded by
+`TMM_HAS_NODEINFO_CACHE` alone.
 
 The warm tier is different by design: `WarmNodeStore.last_heard` is an **absolute** unix-seconds
 timestamp (128 s quantised), so it cannot wrap until 2106 and needs no sweep - the TMM caches
@@ -207,23 +251,23 @@ behaviour - is documented with the module in
 Side-by-side view of what each store actually holds ("-" = not held). Details and
 rationale live in the per-store sections above.
 
-| Property                  | 1. Hot store (`NodeInfoLite`)    | 2. Warm tier (`WarmNodeEntry`)                 | 3. NodeInfo cache (`NodeInfoPayloadEntry`)                    | 4. Unified cache (`UnifiedCacheEntry`)               |
-| ------------------------- | -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
-| Node number               | yes                              | yes                                            | yes (0 = free slot)                                           | yes (0 = free slot)                                  |
-| Names + user id           | yes (flattened fields)           | -                                              | yes (full `User`, when `hasFullUser`)                         | -                                                    |
-| Public key (32 B)         | yes (authoritative)              | yes (keyed entries)                            | yes (TOFU or proven; pinned against tiers 1-2)                | -                                                    |
-| Signer provenance         | `HAS_XEDDSA_SIGNED` bitfield bit | 1 signer bit (shared with `last_heard`)        | `keySignerProven` (monotonic per key)                         | -                                                    |
-| Device role               | `role` field                     | 4-bit role (metadata steal)                    | inside the cached `User`                                      | 4-bit role in count-byte top bits (final fallback)   |
-| Recency                   | `last_heard` (unix secs)         | `last_heard` (unix secs, 128 s quantised)      | `obsTick` (3 min modular tick) + `hasObserved`                | pos/rate/unknown modular ticks                       |
-| Position / telemetry      | via satellite copy-out accessors | -                                              | -                                                             | 8-bit position _fingerprint_ only (dedup)            |
-| Protected / favorite      | bitfield flags                   | 2-bit protected category                       | - (`isMember` keep-alive instead)                             | -                                                    |
-| Routing hint (`next_hop`) | yes (persisted field)            | -                                              | -                                                             | ACK-confirmed relay byte (preloaded from tier 1)     |
-| Direct-reply metadata     | -                                | -                                              | `sourceChannel`, `decodedBitfield` (+ `hasDecodedBitfield`)   | -                                                    |
-| Traffic-shaping counters  | -                                | -                                              | -                                                             | rate + unknown counts, pos fingerprint               |
-| Entry size                | largest (full struct)            | 40 B exact                                     | ~`sizeof(User)`+8, platform-padded (no size assert by design) | 10 B exact                                           |
-| Capacity                  | `MAX_NUM_NODES` (250/120/10)     | `WARM_NODE_COUNT` (~100)                       | `kNodeInfoCacheEntries` (2000)                                | `TRAFFIC_MANAGEMENT_CACHE_SIZE` (2048/500/400/250/0) |
-| Persistence               | node DB file                     | raw-flash ring (nRF52840) or `/prefs/warm.dat` | none (rebuilt from seed + traffic)                            | none                                                 |
-| Storage                   | RAM                              | RAM + flash                                    | PSRAM on hardware; plain heap in native tests                 | PSRAM when available, else heap                      |
+| Property                  | 1. Hot store (`NodeInfoLite`)    | 2. Warm tier (`WarmNodeEntry`)                 | 3. NodeInfo cache (`NodeInfoPayloadEntry`)                    | 4. Unified cache (`UnifiedCacheEntry`)             |
+| ------------------------- | -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| Node number               | yes                              | yes                                            | yes (0 = free slot)                                           | yes (0 = free slot)                                |
+| Names + user id           | yes (flattened fields)           | -                                              | yes (full `User`, when `hasFullUser`)                         | -                                                  |
+| Public key (32 B)         | yes (authoritative)              | yes (keyed entries)                            | yes (TOFU or proven; pinned against tiers 1-2)                | -                                                  |
+| Signer provenance         | `HAS_XEDDSA_SIGNED` bitfield bit | 1 signer bit (shared with `last_heard`)        | `keySignerProven` (monotonic per key)                         | -                                                  |
+| Device role               | `role` field                     | 4-bit role (metadata steal)                    | inside the cached `User`                                      | 4-bit role in count-byte top bits (final fallback) |
+| Recency                   | `last_heard` (unix secs)         | `last_heard` (unix secs, 128 s quantised)      | `obsTick` (3 min modular tick) + `hasObserved`                | pos/rate/unknown modular ticks                     |
+| Position / telemetry      | via satellite copy-out accessors | -                                              | -                                                             | 8-bit position _fingerprint_ only (dedup)          |
+| Protected / favorite      | bitfield flags                   | 2-bit protected category                       | - (`isMember` keep-alive instead)                             | -                                                  |
+| Routing hint (`next_hop`) | yes (persisted field)            | -                                              | -                                                             | ACK-confirmed relay byte (preloaded from tier 1)   |
+| Direct-reply metadata     | -                                | -                                              | `sourceChannel`, `decodedBitfield` (+ `hasDecodedBitfield`)   | -                                                  |
+| Traffic-shaping counters  | -                                | -                                              | -                                                             | rate + unknown counts, pos fingerprint             |
+| Entry size                | largest (full struct)            | 40 B exact                                     | ~`sizeof(User)`+8, platform-padded (no size assert by design) | 10 B exact                                         |
+| Capacity                  | `MAX_NUM_NODES` (10-250)         | `WARM_NODE_COUNT` (0-2000)                     | `kNodeInfoCacheEntries` (2000)                                | `TRAFFIC_MANAGEMENT_CACHE_SIZE` (0-2048)           |
+| Persistence               | node DB file                     | raw-flash ring (nRF52840) or `/prefs/warm.dat` | none (rebuilt from seed + traffic)                            | none                                               |
+| Storage                   | RAM                              | RAM + flash                                    | PSRAM on hardware; plain heap in native tests                 | PSRAM when available, else heap                    |
 
 ## How a lookup falls through the tiers
 
