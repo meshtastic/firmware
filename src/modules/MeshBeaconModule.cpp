@@ -18,6 +18,7 @@ meshtastic_Config_LoRaConfig_RegionCode MeshBeaconModule::originalRegion;
 meshtastic_ChannelSettings MeshBeaconModule::originalPrimaryChannel;
 
 static MeshBeaconModule_TargetRadioSettings targetRadioSettings[8];
+static bool radioConfigTemporary = false;
 
 static bool getTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset *preset,
                                    uint16_t *slot, bool *legacyHopOverride = nullptr,
@@ -56,6 +57,11 @@ MeshBeaconModule::MeshBeaconModule()
     originalLoraChannel = config.lora.channel_num;
     originalRegion = config.lora.region;
     originalPrimaryChannel = channels.getPrimary();
+}
+
+bool MeshBeaconModule::radioConfigIsTemporary()
+{
+    return radioConfigTemporary;
 }
 
 void MeshBeaconModule::setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset,
@@ -151,14 +157,6 @@ meshtastic_ChannelSettings MeshBeaconModule::beaconChannelSettings(const meshtas
 
 bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p)
 {
-    // True while a beacon radio switch is in effect and still needs undoing. We track the switch
-    // explicitly rather than inferring it from "live config differs from the snapshot", because that
-    // heuristic both missed cases (a channel name/PSK swap that left preset/slot/region unchanged would
-    // never be restored) and fired falsely (a legitimate non-beacon channel edit would be reverted on
-    // the next TX). With the flag the restore fires for ANY field we changed and only when we changed
-    // it - including on TX-failure paths, which route through this same restore call.
-    static bool radioSwitched = false;
-
     meshtastic_ChannelSettings *primaryCh = &channels.getByIndex(channels.getPrimaryIndex()).settings;
     meshtastic_Config_LoRaConfig_ModemPreset targetPreset;
     uint16_t targetSlot;
@@ -205,7 +203,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         // Snapshot current (non-beacon) settings so we restore to the latest config. Skip while a
         // switch is already active, so a second switch before the restore can't capture the beacon
         // config as the "home" we later restore to.
-        if (!radioSwitched) {
+        if (!radioConfigTemporary) {
             originalModemPreset = config.lora.modem_preset;
             originalLoraChannel = config.lora.channel_num;
             originalRegion = config.lora.region;
@@ -222,11 +220,11 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 
         channels.fixupChannel(channels.getPrimaryIndex());
         p->channel = channels.getHash(channels.getPrimaryIndex());
+        radioConfigTemporary = true;
         iface->reconfigure();
-        radioSwitched = true;
         return true;
 
-    } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) && radioSwitched) {
+    } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) && radioConfigTemporary) {
 
         LOG_INFO("Beacon: restoring radio config after beacon TX");
         config.lora.modem_preset = originalModemPreset;
@@ -236,8 +234,8 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         primaryCh->name[sizeof(primaryCh->name) - 1] = '\0';
 
         channels.fixupChannel(channels.getPrimaryIndex());
-        iface->reconfigure();
-        radioSwitched = false;
+        if (iface->reconfigure())
+            radioConfigTemporary = false;
         return true;
     }
     return false;

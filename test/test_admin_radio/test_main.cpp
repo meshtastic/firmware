@@ -1176,7 +1176,6 @@ static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     initRegion();
 
-    testAdmin->deferSaves();
     const meshtastic_Config c =
         makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_US, true, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
     applyLoRaConfig(c, false);
@@ -1718,6 +1717,112 @@ static meshtastic_Config_LoRaConfig makeLoRaCandidate(meshtastic_Config_LoRaConf
     return candidate;
 }
 
+static void test_editTransaction_loraCandidate_staysInactiveUntilCommit()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto previous = config.lora;
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+
+    sendBeginEdit();
+    sendSetLora(candidate);
+
+    TEST_ASSERT_TRUE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->requests());
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+}
+
+static void test_editTransaction_commit_queuesOneRadioApply()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto previous = config.lora;
+    const auto first =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    const auto committed =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW);
+
+    sendBeginEdit();
+    sendSetLora(first);
+    sendSetLora(committed);
+
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->requests());
+    sendCommitEdit();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->requests());
+    TEST_ASSERT_EQUAL(committed.modem_preset, scriptedRadio->pending()->candidate.modem_preset);
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
+}
+
+static void test_editTransaction_expiry_doesNotPersistUnappliedLora()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto previous = config.lora;
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+
+    sendBeginEdit();
+    testAdmin->saveUnrelatedConfig(SEGMENT_CHANNELS);
+    sendSetLora(candidate);
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->requests());
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
+    TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
+    TEST_ASSERT_EQUAL_INT(SEGMENT_CHANNELS, testAdmin->persistedSegments());
+    TEST_ASSERT_EQUAL(previous.region, testAdmin->persistedLoRa().region);
+}
+
+static void test_editTransaction_loraFailure_savesOnlyUnrelatedSegments()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto previous = config.lora;
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    constexpr int unrelatedSegments = SEGMENT_CONFIG | SEGMENT_CHANNELS;
+
+    sendBeginEdit();
+    sendSetLora(candidate);
+    testAdmin->saveUnrelatedConfig(unrelatedSegments);
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->requests());
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
+    TEST_ASSERT_EQUAL_INT(unrelatedSegments, testAdmin->persistedSegments());
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
+    TEST_ASSERT_EQUAL(previous.region, testAdmin->persistedLoRa().region);
+}
+
+static void test_menuLoRaHelper_usesValidatedAsyncRequestPath()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto previous = config.lora;
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+
+    TEST_ASSERT_TRUE(testAdmin->requestLoRaConfig(candidate, false));
+
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->requests());
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+}
+
 static void test_setLoraConfig_invalidRegionRejectedBeforeTransaction()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
@@ -1793,7 +1898,6 @@ static void test_setLoraConfig_remoteInvalidRejectedBeforeTransaction()
 static void test_setLoraConfig_doesNotMutateOrSaveBeforeHardwareSuccess()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
-    testAdmin->deferSaves();
     const auto candidate =
         makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
 
@@ -1809,7 +1913,6 @@ static void test_setLoraConfig_doesNotMutateOrSaveBeforeHardwareSuccess()
 static void test_setLoraConfig_normalizationSideEffectsWaitForHardwareSuccess()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
-    testAdmin->deferSaves();
     RadioInterface::uses_default_frequency_slot = false;
     RadioInterface::uses_custom_channel_name = false;
     error_code = meshtastic_CriticalErrorCode_NONE;
@@ -1905,7 +2008,6 @@ static void test_setLoraConfig_success_appliesSideEffectsThenPersists()
 static void test_setLoraConfig_failure_keepsOldConfigAndWarns()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
-    testAdmin->deferSaves();
     RadioInterface::uses_default_frequency_slot = false;
     RadioInterface::uses_custom_channel_name = false;
     error_code = meshtastic_CriticalErrorCode_NONE;
@@ -1971,7 +2073,6 @@ static void test_setLoraConfig_concurrentSavePersistsAfterTerminalResult()
 static void test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecoveryFailure()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
-    testAdmin->deferSaves();
     RadioInterface::uses_default_frequency_slot = false;
     RadioInterface::uses_custom_channel_name = false;
     error_code = meshtastic_CriticalErrorCode_NONE;
@@ -1999,7 +2100,6 @@ static void test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecov
 static void test_setLoraConfig_busy_returnsBadRequest()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
-    testAdmin->deferSaves();
     const auto first =
         makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
     const auto second =
@@ -2020,7 +2120,6 @@ static void test_setLoraConfig_regionSideEffects_doNotRunBeforeSuccess()
     owner.is_licensed = true;
     config.security = meshtastic_Config_SecurityConfig_init_zero;
     gps->disable();
-    testAdmin->deferSaves();
     const auto candidate =
         makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
 
@@ -2329,6 +2428,11 @@ void setup()
     RUN_TEST(test_handleSetConfig_fromOthers_lockedPresetFromNonTrioRegionRejected);
 
     // Asynchronous LoRa config transaction
+    RUN_TEST(test_editTransaction_loraCandidate_staysInactiveUntilCommit);
+    RUN_TEST(test_editTransaction_commit_queuesOneRadioApply);
+    RUN_TEST(test_editTransaction_expiry_doesNotPersistUnappliedLora);
+    RUN_TEST(test_editTransaction_loraFailure_savesOnlyUnrelatedSegments);
+    RUN_TEST(test_menuLoRaHelper_usesValidatedAsyncRequestPath);
     RUN_TEST(test_setLoraConfig_invalidRegionRejectedBeforeTransaction);
     RUN_TEST(test_setLoraConfig_remoteInvalidRejectedBeforeTransaction);
     RUN_TEST(test_setLoraConfig_doesNotMutateOrSaveBeforeHardwareSuccess);

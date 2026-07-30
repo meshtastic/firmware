@@ -15,6 +15,7 @@
 #include "graphics/niche/Utils/FlashData.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "modules/AdminModule.h"
 #include <RadioLibInterface.h>
 #include <target_specific.h>
 #if defined(ARCH_ESP32) && HAS_WIFI
@@ -314,38 +315,25 @@ static constexpr uint8_t MAX_REGION_PRESETS = 16;
 static meshtastic_Config_LoRaConfig_ModemPreset regionPresets[MAX_REGION_PRESETS];
 static uint8_t regionPresetCount = 0;
 
+static bool requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &candidate)
+{
+    if (!adminModule || !adminModule->requestLoRaConfig(candidate, false)) {
+        LOG_WARN("Unable to queue LoRa configuration change from InkHUD menu");
+        return false;
+    }
+    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
+    return true;
+}
+
 static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
 {
     if (config.lora.region == region)
         return;
 
-    config.lora.region = region;
-
-    auto changes = SEGMENT_CONFIG;
-
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (crypto) {
-        crypto->ensurePkiKeys(config.security, owner);
-    }
-#endif
-
-    config.lora.tx_enabled = true;
-
-    initRegion();
-
-    if (myRegion && getEffectiveDutyCycle() < 100) {
-        config.lora.ignore_mqtt = true;
-    }
-
-    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-        changes |= SEGMENT_MODULECONFIG;
-    }
-    // Notify UI that changes are being applied
-    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-    service->reloadConfig(changes);
-
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    auto candidate = config.lora;
+    candidate.region = region;
+    candidate.tx_enabled = true;
+    requestMenuLoRaConfig(candidate);
 }
 
 static void applyDeviceRole(meshtastic_Config_DeviceConfig_Role role)
@@ -370,16 +358,10 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     if (config.lora.modem_preset == preset)
         return;
 
-    config.lora.use_preset = true;
-    config.lora.modem_preset = preset;
-
-    nodeDB->saveToDisk(SEGMENT_CONFIG);
-    service->reloadConfig(SEGMENT_CONFIG);
-
-    // Notify UI that changes are being applied
-    InkHUD::InkHUD::getInstance()->notifyApplyingChanges();
-
-    rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+    auto candidate = config.lora;
+    candidate.use_preset = true;
+    candidate.modem_preset = preset;
+    requestMenuLoRaConfig(candidate);
 }
 
 static void applyConfigReload(uint32_t changes = SEGMENT_CONFIG, bool reboot = false)

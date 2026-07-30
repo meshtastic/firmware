@@ -476,8 +476,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         disableBluetooth();
         LOG_INFO("Commit transaction for edited settings");
         hasOpenEditTransaction = false;
+        const int unrelatedSegments = deferredEditSegments;
         deferredEditSegments = 0;
-        saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
+        const bool hasDeferredLoRaConfig = !loRaConfigApplyPending && pendingLoRaConfig.saveWhat != 0;
+        if (hasDeferredLoRaConfig) {
+            loRaConfigApplyPending = true;
+            if (!service->requestLoRaConfig(pendingLoRaConfig.previous, pendingLoRaConfig.candidate,
+                                            LORA_CONFIG_APPLY_TIMEOUT_MS)) {
+                loRaConfigApplyPending = false;
+                pendingLoRaConfig = PreparedLoRaConfig{};
+                sendWarningAndLog("Radio configuration apply could not be queued; previous configuration retained");
+            }
+            if (unrelatedSegments)
+                saveChanges(unrelatedSegments);
+        } else {
+            saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
+        }
         flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
     }
@@ -1036,9 +1050,15 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
         return false;
 
     pendingLoRaConfig = prepared;
+    if (hasOpenEditTransaction) {
+        editTransactionActivityMs = millis();
+        return true;
+    }
+
     loRaConfigApplyPending = true;
     if (!service->requestLoRaConfig(prepared.previous, prepared.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS)) {
         loRaConfigApplyPending = false;
+        pendingLoRaConfig = PreparedLoRaConfig{};
         return false;
     }
     return true;
@@ -1125,6 +1145,7 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
     }
 
     loRaConfigApplyPending = false;
+    pendingLoRaConfig = PreparedLoRaConfig{};
     const int deferredSegments = deferredLoRaSaveSegments;
     const bool deferredReboot = deferredLoRaSaveReboot;
     const bool deferredNotify = deferredLoRaSaveNotify;
@@ -1985,6 +2006,8 @@ void AdminModule::expireStaleEditTransaction()
 
     LOG_WARN("Edit transaction abandoned for %us; committing what it applied", EDIT_TRANSACTION_IDLE_MS / 1000);
     hasOpenEditTransaction = false;
+    if (!loRaConfigApplyPending && pendingLoRaConfig.saveWhat != 0)
+        pendingLoRaConfig = PreparedLoRaConfig{};
     int segments = deferredEditSegments;
     deferredEditSegments = 0;
     // No reboot: the settings are already live in RAM and the client that would expect one is gone.

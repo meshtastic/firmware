@@ -43,6 +43,9 @@ class MeshBeaconModule
      */
     static bool reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p);
 
+    /// True while the radio is using beacon settings and the home configuration still needs restoration.
+    static bool radioConfigIsTemporary();
+
     /**
      * Associate target radio settings with an outgoing packet by its ID.
      * Sidecar holds 8 entries; evicts slot 0 on overflow.

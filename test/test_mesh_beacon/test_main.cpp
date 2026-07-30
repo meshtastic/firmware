@@ -21,6 +21,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
+#include "RadioLibInterface.h"
 #include "airtime.h"
 #include "modules/AdminModule.h"
 #include "modules/MeshBeaconModule.h"
@@ -111,6 +112,35 @@ class MeshBeaconListenerModuleTestShim : public MeshBeaconListenerModule
   public:
     using MeshBeaconListenerModule::handleReceivedProtobuf;
     using MeshBeaconListenerModule::wantPacket;
+};
+
+class ScriptedBeaconRadio : public RadioLibInterface
+{
+  public:
+    ScriptedBeaconRadio() : RadioLibInterface(nullptr, 0, 0, 0, 0) {}
+
+    bool reconfigure() override
+    {
+        temporaryStateDuringReconfigure.push_back(MeshBeaconModule::radioConfigIsTemporary());
+        reconfigureCount++;
+        return nextReconfigureResult;
+    }
+
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    void startReceive() override {}
+
+  protected:
+    void disableInterrupt() override {}
+    void enableInterrupt(void (*)()) override {}
+    int16_t getCurrentRSSI() override { return -120; }
+    bool isChannelActive() override { return false; }
+    bool isActivelyReceiving() override { return false; }
+    void addReceiveMetadata(meshtastic_MeshPacket *) override {}
+
+  public:
+    bool nextReconfigureResult = true;
+    uint32_t reconfigureCount = 0;
+    std::vector<bool> temporaryStateDuringReconfigure;
 };
 
 // ---------------------------------------------------------------------------
@@ -1338,6 +1368,67 @@ static void test_broadcaster_distinctTargets_bothSent(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, mockRouter->sentPackets.size(), "distinct targets must each be sent");
 }
 
+static meshtastic_MeshPacket makeTemporaryBeaconPacket()
+{
+    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
+    packet.id = 0x12345678;
+    MeshBeaconModule::setTargetRadioSettings(&packet, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, 1);
+    return packet;
+}
+
+static void test_meshBeacon_pendingPersistentApply_waitsForHomeRestore()
+{
+    resetConfig();
+    static const uint8_t homePsk[] = {1};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    ScriptedBeaconRadio radio;
+    const auto homeConfig = config.lora;
+    auto packet = makeTemporaryBeaconPacket();
+    auto candidate = homeConfig;
+    candidate.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW;
+    RadioConfigApplyRequest request{homeConfig, candidate, static_cast<uint32_t>(millis()), 5000};
+
+    TEST_ASSERT_FALSE(MeshBeaconModule::radioConfigIsTemporary());
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &packet));
+    TEST_ASSERT_TRUE(MeshBeaconModule::radioConfigIsTemporary());
+    TEST_ASSERT_EQUAL_UINT32(1, radio.reconfigureCount);
+    TEST_ASSERT_TRUE(radio.temporaryStateDuringReconfigure[0]);
+
+    TEST_ASSERT_TRUE(radio.requestConfigApply(&request));
+    radio.serviceConfigApply(millis());
+
+    TEST_ASSERT_FALSE(MeshBeaconModule::radioConfigIsTemporary());
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::PENDING, request.result.load());
+    TEST_ASSERT_EQUAL_UINT32(2, radio.reconfigureCount);
+    TEST_ASSERT_TRUE(radio.temporaryStateDuringReconfigure[1]);
+    TEST_ASSERT_EQUAL_MEMORY(&homeConfig, &config.lora, sizeof(homeConfig));
+
+    radio.serviceConfigApply(millis());
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
+    TEST_ASSERT_EQUAL_UINT32(3, radio.reconfigureCount);
+    MeshBeaconModule::clearTargetRadioSettings(&packet);
+}
+
+static void test_meshBeacon_failedHomeRestore_remainsTemporary()
+{
+    resetConfig();
+    static const uint8_t homePsk[] = {1};
+    installTestPrimaryChannel("Home", homePsk, sizeof(homePsk));
+    ScriptedBeaconRadio radio;
+    auto packet = makeTemporaryBeaconPacket();
+
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, &packet));
+    radio.nextReconfigureResult = false;
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr));
+    TEST_ASSERT_TRUE(MeshBeaconModule::radioConfigIsTemporary());
+
+    radio.nextReconfigureResult = true;
+    TEST_ASSERT_TRUE(MeshBeaconModule::reconfigureForBeaconTX(&radio, nullptr));
+    TEST_ASSERT_FALSE(MeshBeaconModule::radioConfigIsTemporary());
+    MeshBeaconModule::clearTargetRadioSettings(&packet);
+}
+
 } // namespace
 
 // ===========================================================================
@@ -1461,6 +1552,8 @@ BEACON_TEST_ENTRY void setup()
     RUN_TEST(test_broadcaster_targetChannelIndex_blankSlotFallsBackToPreset);
     RUN_TEST(test_broadcaster_duplicateTargets_dedupedToOnePacket);
     RUN_TEST(test_broadcaster_distinctTargets_bothSent);
+    RUN_TEST(test_meshBeacon_pendingPersistentApply_waitsForHomeRestore);
+    RUN_TEST(test_meshBeacon_failedHomeRestore_remainsTemporary);
 
     exit(UNITY_END());
 }

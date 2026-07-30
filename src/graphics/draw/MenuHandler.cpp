@@ -126,6 +126,15 @@ void launchReplyForMessage(const StoredMessage &message, bool freetext)
     }
 }
 
+bool requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &candidate)
+{
+    if (!adminModule || !adminModule->requestLoRaConfig(candidate, false)) {
+        LOG_WARN("Unable to queue LoRa configuration change from menu");
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 menuHandler::screenMenus menuHandler::menuQueue = MenuNone;
@@ -179,23 +188,8 @@ void menuHandler::OnboardMessage()
     screen->showOverlayBanner(bannerOptions);
 }
 
-static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam)
+static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool isHam, bool clearLicensedOverrides = false)
 {
-    config.lora.region = region;
-    config.lora.channel_num = 0; // Reset to default channel
-
-    // Reconcile the preset with the explicitly chosen region: a preset locked to another
-    // region would leave config.lora invalid until applyModemConfig() repairs it with
-    // error/critical-error side effects - or, for the swappable EU trio, the clamp would
-    // flip the region right back. The user picked the region, so the preset follows it.
-    const RegionInfo *newRegion = getRegion(region);
-    if (config.lora.use_preset && !newRegion->supportsPreset(config.lora.modem_preset)) {
-        LOG_INFO("Preset %s not available in %s, using default %s",
-                 DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), newRegion->name,
-                 DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
-        config.lora.modem_preset = newRegion->getDefaultPreset();
-    }
-
     if (isHam && adminModule) {
         meshtastic_HamParameters hamParams = meshtastic_HamParameters_init_zero;
         strncpy(hamParams.call_sign, "N0CALL", sizeof(hamParams.call_sign) - 1);
@@ -204,26 +198,26 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
         hamParams.frequency = config.lora.override_frequency;
         adminModule->handleSetHamMode(hamParams);
     }
-    auto changes = SEGMENT_CONFIG;
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (crypto) {
-        crypto->ensurePkiKeys(config.security, owner);
+
+    auto candidate = config.lora;
+    candidate.region = region;
+    candidate.channel_num = 0; // Reset to default channel
+    if (clearLicensedOverrides)
+        candidate.override_duty_cycle = false;
+
+    // Reconcile the preset with the explicitly chosen region: a preset locked to another
+    // region would leave config.lora invalid until applyModemConfig() repairs it with
+    // error/critical-error side effects - or, for the swappable EU trio, the clamp would
+    // flip the region right back. The user picked the region, so the preset follows it.
+    const RegionInfo *newRegion = getRegion(region);
+    if (candidate.use_preset && !newRegion->supportsPreset(candidate.modem_preset)) {
+        LOG_INFO("Preset %s not available in %s, using default %s",
+                 DisplayFormatters::getModemPresetDisplayName(candidate.modem_preset, false, true), newRegion->name,
+                 DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
+        candidate.modem_preset = newRegion->getDefaultPreset();
     }
-#endif
-    initRegion();
-    if (getEffectiveDutyCycle() < 100) {
-        config.lora.ignore_mqtt = true;
-    }
-    if (strncmp(moduleConfig.mqtt.root, default_mqtt_root, strlen(default_mqtt_root)) == 0) {
-        snprintf(moduleConfig.mqtt.root, sizeof(moduleConfig.mqtt.root), "%s/%s", default_mqtt_root, myRegion->name);
-        changes |= SEGMENT_MODULECONFIG;
-    }
-#if !MESHTASTIC_EXCLUDE_GPS
-    // Enable gps if it was previously disabled due to region not being set
-    if (gps != nullptr && !gps->isEnabled() && config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
-        gps->enable();
-#endif
-    service->reloadConfig(changes);
+
+    requestMenuLoRaConfig(candidate);
 }
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
@@ -363,10 +357,9 @@ void menuHandler::licensedToNormalConfirmMenu()
     confirmBanner.bannerCallback = [](int selected) {
         if (selected == 1) {
             owner.is_licensed = false;
-            config.lora.override_duty_cycle = false;
             service->reloadOwner(false);
         }
-        applyLoraRegion(pendingRegion, false);
+        applyLoraRegion(pendingRegion, false, selected == 1);
     };
     screen->showOverlayBanner(confirmBanner);
 }
@@ -471,8 +464,9 @@ void menuHandler::FrequencySlotPicker()
             return;
         }
 
-        config.lora.channel_num = selected;
-        service->reloadConfig(SEGMENT_CONFIG);
+        auto candidate = config.lora;
+        candidate.channel_num = selected;
+        requestMenuLoRaConfig(candidate);
     };
 
     screen->showOverlayBanner(bannerOptions);
@@ -524,11 +518,12 @@ static BannerOverlayOptions buildRegionPresetBanner()
             screen->runNow();
             return;
         }
-        config.lora.use_preset = true;
-        config.lora.modem_preset = static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(selected);
-        config.lora.channel_num = 0;        // Reset to default channel for the preset
-        config.lora.override_frequency = 0; // Clear any custom frequency
-        service->reloadConfig(SEGMENT_CONFIG);
+        auto candidate = config.lora;
+        candidate.use_preset = true;
+        candidate.modem_preset = static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(selected);
+        candidate.channel_num = 0;        // Reset to default channel for the preset
+        candidate.override_frequency = 0; // Clear any custom frequency
+        requestMenuLoRaConfig(candidate);
     };
     return bannerOptions;
 }
