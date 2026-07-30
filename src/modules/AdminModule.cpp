@@ -597,7 +597,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         nodeDB->updatePosition(node->num, r->set_fixed_position, RX_SRC_LOCAL);
         nodeDB->setLocalPosition(r->set_fixed_position);
         config.position.fixed_position = true;
-        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps != nullptr)
             gps->enable();
@@ -610,7 +610,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client got remove_fixed_position");
         nodeDB->clearLocalPosition();
         config.position.fixed_position = false;
-        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
@@ -879,6 +879,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
     bool requiresReboot = true;
+    // Config is a monolithic segment: only the lora sub-message actually affects the radio, so only
+    // that case sets radioAffected. Every other sub-message still persists SEGMENT_CONFIG but must not
+    // trigger the live SX126x reconfigure (see MeshService::reloadConfig).
+    bool radioAffected = false;
     bool loraPresetWarnPending = false;
     meshtastic_Config_LoRaConfig pendingOldLora = {}, pendingNewLora = {};
 
@@ -943,7 +947,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
             c.payload_variant.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
             config.position.fixed_position == false && c.payload_variant.position.fixed_position == false) {
             nodeDB->clearLocalPosition();
-            saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+            saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false, /*radioAffected=*/false);
         }
         config.position = c.payload_variant.position;
 
@@ -1005,6 +1009,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
 
         LOG_INFO("Set config: LoRa");
         config.has_lora = true;
+        radioAffected = true; // the only sub-message that legitimately needs a live radio reconfigure
 
         if (validatedLora.coding_rate != clampCodingRate(validatedLora.coding_rate)) {
             LOG_WARN("Invalid coding_rate %d, set to %d", validatedLora.coding_rate, LORA_CR_DEFAULT);
@@ -1228,7 +1233,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
         disableBluetooth();
     } // end of switch case which_payload_variant
 
-    saveChanges(changes, requiresReboot);
+    saveChanges(changes, requiresReboot, radioAffected);
     if (loraPresetWarnPending)
         warnOnLoraPresetChange(pendingOldLora, pendingNewLora);
     // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
@@ -1893,14 +1898,14 @@ void AdminModule::expireStaleEditTransaction()
     flushChannelWarnings();
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool radioAffected)
 {
 #ifdef PIO_UNIT_TESTING
     lastSaveWhatForTest = saveWhat;
 #endif
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
-        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
+        service->reloadConfig(saveWhat, radioAffected); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delay disk save until open transaction commits");
         editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
