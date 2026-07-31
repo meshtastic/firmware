@@ -75,7 +75,8 @@ int32_t ExternalNotificationModule::runOnce()
         uint32_t delay = EXT_NOTIFICATION_MODULE_OUTPUT_MS;
         bool isRtttlPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
-        // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
+        // audioThread->isPlaying() also services the I2S DMA, and stays true until the
+        // queued audio has drained, so keep calling it from the loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
 #endif
         if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
@@ -281,13 +282,9 @@ void ExternalNotificationModule::stopNow()
     buzzerShouldAlert = false;
     nagCycleCutoff = UINT32_MAX;
 
-#ifdef HAS_I2S
-    // GPIO0 is used as mclk for I2S audio and set to OUTPUT by the sound library
-    // T-Deck uses GPIO0 as trackball button, so restore the mode
-#if defined(T_DECK) || (defined(BUTTON_PIN) && BUTTON_PIN == 0)
-    pinMode(0, INPUT);
-#endif
-#endif
+    // No pinMode(0, INPUT) needed any more: that undid the old sound library claiming GPIO0
+    // as I2S MCLK. MeshtasticI2SOut always passes the variant's explicit DAC_I2S_MCLK, which
+    // is never 0 on any HAS_I2S board, so GPIO0 is left alone.
 }
 
 ExternalNotificationModule::ExternalNotificationModule()
