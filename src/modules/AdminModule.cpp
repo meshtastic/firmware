@@ -1192,16 +1192,16 @@ bool AdminModule::requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &inco
     auto candidate = incoming;
     StagedMenuLoRaTransition staged;
     staged.type = transition;
-    bool prospectiveLicensedOwner = owner.is_licensed;
+    bool candidateLicensed = owner.is_licensed;
 
     if (transition == MenuLoRaTransition::ENTER_LICENSED) {
-        prospectiveLicensedOwner = true;
+        candidateLicensed = true;
         candidate.override_duty_cycle = true;
         candidate.tx_enabled = false;
         strncpy(staged.ham.call_sign, "N0CALL", sizeof(staged.ham.call_sign) - 1);
         strncpy(staged.ham.short_name, "N0CL", sizeof(staged.ham.short_name));
     } else if (transition == MenuLoRaTransition::EXIT_LICENSED) {
-        prospectiveLicensedOwner = false;
+        candidateLicensed = false;
         candidate.override_duty_cycle = false;
         candidate.override_frequency = 0;
         candidate.tx_enabled = true;
@@ -1215,7 +1215,7 @@ bool AdminModule::requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &inco
         (candidate.channel_num == 0 || (previousUsesDefault && candidate.channel_num == previous.channel_num)))
         candidate.channel_num = 0;
 
-    const bool accepted = requestLoRaConfig(candidate, false, prospectiveLicensedOwner, staged);
+    const bool accepted = requestLoRaConfig(candidate, false, candidateLicensed, staged);
     if (accepted) {
         pendingLoRaConfig.preserveDefaultFrequencySlot = pendingLoRaConfig.usesDefaultFrequencySlot;
         pendingChannelConfig.preserveDefaultFrequencySlot = pendingLoRaConfig.usesDefaultFrequencySlot;

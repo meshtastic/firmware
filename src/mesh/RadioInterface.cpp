@@ -1007,7 +1007,7 @@ bool RadioInterface::claimConfigApply(RadioConfigApplyRequest *&request)
     return true;
 }
 
-void RadioInterface::deferConfigApply(RadioConfigApplyRequest *request)
+void RadioInterface::deferConfigApply(const RadioConfigApplyRequest *request)
 {
     assert(configApplyRequest.load(std::memory_order_acquire) == request);
     ConfigApplyPhase expected = ConfigApplyPhase::IN_PROGRESS;

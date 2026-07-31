@@ -174,7 +174,7 @@ RadioConfigApplyResult MeshService::pollLoRaConfigApply() const
         return RadioConfigApplyResult::PENDING;
 
     const RadioConfigApplyRequest &request = loRaConfigApplyRequest;
-    RadioInterface *radio = router ? router->getRadioIface() : nullptr;
+    const RadioInterface *radio = router ? router->getRadioIface() : nullptr;
     if (!radio || !radio->ownsConfigApplyRequest(request))
         return RadioConfigApplyResult::INTERFACE_REPLACED;
     return radio->pollConfigApply(request);

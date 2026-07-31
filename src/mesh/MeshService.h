@@ -81,7 +81,7 @@ class MeshService
     uint32_t oldFromNum = 0;
 
     enum class LoRaConfigApplyState : uint8_t { IDLE, PREPARING, PENDING, FINALIZING };
-    RadioConfigApplyRequest loRaConfigApplyRequest;
+    RadioConfigApplyRequest loRaConfigApplyRequest{};
     std::atomic<LoRaConfigApplyState> loRaConfigApplyState{LoRaConfigApplyState::IDLE};
 
   public:

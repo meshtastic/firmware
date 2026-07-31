@@ -154,8 +154,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool messageIsRequest(const meshtastic_AdminMessage *r);
     struct PreparedLoRaConfig {
         static constexpr size_t MAX_DELAYED_DIAGNOSTICS = RadioInterface::MAX_LORA_CONFIG_DIAGNOSTICS;
-        meshtastic_Config_LoRaConfig previous;
-        meshtastic_Config_LoRaConfig candidate;
+        meshtastic_Config_LoRaConfig previous = meshtastic_Config_LoRaConfig_init_zero;
+        meshtastic_Config_LoRaConfig candidate = meshtastic_Config_LoRaConfig_init_zero;
         RadioInterface::LoRaConfigDiagnostic delayedDiagnostics[MAX_DELAYED_DIAGNOSTICS] = {};
         int saveWhat = 0;
         char mqttRootBefore[32] = {};
@@ -250,7 +250,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool pendingLicenseWarning = false;   // a licensed-mode notice is queued for this transaction
 
     static constexpr uint32_t LORA_CONFIG_APPLY_TIMEOUT_MS = 60 * 1000;
-    PreparedLoRaConfig pendingLoRaConfig;
+    PreparedLoRaConfig pendingLoRaConfig{};
     StagedMenuLoRaTransition pendingMenuLoRaTransition;
     PendingChannelConfig pendingChannelConfig;
     PendingOwnerConfig pendingOwnerConfig;

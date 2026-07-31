@@ -17,10 +17,10 @@ enum class RadioConfigApplyResult : uint8_t {
 };
 
 struct RadioConfigApplyRequest {
-    meshtastic_Config_LoRaConfig previous;
-    meshtastic_Config_LoRaConfig candidate;
-    uint32_t requestedAtMsec;
-    uint32_t timeoutMsec;
+    meshtastic_Config_LoRaConfig previous = meshtastic_Config_LoRaConfig_init_zero;
+    meshtastic_Config_LoRaConfig candidate = meshtastic_Config_LoRaConfig_init_zero;
+    uint32_t requestedAtMsec = 0;
+    uint32_t timeoutMsec = 0;
     std::atomic<RadioConfigApplyResult> result{RadioConfigApplyResult::IDLE};
     bool previousLicensed = false;
     bool candidateLicensed = false;

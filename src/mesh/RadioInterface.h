@@ -126,7 +126,7 @@ class RadioInterface
 
     uint32_t computeSlotTimeMsec(const RegionInfo *region = nullptr);
     bool claimConfigApply(RadioConfigApplyRequest *&request);
-    void deferConfigApply(RadioConfigApplyRequest *request);
+    void deferConfigApply(const RadioConfigApplyRequest *request);
     void finishConfigApply(RadioConfigApplyRequest *request, RadioConfigApplyResult result);
     RadioConfigApplyResult applyConfigWithRollback(RadioConfigApplyRequest &request);
     virtual void holdConfigApplyReception() { configApplyReceptionHeld.store(true, std::memory_order_release); }
