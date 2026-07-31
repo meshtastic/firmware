@@ -2615,22 +2615,6 @@ static void test_setChannel_pskChange_doesNotReloadRadio()
     TEST_ASSERT_EQUAL_INT(0, counter.count);
 }
 
-static void test_setConfigLora_liveHardwareFields_dontReloadRadio()
-{
-    usePresetLongFast();
-    ConfigChangedCounter counter;
-    counter.observe(&service->configChanged);
-
-    meshtastic_Config c = meshtastic_Config_init_zero;
-    c.which_payload_variant = meshtastic_Config_lora_tag;
-    c.payload_variant.lora = config.lora;
-    c.payload_variant.lora.tx_enabled = !config.lora.tx_enabled;
-    c.payload_variant.lora.pa_fan_disabled = !config.lora.pa_fan_disabled;
-    sendSetConfig(c);
-
-    TEST_ASSERT_EQUAL_INT(0, counter.count);
-}
-
 static void test_setConfigLora_noop_doesNotReloadRadio()
 {
     usePresetLongFast();
@@ -2647,24 +2631,58 @@ static void test_setConfigLora_noop_doesNotReloadRadio()
     TEST_ASSERT_EQUAL_INT(0, counter.count);
 }
 
+// A LoRa field the modem derives nothing from, and the mutation that changes it. Driven one field
+// per set: bundling them into a single message passes as long as *none* fires, so a field that gets
+// mis-classified later hides behind its neighbours instead of naming itself.
+struct LoraNonRadioField {
+    const char *name;
+    void (*mutate)(meshtastic_Config_LoRaConfig &);
+};
+
+// Persisted policy: read by the router, MQTT and duty-cycle logic, never by RadioInterface.
+static const LoraNonRadioField loraPolicyFields[] = {
+    {"hop_limit", [](meshtastic_Config_LoRaConfig &l) { l.hop_limit = l.hop_limit + 1; }},
+    {"ignore_mqtt", [](meshtastic_Config_LoRaConfig &l) { l.ignore_mqtt = !l.ignore_mqtt; }},
+    {"config_ok_to_mqtt", [](meshtastic_Config_LoRaConfig &l) { l.config_ok_to_mqtt = !l.config_ok_to_mqtt; }},
+    {"override_duty_cycle", [](meshtastic_Config_LoRaConfig &l) { l.override_duty_cycle = !l.override_duty_cycle; }},
+    {"ignore_incoming",
+     [](meshtastic_Config_LoRaConfig &l) {
+         l.ignore_incoming_count = 1;
+         l.ignore_incoming[0] = 0x12345678;
+     }},
+};
+
+// Applied live by the admin setter itself, so a full modem reconfigure would be redundant.
+static const LoraNonRadioField loraLiveHardwareFields[] = {
+    {"tx_enabled", [](meshtastic_Config_LoRaConfig &l) { l.tx_enabled = !l.tx_enabled; }},
+    {"pa_fan_disabled", [](meshtastic_Config_LoRaConfig &l) { l.pa_fan_disabled = !l.pa_fan_disabled; }},
+};
+
+static void assertLoraFieldsDoNotReloadRadio(const LoraNonRadioField *fields, size_t count)
+{
+    for (size_t i = 0; i < count; i++) {
+        usePresetLongFast(); // reset, so the previous iteration's write doesn't carry over
+        ConfigChangedCounter counter;
+        counter.observe(&service->configChanged);
+
+        meshtastic_Config c = meshtastic_Config_init_zero;
+        c.which_payload_variant = meshtastic_Config_lora_tag;
+        c.payload_variant.lora = config.lora;
+        fields[i].mutate(c.payload_variant.lora);
+        sendSetConfig(c);
+
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, counter.count, fields[i].name);
+    }
+}
+
 static void test_setConfigLora_policyOnlyChange_doesNotReloadRadio()
 {
-    usePresetLongFast();
-    ConfigChangedCounter counter;
-    counter.observe(&service->configChanged);
+    assertLoraFieldsDoNotReloadRadio(loraPolicyFields, sizeof(loraPolicyFields) / sizeof(loraPolicyFields[0]));
+}
 
-    meshtastic_Config c = meshtastic_Config_init_zero;
-    c.which_payload_variant = meshtastic_Config_lora_tag;
-    c.payload_variant.lora = config.lora;
-    c.payload_variant.lora.hop_limit = config.lora.hop_limit + 1;
-    c.payload_variant.lora.ignore_mqtt = !config.lora.ignore_mqtt;
-    c.payload_variant.lora.config_ok_to_mqtt = !config.lora.config_ok_to_mqtt;
-    c.payload_variant.lora.override_duty_cycle = !config.lora.override_duty_cycle;
-    c.payload_variant.lora.ignore_incoming_count = 1;
-    c.payload_variant.lora.ignore_incoming[0] = 0x12345678;
-    sendSetConfig(c);
-
-    TEST_ASSERT_EQUAL_INT(0, counter.count);
+static void test_setConfigLora_liveHardwareFields_dontReloadRadio()
+{
+    assertLoraFieldsDoNotReloadRadio(loraLiveHardwareFields, sizeof(loraLiveHardwareFields) / sizeof(loraLiveHardwareFields[0]));
 }
 
 static void test_setConfigLora_realChange_triggersRadioReload()

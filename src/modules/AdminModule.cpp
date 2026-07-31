@@ -15,7 +15,8 @@
 #include <ErriezCRC32.h>
 #include <FSCommon.h>
 #include <Throttle.h>
-#include <ctype.h> // for better whitespace handling
+#include <ctype.h>     // for better whitespace handling
+#include <pb_encode.h> // protobufsEqual() reads the stream result, which pb_encode_to_bytes() hides
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "MeshtasticOTA.h"
 #endif
@@ -97,13 +98,26 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
     }
 }
 
+// Compare two messages by their canonical encoding. Fails toward "changed": every caller uses
+// equality to *skip* a reboot or a radio reload, so a comparison we can't complete must fall
+// through to doing the work rather than silently suppressing it.
+//
+// This encodes directly instead of calling pb_encode_to_bytes(), because that helper returns 0
+// both for a failed encode and for a message whose every field is at its default - and the latter
+// is a legitimate comparison here (a zeroed SecurityConfig encodes to zero bytes). Reading the
+// stream result tells the two apart.
 template <size_t MaxSize> static NOINLINE bool protobufsEqual(const pb_msgdesc_t *fields, const void *left, const void *right)
 {
     // NOINLINE limits peak stack use to this frame: two MaxSize encode buffers.
     uint8_t leftBytes[MaxSize], rightBytes[MaxSize];
-    const size_t leftSize = pb_encode_to_bytes(leftBytes, sizeof(leftBytes), fields, left);
-    const size_t rightSize = pb_encode_to_bytes(rightBytes, sizeof(rightBytes), fields, right);
-    return leftSize == rightSize && memcmp(leftBytes, rightBytes, leftSize) == 0;
+    pb_ostream_t leftStream = pb_ostream_from_buffer(leftBytes, sizeof(leftBytes));
+    pb_ostream_t rightStream = pb_ostream_from_buffer(rightBytes, sizeof(rightBytes));
+    // MaxSize is the nanopb-generated _size for the message, so this cannot fail for want of room.
+    if (!pb_encode(&leftStream, fields, left) || !pb_encode(&rightStream, fields, right)) {
+        LOG_ERROR("Can't encode config for comparison; assuming it changed");
+        return false;
+    }
+    return leftStream.bytes_written == rightStream.bytes_written && memcmp(leftBytes, rightBytes, leftStream.bytes_written) == 0;
 }
 
 static NOINLINE bool loraRadioConfigChanged(const meshtastic_Config_LoRaConfig &oldConfig,
@@ -1555,7 +1569,13 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     const ChannelIndex oldPrimaryIndex = channels.getPrimaryIndex();
+    // Snapshot the primary name before setChannel() overwrites it. getName() returns either the
+    // stored name or, for an unnamed channel, a modem-preset display name ("MediumTurbo", 11 chars,
+    // is the longest today), so this is sized well clear of both. Truncation here would compare
+    // equal on a name change and silently skip a needed radio reload, so keep the headroom.
     char oldPrimaryName[32];
+    static_assert(sizeof(meshtastic_ChannelSettings::name) <= sizeof(oldPrimaryName),
+                  "oldPrimaryName must hold any stored channel name without truncating");
     snprintf(oldPrimaryName, sizeof(oldPrimaryName), "%s", channels.getName(oldPrimaryIndex));
 
     channels.setChannel(cc);
@@ -2024,6 +2044,14 @@ int32_t AdminModule::runOnce()
     if (!hasOpenEditTransaction)
         return disable();
 
+    // Sleep out whatever is left of the idle window. Subtraction-first, so this is exact across the
+    // millis() wrap; Throttle has no "time remaining" helper, only the boolean predicates, and the
+    // remainder is what OSThread wants back.
+    //
+    // The 1ms fallback is not dead: expireStaleEditTransaction() above read millis() a moment
+    // earlier, so the window can tip over between its read and this one, leaving the transaction
+    // open with elapsed >= the window. Without the guard that subtraction underflows to ~49.7 days.
+    // Rescheduling 1ms out lets the next tick see it as expired and close it.
     const uint32_t elapsed = millis() - editTransactionActivityMs;
     return elapsed < EDIT_TRANSACTION_IDLE_MS ? EDIT_TRANSACTION_IDLE_MS - elapsed : 1;
 }
