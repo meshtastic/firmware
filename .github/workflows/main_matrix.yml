@@ -52,12 +52,6 @@ permissions: read-all
 
 jobs:
   setup:
-    strategy:
-      fail-fast: true
-      matrix:
-        arch:
-          - all
-          - check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -93,25 +87,24 @@ jobs:
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
           #
-          # Narrow BOTH the build ('all') and static-analysis ('check') legs to the
-          # PR's affected variants. An absent/empty file (non-PR, 'ci:full-build'
-          # label, or diff failure) leaves EXTRA empty => the full set for that leg.
+          # This single list drives both the build and the check jobs, so narrowing to
+          # the PR's affected variants narrows both. An absent/empty file (non-PR,
+          # 'ci:full-build' label, or diff failure) leaves EXTRA empty => the full set.
           CHANGED=.github/outputs/all_modified_files.txt
           EXTRA=""
           if [[ -s "$CHANGED" ]]; then
             EXTRA="--changed-files $CHANGED"
           fi
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr $EXTRA)
+            TARGETS=$(./bin/generate_ci_matrix.py all --level pr $EXTRA)
           else
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+            TARGETS=$(./bin/generate_ci_matrix.py all)
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
-          echo "${{matrix.arch}}=$TARGETS" >> $GITHUB_OUTPUT
+          echo "all=$TARGETS" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
-      check: ${{ steps.jsonStep.outputs.check }}
 
   version:
     runs-on: ubuntu-latest
@@ -130,14 +123,16 @@ jobs:
 
   check:
     needs: setup
+    # Same board list as `build`: every board in the matrix is statically analysed, so
+    # the checked set can never drift from the built set.
     strategy:
       fail-fast: false
       matrix:
-        check: ${{ fromJson(needs.setup.outputs.check) }}
-    # Runs on GitHub-hosted runners so checks don't compete with builds for the
-    # self-hosted 'arctastic' pool (which builds use).
-    runs-on: ubuntu-latest
-    if: github.repository_owner == 'meshtastic' && github.event_name != 'workflow_dispatch' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
+        check: ${{ fromJson(needs.setup.outputs.all) }}
+    # Use 'arctastic' self-hosted runner pool when running checks in the main repo
+    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
+    # Only run checks for PRs and Merge Queue runs.
+    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
     steps:
       - uses: actions/checkout@v7
         with:

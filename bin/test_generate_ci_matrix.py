@@ -39,7 +39,6 @@ def env(
     board,
     platform,
     level="release",
-    check=False,
     include_dirs=None,
     def_dir=None,
     src_platforms=None,
@@ -48,7 +47,6 @@ def env(
     return {
         "ci": {"board": board, "platform": platform},
         "board_level": level,
-        "board_check": check,
         "include_dirs": include_dirs if include_dirs is not None else [],
         "def_dir": def_dir,
         "src_platforms": src_platforms if src_platforms is not None else [],
@@ -94,7 +92,6 @@ def universe():
             "heltec-v3",
             "esp32s3",
             level="pr",
-            check=True,
             include_dirs=["variants/esp32s3/heltec_v3"],
             def_dir="variants/esp32s3/heltec_v3",
             src_platforms=_sp("esp32"),
@@ -121,7 +118,6 @@ def universe():
             "rak4631",
             "nrf52840",
             level="pr",
-            check=True,
             include_dirs=["variants/nrf52840/rak4631"],
             def_dir="variants/nrf52840/rak4631",
             src_platforms=_sp("nrf52"),
@@ -374,10 +370,22 @@ def test_build_outlist_full_pr_set_when_not_narrowed():
     assert boards == {"esp32-pr-rep", "heltec-v3", "rak4631", "rpipico", "rak11310"}
 
 
-def test_build_outlist_check_leg_full_when_not_narrowed():
-    """The check leg (selected=None) yields board_check && pr envs."""
-    out = gcm.build_outlist(universe(), "check", ["pr"], selected=None)
-    assert {e["board"] for e in out} == {"heltec-v3", "rak4631"}
+def test_single_matrix_drives_build_and_check():
+    """There is one matrix: the workflow feeds the same list to build and check.
+
+    The old ``board_check``-gated 'check' selector is gone, so no separate call can
+    drift from the build set. 'check' is now just an unrecognized platform name and
+    matches nothing, which is what keeps a stale caller from quietly building a
+    hand-curated subset."""
+    for level in (["pr"], ["pr", "extra"], []):
+        built = gcm.build_outlist(universe(), "all", level, selected=None)
+        assert gcm.build_outlist(universe(), "check", level, selected=None) == []
+        assert built, "the build matrix must never be empty"
+
+
+def test_no_env_carries_board_check_metadata():
+    """The synthetic universe mirrors load_all_envs' entry shape: no board_check key."""
+    assert all("board_check" not in e for e in universe())
 
 
 def test_platform_src_map_from_envs_derives_family_grouping():

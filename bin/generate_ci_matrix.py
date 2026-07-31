@@ -3,9 +3,14 @@
 """Generate the CI matrix.
 
 Enumerates every PlatformIO environment and prints a JSON list of
-``{"board", "platform"}`` entries for the requested selector ("all", "check", or a
-specific arch), honoring the per-env ``board_level`` tiers (``pr`` / ``release`` /
-``extra``).
+``{"board", "platform"}`` entries for the requested selector ("all" or a specific
+arch), honoring the per-env ``board_level`` tiers (``pr`` / ``release`` / ``extra``).
+
+There is a single matrix: the workflow runs this once and feeds the same board list to
+both the build and the static-analysis (``pio check``) legs, so every board that is
+built is also checked. (There is no separate ``board_check`` opt-in any more - it used
+to gate a second, hand-curated ``check`` selector that silently diverged from the
+build matrix.)
 
 On pull requests the workflow additionally passes ``--changed-files``: the matrix is
 then narrowed to just the environments a PR's changed files can affect (see
@@ -173,7 +178,7 @@ def board_ini_globs(cfg=None):
 def load_all_envs():
     """Load every PlatformIO env with the metadata selection/filtering need.
 
-    Each entry: {"ci": {"board", "platform"}, "board_level", "board_check",
+    Each entry: {"ci": {"board", "platform"}, "board_level",
     "include_dirs": [repo-relative variants dirs from -I], "def_dir": <repo-rel dir>,
     "src_platforms": [platform/<subdir> names this env compiles]}. The PlatformIO
     import is deferred here so the rest of this module stays import-safe for tests.
@@ -202,10 +207,6 @@ def load_all_envs():
             sys.exit(1)
         bsf = cfg.get(f"env:{pio_env}", "build_src_filter", default=[])
         bsf_text = " ".join(bsf) if isinstance(bsf, list) else str(bsf or "")
-        board_check = (
-            cfg.get(f"env:{pio_env}", "board_check", default="false").strip().lower()
-            == "true"
-        )
         board_level = cfg.get(f"env:{pio_env}", "board_level", default=None)
         # Intentionally fail on a missing or unrecognized level: every env must opt in
         # explicitly, so a new variant can't silently drop out of (or into) the matrix.
@@ -221,7 +222,6 @@ def load_all_envs():
             {
                 "ci": {"board": pio_env, "platform": env_platform},
                 "board_level": board_level,
-                "board_check": board_check,
                 "include_dirs": include_dirs,
                 "def_dir": defdir.get(pio_env),
                 "src_platforms": sorted(set(PLATFORM_INCL_RE.findall(bsf_text))),
@@ -353,21 +353,9 @@ def select_changed(
 def build_outlist(all_envs, platform, level, selected):
     """Apply the platform / board_level filters (and optional narrowing) to envs."""
     outlist = []
-    want_check = "check" in platform
     for env in all_envs:
         ci = env["ci"]
-        if want_check:
-            if not env["board_check"]:
-                continue
-            if selected is not None and ci["board"] not in selected:
-                continue
-            if "pr" in level:
-                if env["board_level"] == "pr":
-                    outlist.append(ci)
-            else:
-                outlist.append(ci)
-            continue
-        # Filter (non-check) builds by platform.
+        # Filter builds by platform.
         if not (platform == "all" or platform == ci["platform"]):
             continue
         if selected is not None:
