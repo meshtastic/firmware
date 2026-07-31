@@ -107,7 +107,7 @@ jobs:
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' && github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'workflow_dispatch' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -132,7 +132,7 @@ jobs:
       platform: ${{ matrix.build.platform }}
 
   build-debian-src:
-    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
     uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
@@ -140,7 +140,7 @@ jobs:
     secrets: inherit
 
   MacOS:
-    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +155,7 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
     strategy:
       fail-fast: false
       matrix:
@@ -167,14 +167,14 @@ jobs:
     # secrets: inherit
 
   package-pio-deps-native-tft:
-    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name == 'workflow_dispatch' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/package_pio_deps.yml
     with:
       pio_env: native-tft
     secrets: inherit
 
   test-native:
-    if: ${{ !contains(github.ref_name, 'event/') && github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
     permissions: # Needed for dorny/test-reporter.
       contents: read
       actions: read
@@ -182,7 +182,7 @@ jobs:
     uses: ./.github/workflows/test_native.yml
 
   build-wasm:
-    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
     # Build the WebAssembly portduino node ([env:native-wasm]) as part of normal CI,
     # like the other platforms. It's a dedicated job (not a row in the `build`
     # matrix) because its artifact is meshnode.{mjs,wasm} - not a flashable
@@ -191,7 +191,7 @@ jobs:
     uses: ./.github/workflows/build_portduino_wasm.yml
 
   docker:
-    if: ${{ !contains(github.ref_name, 'event/') && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true' && !contains(github.ref_name, 'event/')
     permissions: # Needed for pushing to GHCR.
       contents: read
       packages: write
@@ -209,8 +209,32 @@ jobs:
       pio_env: ${{ matrix.pio_env }}
       push: false
 
+  # Single, stable status check for branch protection.
+  # Always runs and passes only if every build and check that ran succeeded.
+  # Consumed in PRs and Merge Queue
+  ci-gate:
+    if: always()
+    needs: [build, check]
+    runs-on: ubuntu-slim
+    steps:
+      - name: Verify build and check results
+        run: |
+          echo "build=${{ needs.build.result }} check=${{ needs.check.result }}"
+          if [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "::error::One or more firmware builds failed, were cancelled, or did not run."
+            exit 1
+          fi
+          case "${{ needs.check.result }}" in
+            success | skipped) ;;
+            *)
+              echo "::error::One or more checks failed or were cancelled (${{ needs.check.result }})."
+              exit 1
+              ;;
+          esac
+
   gather-artifacts:
-    if: github.repository == 'meshtastic/firmware'
+    # Only run on Release (workflow_dispatch) and Nightly (schedule) runs, not on PRs or merge_group runs.
+    if: github.repository_owner == 'meshtastic' && contains(fromJSON('["workflow_dispatch", "schedule"]'), github.event_name)
     strategy:
       fail-fast: false
       matrix:
@@ -284,7 +308,7 @@ jobs:
           retention-days: 30
 
   firmware-size-report:
-    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
     continue-on-error: true
     permissions:
       contents: read
@@ -408,7 +432,7 @@ jobs:
   # exceeds its static RAM (.data+.bss) or flash budget. Kept separate from
   # firmware-size-report, which is informational and continue-on-error.
   size-budget-gate:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
     permissions:
       contents: read
       actions: read
@@ -437,7 +461,7 @@ jobs:
     permissions: # Needed for 'gh release upload'.
       contents: write
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' && github.event.inputs.nightly != 'true' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
@@ -522,7 +546,7 @@ jobs:
 
       - name: Add sources to GitHub Release
         # Only run when targeting master branch with workflow_dispatch
-        if: ${{ github.ref_name == 'master' }}
+        if: github.ref_name == 'master'
         run: |
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{ needs.version.outputs.long }}.json
           gh release upload v${{ needs.version.outputs.long }} ./output/meshtasticd-${{ needs.version.outputs.deb }}-src.zip
@@ -546,7 +570,7 @@ jobs:
           - rp2350
           - stm32
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.repository == 'meshtastic/firmware' && github.event.inputs.nightly != 'true' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     needs: [release-artifacts, version]
     steps:
       - name: Checkout
@@ -589,7 +613,7 @@ jobs:
 
       - name: Add bins and debug elfs to GitHub Release
         # Only run when targeting master branch with workflow_dispatch
-        if: ${{ github.ref_name == 'master' }}
+        if: github.ref_name == 'master'
         run: |
           gh release upload v${{ needs.version.outputs.long }} ./firmware-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
           gh release upload v${{ needs.version.outputs.long }} ./debug-elfs-${{matrix.arch}}-${{ needs.version.outputs.long }}.zip
@@ -598,7 +622,7 @@ jobs:
 
   publish-firmware:
     runs-on: ubuntu-24.04
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true' }}
+    if: github.repository_owner == 'meshtastic' && github.event_name == 'workflow_dispatch' && github.event.inputs.nightly != 'true'
     needs: [release-firmware, version]
     env:
       targets: |-
@@ -657,7 +681,7 @@ jobs:
   # folder's release_notes.md is maintained by hand and deliberately left untouched.
   publish-nightly:
     runs-on: ubuntu-24.04
-    if: ${{ (github.event_name == 'schedule' || github.event.inputs.nightly == 'true') && github.repository == 'meshtastic/firmware' }}
+    if: github.repository_owner == 'meshtastic' && (github.event_name == 'schedule' || github.event.inputs.nightly == 'true')
     needs: [setup, version, gather-artifacts]
     env:
       targets: |-
