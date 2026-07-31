@@ -566,7 +566,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
         return powerHAL_isVBUSConnected();
 #endif
         return getBattVoltage() > chargingVolt;
@@ -1401,6 +1401,22 @@ bool Power::axpChipInit()
             PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_VBACKUP);
+        } else if (HW_VENDOR == meshtastic_HardwareModel_TBEAM_BPF) {
+            // T-Beam BPF rail map (per schematic LilyGo_TBeam_BPF r2025-05-08):
+            //   DCDC1  -> ESP32 + OLED 3V3 (always on, protected)
+            //   ALDO2  -> MicroSD 3V3    (OFF at reset, must enable)
+            //   ALDO4  -> L76K GNSS 3V3  (OFF at reset, must enable)
+            //   ALDO1/3, BLDO1/2, DLDO1 -> user headers / unused at boot, leave at reset defaults.
+            // LoRa power is outside the PMU (external P-MOSFET switched by RF95_POWER_EN / IO16).
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO4);
+
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+            // Make sure nothing's driving into an unused rail
+            PMU->disablePowerOutput(XPOWERS_DCDC5);
+            PMU->disablePowerOutput(XPOWERS_DLDO1);
         }
 
         // disable all axp chip interrupt

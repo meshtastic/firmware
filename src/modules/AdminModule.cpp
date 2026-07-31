@@ -69,7 +69,6 @@
 #endif
 
 AdminModule *adminModule;
-bool hasOpenEditTransaction;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 static bool licensedIdentityWillMigrate()
@@ -240,6 +239,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             return handled;
         }
     }
+    // Before the switch, so every case below sees consistent transaction state.
+    expireStaleEditTransaction();
+
     switch (r->which_payload_variant) {
 
 #ifdef MESHTASTIC_ENCRYPTED_STORAGE
@@ -481,12 +483,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
         LOG_INFO("Begin transaction for editing settings");
         hasOpenEditTransaction = true;
+        editTransactionActivityMs = millis();
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
         disableBluetooth();
         LOG_INFO("Commit transaction for edited settings");
         hasOpenEditTransaction = false;
+        deferredEditSegments = 0;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
         flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
@@ -1875,6 +1879,23 @@ void AdminModule::reboot(int32_t seconds)
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
+// Without this, a commit that never arrives leaves the transaction open forever and every later
+// config write from any client is applied, acknowledged, and then never saved.
+void AdminModule::expireStaleEditTransaction()
+{
+    if (!hasOpenEditTransaction || Throttle::isWithinTimespanMs(editTransactionActivityMs, EDIT_TRANSACTION_IDLE_MS))
+        return;
+
+    LOG_WARN("Edit transaction abandoned for %us; committing what it applied", EDIT_TRANSACTION_IDLE_MS / 1000);
+    hasOpenEditTransaction = false;
+    int segments = deferredEditSegments;
+    deferredEditSegments = 0;
+    // No reboot: the settings are already live in RAM and the client that would expect one is gone.
+    if (segments)
+        saveChanges(segments, false);
+    flushChannelWarnings();
+}
+
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
 #ifdef PIO_UNIT_TESTING
@@ -1885,6 +1906,8 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delay save of changes to disk until the open transaction is committed");
+        editTransactionActivityMs = millis(); // still in use, so not the abandoned kind we time out
+        deferredEditSegments |= saveWhat;
     }
     if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);

@@ -1574,6 +1574,16 @@ static void sendCommitEdit()
     sendAdmin(m);
 }
 
+// An admin message that changes nothing. It answers, so drain the reply or the packet pool leaks.
+static void sendGetDeviceMetadata()
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_request_tag;
+    m.get_device_metadata_request = true;
+    sendAdmin(m);
+    testAdmin->drainReply();
+}
+
 // Preset = LongFast on US, unlicensed owner. "LongFast" is the display name we compare against.
 static void usePresetLongFast()
 {
@@ -1638,6 +1648,53 @@ static void test_warn_transaction_singleChannel_keepsSpecificMessage()
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
     TEST_ASSERT_EQUAL_INT(0, warningsContaining("on channels"));
+}
+
+// An idle transaction is retired by the next admin message, flushing the warnings it held.
+static void test_editTransaction_abandoned_isRetiredOnNextAdminMessage()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    // Deferred, exactly as before: nothing emitted while the transaction looks alive.
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+    TEST_ASSERT_TRUE(testAdmin->editTransactionOpen());
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata(); // any later admin message, from any client
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
+}
+
+// A write arriving after abandonment is saved, not deferred to a commit that never comes.
+static void test_editTransaction_abandoned_laterWriteIsNoLongerDeferred()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    testAdmin->ageEditTransaction();
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+
+    // The write itself retired the stale transaction, so its own warning is emitted immediately.
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
+}
+
+// A transaction still in use is left alone: each write refreshes the window.
+static void test_editTransaction_active_isNotRetired()
+{
+    usePresetLongFast();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "long fast", DEFAULT_KEY, 1));
+
+    TEST_ASSERT_TRUE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+
+    sendCommitEdit();
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("There may be name issues on channels 0, 1"));
 }
 
 static void test_warn_license_noTransaction_emittedImmediately()
@@ -1801,6 +1858,9 @@ void setup()
     RUN_TEST(test_warn_cleanChannel_noMessage);
     RUN_TEST(test_warn_transaction_multipleChannels_singleCoalescedMessage);
     RUN_TEST(test_warn_transaction_singleChannel_keepsSpecificMessage);
+    RUN_TEST(test_editTransaction_abandoned_isRetiredOnNextAdminMessage);
+    RUN_TEST(test_editTransaction_abandoned_laterWriteIsNoLongerDeferred);
+    RUN_TEST(test_editTransaction_active_isNotRetired);
     RUN_TEST(test_warn_license_noTransaction_emittedImmediately);
     RUN_TEST(test_warn_license_transaction_coalescedToSingleMessage);
 

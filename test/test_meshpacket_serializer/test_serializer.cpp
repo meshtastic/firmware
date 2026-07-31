@@ -19,6 +19,9 @@ void test_telemetry_environment_metrics_complete_coverage();
 void test_telemetry_environment_metrics_unset_fields();
 void test_encrypted_packet_serialization();
 void test_empty_encrypted_packet();
+void test_timestamp_present_when_has_rx_time();
+void test_timestamp_zeroed_when_rx_time_absent();
+void test_encrypted_timestamp_zeroed_when_rx_time_absent();
 
 void setup()
 {
@@ -51,6 +54,11 @@ void setup()
     // Encrypted packet test
     RUN_TEST(test_encrypted_packet_serialization);
     RUN_TEST(test_empty_encrypted_packet);
+
+    // rx_time explicit-presence tests
+    RUN_TEST(test_timestamp_present_when_has_rx_time);
+    RUN_TEST(test_timestamp_zeroed_when_rx_time_absent);
+    RUN_TEST(test_encrypted_timestamp_zeroed_when_rx_time_absent);
 
     UNITY_END();
 }
