@@ -445,6 +445,8 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     passkeyShowing = true;
 
     if (match_request) {
+        // TODO(deadline-type): a deadline built inline from bare millis(), never stored - the case
+        // no constructor helper can catch, and the argument for a type rather than a factory.
         uint32_t start_time = millis();
         while (!Throttle::deadlinePassed(start_time + 30000)) {
             if (!Bluefruit.connected(conn_handle))

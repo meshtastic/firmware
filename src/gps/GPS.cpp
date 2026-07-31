@@ -1571,6 +1571,8 @@ int32_t GPS::runOnce()
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
                 // Same clock the Throttle evaluation reads, and never the "no hold" sentinel.
+                // TODO(deadline-type): this remap is what Deadline::in() would own; fixHoldInForce()
+                // and holdJustExpired() are the two readings armed() would keep separate.
                 const uint32_t holdEnds = Time::getMillis() + holdTime;
                 fixHoldEnds = holdEnds == 0 ? 1 : holdEnds;
 #ifdef GPS_DEBUG

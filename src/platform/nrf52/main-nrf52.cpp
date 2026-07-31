@@ -300,6 +300,7 @@ extern "C" void lfs_assert(const char *reason)
     // 0 means no backoff armed yet (first-ever corruption) - test that before the elapsed check,
     // since deadlinePassed(0) only reads as passed for the first half of each wrap cycle and a miss
     // here would delay() for weeks.
+    // TODO(deadline-type): armed() would carry this guard, and the delay() below is why it matters.
     if (millis_until_formatting_again != 0 && !Throttle::deadlinePassed(millis_until_formatting_again)) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
         const long millis_remain = millis_until_formatting_again - millis();

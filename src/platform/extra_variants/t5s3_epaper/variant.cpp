@@ -188,6 +188,8 @@ class SideKeyInterruptThread : public concurrency::OSThread
         // 0 means no block armed. deadlinePassed(0) only reads as passed for the first half of
         // each millis() wrap cycle, so a device that never light-sleeps would falsely stay
         // blocked for ~24.8 days every ~49.7 days without this guard.
+        // TODO(deadline-type): the same guard is respelled at three sites in this file, plus
+        // suppressUntilMs below - four copies of what armed() would say once.
         if (touchResumeBlockUntilMs != 0 && !Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
             resetStateAndStop();
             return OSThread::disable();

@@ -81,6 +81,8 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
         // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
         // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
+        // TODO(deadline-type): isNagging is armed() kept in a second variable, and UINT32_MAX is a
+        // third spelling of inactive - converting this site is what would unify the conventions.
         const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
         if (nagWindowExpired && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
@@ -428,6 +430,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                                                     (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
 
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
+                // TODO(deadline-type): hand-built off bare millis(), the arm site Deadline::in()
+                // would own - it can land on UINT32_MAX, which this site reads back as inactive.
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
                                                  ? (moduleConfig.external_notification.nag_timeout * 1000)
                                                  : moduleConfig.external_notification.output_ms);

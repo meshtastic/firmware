@@ -199,6 +199,7 @@ static int32_t reconnectETH()
 #ifndef DISABLE_NTP
     // 0 here means "renew now" (forced at link-up). deadlinePassed(0) only reads as passed for the
     // first half of each wrap cycle, so treat 0 as always-due rather than relying on that.
+    // TODO(deadline-type): a fourth reading of 0 - "due now", not "unarmed" or "forever".
     if (isEthernetAvailable() && (ntp_renew == 0 || Throttle::deadlinePassed(ntp_renew))) {
 
         LOG_INFO("Update NTP time from %s", config.network.ntp_server);

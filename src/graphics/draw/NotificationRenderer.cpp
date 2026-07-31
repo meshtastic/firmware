@@ -46,6 +46,9 @@ int bannerSignalBars = -1;
 InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
+// TODO(deadline-type): 0 means "forever" here, the inverse of the unarmed sentinel elsewhere, so
+// every read spells its own `alertBannerUntil > 0` guard. A Deadline type needs that third state
+// named rather than left to each site.
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
 uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are selectable options
 const char **NotificationRenderer::optionsArrayPtr = nullptr;
