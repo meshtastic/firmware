@@ -114,7 +114,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 {
     bool success = RadioLibInterface::reconfigure();
 
-    const auto recordConfigError = [&success](const char *operation, int result) {
+    const auto recordConfigError = [this, &success](const char *operation, int result) {
         if (result == RADIOLIB_ERR_NONE)
             return;
         LOG_ERROR("SX128X %s %s%d", operation, radioLibErr, result);

@@ -187,7 +187,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     bool success = RadioLibInterface::reconfigure();
     const meshtastic_Config_LoRaConfig &loraConfig = getActiveLoRaConfig();
 
-    const auto recordConfigError = [&success](const char *operation, int result) {
+    const auto recordConfigError = [this, &success](const char *operation, int result) {
         if (result == RADIOLIB_ERR_NONE)
             return;
         LOG_ERROR("SX126X %s %s%d", operation, radioLibErr, result);
