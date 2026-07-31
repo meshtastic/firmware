@@ -518,14 +518,13 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
     }
 
     char textString[12];
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // GPS is disabled or not present
-        if (config.position.fixed_position) {
-            snprintf(textString, sizeof(textString), "Fixed GPS");
-        } else {
-            snprintf(textString, sizeof(textString), "%s",
-                     config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off");
-        }
+    if (config.position.fixed_position) {
+        // Fixed position overrides live GPS state, regardless of gps_mode
+        snprintf(textString, sizeof(textString), "Fixed GPS");
+    } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+        snprintf(textString, sizeof(textString), "No GPS");
+    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        snprintf(textString, sizeof(textString), "GPS off");
     } else if (!gps || !gps->getIsConnected()) {
         snprintf(textString, sizeof(textString), "No Lock");
     } else if (!gps->getHasLock()) {
