@@ -1,9 +1,10 @@
 // Unit tests for src/airtime.{h,cpp} - AirTime::syncNow() and its rolling windows.
 //
 // syncNow() replaced a per-second runOnce() tick with monotonic-uptime bucket rotation so windows
-// stay correct across light sleep. It now takes its seconds from Time::getUptimeSecs(); these
-// tests exercise the rotation/decay math on top of that, including across the 32-bit millis()
-// wrap, which also covers the AirTime-polls-the-wrap-counter composition end to end.
+// stay correct across light sleep. It now takes its seconds from Time::getUptimeSecs(), which is a
+// pure read of a carry the main loop publishes via Time::serviceMonotonic(); these tests exercise
+// the rotation/decay math on top of that, including across the 32-bit millis() wrap. The wrap cases
+// therefore step the clock the way the main loop does - advance, then publish.
 #include "Arduino.h"
 #include "TestUtil.h"
 #include "UptimeClock.h"
@@ -146,11 +147,13 @@ void test_syncNow_survives_millis_wrap()
 {
     const uint32_t beforeWrap = 4294967000u; // 296ms before the wrap, on a whole-second boundary
     Time::setTestMillis(beforeWrap);
+    Time::serviceMonotonic(); // the main loop's publish, which is what carries the wrap
     AirTime a;
 
     TEST_ASSERT_EQUAL_UINT32(4294967u, a.getSecondsSinceBoot());
 
     Time::advanceTestMillis(1000); // crosses the wrap
+    Time::serviceMonotonic();
     TEST_ASSERT_EQUAL_UINT32(4294968u, a.getSecondsSinceBoot());
 }
 
@@ -160,10 +163,12 @@ void test_period_rotation_survives_millis_wrap()
 {
     const uint32_t beforeWrap = 0xFFFFFFFFu - (3600u * 1000u) + 1; // one hour minus 1ms before the wrap
     Time::setTestMillis(beforeWrap);
+    Time::serviceMonotonic();
     AirTime a;
     a.logAirtime(TX_LOG, 777);
 
     Time::advanceTestMillis(3600u * 1000u); // wraps partway through
+    Time::serviceMonotonic();
 
     uint32_t *report = a.airtimeReport(TX_LOG);
     TEST_ASSERT_EQUAL_UINT32(0, report[0]);
