@@ -21,6 +21,14 @@ std::atomic<uint32_t> publishSeq{0};
 std::atomic<uint32_t> publishedHigh{0}; // wraps counted as of the last publish
 std::atomic<uint32_t> publishedLow{0};  // getMillis() at the last publish
 
+// Extend a published (high, low) snapshot to `now`. Unsigned subtraction is exact across the wrap
+// for any gap under 49.7 days, so neither caller inspects the boundary. One copy: the reader and
+// the writer must agree on this arithmetic exactly, or the carry drifts from what readers report.
+uint64_t extendPublished(uint32_t high, uint32_t low, uint32_t now)
+{
+    return ((((uint64_t)high << 32) | low) + (uint32_t)(now - low));
+}
+
 // Seqlock read. Single writer, so this only ever retries against a publish in flight.
 void readPublished(uint32_t &high, uint32_t &low)
 {
@@ -41,9 +49,8 @@ uint64_t Time::getMillisMonotonic()
 {
     uint32_t high, low;
     readPublished(high, low);
-    // Elapsed since the publish. Unsigned subtraction is exact across the wrap for any gap under
-    // 49.7 days, so the reader neither inspects the boundary nor writes anything back.
-    return ((((uint64_t)high << 32) | low) + (uint32_t)(getMillis() - low));
+    // The reader writes nothing back; it just extends the last published carry to now.
+    return extendPublished(high, low, getMillis());
 }
 
 uint32_t Time::getUptimeSecs()
@@ -55,7 +62,7 @@ void Time::serviceMonotonic()
 {
     const uint32_t low = publishedLow.load(std::memory_order_relaxed);
     const uint32_t high = publishedHigh.load(std::memory_order_relaxed);
-    const uint64_t next = ((((uint64_t)high << 32) | low) + (uint32_t)(getMillis() - low));
+    const uint64_t next = extendPublished(high, low, getMillis());
 
     const uint32_t seq = publishSeq.load(std::memory_order_relaxed);
     publishSeq.store(seq + 1, std::memory_order_relaxed); // odd: publish in progress
