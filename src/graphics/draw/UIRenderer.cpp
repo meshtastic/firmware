@@ -547,22 +547,6 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
     }
 }
 
-// Draw status when GPS is disabled or not present
-void UIRenderer::drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
-{
-    const char *displayLine;
-    int pos;
-    if (y < FONT_HEIGHT_SMALL) { // Line 1: use short string
-        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        pos = display->getWidth() - display->getStringWidth(displayLine);
-    } else {
-        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "GPS not present"
-                                                                                                       : "GPS is disabled";
-        pos = (display->getWidth() - display->getStringWidth(displayLine)) / 2;
-    }
-    display->drawString(x + pos, y, displayLine);
-}
-
 void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     char displayLine[32];
