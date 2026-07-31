@@ -9,6 +9,7 @@
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "buzz.h"
 #include "concurrency/Periodic.h"
 #include "gps/RTC.h"
@@ -349,11 +350,13 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     uint8_t buffer[768] = {0};
     uint8_t b;
     int bytesRead = 0;
-    uint32_t startTimeout = millis() + waitMillis;
+    // Start stamp + interval rather than a stored deadline: same wrap-safety, but the full 49.7-day
+    // range instead of 24.8 days ahead, and Time::getMillis() makes the wait injectable.
+    const uint32_t waitStartMs = Time::getMillis();
 #ifdef GPS_DEBUG
     std::string debugmsg = "";
 #endif
-    while (!Throttle::deadlinePassed(startTimeout)) {
+    while (Throttle::isWithinTimespanMs(waitStartMs, waitMillis)) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
@@ -1428,6 +1431,35 @@ void GPS::publishUpdate()
     }
 }
 
+/// Is a post-lock ephemeris hold currently in force?
+///
+/// Ask the question in this direction and the sentinel answers itself: `fixHoldEnds == 0` is the
+/// *absence* of a deadline, so "no hold is in force" is the only honest reading of it. Asked the
+/// other way round - "has the hold expired?" - 0 has no honest answer at all, and whichever guard
+/// you reach for silently picks one. That is how the re-arm site below broke: `fixHoldEnds != 0 &&`
+/// looks like the sentinel rule from AGENTS.md, but there it means "a hold that was never armed can
+/// never expire", so nothing re-armed and the receiver stayed powered until the search timeout.
+///
+/// The `!= 0` test is not redundant with the arithmetic, though it looks it. deadlinePassed() is an
+/// unsigned half-range test: past 2^31 ms of uptime `now - threadIntervalMs` lands in the top half,
+/// so the sentinel reads as a deadline ~24.9 days in the *future* rather than in the past.
+///
+/// Not static, and deliberately without a header: it lives beside its only caller, and the native
+/// test build compiles this file, so test/test_gps_fix_hold/ declares the two prototypes directly.
+bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs)
+{
+    return fixHoldEnds != 0 && !Throttle::deadlinePassed(fixHoldEnds + threadIntervalMs);
+}
+
+/// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold in force" is a reason to
+/// arm, and it is reached often: the hold is cleared by every publish, including the ones that do
+/// not put the receiver back to sleep.
+bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds, uint32_t threadIntervalMs)
+{
+    // First lock of a cycle, first lock after the receiver was off, or nothing holding right now.
+    return !hasValidLocation || prevFixQual == 0 || !fixHoldInForce(fixHoldEnds, threadIntervalMs);
+}
+
 int32_t GPS::runOnce()
 {
 #if defined(SENSECAP_INDICATOR)
@@ -1523,8 +1555,7 @@ int32_t GPS::runOnce()
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
-            } else if (!hasValidLocation || prev_fixQual == 0 ||
-                       (fixHoldEnds != 0 && Throttle::deadlinePassed(fixHoldEnds + GPS_THREAD_INTERVAL))) {
+            } else if (shouldArmFixHold(hasValidLocation, prev_fixQual, fixHoldEnds, GPS_THREAD_INTERVAL)) {
                 hasValidLocation = true;
                 // Hold for up to 20secs after getting a lock to download ephemeris etc
                 uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
@@ -1552,8 +1583,9 @@ int32_t GPS::runOnce()
         }
 
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
-        // 0 means "not holding", so it stays in front of the elapsed test.
-        bool holdExpired = (fixHoldEnds != 0 && Throttle::deadlinePassed(fixHoldEnds));
+        // The other reading of the same sentinel: a hold must have existed before it can expire,
+        // where shouldArmFixHold() treats "none in force" as a reason to arm.
+        bool holdExpired = (fixHoldEnds != 0 && !fixHoldInForce(fixHoldEnds, 0));
         if (shouldPublish || tooLong || holdExpired) {
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
