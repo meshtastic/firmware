@@ -20,12 +20,6 @@ NodeInfoModule *nodeInfoModule;
 
 static constexpr uint32_t NodeInfoReplySuppressSeconds = USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS;
 
-// Kept in milliseconds so the check can use Throttle. The seconds value is user-overridable, so
-// guard the multiply: above ~4.29M seconds it overflows uint32_t.
-static_assert(NodeInfoReplySuppressSeconds <= UINT32_MAX / 1000UL,
-              "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS is too large to express in milliseconds");
-static constexpr uint32_t NodeInfoReplySuppressMs = NodeInfoReplySuppressSeconds * 1000UL;
-
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
     suppressReplyForCurrentRequest = false;
@@ -41,13 +35,15 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
         // A local dedup window, not a wall-clock reading - uptime avoids RTC-quality jumps and
-        // replayed packets' stale rx_time perturbing it.
-        const uint32_t nowMs = Time::getMillis();
+        // replayed packets' stale rx_time perturbing it. Seconds, not millis: entries live as long
+        // as the node stays in the DB, and a 32-bit millisecond stamp aliases back into the window
+        // once uptime passes 49.7 days, silently suppressing a legitimate reply for up to 12h.
+        const uint32_t nowSecs = Time::getUptimeSecs();
         auto it = lastNodeInfoSeen.find(sender);
-        if (it != lastNodeInfoSeen.end() && Throttle::isWithinTimespanMs(it->second, NodeInfoReplySuppressMs)) {
+        if (it != lastNodeInfoSeen.end() && (uint32_t)(nowSecs - it->second) < NodeInfoReplySuppressSeconds) {
             suppressReplyForCurrentRequest = true;
         }
-        lastNodeInfoSeen[sender] = nowMs;
+        lastNodeInfoSeen[sender] = nowSecs;
         pruneLastNodeInfoCache();
     }
 
@@ -196,23 +192,25 @@ void NodeInfoModule::pruneLastNodeInfoCache()
         return;
 
     const size_t maxEntries = nodeDB->meshNodes->size();
+    const uint32_t nowSecs = Time::getUptimeSecs();
 
+    // Drop entries for nodes we no longer know, and any stamp already past the suppression window:
+    // it can only decide "don't suppress", so keeping it buys nothing.
     for (auto it = lastNodeInfoSeen.begin(); it != lastNodeInfoSeen.end();) {
-        if (!nodeDB->getMeshNode(it->first)) {
+        if (!nodeDB->getMeshNode(it->first) || (uint32_t)(nowSecs - it->second) >= NodeInfoReplySuppressSeconds) {
             it = lastNodeInfoSeen.erase(it);
         } else {
             ++it;
         }
     }
 
-    // Evict by largest elapsed time: comparing stored stamps directly picks the wrong victim once
-    // some of them sit on the far side of the millis() wrap.
-    const uint32_t nowMs = Time::getMillis();
+    // Evict by largest elapsed time rather than smallest stamp, so the victim is still the oldest
+    // entry if the uptime counter ever wraps underneath us.
     while (!lastNodeInfoSeen.empty() && lastNodeInfoSeen.size() > maxEntries) {
         auto oldestIt = std::max_element(
             lastNodeInfoSeen.begin(), lastNodeInfoSeen.end(),
-            [nowMs](const std::pair<const NodeNum, uint32_t> &lhs, const std::pair<const NodeNum, uint32_t> &rhs) {
-                return (uint32_t)(nowMs - lhs.second) < (uint32_t)(nowMs - rhs.second);
+            [nowSecs](const std::pair<const NodeNum, uint32_t> &lhs, const std::pair<const NodeNum, uint32_t> &rhs) {
+                return (uint32_t)(nowSecs - lhs.second) < (uint32_t)(nowSecs - rhs.second);
             });
         lastNodeInfoSeen.erase(oldestIt);
     }
