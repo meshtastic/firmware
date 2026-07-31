@@ -118,7 +118,9 @@ class RadioInterface
     std::atomic<ConfigApplyPhase> configApplyPhase{ConfigApplyPhase::IDLE};
     std::atomic<uint32_t> configApplyTxGate{0};
     std::atomic<bool> configApplyTxInhibit{false};
+    std::atomic<bool> configApplyReceptionHeld{false};
     const meshtastic_Config_LoRaConfig *configApplyLoraConfig = nullptr;
+    const meshtastic_ChannelSettings *configApplyPrimaryChannel = nullptr;
     bool configApplyLicensedOwner = false;
     bool configApplyLicensedOwnerSet = false;
 
@@ -127,6 +129,9 @@ class RadioInterface
     void deferConfigApply(RadioConfigApplyRequest *request);
     void finishConfigApply(RadioConfigApplyRequest *request, RadioConfigApplyResult result);
     RadioConfigApplyResult applyConfigWithRollback(RadioConfigApplyRequest &request);
+    virtual void holdConfigApplyReception() { configApplyReceptionHeld.store(true, std::memory_order_release); }
+    bool configApplyReceptionIsHeld() const { return configApplyReceptionHeld.load(std::memory_order_acquire); }
+    void releaseConfigApplyReception() { configApplyReceptionHeld.store(false, std::memory_order_release); }
     bool configApplyPending() const;
     bool configApplyBarrierIsSet() const;
     bool claimConfigApplyTxStart();
@@ -395,7 +400,8 @@ class RadioInterface
     bool getActiveLicensedOwner() const;
     meshtastic_Config_LoRaConfig hardwareConfigFor(const meshtastic_Config_LoRaConfig &loraConfig);
     bool shouldRecordReconfigureFailure() const { return configApplyLoraConfig == nullptr || recordConfigApplyFailure; }
-    bool reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig, bool licensedOwner, bool recordFailure = false);
+    bool reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig, bool licensedOwner, bool recordFailure = false,
+                           const meshtastic_ChannelSettings *primaryChannel = nullptr);
 
     /**
      * Get current RSSI reading from the radio.

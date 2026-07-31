@@ -937,15 +937,18 @@ bool RadioInterface::reconfigureCommitted()
     return reconfigureConfig(config.lora, devicestate.owner.is_licensed, true);
 }
 
-bool RadioInterface::reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig, bool licensedOwner, bool recordFailure)
+bool RadioInterface::reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig, bool licensedOwner, bool recordFailure,
+                                       const meshtastic_ChannelSettings *primaryChannel)
 {
     const meshtastic_Config_LoRaConfig hardwareConfig = hardwareConfigFor(loraConfig);
     configApplyLoraConfig = &hardwareConfig;
+    configApplyPrimaryChannel = primaryChannel;
     configApplyLicensedOwner = licensedOwner;
     configApplyLicensedOwnerSet = true;
     recordConfigApplyFailure = recordFailure;
     const bool result = reconfigure();
     configApplyLoraConfig = nullptr;
+    configApplyPrimaryChannel = nullptr;
     configApplyLicensedOwnerSet = false;
     recordConfigApplyFailure = false;
     return result;
@@ -969,8 +972,8 @@ bool RadioInterface::requestConfigApply(RadioConfigApplyRequest *request)
 {
     if (request == nullptr)
         return false;
-
-    const LoRaConfigNormalization validation = normalizeConfigLora(request->candidate, false, nullptr, this);
+    const meshtastic_ChannelSettings *candidatePrimary = request->hasPrimarySnapshots ? &request->candidatePrimary : nullptr;
+    const LoRaConfigNormalization validation = normalizeConfigLora(request->candidate, false, candidatePrimary, this);
     if (!validation.valid) {
         publishLoRaConfigDiagnostics(validation);
         request->result.store(RadioConfigApplyResult::IDLE, std::memory_order_release);
@@ -1025,12 +1028,15 @@ void RadioInterface::finishConfigApply(RadioConfigApplyRequest *request, RadioCo
 
 RadioConfigApplyResult RadioInterface::applyConfigWithRollback(RadioConfigApplyRequest &request)
 {
-    if (reconfigureConfig(request.candidate, request.candidateLicensed)) {
+    const meshtastic_ChannelSettings *candidatePrimary = request.hasPrimarySnapshots ? &request.candidatePrimary : nullptr;
+    const meshtastic_ChannelSettings *previousPrimary = request.hasPrimarySnapshots ? &request.previousPrimary : nullptr;
+    holdConfigApplyReception();
+    if (reconfigureConfig(request.candidate, request.candidateLicensed, false, candidatePrimary)) {
         setConfigApplyTxInhibit(false);
         return RadioConfigApplyResult::APPLIED;
     }
 
-    if (reconfigureConfig(request.previous, request.previousLicensed)) {
+    if (reconfigureConfig(request.previous, request.previousLicensed, false, previousPrimary)) {
         setConfigApplyTxInhibit(false);
         return RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK;
     }
@@ -1075,6 +1081,8 @@ bool RadioInterface::finalizeConfigApply(RadioConfigApplyRequest *request)
         return false;
 
     configApplyRequest.store(nullptr, std::memory_order_release);
+    if (request->result.load(std::memory_order_acquire) != RadioConfigApplyResult::ROLLBACK_FAILED)
+        releaseConfigApplyReception();
     configApplyTxGate.fetch_and(CONFIG_APPLY_TX_CLAIM_MASK, std::memory_order_release);
     configApplyPhase.store(ConfigApplyPhase::IDLE, std::memory_order_release);
     return true;
@@ -1622,9 +1630,9 @@ bool RadioInterface::applyModemConfig()
     bool usesDefaultFrequencySlot = uses_default_frequency_slot;
 
     if (stagedApply) {
-        LoRaConfigNormalization normalization = normalizeConfigLora(loraConfig, false, nullptr, this);
+        LoRaConfigNormalization normalization = normalizeConfigLora(loraConfig, false, configApplyPrimaryChannel, this);
         if (!normalization.valid)
-            normalization = normalizeConfigLora(loraConfig, true, nullptr, this);
+            normalization = normalizeConfigLora(loraConfig, true, configApplyPrimaryChannel, this);
         if (!normalization.valid) {
             publishLoRaConfigDiagnostics(normalization);
             return false;
@@ -1697,7 +1705,7 @@ bool RadioInterface::applyModemConfig()
     // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
     // (numFreqSlots - 1).
-    const char *channelName = getChannelNameForLoRaConfig(loraConfig);
+    const char *channelName = getChannelNameForLoRaConfig(loraConfig, configApplyPrimaryChannel);
     // Guard the modulo: numFreqSlots can be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
     uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
     uint32_t presetNameHashSlot =
@@ -1845,6 +1853,10 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 
 void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 {
+    if (configApplyReceptionIsHeld()) {
+        packetPool.release(p);
+        return;
+    }
     if (router) {
         p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         router->enqueueReceivedMessage(p);

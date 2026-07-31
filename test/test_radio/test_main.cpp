@@ -125,10 +125,15 @@ class TestableRadioLibInterface : public RadioLibInterface
 
     uint32_t applyCount() const { return reconfigureCount; }
     uint32_t startSendCount() const { return startSendCalls; }
+    uint32_t startReceiveCount() const { return startReceiveCalls; }
+    bool configApplyBarrierForTest() const { return configApplyBarrierIsSet(); }
+    bool configApplyReceptionHeldForTest() const { return configApplyReceptionHeld.load(); }
+    bool receptionWasHeldDuringApplyForTest() const { return receptionWasHeldDuringApply; }
     meshtastic_Config_LoRaConfig_RegionCode appliedRegion(size_t index) const { return appliedRegions[index]; }
 
     bool reconfigure() override
     {
+        receptionWasHeldDuringApply = configApplyReceptionHeld.load();
         appliedRegions[reconfigureCount] = getActiveLoRaConfig().region;
         ++reconfigureCount;
         if (reenterDuringApply) {
@@ -136,12 +141,14 @@ class TestableRadioLibInterface : public RadioLibInterface
             serviceConfigApply(millis());
         }
         const bool result = reconfigureResults[reconfigureCount - 1];
+        if (result)
+            startReceive();
         if (!result && shouldRecordErrors && shouldRecordReconfigureFailure())
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         return result;
     }
 
-    void startReceive() override {}
+    void startReceive() override { ++startReceiveCalls; }
 
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
 
@@ -180,7 +187,9 @@ class TestableRadioLibInterface : public RadioLibInterface
     bool useBaseStartSend = false;
     bool reenterDuringApply = false;
     bool shouldRecordErrors = false;
+    bool receptionWasHeldDuringApply = false;
     uint32_t startSendCalls = 0;
+    uint32_t startReceiveCalls = 0;
 };
 
 class TestableLR1121Interface : public LR11x0Interface<LR1121>
@@ -872,6 +881,54 @@ static void test_configApply_applyFailure_rollsBack()
     TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
 }
 
+static void initializeChannelApplyRequest(RadioConfigApplyRequest &request, const char *candidateName)
+{
+    channelFile = meshtastic_ChannelFile_init_zero;
+    channels.initDefaults();
+    channels.onConfigChanged();
+    const meshtastic_ChannelFile previous = channelFile;
+    meshtastic_ChannelFile candidate = previous;
+    meshtastic_Channel primary = candidate.channels[0];
+    strncpy(primary.settings.name, candidateName, sizeof(primary.settings.name) - 1);
+    const uint8_t candidatePrimary = Channels::setChannelInFile(candidate, primary, 0);
+
+    request.previous = usConfig();
+    request.candidate = usConfig();
+    request.requestedAtMsec = 1000;
+    request.timeoutMsec = 5000;
+    request.hasPrimarySnapshots = true;
+    request.previousPrimary = previous.channels[0].settings;
+    request.candidatePrimary = candidate.channels[candidatePrimary].settings;
+}
+
+static void test_configApply_primarySnapshotNeverPublishesSharedChannels()
+{
+    RadioConfigApplyRequest request;
+    initializeChannelApplyRequest(request, "Candidate");
+    TEST_ASSERT_EQUAL_STRING("", channels.getPrimary().name);
+    testRadio->scriptApply(true, true);
+
+    TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
+    TEST_ASSERT_EQUAL_STRING("", channels.getPrimary().name);
+    testRadio->serviceConfigApply(1000);
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
+    TEST_ASSERT_EQUAL_STRING("", channels.getPrimary().name);
+}
+
+static void test_configApply_primarySnapshotLeavesSharedChannelsOnApplyFailure()
+{
+    RadioConfigApplyRequest request;
+    initializeChannelApplyRequest(request, "Candidate");
+    testRadio->scriptApply(false, true);
+
+    TEST_ASSERT_TRUE(testRadio->requestConfigApply(&request));
+    testRadio->serviceConfigApply(1000);
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK, request.result.load());
+    TEST_ASSERT_EQUAL_STRING("", channels.getPrimary().name);
+}
+
 static void test_configApply_rollbackFailure_inhibitsTx()
 {
     RadioConfigApplyRequest request{usConfig(), lora24Config(), 1000, 5000};
@@ -962,10 +1019,47 @@ static void test_configApply_completion_waitsForFinalizationBeforeResumingTraffi
 
     TEST_ASSERT_EQUAL_UINT32(0, testRadioLib->startSendCount());
 
+    TEST_ASSERT_FALSE(testRadioLib->finalizeConfigApply(&request));
+    TEST_ASSERT_TRUE(testRadioLib->configApplyBarrierForTest());
+    testRadioLib->clearPendingNotificationForTest();
     TEST_ASSERT_TRUE(testRadioLib->finalizeConfigApply(&request));
+    TEST_ASSERT_FALSE(testRadioLib->configApplyBarrierForTest());
     testRadioLib->fireTransmitDelayForTest();
 
     TEST_ASSERT_EQUAL_UINT32(1, testRadioLib->startSendCount());
+}
+
+static void test_configApply_receptionIsValidatedBeforeMainThreadFinalization()
+{
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), static_cast<uint32_t>(millis()), 5000};
+    config.lora = request.previous;
+    const uint32_t receiveStarts = testRadioLib->startReceiveCount();
+
+    TEST_ASSERT_TRUE(testRadioLib->requestConfigApply(&request));
+    testRadioLib->serviceConfigApply(millis());
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
+    TEST_ASSERT_EQUAL_UINT32(receiveStarts + 1, testRadioLib->startReceiveCount());
+
+    testRadioLib->serviceConfigApply(millis());
+    TEST_ASSERT_EQUAL_UINT32(receiveStarts + 1, testRadioLib->startReceiveCount());
+
+    TEST_ASSERT_FALSE(testRadioLib->finalizeConfigApply(&request));
+    TEST_ASSERT_TRUE(testRadioLib->configApplyReceptionHeldForTest());
+    testRadioLib->clearPendingNotificationForTest();
+    TEST_ASSERT_TRUE(testRadioLib->finalizeConfigApply(&request));
+    TEST_ASSERT_EQUAL_UINT32(receiveStarts + 1, testRadioLib->startReceiveCount());
+}
+
+static void test_configApply_holdsReceptionBeforeReconfigure()
+{
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), static_cast<uint32_t>(millis()), 5000};
+    config.lora = request.previous;
+
+    TEST_ASSERT_TRUE(testRadioLib->requestConfigApply(&request));
+    testRadioLib->serviceConfigApply(millis());
+
+    TEST_ASSERT_TRUE(testRadioLib->receptionWasHeldDuringApplyForTest());
+    TEST_ASSERT_TRUE(testRadioLib->configApplyReceptionHeldForTest());
 }
 
 static void test_configApply_reentrantServiceAppliesExactlyOnce()
@@ -980,6 +1074,8 @@ static void test_configApply_reentrantServiceAppliesExactlyOnce()
 
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
     TEST_ASSERT_EQUAL_UINT32(1, testRadioLib->applyCount());
+    TEST_ASSERT_FALSE(testRadioLib->finalizeConfigApply(&request));
+    testRadioLib->clearPendingNotificationForTest();
     TEST_ASSERT_TRUE(testRadioLib->finalizeConfigApply(&request));
 }
 
@@ -993,6 +1089,8 @@ static void test_configApply_finalizeRejectsReplacementRadio()
 
     TestableRadioLibInterface replacement;
     TEST_ASSERT_FALSE(replacement.finalizeConfigApply(&request));
+    TEST_ASSERT_FALSE(testRadioLib->finalizeConfigApply(&request));
+    testRadioLib->clearPendingNotificationForTest();
     TEST_ASSERT_TRUE(testRadioLib->finalizeConfigApply(&request));
 }
 
@@ -1088,10 +1186,10 @@ static void test_configApply_timeoutIsRolloverSafe()
 
     testRadioLib->serviceConfigApply(9);
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::TIMED_OUT, request.result.load());
-    TEST_ASSERT_TRUE(testRadioLib->finalizeConfigApply(&request));
-
+    TEST_ASSERT_FALSE(testRadioLib->finalizeConfigApply(&request));
     testRadioLib->finishTxForTest();
     testRadioLib->clearPendingNotificationForTest();
+    TEST_ASSERT_TRUE(testRadioLib->finalizeConfigApply(&request));
 }
 
 static void test_configApply_activeRx_defersUntilReceiveCompletes()
@@ -1160,6 +1258,7 @@ static void test_configApply_rollbackFailure_inhibitsRadioLibTx()
 
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::ROLLBACK_FAILED, request.result.load());
     TEST_ASSERT_TRUE(testRadioLib->configApplyTxInhibited());
+    TEST_ASSERT_TRUE(testRadioLib->configApplyReceptionHeldForTest());
 }
 
 static void test_configApply_barrierBlocksDequeuesAcceptedDuringChannelCheck()
@@ -1477,11 +1576,15 @@ void setup()
     RUN_TEST(test_configApply_idle_success_keepsCandidatePrivate);
     RUN_TEST(test_configApply_candidateLicensedStateControlsPowerLimit);
     RUN_TEST(test_configApply_applyFailure_rollsBack);
+    RUN_TEST(test_configApply_primarySnapshotNeverPublishesSharedChannels);
+    RUN_TEST(test_configApply_primarySnapshotLeavesSharedChannelsOnApplyFailure);
     RUN_TEST(test_configApply_rollbackFailure_inhibitsTx);
     RUN_TEST(test_configApply_secondRequest_rejectedBusy);
     RUN_TEST(test_configApply_activeTx_waits_withoutCompletingPacket);
     RUN_TEST(test_configApply_barrier_keepsQueuedPacketQueued);
     RUN_TEST(test_configApply_completion_waitsForFinalizationBeforeResumingTraffic);
+    RUN_TEST(test_configApply_receptionIsValidatedBeforeMainThreadFinalization);
+    RUN_TEST(test_configApply_holdsReceptionBeforeReconfigure);
     RUN_TEST(test_configApply_reentrantServiceAppliesExactlyOnce);
     RUN_TEST(test_configApply_finalizeRejectsReplacementRadio);
     RUN_TEST(test_configApply_successfulRollbackRestoresCandidateCriticalError);

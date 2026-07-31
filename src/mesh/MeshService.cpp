@@ -121,7 +121,9 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 }
 
 bool MeshService::requestLoRaConfig(const meshtastic_Config_LoRaConfig &previous, const meshtastic_Config_LoRaConfig &candidate,
-                                    uint32_t timeoutMsec, bool previousLicensed, bool candidateLicensed)
+                                    uint32_t timeoutMsec, bool previousLicensed, bool candidateLicensed,
+                                    const meshtastic_ChannelSettings *previousPrimary,
+                                    const meshtastic_ChannelSettings *candidatePrimary)
 {
     LoRaConfigApplyState expected = LoRaConfigApplyState::IDLE;
     if (!loRaConfigApplyState.compare_exchange_strong(expected, LoRaConfigApplyState::PREPARING, std::memory_order_acq_rel,
@@ -147,6 +149,11 @@ bool MeshService::requestLoRaConfig(const meshtastic_Config_LoRaConfig &previous
     request.previousLicensed = previousLicensed;
     request.candidateLicensed = candidateLicensed;
     request.acceptedRadioId = 0;
+    request.hasPrimarySnapshots = previousPrimary != nullptr && candidatePrimary != nullptr;
+    if (request.hasPrimarySnapshots) {
+        request.previousPrimary = *previousPrimary;
+        request.candidatePrimary = *candidatePrimary;
+    }
     request.result.store(RadioConfigApplyResult::IDLE, std::memory_order_relaxed);
 
     if (!radio->requestConfigApply(&request)) {

@@ -74,6 +74,14 @@ bool NotifiedWorkerThread::notifyLater(uint32_t delay, uint32_t v, bool overwrit
     return didIt;
 }
 
+void NotifiedWorkerThread::wakePreservingNotification()
+{
+    enabled = true;
+    setInterval(0);
+    runASAP = true;
+    mainDelay.interrupt();
+}
+
 void NotifiedWorkerThread::checkNotification()
 {
     // Atomically read and clear. (This avoids a potential race condition where an interrupt handler could set a new notification

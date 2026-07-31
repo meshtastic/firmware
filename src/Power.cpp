@@ -15,6 +15,7 @@
  */
 #include "Power.h"
 #include "BluetoothCommon.h"
+#include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -828,6 +829,9 @@ bool Power::setup()
 
 void Power::powerCommandsCheck()
 {
+    if (service && service->loRaConfigApplyActive())
+        return;
+
     if (rebootAtMsec && millis() > rebootAtMsec) {
         LOG_INFO("Rebooting");
         reboot();

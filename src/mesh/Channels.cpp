@@ -117,12 +117,17 @@ void Channels::initDefaultLoraConfig()
 
 bool Channels::ensureLicensedOperation()
 {
-    if (!owner.is_licensed) {
+    return ensureLicensedOperation(channelFile, owner.is_licensed);
+}
+
+bool Channels::ensureLicensedOperation(meshtastic_ChannelFile &file, bool licensed)
+{
+    if (!licensed)
         return false;
-    }
+
     bool hasEncryptionOrAdmin = false;
-    for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
-        auto channel = channels.getByIndex(i);
+    for (pb_size_t i = 0; i < file.channels_count; ++i) {
+        auto &channel = file.channels[i];
         if (!channel.has_settings) {
             continue;
         }
@@ -133,14 +138,12 @@ bool Channels::ensureLicensedOperation()
                 channelSettings.psk.bytes[0] = 0;
                 channelSettings.psk.size = 0;
                 hasEncryptionOrAdmin = true;
-                channels.setChannel(channel);
             }
 
         } else if (channelSettings.psk.size > 0) {
             channelSettings.psk.bytes[0] = 0;
             channelSettings.psk.size = 0;
             hasEncryptionOrAdmin = true;
-            channels.setChannel(channel);
         }
     }
     return hasEncryptionOrAdmin;
@@ -151,7 +154,12 @@ bool Channels::ensureLicensedOperation()
  */
 void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
-    meshtastic_Channel &ch = getByIndex(chIndex);
+    initDefaultChannel(channelFile, chIndex);
+}
+
+void Channels::initDefaultChannel(meshtastic_ChannelFile &file, ChannelIndex chIndex)
+{
+    meshtastic_Channel &ch = file.channels[chIndex];
     meshtastic_ChannelSettings &channelSettings = ch.settings;
 
     uint8_t defaultpskIndex = 1;
@@ -380,6 +388,51 @@ void Channels::setChannel(const meshtastic_Channel &c)
                 channelFile.channels[i].role = meshtastic_Channel_Role_SECONDARY;
 
     old = c; // slam in the new settings/role
+}
+
+ChannelIndex Channels::setChannelInFile(meshtastic_ChannelFile &file, const meshtastic_Channel &channel,
+                                        ChannelIndex fallbackPrimary, bool ensurePrimary)
+{
+    if (file.channels_count == 0 || file.channels_count > MAX_NUM_CHANNELS)
+        file.channels_count = MAX_NUM_CHANNELS;
+    if (channel.index < 0 || channel.index >= file.channels_count)
+        return fallbackPrimary < file.channels_count ? fallbackPrimary : 0;
+
+    if (channel.role == meshtastic_Channel_Role_PRIMARY) {
+        for (pb_size_t i = 0; i < file.channels_count; ++i) {
+            if (file.channels[i].role == meshtastic_Channel_Role_PRIMARY)
+                file.channels[i].role = meshtastic_Channel_Role_SECONDARY;
+        }
+    }
+    file.channels[channel.index] = channel;
+
+    ChannelIndex primary = fallbackPrimary < file.channels_count ? fallbackPrimary : 0;
+    bool hasPrimary = false;
+    for (pb_size_t i = 0; i < file.channels_count; ++i) {
+        auto &candidate = file.channels[i];
+        candidate.index = i;
+        if (!candidate.has_settings) {
+            candidate.role = meshtastic_Channel_Role_DISABLED;
+            memset(&candidate.settings, 0, sizeof(candidate.settings));
+            candidate.has_settings = true;
+        } else if (strcmp(candidate.settings.name, "Default") == 0) {
+            candidate.settings.name[0] = '\0';
+        }
+        if (candidate.role == meshtastic_Channel_Role_PRIMARY) {
+            primary = i;
+            hasPrimary = true;
+        }
+    }
+
+    if (!hasPrimary && ensurePrimary) {
+        if (file.channels[primary].role == meshtastic_Channel_Role_SECONDARY) {
+            file.channels[primary].role = meshtastic_Channel_Role_PRIMARY;
+        } else {
+            primary = 0;
+            initDefaultChannel(file, primary);
+        }
+    }
+    return primary;
 }
 
 bool Channels::anyMqttEnabled()

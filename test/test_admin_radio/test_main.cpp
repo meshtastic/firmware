@@ -19,10 +19,12 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "Power.h"
 #include "PowerMon.h"
 #include "RadioInterface.h"
 #include "Router.h"
 #include "TestUtil.h"
+#include "main.h"
 #include "mesh/Channels.h"
 #include "modules/AdminModule.h"
 #include "platform/portduino/PortduinoGlue.h"
@@ -56,6 +58,18 @@ class MockMeshService : public MeshService
         capturedWarnings.push_back(n->message);
         releaseClientNotificationToPool(n);
     }
+
+    void reloadOwner(bool shouldSave = true) override
+    {
+        sawLicensedOwner = owner.is_licensed;
+        licensedChannelsWereSanitized =
+            channels.getByIndex(0).settings.psk.size == 0 && channels.getByIndex(1).role == meshtastic_Channel_Role_DISABLED &&
+            channels.getByIndex(1).settings.psk.size == 0 && channels.getByIndex(2).settings.psk.size == 0;
+        MeshService::reloadOwner(shouldSave);
+    }
+
+    bool sawLicensedOwner = false;
+    bool licensedChannelsWereSanitized = false;
 };
 
 class ConfigChangedCounter : public Observer<void *>
@@ -157,6 +171,27 @@ class ScriptedConfigApplyRadio : public RadioInterface
     bool rejectNextRequest = false;
     bool deferNextFinalization = false;
     bool limitWideBandwidth = false;
+};
+
+class ChannelConfigApplyRadio : public RadioInterface
+{
+  public:
+    void beginSendingForTest() { sendingPacket = &inFlightPacket; }
+    void completeSendingForTest() { sendingPacket = nullptr; }
+    uint32_t reconfigurations() const { return reconfigureCount; }
+
+    bool reconfigure() override
+    {
+        reconfigureCount++;
+        return true;
+    }
+
+    uint32_t getPacketTime(uint32_t, bool) override { return 0; }
+    ErrorCode send(meshtastic_MeshPacket *) override { return ERRNO_OK; }
+
+  private:
+    meshtastic_MeshPacket inFlightPacket = meshtastic_MeshPacket_init_zero;
+    uint32_t reconfigureCount = 0;
 };
 
 static Router *savedRouter;
@@ -1146,12 +1181,19 @@ static void test_handleSetOwner_persistsLicensedChannelSanitation()
 
     meshtastic_User licensed = meshtastic_User_init_zero;
     licensed.is_licensed = true;
-    testAdmin->deferSaves();
     nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1); // reloadOwner(false) only checks presence
-    testAdmin->handleSetOwner(licensed);
+    TEST_ASSERT_TRUE(testAdmin->handleSetOwner(licensed));
+
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
 
     TEST_ASSERT_TRUE(testAdmin->savedSegments() & SEGMENT_CHANNELS);
+    TEST_ASSERT_TRUE(owner.is_licensed);
     assertLicensedChannelsSanitized();
+    TEST_ASSERT_TRUE(mockMeshService->sawLicensedOwner);
+    TEST_ASSERT_TRUE(mockMeshService->licensedChannelsWereSanitized);
 
     uint8_t encoded[meshtastic_ChannelFile_size];
     const size_t encodedSize = pb_encode_to_bytes(encoded, sizeof(encoded), &meshtastic_ChannelFile_msg, &channelFile);
@@ -1161,6 +1203,31 @@ static void test_handleSetOwner_persistsLicensedChannelSanitation()
     channelFile = reloaded;
     assertLicensedChannelsSanitized();
     TEST_ASSERT_FALSE_MESSAGE(channels.ensureLicensedOperation(), "sanitized reload must not trigger another persistence write");
+}
+
+static void test_handleSetOwner_radioFailureKeepsLicenseAndChannelsUnchanged()
+{
+    replaceAdminRadioGlobals();
+    owner = meshtastic_User_init_zero;
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    config.lora.tx_enabled = true;
+    initRegion();
+    installEncryptedAndAdminChannels();
+    const meshtastic_ChannelFile previousChannels = channelFile;
+
+    meshtastic_User licensed = owner;
+    licensed.is_licensed = true;
+    TEST_ASSERT_TRUE(testAdmin->handleSetOwner(licensed));
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    TEST_ASSERT_EQUAL_MEMORY(&previousChannels, &channelFile, sizeof(channelFile));
 }
 
 static void test_bootDefense_sanitizesStaleLicensedChannelsOnce()
@@ -1750,6 +1817,23 @@ static void sendAdmin(meshtastic_AdminMessage &m)
     testAdmin->handleReceivedProtobuf(mp, &m);
 }
 
+static void sendAdminWithResponse(meshtastic_AdminMessage &m)
+{
+    meshtastic_MeshPacket mp = meshtastic_MeshPacket_init_zero;
+    mp.from = 0;
+    mp.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    mp.decoded.want_response = true;
+    testAdmin->handleReceivedProtobuf(mp, &m);
+}
+
+static void sendSetOwner(const meshtastic_User &candidate)
+{
+    meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
+    m.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
+    m.set_owner = candidate;
+    sendAdmin(m);
+}
+
 static void sendSetChannel(const meshtastic_Channel &ch)
 {
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
@@ -1765,6 +1849,32 @@ static void sendSetLora(const meshtastic_Config_LoRaConfig &lora)
     m.set_config.which_payload_variant = meshtastic_Config_lora_tag;
     m.set_config.payload_variant.lora = lora;
     sendAdmin(m);
+}
+
+static meshtastic_Channel readChannel(uint8_t index)
+{
+    meshtastic_AdminMessage request = meshtastic_AdminMessage_init_zero;
+    request.which_payload_variant = meshtastic_AdminMessage_get_channel_request_tag;
+    request.get_channel_request = index + 1;
+    sendAdminWithResponse(request);
+
+    const meshtastic_MeshPacket *reply = testAdmin->reply();
+    TEST_ASSERT_NOT_NULL(reply);
+    meshtastic_AdminMessage response = meshtastic_AdminMessage_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_AdminMessage_msg, &response));
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_get_channel_response_tag, response.which_payload_variant);
+    const meshtastic_Channel channel = response.get_channel_response;
+    testAdmin->drainReply();
+    return channel;
+}
+
+static void completeQueuedChannelApply()
+{
+    if (!scriptedRadio->pending())
+        return;
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
 }
 
 static bool replyHasRoutingError(meshtastic_Routing_Error expected)
@@ -1826,7 +1936,9 @@ static void configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_Region
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
     owner.is_licensed = false;
     initRegion();
+    channelFile = meshtastic_ChannelFile_init_zero;
     channels.initDefaults();
+    channels.onConfigChanged();
     strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
     moduleConfig.mqtt.root[sizeof(moduleConfig.mqtt.root) - 1] = '\0';
 }
@@ -1884,7 +1996,7 @@ static void test_editTransaction_commit_queuesOneRadioApply()
     TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
 }
 
-static void test_editTransaction_expiry_doesNotPersistUnappliedLora()
+static void test_editTransaction_expiryQueuesAndPersistsStagedLora()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
     const auto previous = config.lora;
@@ -1898,13 +2010,19 @@ static void test_editTransaction_expiry_doesNotPersistUnappliedLora()
     sendGetDeviceMetadata();
 
     TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
-    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
-    TEST_ASSERT_NULL(scriptedRadio->pending());
-    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->requests());
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->requests());
     TEST_ASSERT_EQUAL_MEMORY(&previous, &config.lora, sizeof(previous));
-    TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
-    TEST_ASSERT_EQUAL_INT(SEGMENT_CHANNELS, testAdmin->persistedSegments());
-    TEST_ASSERT_EQUAL(previous.region, testAdmin->persistedLoRa().region);
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL(candidate.region, config.lora.region);
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CONFIG);
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CHANNELS);
+    TEST_ASSERT_EQUAL(candidate.region, testAdmin->persistedLoRa().region);
 }
 
 static void test_editTransaction_loraFailure_savesOnlyUnrelatedSegments()
@@ -2627,6 +2745,53 @@ static void test_setLoraConfig_busy_returnsBadRequest()
     TEST_ASSERT_TRUE(replyHasRoutingError(meshtastic_Routing_Error_BAD_REQUEST));
 }
 
+static void test_destructiveAdminOperations_rejectedDuringPendingRadioApply()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    sendSetLora(candidate);
+
+    const uint32_t disruptiveTags[] = {
+        meshtastic_AdminMessage_reboot_seconds_tag,         meshtastic_AdminMessage_ota_request_tag,
+        meshtastic_AdminMessage_shutdown_seconds_tag,       meshtastic_AdminMessage_factory_reset_config_tag,
+        meshtastic_AdminMessage_factory_reset_device_tag,   meshtastic_AdminMessage_nodedb_reset_tag,
+        meshtastic_AdminMessage_enter_dfu_mode_request_tag, meshtastic_AdminMessage_restore_preferences_tag,
+    };
+    const RadioConfigApplyRequest *pending = scriptedRadio->pending();
+
+    for (const auto tag : disruptiveTags) {
+        meshtastic_AdminMessage message = meshtastic_AdminMessage_init_zero;
+        message.which_payload_variant = tag;
+        sendAdmin(message);
+
+        TEST_ASSERT_TRUE(replyHasRoutingError(meshtastic_Routing_Error_BAD_REQUEST));
+        TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+        TEST_ASSERT_EQUAL_PTR(pending, scriptedRadio->pending());
+        TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+        testAdmin->drainReply();
+    }
+}
+
+static void test_powerCommands_dueBeforeRadioApply_waitForCompletion()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    rebootAtMsec = 1;
+    shutdownAtMsec = 1;
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    sendSetLora(candidate);
+
+    Power powerUnderTest;
+    powerUnderTest.powerCommandsCheck();
+
+    TEST_ASSERT_EQUAL_UINT32(1, rebootAtMsec);
+    TEST_ASSERT_EQUAL_UINT32(1, shutdownAtMsec);
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    rebootAtMsec = 0;
+    shutdownAtMsec = 0;
+}
+
 static void test_setLoraConfig_regionSideEffects_doNotRunBeforeSuccess()
 {
     replaceAdminRadioGlobals();
@@ -2669,8 +2834,725 @@ static void test_warn_singleChannel_variantName_oneSpecificMessage()
     usePresetLongFast();
     // Name is a case/space variant of the preset with the default key: a single name issue.
     sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
+    completeQueuedChannelApply();
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
+}
+
+static void test_setPrimaryChannel_activeTxDefersRadioApplyUntilSendingCompletes()
+{
+    usePresetLongFast();
+    const meshtastic_ChannelFile previous = channelFile;
+    auto radio = std::make_unique<ChannelConfigApplyRadio>();
+    auto *channelRadio = radio.get();
+    scriptedRadio = nullptr;
+    testRouter->addInterface(std::move(radio));
+    channelRadio->beginSendingForTest();
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &channelFile, sizeof(channelFile));
+    channelRadio->serviceConfigApply(millis());
+
+    TEST_ASSERT_EQUAL_UINT32(0, channelRadio->reconfigurations());
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+
+    channelRadio->completeSendingForTest();
+    channelRadio->serviceConfigApply(millis());
+    mockMeshService->loop();
+
+    const uint32_t reconfigurations = channelRadio->reconfigurations();
+    const bool applyPending = testAdmin->loRaConfigPending();
+    auto replacement = std::make_unique<ScriptedConfigApplyRadio>();
+    scriptedRadio = replacement.get();
+    testRouter->addInterface(std::move(replacement));
+
+    TEST_ASSERT_EQUAL_UINT32(1, reconfigurations);
+    TEST_ASSERT_FALSE(applyPending);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(CUSTOM_KEY), channels.getPrimary().psk.size);
+}
+
+static void test_setSecondaryChannel_doesNotReconfigureRadio()
+{
+    usePresetLongFast();
+    ConfigChangedCounter configChanges;
+    configChanges.observe(&mockMeshService->configChanged);
+    const uint32_t requestsBefore = scriptedRadio->requests();
+
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "Private", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+
+    TEST_ASSERT_EQUAL_UINT32(requestsBefore, scriptedRadio->requests());
+    TEST_ASSERT_EQUAL_UINT32(0, configChanges.count);
+}
+
+static void test_setPrimaryChannel_applyFailureRestoresPreviousChannels()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const meshtastic_ChannelFile previous = channelFile;
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Candidate", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &channelFile, sizeof(channelFile));
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &channelFile, sizeof(channelFile));
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+}
+
+static void test_setPrimaryChannel_queueFailureDoesNotLeakCandidateWarnings()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const meshtastic_ChannelFile previous = channelFile;
+    owner.is_licensed = true;
+    scriptedRadio->rejectNext();
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Candidate", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+
+    TEST_ASSERT_EQUAL_MEMORY(&previous, &channelFile, sizeof(channelFile));
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_INT(0, warningsContaining("Licensed mode activated"));
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("could not be queued"));
+}
+
+static void test_setChannel_duringPendingApplyIsRejectedWithoutOrphaningFirstRequest()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "First", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    const RadioConfigApplyRequest *firstRequest = scriptedRadio->pending();
+    TEST_ASSERT_NOT_NULL(firstRequest);
+
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "Second", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+
+    TEST_ASSERT_TRUE(replyHasRoutingError(meshtastic_Routing_Error_BAD_REQUEST));
+    TEST_ASSERT_EQUAL_PTR(firstRequest, scriptedRadio->pending());
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL_STRING("First", channels.getPrimary().name);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channelFile.channels[1].role);
+}
+
+static void test_beginEdit_duringPendingApplyIsRejected()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "First", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+
+    sendBeginEdit();
+
+    TEST_ASSERT_TRUE(replyHasRoutingError(meshtastic_Routing_Error_BAD_REQUEST));
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+}
+
+static void test_editTransaction_channelThenLoraPreservesBothInApply()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Combined", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendSetLora(
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST));
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->hasPrimarySnapshots);
+    TEST_ASSERT_EQUAL_STRING("Combined", scriptedRadio->pending()->candidatePrimary.name);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL_STRING("Combined", channels.getPrimary().name);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CHANNELS);
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CONFIG);
+}
+
+static void test_editTransaction_loraThenChannelPreservesBothInApply()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendBeginEdit();
+    sendSetLora(
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST));
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Combined", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->hasPrimarySnapshots);
+    TEST_ASSERT_EQUAL_STRING("Combined", scriptedRadio->pending()->candidatePrimary.name);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL_STRING("Combined", channels.getPrimary().name);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CHANNELS);
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CONFIG);
+}
+
+static void test_editTransaction_getChannelReturnsStagedCandidate()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Staged", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+
+    TEST_ASSERT_EQUAL_STRING("", channels.getPrimary().name);
+    const meshtastic_Channel staged = readChannel(0);
+    TEST_ASSERT_EQUAL_STRING("Staged", staged.settings.name);
+}
+
+static void test_editTransaction_defaultChannelHashUsesCandidatePreset()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const uint8_t defaultKey[] = {1};
+    sendBeginEdit();
+    sendSetLora(
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST));
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", defaultKey, sizeof(defaultKey)));
+    sendCommitEdit();
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+    const int16_t publishedHash = channels.getHash(0);
+    channels.fixupChannel(0);
+    TEST_ASSERT_EQUAL(channels.getHash(0), publishedHash);
+}
+
+static void test_editTransaction_abandonedLicenseExitQueuesRadioApply()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    owner.is_licensed = true;
+    config.lora.override_duty_cycle = true;
+    config.lora.tx_power = 30;
+    NodeInfoModule *previousNodeInfoModule = nodeInfoModule;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    sendBeginEdit();
+
+    meshtastic_User unlicensed = owner;
+    unlicensed.is_licensed = false;
+    sendSetOwner(unlicensed);
+    TEST_ASSERT_TRUE(owner.is_licensed);
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->previousLicensed);
+    TEST_ASSERT_FALSE(scriptedRadio->pending()->candidateLicensed);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    nodeInfoModule = previousNodeInfoModule;
+}
+
+static void test_editTransaction_loraThenOwnerPreservesBothCandidates()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    NodeInfoModule *previousNodeInfoModule = nodeInfoModule;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    sendBeginEdit();
+    sendSetLora(
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST));
+    meshtastic_User licensed = owner;
+    licensed.is_licensed = true;
+    sendSetOwner(licensed);
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->candidateLicensed);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, scriptedRadio->pending()->candidate.modem_preset);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+    nodeInfoModule = previousNodeInfoModule;
+}
+
+static void test_editTransaction_ownerThenLoraPreservesBothCandidates()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    NodeInfoModule *previousNodeInfoModule = nodeInfoModule;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    sendBeginEdit();
+    meshtastic_User licensed = owner;
+    licensed.is_licensed = true;
+    sendSetOwner(licensed);
+    sendSetLora(
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST));
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->candidateLicensed);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, scriptedRadio->pending()->candidate.modem_preset);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, config.lora.modem_preset);
+    nodeInfoModule = previousNodeInfoModule;
+}
+
+static uint32_t correctedChannelForPrimary(meshtastic_Config_LoRaConfig candidate, const char *primaryName)
+{
+    meshtastic_ChannelSettings primary = meshtastic_ChannelSettings_init_zero;
+    strncpy(primary.name, primaryName, sizeof(primary.name) - 1);
+    candidate.channel_num = UINT32_MAX;
+    const auto corrected = RadioInterface::normalizeConfigLora(candidate, true, &primary, scriptedRadio);
+    TEST_ASSERT_TRUE(corrected.valid);
+    return corrected.config.channel_num;
+}
+
+static meshtastic_Config_LoRaConfig invalidSlotCandidate()
+{
+    auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    candidate.channel_num = UINT32_MAX;
+    return candidate;
+}
+
+static void assertPendingSlotUsesPrimary(const char *primaryName)
+{
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    const auto &candidate = scriptedRadio->pending()->candidate;
+    TEST_ASSERT_EQUAL_UINT32(correctedChannelForPrimary(candidate, primaryName), candidate.channel_num);
+}
+
+static void test_editTransaction_channelThenLoraCorrectsInvalidSlotAgainstFinalPrimary()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Final Primary", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendSetLora(invalidSlotCandidate());
+    sendCommitEdit();
+
+    assertPendingSlotUsesPrimary("Final Primary");
+    completeQueuedChannelApply();
+    TEST_ASSERT_EQUAL_UINT32(correctedChannelForPrimary(config.lora, "Final Primary"), config.lora.channel_num);
+}
+
+static void test_editTransaction_loraThenChannelCorrectsInvalidSlotAgainstFinalPrimary()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendBeginEdit();
+    sendSetLora(invalidSlotCandidate());
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Final Primary", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendCommitEdit();
+
+    assertPendingSlotUsesPrimary("Final Primary");
+    completeQueuedChannelApply();
+    TEST_ASSERT_EQUAL_UINT32(correctedChannelForPrimary(config.lora, "Final Primary"), config.lora.channel_num);
+}
+
+static void test_editTransaction_expiryCorrectsInvalidSlotAgainstFinalPrimary()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendBeginEdit();
+    sendSetLora(invalidSlotCandidate());
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Expired Primary", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    assertPendingSlotUsesPrimary("Expired Primary");
+    completeQueuedChannelApply();
+    TEST_ASSERT_EQUAL_UINT32(correctedChannelForPrimary(config.lora, "Expired Primary"), config.lora.channel_num);
+}
+
+static void test_editTransaction_invalidSlotRollbackKeepsPublishedState()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto publishedLoRa = config.lora;
+    const auto publishedChannels = channelFile;
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Rejected Primary", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendSetLora(invalidSlotCandidate());
+    sendCommitEdit();
+
+    assertPendingSlotUsesPrimary("Rejected Primary");
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+    TEST_ASSERT_EQUAL_MEMORY(&publishedLoRa, &config.lora, sizeof(config.lora));
+    TEST_ASSERT_EQUAL_MEMORY(&publishedChannels, &channelFile, sizeof(channelFile));
+}
+
+static void test_editTransaction_ownerLastPreservesCorrectedSlotProvenance()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    NodeInfoModule *previousNodeInfoModule = nodeInfoModule;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    sendBeginEdit();
+    sendSetLora(invalidSlotCandidate());
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Owner Final", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    meshtastic_User licensed = owner;
+    licensed.is_licensed = true;
+    sendSetOwner(licensed);
+    sendCommitEdit();
+
+    assertPendingSlotUsesPrimary("Owner Final");
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_EQUAL_UINT32(correctedChannelForPrimary(config.lora, "Owner Final"), config.lora.channel_num);
+    TEST_ASSERT_EQUAL_INT(2, warningsContaining("Channel number"));
+    nodeInfoModule = previousNodeInfoModule;
+}
+
+static void test_editTransaction_compoundCorrectionTracksFinalPrimary()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    auto candidate = invalidSlotCandidate();
+    candidate.modem_preset = static_cast<meshtastic_Config_LoRaConfig_ModemPreset>(255);
+
+    sendBeginEdit();
+    sendSetLora(candidate);
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Compound Final", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    NodeInfoModule *previousNodeInfoModule = nodeInfoModule;
+    nodeInfoModule = reinterpret_cast<NodeInfoModule *>(1);
+    meshtastic_User licensed = owner;
+    licensed.is_licensed = true;
+    sendSetOwner(licensed);
+    sendCommitEdit();
+
+    assertPendingSlotUsesPrimary("Compound Final");
+    completeQueuedChannelApply();
+    TEST_ASSERT_EQUAL(getRegion(config.lora.region)->getDefaultPreset(), config.lora.modem_preset);
+    TEST_ASSERT_EQUAL_UINT32(correctedChannelForPrimary(config.lora, "Compound Final"), config.lora.channel_num);
+    TEST_ASSERT_EQUAL_INT(2, warningsContaining("Preset"));
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("Channel number"));
+    nodeInfoModule = previousNodeInfoModule;
+}
+
+static void installNamedPrimary(const char *name)
+{
+    const auto primary = makeChannel(0, meshtastic_Channel_Role_PRIMARY, name, DEFAULT_KEY, sizeof(DEFAULT_KEY));
+    Channels::setChannelInFile(channelFile, primary, 0);
+    channels.onConfigChanged();
+}
+
+static void test_channelRename_preservesConcreteDefaultSlotProvenance()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    installNamedPrimary("Old Primary");
+    config.lora.channel_num = correctedChannelForPrimary(config.lora, "Old Primary");
+    RadioInterface::uses_default_frequency_slot = true;
+
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "New Primary", DEFAULT_KEY, sizeof(DEFAULT_KEY)));
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->pending()->candidate.channel_num);
+    completeQueuedChannelApply();
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+}
+
+static void test_channelRename_preservesZeroDefaultSlotProvenance()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    installNamedPrimary("Old Primary");
+    config.lora.channel_num = 0;
+    RadioInterface::uses_default_frequency_slot = true;
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "New Primary", DEFAULT_KEY, sizeof(DEFAULT_KEY)));
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->pending()->candidate.channel_num);
+    completeQueuedChannelApply();
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+}
+
+static void test_channelRename_preservesExplicitSlot()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    installNamedPrimary("Old Primary");
+    config.lora.channel_num = 2;
+    RadioInterface::uses_default_frequency_slot = false;
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "New Primary", DEFAULT_KEY, sizeof(DEFAULT_KEY)));
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(2, scriptedRadio->pending()->candidate.channel_num);
+    completeQueuedChannelApply();
+    TEST_ASSERT_EQUAL_UINT32(2, config.lora.channel_num);
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+}
+
+static void test_channelRename_rollbackPreservesDefaultSlotState()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    installNamedPrimary("Old Primary");
+    const uint32_t oldSlot = correctedChannelForPrimary(config.lora, "Old Primary");
+    config.lora.channel_num = oldSlot;
+    RadioInterface::uses_default_frequency_slot = true;
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Rejected Primary", DEFAULT_KEY, sizeof(DEFAULT_KEY)));
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL_UINT32(oldSlot, config.lora.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+    TEST_ASSERT_EQUAL_STRING("Old Primary", channels.getPrimary().name);
+}
+
+static void configureConcreteDefaultSlot(const char *primaryName)
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    installNamedPrimary(primaryName);
+    config.lora.channel_num = correctedChannelForPrimary(config.lora, primaryName);
+    RadioInterface::uses_default_frequency_slot = true;
+}
+
+static void test_loraPresetChange_preservesConcreteDefaultSlotProvenance()
+{
+    configureConcreteDefaultSlot("Preset Primary");
+    auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    candidate.channel_num = config.lora.channel_num;
+
+    sendSetLora(candidate);
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->pending()->candidate.channel_num);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_EQUAL_UINT32(0, config.lora.channel_num);
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+}
+
+static void test_loraRegionChange_preservesConcreteDefaultSlotProvenance()
+{
+    configureConcreteDefaultSlot("Region Primary");
+    auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    candidate.channel_num = config.lora.channel_num;
+
+    sendSetLora(candidate);
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->pending()->candidate.channel_num);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
+}
+
+static void test_loraPresetChange_preservesExplicitSlot()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    config.lora.channel_num = 2;
+    RadioInterface::uses_default_frequency_slot = false;
+    auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    candidate.channel_num = 2;
+
+    sendSetLora(candidate);
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(2, scriptedRadio->pending()->candidate.channel_num);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_FALSE(RadioInterface::uses_default_frequency_slot);
+}
+
+static void test_editTransaction_loraThenChannelPreservesConcreteDefaultSlot()
+{
+    configureConcreteDefaultSlot("Old Primary");
+    auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    candidate.channel_num = config.lora.channel_num;
+
+    sendBeginEdit();
+    sendSetLora(candidate);
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "New Primary", DEFAULT_KEY, sizeof(DEFAULT_KEY)));
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->pending()->candidate.channel_num);
+}
+
+static void test_editTransaction_channelThenLoraPreservesConcreteDefaultSlot()
+{
+    configureConcreteDefaultSlot("Old Primary");
+    auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_US, meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST);
+    candidate.channel_num = config.lora.channel_num;
+
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "New Primary", DEFAULT_KEY, sizeof(DEFAULT_KEY)));
+    sendSetLora(candidate);
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->pending()->candidate.channel_num);
+}
+
+static void test_editTransaction_primaryReplacementIsWriteOrderIndependent()
+{
+    const auto oldPrimaryDisabled = makeChannel(0, meshtastic_Channel_Role_DISABLED, "", CUSTOM_KEY, 0);
+    const auto newPrimary = makeChannel(1, meshtastic_Channel_Role_PRIMARY, "Replacement", CUSTOM_KEY, sizeof(CUSTOM_KEY));
+    const auto initialSecondary =
+        makeChannel(1, meshtastic_Channel_Role_SECONDARY, "Replacement", CUSTOM_KEY, sizeof(CUSTOM_KEY));
+
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendSetChannel(initialSecondary);
+    sendBeginEdit();
+    sendSetChannel(oldPrimaryDisabled);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, readChannel(0).role);
+    sendSetChannel(newPrimary);
+    sendCommitEdit();
+    completeQueuedChannelApply();
+    const meshtastic_ChannelFile disableThenPromote = channelFile;
+
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendSetChannel(initialSecondary);
+    sendBeginEdit();
+    sendSetChannel(newPrimary);
+    sendSetChannel(oldPrimaryDisabled);
+    sendCommitEdit();
+    completeQueuedChannelApply();
+
+    TEST_ASSERT_EQUAL_MEMORY(&disableThenPromote, &channelFile, sizeof(channelFile));
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_DISABLED, channelFile.channels[0].role);
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, channelFile.channels[1].role);
+}
+
+static void test_editTransaction_primaryReplacementFailureRetainsPublishedTable()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "Replacement", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    const meshtastic_ChannelFile published = channelFile;
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_DISABLED, "", CUSTOM_KEY, 0));
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_PRIMARY, "Replacement", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendCommitEdit();
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+    TEST_ASSERT_EQUAL_MEMORY(&published, &channelFile, sizeof(channelFile));
+}
+
+static void test_channelApplyFailureWithLicensedOwnerKeepsChannelsUnencrypted()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    TEST_ASSERT_GREATER_THAN_UINT32(0, channels.getPrimary().psk.size);
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Licensed", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendCommitEdit();
+
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    owner.is_licensed = true;
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+
+    TEST_ASSERT_TRUE(owner.is_licensed);
+    TEST_ASSERT_EQUAL_UINT32(0, channels.getPrimary().psk.size);
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CHANNELS);
+}
+
+static void configureLicensedSinglePrimary()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    owner.is_licensed = true;
+    channels.ensureLicensedOperation();
+    TEST_ASSERT_EQUAL_UINT32(0, channels.getPrimary().psk.size);
+}
+
+static void assertLicensedFallbackPrimaryIsPlaintext()
+{
+    completeQueuedChannelApply();
+    TEST_ASSERT_EQUAL(meshtastic_Channel_Role_PRIMARY, channelFile.channels[0].role);
+    TEST_ASSERT_EQUAL_UINT32(0, channelFile.channels[0].settings.psk.size);
+}
+
+static void test_setChannel_licensedFallbackPrimaryRemainsPlaintext()
+{
+    configureLicensedSinglePrimary();
+
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_DISABLED, "", CUSTOM_KEY, 0));
+
+    assertLicensedFallbackPrimaryIsPlaintext();
+}
+
+static void test_editTransaction_licensedFallbackPrimaryRemainsPlaintext()
+{
+    configureLicensedSinglePrimary();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_DISABLED, "", CUSTOM_KEY, 0));
+    sendCommitEdit();
+
+    assertLicensedFallbackPrimaryIsPlaintext();
+}
+
+static void test_editTransaction_expiredLicensedFallbackPrimaryRemainsPlaintext()
+{
+    configureLicensedSinglePrimary();
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_DISABLED, "", CUSTOM_KEY, 0));
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    assertLicensedFallbackPrimaryIsPlaintext();
+}
+
+static void test_editTransaction_primaryChannelDefersAndReconfiguresOnce()
+{
+    usePresetLongFast();
+    auto radio = std::make_unique<ChannelConfigApplyRadio>();
+    auto *channelRadio = radio.get();
+    scriptedRadio = nullptr;
+    testRouter->addInterface(std::move(radio));
+    channelRadio->beginSendingForTest();
+
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendCommitEdit();
+    channelRadio->serviceConfigApply(millis());
+    const uint32_t whileSending = channelRadio->reconfigurations();
+
+    channelRadio->completeSendingForTest();
+    channelRadio->serviceConfigApply(millis());
+    mockMeshService->loop();
+
+    const uint32_t afterCompletion = channelRadio->reconfigurations();
+    auto replacement = std::make_unique<ScriptedConfigApplyRadio>();
+    scriptedRadio = replacement.get();
+    testRouter->addInterface(std::move(replacement));
+
+    TEST_ASSERT_EQUAL_UINT32(0, whileSending);
+    TEST_ASSERT_EQUAL_UINT32(1, afterCompletion);
+}
+
+static void test_editTransaction_secondaryOnlyDoesNotReconfigureRadio()
+{
+    usePresetLongFast();
+    ConfigChangedCounter configChanges;
+    configChanges.observe(&mockMeshService->configChanged);
+
+    sendBeginEdit();
+    sendSetChannel(makeChannel(1, meshtastic_Channel_Role_SECONDARY, "Private", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    sendCommitEdit();
+
+    TEST_ASSERT_EQUAL_UINT32(0, configChanges.count);
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->requests());
+}
+
+static void test_editTransaction_abandonedPrimaryQueuesSafeApply()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    sendBeginEdit();
+    sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "Expired", CUSTOM_KEY, sizeof(CUSTOM_KEY)));
+    TEST_ASSERT_NULL(scriptedRadio->pending());
+
+    testAdmin->ageEditTransaction();
+    sendGetDeviceMetadata();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL_STRING("Expired", channels.getPrimary().name);
+    TEST_ASSERT_EQUAL_INT(SEGMENT_CHANNELS, testAdmin->persistedSegments());
 }
 
 static void test_warn_singleChannel_nameAndPsk_collapsedToCatchAll()
@@ -2678,6 +3560,7 @@ static void test_warn_singleChannel_nameAndPsk_collapsedToCatchAll()
     usePresetLongFast();
     // Variant name AND a non-default key: two issues on one channel collapse to one catch-all.
     sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", CUSTOM_KEY, 2));
+    completeQueuedChannelApply();
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("There may be name and PSK issues on channel 0"));
 }
@@ -2687,6 +3570,7 @@ static void test_warn_cleanChannel_noMessage()
     usePresetLongFast();
     // Exact preset name + default key: nothing to warn about.
     sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "LongFast", DEFAULT_KEY, 1));
+    completeQueuedChannelApply();
     TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
 }
 
@@ -2700,6 +3584,7 @@ static void test_warn_transaction_multipleChannels_singleCoalescedMessage()
     TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
 
     sendCommitEdit();
+    completeQueuedChannelApply();
     // Exactly one message, naming both channels.
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("There may be name issues on channels 0, 1"));
@@ -2713,6 +3598,7 @@ static void test_warn_transaction_singleChannel_keepsSpecificMessage()
     TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
 
     sendCommitEdit();
+    completeQueuedChannelApply();
     // One flagged channel: the specific message verbatim, not the plural catch-all.
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
@@ -2731,6 +3617,7 @@ static void test_editTransaction_abandoned_isRetiredOnNextAdminMessage()
 
     testAdmin->ageEditTransaction();
     sendGetDeviceMetadata(); // any later admin message, from any client
+    completeQueuedChannelApply();
 
     TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("looks like a mistype of 'LongFast'"));
@@ -2744,6 +3631,7 @@ static void test_editTransaction_abandoned_laterWriteIsNoLongerDeferred()
     testAdmin->ageEditTransaction();
 
     sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "long fast", DEFAULT_KEY, 1));
+    completeQueuedChannelApply();
 
     // The write itself retired the stale transaction, so its own warning is emitted immediately.
     TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
@@ -2762,6 +3650,7 @@ static void test_editTransaction_active_isNotRetired()
     TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
 
     sendCommitEdit();
+    completeQueuedChannelApply();
     TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("There may be name issues on channels 0, 1"));
 }
@@ -2772,6 +3661,7 @@ static void test_warn_license_noTransaction_emittedImmediately()
     owner.is_licensed = true;
     // Setting a channel that still carries a key triggers ensureLicensedOperation() to strip it.
     sendSetChannel(makeChannel(0, meshtastic_Channel_Role_PRIMARY, "", CUSTOM_KEY, 2));
+    completeQueuedChannelApply();
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("Licensed mode activated"));
 }
 
@@ -2786,6 +3676,7 @@ static void test_warn_license_transaction_coalescedToSingleMessage()
     TEST_ASSERT_EQUAL_INT(0, (int)capturedWarnings.size());
 
     sendCommitEdit();
+    completeQueuedChannelApply();
     // Collapsed to a single licensed-mode notice (and no channel warning, since names are blank).
     TEST_ASSERT_EQUAL_INT(1, warningsContaining("Licensed mode activated"));
     TEST_ASSERT_EQUAL_INT(1, (int)capturedWarnings.size());
@@ -2849,6 +3740,7 @@ void setup()
 
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);
+    RUN_TEST(test_handleSetOwner_radioFailureKeepsLicenseAndChannelsUnchanged);
     RUN_TEST(test_handleSetConfig_persistsLicensedFirstRegionIdentity);
     RUN_TEST(test_bootDefense_sanitizesStaleLicensedChannelsOnce);
     RUN_TEST(test_restorePreferences_sanitizesLicensedBackupBeforeReturn);
@@ -2949,7 +3841,7 @@ void setup()
     // Asynchronous LoRa config transaction
     RUN_TEST(test_editTransaction_loraCandidate_staysInactiveUntilCommit);
     RUN_TEST(test_editTransaction_commit_queuesOneRadioApply);
-    RUN_TEST(test_editTransaction_expiry_doesNotPersistUnappliedLora);
+    RUN_TEST(test_editTransaction_expiryQueuesAndPersistsStagedLora);
     RUN_TEST(test_editTransaction_loraFailure_savesOnlyUnrelatedSegments);
     RUN_TEST(test_menuLoRaHelper_ordinaryQueueSuccessBusyAndNoSyncPersistence);
     RUN_TEST(test_menuLoRaHelper_queueRejectionDiscardsLicensedTransitions);
@@ -2972,9 +3864,48 @@ void setup()
     RUN_TEST(test_setLoraConfig_deferredSaveWaitsForRadioFinalization);
     RUN_TEST(test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecoveryFailure);
     RUN_TEST(test_setLoraConfig_busy_returnsBadRequest);
+    RUN_TEST(test_destructiveAdminOperations_rejectedDuringPendingRadioApply);
+    RUN_TEST(test_powerCommands_dueBeforeRadioApply_waitForCompletion);
     RUN_TEST(test_setLoraConfig_regionSideEffects_doNotRunBeforeSuccess);
 
     // Channel-configuration warning + coalescing
+    RUN_TEST(test_setPrimaryChannel_activeTxDefersRadioApplyUntilSendingCompletes);
+    RUN_TEST(test_setSecondaryChannel_doesNotReconfigureRadio);
+    RUN_TEST(test_setPrimaryChannel_applyFailureRestoresPreviousChannels);
+    RUN_TEST(test_setPrimaryChannel_queueFailureDoesNotLeakCandidateWarnings);
+    RUN_TEST(test_setChannel_duringPendingApplyIsRejectedWithoutOrphaningFirstRequest);
+    RUN_TEST(test_beginEdit_duringPendingApplyIsRejected);
+    RUN_TEST(test_editTransaction_channelThenLoraPreservesBothInApply);
+    RUN_TEST(test_editTransaction_loraThenChannelPreservesBothInApply);
+    RUN_TEST(test_editTransaction_getChannelReturnsStagedCandidate);
+    RUN_TEST(test_editTransaction_defaultChannelHashUsesCandidatePreset);
+    RUN_TEST(test_editTransaction_abandonedLicenseExitQueuesRadioApply);
+    RUN_TEST(test_editTransaction_loraThenOwnerPreservesBothCandidates);
+    RUN_TEST(test_editTransaction_ownerThenLoraPreservesBothCandidates);
+    RUN_TEST(test_editTransaction_channelThenLoraCorrectsInvalidSlotAgainstFinalPrimary);
+    RUN_TEST(test_editTransaction_loraThenChannelCorrectsInvalidSlotAgainstFinalPrimary);
+    RUN_TEST(test_editTransaction_expiryCorrectsInvalidSlotAgainstFinalPrimary);
+    RUN_TEST(test_editTransaction_invalidSlotRollbackKeepsPublishedState);
+    RUN_TEST(test_editTransaction_ownerLastPreservesCorrectedSlotProvenance);
+    RUN_TEST(test_editTransaction_compoundCorrectionTracksFinalPrimary);
+    RUN_TEST(test_channelRename_preservesConcreteDefaultSlotProvenance);
+    RUN_TEST(test_channelRename_preservesZeroDefaultSlotProvenance);
+    RUN_TEST(test_channelRename_preservesExplicitSlot);
+    RUN_TEST(test_channelRename_rollbackPreservesDefaultSlotState);
+    RUN_TEST(test_loraPresetChange_preservesConcreteDefaultSlotProvenance);
+    RUN_TEST(test_loraRegionChange_preservesConcreteDefaultSlotProvenance);
+    RUN_TEST(test_loraPresetChange_preservesExplicitSlot);
+    RUN_TEST(test_editTransaction_loraThenChannelPreservesConcreteDefaultSlot);
+    RUN_TEST(test_editTransaction_channelThenLoraPreservesConcreteDefaultSlot);
+    RUN_TEST(test_editTransaction_primaryReplacementIsWriteOrderIndependent);
+    RUN_TEST(test_editTransaction_primaryReplacementFailureRetainsPublishedTable);
+    RUN_TEST(test_channelApplyFailureWithLicensedOwnerKeepsChannelsUnencrypted);
+    RUN_TEST(test_setChannel_licensedFallbackPrimaryRemainsPlaintext);
+    RUN_TEST(test_editTransaction_licensedFallbackPrimaryRemainsPlaintext);
+    RUN_TEST(test_editTransaction_expiredLicensedFallbackPrimaryRemainsPlaintext);
+    RUN_TEST(test_editTransaction_primaryChannelDefersAndReconfiguresOnce);
+    RUN_TEST(test_editTransaction_secondaryOnlyDoesNotReconfigureRadio);
+    RUN_TEST(test_editTransaction_abandonedPrimaryQueuesSafeApply);
     RUN_TEST(test_warn_singleChannel_variantName_oneSpecificMessage);
     RUN_TEST(test_warn_singleChannel_nameAndPsk_collapsedToCatchAll);
     RUN_TEST(test_warn_cleanChannel_noMessage);

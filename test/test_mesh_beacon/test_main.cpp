@@ -1624,6 +1624,9 @@ static void test_meshBeacon_adminRollbackUsesCanonicalHomeConfig()
     TEST_ASSERT_FALSE(MeshBeaconModule::radioConfigIsTemporary());
     radio->serviceConfigApply(millis());
     mockSvc->loop();
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    radio->serviceConfigApply(millis());
+    mockSvc->loop();
 
     TEST_ASSERT_EQUAL_MEMORY(&homeConfig, &config.lora, sizeof(homeConfig));
     TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());

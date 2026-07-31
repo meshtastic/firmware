@@ -181,7 +181,9 @@ class MeshService
     void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
     bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &previous, const meshtastic_Config_LoRaConfig &candidate,
-                           uint32_t timeoutMsec, bool previousLicensed, bool candidateLicensed);
+                           uint32_t timeoutMsec, bool previousLicensed, bool candidateLicensed,
+                           const meshtastic_ChannelSettings *previousPrimary = nullptr,
+                           const meshtastic_ChannelSettings *candidatePrimary = nullptr);
     RadioConfigApplyResult pollLoRaConfigApply() const;
     bool loRaConfigApplyActive() const
     {
@@ -189,7 +191,7 @@ class MeshService
     }
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
-    void reloadOwner(bool shouldSave = true);
+    virtual void reloadOwner(bool shouldSave = true);
 
     /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
     /// sends our nodeinfo

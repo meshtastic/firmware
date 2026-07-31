@@ -241,7 +241,37 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
     }
     // Before the switch, so every case below sees consistent transaction state.
-    expireStaleEditTransaction();
+    if (!expireStaleEditTransaction()) {
+        myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        return handled;
+    }
+
+    if (loRaConfigApplyPending.load(std::memory_order_acquire)) {
+        bool interruptsRadioApply = false;
+        switch (r->which_payload_variant) {
+        case meshtastic_AdminMessage_reboot_seconds_tag:
+            interruptsRadioApply = r->reboot_seconds >= 0;
+            break;
+        case meshtastic_AdminMessage_shutdown_seconds_tag:
+            interruptsRadioApply = r->shutdown_seconds >= 0;
+            break;
+        case meshtastic_AdminMessage_ota_request_tag:
+        case meshtastic_AdminMessage_factory_reset_config_tag:
+        case meshtastic_AdminMessage_factory_reset_device_tag:
+        case meshtastic_AdminMessage_nodedb_reset_tag:
+        case meshtastic_AdminMessage_enter_dfu_mode_request_tag:
+        case meshtastic_AdminMessage_restore_preferences_tag:
+            interruptsRadioApply = true;
+            break;
+        default:
+            break;
+        }
+        if (interruptsRadioApply) {
+            LOG_WARN("Rejecting admin operation while radio configuration apply is pending");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+            return handled;
+        }
+    }
 
     switch (r->which_payload_variant) {
 
@@ -289,6 +319,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      */
     case meshtastic_AdminMessage_set_owner_tag:
         LOG_DEBUG("Client set owner");
+        if (loRaConfigApplyPending.load(std::memory_order_acquire) && owner.is_licensed != r->set_owner.is_licensed) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+            break;
+        }
         // Validate names
         if (*r->set_owner.long_name) {
             const char *start = r->set_owner.long_name;
@@ -311,7 +345,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 break;
             }
         }
-        handleSetOwner(r->set_owner);
+        if (!handleSetOwner(r->set_owner))
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         break;
 
     case meshtastic_AdminMessage_set_config_tag: {
@@ -352,8 +387,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_DEBUG("Client set channel %d", r->set_channel.index);
         if (r->set_channel.index < 0 || r->set_channel.index >= (int)MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
-        else
-            handleSetChannel(r->set_channel);
+        else if (!handleSetChannel(r->set_channel))
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         break;
     case meshtastic_AdminMessage_set_ham_mode_tag:
         LOG_DEBUG("Client set ham mode");
@@ -469,6 +504,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
         LOG_INFO("Begin transaction for editing settings");
+        if (loRaConfigApplyPending.load(std::memory_order_acquire)) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+            break;
+        }
         hasOpenEditTransaction = true;
         editTransactionActivityMs = millis();
         break;
@@ -476,19 +515,25 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
         disableBluetooth();
         LOG_INFO("Commit transaction for edited settings");
-        const bool hasDeferredLoRaConfig =
-            !loRaConfigApplyPending.load(std::memory_order_acquire) && pendingLoRaConfig.saveWhat != 0;
-        if (hasDeferredLoRaConfig && !tryBeginLoRaConfigApply()) {
+        normalizePendingChannelPrimary();
+        const bool hasStagedLoRaConfig = (pendingLoRaConfig.saveWhat & ~SEGMENT_CHANNELS) != 0;
+        const bool requiresRadioApply = hasStagedLoRaConfig || pendingChannelNeedsRadioApply();
+        if (requiresRadioApply && (!service || !tryBeginLoRaConfigApply())) {
             editTransactionActivityMs = millis();
             sendWarningAndLog("Radio configuration apply is busy; edited settings remain staged for retry");
             break;
         }
         hasOpenEditTransaction = false;
-        const int unrelatedSegments = deferredEditSegments;
+        const int editedSegments = deferredEditSegments;
         deferredEditSegments = 0;
-        if (hasDeferredLoRaConfig) {
+        if (requiresRadioApply) {
+            const int unrelatedSegments = pendingChannelConfig.active ? editedSegments & ~SEGMENT_CHANNELS : editedSegments;
             if (!service->requestLoRaConfig(pendingLoRaConfig.previous, pendingLoRaConfig.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS,
-                                            pendingLoRaConfig.previousLicensed, pendingLoRaConfig.candidateLicensed)) {
+                                            pendingLoRaConfig.previousLicensed, pendingLoRaConfig.candidateLicensed,
+                                            pendingChannelConfig.active ? &pendingChannelConfig.previousPrimary : nullptr,
+                                            pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr)) {
+                pendingChannelConfig = PendingChannelConfig{};
+                pendingOwnerConfig = PendingOwnerConfig{};
                 pendingLoRaConfig = PreparedLoRaConfig{};
                 pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
                 cancelLoRaConfigApply();
@@ -497,9 +542,21 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             if (unrelatedSegments)
                 saveChanges(unrelatedSegments);
         } else {
-            saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
+            const int unrelatedSegments = editedSegments & ~SEGMENT_CHANNELS;
+            if (unrelatedSegments)
+                saveChanges(unrelatedSegments);
+            if (pendingChannelConfig.active) {
+                publishPendingChannels();
+                saveChanges(SEGMENT_CHANNELS, false, false);
+                queuePendingChannelWarnings();
+                pendingChannelConfig = PendingChannelConfig{};
+                pendingLoRaConfig = PreparedLoRaConfig{};
+            }
+            if (!editedSegments)
+                saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                            SEGMENT_NODEDATABASE);
+            flushChannelWarnings();
         }
-        flushChannelWarnings(); // one coalesced message for everything edited in this transaction
         break;
     }
     case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
@@ -785,11 +842,13 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
  * Setter methods
  */
 
-void AdminModule::handleSetOwner(const meshtastic_User &o)
+bool AdminModule::handleSetOwner(const meshtastic_User &o)
 {
+    if (loRaConfigApplyPending.load(std::memory_order_acquire))
+        return false;
+
+    meshtastic_User candidate = pendingOwnerConfig.active ? pendingOwnerConfig.candidate : owner;
     int changed = 0;
-    bool identityUpdated = false;
-    bool channelsSanitized = false;
 
     if (*o.long_name) {
         // Apps built against the older 39-byte limit may send longer names; clamp
@@ -798,50 +857,85 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         strncpy(longName, o.long_name, sizeof(longName));
         longName[sizeof(longName) - 1] = '\0';
         clampLongName(longName);
-        changed |= strcmp(owner.long_name, longName);
-        strncpy(owner.long_name, longName, sizeof(owner.long_name));
-        owner.long_name[sizeof(owner.long_name) - 1] = '\0';
+        changed |= strcmp(candidate.long_name, longName);
+        strncpy(candidate.long_name, longName, sizeof(candidate.long_name));
+        candidate.long_name[sizeof(candidate.long_name) - 1] = '\0';
     }
     if (*o.short_name) {
-        changed |= strcmp(owner.short_name, o.short_name);
-        strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
-        owner.short_name[sizeof(owner.short_name) - 1] = '\0';
-        sanitizeUtf8(owner.short_name, sizeof(owner.short_name));
+        changed |= strcmp(candidate.short_name, o.short_name);
+        strncpy(candidate.short_name, o.short_name, sizeof(candidate.short_name));
+        candidate.short_name[sizeof(candidate.short_name) - 1] = '\0';
+        sanitizeUtf8(candidate.short_name, sizeof(candidate.short_name));
     }
-    if (owner.is_licensed != o.is_licensed) {
+    if (pendingOwnerConfig.active && candidate.is_licensed != o.is_licensed)
+        return false;
+
+    const bool licenseChanged = owner.is_licensed != o.is_licensed;
+    if (candidate.is_licensed != o.is_licensed) {
         changed = 1;
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-        const bool identityWillMigrate =
-            o.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET && licensedIdentityWillMigrate();
-        if (identityWillMigrate)
-            sendWarning(licensedIdentityMigrationMessage);
-#endif
-        owner.is_licensed = o.is_licensed;
-        if (channels.ensureLicensedOperation()) {
-            warnLicensedMode();
-            channelsSanitized = true;
-        }
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-        if (owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            identityUpdated = nodeDB->generateCryptoKeyPair();
-            if (identityWillMigrate)
-                nodeDB->licensedIdentityMigrationPending = false;
-        }
-#endif
+        candidate.is_licensed = o.is_licensed;
     }
-    snprintf(owner.id, sizeof(owner.id), "!%08x", nodeDB->getNodeNum());
-    if (owner.has_is_unmessagable != o.has_is_unmessagable ||
-        (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
+    snprintf(candidate.id, sizeof(candidate.id), "!%08x", nodeDB->getNodeNum());
+    if (candidate.has_is_unmessagable != o.has_is_unmessagable ||
+        (o.has_is_unmessagable && candidate.is_unmessagable != o.is_unmessagable)) {
         changed = 1;
-        owner.has_is_unmessagable = owner.has_is_unmessagable || o.has_is_unmessagable;
-        owner.is_unmessagable = o.is_unmessagable;
+        candidate.has_is_unmessagable = candidate.has_is_unmessagable || o.has_is_unmessagable;
+        candidate.is_unmessagable = o.is_unmessagable;
     }
 
-    if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service->reloadOwner(!hasOpenEditTransaction);
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | (identityUpdated ? SEGMENT_CONFIG : 0) |
-                    (channelsSanitized ? SEGMENT_CHANNELS : 0));
+    if (!changed)
+        return true;
+
+    if (licenseChanged) {
+        const PendingChannelConfig savedChannels = pendingChannelConfig;
+        const PendingOwnerConfig savedOwner = pendingOwnerConfig;
+        pendingOwnerConfig.previous = owner;
+        pendingOwnerConfig.candidate = candidate;
+        pendingOwnerConfig.active = true;
+        ensurePendingChannelConfig();
+        pendingChannelConfig.licensedChannelsSanitized |=
+            Channels::ensureLicensedOperation(pendingChannelConfig.candidate, candidate.is_licensed);
+
+        const meshtastic_Config_LoRaConfig radioCandidate =
+            pendingLoRaConfig.saveWhat != 0 ? pendingLoRaConfig.candidate : config.lora;
+        const PreparedLoRaConfig previousPrepared = pendingLoRaConfig;
+        if (!requestLoRaConfig(radioCandidate, false, candidate.is_licensed, StagedMenuLoRaTransition{})) {
+            pendingChannelConfig = savedChannels;
+            pendingOwnerConfig = savedOwner;
+            return false;
+        }
+        pendingLoRaConfig.channelNumAutoCorrected |= previousPrepared.channelNumAutoCorrected;
+        pendingLoRaConfig.preserveDefaultFrequencySlot = previousPrepared.preserveDefaultFrequencySlot;
+        if (previousPrepared.warnCodingRateNormalization) {
+            pendingLoRaConfig.warnCodingRateNormalization = true;
+            pendingLoRaConfig.invalidCodingRate = previousPrepared.invalidCodingRate;
+        }
+        if (previousPrepared.warnSpreadFactorNormalization) {
+            pendingLoRaConfig.warnSpreadFactorNormalization = true;
+            pendingLoRaConfig.invalidSpreadFactor = previousPrepared.invalidSpreadFactor;
+        }
+        if (previousPrepared.warnBandwidthNormalization) {
+            pendingLoRaConfig.warnBandwidthNormalization = true;
+            pendingLoRaConfig.invalidBandwidth = previousPrepared.invalidBandwidth;
+        }
+        pendingLoRaConfig.warnInvalidClientCorrection |= previousPrepared.warnInvalidClientCorrection;
+        pendingLoRaConfig.warnFemNormalization |= previousPrepared.warnFemNormalization;
+        for (uint8_t i = 0; i < previousPrepared.delayedDiagnosticCount &&
+                            pendingLoRaConfig.delayedDiagnosticCount < PreparedLoRaConfig::MAX_DELAYED_DIAGNOSTICS;
+             ++i) {
+            pendingLoRaConfig.delayedDiagnostics[pendingLoRaConfig.delayedDiagnosticCount++] =
+                previousPrepared.delayedDiagnostics[i];
+        }
+        pendingLoRaConfig.saveWhat |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | SEGMENT_CHANNELS;
+        if (hasOpenEditTransaction)
+            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | SEGMENT_CHANNELS);
+        return true;
     }
+
+    owner = candidate;
+    service->reloadOwner(!hasOpenEditTransaction);
+    saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE);
+    return true;
 }
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR &&                            \
@@ -890,9 +984,11 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 #if !MESHTASTIC_EXCLUDE_BEACON
     meshtastic_ChannelSettings homePrimaryChannel;
     MeshBeaconModule::getHomeRadioConfig(prepared.previous, &homePrimaryChannel);
-    const meshtastic_ChannelSettings *normalizationPrimaryChannel = &homePrimaryChannel;
+    const meshtastic_ChannelSettings *normalizationPrimaryChannel =
+        pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : &homePrimaryChannel;
 #else
-    const meshtastic_ChannelSettings *normalizationPrimaryChannel = nullptr;
+    const meshtastic_ChannelSettings *normalizationPrimaryChannel =
+        pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr;
 #endif
     RadioInterface *candidateRadio = router ? router->getRadioIface() : nullptr;
     prepared.candidate = incoming;
@@ -986,6 +1082,7 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
             }
         } else {
             prepared.warnInvalidClientCorrection = true;
+            const uint32_t requestedChannelNum = prepared.candidate.channel_num;
             delayDiagnostics(validation);
             const RadioInterface::LoRaConfigNormalization corrected =
                 RadioInterface::normalizeConfigLora(prepared.candidate, true, normalizationPrimaryChannel, candidateRadio);
@@ -995,6 +1092,7 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
                 LOG_WARN("LoRa config cannot be corrected for this radio, rejecting changes");
                 return false;
             }
+            prepared.channelNumAutoCorrected = corrected.config.channel_num != requestedChannelNum;
             prepared.candidate = corrected.config;
             validation = corrected;
         }
@@ -1063,7 +1161,21 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 
 bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers)
 {
-    return requestLoRaConfig(incoming, fromOthers, owner.is_licensed, StagedMenuLoRaTransition{});
+    const meshtastic_Config_LoRaConfig &previous = pendingLoRaConfig.saveWhat != 0 ? pendingLoRaConfig.candidate : config.lora;
+    const bool previousUsesDefault = pendingLoRaConfig.saveWhat != 0 ? pendingLoRaConfig.preserveDefaultFrequencySlot
+                                     : pendingChannelConfig.active   ? pendingChannelConfig.preserveDefaultFrequencySlot
+                                                                     : RadioInterface::uses_default_frequency_slot;
+    auto candidate = incoming;
+    if (candidate.override_frequency == 0 &&
+        (candidate.channel_num == 0 || (previousUsesDefault && candidate.channel_num == previous.channel_num)))
+        candidate.channel_num = 0;
+
+    const bool accepted = requestLoRaConfig(candidate, fromOthers, prospectiveLicensedOwner(), StagedMenuLoRaTransition{});
+    if (accepted) {
+        pendingLoRaConfig.preserveDefaultFrequencySlot = pendingLoRaConfig.usesDefaultFrequencySlot;
+        pendingChannelConfig.preserveDefaultFrequencySlot = pendingLoRaConfig.usesDefaultFrequencySlot;
+    }
+    return accepted;
 }
 
 bool AdminModule::requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, MenuLoRaTransition transition)
@@ -1086,7 +1198,20 @@ bool AdminModule::requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &inco
         candidate.tx_enabled = true;
     }
 
-    return requestLoRaConfig(candidate, false, prospectiveLicensedOwner, staged);
+    const meshtastic_Config_LoRaConfig &previous = pendingLoRaConfig.saveWhat != 0 ? pendingLoRaConfig.candidate : config.lora;
+    const bool previousUsesDefault = pendingLoRaConfig.saveWhat != 0 ? pendingLoRaConfig.preserveDefaultFrequencySlot
+                                     : pendingChannelConfig.active   ? pendingChannelConfig.preserveDefaultFrequencySlot
+                                                                     : RadioInterface::uses_default_frequency_slot;
+    if (candidate.override_frequency == 0 &&
+        (candidate.channel_num == 0 || (previousUsesDefault && candidate.channel_num == previous.channel_num)))
+        candidate.channel_num = 0;
+
+    const bool accepted = requestLoRaConfig(candidate, false, prospectiveLicensedOwner, staged);
+    if (accepted) {
+        pendingLoRaConfig.preserveDefaultFrequencySlot = pendingLoRaConfig.usesDefaultFrequencySlot;
+        pendingChannelConfig.preserveDefaultFrequencySlot = pendingLoRaConfig.usesDefaultFrequencySlot;
+    }
+    return accepted;
 }
 
 bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
@@ -1095,19 +1220,38 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     if (!service || !tryBeginLoRaConfigApply())
         return false;
 
+    const bool channelWasAlreadyPending = pendingChannelConfig.active;
+    if (prospectiveLicensedOwner && (!owner.is_licensed || pendingOwnerConfig.active)) {
+        ensurePendingChannelConfig();
+        pendingChannelConfig.licensedChannelsSanitized |= Channels::ensureLicensedOperation(pendingChannelConfig.candidate, true);
+    }
+    if (!hasOpenEditTransaction && pendingChannelConfig.active)
+        normalizePendingChannelPrimary();
+
     PreparedLoRaConfig prepared;
     if (!prepareLoRaConfig(incoming, fromOthers, prospectiveLicensedOwner, prepared)) {
+        if (!channelWasAlreadyPending)
+            pendingChannelConfig = PendingChannelConfig{};
         cancelLoRaConfigApply();
         return false;
     }
 
     pendingLoRaConfig = prepared;
     pendingMenuLoRaTransition = transition;
+    if (pendingChannelConfig.active) {
+        pendingLoRaConfig.saveWhat |= SEGMENT_CHANNELS;
+        pendingLoRaConfig.candidateLicensed = prospectiveLicensedOwner;
+    }
     if (transition.type == MenuLoRaTransition::ENTER_LICENSED) {
         pendingLoRaConfig.generateLicensedIdentity = false;
         pendingLoRaConfig.warnLicensedIdentityMigration = false;
         pendingMenuLoRaTransition.ham.tx_power = prepared.candidate.tx_power;
         pendingMenuLoRaTransition.ham.frequency = prepared.candidate.override_frequency;
+    } else if (pendingOwnerConfig.active && prospectiveLicensedOwner &&
+               config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        pendingLoRaConfig.generateLicensedIdentity = true;
+        pendingLoRaConfig.warnLicensedIdentityMigration = licensedIdentityWillMigrate();
+        pendingLoRaConfig.saveWhat |= SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
     }
     if (hasOpenEditTransaction) {
         editTransactionActivityMs = millis();
@@ -1116,9 +1260,13 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     }
 
     if (!service->requestLoRaConfig(prepared.previous, prepared.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS,
-                                    prepared.previousLicensed, prepared.candidateLicensed)) {
+                                    prepared.previousLicensed, prepared.candidateLicensed,
+                                    pendingChannelConfig.active ? &pendingChannelConfig.previousPrimary : nullptr,
+                                    pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr)) {
         pendingLoRaConfig = PreparedLoRaConfig{};
         pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
+        if (!channelWasAlreadyPending)
+            pendingChannelConfig = PendingChannelConfig{};
         cancelLoRaConfigApply();
         return false;
     }
@@ -1173,7 +1321,15 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
     if (result == RadioConfigApplyResult::APPLIED) {
         config.has_lora = true;
         config.lora = pendingLoRaConfig.candidate;
-        const int saveWhat = pendingLoRaConfig.saveWhat | applyStagedMenuLoRaTransition();
+        int saveWhat = pendingLoRaConfig.saveWhat;
+        if (pendingChannelConfig.active)
+            publishPendingChannels();
+        if (pendingOwnerConfig.active) {
+            owner = pendingOwnerConfig.candidate;
+            service->reloadOwner(false);
+            saveWhat |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
+        }
+        saveWhat |= applyStagedMenuLoRaTransition();
         if (pendingLoRaConfig.updateFrequencySlotFlags) {
             RadioInterface::uses_default_frequency_slot = pendingLoRaConfig.usesDefaultFrequencySlot;
             RadioInterface::uses_custom_channel_name = pendingLoRaConfig.usesCustomChannelName;
@@ -1229,11 +1385,19 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
 #endif
 
         saveChanges(saveWhat, false, false, true);
+        if (pendingChannelConfig.active)
+            queuePendingChannelWarnings();
         if (pendingLoRaConfig.warnPresetChange)
             warnOnLoraPresetChange(pendingLoRaConfig.previous, pendingLoRaConfig.candidate);
         if (!hasOpenEditTransaction)
             flushChannelWarnings();
     } else {
+        if (owner.is_licensed && channels.ensureLicensedOperation()) {
+            channels.onConfigChanged();
+            saveChanges(SEGMENT_CHANNELS, false, false, true);
+            warnLicensedMode();
+            flushChannelWarnings();
+        }
         config.lora = pendingLoRaConfig.previous;
         initRegion();
         if (result == RadioConfigApplyResult::ROLLBACK_FAILED) {
@@ -1248,6 +1412,8 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
 
     pendingLoRaConfig = PreparedLoRaConfig{};
     pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
+    pendingChannelConfig = PendingChannelConfig{};
+    pendingOwnerConfig = PendingOwnerConfig{};
 }
 
 void AdminModule::finalizeLoRaConfigApply()
@@ -1666,37 +1832,162 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     return true;
 }
 
-void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
+bool AdminModule::pendingChannelNeedsRadioApply() const
 {
-    channels.setChannel(cc);
-    if (channels.ensureLicensedOperation()) {
-        warnLicensedMode();
-    }
-    // Refresh derived state (primaryIndex in particular) BEFORE the precision clamp below. usesPublicKey()
-    // resolves a secondary channel's key against the primary, so it must see the post-update primaryIndex;
-    // running the clamp first could evaluate secondaries against the previous primary and skip the clamp/warning.
-    channels.onConfigChanged(); // tell the radios about this change
+    return pendingChannelConfig.active &&
+           (pendingChannelConfig.previousPrimaryIndex != pendingChannelConfig.candidatePrimaryIndex ||
+            memcmp(&pendingChannelConfig.previousPrimary, &pendingChannelConfig.candidatePrimary,
+                   sizeof(pendingChannelConfig.previousPrimary)) != 0);
+}
 
-    // Persist the public-key precision clamp for all channels that may be affected (e.g. secondaries
-    // that inherit a now-public primary key) and warn the client once if anything was coarsened.
-    bool clamped = false;
-    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
-        meshtastic_Channel &ch = channels.getByIndex(i);
-        if (ch.role == meshtastic_Channel_Role_DISABLED || !ch.settings.has_module_settings)
+void AdminModule::ensurePendingChannelConfig()
+{
+    if (pendingChannelConfig.active)
+        return;
+
+    pendingChannelConfig.active = true;
+    pendingChannelConfig.candidate = channelFile;
+    pendingChannelConfig.previousPrimaryIndex = channels.getPrimaryIndex();
+    pendingChannelConfig.candidatePrimaryIndex = channels.getPrimaryIndex();
+    pendingChannelConfig.previousPrimary = channels.getPrimary();
+    pendingChannelConfig.candidatePrimary = channels.getPrimary();
+    pendingChannelConfig.preserveDefaultFrequencySlot = pendingLoRaConfig.saveWhat != 0
+                                                            ? pendingLoRaConfig.preserveDefaultFrequencySlot
+                                                            : RadioInterface::uses_default_frequency_slot;
+}
+
+void AdminModule::normalizePendingChannelPrimary()
+{
+    if (!pendingChannelConfig.active)
+        return;
+
+    const auto primary = pendingChannelConfig.candidate.channels[pendingChannelConfig.candidatePrimaryIndex];
+    pendingChannelConfig.candidatePrimaryIndex =
+        Channels::setChannelInFile(pendingChannelConfig.candidate, primary, pendingChannelConfig.candidatePrimaryIndex);
+    pendingChannelConfig.licensedChannelsSanitized |=
+        Channels::ensureLicensedOperation(pendingChannelConfig.candidate, prospectiveLicensedOwner());
+    pendingChannelConfig.candidatePrimary =
+        pendingChannelConfig.candidate.channels[pendingChannelConfig.candidatePrimaryIndex].settings;
+    if (pendingLoRaConfig.saveWhat != 0) {
+        if (pendingChannelConfig.preserveDefaultFrequencySlot && !pendingLoRaConfig.channelNumAutoCorrected)
+            pendingLoRaConfig.candidate.channel_num = 0;
+        if (pendingLoRaConfig.channelNumAutoCorrected) {
+            auto correctedCandidate = pendingLoRaConfig.candidate;
+            correctedCandidate.channel_num = UINT32_MAX;
+            const auto corrected = RadioInterface::normalizeConfigLora(
+                correctedCandidate, true, &pendingChannelConfig.candidatePrimary, router ? router->getRadioIface() : nullptr);
+            if (corrected.valid)
+                pendingLoRaConfig.candidate.channel_num = corrected.config.channel_num;
+        }
+        const auto normalization =
+            RadioInterface::normalizeConfigLora(pendingLoRaConfig.candidate, false, &pendingChannelConfig.candidatePrimary,
+                                                router ? router->getRadioIface() : nullptr);
+        pendingLoRaConfig.updateFrequencySlotFlags = normalization.updatesFrequencySlotFlags;
+        pendingLoRaConfig.usesDefaultFrequencySlot = normalization.usesDefaultFrequencySlot;
+        pendingLoRaConfig.usesCustomChannelName = normalization.usesCustomChannelName;
+    }
+}
+
+bool AdminModule::prospectiveLicensedOwner() const
+{
+    return pendingOwnerConfig.active ? pendingOwnerConfig.candidate.is_licensed : owner.is_licensed;
+}
+
+void AdminModule::publishPendingChannels()
+{
+    channelFile = pendingChannelConfig.candidate;
+    channels.onConfigChanged();
+}
+
+void AdminModule::queuePendingChannelWarnings()
+{
+    if (pendingChannelConfig.licensedChannelsSanitized)
+        warnLicensedMode();
+    if (pendingChannelConfig.precisionClamped)
+        sendWarning(publicChannelPrecisionMessage);
+    for (uint8_t i = 0; i < MAX_NUM_CHANNELS; ++i) {
+        if (pendingChannelConfig.changedChannels & (1u << i))
+            warnOnChannelSet(pendingChannelConfig.candidate.channels[i]);
+    }
+}
+
+bool AdminModule::handleSetChannel(const meshtastic_Channel &cc)
+{
+    if (loRaConfigApplyPending.load(std::memory_order_acquire)) {
+        sendWarningAndLog("Radio configuration apply is busy; channel change was not applied");
+        return false;
+    }
+
+    ensurePendingChannelConfig();
+
+    pendingChannelConfig.candidatePrimaryIndex =
+        Channels::setChannelInFile(pendingChannelConfig.candidate, cc, pendingChannelConfig.candidatePrimaryIndex, false);
+    pendingChannelConfig.changedChannels |= 1u << cc.index;
+    pendingChannelConfig.licensedChannelsSanitized |=
+        Channels::ensureLicensedOperation(pendingChannelConfig.candidate, prospectiveLicensedOwner());
+
+    for (uint8_t i = 0; i < pendingChannelConfig.candidate.channels_count; ++i) {
+        auto &channel = pendingChannelConfig.candidate.channels[i];
+        if (channel.role == meshtastic_Channel_Role_DISABLED || !channel.settings.has_module_settings)
             continue;
-        uint32_t allowed = getPositionPrecisionForChannel(i);
-        if (allowed != ch.settings.module_settings.position_precision) {
-            ch.settings.module_settings.position_precision = allowed;
-            clamped = true;
+        uint32_t allowed = channel.settings.module_settings.position_precision;
+        if (allowed > MAX_POSITION_PRECISION_PUBLIC_KEY && channelFileUsesPublicKey(pendingChannelConfig.candidate, i))
+            allowed = MAX_POSITION_PRECISION_PUBLIC_KEY;
+        if (allowed != channel.settings.module_settings.position_precision) {
+            channel.settings.module_settings.position_precision = allowed;
+            pendingChannelConfig.precisionClamped = true;
         }
     }
-    if (clamped)
-        sendWarning(publicChannelPrecisionMessage);
-    saveChanges(SEGMENT_CHANNELS, false);
-    warnOnChannelSet(channels.getByIndex(cc.index)); // passes the saved channel
-    // Inside an edit transaction the queued warnings are flushed once at commit; otherwise emit now.
-    if (!hasOpenEditTransaction)
+
+    if (pendingLoRaConfig.saveWhat == 0) {
+        pendingLoRaConfig.previous = config.lora;
+        pendingLoRaConfig.candidate = config.lora;
+        pendingLoRaConfig.previousLicensed = owner.is_licensed;
+        pendingLoRaConfig.candidateLicensed = prospectiveLicensedOwner();
+        pendingLoRaConfig.preserveDefaultFrequencySlot = pendingChannelConfig.preserveDefaultFrequencySlot;
+    }
+    pendingLoRaConfig.saveWhat |= SEGMENT_CHANNELS;
+
+    const auto normalization = RadioInterface::normalizeConfigLora(
+        pendingLoRaConfig.candidate, false, &pendingChannelConfig.candidatePrimary, router ? router->getRadioIface() : nullptr);
+    pendingLoRaConfig.updateFrequencySlotFlags = normalization.updatesFrequencySlotFlags;
+    pendingLoRaConfig.usesDefaultFrequencySlot = normalization.usesDefaultFrequencySlot;
+    pendingLoRaConfig.usesCustomChannelName = normalization.usesCustomChannelName;
+
+    if (hasOpenEditTransaction) {
+        deferredEditSegments |= SEGMENT_CHANNELS;
+        editTransactionActivityMs = millis();
+        return true;
+    }
+
+    normalizePendingChannelPrimary();
+
+    if (!pendingChannelNeedsRadioApply()) {
+        publishPendingChannels();
+        saveChanges(SEGMENT_CHANNELS, false, false);
+        queuePendingChannelWarnings();
         flushChannelWarnings();
+        pendingChannelConfig = PendingChannelConfig{};
+        pendingLoRaConfig = PreparedLoRaConfig{};
+        return true;
+    }
+
+    if (!service || !tryBeginLoRaConfigApply()) {
+        pendingChannelConfig = PendingChannelConfig{};
+        pendingLoRaConfig = PreparedLoRaConfig{};
+        sendWarningAndLog("Radio configuration apply is busy; channel change was not applied");
+        return false;
+    }
+    if (!service->requestLoRaConfig(pendingLoRaConfig.previous, pendingLoRaConfig.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS,
+                                    pendingLoRaConfig.previousLicensed, pendingLoRaConfig.candidateLicensed,
+                                    &pendingChannelConfig.previousPrimary, &pendingChannelConfig.candidatePrimary)) {
+        pendingChannelConfig = PendingChannelConfig{};
+        pendingLoRaConfig = PreparedLoRaConfig{};
+        cancelLoRaConfigApply();
+        sendWarningAndLog("Radio configuration apply could not be queued; previous channel retained");
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -2063,7 +2354,9 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
     if (req.decoded.want_response) {
         // We create the reply here
         meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-        r.get_channel_response = channels.getByIndex(channelIndex);
+        r.get_channel_response = hasOpenEditTransaction && pendingChannelConfig.active
+                                     ? pendingChannelConfig.candidate.channels[channelIndex]
+                                     : channels.getByIndex(channelIndex);
         r.which_payload_variant = meshtastic_AdminMessage_get_channel_response_tag;
         setPassKey(&r);
         myReply = allocDataProtobuf(r);
@@ -2100,23 +2393,52 @@ void AdminModule::reboot(int32_t seconds)
 
 // Without this, a commit that never arrives leaves the transaction open forever and every later
 // config write from any client is applied, acknowledged, and then never saved.
-void AdminModule::expireStaleEditTransaction()
+bool AdminModule::expireStaleEditTransaction()
 {
     if (!hasOpenEditTransaction || Throttle::isWithinTimespanMs(editTransactionActivityMs, EDIT_TRANSACTION_IDLE_MS))
-        return;
+        return true;
+
+    normalizePendingChannelPrimary();
+    const bool hasStagedRadioConfig = (pendingLoRaConfig.saveWhat & ~SEGMENT_CHANNELS) != 0 || pendingOwnerConfig.active;
+    const bool requiresRadioApply = hasStagedRadioConfig || pendingChannelNeedsRadioApply();
+    if (requiresRadioApply && (!service || !tryBeginLoRaConfigApply())) {
+        sendWarningAndLog("Radio configuration apply is busy; abandoned edits remain staged for retry");
+        return false;
+    }
 
     LOG_WARN("Edit transaction abandoned for %us; committing what it applied", EDIT_TRANSACTION_IDLE_MS / 1000);
     hasOpenEditTransaction = false;
-    if (!loRaConfigApplyPending.load(std::memory_order_acquire) && pendingLoRaConfig.saveWhat != 0) {
-        pendingLoRaConfig = PreparedLoRaConfig{};
-        pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
-    }
     int segments = deferredEditSegments;
     deferredEditSegments = 0;
-    // No reboot: the settings are already live in RAM and the client that would expect one is gone.
-    if (segments)
-        saveChanges(segments, false);
-    flushChannelWarnings();
+    if (requiresRadioApply) {
+        const int unrelatedSegments = pendingChannelConfig.active ? segments & ~SEGMENT_CHANNELS : segments;
+        if (!service->requestLoRaConfig(pendingLoRaConfig.previous, pendingLoRaConfig.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS,
+                                        pendingLoRaConfig.previousLicensed, pendingLoRaConfig.candidateLicensed,
+                                        pendingChannelConfig.active ? &pendingChannelConfig.previousPrimary : nullptr,
+                                        pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr)) {
+            pendingChannelConfig = PendingChannelConfig{};
+            pendingOwnerConfig = PendingOwnerConfig{};
+            pendingLoRaConfig = PreparedLoRaConfig{};
+            pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
+            cancelLoRaConfigApply();
+            sendWarningAndLog("Radio configuration apply could not be queued; abandoned edits were discarded");
+        }
+        if (unrelatedSegments)
+            saveChanges(unrelatedSegments, false);
+    } else {
+        if (pendingChannelConfig.active) {
+            publishPendingChannels();
+            saveChanges(SEGMENT_CHANNELS, false, false);
+            queuePendingChannelWarnings();
+            pendingChannelConfig = PendingChannelConfig{};
+            pendingLoRaConfig = PreparedLoRaConfig{};
+        }
+        segments &= ~SEGMENT_CHANNELS;
+        if (segments)
+            saveChanges(segments, false);
+        flushChannelWarnings();
+    }
+    return true;
 }
 
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool notifyConfigChange, bool radioApplyCompletion)
@@ -2223,11 +2545,6 @@ int AdminModule::applyEnterLicensedMode(const meshtastic_HamParameters &params)
             nodeDB->licensedIdentityMigrationPending = false;
     }
 #endif
-
-    if (channels.ensureLicensedOperation()) {
-        warnLicensedMode();
-    }
-    channels.onConfigChanged();
 
     if (strcmp(params.call_sign, "N0CALL") == 0) {
         config.lora.tx_enabled = false;

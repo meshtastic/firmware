@@ -39,6 +39,9 @@ class NotifiedWorkerThread : public OSThread
   protected:
     virtual void onNotify(uint32_t notification) = 0;
 
+    /** Wake immediately without replacing an already queued notification. */
+    void wakePreservingNotification();
+
     /// just calls checkNotification()
     virtual int32_t runOnce() override;
 

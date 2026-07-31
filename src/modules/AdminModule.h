@@ -53,7 +53,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     uint32_t editTransactionActivityMs = 0; // millis() of the last save this transaction deferred
     int deferredEditSegments = 0;           // segments that transaction has touched but not yet saved
     /// Retire an open edit transaction whose client stopped talking, persisting what it applied.
-    void expireStaleEditTransaction();
+    bool expireStaleEditTransaction();
 #ifdef PIO_UNIT_TESTING
     int lastSaveWhatForTest = 0;
     int persistedSaveWhatForTest = 0;
@@ -90,8 +90,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     /**
      * Setters
      */
-    void handleSetOwner(const meshtastic_User &o);
-    void handleSetChannel(const meshtastic_Channel &cc);
+    bool handleSetOwner(const meshtastic_User &o);
+    bool handleSetChannel(const meshtastic_Channel &cc);
 
   protected:
     bool handleSetConfig(const meshtastic_Config &c, bool fromOthers);
@@ -164,6 +164,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
         uint8_t invalidSpreadFactor = 0;
         uint16_t invalidBandwidth = 0;
         bool regionChanged = false;
+        bool channelNumAutoCorrected = false;
+        bool preserveDefaultFrequencySlot = false;
         bool updateFrequencySlotFlags = false;
         bool usesDefaultFrequencySlot = false;
         bool usesCustomChannelName = false;
@@ -188,6 +190,23 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
         MenuLoRaTransition type = MenuLoRaTransition::NONE;
         meshtastic_HamParameters ham = meshtastic_HamParameters_init_zero;
     };
+    struct PendingChannelConfig {
+        meshtastic_ChannelFile candidate = meshtastic_ChannelFile_init_zero;
+        meshtastic_ChannelSettings previousPrimary = meshtastic_ChannelSettings_init_zero;
+        meshtastic_ChannelSettings candidatePrimary = meshtastic_ChannelSettings_init_zero;
+        uint32_t changedChannels = 0;
+        uint8_t previousPrimaryIndex = 0;
+        uint8_t candidatePrimaryIndex = 0;
+        bool licensedChannelsSanitized = false;
+        bool precisionClamped = false;
+        bool preserveDefaultFrequencySlot = false;
+        bool active = false;
+    };
+    struct PendingOwnerConfig {
+        meshtastic_User previous = meshtastic_User_init_zero;
+        meshtastic_User candidate = meshtastic_User_init_zero;
+        bool active = false;
+    };
     bool prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
                            PreparedLoRaConfig &prepared);
     bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
@@ -195,6 +214,12 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool tryBeginLoRaConfigApply();
     void cancelLoRaConfigApply();
     void finishLoRaConfigApplyAndFlushDeferred();
+    bool pendingChannelNeedsRadioApply() const;
+    void ensurePendingChannelConfig();
+    void normalizePendingChannelPrimary();
+    bool prospectiveLicensedOwner() const;
+    void publishPendingChannels();
+    void queuePendingChannelWarnings();
     void persistChanges(int saveWhat, bool shouldReboot, bool notifyConfigChange);
     bool validateHamParameters(const meshtastic_HamParameters &params) const;
     int applyEnterLicensedMode(const meshtastic_HamParameters &params);
@@ -226,6 +251,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     static constexpr uint32_t LORA_CONFIG_APPLY_TIMEOUT_MS = 60 * 1000;
     PreparedLoRaConfig pendingLoRaConfig;
     StagedMenuLoRaTransition pendingMenuLoRaTransition;
+    PendingChannelConfig pendingChannelConfig;
+    PendingOwnerConfig pendingOwnerConfig;
     std::atomic<bool> loRaConfigApplyPending{false};
     concurrency::Lock loRaSaveLock;
     uint32_t loRaSavesInProgress = 0;

@@ -235,14 +235,33 @@ bool RadioLibInterface::requestConfigApply(RadioConfigApplyRequest *request)
 
 bool RadioLibInterface::finalizeConfigApply(RadioConfigApplyRequest *request)
 {
-    if (!RadioInterface::finalizeConfigApply(request))
+    if (request == nullptr)
         return false;
 
-    LOG_DEBUG("radio_config_apply resume");
+    RadioConfigApplyRequest *complete = request;
+    if (configApplyFinalizeComplete.compare_exchange_strong(complete, nullptr, std::memory_order_acq_rel,
+                                                            std::memory_order_acquire))
+        return true;
 
-    if (!txQueue.empty())
-        setTransmitDelay();
-    return true;
+    if (!ownsConfigApplyRequest(*request) || configApplyRequest.load(std::memory_order_acquire) != request ||
+        configApplyPhase.load(std::memory_order_acquire) != ConfigApplyPhase::COMPLETE)
+        return false;
+
+    RadioConfigApplyRequest *expected = nullptr;
+    if (!configApplyFinalizePending.compare_exchange_strong(expected, request, std::memory_order_acq_rel,
+                                                            std::memory_order_acquire) &&
+        expected != request)
+        return false;
+
+    if (!notify(CONFIG_APPLY_PENDING, false))
+        wakePreservingNotification();
+    return false;
+}
+
+void RadioLibInterface::holdConfigApplyReception()
+{
+    RadioInterface::holdConfigApplyReception();
+    setStandby();
 }
 
 meshtastic_MeshPacket *RadioLibInterface::dequeueTxPacketIfConfigApplyAllowed()
@@ -256,6 +275,26 @@ meshtastic_MeshPacket *RadioLibInterface::dequeueTxPacketIfConfigApplyAllowed()
 
 void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
 {
+    RadioConfigApplyRequest *finalizeRequest = configApplyFinalizePending.load(std::memory_order_acquire);
+    if (finalizeRequest != nullptr) {
+        if (configApplyTxStartActive() || sendingPacket != nullptr) {
+            notifyLater(25, CONFIG_APPLY_PENDING, false);
+            return;
+        }
+
+        RadioConfigApplyRequest *expected = finalizeRequest;
+        if (!configApplyFinalizePending.compare_exchange_strong(expected, nullptr, std::memory_order_acq_rel,
+                                                                std::memory_order_acquire))
+            return;
+        const bool finalized = RadioInterface::finalizeConfigApply(finalizeRequest);
+        assert(finalized);
+        configApplyFinalizeComplete.store(finalizeRequest, std::memory_order_release);
+        if (!txQueue.empty())
+            setTransmitDelay();
+        LOG_DEBUG("radio_config_apply resume");
+        return;
+    }
+
     RadioConfigApplyRequest *request = nullptr;
     if (!claimConfigApply(request))
         return;
@@ -518,12 +557,14 @@ void RadioLibInterface::onNotify(uint32_t notification)
             break;
         }
 #endif
-        startReceive();
+        if (!configApplyReceptionIsHeld() || !configApplyTxInhibited())
+            startReceive();
         setTransmitDelay();
         break;
     case ISR_RX:
         handleReceiveInterrupt();
-        startReceive();
+        if (!configApplyReceptionIsHeld() || !configApplyTxInhibited())
+            startReceive();
         setTransmitDelay();
         break;
     case ISR_POLL_TICK:

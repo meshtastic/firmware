@@ -47,6 +47,10 @@ class Channels
      */
     void setChannel(const meshtastic_Channel &c);
 
+    static ChannelIndex setChannelInFile(meshtastic_ChannelFile &file, const meshtastic_Channel &channel,
+                                         ChannelIndex fallbackPrimary, bool ensurePrimary = true);
+    static bool ensureLicensedOperation(meshtastic_ChannelFile &file, bool licensed);
+
     /** Return a human friendly name for this channel (and expand any short strings as needed)
      */
     const char *getName(size_t chIndex);
@@ -138,6 +142,7 @@ class Channels
      * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
+    static void initDefaultChannel(meshtastic_ChannelFile &file, ChannelIndex chIndex);
 
     /**
      * Return the key used for encrypting this channel (if channel is secondary and no key provided, use the primary channel's

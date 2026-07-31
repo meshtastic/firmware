@@ -109,6 +109,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     bool isReceiving = false;
 
   protected:
+    void holdConfigApplyReception() override;
+    std::atomic<RadioConfigApplyRequest *> configApplyFinalizePending{nullptr};
+    std::atomic<RadioConfigApplyRequest *> configApplyFinalizeComplete{nullptr};
+
     // Noise floor tracking - rolling window of samples.
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
     static const int32_t NOISE_FLOOR_DEFAULT = -120;

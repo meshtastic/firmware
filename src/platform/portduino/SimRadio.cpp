@@ -73,6 +73,8 @@ bool SimRadio::finalizeConfigApply(RadioConfigApplyRequest *request)
 void SimRadio::setTransmitDelay()
 {
     meshtastic_MeshPacket *p = txQueue.getFront();
+    if (!p)
+        return;
     // We want all sending/receiving to be done by our daemon thread.
     // We use a delay here because this packet might have been sent in response to a packet we just received.
     // So we want to make sure the other side has had a chance to reconfigure its radio.
@@ -233,12 +235,18 @@ void SimRadio::onNotify(uint32_t notification)
                     if (claimConfigApplyTxStart()) {
                         meshtastic_MeshPacket *txp = txQueue.dequeue();
                         assert(txp);
-                        startSend(txp);
-                        // Packet has been sent, count it toward our TX airtime utilization.
-                        uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
-                        airTime->logAirtime(TX_LOG, xmitMsec);
+                        if (configApplyTxInhibited()) {
+                            LOG_WARN("Drop queued simulated Tx packet because radio configuration recovery failed");
+                            packetPool.release(txp);
+                            setTransmitDelay();
+                        } else {
+                            startSend(txp);
+                            // Packet has been sent, count it toward our TX airtime utilization.
+                            uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
+                            airTime->logAirtime(TX_LOG, xmitMsec);
 
-                        notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
+                            notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
+                        }
                         releaseConfigApplyTxStart();
                     }
                 }
