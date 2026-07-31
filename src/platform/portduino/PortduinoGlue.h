@@ -34,7 +34,22 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
-enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d, hub75 };
+enum screen_modules {
+    no_screen,
+    x11,
+    sdl,
+    fb,
+    st7789,
+    st7735,
+    st7735s,
+    st7796,
+    ili9341,
+    ili9342,
+    ili9486,
+    ili9488,
+    hx8357d,
+    hub75
+};
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
@@ -82,10 +97,10 @@ extern struct portduino_config_struct {
                                                            {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"},
                                                            {use_llcc68, "LLCC68"}, {use_lr2021, "lr2021"}};
 
-    std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
-                                                          {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
-                                                          {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
-                                                          {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}, {hub75, "HUB75"}};
+    std::map<screen_modules, std::string> screen_names = {
+        {x11, "X11"},         {sdl, "SDL"},         {fb, "FB"},           {st7789, "ST7789"},   {st7735, "ST7735"},
+        {st7735s, "ST7735S"}, {st7796, "ST7796"},   {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
+        {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}, {hub75, "HUB75"}};
 
     lora_module_enum lora_module;
     bool has_rfswitch_table = false;
@@ -138,6 +153,7 @@ extern struct portduino_config_struct {
     screen_modules displayPanel = no_screen;
     int displayWidth = 0;
     int displayHeight = 0;
+    float displayZoom = 1.0;
     bool displayRGBOrder = false;
     bool displayBacklightInvert = false;
     bool displayRotate = false;
@@ -439,6 +455,8 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "Width" << YAML::Value << displayWidth;
             if (displayHeight)
                 out << YAML::Key << "Height" << YAML::Value << displayHeight;
+            if (displayZoom != 1.0)
+                out << YAML::Key << "Zoom" << YAML::Value << displayZoom;
             if (displayRGBOrder)
                 out << YAML::Key << "RGBOrder" << YAML::Value << true;
             if (displayBacklightInvert)
@@ -453,7 +471,6 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "OffsetY" << YAML::Value << displayOffsetY;
 
             out << YAML::Key << "OffsetRotate" << YAML::Value << displayOffsetRotate;
-
             if (displayPanel == hub75) {
                 out << YAML::Key << "HUB75" << YAML::Value << YAML::BeginMap;
                 out << YAML::Key << "HardwareMapping" << YAML::Value << hub75_hardware_mapping;

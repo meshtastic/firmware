@@ -40,6 +40,15 @@ void tft_task_handler(void *param = nullptr)
     }
 }
 
+#if defined(ARCH_PORTDUINO)
+void tft_thread_entry(void)
+{
+    // SDL expects window/event/render work on a single thread.
+    deviceScreen->init(new PacketClient);
+    tft_task_handler();
+}
+#endif
+
 void tftSetup(void)
 {
 #ifndef ARCH_PORTDUINO
@@ -49,32 +58,32 @@ void tftSetup(void)
 #else
     if (portduino_config.displayPanel != no_screen) {
         DisplayDriverConfig displayConfig;
-        static char *panels[] = {"NOSCREEN", "X11",     "FB",      "ST7789",  "ST7735",  "ST7735S",
-                                 "ST7796",   "ILI9341", "ILI9342", "ILI9486", "ILI9488", "HX8357D"};
+        static char *panels[] = {"NOSCREEN", "X11",     "SDL",     "FB",      "ST7789",  "ST7735",  "ST7735S",
+                                 "ST7796",   "ILI9341", "ILI9342", "ILI9486", "ILI9488", "HX8357D", "HUB75"};
         static char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
-#if defined(USE_X11)
-        if (portduino_config.displayPanel == x11) {
+        if (portduino_config.displayPanel == sdl) {
+            if (portduino_config.displayWidth && portduino_config.displayHeight)
+                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::SDL, (uint16_t)portduino_config.displayWidth,
+                                                    (uint16_t)portduino_config.displayHeight, portduino_config.displayZoom);
+            else
+                displayConfig.device(DisplayDriverConfig::device_t::SDL);
+        } else if (portduino_config.displayPanel == x11) {
             if (portduino_config.displayWidth && portduino_config.displayHeight)
                 displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::X11, (uint16_t)portduino_config.displayWidth,
                                                     (uint16_t)portduino_config.displayHeight);
             else
                 displayConfig.device(DisplayDriverConfig::device_t::X11);
-        } else
-#elif defined(USE_FRAMEBUFFER)
-        if (portduino_config.displayPanel == fb) {
-            // Rotation from yaml Display.OffsetRotate: 1=90, 2=180, 3=270 deg
-            char rbuf[4];
-            snprintf(rbuf, sizeof(rbuf), "%d", portduino_config.displayRotate ? (portduino_config.displayOffsetRotate & 3) : 0);
-            if (setenv("MESHTASTIC_FB_ROTATION", rbuf, 1) != 0)
-                LOG_ERROR("Failed to set MESHTASTIC_FB_ROTATION, framebuffer will use its default rotation");
-            if (portduino_config.displayWidth && portduino_config.displayHeight)
-                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::FB, (uint16_t)portduino_config.displayWidth,
-                                                    (uint16_t)portduino_config.displayHeight);
+        } else if (portduino_config.displayPanel == fb) {
+            if (portduino_config.displayWidth && portduino_config.displayHeight) {
+                displayConfig.device(DisplayDriverConfig::device_t::FB)
+                             .panel(DisplayDriverConfig::panel_config_t{.type = panels[portduino_config.displayPanel],
+                                                                        .panel_width = (uint16_t)portduino_config.displayWidth,
+                                                                        .panel_height = (uint16_t)portduino_config.displayHeight,
+                                                                        .offset_rotation = (uint8_t)portduino_config.displayOffsetRotate });
+            }
             else
                 displayConfig.device(DisplayDriverConfig::device_t::FB);
-        } else
-#endif
-        {
+        } else {
             displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
                 .panel(DisplayDriverConfig::panel_config_t{.type = panels[portduino_config.displayPanel],
                                                            .panel_width = (uint16_t)portduino_config.displayWidth,
@@ -128,7 +137,6 @@ void tftSetup(void)
         }
         deviceScreen = &DeviceScreen::create(&displayConfig);
         PacketAPI::create(PacketServer::init());
-        deviceScreen->init(new PacketClient);
     } else {
         LOG_INFO("Running without TFT display!");
     }
@@ -140,7 +148,7 @@ void tftSetup(void)
         endSleepObserver.observe(&notifyLightSleepEnd);
         xTaskCreatePinnedToCore(tft_task_handler, "tft", TFT_TASK_STACK_SIZE, NULL, 1, NULL, 0);
 #elif defined(ARCH_PORTDUINO)
-        std::thread *tft_task = new std::thread([] { tft_task_handler(); });
+        std::thread *tft_task = new std::thread([] { tft_thread_entry(); });
 #endif
     }
 }
