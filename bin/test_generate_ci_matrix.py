@@ -38,7 +38,7 @@ BASE_INI_INCL = {"variants/esp32/esp32-common.ini": {"esp32"}}
 def env(
     board,
     platform,
-    level=None,
+    level="release",
     check=False,
     include_dirs=None,
     def_dir=None,
@@ -68,7 +68,7 @@ def universe():
         env(
             "tbeam",
             "esp32",
-            level=None,
+            level="release",
             include_dirs=["variants/esp32/tbeam"],
             def_dir="variants/esp32/tbeam",
             src_platforms=_sp("esp32"),
@@ -401,11 +401,12 @@ def test_platform_src_map_from_envs_derives_family_grouping():
 
 
 def test_emittable_allowlist_fails_closed():
-    """Unknown board_level values are excluded; only None/pr/extra emit."""
-    assert gcm._emittable(env("a", "esp32", level=None))
+    """Unknown board_level values are excluded; only pr/release/extra emit."""
+    assert gcm._emittable(env("a", "esp32", level="release"))
     assert gcm._emittable(env("a", "esp32", level="pr"))
     assert gcm._emittable(env("a", "esp32", level="extra"))
-    # Retired 'community' tier and any typo fail closed.
+    # Retired 'community' tier, None (missing level), and any typo fail closed.
+    assert not gcm._emittable(env("a", "esp32", level=None))
     assert not gcm._emittable(env("a", "esp32", level="community"))
     assert not gcm._emittable(env("a", "esp32", level="bogus"))
     # covered-elsewhere platform is excluded regardless of a valid level.

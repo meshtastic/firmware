@@ -4,8 +4,8 @@
 
 Enumerates every PlatformIO environment and prints a JSON list of
 ``{"board", "platform"}`` entries for the requested selector ("all", "check", or a
-specific arch), honoring the per-env ``board_level`` tiers (``pr`` / ``extra`` /
-release-only).
+specific arch), honoring the per-env ``board_level`` tiers (``pr`` / ``release`` /
+``extra``).
 
 On pull requests the workflow additionally passes ``--changed-files``: the matrix is
 then narrowed to just the environments a PR's changed files can affect (see
@@ -37,8 +37,8 @@ COVERED_ELSEWHERE = {"native"}
 
 # board_level values an env may carry and still be emittable. An ALLOWLIST (not a
 # denylist) so an unknown/typo'd level fails CLOSED (excluded) rather than silently
-# building. None = release board, "pr"/"extra" = the two explicit tiers.
-EMITTABLE_LEVELS = {None, "pr", "extra"}
+# building. "release" = full release matrix, "pr"/"extra" = the two explicit tiers.
+EMITTABLE_LEVELS = {"pr", "release", "extra"}
 
 # Fallback platformio.ini globs that hold [env:...] / [*_base] definitions. Production
 # overrides the env-definition scan with the real [platformio] extra_configs (see
@@ -206,10 +206,21 @@ def load_all_envs():
             cfg.get(f"env:{pio_env}", "board_check", default="false").strip().lower()
             == "true"
         )
+        board_level = cfg.get(f"env:{pio_env}", "board_level", default=None)
+        # Intentionally fail on a missing or unrecognized level: every env must opt in
+        # explicitly, so a new variant can't silently drop out of (or into) the matrix.
+        if board_level not in EMITTABLE_LEVELS:
+            found = repr(board_level) if board_level is not None else "no value"
+            print(
+                f"Error: environment '{pio_env}' has {found} for 'board_level'; "
+                f"expected one of: {', '.join(sorted(EMITTABLE_LEVELS))}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         all_envs.append(
             {
                 "ci": {"board": pio_env, "platform": env_platform},
-                "board_level": cfg.get(f"env:{pio_env}", "board_level", default=None),
+                "board_level": board_level,
                 "board_check": board_check,
                 "include_dirs": include_dirs,
                 "def_dir": defdir.get(pio_env),
@@ -370,8 +381,8 @@ def build_outlist(all_envs, platform, level, selected):
         # Include board_level = 'extra' when requested.
         elif "extra" in level and env["board_level"] == "extra":
             outlist.append(ci)
-        # If no board level is specified, include in release builds (not PR).
-        elif "pr" not in level and not env["board_level"]:
+        # Include board_level = 'release' unless narrowed to the PR subset.
+        elif "pr" not in level and env["board_level"] == "release":
             outlist.append(ci)
     return outlist
 
