@@ -3,6 +3,8 @@
 #include "MeshRadio.h"
 #include "TestUtil.h"
 #include "meshUtils.h"
+#include "modules/RoutingModule.h"
+#include <algorithm>
 #include <unity.h>
 
 // Helper to compute expected ms using same logic as Default::congestionScalingCoefficient
@@ -181,6 +183,32 @@ void test_scaled_overflow_saturates()
     TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(INT32_MAX), res);
 }
 
+void test_configured_or_default_hop_limit()
+{
+    config.lora.hop_limit = HOP_MAX;
+    const uint8_t result = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
+
+#if USERPREFS_EVENT_MODE
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeHopLimit, result);
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeHopLimit, Default::getConfiguredOrDefaultHopLimit(Default::eventModeHopLimit));
+#else
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, result);
+#endif
+}
+
+#if USERPREFS_EVENT_MODE
+void test_event_mode_caps_optimized_response()
+{
+    config.lora.hop_limit = HOP_MAX;
+    meshtastic_MeshPacket request = meshtastic_MeshPacket_init_zero;
+    request.hop_start = HOP_MAX;
+    request.hop_limit = HOP_MAX - 4;
+
+    RoutingModule module;
+    TEST_ASSERT_EQUAL_UINT8(std::min<uint8_t>(6, Default::eventModeHopLimit), module.getHopLimitForResponse(request));
+}
+#endif
+
 void setup()
 {
     // Small delay to match other test mains
@@ -201,6 +229,10 @@ void setup()
     RUN_TEST(test_ms_default_clamps);
     RUN_TEST(test_ms_result_is_int32_safe);
     RUN_TEST(test_scaled_overflow_saturates);
+    RUN_TEST(test_configured_or_default_hop_limit);
+#if USERPREFS_EVENT_MODE
+    RUN_TEST(test_event_mode_caps_optimized_response);
+#endif
     exit(UNITY_END());
 }
 

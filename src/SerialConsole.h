@@ -67,7 +67,6 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
 };
 
 // A simple wrapper to allow non class aware code write to the console
-void consolePrintf(const char *format, ...);
 void consoleInit();
 
 extern SerialConsole *console;
