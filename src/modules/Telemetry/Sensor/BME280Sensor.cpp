@@ -30,16 +30,42 @@ bool BME280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    measurement->variant.environment_metrics.has_temperature = true;
-    measurement->variant.environment_metrics.has_relative_humidity = true;
-    measurement->variant.environment_metrics.has_barometric_pressure = true;
-
     LOG_DEBUG("BME280 getMetrics");
-    bme280.takeForcedMeasurement();
-    measurement->variant.environment_metrics.temperature = bme280.readTemperature();
-    measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
-    measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
-
+    if(bme280.takeForcedMeasurement())
+    {
+        measurement->variant.environment_metrics.temperature = bme280.readTemperature();
+        measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
+        measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
+        measurement->variant.environment_metrics.has_temperature = true;
+        measurement->variant.environment_metrics.has_relative_humidity = true;
+        measurement->variant.environment_metrics.has_barometric_pressure = true;
+    }
+    else
+    {
+        LOG_WARN("BME280 meassurment failed, attempting reset.");
+        if(bme280.init())
+        {
+            bme280.setSampling(Adafruit_BME280::MODE_FORCED,
+                       Adafruit_BME280::SAMPLING_X1, // Temp. oversampling
+                       Adafruit_BME280::SAMPLING_X1, // Pressure oversampling
+                       Adafruit_BME280::SAMPLING_X1, // Humidity oversampling
+                       Adafruit_BME280::FILTER_OFF, Adafruit_BME280::STANDBY_MS_1000);
+            LOG_DEBUG("BME280 reset success, getMetrics");
+            if(bme280.takeForcedMeasurement())
+            {
+                measurement->variant.environment_metrics.temperature = bme280.readTemperature();
+                measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();
+                measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
+                measurement->variant.environment_metrics.has_temperature = true;
+                measurement->variant.environment_metrics.has_relative_humidity = true;
+                measurement->variant.environment_metrics.has_barometric_pressure = true;
+            }
+            else
+            {
+                LOG_WARN("BME280 meassurment failed again.");
+            }
+        }
+    }
     return true;
 }
 #endif
