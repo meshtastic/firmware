@@ -169,10 +169,15 @@ inline bool isRadioProfileFile(const char *filename)
 /// How many seconds since we last heard from a node before it is considered offline (2 hrs)
 #define NUM_ONLINE_SECS (60 * 60 * 2)
 
+/// "No trustworthy arrival time", as distinct from "zero seconds ago". Deliberately huge so the
+/// display formatters fall into their existing unknown-age branches ("unknown age" / "?").
+inline constexpr uint32_t SINCE_UNKNOWN = UINT32_MAX;
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
-/// Given a packet, return how many seconds in the past (vs now) it was received
+/// Given a packet, return how many seconds in the past (vs now) it was received,
+/// or SINCE_UNKNOWN if it carries no trustworthy rx_time.
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
 /// Outcome of mapping a single on-wire last-byte (next_hop / relay_node) back to a full NodeNum.
@@ -743,7 +748,12 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
-// Bits 10..31 reserved for future single-bit flags.
+// snr_q4 (persisted, sint32) is proto3 singular, so 0 == "never written", but 0 dB is valid.
+// This bit disambiguates: whenever snr_q4 is written from a genuine RF measurement.
+// Use this instead of `if (snr_q4)`. Legacy records (bit clear) are unambiguously "unknown".
+#define NODEINFO_BITFIELD_HAS_SNR_SHIFT 10
+#define NODEINFO_BITFIELD_HAS_SNR_MASK (1u << NODEINFO_BITFIELD_HAS_SNR_SHIFT)
+// Bits 11..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
@@ -785,6 +795,12 @@ inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+/// True if this node's snr_q4 was written from a genuine RF measurement (including a real
+/// 0 dB reading). False means "never measured" - do not treat 0 as data.
+inline bool nodeInfoLiteHasSnr(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK);
 }
 /// A node that the eviction/migration paths must not drop: a favourite, an
 /// ignored (blocked) node, or a manually-verified key.

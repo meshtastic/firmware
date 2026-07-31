@@ -121,7 +121,7 @@ class AuthPipelineRadio : public RadioInterface
     {
         sendCalls++;
         packetPool.release(p);
-        return ERRNO_OK;
+        return failSend ? ERRNO_DISABLED : ERRNO_OK;
     }
     bool cancelSending(NodeNum, PacketId) override
     {
@@ -139,8 +139,13 @@ class AuthPipelineRadio : public RadioInterface
         return true;
     }
     uint32_t getPacketTime(uint32_t, bool = false) override { return 7; }
-    void reset() { sendCalls = cancelCalls = findCalls = removeCalls = 0; }
+    void reset()
+    {
+        sendCalls = cancelCalls = findCalls = removeCalls = 0;
+        failSend = false;
+    }
 
+    bool failSend = false;
     uint32_t sendCalls = 0;
     uint32_t cancelCalls = 0;
     uint32_t findCalls = 0;
@@ -406,6 +411,8 @@ void setUp(void)
     pipelineMqtt->clearQueue();
     while (meshtastic_MeshPacket *queued = pipelineService->getForPhone())
         packetPool.release(queued);
+    while (meshtastic_QueueStatus *queued = pipelineService->getQueueStatusForPhone())
+        pipelineService->releaseQueueStatusToPool(queued);
     resetRoutingAuthEvaluationCount();
 }
 
@@ -1441,6 +1448,66 @@ void test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass
     TEST_ASSERT_EQUAL_MESSAGE(3, routingAuthEvaluationCount(), "same packet ID with different bytes must be reevaluated");
 }
 
+// A local reliable send that fails before reaching the radio must not outlive the error as a scheduled retransmission.
+void test_C13_failed_initial_reliable_send_does_not_retry(void)
+{
+    meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    initial.id = 0xC13C13C1;
+    initial.want_ack = true;
+    initial.channel = MAX_NUM_CHANNELS; // Out of range, so encoding returns NO_CHANNEL.
+
+    auto *packet = packetPool.allocCopy(initial);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    pipelineRouter->send(packet);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "initial encoding failure must be reported to the originating client");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "failed initial send must not leave a retransmission pending");
+
+    pipelineRadio->failSend = true;
+    meshtastic_MeshPacket interfaceFailure = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    interfaceFailure.id = 0xC13C13C2;
+    interfaceFailure.want_ack = true;
+    packet = packetPool.allocCopy(interfaceFailure);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    pipelineService->sendToMesh(packet, RX_SRC_USER);
+    meshtastic_QueueStatus *status = pipelineService->getQueueStatusForPhone();
+    TEST_ASSERT_NOT_NULL(status);
+    TEST_ASSERT_EQUAL(ERRNO_DISABLED, status->res);
+    TEST_ASSERT_EQUAL_UINT32(interfaceFailure.id, status->mesh_packet_id);
+    pipelineService->releaseQueueStatusToPool(status);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "interface errors are reported to the client through QueueStatus, not a routing NAK");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, pipelineRouter->pendingCount(),
+                                     "failed interface enqueue must not leave a retransmission pending");
+}
+
+void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
+{
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.override_duty_cycle = false;
+    initRegion();
+    airTime->utilizationTX[0] = MS_IN_HOUR;
+
+    meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    initial.id = 0xC14C14C1;
+    initial.want_ack = true;
+    auto *packet = packetPool.allocCopy(initial);
+    TEST_ASSERT_NOT_NULL(packet);
+
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_DUTY_CYCLE_LIMIT, pipelineRouter->send(packet));
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouting->ackCalls,
+                                     "duty-cycle rejection must still notify the originating client");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(),
+                                     "duty-cycle rejection must retain the retry for when airtime is available");
+
+    airTime->utilizationTX[0] = 0;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    initRegion();
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -1907,6 +1974,8 @@ void setup()
     RUN_TEST(test_C10_legacy_channel_dm_failure_has_no_pipeline_effects);
     RUN_TEST(test_C11_malformed_pki_plaintext_has_no_pipeline_effects);
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
+    RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
+    RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

@@ -1,4 +1,5 @@
 #include "NextHopRouter.h"
+#include "Default.h"
 #include "MeshTypes.h"
 #include "meshUtils.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
@@ -8,6 +9,18 @@
 #include "modules/TrafficManagementModule.h"
 #endif
 #include "NodeDB.h"
+
+#if USERPREFS_EVENT_MODE
+static void capEventRelayHops(meshtastic_MeshPacket *packet)
+{
+    if (packet->hop_limit <= Default::eventModeRelayHopLimit)
+        return;
+
+    const uint8_t reduction = packet->hop_limit - Default::eventModeRelayHopLimit;
+    packet->hop_start = reduction <= packet->hop_start ? packet->hop_start - reduction : 0;
+    packet->hop_limit = Default::eventModeRelayHopLimit;
+}
+#endif
 
 NextHopRouter::NextHopRouter() {}
 
@@ -26,6 +39,9 @@ bool NextHopRouter::relayOpaquePacket(const meshtastic_MeshPacket *p)
     if (!relay)
         return false;
     relay->hop_limit--;
+#if USERPREFS_EVENT_MODE
+    capEventRelayHops(relay);
+#endif
     relay->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum());
     // The interface declines some packets (NODENUM_BROADCAST_NO_LORA) with ERRNO_SHOULD_RELEASE,
     // which leaves the copy ours to free. Dropping it here would leak a pool slot per opaque frame.
@@ -211,11 +227,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                         LOG_INFO("favorite-ROUTER/CLIENT_BASE-to-ROUTER/CLIENT_BASE rebroadcast: preserving hop_limit");
                     }
 #if USERPREFS_EVENT_MODE
-                    if (tosend->hop_limit > 2) {
-                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                        tosend->hop_start -= (tosend->hop_limit - 2);
-                        tosend->hop_limit = 2;
-                    }
+                    capEventRelayHops(tosend);
 #endif
 
                     ErrorCode res =

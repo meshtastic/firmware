@@ -766,6 +766,7 @@ static void test_tm_nodeinfo_directResponse_psramCacheRespondsAndPreservesBitfie
     observed.decoded.bitfield = BITFIELD_WANT_RESPONSE_MASK;
     observed.channel = 2;
     observed.rx_time = 123456;
+    observed.has_rx_time = true; // rx_time has explicit presence; mark this synthetic reading as measured
 
     ProcessMessage observedResult = module.handleReceived(observed);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessMessage::CONTINUE), static_cast<int>(observedResult));

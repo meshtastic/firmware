@@ -61,6 +61,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
+#include "graphics/Backlight.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTPalette.h"
@@ -691,7 +692,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
-#ifdef PIN_EINK_EN
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightOn();
+#elif defined(PIN_EINK_EN)
             if (uiconfig.screen_brightness == 1)
                 digitalWrite(PIN_EINK_EN, HIGH);
 #elif defined(PCA_PIN_EINK_EN)
@@ -751,7 +754,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             drawLockdownLockScreen(dispdev);
 #endif
 
-#ifdef PIN_EINK_EN
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightOff();
+#elif defined(PIN_EINK_EN)
             digitalWrite(PIN_EINK_EN, LOW);
 #elif defined(PCA_PIN_EINK_EN)
             io.digitalWrite(PCA_PIN_EINK_EN, LOW);
@@ -1848,8 +1853,12 @@ void Screen::handleStartFirmwareUpdateScreen()
 
 void Screen::increaseBrightness()
 {
+#if HAS_PWM_BACKLIGHT
+    graphics::backlightStepUp();
+    brightness = graphics::backlightGet();
+#else
     brightness = ((brightness + 62) > 254) ? brightness : (brightness + 62);
-
+#endif
 #if defined(ST7789_CS)
     // run the setDisplayBrightness function. This works on t-decks
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
@@ -1860,8 +1869,12 @@ void Screen::increaseBrightness()
 
 void Screen::decreaseBrightness()
 {
+#if HAS_PWM_BACKLIGHT
+    graphics::backlightStepDown();
+    brightness = graphics::backlightGet();
+#else
     brightness = (brightness < 70) ? brightness : (brightness - 62);
-
+#endif
 #if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
@@ -2057,10 +2070,18 @@ int Screen::handleInputEvent(const InputEvent *event)
     }
 
 #ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
-    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
-    setFastFramerate();                       // Draw ASAP
+#if HAS_PWM_BACKLIGHT
+    // A PWM backlight change leaves the frame identical, and the refresh is blocking.
+    const bool backlightOnly =
+        event->kbchar == INPUT_BROKER_MSG_BRIGHTNESS_UP || event->kbchar == INPUT_BROKER_MSG_BRIGHTNESS_DOWN;
+    if (!backlightOnly)
+#endif
+    {
+        EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+        EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+        handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+        setFastFramerate();                       // Draw ASAP
+    }
 #endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = *event;
