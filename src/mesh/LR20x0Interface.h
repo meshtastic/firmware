@@ -22,6 +22,8 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     /// \return true if initialisation succeeded.
     virtual bool reconfigure() override;
 
+    bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override;
+
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() override;
 
@@ -71,6 +73,9 @@ template <class T> class LR20x0Interface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
+    int setStandby(bool completePacket);
+    int startReceiveForReconfigure();
+    void selectExternalRfPath(float frequency);
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 };

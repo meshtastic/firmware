@@ -7,6 +7,7 @@
 #include "RadioConfigApply.h"
 #include "airtime.h"
 #include "error.h"
+#include <atomic>
 #include <memory>
 
 #if HAS_LORA_FEM
@@ -84,6 +85,10 @@ class RadioInterface
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepCb);
 
   protected:
+    enum class ConfigApplyPhase : uint8_t { IDLE, PREPARING, PENDING, IN_PROGRESS, COMPLETE, FINALIZING };
+    static constexpr uint32_t CONFIG_APPLY_TX_BARRIER = 1UL << 31;
+    static constexpr uint32_t CONFIG_APPLY_TX_CLAIM_MASK = ~CONFIG_APPLY_TX_BARRIER;
+
     bool disabled = false;
 
     float bw = 125;
@@ -107,11 +112,27 @@ class RadioInterface
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
-    RadioConfigApplyRequest *configApplyRequest = nullptr;
-    bool configApplyTxInhibit = false;
+    static std::atomic<uint32_t> nextConfigApplyOwnerId;
+    const uint32_t configApplyOwner;
+    std::atomic<RadioConfigApplyRequest *> configApplyRequest{nullptr};
+    std::atomic<ConfigApplyPhase> configApplyPhase{ConfigApplyPhase::IDLE};
+    std::atomic<uint32_t> configApplyTxGate{0};
+    std::atomic<bool> configApplyTxInhibit{false};
     const meshtastic_Config_LoRaConfig *configApplyLoraConfig = nullptr;
+    bool configApplyLicensedOwner = false;
+    bool configApplyLicensedOwnerSet = false;
 
     uint32_t computeSlotTimeMsec(const RegionInfo *region = nullptr);
+    bool claimConfigApply(RadioConfigApplyRequest *&request);
+    void deferConfigApply(RadioConfigApplyRequest *request);
+    void finishConfigApply(RadioConfigApplyRequest *request, RadioConfigApplyResult result);
+    RadioConfigApplyResult applyConfigWithRollback(RadioConfigApplyRequest &request);
+    bool configApplyPending() const;
+    bool configApplyBarrierIsSet() const;
+    bool claimConfigApplyTxStart();
+    void releaseConfigApplyTxStart();
+    bool configApplyTxStartActive() const;
+    virtual bool isActivelyReceiving() { return false; }
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
@@ -154,6 +175,9 @@ class RadioInterface
     /// Whether the radio can tune sub-GHz bands. False for 2.4 GHz-only chips (SX128x);
     /// multiband chips like the LR1121 keep the default.
     virtual bool supportsSubGhz() { return true; }
+
+    /// Whether the active radio accepts this exact LoRa bandwidth in the requested band.
+    virtual bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) { return true; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }
@@ -198,11 +222,23 @@ class RadioInterface
     /// \return true if initialisation succeeded.
     virtual bool reconfigure();
 
+    /// Apply an ephemeral profile without publishing candidate errors as permanent device faults.
+    bool reconfigureTransient();
+
+    /// Apply the persisted profile through hardware translation while retaining fault reporting.
+    bool reconfigureCommitted();
+
     virtual bool requestConfigApply(RadioConfigApplyRequest *request);
     virtual void serviceConfigApply(uint32_t nowMsec);
     virtual RadioConfigApplyResult pollConfigApply(const RadioConfigApplyRequest &request) const;
+    virtual bool finalizeConfigApply(RadioConfigApplyRequest *request);
     virtual void setConfigApplyTxInhibit(bool inhibited);
     virtual bool configApplyTxInhibited() const;
+    uint32_t configApplyOwnerId() const { return configApplyOwner; }
+    bool ownsConfigApplyRequest(const RadioConfigApplyRequest &request) const
+    {
+        return request.acceptedRadioId == configApplyOwner;
+    }
 
     /** The delay to use for retransmitting dropped packets */
     [[nodiscard]] uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
@@ -265,6 +301,8 @@ class RadioInterface
         REGION_SWAP_DEFERRED,
         REGION_SWAPPED,
         INVALID_PRESET,
+        UNSUPPORTED_BAND,
+        UNSUPPORTED_BANDWIDTH,
         BANDWIDTH_TOO_WIDE,
         INVALID_CHANNEL,
     };
@@ -291,11 +329,15 @@ class RadioInterface
         bool usesCustomChannelName = false;
     };
 
-    static LoRaConfigNormalization normalizeConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    void commitBootConfigCorrection();
+
+    static LoRaConfigNormalization normalizeConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, bool clamp,
+                                                       const meshtastic_ChannelSettings *primaryChannel = nullptr,
+                                                       RadioInterface *radio = nullptr);
     static void publishLoRaConfigDiagnostics(const LoRaConfigNormalization &normalization);
     static void commitLoRaConfigFrequencyFlags(const LoRaConfigNormalization &normalization);
 
-    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, RadioInterface *radio = nullptr);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
@@ -308,10 +350,10 @@ class RadioInterface
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate radio configuration is valid.
-    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio = nullptr);
 
     // Make a candidate radio configuration valid, even if it isn't.
-    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio = nullptr);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.
@@ -350,7 +392,10 @@ class RadioInterface
 
     const meshtastic_Config_LoRaConfig &getActiveLoRaConfig() const;
     const RegionInfo *getActiveRegion() const;
-    bool reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig);
+    bool getActiveLicensedOwner() const;
+    meshtastic_Config_LoRaConfig hardwareConfigFor(const meshtastic_Config_LoRaConfig &loraConfig);
+    bool shouldRecordReconfigureFailure() const { return configApplyLoraConfig == nullptr || recordConfigApplyFailure; }
+    bool reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig, bool licensedOwner, bool recordFailure = false);
 
     /**
      * Get current RSSI reading from the radio.
@@ -359,12 +404,16 @@ class RadioInterface
     virtual int16_t getCurrentRSSI() { return 0; }
 
   private:
+    LoRaConfigNormalization bootConfigCorrection;
+    bool bootConfigCorrectionPending = false;
+    bool recordConfigApplyFailure = false;
+
     /**
      * Convert our modemConfig enum into wf, sf, etc...
      *
      * These parameters will be pull from the channelSettings global
      */
-    void applyModemConfig();
+    bool applyModemConfig();
 
     /// Return 0 if sleep is okay. A non-NULL argument means the radio is about to be powered
     /// down (deep sleep / shutdown), see doPreflightSleep()
@@ -372,10 +421,10 @@ class RadioInterface
 
     int notifyDeepSleepCb(void *unused = NULL);
 
-    int reloadConfig(void *unused) { return reconfigure() ? 0 : 1; }
+    int reloadConfig(void *unused) { return reconfigureCommitted() ? 0 : 1; }
 };
 
-std::unique_ptr<RadioInterface> initLoRa();
+std::unique_ptr<RadioInterface> initLoRa(bool commitBootCorrections = true);
 
 /// Debug printing for packets
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p);

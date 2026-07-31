@@ -14,7 +14,7 @@ class MeshPacketQueue
 
     /** Replace a lower priority package in the queue with 'mp' (provided there are lower pri packages). Return true if replaced.
      */
-    bool replaceLowerPriorityPacket(meshtastic_MeshPacket *mp);
+    bool replaceLowerPriorityPacket(meshtastic_MeshPacket *mp, meshtastic_MeshPacket **evicted);
 
   public:
     explicit MeshPacketQueue(size_t _maxLen);
@@ -22,7 +22,7 @@ class MeshPacketQueue
     /** enqueue a packet, return false if full
      * @param dropped Optional pointer to a bool that will be set to true if a packet was dropped
      */
-    bool enqueue(meshtastic_MeshPacket *p, bool *dropped = nullptr);
+    bool enqueue(meshtastic_MeshPacket *p, bool *dropped = nullptr, meshtastic_MeshPacket **evicted = nullptr);
 
     /** return true if the queue is empty */
     bool empty();

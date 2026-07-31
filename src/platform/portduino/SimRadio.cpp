@@ -1,6 +1,9 @@
 #include "SimRadio.h"
 #include "MeshService.h"
 #include "Router.h"
+#if !MESHTASTIC_EXCLUDE_BEACON
+#include "modules/MeshBeaconModule.h"
+#endif
 
 SimRadio::SimRadio() : NotifiedWorkerThread("SimRadio")
 {
@@ -11,16 +14,33 @@ SimRadio *SimRadio::instance;
 
 ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 {
+    if (configApplyTxInhibited()) {
+        LOG_WARN("Drop simulated Tx packet because radio configuration recovery failed");
+        packetPool.release(p);
+        return ERRNO_DISABLED;
+    }
+
     printPacket("enqueuing for send", p);
 
     bool dropped = false;
-    ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
+    meshtastic_MeshPacket *evicted = nullptr;
+    ErrorCode res = txQueue.enqueue(p, &dropped, &evicted) ? ERRNO_OK : ERRNO_UNKNOWN;
+
+    if (evicted) {
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(evicted);
+#endif
+        packetPool.release(evicted);
+    }
 
     if (dropped) {
         txDrop++;
     }
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
         packetPool.release(p);
         return res;
     }
@@ -30,6 +50,24 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
     LOG_DEBUG("Set random delay before tx");
     setTransmitDelay();
     return res;
+}
+
+bool SimRadio::requestConfigApply(RadioConfigApplyRequest *request)
+{
+    if (!RadioInterface::requestConfigApply(request))
+        return false;
+
+    notify(CONFIG_APPLY_PENDING, false);
+    return true;
+}
+
+bool SimRadio::finalizeConfigApply(RadioConfigApplyRequest *request)
+{
+    if (!RadioInterface::finalizeConfigApply(request))
+        return false;
+    if (!txQueue.empty())
+        setTransmitDelay();
+    return true;
 }
 
 void SimRadio::setTransmitDelay()
@@ -98,6 +136,9 @@ void SimRadio::completeSending()
         printPacket("Completed sending", p);
 
         // We are done sending that packet, release it
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
         packetPool.release(p);
         // LOG_DEBUG("Done with send");
     }
@@ -136,8 +177,12 @@ bool SimRadio::isChannelActive()
 bool SimRadio::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
-    if (p)
+    if (p) {
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
         packetPool.release(p); // free the packet we just removed
+    }
 
     bool result = (p != NULL);
     LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
@@ -164,6 +209,8 @@ void SimRadio::onNotify(uint32_t notification)
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
+        if (configApplyBarrierIsSet())
+            break;
         if (receivingPacket) { // This happens when we had a timer pending and we started receiving
             handleReceiveInterrupt();
             startTransmitTimer();
@@ -183,23 +230,32 @@ void SimRadio::onNotify(uint32_t notification)
                     setTransmitDelay(); // reset random delay
                 } else {
                     // Send any outgoing packets we have ready
-                    meshtastic_MeshPacket *txp = txQueue.dequeue();
-                    assert(txp);
-                    startSend(txp);
-                    // Packet has been sent, count it toward our TX airtime utilization.
-                    uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
-                    airTime->logAirtime(TX_LOG, xmitMsec);
+                    if (claimConfigApplyTxStart()) {
+                        meshtastic_MeshPacket *txp = txQueue.dequeue();
+                        assert(txp);
+                        startSend(txp);
+                        // Packet has been sent, count it toward our TX airtime utilization.
+                        uint32_t xmitMsec = RadioInterface::getPacketTime(txp);
+                        airTime->logAirtime(TX_LOG, xmitMsec);
 
-                    notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
+                        notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
+                        releaseConfigApplyTxStart();
+                    }
                 }
             }
         } else {
             // LOG_DEBUG("done with txqueue");
         }
         break;
+    case CONFIG_APPLY_PENDING:
+        break;
     default:
         assert(0); // We expected to receive a valid notification from the ISR
     }
+
+    serviceConfigApply(millis());
+    if (configApplyPending())
+        notifyLater(25, CONFIG_APPLY_PENDING, false);
 }
 
 /** start an immediate transmit */

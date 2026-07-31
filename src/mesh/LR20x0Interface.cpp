@@ -50,6 +50,14 @@ LR20x0Interface<T>::LR20x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
     LOG_WARN("LR20x0Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
+template <typename T> bool LR20x0Interface<T>::supportsLoRaBandwidth(float bandwidthKHz, bool wideBand)
+{
+    (void)wideBand;
+    return bandwidthKHz == 31.25f || bandwidthKHz == 41.7f || bandwidthKHz == 62.5f || bandwidthKHz == 83.0f ||
+           bandwidthKHz == 101.0f || bandwidthKHz == 125.0f || bandwidthKHz == 203.125f || bandwidthKHz == 250.0f ||
+           bandwidthKHz == 406.25f || bandwidthKHz == 500.0f || bandwidthKHz == 812.5f || bandwidthKHz == 1000.0f;
+}
+
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
 /// \return true if initialisation succeeded.
@@ -78,7 +86,8 @@ template <typename T> bool LR20x0Interface<T>::init()
     LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
 #endif
 
-    RadioLibInterface::init();
+    if (!RadioLibInterface::init())
+        return false;
 
 #ifdef LR2021_IRQ_DIO_NUM
     lora.irqDioNum = LR2021_IRQ_DIO_NUM;
@@ -98,15 +107,13 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 #ifdef LR2021_RF_SWITCH_SUBGHZ
     pinMode(LR2021_RF_SWITCH_SUBGHZ, OUTPUT);
-    digitalWrite(LR2021_RF_SWITCH_SUBGHZ, getFreq() < 1e9 ? HIGH : LOW);
-    LOG_DEBUG("Set RF0 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
 #ifdef LR2021_RF_SWITCH_2_4GHZ
     pinMode(LR2021_RF_SWITCH_2_4GHZ, OUTPUT);
-    digitalWrite(LR2021_RF_SWITCH_2_4GHZ, getFreq() < 1e9 ? LOW : HIGH);
-    LOG_DEBUG("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
+    selectExternalRfPath(getFreq());
+    LOG_DEBUG("Set external RF path to %s", getFreq() < 1000.0f ? "SubGHz" : "2.4GHz");
 
     // Allow extra time for TCXO to stabilize after power-on
     delay(10);
@@ -181,15 +188,16 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         if (result == RADIOLIB_ERR_NONE)
             return;
         LOG_ERROR("LR20x0 %s %s%d", operation, radioLibErr, result);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        if (shouldRecordReconfigureFailure())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         success = false;
     };
 
-    // set mode to standby
-    setStandby();
+    int err = setStandby(false);
+    recordConfigError("standby", err);
 
     // configure publicly accessible settings
-    int err = lora.setSpreadingFactor(sf);
+    err = lora.setSpreadingFactor(sf);
     recordConfigError("setSpreadingFactor", err);
 
     err = lora.setBandwidth(bw); // different form than LR11xx
@@ -220,8 +228,10 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     err = lora.setRxBoostedGainMode(loraConfig.sx126x_rx_boosted_gain);
     recordConfigError("setRxBoostedGainMode", err);
 
-    if (success)
-        startReceive(); // restart receiving
+    if (success) {
+        err = startReceiveForReconfigure();
+        recordConfigError("startReceive", err);
+    }
 
     return success;
 }
@@ -231,7 +241,7 @@ template <typename T> void LR20x0Interface<T>::disableInterrupt()
     lora.clearIrqAction();
 }
 
-template <typename T> void LR20x0Interface<T>::setStandby()
+template <typename T> int LR20x0Interface<T>::setStandby(bool completePacket)
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
@@ -241,13 +251,21 @@ template <typename T> void LR20x0Interface<T>::setStandby()
         LOG_DEBUG("LR20x0 standby failed with error %d", err);
     }
 
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
 
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
-    completeSending(); // If we were sending, not anymore
+    if (completePacket)
+        completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> void LR20x0Interface<T>::setStandby()
+{
+    assert(setStandby(true) == RADIOLIB_ERR_NONE);
 }
 
 /**
@@ -278,23 +296,46 @@ template <typename T> void LR20x0Interface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
-
     setStandby();
 
-    lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
-
-    // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
-    int err =
-        lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
-    if (err)
+    const int err = startReceiveForReconfigure();
+    if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("StartReceive error: %d", err);
     assert(err == RADIOLIB_ERR_NONE);
+#endif
+}
+
+template <typename T> int LR20x0Interface<T>::startReceiveForReconfigure()
+{
+#ifdef SLEEP_ONLY
+    sleep();
+    return RADIOLIB_ERR_NONE;
+#else
+    int err = lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
+
+    selectExternalRfPath(getFreq());
+    err = lora.startReceive(RADIOLIB_LR2021_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
 
     RadioLibInterface::startReceive();
 
     // Must be done AFTER starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
+    return RADIOLIB_ERR_NONE;
+#endif
+}
+
+template <typename T> void LR20x0Interface<T>::selectExternalRfPath(float frequency)
+{
+#ifdef LR2021_RF_SWITCH_SUBGHZ
+    digitalWrite(LR2021_RF_SWITCH_SUBGHZ, frequency < 1000.0f ? HIGH : LOW);
+#endif
+#ifdef LR2021_RF_SWITCH_2_4GHZ
+    digitalWrite(LR2021_RF_SWITCH_2_4GHZ, frequency < 1000.0f ? LOW : HIGH);
 #endif
 }
 

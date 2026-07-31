@@ -34,23 +34,32 @@ typedef struct {
 class MeshBeaconModule
 {
   public:
+    enum class RadioConfigResult : uint8_t { UNCHANGED, RECONFIGURED, IN_PROGRESS, FAILED };
+
     MeshBeaconModule();
 
     /**
      * Reconfigure the radio for beacon TX, or restore to original config if p is NULL.
-     * Returns true if the radio was reconfigured (caller must re-run transmit delay for CCA).
+     * Returns RECONFIGURED when the caller must re-run transmit delay for CCA, or FAILED when
+     * the switch/restore did not complete and transmission must not proceed.
      * Driven by broadcast_on_preset / broadcast_on_channel from MeshBeaconConfig.
      */
-    static bool reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p);
+    static RadioConfigResult reconfigureForBeaconTX(RadioInterface *iface, meshtastic_MeshPacket *p);
 
     /// True while the radio is using beacon settings and the home configuration still needs restoration.
     static bool radioConfigIsTemporary();
 
+    /// True after a home-profile restore failed and normal RX/TX must remain paused.
+    static bool radioRestoreIsPending();
+
+    /// Copy the canonical home configuration, even while a beacon temporarily owns the radio.
+    static bool getHomeRadioConfig(meshtastic_Config_LoRaConfig &lora, meshtastic_ChannelSettings *primary = nullptr);
+
     /**
      * Associate target radio settings with an outgoing packet by its ID.
-     * Sidecar holds 8 entries; evicts slot 0 on overflow.
+     * Returns false if no lifetime slot is available; callers must not transmit the packet in that case.
      */
-    static void
+    static bool
     setTargetRadioSettings(const meshtastic_MeshPacket *p, meshtastic_Config_LoRaConfig_ModemPreset preset, uint16_t slot,
                            bool legacyHopOverride = false,
                            meshtastic_Config_LoRaConfig_RegionCode region = meshtastic_Config_LoRaConfig_RegionCode_UNSET,
@@ -67,6 +76,7 @@ class MeshBeaconModule
      * Called from RadioLibInterface::completeSending().
      */
     static void clearTargetRadioSettings(const meshtastic_MeshPacket *p);
+    static void clearTargetRadioSettings(PacketId id);
 
     /**
      * True if p is tagged for a beacon radio switch whose target config must NOT be transmitted:
@@ -74,7 +84,7 @@ class MeshBeaconModule
      * (licensed-only) region. The radio driver drops such packets rather than sending them on the
      * current config. False for any packet without a sidecar entry (normal traffic is never affected).
      */
-    static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p);
+    static bool beaconTxConfigInvalid(const meshtastic_MeshPacket *p, RadioInterface *iface = nullptr);
 
   protected:
     /**

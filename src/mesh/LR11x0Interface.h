@@ -18,6 +18,8 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /// \return true if initialisation succeeded.
     virtual bool init() override;
 
+    bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override;
+
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
@@ -116,6 +118,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
         int setRxBoostedGainMode(bool boostedGain) { return radio.lora.setRxBoostedGainMode(boostedGain); }
         int startReceive()
         {
+            radio.selectExternalRfPath(radio.getFreq());
             return radio.lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS,
                                            RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
         }
@@ -130,7 +133,5 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     int reinitializeForBand(const LR11x0ConfigApplyParams &params, LR11x0ApplyStep *failedStep);
     void selectExternalRfPath(float frequency);
     void finishStartReceive();
-
-    bool receiveStartedDuringReconfigure = false;
 };
 #endif

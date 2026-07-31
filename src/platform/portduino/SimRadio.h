@@ -9,7 +9,7 @@
 
 class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, CONFIG_APPLY_PENDING };
 
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
@@ -21,6 +21,8 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     static SimRadio *instance;
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
+    bool requestConfigApply(RadioConfigApplyRequest *request) override;
+    bool finalizeConfigApply(RadioConfigApplyRequest *request) override;
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive();
@@ -35,6 +37,17 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
 
     /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
     virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
+#ifdef PIO_UNIT_TESTING
+    bool completeNextSendingForTest()
+    {
+        if (sendingPacket || txQueue.empty())
+            return false;
+        sendingPacket = txQueue.dequeue();
+        completeSending();
+        return true;
+    }
+#endif
 
     /**
      * Start waiting to receive a message

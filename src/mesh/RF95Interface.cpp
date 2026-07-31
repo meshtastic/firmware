@@ -118,7 +118,8 @@ bool RF95Interface::init()
     digitalWrite(RF95_POWER_EN, HIGH);
 #endif
 
-    RadioLibInterface::init();
+    if (!RadioLibInterface::init())
+        return false;
 
 #if defined(RADIOMASTER_900_BANDIT_NANO) || defined(RADIOMASTER_900_BANDIT)
     // DAC and DB values based on dBm using interpolation
@@ -214,15 +215,16 @@ bool RF95Interface::reconfigure()
         if (result == RADIOLIB_ERR_NONE)
             return;
         LOG_ERROR("RF95 %s %s%d", operation, radioLibErr, result);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        if (shouldRecordReconfigureFailure())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         success = false;
     };
 
-    // set mode to standby
-    setStandby();
+    int err = setStandby(false);
+    recordConfigError("standby", err);
 
     // configure publicly accessible settings
-    int err = lora->setSpreadingFactor(sf);
+    err = lora->setSpreadingFactor(sf);
     recordConfigError("setSpreadingFactor", err);
 
     err = lora->setBandwidth(bw);
@@ -252,8 +254,10 @@ bool RF95Interface::reconfigure()
 #endif
     recordConfigError("setOutputPower", err);
 
-    if (success)
-        startReceive(); // restart receiving
+    if (success) {
+        err = startReceiveForReconfigure();
+        recordConfigError("startReceive", err);
+    }
 
     return success;
 }
@@ -269,17 +273,27 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
     LOG_DEBUG("Corrected frequency offset: %f", lora->getFrequencyError());
 }
 
-void RF95Interface::setStandby()
+int RF95Interface::setStandby(bool completePacket)
 {
+    checkNotification();
+
     int err = lora->standby();
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("RF95 standby %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
 
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
-    completeSending(); // If we were sending, not anymore
+    if (completePacket)
+        completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+void RF95Interface::setStandby()
+{
+    assert(setStandby(true) == RADIOLIB_ERR_NONE);
 }
 
 /** We override to turn on transmitter power as needed.
@@ -293,18 +307,27 @@ void RF95Interface::configHardwareForSend()
 
 void RF95Interface::startReceive()
 {
-    setTransmitEnable(false);
     setStandby();
-    int err = lora->startReceive();
+
+    const int err = startReceiveForReconfigure();
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("RF95 startReceive %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
+}
+
+int RF95Interface::startReceiveForReconfigure()
+{
+    setTransmitEnable(false);
+    const int err = lora->startReceive();
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
 
     isReceiving = true;
 
     // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
+    return RADIOLIB_ERR_NONE;
 }
 
 bool RF95Interface::isChannelActive()

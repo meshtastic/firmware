@@ -32,7 +32,17 @@ class AdminModuleTestShim : public AdminModule
     uint32_t persistenceCount() const { return persistenceCountForTest; }
     const meshtastic_Config_LoRaConfig &persistedLoRa() const { return persistedLoRaForTest; }
     void saveUnrelatedConfig(int segments) { saveChanges(segments, false); }
-    bool loRaConfigPending() const { return loRaConfigApplyPending; }
+    bool loRaConfigPending() const { return loRaConfigApplyPending.load(std::memory_order_acquire); }
+    void holdLoRaSaveForTest()
+    {
+        concurrency::LockGuard guard(&loRaSaveLock);
+        ++loRaSavesInProgress;
+    }
+    void releaseLoRaSaveForTest()
+    {
+        concurrency::LockGuard guard(&loRaSaveLock);
+        --loRaSavesInProgress;
+    }
 
     bool editTransactionOpen() const { return hasOpenEditTransaction; }
     // Backdate past the idle window so a test sees an abandoned transaction without waiting it out.

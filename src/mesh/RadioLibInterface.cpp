@@ -190,13 +190,24 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     LOG_DEBUG("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d", txGood, txRelay, rxGood, rxBad);
     bool dropped = false;
-    ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
+    meshtastic_MeshPacket *evicted = nullptr;
+    ErrorCode res = txQueue.enqueue(p, &dropped, &evicted) ? ERRNO_OK : ERRNO_UNKNOWN;
+
+    if (evicted) {
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(evicted);
+#endif
+        packetPool.release(evicted);
+    }
 
     if (dropped) {
         txDrop++;
     }
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
         packetPool.release(p);
         return res;
     }
@@ -214,105 +225,84 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
 bool RadioLibInterface::requestConfigApply(RadioConfigApplyRequest *request)
 {
-    if (request == nullptr)
+    if (!RadioInterface::requestConfigApply(request))
         return false;
-
-    {
-        concurrency::LockGuard lock(&configApplyLock);
-        if (pendingConfigApply != nullptr) {
-            request->result.store(RadioConfigApplyResult::BUSY);
-            return false;
-        }
-
-        request->result.store(RadioConfigApplyResult::PENDING);
-        configApplyBarrier = true;
-        pendingConfigApply = request;
-    }
 
     notify(CONFIG_APPLY_PENDING, false);
     LOG_DEBUG("radio_config_apply queued");
     return true;
 }
 
-void RadioLibInterface::finishConfigApply(RadioConfigApplyRequest *request, RadioConfigApplyResult result)
+bool RadioLibInterface::finalizeConfigApply(RadioConfigApplyRequest *request)
 {
-    {
-        concurrency::LockGuard lock(&configApplyLock);
-        assert(pendingConfigApply == request);
-        pendingConfigApply = nullptr;
-        configApplyBarrier = false;
-    }
-    request->result.store(result);
-    LOG_DEBUG("radio_config_apply resume result=%u", static_cast<unsigned>(result));
+    if (!RadioInterface::finalizeConfigApply(request))
+        return false;
+
+    LOG_DEBUG("radio_config_apply resume");
 
     if (!txQueue.empty())
         setTransmitDelay();
-}
-
-bool RadioLibInterface::configApplyBarrierIsSet()
-{
-    concurrency::LockGuard lock(&configApplyLock);
-    return configApplyBarrier;
+    return true;
 }
 
 meshtastic_MeshPacket *RadioLibInterface::dequeueTxPacketIfConfigApplyAllowed()
 {
-    concurrency::LockGuard lock(&configApplyLock);
-    return configApplyBarrier ? nullptr : txQueue.dequeue();
+    if (!claimConfigApplyTxStart())
+        return nullptr;
+    meshtastic_MeshPacket *packet = txQueue.dequeue();
+    releaseConfigApplyTxStart();
+    return packet;
 }
 
 void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
 {
-    (void)nowMsec;
-
-    RadioConfigApplyRequest *request;
-    {
-        concurrency::LockGuard lock(&configApplyLock);
-        request = pendingConfigApply;
-    }
-    if (request == nullptr)
+    RadioConfigApplyRequest *request = nullptr;
+    if (!claimConfigApply(request))
         return;
+    const bool timedOut = static_cast<uint32_t>(nowMsec - request->requestedAtMsec) >= request->timeoutMsec;
 
-    if (!Throttle::isWithinTimespanMs(request->requestedAtMsec, request->timeoutMsec)) {
-        finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
-        return;
-    }
-
-    if (sendingPacket != nullptr) {
+    if (configApplyTxStartActive() || sendingPacket != nullptr) {
+        if (timedOut) {
+            finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
+            return;
+        }
         LOG_DEBUG("radio_config_apply wait_tx");
+        deferConfigApply(request);
         notifyLater(25, CONFIG_APPLY_PENDING, false);
         return;
     }
 
     if (isActivelyReceiving()) {
+        if (timedOut) {
+            finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
+            return;
+        }
+        deferConfigApply(request);
         notifyLater(25, CONFIG_APPLY_PENDING, false);
         return;
     }
 
 #if !MESHTASTIC_EXCLUDE_BEACON
-    if (MeshBeaconModule::reconfigureForBeaconTX(this, nullptr)) {
-        notify(CONFIG_APPLY_PENDING, false);
+    const auto beaconRestoreResult = MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+    if (beaconRestoreResult != MeshBeaconModule::RadioConfigResult::UNCHANGED) {
+        deferConfigApply(request);
+        if (beaconRestoreResult == MeshBeaconModule::RadioConfigResult::FAILED)
+            scheduleBeaconRestoreRetry();
+        else
+            notifyLater(25, CONFIG_APPLY_PENDING, false);
         return;
     }
 #endif
 
-    LOG_DEBUG("radio_config_apply apply");
-    RadioConfigApplyResult result;
-    if (reconfigureConfig(request->candidate)) {
-        result = RadioConfigApplyResult::APPLIED;
-        startReceive();
-    } else {
-        LOG_DEBUG("radio_config_apply rollback");
-        if (reconfigureConfig(request->previous)) {
-            result = RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK;
-            startReceive();
-        } else {
-            setConfigApplyTxInhibit(true);
-            result = RadioConfigApplyResult::ROLLBACK_FAILED;
-        }
+    if (timedOut) {
+        finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
+        return;
     }
 
+    LOG_DEBUG("radio_config_apply apply");
+    const RadioConfigApplyResult result = applyConfigWithRollback(*request);
     finishConfigApply(request, result);
+    LOG_DEBUG("radio_config_apply complete result=%u", static_cast<unsigned>(result));
 }
 
 meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
@@ -351,8 +341,12 @@ bool RadioLibInterface::isSending()
 bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
 {
     auto p = txQueue.remove(from, id);
-    if (p)
+    if (p) {
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
         packetPool.release(p); // free the packet we just removed
+    }
 
     bool result = (p != NULL);
     LOG_DEBUG("cancelSending id=0x%08x, removed=%d", id, result);
@@ -507,17 +501,22 @@ void RadioLibInterface::deliverPendingIrqFromPoll(PendingISR cause)
 
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+#if !MESHTASTIC_EXCLUDE_BEACON
+    if (MeshBeaconModule::radioRestoreIsPending() && notification != BEACON_RESTORE_PENDING) {
+        scheduleBeaconRestoreRetry();
+        serviceConfigApply(millis());
+        return;
+    }
+#endif
 
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt(); // completeSending() already restored the radio to the home config
 #if !MESHTASTIC_EXCLUDE_BEACON
-        // Pre-switch the radio to the NEXT queued packet's beacon config (no-op for normal traffic).
-        // Not required for correctness - TRANSMIT_DELAY_COMPLETED would switch before CAD anyway - but
-        // doing it here lets the next beacon skip the switch-only delay cycle and, more importantly,
-        // keeps the post-TX listen window (and the CAD/LBT that follows) on the channel we're about to
-        // transmit on. Only engages when the next packet is itself a beacon - exactly when we want it.
-        MeshBeaconModule::reconfigureForBeaconTX(this, txQueue.getFront());
+        if (MeshBeaconModule::radioConfigIsTemporary()) {
+            scheduleBeaconRestoreRetry();
+            break;
+        }
 #endif
         startReceive();
         setTransmitDelay();
@@ -532,6 +531,18 @@ void RadioLibInterface::onNotify(uint32_t notification)
         break;
     case CONFIG_APPLY_PENDING:
         break;
+    case BEACON_RESTORE_PENDING: {
+#if !MESHTASTIC_EXCLUDE_BEACON
+        const auto restoreResult = MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+        if (restoreResult == MeshBeaconModule::RadioConfigResult::FAILED ||
+            restoreResult == MeshBeaconModule::RadioConfigResult::IN_PROGRESS) {
+            scheduleBeaconRestoreRetry();
+        } else {
+            setTransmitDelay();
+        }
+#endif
+        break;
+    }
     case TRANSMIT_DELAY_COMPLETED:
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
@@ -551,7 +562,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
 #if !MESHTASTIC_EXCLUDE_BEACON
-                } else if (MeshBeaconModule::beaconTxConfigInvalid(txp)) {
+                } else if (MeshBeaconModule::beaconTxConfigInvalid(txp, this)) {
                     // The beacon's target radio config is invalid (bad preset/region, or an
                     // unlicensed node keying up on a ham-only region). Drop the packet - never
                     // transmit it on the current (home) config - and move on to the next queued packet.
@@ -562,27 +573,49 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         packetPool.release(bad);
                         setTransmitDelay();
                     }
-                } else if (MeshBeaconModule::reconfigureForBeaconTX(this, txp)) {
-                    setTransmitDelay();
-#endif
                 } else {
-                    if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-#if !MESHTASTIC_EXCLUDE_BEACON
-                        if (!MeshBeaconModule::hasTargetRadioSettings(txp))
-#endif
-                        {
-                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
-                        }
+                    const auto beaconConfigResult = MeshBeaconModule::reconfigureForBeaconTX(this, txp);
+                    if (beaconConfigResult == MeshBeaconModule::RadioConfigResult::RECONFIGURED ||
+                        beaconConfigResult == MeshBeaconModule::RadioConfigResult::IN_PROGRESS) {
                         setTransmitDelay();
-                    } else {
-                        // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
-                        // actual transmission as short as possible
-                        txp = dequeueTxPacketIfConfigApplyAllowed();
-                        if (txp != nullptr) {
-                            startSend(txp);
-                            LOG_DEBUG("%d packets remain in the TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                    } else if (beaconConfigResult == MeshBeaconModule::RadioConfigResult::FAILED) {
+                        if (MeshBeaconModule::hasTargetRadioSettings(txp)) {
+                            meshtastic_MeshPacket *bad = dequeueTxPacketIfConfigApplyAllowed();
+                            if (bad != nullptr) {
+                                LOG_ERROR("Beacon: TX radio switch failed, dropping packet 0x%08x", bad->id);
+                                MeshBeaconModule::clearTargetRadioSettings(bad);
+                                packetPool.release(bad);
+                            }
                         }
+                        if (MeshBeaconModule::radioConfigIsTemporary())
+                            scheduleBeaconRestoreRetry();
+                        else
+                            setTransmitDelay();
+#endif
+                    } else {
+                        if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
+#if !MESHTASTIC_EXCLUDE_BEACON
+                            if (!MeshBeaconModule::hasTargetRadioSettings(txp))
+#endif
+                            {
+                                startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+                            }
+                            setTransmitDelay();
+                        } else {
+                            // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan
+                            // and actual transmission as short as possible
+                            if (claimConfigApplyTxStart()) {
+                                txp = txQueue.dequeue();
+                                if (txp != nullptr) {
+                                    startSend(txp);
+                                    LOG_DEBUG("%d packets remain in the TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                                }
+                                releaseConfigApplyTxStart();
+                            }
+                        }
+#if !MESHTASTIC_EXCLUDE_BEACON
                     }
+#endif
                 }
             }
         } else {
@@ -593,6 +626,10 @@ void RadioLibInterface::onNotify(uint32_t notification)
         assert(0); // We expected to receive a valid notification from the ISR
     }
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+    if (MeshBeaconModule::radioRestoreIsPending())
+        scheduleBeaconRestoreRetry();
+#endif
     serviceConfigApply(millis());
 }
 
@@ -625,6 +662,11 @@ void RadioLibInterface::setTransmitDelay()
     }
 }
 
+void RadioLibInterface::scheduleBeaconRestoreRetry()
+{
+    notifyLater(25, BEACON_RESTORE_PENDING, true);
+}
+
 void RadioLibInterface::startTransmitTimer(bool withDelay)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
@@ -653,10 +695,20 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     if (p) {
         p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
         bool dropped = false;
-        if (txQueue.enqueue(p, &dropped)) {
+        meshtastic_MeshPacket *evicted = nullptr;
+        if (txQueue.enqueue(p, &dropped, &evicted)) {
             LOG_DEBUG("Move existing queued packet to the late rebroadcast window %dms from now", p->tx_after - millis());
         } else {
+#if !MESHTASTIC_EXCLUDE_BEACON
+            MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
             packetPool.release(p);
+        }
+        if (evicted) {
+#if !MESHTASTIC_EXCLUDE_BEACON
+            MeshBeaconModule::clearTargetRadioSettings(evicted);
+#endif
+            packetPool.release(evicted);
         }
         if (dropped) {
             txDrop++;
@@ -673,6 +725,9 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
         LOG_DEBUG("Dropping pending-TX packet 0x%08x with hop limit %d", p->id, p->hop_limit);
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(p);
+#endif
         packetPool.release(p);
         return true;
     }
@@ -880,9 +935,15 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         // since it never reaches completeSending() here, restore the radio so it isn't left on the
         // beacon config (which would also break RX on the home channel).
         MeshBeaconModule::clearTargetRadioSettings(txp);
-        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+        const auto restoreResult = MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
 #endif
         packetPool.release(txp);
+#if !MESHTASTIC_EXCLUDE_BEACON
+        if (restoreResult == MeshBeaconModule::RadioConfigResult::FAILED) {
+            scheduleBeaconRestoreRetry();
+            return false;
+        }
+#endif
         setTransmitDelay();
         return false;
     } else {
@@ -898,7 +959,14 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             // This send failed, but make sure to 'complete' it properly
             completeSending();
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
-            startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
+#if !MESHTASTIC_EXCLUDE_BEACON
+            if (MeshBeaconModule::radioConfigIsTemporary()) {
+                scheduleBeaconRestoreRetry();
+            } else
+#endif
+            {
+                startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
+            }
         } else {
             // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
             // bits

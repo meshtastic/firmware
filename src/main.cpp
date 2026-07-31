@@ -1447,6 +1447,10 @@ void loop()
 #endif
 
     service->loop();
+#if defined(ARCH_PORTDUINO) && !defined(ARCH_PORTDUINO_WASM) && __has_include(<ulfius.h>)
+    if (piwebServerThread)
+        piwebServerThread->processPendingRequests();
+#endif
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER && defined(HAS_FREE_RTOS) && !defined(ARCH_RP2040)
     if (inputBroker)
         inputBroker->processInputEventQueue();
@@ -1473,7 +1477,7 @@ void loop()
                 exit(EXIT_FAILURE);
             }
         }
-        auto rIf = initLoRa();
+        auto rIf = initLoRa(!service->loRaConfigApplyActive());
         if (rIf) {
             router->addInterface(std::move(rIf));
             portduino_status.LoRa_in_error = false;

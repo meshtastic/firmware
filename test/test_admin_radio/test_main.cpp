@@ -76,6 +76,15 @@ static MockMeshService *mockMeshService;
 class ScriptedConfigApplyRadio : public RadioInterface
 {
   public:
+    bool wideLora() override { return true; }
+
+    bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
+    {
+        return !limitWideBandwidth || !wideBand || bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f;
+    }
+
+    void emulateLr1121Bandwidths() { limitWideBandwidth = true; }
+
     bool requestConfigApply(RadioConfigApplyRequest *request) override
     {
         if (rejectNextRequest) {
@@ -88,7 +97,8 @@ class ScriptedConfigApplyRadio : public RadioInterface
             return false;
         }
         pendingRequest = request;
-        pendingRequest->result.store(RadioConfigApplyResult::PENDING);
+        pendingRequest->acceptedRadioId = configApplyOwnerId();
+        pendingRequest->result.store(RadioConfigApplyResult::PENDING, std::memory_order_release);
         requestCount++;
         return true;
     }
@@ -98,21 +108,41 @@ class ScriptedConfigApplyRadio : public RadioInterface
         TEST_ASSERT_NOT_NULL(pendingRequest);
         if (result == RadioConfigApplyResult::ROLLBACK_FAILED)
             setConfigApplyTxInhibit(true);
-        RadioConfigApplyRequest *request = pendingRequest;
+        pendingRequest->result.store(result);
+    }
+
+    bool finalizeConfigApply(RadioConfigApplyRequest *request) override
+    {
+        if (!ownsConfigApplyRequest(*request))
+            return false;
+        if (deferNextFinalization) {
+            deferNextFinalization = false;
+            return false;
+        }
+        TEST_ASSERT_EQUAL_PTR(pendingRequest, request);
+        finalizedRegion = config.lora.region;
         pendingRequest = nullptr;
-        request->result.store(result);
+        finalizeCount++;
+        return true;
     }
 
     const RadioConfigApplyRequest *pending() const { return pendingRequest; }
 
     uint32_t requests() const { return requestCount; }
+    uint32_t finalizations() const { return finalizeCount; }
+    meshtastic_Config_LoRaConfig_RegionCode regionAtFinalize() const { return finalizedRegion; }
     void rejectNext() { rejectNextRequest = true; }
+    void deferNextFinalize() { deferNextFinalization = true; }
 
     void reset()
     {
         pendingRequest = nullptr;
         requestCount = 0;
+        finalizeCount = 0;
+        finalizedRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         rejectNextRequest = false;
+        deferNextFinalization = false;
+        limitWideBandwidth = false;
         setConfigApplyTxInhibit(false);
     }
 
@@ -122,7 +152,11 @@ class ScriptedConfigApplyRadio : public RadioInterface
   private:
     RadioConfigApplyRequest *pendingRequest = nullptr;
     uint32_t requestCount = 0;
+    uint32_t finalizeCount = 0;
+    meshtastic_Config_LoRaConfig_RegionCode finalizedRegion = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     bool rejectNextRequest = false;
+    bool deferNextFinalization = false;
+    bool limitWideBandwidth = false;
 };
 
 static Router *savedRouter;
@@ -1346,6 +1380,76 @@ static void test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault(
     TEST_ASSERT_EQUAL_UINT16(bwKHzToCode(LORA_BW_DEFAULT_KHZ), config.lora.bandwidth);
 }
 
+static meshtastic_Config makeLora24CustomBandwidth(uint16_t bandwidth)
+{
+    meshtastic_Config c = makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, false,
+                                            meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+    c.payload_variant.lora.bandwidth = bandwidth;
+    c.payload_variant.lora.spread_factor = 7;
+    c.payload_variant.lora.coding_rate = 5;
+    return c;
+}
+
+static void test_handleSetConfig_localUnsupportedLr1121BandwidthUsesRegionDefault()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    scriptedRadio->emulateLr1121Bandwidths();
+
+    applyLoRaConfig(makeLora24CustomBandwidth(125), false);
+
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(800, config.lora.bandwidth);
+}
+
+static void test_handleSetConfig_remoteUnsupportedLr1121BandwidthIsRejected()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    scriptedRadio->emulateLr1121Bandwidths();
+
+    TEST_ASSERT_FALSE(testAdmin->handleSetConfig(makeLora24CustomBandwidth(125), true));
+    TEST_ASSERT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_TRUE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, config.lora.modem_preset);
+}
+
+static void test_handleSetConfig_crossRegionLocalUnsupportedLr1121BandwidthUsesRegionDefault()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    scriptedRadio->emulateLr1121Bandwidths();
+
+    applyLoRaConfig(makeLora24CustomBandwidth(125), false);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, config.lora.region);
+    TEST_ASSERT_FALSE(config.lora.use_preset);
+    TEST_ASSERT_EQUAL_UINT16(800, config.lora.bandwidth);
+}
+
+static void test_handleSetConfig_crossRegionRemoteUnsupportedLr1121BandwidthIsRejected()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    initRegion();
+    scriptedRadio->emulateLr1121Bandwidths();
+
+    TEST_ASSERT_FALSE(testAdmin->handleSetConfig(makeLora24CustomBandwidth(125), true));
+    TEST_ASSERT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+}
+
 // In preset mode bandwidth 0 is the norm (the preset supplies it); the ingest clamp must leave it
 // untouched so preset configs still read back bandwidth 0.
 static void test_handleSetConfig_fromLocal_presetBandwidthZeroLeftUntouched()
@@ -2034,6 +2138,8 @@ static void test_menuLoRaHelper_enterLicensedAppliesOnceAfterRadioSuccess()
     assertLicensedMenuSnapshot(before);
     TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
     TEST_ASSERT_TRUE(scriptedRadio->pending()->candidate.override_duty_cycle);
+    TEST_ASSERT_FALSE(scriptedRadio->pending()->previousLicensed);
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->candidateLicensed);
     TEST_ASSERT_EQUAL_INT8(30, scriptedRadio->pending()->candidate.tx_power);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 144.5f, scriptedRadio->pending()->candidate.override_frequency);
     TEST_ASSERT_FALSE(scriptedRadio->pending()->candidate.tx_enabled);
@@ -2077,6 +2183,8 @@ static void test_menuLoRaHelper_exitLicensedAppliesNormalizedStateOnceAfterRadio
     TEST_ASSERT_TRUE(owner.is_licensed);
     TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
     TEST_ASSERT_FALSE(scriptedRadio->pending()->candidate.override_duty_cycle);
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->previousLicensed);
+    TEST_ASSERT_FALSE(scriptedRadio->pending()->candidateLicensed);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, scriptedRadio->pending()->candidate.override_frequency);
     TEST_ASSERT_EQUAL_INT8(getRegion(meshtastic_Config_LoRaConfig_RegionCode_US)->powerLimit,
                            scriptedRadio->pending()->candidate.tx_power);
@@ -2099,7 +2207,7 @@ static void test_menuLoRaHelper_exitLicensedAppliesNormalizedStateOnceAfterRadio
                           testAdmin->persistedSegments());
 }
 
-static void test_setHamMode_directProtobufPathRemainsImmediate()
+static void test_setHamMode_directProtobufPathCommitsAfterRadioSuccess()
 {
     configureLicensedMenuBaseline(false);
     meshtastic_HamParameters params = meshtastic_HamParameters_init_zero;
@@ -2110,6 +2218,16 @@ static void test_setHamMode_directProtobufPathRemainsImmediate()
 
     testAdmin->handleSetHamMode(params);
 
+    TEST_ASSERT_FALSE(owner.is_licensed);
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_FALSE(scriptedRadio->pending()->previousLicensed);
+    TEST_ASSERT_TRUE(scriptedRadio->pending()->candidateLicensed);
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
     TEST_ASSERT_TRUE(owner.is_licensed);
     TEST_ASSERT_EQUAL_STRING("K1ABC", owner.long_name);
     TEST_ASSERT_EQUAL_STRING("K1A", owner.short_name);
@@ -2119,6 +2237,25 @@ static void test_setHamMode_directProtobufPathRemainsImmediate()
     TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
     TEST_ASSERT_NULL(scriptedRadio->pending());
     TEST_ASSERT_EQUAL_UINT32(1, testAdmin->persistenceCount());
+}
+
+static void test_setHamMode_directProtobufFailureLeavesStateUnchanged()
+{
+    configureLicensedMenuBaseline(false);
+    const auto before = captureLicensedMenuSnapshot();
+    meshtastic_HamParameters params = meshtastic_HamParameters_init_zero;
+    strncpy(params.call_sign, "K1ABC", sizeof(params.call_sign) - 1);
+    strncpy(params.short_name, "K1A", sizeof(params.short_name) - 1);
+    params.tx_power = 20;
+    params.frequency = 145.5f;
+
+    testAdmin->handleSetHamMode(params);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
+    mockMeshService->loop();
+
+    assertLicensedMenuSnapshot(before);
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_UINT32(0, testAdmin->persistenceCount());
 }
 
 static void test_setLoraConfig_invalidRegionRejectedBeforeTransaction()
@@ -2243,7 +2380,7 @@ static void test_setLoraConfig_normalizationSideEffectsWaitForHardwareSuccess()
     mockMeshService->loop();
 
     TEST_ASSERT_TRUE(RadioInterface::uses_default_frequency_slot);
-    TEST_ASSERT_TRUE(RadioInterface::uses_custom_channel_name);
+    TEST_ASSERT_FALSE(RadioInterface::uses_custom_channel_name);
     TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING, error_code);
     TEST_ASSERT_EQUAL_INT(2, (int)capturedWarnings.size());
     error_code = meshtastic_CriticalErrorCode_NONE;
@@ -2288,6 +2425,8 @@ static void test_setLoraConfig_success_appliesSideEffectsThenPersists()
     scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
     mockMeshService->loop();
 
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->finalizations());
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_868, scriptedRadio->regionAtFinalize());
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_868, config.lora.region);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_868, myRegion->code);
     TEST_ASSERT_EQUAL_INT8(getRegion(meshtastic_Config_LoRaConfig_RegionCode_EU_868)->powerLimit, config.lora.tx_power);
@@ -2319,6 +2458,8 @@ static void test_setLoraConfig_failure_keepsOldConfigAndWarns()
     scriptedRadio->complete(RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK);
     mockMeshService->loop();
 
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->finalizations());
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, scriptedRadio->regionAtFinalize());
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, myRegion->code);
     TEST_ASSERT_EQUAL_INT(0, testAdmin->savedSegments());
@@ -2344,6 +2485,26 @@ static void test_setLoraConfig_failure_keepsOldConfigAndWarns()
     TEST_ASSERT_EQUAL_UINT32(2, scriptedRadio->requests());
 }
 
+static void test_setLoraConfig_interfaceReplacementKeepsOldConfig()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    sendSetLora(candidate);
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+
+    auto replacement = std::make_unique<ScriptedConfigApplyRadio>();
+    scriptedRadio = replacement.get();
+    testRouter->addInterface(std::move(replacement));
+    mockMeshService->loop();
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, config.lora.region);
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->finalizations());
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("radio interface changed"));
+}
+
 static void test_setLoraConfig_concurrentSavePersistsAfterTerminalResult()
 {
     configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
@@ -2366,6 +2527,62 @@ static void test_setLoraConfig_concurrentSavePersistsAfterTerminalResult()
     TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_CONFIG);
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_US, testAdmin->persistedLoRa().region);
     TEST_ASSERT_EQUAL(unrelatedRole, config.device.role);
+}
+
+static void test_editTransaction_busyCommitPreservesStagedLoraForRetry()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    sendBeginEdit();
+    sendSetLora(candidate);
+    testAdmin->holdLoRaSaveForTest();
+    sendCommitEdit();
+
+    TEST_ASSERT_TRUE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->requests());
+    TEST_ASSERT_EQUAL_INT(1, warningsContaining("remain staged for retry"));
+
+    testAdmin->releaseLoRaSaveForTest();
+    sendCommitEdit();
+
+    TEST_ASSERT_FALSE(testAdmin->editTransactionOpen());
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->requests());
+    TEST_ASSERT_NOT_NULL(scriptedRadio->pending());
+    TEST_ASSERT_EQUAL(candidate.region, scriptedRadio->pending()->candidate.region);
+    TEST_ASSERT_EQUAL(candidate.modem_preset, scriptedRadio->pending()->candidate.modem_preset);
+
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_RegionCode_EU_868, config.lora.region);
+}
+
+static void test_setLoraConfig_deferredSaveWaitsForRadioFinalization()
+{
+    configureLoRaTransactionBaseline(meshtastic_Config_LoRaConfig_RegionCode_US);
+    const auto candidate =
+        makeLoRaCandidate(meshtastic_Config_LoRaConfig_RegionCode_EU_868, meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST);
+
+    sendSetLora(candidate);
+    scriptedRadio->deferNextFinalize();
+    scriptedRadio->complete(RadioConfigApplyResult::APPLIED);
+    mockMeshService->loop();
+
+    TEST_ASSERT_TRUE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_UINT32(0, scriptedRadio->finalizations());
+    const uint32_t persistenceBeforeDeferredSave = testAdmin->persistenceCount();
+    testAdmin->saveUnrelatedConfig(SEGMENT_MODULECONFIG);
+    TEST_ASSERT_EQUAL_UINT32(persistenceBeforeDeferredSave, testAdmin->persistenceCount());
+
+    mockMeshService->loop();
+
+    TEST_ASSERT_FALSE(testAdmin->loRaConfigPending());
+    TEST_ASSERT_EQUAL_UINT32(1, scriptedRadio->finalizations());
+    TEST_ASSERT_EQUAL_UINT32(persistenceBeforeDeferredSave + 1, testAdmin->persistenceCount());
+    TEST_ASSERT_TRUE(testAdmin->persistedSegments() & SEGMENT_MODULECONFIG);
 }
 
 static void test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecoveryFailure()
@@ -2713,6 +2930,10 @@ void setup()
     RUN_TEST(test_clampBandwidthCode_zeroMapsToDefaultOthersUnchanged);
     RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthZeroClampedToDefault);
     RUN_TEST(test_handleSetConfig_fromOthers_customBandwidthZeroClampedToDefault);
+    RUN_TEST(test_handleSetConfig_localUnsupportedLr1121BandwidthUsesRegionDefault);
+    RUN_TEST(test_handleSetConfig_remoteUnsupportedLr1121BandwidthIsRejected);
+    RUN_TEST(test_handleSetConfig_crossRegionLocalUnsupportedLr1121BandwidthUsesRegionDefault);
+    RUN_TEST(test_handleSetConfig_crossRegionRemoteUnsupportedLr1121BandwidthIsRejected);
     RUN_TEST(test_handleSetConfig_fromLocal_presetBandwidthZeroLeftUntouched);
     RUN_TEST(test_handleSetConfig_fromLocal_customBandwidthNonZeroPreserved);
     RUN_TEST(test_handleSetConfig_security_preservesKeypairWhenPrivateOmitted);
@@ -2737,14 +2958,18 @@ void setup()
     RUN_TEST(test_menuLoRaHelper_exitLicensedTerminalFailuresLeaveSnapshotUnchanged);
     RUN_TEST(test_menuLoRaHelper_enterLicensedAppliesOnceAfterRadioSuccess);
     RUN_TEST(test_menuLoRaHelper_exitLicensedAppliesNormalizedStateOnceAfterRadioSuccess);
-    RUN_TEST(test_setHamMode_directProtobufPathRemainsImmediate);
+    RUN_TEST(test_setHamMode_directProtobufPathCommitsAfterRadioSuccess);
+    RUN_TEST(test_setHamMode_directProtobufFailureLeavesStateUnchanged);
     RUN_TEST(test_setLoraConfig_invalidRegionRejectedBeforeTransaction);
     RUN_TEST(test_setLoraConfig_remoteInvalidRejectedBeforeTransaction);
     RUN_TEST(test_setLoraConfig_doesNotMutateOrSaveBeforeHardwareSuccess);
     RUN_TEST(test_setLoraConfig_normalizationSideEffectsWaitForHardwareSuccess);
     RUN_TEST(test_setLoraConfig_success_appliesSideEffectsThenPersists);
     RUN_TEST(test_setLoraConfig_failure_keepsOldConfigAndWarns);
+    RUN_TEST(test_setLoraConfig_interfaceReplacementKeepsOldConfig);
     RUN_TEST(test_setLoraConfig_concurrentSavePersistsAfterTerminalResult);
+    RUN_TEST(test_editTransaction_busyCommitPreservesStagedLoraForRetry);
+    RUN_TEST(test_setLoraConfig_deferredSaveWaitsForRadioFinalization);
     RUN_TEST(test_setLoraConfig_rollbackFailure_keepsPersistedConfigAndWarnsRecoveryFailure);
     RUN_TEST(test_setLoraConfig_busy_returnsBadRequest);
     RUN_TEST(test_setLoraConfig_regionSideEffects_doNotRunBeforeSuccess);

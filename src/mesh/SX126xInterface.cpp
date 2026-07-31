@@ -84,7 +84,8 @@ template <typename T> bool SX126xInterface<T>::init()
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
-    RadioLibInterface::init();
+    if (!RadioLibInterface::init())
+        return false;
 
     limitPower(SX126X_MAX_POWER);
     // Make sure we reach the minimum power supported to turn the chip on (-9dBm)
@@ -191,15 +192,16 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         if (result == RADIOLIB_ERR_NONE)
             return;
         LOG_ERROR("SX126X %s %s%d", operation, radioLibErr, result);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        if (shouldRecordReconfigureFailure())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         success = false;
     };
 
-    // set mode to standby
-    setStandby();
+    int err = setStandby(false);
+    recordConfigError("standby", err);
 
     // configure publicly accessible settings
-    int err = lora.setSpreadingFactor(sf);
+    err = lora.setSpreadingFactor(sf);
     recordConfigError("setSpreadingFactor", err);
 
     err = lora.setBandwidth(bw);
@@ -226,20 +228,16 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = -9;
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE) {
-        // Don't abort: this power is operator config (tx_power/SX126X_MAX_POWER); a value above the
-        // driver's max would crash the daemon before reloadConfig() persists. Flag it and keep prior power.
-        LOG_ERROR("SX126X setOutputPower %d dBm rejected (%s%d); keeping previous Tx power", power, radioLibErr, err);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        success = false;
-    }
+    recordConfigError("setOutputPower", err);
 
     // Apply RX gain mode - valid in STDBY (datasheet §9.6), matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(loraConfig.sx126x_rx_boosted_gain);
     recordConfigError("setRxBoostedGainMode", err);
 
-    if (success)
-        startReceive(); // restart receiving
+    if (success) {
+        err = startReceiveForReconfigure();
+        recordConfigError("startReceive", err);
+    }
 
     return success;
 }
@@ -306,7 +304,7 @@ template <typename T> void SX126xInterface<T>::handleSoftwareLoraIrqPoll()
 }
 #endif
 
-template <typename T> void SX126xInterface<T>::setStandby()
+template <typename T> int SX126xInterface<T>::setStandby(bool completePacket)
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
@@ -317,14 +315,25 @@ template <typename T> void SX126xInterface<T>::setStandby()
 #ifdef ARCH_PORTDUINO
     if (err != RADIOLIB_ERR_NONE)
         portduino_status.LoRa_in_error = true;
-#else
-    assert(err == RADIOLIB_ERR_NONE);
 #endif
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
-    completeSending(); // If we were sending, not anymore
+    if (completePacket)
+        completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> void SX126xInterface<T>::setStandby()
+{
+#ifdef ARCH_PORTDUINO
+    setStandby(true);
+#else
+    assert(setStandby(true) == RADIOLIB_ERR_NONE);
+#endif
 }
 
 /**
@@ -355,34 +364,48 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
-
-    setTransmitEnable(false);
     setStandby();
+
+    const int err = startReceiveForReconfigure();
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX126X startReceive %s%d", radioLibErr, err);
+#ifdef ARCH_PORTDUINO
+    (void)err;
+#else
+    assert(err == RADIOLIB_ERR_NONE);
+#endif
+#endif
+}
+
+template <typename T> int SX126xInterface<T>::startReceiveForReconfigure()
+{
+#ifdef SLEEP_ONLY
+    sleep();
+    return RADIOLIB_ERR_NONE;
+#else
+    setTransmitEnable(false);
 
 #ifdef ARCH_PORTDUINO_WASM
     // Continuous RX in the browser: duty-cycle sleep parks BUSY high between RX
     // windows and stalls the slow WebUSB SPI link. No battery to save here.
     int err = lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
-    const char *rxMethod = "startReceive";
 #else
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
-    const char *rxMethod = "startReceiveDutyCycleAuto";
 #endif
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X %s %s%d", rxMethod, radioLibErr, err);
 #ifdef ARCH_PORTDUINO
     if (err != RADIOLIB_ERR_NONE)
         portduino_status.LoRa_in_error = true;
-#else
-    assert(err == RADIOLIB_ERR_NONE);
 #endif
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
 
     RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
+    return RADIOLIB_ERR_NONE;
 #endif
 }
 

@@ -2795,7 +2795,7 @@ static concurrency::Lock g_reloadFromDiskMutex;
  * Re-run loadFromDisk() after encrypted storage is unlocked at runtime.
  * Holds the radio in standby across the file IO + proto decode so the
  * SX12xx is not mid-RX/TX when config.lora is overwritten, then calls
- * reconfigure() to push the now-real settings to the chip.
+ * reconfigureCommitted() to push the now-real settings to the chip.
  *
  * Returns true iff every encrypted file decrypted and decoded cleanly.
  * On false the caller MUST treat storage as corrupt - see header.
@@ -2839,7 +2839,8 @@ bool NodeDB::reloadFromDisk()
     // Push the now-real config to the radio.
     if (rIface) {
         channels.onConfigChanged();
-        rIface->reconfigure();
+        if (!rIface->reconfigureCommitted())
+            LOG_ERROR("NodeDB: radio rejected reloaded LoRa configuration");
     }
     return true;
 }

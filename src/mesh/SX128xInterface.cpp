@@ -60,7 +60,8 @@ template <typename T> bool SX128xInterface<T>::init()
 #endif
 #endif
 
-    RadioLibInterface::init();
+    if (!RadioLibInterface::init())
+        return false;
 
     limitPower(SX128X_MAX_POWER);
 
@@ -69,22 +70,8 @@ template <typename T> bool SX128xInterface<T>::init()
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_INFO("SX128x init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+    if (res != RADIOLIB_ERR_NONE)
         return false;
-
-    if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
-        LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
-        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
-        nodeDB->saveToDisk(SEGMENT_CONFIG);
-        delay(2000);
-#if defined(ARCH_ESP32)
-        ESP.restart();
-#elif defined(ARCH_NRF52)
-        NVIC_SystemReset();
-#else
-        LOG_ERROR("FIXME implement reboot for this platform. Skip for now");
-#endif
-    }
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
@@ -118,15 +105,16 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         if (result == RADIOLIB_ERR_NONE)
             return;
         LOG_ERROR("SX128X %s %s%d", operation, radioLibErr, result);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        if (shouldRecordReconfigureFailure())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
         success = false;
     };
 
-    // set mode to standby
-    setStandby();
+    int err = setStandby(false);
+    recordConfigError("standby", err);
 
     // configure publicly accessible settings
-    int err = lora.setSpreadingFactor(sf);
+    err = lora.setSpreadingFactor(sf);
     recordConfigError("setSpreadingFactor", err);
 
     err = lora.setBandwidth(bw);
@@ -149,8 +137,10 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     err = lora.setOutputPower(power);
     recordConfigError("setOutputPower", err);
 
-    if (success)
-        startReceive(); // restart receiving
+    if (success) {
+        err = startReceiveForReconfigure();
+        recordConfigError("startReceive", err);
+    }
 
     return success;
 }
@@ -165,7 +155,12 @@ template <typename T> bool SX128xInterface<T>::wideLora()
     return true;
 }
 
-template <typename T> void SX128xInterface<T>::setStandby()
+template <typename T> bool SX128xInterface<T>::supportsLoRaBandwidth(float bandwidthKHz, bool wideBand)
+{
+    return wideBand && (bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f || bandwidthKHz == 1625.0f);
+}
+
+template <typename T> int SX128xInterface<T>::setStandby(bool completePacket)
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
@@ -173,7 +168,8 @@ template <typename T> void SX128xInterface<T>::setStandby()
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE)
+        return err;
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
@@ -192,8 +188,15 @@ template <typename T> void SX128xInterface<T>::setStandby()
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
-    completeSending(); // If we were sending, not anymore
+    if (completePacket)
+        completeSending(); // If we were sending, not anymore
     RadioLibInterface::setStandby();
+    return err;
+}
+
+template <typename T> void SX128xInterface<T>::setStandby()
+{
+    assert(setStandby(true) == RADIOLIB_ERR_NONE);
 }
 
 /**
@@ -240,8 +243,21 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
-
     setStandby();
+
+    const int err = startReceiveForReconfigure();
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128X startReceive %s%d", radioLibErr, err);
+    assert(err == RADIOLIB_ERR_NONE);
+#endif
+}
+
+template <typename T> int SX128xInterface<T>::startReceiveForReconfigure()
+{
+#ifdef SLEEP_ONLY
+    sleep();
+    return RADIOLIB_ERR_NONE;
+#else
 
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
@@ -261,16 +277,15 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 
     int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
-
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128X startReceive %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+        return err;
 
     RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
     checkRxDoneIrqFlag();
+    return RADIOLIB_ERR_NONE;
 #endif
 }
 

@@ -8,6 +8,7 @@
 #include "PositionPrecision.h"
 #include "PowerFSM.h"
 #include "SPILock.h"
+#include "concurrency/LockGuard.h"
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
@@ -475,17 +476,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
         disableBluetooth();
         LOG_INFO("Commit transaction for edited settings");
+        const bool hasDeferredLoRaConfig =
+            !loRaConfigApplyPending.load(std::memory_order_acquire) && pendingLoRaConfig.saveWhat != 0;
+        if (hasDeferredLoRaConfig && !tryBeginLoRaConfigApply()) {
+            editTransactionActivityMs = millis();
+            sendWarningAndLog("Radio configuration apply is busy; edited settings remain staged for retry");
+            break;
+        }
         hasOpenEditTransaction = false;
         const int unrelatedSegments = deferredEditSegments;
         deferredEditSegments = 0;
-        const bool hasDeferredLoRaConfig = !loRaConfigApplyPending && pendingLoRaConfig.saveWhat != 0;
         if (hasDeferredLoRaConfig) {
-            loRaConfigApplyPending = true;
-            if (!service->requestLoRaConfig(pendingLoRaConfig.previous, pendingLoRaConfig.candidate,
-                                            LORA_CONFIG_APPLY_TIMEOUT_MS)) {
-                loRaConfigApplyPending = false;
-                memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
+            if (!service->requestLoRaConfig(pendingLoRaConfig.previous, pendingLoRaConfig.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS,
+                                            pendingLoRaConfig.previousLicensed, pendingLoRaConfig.candidateLicensed)) {
+                pendingLoRaConfig = PreparedLoRaConfig{};
                 pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
+                cancelLoRaConfigApply();
                 sendWarningAndLog("Radio configuration apply could not be queued; previous configuration retained");
             }
             if (unrelatedSegments)
@@ -879,14 +885,24 @@ static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incomi
 bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
                                     PreparedLoRaConfig &prepared)
 {
-    memset(&prepared, 0, sizeof(prepared));
+    prepared = PreparedLoRaConfig{};
     prepared.previous = config.lora;
+#if !MESHTASTIC_EXCLUDE_BEACON
+    meshtastic_ChannelSettings homePrimaryChannel;
+    MeshBeaconModule::getHomeRadioConfig(prepared.previous, &homePrimaryChannel);
+    const meshtastic_ChannelSettings *normalizationPrimaryChannel = &homePrimaryChannel;
+#else
+    const meshtastic_ChannelSettings *normalizationPrimaryChannel = nullptr;
+#endif
+    RadioInterface *candidateRadio = router ? router->getRadioIface() : nullptr;
     prepared.candidate = incoming;
+    prepared.previousLicensed = owner.is_licensed;
+    prepared.candidateLicensed = prospectiveLicensedOwner;
     prepared.saveWhat = SEGMENT_CONFIG;
     prepared.fanDisabled = incoming.pa_fan_disabled;
 
     const bool isRegionUnset = prepared.previous.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-    const RegionInfo *activeRegion = myRegion ? myRegion : getRegion(prepared.previous.region);
+    const RegionInfo *activeRegion = getRegion(prepared.previous.region);
     bool regionSideEffectsPending = false;
 
     LOG_INFO("Set config: LoRa");
@@ -920,8 +936,7 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 
     if (prepared.candidate.region != activeRegion->code) {
         const bool regionValid = RadioInterface::checkConfigRegion(prepared.candidate, nullptr, 0, prospectiveLicensedOwner);
-        const RadioInterface::LoRaConfigNormalization validation = RadioInterface::normalizeConfigLora(prepared.candidate, false);
-        if (regionValid && validation.valid) {
+        if (regionValid) {
             if (isRegionUnset && prepared.candidate.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
                 if (prospectiveLicensedOwner) {
@@ -938,15 +953,13 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
                 prepared.candidate.tx_enabled = false;
             regionSideEffectsPending = true;
         } else {
-            if (!regionValid)
-                RadioInterface::validateConfigRegion(prepared.candidate);
-            else
-                RadioInterface::publishLoRaConfigDiagnostics(validation);
+            RadioInterface::validateConfigRegion(prepared.candidate);
             return false;
         }
     }
 
-    RadioInterface::LoRaConfigNormalization validation = RadioInterface::normalizeConfigLora(prepared.candidate, false);
+    RadioInterface::LoRaConfigNormalization validation =
+        RadioInterface::normalizeConfigLora(prepared.candidate, false, normalizationPrimaryChannel, candidateRadio);
     if (!validation.valid) {
         if (fromOthers) {
             const RegionInfo *swapRegion =
@@ -956,7 +969,7 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
             if (swapRegion) {
                 prepared.candidate.region = swapRegion->code;
                 const RadioInterface::LoRaConfigNormalization swappedValidation =
-                    RadioInterface::normalizeConfigLora(prepared.candidate, false);
+                    RadioInterface::normalizeConfigLora(prepared.candidate, false, normalizationPrimaryChannel, candidateRadio);
                 if (swappedValidation.valid) {
                     delayDiagnostics(validation);
                     validation = swappedValidation;
@@ -975,8 +988,13 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
             prepared.warnInvalidClientCorrection = true;
             delayDiagnostics(validation);
             const RadioInterface::LoRaConfigNormalization corrected =
-                RadioInterface::normalizeConfigLora(prepared.candidate, true);
+                RadioInterface::normalizeConfigLora(prepared.candidate, true, normalizationPrimaryChannel, candidateRadio);
             delayDiagnostics(corrected);
+            if (!corrected.valid) {
+                RadioInterface::publishLoRaConfigDiagnostics(corrected);
+                LOG_WARN("LoRa config cannot be corrected for this radio, rejecting changes");
+                return false;
+            }
             prepared.candidate = corrected.config;
             validation = corrected;
         }
@@ -1031,7 +1049,7 @@ bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 
     prepared.warnPresetChange = prepared.candidate.modem_preset != prepared.previous.modem_preset;
     const RadioInterface::LoRaConfigNormalization finalValidation =
-        RadioInterface::normalizeConfigLora(prepared.candidate, false);
+        RadioInterface::normalizeConfigLora(prepared.candidate, false, normalizationPrimaryChannel, candidateRadio);
     prepared.updateFrequencySlotFlags = finalValidation.updatesFrequencySlotFlags;
     prepared.usesDefaultFrequencySlot = finalValidation.usesDefaultFrequencySlot;
     prepared.usesCustomChannelName = finalValidation.usesCustomChannelName;
@@ -1074,12 +1092,14 @@ bool AdminModule::requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &inco
 bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
                                     const StagedMenuLoRaTransition &transition)
 {
-    if (loRaConfigApplyPending || !service)
+    if (!service || !tryBeginLoRaConfigApply())
         return false;
 
     PreparedLoRaConfig prepared;
-    if (!prepareLoRaConfig(incoming, fromOthers, prospectiveLicensedOwner, prepared))
+    if (!prepareLoRaConfig(incoming, fromOthers, prospectiveLicensedOwner, prepared)) {
+        cancelLoRaConfigApply();
         return false;
+    }
 
     pendingLoRaConfig = prepared;
     pendingMenuLoRaTransition = transition;
@@ -1091,22 +1111,62 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     }
     if (hasOpenEditTransaction) {
         editTransactionActivityMs = millis();
+        cancelLoRaConfigApply();
         return true;
     }
 
-    loRaConfigApplyPending = true;
-    if (!service->requestLoRaConfig(prepared.previous, prepared.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS)) {
-        loRaConfigApplyPending = false;
-        memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
+    if (!service->requestLoRaConfig(prepared.previous, prepared.candidate, LORA_CONFIG_APPLY_TIMEOUT_MS,
+                                    prepared.previousLicensed, prepared.candidateLicensed)) {
+        pendingLoRaConfig = PreparedLoRaConfig{};
         pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
+        cancelLoRaConfigApply();
         return false;
     }
     return true;
 }
 
+bool AdminModule::tryBeginLoRaConfigApply()
+{
+    concurrency::LockGuard guard(&loRaSaveLock);
+    if (loRaSavesInProgress != 0 || loRaConfigApplyPending.load(std::memory_order_acquire))
+        return false;
+    loRaConfigApplyPending.store(true, std::memory_order_release);
+    return true;
+}
+
+void AdminModule::cancelLoRaConfigApply()
+{
+    finishLoRaConfigApplyAndFlushDeferred();
+}
+
+void AdminModule::finishLoRaConfigApplyAndFlushDeferred()
+{
+    int deferredSegments;
+    bool deferredReboot;
+    bool deferredNotify;
+    {
+        concurrency::LockGuard guard(&loRaSaveLock);
+        deferredSegments = deferredLoRaSaveSegments;
+        deferredReboot = deferredLoRaSaveReboot;
+        deferredNotify = deferredLoRaSaveNotify;
+        deferredLoRaSaveSegments = 0;
+        deferredLoRaSaveReboot = false;
+        deferredLoRaSaveNotify = false;
+        if (deferredSegments)
+            ++loRaSavesInProgress;
+        loRaConfigApplyPending.store(false, std::memory_order_release);
+    }
+    if (deferredSegments) {
+        persistChanges(deferredSegments, deferredReboot, deferredNotify);
+        concurrency::LockGuard guard(&loRaSaveLock);
+        assert(loRaSavesInProgress != 0);
+        --loRaSavesInProgress;
+    }
+}
+
 void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request)
 {
-    if (!loRaConfigApplyPending)
+    if (!loRaConfigApplyPending.load(std::memory_order_acquire))
         return;
 
     const RadioConfigApplyResult result = request.result.load();
@@ -1168,9 +1228,7 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
             gps->enable();
 #endif
 
-        finalizingLoRaConfig = true;
-        saveChanges(saveWhat, false, false);
-        finalizingLoRaConfig = false;
+        saveChanges(saveWhat, false, false, true);
         if (pendingLoRaConfig.warnPresetChange)
             warnOnLoraPresetChange(pendingLoRaConfig.previous, pendingLoRaConfig.candidate);
         if (!hasOpenEditTransaction)
@@ -1180,22 +1238,23 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
         initRegion();
         if (result == RadioConfigApplyResult::ROLLBACK_FAILED) {
             sendWarningAndLog("Radio configuration apply failed; radio recovery failed and transmission remains inhibited");
+        } else if (result == RadioConfigApplyResult::INTERFACE_REPLACED) {
+            sendWarningAndLog(
+                "Radio configuration apply stopped because the radio interface changed; previous configuration retained");
         } else {
             sendWarningAndLog("Radio configuration apply failed; previous configuration retained");
         }
     }
 
-    loRaConfigApplyPending = false;
-    memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
+    pendingLoRaConfig = PreparedLoRaConfig{};
     pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
-    const int deferredSegments = deferredLoRaSaveSegments;
-    const bool deferredReboot = deferredLoRaSaveReboot;
-    const bool deferredNotify = deferredLoRaSaveNotify;
-    deferredLoRaSaveSegments = 0;
-    deferredLoRaSaveReboot = false;
-    deferredLoRaSaveNotify = false;
-    if (deferredSegments)
-        saveChanges(deferredSegments, deferredReboot, deferredNotify);
+}
+
+void AdminModule::finalizeLoRaConfigApply()
+{
+    if (!loRaConfigApplyPending.load(std::memory_order_acquire))
+        return;
+    finishLoRaConfigApplyAndFlushDeferred();
 }
 
 bool AdminModule::handleSetConfig(const meshtastic_Config &c, bool fromOthers)
@@ -2048,8 +2107,8 @@ void AdminModule::expireStaleEditTransaction()
 
     LOG_WARN("Edit transaction abandoned for %us; committing what it applied", EDIT_TRANSACTION_IDLE_MS / 1000);
     hasOpenEditTransaction = false;
-    if (!loRaConfigApplyPending && pendingLoRaConfig.saveWhat != 0) {
-        memset(&pendingLoRaConfig, 0, sizeof(pendingLoRaConfig));
+    if (!loRaConfigApplyPending.load(std::memory_order_acquire) && pendingLoRaConfig.saveWhat != 0) {
+        pendingLoRaConfig = PreparedLoRaConfig{};
         pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
     }
     int segments = deferredEditSegments;
@@ -2060,18 +2119,32 @@ void AdminModule::expireStaleEditTransaction()
     flushChannelWarnings();
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool notifyConfigChange)
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot, bool notifyConfigChange, bool radioApplyCompletion)
 {
 #ifdef PIO_UNIT_TESTING
     lastSaveWhatForTest = saveWhat;
 #endif
-    if (loRaConfigApplyPending && !finalizingLoRaConfig) {
-        LOG_INFO("Delay save of changes to disk until LoRa configuration apply completes");
-        deferredLoRaSaveSegments |= saveWhat;
-        deferredLoRaSaveReboot = deferredLoRaSaveReboot || shouldReboot;
-        deferredLoRaSaveNotify = deferredLoRaSaveNotify || notifyConfigChange;
-        return;
+    {
+        concurrency::LockGuard guard(&loRaSaveLock);
+        if (loRaConfigApplyPending.load(std::memory_order_acquire) && !radioApplyCompletion) {
+            LOG_INFO("Delay save of changes to disk until LoRa configuration apply completes");
+            deferredLoRaSaveSegments |= saveWhat;
+            deferredLoRaSaveReboot = deferredLoRaSaveReboot || shouldReboot;
+            deferredLoRaSaveNotify = deferredLoRaSaveNotify || notifyConfigChange;
+            return;
+        }
+        ++loRaSavesInProgress;
     }
+    persistChanges(saveWhat, shouldReboot, notifyConfigChange);
+    {
+        concurrency::LockGuard guard(&loRaSaveLock);
+        assert(loRaSavesInProgress != 0);
+        --loRaSavesInProgress;
+    }
+}
+
+void AdminModule::persistChanges(int saveWhat, bool shouldReboot, bool notifyConfigChange)
+{
     if (!hasOpenEditTransaction) {
         LOG_INFO("Save changes to disk");
 #ifdef PIO_UNIT_TESTING
@@ -2183,7 +2256,19 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &params)
 {
     if (!validateHamParameters(params))
         return;
-    saveChanges(applyEnterLicensedMode(params));
+
+    meshtastic_Config_LoRaConfig candidate = config.lora;
+    candidate.override_duty_cycle = true;
+    candidate.tx_power = params.tx_power;
+    candidate.override_frequency = params.frequency;
+    if (strcmp(params.call_sign, "N0CALL") == 0)
+        candidate.tx_enabled = false;
+
+    StagedMenuLoRaTransition staged;
+    staged.type = MenuLoRaTransition::ENTER_LICENSED;
+    staged.ham = params;
+    if (!requestLoRaConfig(candidate, false, true, staged))
+        sendWarningAndLog("Licensed mode radio configuration could not be queued; previous configuration retained");
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

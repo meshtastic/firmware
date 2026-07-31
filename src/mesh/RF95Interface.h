@@ -70,6 +70,8 @@ class RF95Interface : public RadioLibInterface
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(*lora, pl, received); }
 
   private:
+    int setStandby(bool completePacket);
+    int startReceiveForReconfigure();
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
 };

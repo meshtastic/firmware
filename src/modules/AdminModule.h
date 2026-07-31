@@ -1,8 +1,11 @@
 #pragma once
+
+#include <atomic>
 #ifdef ESP_PLATFORM
 #include <esp_ota_ops.h>
 #endif
 #include "ProtobufModule.h"
+#include "concurrency/Lock.h"
 #include "mesh/RadioConfigApply.h"
 #include "mesh/RadioInterface.h"
 #include "meshUtils.h"
@@ -62,7 +65,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     uint32_t session_time = 0;        // millis() when the current session passkey was issued
     bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
-    void saveChanges(int saveWhat, bool shouldReboot = true, bool notifyConfigChange = true);
+    void saveChanges(int saveWhat, bool shouldReboot = true, bool notifyConfigChange = true, bool radioApplyCompletion = false);
 
     /**
      * Getters
@@ -107,6 +110,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool requestMenuLoRaConfig(const meshtastic_Config_LoRaConfig &incoming,
                                MenuLoRaTransition transition = MenuLoRaTransition::NONE);
     void completeLoRaConfigApply(const RadioConfigApplyRequest &request);
+    void finalizeLoRaConfigApply();
 
     /// Note an admin request leaving this node for a remote, so that remote's response is
     /// accepted. Called from the client-to-mesh path (MeshService::handleToRadio).
@@ -177,6 +181,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
         bool warnFemNormalization = false;
         bool warnPresetChange = false;
         bool fanDisabled = false;
+        bool previousLicensed = false;
+        bool candidateLicensed = false;
     };
     struct StagedMenuLoRaTransition {
         MenuLoRaTransition type = MenuLoRaTransition::NONE;
@@ -186,6 +192,10 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
                            PreparedLoRaConfig &prepared);
     bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
                            const StagedMenuLoRaTransition &transition);
+    bool tryBeginLoRaConfigApply();
+    void cancelLoRaConfigApply();
+    void finishLoRaConfigApplyAndFlushDeferred();
+    void persistChanges(int saveWhat, bool shouldReboot, bool notifyConfigChange);
     bool validateHamParameters(const meshtastic_HamParameters &params) const;
     int applyEnterLicensedMode(const meshtastic_HamParameters &params);
     int applyStagedMenuLoRaTransition();
@@ -216,8 +226,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     static constexpr uint32_t LORA_CONFIG_APPLY_TIMEOUT_MS = 60 * 1000;
     PreparedLoRaConfig pendingLoRaConfig;
     StagedMenuLoRaTransition pendingMenuLoRaTransition;
-    bool loRaConfigApplyPending = false;
-    bool finalizingLoRaConfig = false;
+    std::atomic<bool> loRaConfigApplyPending{false};
+    concurrency::Lock loRaSaveLock;
+    uint32_t loRaSavesInProgress = 0;
     int deferredLoRaSaveSegments = 0;
     bool deferredLoRaSaveReboot = false;
     bool deferredLoRaSaveNotify = false;

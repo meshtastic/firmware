@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <assert.h>
+#include <atomic>
 #include <string>
 
 #include "GPSStatus.h"
@@ -79,11 +80,9 @@ class MeshService
     /// Updated in loop() to detect when fromNum changes
     uint32_t oldFromNum = 0;
 
-    // Alternating slots keep a completed request stable until a later handoff proves the worker released it.
-    RadioConfigApplyRequest loRaConfigApplyRequests[2];
-    uint8_t activeLoRaConfigApply = 0;
-    uint8_t nextLoRaConfigApply = 0;
-    bool loRaConfigApplyPending = false;
+    enum class LoRaConfigApplyState : uint8_t { IDLE, PREPARING, PENDING, FINALIZING };
+    RadioConfigApplyRequest loRaConfigApplyRequest;
+    std::atomic<LoRaConfigApplyState> loRaConfigApplyState{LoRaConfigApplyState::IDLE};
 
   public:
     enum APIState {
@@ -182,8 +181,12 @@ class MeshService
     void reloadConfig(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
     bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &previous, const meshtastic_Config_LoRaConfig &candidate,
-                           uint32_t timeoutMsec);
+                           uint32_t timeoutMsec, bool previousLicensed, bool candidateLicensed);
     RadioConfigApplyResult pollLoRaConfigApply() const;
+    bool loRaConfigApplyActive() const
+    {
+        return loRaConfigApplyState.load(std::memory_order_acquire) != LoRaConfigApplyState::IDLE;
+    }
 
     /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
     void reloadOwner(bool shouldSave = true);

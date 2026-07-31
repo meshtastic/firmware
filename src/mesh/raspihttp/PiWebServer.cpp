@@ -71,6 +71,7 @@ mail:   marchammermann@googlemail.com
 #include <ulfius.h>
 #include <yder.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -101,6 +102,119 @@ volatile bool isWebServerReady;
 volatile bool isCertReady;
 
 PiWebServerThread *piwebServerThread;
+
+bool HttpAPI::submit(const std::shared_ptr<PendingRequest> &request)
+{
+    {
+        std::lock_guard<std::mutex> guard(requestMutex);
+        if (!acceptingRequests || requests.size() >= REQUEST_QUEUE_SIZE)
+            return false;
+        requests.push_back(request);
+    }
+
+    concurrency::mainDelay.interrupt();
+    std::unique_lock<std::mutex> completionLock(request->completionMutex);
+    request->completion.wait(completionLock, [&request] { return request->completed; });
+    return !request->cancelled;
+}
+
+bool HttpAPI::submitToRadio(const uint8_t *data, size_t length)
+{
+    if (!data || length == 0 || length > MAX_TO_FROM_RADIO_SIZE)
+        return false;
+
+    auto request = std::make_shared<PendingRequest>();
+    request->type = RequestType::TO_RADIO;
+    memcpy(request->data.data(), data, length);
+    request->length = length;
+    return submit(request);
+}
+
+bool HttpAPI::submitFromRadio(uint8_t *data, size_t &length)
+{
+    if (!data)
+        return false;
+
+    auto request = std::make_shared<PendingRequest>();
+    request->type = RequestType::FROM_RADIO;
+    if (!submit(request))
+        return false;
+
+    memcpy(data, request->data.data(), request->length);
+    length = request->length;
+    return true;
+}
+
+bool HttpAPI::hasPendingRequests()
+{
+    return pendingRequestCount() != 0;
+}
+
+size_t HttpAPI::pendingRequestCount()
+{
+    std::lock_guard<std::mutex> guard(requestMutex);
+    return requests.size();
+}
+
+void HttpAPI::processPendingRequests()
+{
+    std::deque<std::shared_ptr<PendingRequest>> pending;
+    {
+        std::lock_guard<std::mutex> guard(requestMutex);
+        const size_t count = requests.size();
+        for (size_t i = 0; i < count; ++i) {
+            pending.push_back(requests.front());
+            inFlightRequests.push_back(requests.front());
+            requests.pop_front();
+        }
+    }
+
+    for (const auto &request : pending) {
+        bool cancelled = false;
+        {
+            std::lock_guard<std::mutex> completionGuard(request->completionMutex);
+            cancelled = request->cancelled;
+        }
+        if (!cancelled) {
+            if (request->type == RequestType::TO_RADIO)
+                handleToRadio(request->data.data(), request->length);
+            else
+                request->length = getFromRadio(request->data.data());
+        }
+
+        {
+            std::lock_guard<std::mutex> completionGuard(request->completionMutex);
+            request->completed = true;
+        }
+        request->completion.notify_one();
+
+        std::lock_guard<std::mutex> guard(requestMutex);
+        auto entry = std::find(inFlightRequests.begin(), inFlightRequests.end(), request);
+        if (entry != inFlightRequests.end())
+            inFlightRequests.erase(entry);
+    }
+}
+
+void HttpAPI::stopAcceptingRequests()
+{
+    std::deque<std::shared_ptr<PendingRequest>> cancelled;
+    {
+        std::lock_guard<std::mutex> guard(requestMutex);
+        acceptingRequests = false;
+        cancelled.swap(requests);
+        cancelled.insert(cancelled.end(), inFlightRequests.begin(), inFlightRequests.end());
+        inFlightRequests.clear();
+    }
+
+    for (const auto &request : cancelled) {
+        {
+            std::lock_guard<std::mutex> completionGuard(request->completionMutex);
+            request->cancelled = true;
+            request->completed = true;
+        }
+        request->completion.notify_one();
+    }
+}
 
 /**
  * Return the filename extension
@@ -251,17 +365,18 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
         return U_CALLBACK_COMPLETE;
     }
 
-    byte buffer[MAX_TO_FROM_RADIO_SIZE];
     size_t s = req->binary_body_length;
 
-    memcpy(buffer, req->binary_body, MAX_TO_FROM_RADIO_SIZE);
-
-    // FIXME* Problem with portdunio loosing mountpoint maybe because of running in a real sep. thread
-
-    portduinoVFS->mountpoint(configWeb.rootPath);
+    if (s == 0 || s > MAX_TO_FROM_RADIO_SIZE) {
+        ulfius_set_string_body_response(res, 400, "Invalid ToRadio payload size");
+        return U_CALLBACK_COMPLETE;
+    }
 
     LOG_DEBUG("Received %d bytes from PUT request", s);
-    static_cast<HttpAPI *>(user_data)->handleToRadio(buffer, s);
+    if (!static_cast<HttpAPI *>(user_data)->submitToRadio(static_cast<const uint8_t *>(req->binary_body), s)) {
+        ulfius_set_string_body_response(res, 503, "ToRadio unavailable");
+        return U_CALLBACK_COMPLETE;
+    }
     LOG_DEBUG("end web->radio  ");
     return U_CALLBACK_COMPLETE;
 }
@@ -289,21 +404,27 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
     }
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
-    uint32_t len = 1;
+    size_t len = 0;
 
     if (valueAll == "true") {
-        while (len) {
-            len = static_cast<HttpAPI *>(user_data)->getFromRadio(txBuf);
+        do {
+            if (!static_cast<HttpAPI *>(user_data)->submitFromRadio(txBuf, len)) {
+                ulfius_set_string_body_response(res, 503, "FromRadio unavailable");
+                return U_CALLBACK_COMPLETE;
+            }
             ulfius_set_response_properties(res, U_OPT_STATUS, 200, U_OPT_BINARY_BODY, txBuf, len);
             const char *tmpa = (const char *)txBuf;
             ulfius_set_string_body_response(res, 200, tmpa);
             // LOG_DEBUG("\n----webAPI response all:----");
             // LOG_DEBUG(tmpa);
             // LOG_DEBUG("");
-        }
+        } while (len);
         // Otherwise, just return one protobuf
     } else {
-        len = static_cast<HttpAPI *>(user_data)->getFromRadio(txBuf);
+        if (!static_cast<HttpAPI *>(user_data)->submitFromRadio(txBuf, len)) {
+            ulfius_set_string_body_response(res, 503, "FromRadio unavailable");
+            return U_CALLBACK_COMPLETE;
+        }
         const char *tmpa = (const char *)txBuf;
         ulfius_set_binary_body_response(res, 200, tmpa, len);
         // LOG_DEBUG("\n----webAPI response:");
@@ -535,11 +656,19 @@ PiWebServerThread::PiWebServerThread()
     }
 }
 
+void PiWebServerThread::processPendingRequests()
+{
+    if (webAPI.hasPendingRequests()) {
+        portduinoVFS->mountpoint(configWeb.rootPath);
+        webAPI.processPendingRequests();
+    }
+}
+
 PiWebServerThread::~PiWebServerThread()
 {
-    u_map_clean(&configWeb.mime_types);
-
+    webAPI.stopAcceptingRequests();
     ulfius_stop_framework(&instanceWeb);
+    u_map_clean(&configWeb.mime_types);
     ulfius_clean_instance(&instanceWeb);
     free(configWeb.rootPath);
     free(key_pem);

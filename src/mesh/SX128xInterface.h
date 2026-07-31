@@ -22,6 +22,8 @@ template <class T> class SX128xInterface : public RadioLibInterface
     /// SX128x is a 2.4 GHz-only chip; it cannot tune sub-GHz regions
     virtual bool supportsSubGhz() override { return false; }
 
+    bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override;
+
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
@@ -72,6 +74,8 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
+    int setStandby(bool completePacket);
+    int startReceiveForReconfigure();
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 };

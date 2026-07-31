@@ -11,6 +11,7 @@ enum class RadioConfigApplyResult : uint8_t {
     TIMED_OUT,
     APPLY_FAILED_ROLLED_BACK,
     ROLLBACK_FAILED,
+    INTERFACE_REPLACED,
     BUSY,
 };
 
@@ -20,4 +21,7 @@ struct RadioConfigApplyRequest {
     uint32_t requestedAtMsec;
     uint32_t timeoutMsec;
     std::atomic<RadioConfigApplyResult> result{RadioConfigApplyResult::IDLE};
+    bool previousLicensed = false;
+    bool candidateLicensed = false;
+    uint32_t acceptedRadioId = 0;
 };

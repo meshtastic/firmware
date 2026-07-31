@@ -44,6 +44,13 @@ LR11x0Interface<T>::LR11x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
     LOG_WARN("LR11x0Interface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
+template <typename T> bool LR11x0Interface<T>::supportsLoRaBandwidth(float bandwidthKHz, bool wideBand)
+{
+    if (wideBand)
+        return bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f;
+    return bandwidthKHz == 62.5f || bandwidthKHz == 125.0f || bandwidthKHz == 250.0f || bandwidthKHz == 500.0f;
+}
+
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
 /// \return true if initialisation succeeded.
@@ -72,7 +79,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
 #endif
 
-    RadioLibInterface::init();
+    if (!RadioLibInterface::init())
+        return false;
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR1120_MAX_POWER);
@@ -82,15 +90,13 @@ template <typename T> bool LR11x0Interface<T>::init()
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
     pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);
-    digitalWrite(LR11X0_RF_SWITCH_SUBGHZ, getFreq() < 1e9 ? HIGH : LOW);
-    LOG_DEBUG("Set RF0 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
 #ifdef LR11X0_RF_SWITCH_2_4GHZ
     pinMode(LR11X0_RF_SWITCH_2_4GHZ, OUTPUT);
-    digitalWrite(LR11X0_RF_SWITCH_2_4GHZ, getFreq() < 1e9 ? LOW : HIGH);
-    LOG_DEBUG("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
+    selectExternalRfPath(getFreq());
+    LOG_DEBUG("Set external RF path to %s", getFreq() < 1000.0f ? "SubGHz" : "2.4GHz");
 
     // Allow extra time for TCXO to stabilize after power-on
     delay(10);
@@ -117,7 +123,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
+    if (res != RADIOLIB_ERR_NONE)
         return false;
 
     LR11x0VersionInfo_t version;
@@ -180,14 +186,13 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
         error = reinitializeForBand(params, &failedStep);
         if (error != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR11x0 reinitialize %s %s%d", lr11x0ApplyStepName(failedStep), radioLibErr, error);
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            if (shouldRecordReconfigureFailure())
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
     }
 
-    selectExternalRfPath(params.frequency);
     finishStartReceive();
-    receiveStartedDuringReconfigure = true;
     return true;
 }
 
@@ -239,6 +244,7 @@ int LR11x0Interface<T>::reinitializeForBand(const LR11x0ConfigApplyParams &param
     if (error != RADIOLIB_ERR_NONE)
         return fail(LR11x0ApplyStep::RX_GAIN, error);
 
+    selectExternalRfPath(params.frequency);
     error = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
     return error == RADIOLIB_ERR_NONE ? error : fail(LR11x0ApplyStep::START_RECEIVE, error);
 }
@@ -298,7 +304,6 @@ template <typename T> int LR11x0Interface<T>::setStandbyForReconfigure()
 
 template <typename T> void LR11x0Interface<T>::setStandby()
 {
-    receiveStartedDuringReconfigure = false;
     assert(setStandby(true) == RADIOLIB_ERR_NONE);
 }
 
@@ -318,7 +323,6 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void LR11x0Interface<T>::configHardwareForSend()
 {
-    receiveStartedDuringReconfigure = false;
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -330,11 +334,6 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 #ifdef SLEEP_ONLY
     sleep();
 #else
-    if (receiveStartedDuringReconfigure) {
-        receiveStartedDuringReconfigure = false;
-        return;
-    }
-
     setStandby();
 
     lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.

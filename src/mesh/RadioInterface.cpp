@@ -84,6 +84,18 @@ static bool isSwappableEuRegion(meshtastic_Config_LoRaConfig_RegionCode code)
     return false;
 }
 
+static const char *getChannelNameForLoRaConfig(const meshtastic_Config_LoRaConfig &loraConfig,
+                                               const meshtastic_ChannelSettings *primaryChannel = nullptr)
+{
+    const meshtastic_ChannelSettings &settings = primaryChannel ? *primaryChannel : channels.getPrimary();
+    if (settings.name[0] != '\0')
+        return settings.name;
+
+    return loraConfig.use_preset
+               ? DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset)
+               : "Custom";
+}
+
 // Region profiles: bundle preset list + regulatory parameters shared across regions
 // presets, spacing, padding, audio, licensed, text throttle, position throttle, telemetry throttle
 const RegionProfile PROFILE_STD = {PRESETS_STD, 0, 0, true, false, 0, 1, 1};
@@ -97,6 +109,7 @@ const RegionProfile PROFILE_HAM_20KHZ = {PRESETS_TINY, 0, 0.0022f, false, true, 
 const RegionProfile PROFILE_HAM_100KHZ = {PRESETS_NARROW, 0, 0.01875f, false, true, 0, 1, 1};
 
 Observable<uint32_t> RadioInterface::loraRxPacketObservable;
+std::atomic<uint32_t> RadioInterface::nextConfigApplyOwnerId{1};
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, power_limit, frequency_switching, wide_lora, profile_ptr, default_preset,   \
              override_slot)                                                                                                      \
@@ -371,7 +384,7 @@ extern SPIClass SPI1;
 #endif
 #endif
 
-std::unique_ptr<RadioInterface> initLoRa()
+std::unique_ptr<RadioInterface> initLoRa(bool commitBootCorrections)
 {
     std::unique_ptr<RadioInterface> rIf = nullptr;
 
@@ -647,6 +660,8 @@ std::unique_ptr<RadioInterface> initLoRa()
             rebootAtMsec = millis() + 5000;
         }
     }
+    if (rIf && commitBootCorrections)
+        rIf->commitBootConfigCorrection();
     return rIf;
 }
 
@@ -902,23 +917,52 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 #endif
 }
 
-RadioInterface::RadioInterface()
+RadioInterface::RadioInterface() : configApplyOwner(nextConfigApplyOwnerId.fetch_add(1, std::memory_order_relaxed))
 {
     assert(sizeof(PacketHeader) == MESHTASTIC_HEADER_LENGTH); // make sure the compiler did what we expected
 }
 
 bool RadioInterface::reconfigure()
 {
-    applyModemConfig();
-    return true;
+    return applyModemConfig();
 }
 
-bool RadioInterface::reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::reconfigureTransient()
 {
-    configApplyLoraConfig = &loraConfig;
+    return reconfigureConfig(config.lora, devicestate.owner.is_licensed);
+}
+
+bool RadioInterface::reconfigureCommitted()
+{
+    return reconfigureConfig(config.lora, devicestate.owner.is_licensed, true);
+}
+
+bool RadioInterface::reconfigureConfig(const meshtastic_Config_LoRaConfig &loraConfig, bool licensedOwner, bool recordFailure)
+{
+    const meshtastic_Config_LoRaConfig hardwareConfig = hardwareConfigFor(loraConfig);
+    configApplyLoraConfig = &hardwareConfig;
+    configApplyLicensedOwner = licensedOwner;
+    configApplyLicensedOwnerSet = true;
+    recordConfigApplyFailure = recordFailure;
     const bool result = reconfigure();
     configApplyLoraConfig = nullptr;
+    configApplyLicensedOwnerSet = false;
+    recordConfigApplyFailure = false;
     return result;
+}
+
+meshtastic_Config_LoRaConfig RadioInterface::hardwareConfigFor(const meshtastic_Config_LoRaConfig &loraConfig)
+{
+    meshtastic_Config_LoRaConfig hardwareConfig = loraConfig;
+    if (hardwareConfig.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET && wideLora() && !supportsSubGhz()) {
+        hardwareConfig.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+        hardwareConfig.use_preset = true;
+        hardwareConfig.modem_preset = getRegion(hardwareConfig.region)->getDefaultPreset();
+        hardwareConfig.channel_num = 0;
+        hardwareConfig.override_frequency = 0;
+        hardwareConfig.frequency_offset = 0;
+    }
+    return hardwareConfig;
 }
 
 bool RadioInterface::requestConfigApply(RadioConfigApplyRequest *request)
@@ -926,59 +970,157 @@ bool RadioInterface::requestConfigApply(RadioConfigApplyRequest *request)
     if (request == nullptr)
         return false;
 
-    if (configApplyRequest != nullptr) {
-        request->result.store(RadioConfigApplyResult::BUSY);
+    const LoRaConfigNormalization validation = normalizeConfigLora(request->candidate, false, nullptr, this);
+    if (!validation.valid) {
+        publishLoRaConfigDiagnostics(validation);
+        request->result.store(RadioConfigApplyResult::IDLE, std::memory_order_release);
         return false;
     }
 
-    request->result.store(RadioConfigApplyResult::PENDING);
-    configApplyRequest = request;
+    ConfigApplyPhase expected = ConfigApplyPhase::IDLE;
+    if (!configApplyPhase.compare_exchange_strong(expected, ConfigApplyPhase::PREPARING, std::memory_order_acq_rel,
+                                                  std::memory_order_acquire)) {
+        request->result.store(RadioConfigApplyResult::BUSY, std::memory_order_release);
+        return false;
+    }
+
+    request->acceptedRadioId = configApplyOwner;
+    request->result.store(RadioConfigApplyResult::PENDING, std::memory_order_relaxed);
+    configApplyRequest.store(request, std::memory_order_relaxed);
+    configApplyTxGate.fetch_or(CONFIG_APPLY_TX_BARRIER, std::memory_order_acq_rel);
+    configApplyPhase.store(ConfigApplyPhase::PENDING, std::memory_order_release);
     return true;
+}
+
+bool RadioInterface::claimConfigApply(RadioConfigApplyRequest *&request)
+{
+    ConfigApplyPhase expected = ConfigApplyPhase::PENDING;
+    if (!configApplyPhase.compare_exchange_strong(expected, ConfigApplyPhase::IN_PROGRESS, std::memory_order_acq_rel,
+                                                  std::memory_order_acquire))
+        return false;
+
+    request = configApplyRequest.load(std::memory_order_acquire);
+    assert(request != nullptr);
+    return true;
+}
+
+void RadioInterface::deferConfigApply(RadioConfigApplyRequest *request)
+{
+    assert(configApplyRequest.load(std::memory_order_acquire) == request);
+    ConfigApplyPhase expected = ConfigApplyPhase::IN_PROGRESS;
+    const bool deferred = configApplyPhase.compare_exchange_strong(expected, ConfigApplyPhase::PENDING, std::memory_order_release,
+                                                                   std::memory_order_relaxed);
+    assert(deferred);
+}
+
+void RadioInterface::finishConfigApply(RadioConfigApplyRequest *request, RadioConfigApplyResult result)
+{
+    assert(configApplyRequest.load(std::memory_order_acquire) == request);
+    ConfigApplyPhase expected = ConfigApplyPhase::IN_PROGRESS;
+    const bool completed = configApplyPhase.compare_exchange_strong(expected, ConfigApplyPhase::COMPLETE,
+                                                                    std::memory_order_release, std::memory_order_relaxed);
+    assert(completed);
+    request->result.store(result, std::memory_order_release);
+}
+
+RadioConfigApplyResult RadioInterface::applyConfigWithRollback(RadioConfigApplyRequest &request)
+{
+    if (reconfigureConfig(request.candidate, request.candidateLicensed)) {
+        setConfigApplyTxInhibit(false);
+        return RadioConfigApplyResult::APPLIED;
+    }
+
+    if (reconfigureConfig(request.previous, request.previousLicensed)) {
+        setConfigApplyTxInhibit(false);
+        return RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK;
+    }
+
+    setConfigApplyTxInhibit(true);
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    return RadioConfigApplyResult::ROLLBACK_FAILED;
 }
 
 void RadioInterface::serviceConfigApply(uint32_t nowMsec)
 {
-    (void)nowMsec;
-
-    if (configApplyRequest == nullptr)
+    RadioConfigApplyRequest *request = nullptr;
+    if (!claimConfigApply(request))
         return;
 
-    RadioConfigApplyRequest *request = configApplyRequest;
-    if (!Throttle::isWithinTimespanMs(request->requestedAtMsec, request->timeoutMsec)) {
-        configApplyRequest = nullptr;
-        request->result.store(RadioConfigApplyResult::TIMED_OUT);
+    if (static_cast<uint32_t>(nowMsec - request->requestedAtMsec) >= request->timeoutMsec) {
+        finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
         return;
     }
 
-    RadioConfigApplyResult result;
-    if (reconfigureConfig(request->candidate)) {
-        result = RadioConfigApplyResult::APPLIED;
-    } else {
-        if (reconfigureConfig(request->previous)) {
-            result = RadioConfigApplyResult::APPLY_FAILED_ROLLED_BACK;
-        } else {
-            setConfigApplyTxInhibit(true);
-            result = RadioConfigApplyResult::ROLLBACK_FAILED;
-        }
+    if (configApplyTxStartActive() || sendingPacket != nullptr || isActivelyReceiving()) {
+        deferConfigApply(request);
+        return;
     }
 
-    configApplyRequest = nullptr;
-    request->result.store(result);
+    finishConfigApply(request, applyConfigWithRollback(*request));
 }
 
 RadioConfigApplyResult RadioInterface::pollConfigApply(const RadioConfigApplyRequest &request) const
 {
-    return request.result.load();
+    return request.result.load(std::memory_order_acquire);
+}
+
+bool RadioInterface::finalizeConfigApply(RadioConfigApplyRequest *request)
+{
+    if (request == nullptr || !ownsConfigApplyRequest(*request) || configApplyRequest.load(std::memory_order_acquire) != request)
+        return false;
+
+    ConfigApplyPhase expected = ConfigApplyPhase::COMPLETE;
+    if (!configApplyPhase.compare_exchange_strong(expected, ConfigApplyPhase::FINALIZING, std::memory_order_acq_rel,
+                                                  std::memory_order_acquire))
+        return false;
+
+    configApplyRequest.store(nullptr, std::memory_order_release);
+    configApplyTxGate.fetch_and(CONFIG_APPLY_TX_CLAIM_MASK, std::memory_order_release);
+    configApplyPhase.store(ConfigApplyPhase::IDLE, std::memory_order_release);
+    return true;
 }
 
 void RadioInterface::setConfigApplyTxInhibit(bool inhibited)
 {
-    configApplyTxInhibit = inhibited;
+    configApplyTxInhibit.store(inhibited, std::memory_order_release);
 }
 
 bool RadioInterface::configApplyTxInhibited() const
 {
-    return configApplyTxInhibit;
+    return configApplyTxInhibit.load(std::memory_order_acquire);
+}
+
+bool RadioInterface::configApplyPending() const
+{
+    const ConfigApplyPhase phase = configApplyPhase.load(std::memory_order_acquire);
+    return phase == ConfigApplyPhase::PREPARING || phase == ConfigApplyPhase::PENDING || phase == ConfigApplyPhase::IN_PROGRESS;
+}
+
+bool RadioInterface::configApplyBarrierIsSet() const
+{
+    return (configApplyTxGate.load(std::memory_order_acquire) & CONFIG_APPLY_TX_BARRIER) != 0;
+}
+
+bool RadioInterface::claimConfigApplyTxStart()
+{
+    uint32_t gate = configApplyTxGate.load(std::memory_order_acquire);
+    while ((gate & CONFIG_APPLY_TX_BARRIER) == 0) {
+        assert((gate & CONFIG_APPLY_TX_CLAIM_MASK) != CONFIG_APPLY_TX_CLAIM_MASK);
+        if (configApplyTxGate.compare_exchange_weak(gate, gate + 1, std::memory_order_acq_rel, std::memory_order_acquire))
+            return true;
+    }
+    return false;
+}
+
+void RadioInterface::releaseConfigApplyTxStart()
+{
+    const uint32_t previous = configApplyTxGate.fetch_sub(1, std::memory_order_release);
+    assert((previous & CONFIG_APPLY_TX_CLAIM_MASK) != 0);
+}
+
+bool RadioInterface::configApplyTxStartActive() const
+{
+    return (configApplyTxGate.load(std::memory_order_acquire) & CONFIG_APPLY_TX_CLAIM_MASK) != 0;
 }
 
 bool RadioInterface::init()
@@ -993,9 +1135,53 @@ bool RadioInterface::init()
     // radioIf.setThisAddress(nodeDB->getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at
     // constructor time.
 
-    applyModemConfig();
+    const bool regionUnset = config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    meshtastic_Config_LoRaConfig bootConfig = hardwareConfigFor(config.lora);
+    LoRaConfigNormalization validation = normalizeConfigLora(bootConfig, false, nullptr, this);
+    if (!validation.valid) {
+        LoRaConfigNormalization corrected = normalizeConfigLora(config.lora, true, nullptr, this);
+        if (!corrected.valid && wideLora() && !supportsSubGhz()) {
+            bootConfig.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+            bootConfig.use_preset = true;
+            bootConfig.modem_preset = getRegion(bootConfig.region)->getDefaultPreset();
+            bootConfig.channel_num = 0;
+            bootConfig.override_frequency = 0;
+            bootConfig.frequency_offset = 0;
+            corrected = normalizeConfigLora(bootConfig, true, nullptr, this);
+        }
+        if (corrected.valid) {
+            bootConfig = corrected.config;
+            if (!regionUnset) {
+                bootConfigCorrection = corrected;
+                bootConfigCorrectionPending = true;
+            }
+        } else {
+            publishLoRaConfigDiagnostics(corrected);
+            return false;
+        }
+    }
+
+    configApplyLoraConfig = &bootConfig;
+    const bool applied = applyModemConfig();
+    configApplyLoraConfig = nullptr;
+    if (!applied)
+        return false;
+    myRegion = getRegion(bootConfig.region);
 
     return true;
+}
+
+void RadioInterface::commitBootConfigCorrection()
+{
+    if (!bootConfigCorrectionPending)
+        return;
+
+    config.lora = bootConfigCorrection.config;
+    myRegion = getRegion(config.lora.region);
+    publishLoRaConfigDiagnostics(bootConfigCorrection);
+    commitLoRaConfigFrequencyFlags(bootConfigCorrection);
+    nodeDB->saveToDisk(SEGMENT_CONFIG);
+    bootConfigCorrectionPending = false;
 }
 
 int RadioInterface::notifyDeepSleepCb(void *unused)
@@ -1060,6 +1246,11 @@ const meshtastic_Config_LoRaConfig &RadioInterface::getActiveLoRaConfig() const
 const RegionInfo *RadioInterface::getActiveRegion() const
 {
     return configApplyLoraConfig ? getRegion(configApplyLoraConfig->region) : myRegion;
+}
+
+bool RadioInterface::getActiveLicensedOwner() const
+{
+    return configApplyLicensedOwnerSet ? configApplyLicensedOwner : devicestate.owner.is_licensed;
 }
 
 /**
@@ -1160,7 +1351,9 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
 }
 
 RadioInterface::LoRaConfigNormalization RadioInterface::normalizeConfigLora(const meshtastic_Config_LoRaConfig &loraConfig,
-                                                                            bool clamp)
+                                                                            bool clamp,
+                                                                            const meshtastic_ChannelSettings *primaryChannel,
+                                                                            RadioInterface *radio)
 {
     LoRaConfigNormalization result;
     result.config = loraConfig;
@@ -1214,6 +1407,43 @@ RadioInterface::LoRaConfigNormalization RadioInterface::normalizeConfigLora(cons
         checkBw = clampBandwidthKHz(bwCodeToKHz(result.config.bandwidth));
     }
 
+    if (radio && newRegion->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+        ((newRegion->wideLora && !radio->wideLora()) || (!newRegion->wideLora && !radio->supportsSubGhz()))) {
+        LoRaConfigDiagnostic diagnostic;
+        diagnostic.type = LoRaConfigDiagnosticType::UNSUPPORTED_BAND;
+        diagnostic.region = result.config.region;
+        diagnostic.preset = result.config.modem_preset;
+        addDiagnostic(diagnostic);
+        result.valid = false;
+        return result;
+    }
+
+    if (radio && newRegion->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+        !radio->supportsLoRaBandwidth(checkBw, newRegion->wideLora)) {
+        LoRaConfigDiagnostic diagnostic;
+        diagnostic.type = LoRaConfigDiagnosticType::UNSUPPORTED_BANDWIDTH;
+        diagnostic.region = result.config.region;
+        diagnostic.preset = result.config.modem_preset;
+        diagnostic.requestedBandwidthKHz = checkBw;
+        diagnostic.corrected = clamp;
+        addDiagnostic(diagnostic);
+        if (!clamp) {
+            result.valid = false;
+            return result;
+        }
+
+        const float defaultBandwidth = modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora);
+        if (result.config.use_preset)
+            result.config.modem_preset = newRegion->getDefaultPreset();
+        else
+            result.config.bandwidth = bwKHzToCode(defaultBandwidth);
+        checkBw = defaultBandwidth;
+        if (!radio->supportsLoRaBandwidth(checkBw, newRegion->wideLora)) {
+            result.valid = false;
+            return result;
+        }
+    }
+
     float freqSlotWidth = newRegion->profile->spacing + (newRegion->profile->padding * 2) + (checkBw / 1000);
     uint32_t numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
 
@@ -1235,7 +1465,7 @@ RadioInterface::LoRaConfigNormalization RadioInterface::normalizeConfigLora(cons
         numFreqSlots = round((newRegion->freqEnd - newRegion->freqStart + newRegion->profile->spacing) / freqSlotWidth);
     }
 
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    const char *channelName = getChannelNameForLoRaConfig(result.config, primaryChannel);
     const char *presetName =
         DisplayFormatters::getModemPresetDisplayName(result.config.modem_preset, false, result.config.use_preset);
     const uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
@@ -1312,6 +1542,24 @@ void RadioInterface::publishLoRaConfigDiagnostics(const LoRaConfigNormalization 
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             sendErrorNotification(message);
             break;
+        case LoRaConfigDiagnosticType::UNSUPPORTED_BAND:
+            snprintf(message, sizeof(message), "Radio does not support the %s band", region->name);
+            LOG_ERROR("%s", message);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(message);
+            break;
+        case LoRaConfigDiagnosticType::UNSUPPORTED_BANDWIDTH:
+            if (diagnostic.corrected) {
+                snprintf(message, sizeof(message), "Radio does not support %.3fkHz in %s; using the region default",
+                         diagnostic.requestedBandwidthKHz, region->name);
+            } else {
+                snprintf(message, sizeof(message), "Radio does not support %.3fkHz in %s", diagnostic.requestedBandwidthKHz,
+                         region->name);
+            }
+            LOG_ERROR("%s", message);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(message);
+            break;
         case LoRaConfigDiagnosticType::BANDWIDTH_TOO_WIDE:
             snprintf(message, sizeof(message), "%s span %.0fkHz < requested %.0fkHz", region->name,
                      (region->freqEnd - region->freqStart) * 1000.0f, diagnostic.requestedBandwidthKHz);
@@ -1340,9 +1588,9 @@ void RadioInterface::commitLoRaConfigFrequencyFlags(const LoRaConfigNormalizatio
     uses_custom_channel_name = normalization.usesCustomChannelName;
 }
 
-bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp)
+bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, RadioInterface *radio)
 {
-    const LoRaConfigNormalization normalization = normalizeConfigLora(loraConfig, clamp);
+    const LoRaConfigNormalization normalization = normalizeConfigLora(loraConfig, clamp, nullptr, radio);
     publishLoRaConfigDiagnostics(normalization);
     commitLoRaConfigFrequencyFlags(normalization);
     if (clamp)
@@ -1350,22 +1598,22 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     return normalization.valid;
 }
 
-bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio)
 {
     auto copy = loraConfig;
-    return checkOrClampConfigLora(copy, false);
+    return checkOrClampConfigLora(copy, false, radio);
 }
 
-void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio)
 {
-    checkOrClampConfigLora(loraConfig, true);
+    checkOrClampConfigLora(loraConfig, true, radio);
 }
 
 /**
  * Pull our channel settings etc... from protobufs to the dumb interface settings
  * Note: this must be given only settings which have been validated or clamped!
  */
-void RadioInterface::applyModemConfig()
+bool RadioInterface::applyModemConfig()
 {
     const bool stagedApply = configApplyLoraConfig != nullptr;
     meshtastic_Config_LoRaConfig stagedConfig;
@@ -1374,9 +1622,13 @@ void RadioInterface::applyModemConfig()
     bool usesDefaultFrequencySlot = uses_default_frequency_slot;
 
     if (stagedApply) {
-        LoRaConfigNormalization normalization = normalizeConfigLora(loraConfig, false);
+        LoRaConfigNormalization normalization = normalizeConfigLora(loraConfig, false, nullptr, this);
         if (!normalization.valid)
-            normalization = normalizeConfigLora(loraConfig, true);
+            normalization = normalizeConfigLora(loraConfig, true, nullptr, this);
+        if (!normalization.valid) {
+            publishLoRaConfigDiagnostics(normalization);
+            return false;
+        }
         loraConfig = normalization.config;
         newRegion = getRegion(loraConfig.region);
         if (normalization.updatesFrequencySlotFlags)
@@ -1386,7 +1638,7 @@ void RadioInterface::applyModemConfig()
     }
 
     if (loraConfig.use_preset) {
-        if (!stagedApply && !validateConfigLora(loraConfig)) {
+        if (!stagedApply && !validateConfigLora(loraConfig, this)) {
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
         uint8_t newcr;
@@ -1405,10 +1657,10 @@ void RadioInterface::applyModemConfig()
         }
 
     } else if (!stagedApply) {
-        if (!validateConfigLora(loraConfig)) {
+        if (!validateConfigLora(loraConfig, this)) {
             LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
                      newRegion->name);
-            clampConfigLora(loraConfig);
+            clampConfigLora(loraConfig, this);
         }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
@@ -1422,7 +1674,7 @@ void RadioInterface::applyModemConfig()
 
     power = loraConfig.tx_power;
 
-    if ((power == 0) || ((power > newRegion->powerLimit) && !devicestate.owner.is_licensed))
+    if ((power == 0) || ((power > newRegion->powerLimit) && !getActiveLicensedOwner()))
         power = newRegion->powerLimit;
 
     if (power == 0)
@@ -1445,7 +1697,7 @@ void RadioInterface::applyModemConfig()
     // Calculate hash of channel name and preset name to pick a default frequency slot if user has not specified one.
     // Note that channel_num is actually (channel_num - 1), i.e. zero-based, since modulus (%) returns values from 0 to
     // (numFreqSlots - 1).
-    const char *channelName = channels.getName(channels.getPrimaryIndex());
+    const char *channelName = getChannelNameForLoRaConfig(loraConfig);
     // Guard the modulo: numFreqSlots can be 0 for an UNSET/degenerate region, and % 0 is a SIGFPE
     uint32_t channelNameHashSlot = numFreqSlots ? (hash(channelName) % numFreqSlots) : 0;
     uint32_t presetNameHashSlot =
@@ -1513,6 +1765,7 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
     LOG_INFO("Slot time: %u msec, preamble time: %u msec", slotTimeMsec, preambleTimeMsec);
+    return true;
 } // end of applyModemConfig
 
 /** Slottime is the time to detect a transmission has started, consisting of:
@@ -1547,13 +1800,13 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
     if (activeRegion->powerLimit)
         maxPower = activeRegion->powerLimit;
 
-    if ((power > maxPower) && !devicestate.owner.is_licensed) {
+    if ((power > maxPower) && !getActiveLicensedOwner()) {
         LOG_INFO("Lower transmit power because of regulatory limits");
         power = maxPower;
     }
 
 #if HAS_LORA_FEM
-    if (!devicestate.owner.is_licensed) {
+    if (!getActiveLicensedOwner()) {
         power = loraFEMInterface.powerConversion(power);
     }
 #else
@@ -1567,11 +1820,11 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 #endif
 
     if (num_pa_points == 1) {
-        if (tx_gain[0] > 0 && !devicestate.owner.is_licensed) {
+        if (tx_gain[0] > 0 && !getActiveLicensedOwner()) {
             LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, tx_gain[0]);
             power -= tx_gain[0];
         }
-    } else if (!devicestate.owner.is_licensed) {
+    } else if (!getActiveLicensedOwner()) {
         // we have an array of PA gain values.  Find the highest power setting that works.
         for (int radio_dbm = 0; radio_dbm < (int)num_pa_points; radio_dbm++) {
             if (((radio_dbm + tx_gain[radio_dbm]) > power) ||

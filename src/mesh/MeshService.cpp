@@ -121,49 +121,85 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 }
 
 bool MeshService::requestLoRaConfig(const meshtastic_Config_LoRaConfig &previous, const meshtastic_Config_LoRaConfig &candidate,
-                                    uint32_t timeoutMsec)
+                                    uint32_t timeoutMsec, bool previousLicensed, bool candidateLicensed)
 {
-    if (loRaConfigApplyPending || !router)
+    LoRaConfigApplyState expected = LoRaConfigApplyState::IDLE;
+    if (!loRaConfigApplyState.compare_exchange_strong(expected, LoRaConfigApplyState::PREPARING, std::memory_order_acq_rel,
+                                                      std::memory_order_acquire))
         return false;
+
+    if (!router) {
+        loRaConfigApplyState.store(LoRaConfigApplyState::IDLE, std::memory_order_release);
+        return false;
+    }
 
     RadioInterface *radio = router->getRadioIface();
-    if (!radio)
+    if (!radio) {
+        loRaConfigApplyState.store(LoRaConfigApplyState::IDLE, std::memory_order_release);
         return false;
+    }
 
-    RadioConfigApplyRequest &request = loRaConfigApplyRequests[nextLoRaConfigApply];
+    RadioConfigApplyRequest &request = loRaConfigApplyRequest;
     request.previous = previous;
     request.candidate = candidate;
     request.requestedAtMsec = millis();
     request.timeoutMsec = timeoutMsec;
-    request.result.store(RadioConfigApplyResult::IDLE);
+    request.previousLicensed = previousLicensed;
+    request.candidateLicensed = candidateLicensed;
+    request.acceptedRadioId = 0;
+    request.result.store(RadioConfigApplyResult::IDLE, std::memory_order_relaxed);
 
-    if (!radio->requestConfigApply(&request))
+    if (!radio->requestConfigApply(&request)) {
+        loRaConfigApplyState.store(LoRaConfigApplyState::IDLE, std::memory_order_release);
         return false;
+    }
 
-    activeLoRaConfigApply = nextLoRaConfigApply;
-    nextLoRaConfigApply ^= 1;
-    loRaConfigApplyPending = true;
+    loRaConfigApplyState.store(LoRaConfigApplyState::PENDING, std::memory_order_release);
     return true;
 }
 
 RadioConfigApplyResult MeshService::pollLoRaConfigApply() const
 {
-    if (!loRaConfigApplyPending)
+    const LoRaConfigApplyState state = loRaConfigApplyState.load(std::memory_order_acquire);
+    if (state == LoRaConfigApplyState::IDLE)
         return RadioConfigApplyResult::IDLE;
+    if (state == LoRaConfigApplyState::PREPARING)
+        return RadioConfigApplyResult::PENDING;
 
-    const RadioConfigApplyRequest &request = loRaConfigApplyRequests[activeLoRaConfigApply];
+    const RadioConfigApplyRequest &request = loRaConfigApplyRequest;
     RadioInterface *radio = router ? router->getRadioIface() : nullptr;
-    return radio ? radio->pollConfigApply(request) : request.result.load();
+    if (!radio || !radio->ownsConfigApplyRequest(request))
+        return RadioConfigApplyResult::INTERFACE_REPLACED;
+    return radio->pollConfigApply(request);
 }
 
 /// Do idle processing (mostly processing messages which have been queued from the radio)
 void MeshService::loop()
 {
-    if (loRaConfigApplyPending) {
+    LoRaConfigApplyState state = loRaConfigApplyState.load(std::memory_order_acquire);
+    if (state == LoRaConfigApplyState::PENDING) {
         const RadioConfigApplyResult result = pollLoRaConfigApply();
-        if (result != RadioConfigApplyResult::IDLE && result != RadioConfigApplyResult::PENDING && adminModule) {
-            adminModule->completeLoRaConfigApply(loRaConfigApplyRequests[activeLoRaConfigApply]);
-            loRaConfigApplyPending = false;
+        if (result != RadioConfigApplyResult::IDLE && result != RadioConfigApplyResult::PENDING) {
+            LoRaConfigApplyState expected = LoRaConfigApplyState::PENDING;
+            if (loRaConfigApplyState.compare_exchange_strong(expected, LoRaConfigApplyState::FINALIZING,
+                                                             std::memory_order_acq_rel, std::memory_order_acquire)) {
+                RadioConfigApplyRequest &request = loRaConfigApplyRequest;
+                if (result == RadioConfigApplyResult::INTERFACE_REPLACED)
+                    request.result.store(result, std::memory_order_release);
+                if (adminModule)
+                    adminModule->completeLoRaConfigApply(request);
+                state = LoRaConfigApplyState::FINALIZING;
+            }
+        }
+    }
+
+    if (state == LoRaConfigApplyState::FINALIZING) {
+        RadioConfigApplyRequest &request = loRaConfigApplyRequest;
+        RadioInterface *radio = router ? router->getRadioIface() : nullptr;
+        if (!radio || !radio->ownsConfigApplyRequest(request) || radio->finalizeConfigApply(&request)) {
+            loRaConfigApplyState.store(LoRaConfigApplyState::IDLE, std::memory_order_release);
+            if (adminModule)
+                adminModule->finalizeLoRaConfigApply();
         }
     }
 

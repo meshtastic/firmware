@@ -9,7 +9,12 @@
 #include "ulfius-cfg.h"
 #include "ulfius.h"
 #include <Arduino.h>
+#include <array>
+#include <condition_variable>
+#include <deque>
 #include <functional>
+#include <memory>
+#include <mutex>
 
 #define STATIC_FILE_CHUNK 256
 
@@ -36,10 +41,31 @@ class HttpAPI : public PhoneAPI
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 
-  private:
-    // Nothing here yet
+    bool submitToRadio(const uint8_t *data, size_t length);
+    bool submitFromRadio(uint8_t *data, size_t &length);
+    bool hasPendingRequests();
+    size_t pendingRequestCount();
+    void processPendingRequests();
+    void stopAcceptingRequests();
 
-  protected:
+  private:
+    static constexpr size_t REQUEST_QUEUE_SIZE = 8;
+    enum class RequestType : uint8_t { TO_RADIO, FROM_RADIO };
+    struct PendingRequest {
+        RequestType type;
+        std::array<uint8_t, MAX_TO_FROM_RADIO_SIZE> data{};
+        size_t length = 0;
+        std::mutex completionMutex;
+        std::condition_variable completion;
+        bool completed = false;
+        bool cancelled = false;
+    };
+
+    bool submit(const std::shared_ptr<PendingRequest> &request);
+    std::mutex requestMutex;
+    std::deque<std::shared_ptr<PendingRequest>> requests;
+    std::deque<std::shared_ptr<PendingRequest>> inFlightRequests;
+    bool acceptingRequests = true;
 };
 
 class PiWebServerThread
@@ -54,6 +80,7 @@ class PiWebServerThread
   public:
     PiWebServerThread();
     ~PiWebServerThread();
+    void processPendingRequests();
     int CreateSSLCertificate();
     int CheckSSLandLoad();
     uint32_t requestRestart = 0;
