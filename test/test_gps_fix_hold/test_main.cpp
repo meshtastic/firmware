@@ -150,9 +150,8 @@ void test_no_hold_means_arm_but_does_not_mean_expired(void)
     TEST_ASSERT_FALSE_MESSAGE(holdJustExpired(0), "...but not a reason to publish and sleep");
 }
 
-// The sentinel guard inside holdJustExpired() is load-bearing on every cycle, not just past the
-// half-range: fixHoldInForce() already reports an unarmed hold as "not in force", so negating it
-// alone reads as "expired" and would call down() on a receiver that was never holding.
+// holdJustExpired()'s sentinel guard is load-bearing on every cycle, not just past the half-range:
+// fixHoldInForce() calls an unarmed hold "not in force", so negating it alone reads as expired.
 void test_only_an_armed_hold_can_expire(void)
 {
     Time::setTestMillis(50 * 1000);
