@@ -8,9 +8,13 @@
 #include "comms/PacketServer.h"
 #include "graphics/DeviceScreen.h"
 #include "graphics/driver/DisplayDriverConfig.h"
+#include "util/ISpiLock.h"
 
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
+#endif
+
+#if defined(ARCH_PORTDUINO) || !defined(HAS_FREE_RTOS)
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -30,12 +34,72 @@ CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t> endSleepObserver =
     CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t>(deviceScreen, &DeviceScreen::wakeUp);
 #endif
 
+/**
+ * Lends spiLock to device-ui so it can guard its own bus traffic.
+ *
+ * This used to be a coarse hold around the whole UI cycle in tft_task_handler(). On
+ * boards where the TFT, SD card and LoRa radio share one SPI bus (T-Deck), that blocked
+ * every radio operation on the main loop for an entire render+flush - tens to hundreds
+ * of milliseconds while the UI animates, felt as mesh RX/TX latency. Most of that time
+ * is LVGL timer work and rendering into the draw buffer, which touches no SPI at all.
+ *
+ * device-ui now takes the lock only around real transfers, so the bus is free during the
+ * CPU-only majority of a redraw.
+ *
+ * Reentrant because ISpiLock requires it: device-ui guards at method granularity, so a
+ * caller that already holds the bus can reach another guarded method, while spiLock is a
+ * plain binary semaphore that would self-deadlock on the second take. Track the owning
+ * thread and only touch the underlying lock on the outermost acquire.
+ *
+ * Only the owner writes owner/depth, and only while holding the lock, so no additional
+ * synchronization is needed: a thread that does not own it either reads some other
+ * thread's id or the unowned sentinel, and in both cases correctly goes on to block.
+ */
+class ReentrantSpiLock : public ISpiLock
+{
+  public:
+    void lock(void) override
+    {
+        ThreadId self = currentThread();
+        if (depth && owner == self) {
+            depth++;
+            return;
+        }
+        spiLock->lock();
+        owner = self;
+        depth = 1;
+    }
+
+    void unlock(void) override
+    {
+        if (--depth == 0) {
+            owner = ThreadId();
+            spiLock->unlock();
+        }
+    }
+
+  private:
+    // Portduino builds have no FreeRTOS, but device-ui runs there too, so the
+    // reentrancy has to be portable rather than an ESP32-only path.
+#ifdef HAS_FREE_RTOS
+    using ThreadId = TaskHandle_t;
+    static ThreadId currentThread(void) { return xTaskGetCurrentTaskHandle(); }
+#else
+    using ThreadId = std::thread::id;
+    static ThreadId currentThread(void) { return std::this_thread::get_id(); }
+#endif
+
+    ThreadId owner = ThreadId();
+    uint32_t depth = 0;
+};
+
+static ReentrantSpiLock reentrantSpiLock;
+
 void tft_task_handler(void *param = nullptr)
 {
     while (true) {
-        spiLock->lock();
+        // No lock held here on purpose - device-ui guards its own SPI access.
         deviceScreen->task_handler();
-        spiLock->unlock();
         deviceScreen->sleep();
     }
 }
@@ -43,7 +107,7 @@ void tft_task_handler(void *param = nullptr)
 void tftSetup(void)
 {
 #ifndef ARCH_PORTDUINO
-    deviceScreen = &DeviceScreen::create();
+    deviceScreen = &DeviceScreen::create(reentrantSpiLock);
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
 #else
@@ -126,7 +190,7 @@ void tftSetup(void)
                     .i2c{.i2c_addr = (uint8_t)portduino_config.touchscreenI2CAddr}});
             }
         }
-        deviceScreen = &DeviceScreen::create(&displayConfig);
+        deviceScreen = &DeviceScreen::create(&displayConfig, &reentrantSpiLock);
         PacketAPI::create(PacketServer::init());
         deviceScreen->init(new PacketClient);
     } else {
