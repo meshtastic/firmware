@@ -10,6 +10,7 @@
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/draw/UIRenderer.h"
+#include "input/kbI2cBase.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "modules/ExternalNotificationModule.h"
@@ -72,8 +73,49 @@ ScreenResolution currentResolution = ScreenResolution::Low;
 // === Internal State ===
 bool isBoltVisibleShared = true;
 uint32_t lastBlinkShared = 0;
-bool isMailIconVisible = true;
-uint32_t lastMailBlink = 0;
+
+enum class HeaderStatusIcon : uint8_t {
+    None,
+    Mail,
+    KeypadLock,
+    Mute,
+};
+
+static uint8_t statusCarouselIndex = 0;
+static uint32_t lastStatusCarouselStep = 0;
+static constexpr uint32_t STATUS_ICON_CAROUSEL_INTERVAL_MS = 1250;
+
+static HeaderStatusIcon selectHeaderStatusIcon(bool showMail, bool showKeypadLock, bool showMute, uint32_t now)
+{
+    HeaderStatusIcon icons[3];
+    uint8_t iconCount = 0;
+
+    if (showMail) {
+        icons[iconCount++] = HeaderStatusIcon::Mail;
+    }
+    if (showKeypadLock) {
+        icons[iconCount++] = HeaderStatusIcon::KeypadLock;
+    }
+    if (showMute) {
+        icons[iconCount++] = HeaderStatusIcon::Mute;
+    }
+
+    if (iconCount == 0) {
+        statusCarouselIndex = 0;
+        return HeaderStatusIcon::None;
+    }
+
+    if (statusCarouselIndex >= iconCount) {
+        statusCarouselIndex = 0;
+    }
+
+    if (iconCount > 1 && (now - lastStatusCarouselStep) >= STATUS_ICON_CAROUSEL_INTERVAL_MS) {
+        statusCarouselIndex = (statusCarouselIndex + 1) % iconCount;
+        lastStatusCarouselStep = now;
+    }
+
+    return icons[statusCarouselIndex];
+}
 
 static inline bool useClockHeaderAccentTheme(uint32_t themeId)
 {
@@ -380,23 +422,13 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         // === Show Mail or Mute Icon to the Left of Time ===
         int iconRightEdge = timeX - 2;
 
-        bool showMail = false;
+        const bool showMail = hasUnreadMessage;
+        const bool showKeypadLock = isKbI2cKeypadLocked();
+        const bool showMute = externalNotificationModule && externalNotificationModule->getMute();
+        const HeaderStatusIcon activeIcon = selectHeaderStatusIcon(showMail, showKeypadLock, showMute, now);
 
-#ifndef USE_EINK
-        if (hasUnreadMessage) {
-            if (now - lastMailBlink > 500) {
-                isMailIconVisible = !isMailIconVisible;
-                lastMailBlink = now;
-            }
-            showMail = isMailIconVisible;
-        }
-#else
-        if (hasUnreadMessage) {
-            showMail = true;
-        }
-#endif
-
-        if (showMail) {
+        switch (activeIcon) {
+        case HeaderStatusIcon::Mail:
             if (useHorizontalBattery) {
                 int iconW = 16, iconH = 12;
                 int iconX = iconRightEdge - iconW;
@@ -427,7 +459,24 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 }
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (externalNotificationModule->getMute()) {
+            break;
+        case HeaderStatusIcon::KeypadLock: {
+            int iconX = iconRightEdge - padlock_symbol_width;
+            int iconY = textY + (FONT_HEIGHT_SMALL - padlock_symbol_height) / 2;
+
+            if (useInvertedHeaderStyle) {
+                display->setColor(WHITE);
+                display->fillRect(iconX - 1, iconY - 1, padlock_symbol_width + 2, padlock_symbol_height + 2);
+                display->setColor(BLACK);
+            } else {
+                display->setColor(BLACK);
+                display->fillRect(iconX - 1, iconY - 1, padlock_symbol_width + 2, padlock_symbol_height + 2);
+                display->setColor(WHITE);
+            }
+            display->drawXbm(iconX, iconY, padlock_symbol_width, padlock_symbol_height, padlock_symbol);
+            break;
+        }
+        case HeaderStatusIcon::Mute:
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
@@ -457,6 +506,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 }
                 display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
             }
+            break;
+        case HeaderStatusIcon::None:
+        default:
+            break;
         }
 
         if (show_date) {
@@ -477,23 +530,13 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #if GRAPHICS_TFT_COLORING_ENABLED
         statusRightStartX = screenW - (useHorizontalBattery ? 22 : 12);
 #endif
-        bool showMail = false;
+        const bool showMail = hasUnreadMessage;
+        const bool showKeypadLock = isKbI2cKeypadLocked();
+        const bool showMute = externalNotificationModule && externalNotificationModule->getMute();
+        const HeaderStatusIcon activeIcon = selectHeaderStatusIcon(showMail, showKeypadLock, showMute, now);
 
-#ifndef USE_EINK
-        if (hasUnreadMessage) {
-            if (now - lastMailBlink > 500) {
-                isMailIconVisible = !isMailIconVisible;
-                lastMailBlink = now;
-            }
-            showMail = isMailIconVisible;
-        }
-#else
-        if (hasUnreadMessage) {
-            showMail = true;
-        }
-#endif
-
-        if (showMail) {
+        switch (activeIcon) {
+        case HeaderStatusIcon::Mail:
             if (useHorizontalBattery) {
                 int iconW = 16, iconH = 12;
                 int iconX = iconRightEdge - iconW;
@@ -506,7 +549,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
-        } else if (externalNotificationModule->getMute()) {
+            break;
+        case HeaderStatusIcon::KeypadLock: {
+            int iconX = iconRightEdge - key_symbol_width;
+            int iconY = textY + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;
+            display->drawXbm(iconX, iconY, key_symbol_width, key_symbol_height, key_symbol);
+            break;
+        }
+        case HeaderStatusIcon::Mute:
             if (currentResolution == ScreenResolution::High) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
@@ -516,6 +566,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                 display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
             }
+            break;
+        case HeaderStatusIcon::None:
+        default:
+            break;
         }
     }
 #endif

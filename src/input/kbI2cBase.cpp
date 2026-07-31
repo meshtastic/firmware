@@ -18,6 +18,13 @@
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 
+static bool gIsKbI2cKeypadLocked = false;
+
+bool isKbI2cKeypadLocked()
+{
+    return gIsKbI2cKeypadLocked;
+}
+
 KbI2cBase::KbI2cBase(const char *name)
     : concurrency::OSThread(name),
 #if defined(T_DECK_PRO)
@@ -261,6 +268,21 @@ int32_t KbI2cBase::runOnce()
         InputEvent e = {};
         while (TCAKeyboard.hasEvent()) {
             char nextEvent = TCAKeyboard.dequeueEvent();
+
+            if (nextEvent == TCA8418KeyboardBase::KEYPAD_LOCK) {
+                isKeypadLockedState = !isKeypadLockedState;
+                gIsKbI2cKeypadLocked = isKeypadLockedState;
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = isKeypadLockedState ? INPUT_BROKER_MSG_KEYPAD_LOCK_ON : INPUT_BROKER_MSG_KEYPAD_LOCK_OFF;
+                e.source = this->_originName;
+                this->notifyObservers(&e);
+                continue;
+            }
+
+            if (isKeypadLockedState) {
+                continue;
+            }
+
             e.inputEvent = INPUT_BROKER_ANYKEY;
             e.kbchar = 0x00;
             e.source = this->_originName;
