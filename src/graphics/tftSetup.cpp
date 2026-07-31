@@ -25,7 +25,6 @@
 #include "input/I2CKeyboardScanner.h"
 #include "mesh/IndicatorSerial.h"
 #include "mesh/comms/I2CProxy.h"
-#include "mesh/comms/LinkSpiLock.h"
 
 // Serves the UI map tiles from the SD card behind the RP2040, chunk-wise
 // over the interdevice link.
@@ -81,7 +80,6 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        SpiLockBreak spiFree;
         Budget budget;
         do {
             memset(&result, 0, sizeof(result));
@@ -105,7 +103,6 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        SpiLockBreak spiFree;
         Budget budget;
         bool retried = false;
         do {
@@ -131,7 +128,6 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        SpiLockBreak spiFree;
         meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
         // A mount takes up to two seconds. Waiting it out here is worth it (an
         // empty slot reported once sticks in the UI), but this runs on the UI
@@ -172,7 +168,6 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        SpiLockBreak spiFree;
         Budget budget;
         do {
             memset(&result, 0, sizeof(result));
@@ -191,7 +186,6 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        SpiLockBreak spiFree;
         uint32_t offset = 0;
         while (true) {
             bool got_page = false;
@@ -220,7 +214,6 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        SpiLockBreak spiFree;
         meshtastic_SdCardInfo state = meshtastic_SdCardInfo_init_zero;
         return sensecapIndicator->sd_command(command, &state);
     }
@@ -280,18 +273,11 @@ class ReentrantSpiLock : public ISpiLock
         spiLock->lock();
         owner = self;
         depth = 1;
-#ifdef SENSECAP_INDICATOR
-        // lets the remote FS hand the bus back while it waits on the link
-        spiLockHolder = self;
-#endif
     }
 
     void unlock(void) override
     {
         if (--depth == 0) {
-#ifdef SENSECAP_INDICATOR
-            spiLockHolder = nullptr;
-#endif
             owner = ThreadId();
             spiLock->unlock();
         }

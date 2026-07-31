@@ -2,12 +2,8 @@
 
 #include "I2CProxy.h"
 #include "../IndicatorSerial.h"
-#include "LinkSpiLock.h"
 
 I2CProxy *i2cProxy = new I2CProxy();
-
-// the TFT task publishes itself here while it holds spiLock, see LinkSpiLock.h
-volatile TaskHandle_t spiLockHolder = nullptr;
 
 // Transaction state of the calling task. Slots are claimed on first use and
 // never released: the set of tasks touching the bridged bus is fixed (main
@@ -122,10 +118,6 @@ uint8_t I2CProxy::transact(Context &c, uint8_t address, size_t rlen)
         return 4;
     if (c.txLen > MAX_WRITE)
         return 1;
-
-    // the keyboard scanner polls this bus from the LVGL task, which holds the
-    // SPI lock the radio needs
-    SpiLockBreak spiFree;
 
     meshtastic_I2CResult result = meshtastic_I2CResult_init_zero;
     if (!sensecapIndicator->i2c_transact(address, c.txBuf, c.txLen, rlen, &result))
