@@ -280,11 +280,14 @@ void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
 
     if (sendingPacket != nullptr) {
         LOG_DEBUG("radio_config_apply wait_tx");
+        notifyLater(25, CONFIG_APPLY_PENDING, false);
         return;
     }
 
-    if (isActivelyReceiving())
+    if (isActivelyReceiving()) {
+        notifyLater(25, CONFIG_APPLY_PENDING, false);
         return;
+    }
 
 #if !MESHTASTIC_EXCLUDE_BEACON
     if (MeshBeaconModule::reconfigureForBeaconTX(this, nullptr)) {

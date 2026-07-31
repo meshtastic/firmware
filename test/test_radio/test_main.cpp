@@ -563,6 +563,24 @@ static void test_configApply_activeRx_defersUntilReceiveCompletes()
     TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
 }
 
+static void test_configApply_activeRx_retriesAfterNotificationIsConsumed()
+{
+    RadioConfigApplyRequest request{usConfig(), lora24Config(), static_cast<uint32_t>(millis()), 5000};
+    config.lora = request.previous;
+    testRadioLib->setActivelyReceivingForTest(true);
+
+    TEST_ASSERT_TRUE(testRadioLib->requestConfigApply(&request));
+    testRadioLib->clearPendingNotificationForTest();
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::PENDING, request.result.load());
+    TEST_ASSERT_EQUAL_UINT32(0, testRadioLib->applyCount());
+
+    testRadioLib->setActivelyReceivingForTest(false);
+    testRadioLib->clearPendingNotificationForTest();
+
+    TEST_ASSERT_EQUAL(RadioConfigApplyResult::APPLIED, request.result.load());
+}
+
 static void test_configApply_applyFailure_rollsBackRadioLib()
 {
     RadioConfigApplyRequest request{usConfig(), lora24Config(), static_cast<uint32_t>(millis()), 5000};
@@ -896,6 +914,7 @@ void setup()
     RUN_TEST(test_configApply_timeout_doesNotAbortTx);
     RUN_TEST(test_configApply_timeoutIsRolloverSafe);
     RUN_TEST(test_configApply_activeRx_defersUntilReceiveCompletes);
+    RUN_TEST(test_configApply_activeRx_retriesAfterNotificationIsConsumed);
     RUN_TEST(test_configApply_applyFailure_rollsBackRadioLib);
     RUN_TEST(test_configApply_rollbackFailure_inhibitsRadioLibTx);
     RUN_TEST(test_configApply_barrierBlocksDequeuesAcceptedDuringChannelCheck);
