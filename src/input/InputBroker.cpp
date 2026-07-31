@@ -35,11 +35,12 @@
 #endif
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
+#include "graphics/Backlight.h"
 #include "input/ButtonThread.h"
 
 #if defined(BUTTON_PIN_TOUCH)
 ButtonThread *TouchButtonThread = nullptr;
-#if defined(PIN_EINK_EN)
+#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN)
 static bool touchBacklightWasOn = false;
 static bool touchBacklightActive = false;
 #endif
@@ -241,20 +242,28 @@ void InputBroker::Init()
     };
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
-#if defined(PIN_EINK_EN)
-    // Touch pad drives the backlight on devices with e-ink backlight pin
+#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN)
+    // Touch pad drives the backlight on devices that have one
     touchConfig.longPress = INPUT_BROKER_NONE;
     touchConfig.suppressLeadUpSound = true;
     touchConfig.onPress = []() {
-        touchBacklightWasOn = uiconfig.screen_brightness == 1;
+        touchBacklightWasOn = uiconfig.screen_brightness > 0;
         if (!touchBacklightWasOn) {
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightOn();
+#else
             digitalWrite(PIN_EINK_EN, HIGH);
+#endif
         }
         touchBacklightActive = true;
     };
     touchConfig.onRelease = []() {
         if (touchBacklightActive && !touchBacklightWasOn) {
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightOff();
+#else
             digitalWrite(PIN_EINK_EN, LOW);
+#endif
         }
         touchBacklightActive = false;
     };
@@ -327,6 +336,30 @@ void InputBroker::Init()
 #define BUTTON_ACTIVE_PULLUP true
 #endif
 
+#if defined(ELECROW_ThinkNode_M8)
+    // Rotary encoder drives the UI, so the function button keeps a fixed map.
+    LOG_DEBUG("ThinkNode_M8 button");
+    UserButtonThread = new ButtonThread("FunctionButton");
+    {
+        ButtonConfig userConfig;
+        userConfig.pinNumber = (uint8_t)_pinNum;
+        userConfig.activeLow = BUTTON_ACTIVE_LOW;
+        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+        userConfig.pullupSense = pullup_sense;
+        userConfig.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            UserButtonThread->setIntervalFromNow(0);
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            concurrency::mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfig.singlePress = INPUT_BROKER_SEND_PING;
+        userConfig.longPress = INPUT_BROKER_SHUTDOWN;
+        userConfig.longPressTime = 5000;
+        userConfig.doublePress = INPUT_BROKER_GPS_TOGGLE;
+        UserButtonThread->initButton(userConfig);
+    }
+#else
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThread("UserButton");
@@ -378,8 +411,9 @@ void InputBroker::Init()
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
     }
-#endif
-#endif
+#endif // ELECROW_ThinkNode_M8
+#endif // BUTTON_PIN
+#endif // HAS_BUTTON
 
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {

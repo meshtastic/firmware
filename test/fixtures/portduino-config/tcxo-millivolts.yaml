@@ -1,0 +1,9 @@
+# FAULT: DIO3_TCXO_VOLTAGE is in VOLTS and is multiplied by 1000, but every other
+# Meshtastic surface discusses this setting in millivolts -- so "1800" is the natural
+# thing to write and silently asks for 1800V. Nothing downstream range-checks it.
+# The correct spelling for a 1.8V part is 1.8, or just true.
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  DIO3_TCXO_VOLTAGE: 1800
