@@ -10,6 +10,7 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "buzz.h"
+#include "graphics/Backlight.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
@@ -1111,7 +1112,7 @@ void menuHandler::homeBaseMenu()
         }
         optionsEnumArray[options++] = Mute;
     }
-#if defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
+#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
     optionsArray[options] = "Toggle Backlight";
     optionsEnumArray[options++] = Backlight;
 #else
@@ -1141,7 +1142,10 @@ void menuHandler::homeBaseMenu()
             }
         } else if (selected == Backlight) {
             screen->setOn(false);
-#if defined(PIN_EINK_EN)
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightToggle();
+            saveUIConfig();
+#elif defined(PIN_EINK_EN)
             if (uiconfig.screen_brightness == 1) {
                 uiconfig.screen_brightness = 0;
                 digitalWrite(PIN_EINK_EN, LOW);

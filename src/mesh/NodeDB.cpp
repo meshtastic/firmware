@@ -1270,6 +1270,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.active = true;
 #endif // NANO_G2_ULTRA
 
+#ifdef ELECROW_ThinkNode_M8
+    moduleConfig.canned_message.rotary1_enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_a = PIN_BUTTON_EC04_A;
+    moduleConfig.canned_message.inputbroker_pin_b = PIN_BUTTON_EC04_B;
+    moduleConfig.canned_message.inputbroker_pin_press = PIN_BUTTON_EC04;
+    moduleConfig.canned_message.inputbroker_event_cw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+    moduleConfig.canned_message.inputbroker_event_ccw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+    moduleConfig.canned_message.inputbroker_event_press = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+#endif
 #ifdef T_LORA_PAGER
     moduleConfig.canned_message.updown1_enabled = true;
     moduleConfig.canned_message.inputbroker_pin_a = ROTARY_A;
@@ -1607,15 +1616,19 @@ void NodeDB::resetNodes(bool keepFavorites)
     numMeshNodes = 1;
     if (keepFavorites) {
         LOG_INFO("Clearing node database - preserving favorites");
-        for (size_t i = 0; i < meshNodes->size(); i++) {
-            meshtastic_NodeInfoLite &node = meshNodes->at(i);
-            if (i > 0 && !nodeInfoLiteIsFavorite(&node)) {
-                eraseNodeSatellites(node.num);
-                node = meshtastic_NodeInfoLite();
-            } else {
+        // Compact favorites into contiguous low slots: zeroing in place leaves one above
+        // numMeshNodes, invisible to every `i < numMeshNodes` scan yet still serialized to flash.
+        for (size_t i = 1; i < meshNodes->size(); i++) {
+            const meshtastic_NodeInfoLite &node = meshNodes->at(i);
+            if (nodeInfoLiteIsFavorite(&node)) {
+                if (numMeshNodes != i)
+                    meshNodes->at(numMeshNodes) = node;
                 numMeshNodes += 1;
+            } else if (node.num) {
+                eraseNodeSatellites(node.num);
             }
-        };
+        }
+        std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     } else {
         LOG_INFO("Clearing node database - removing favorites");
         for (size_t i = 1; i < meshNodes->size(); i++) {
@@ -3961,7 +3974,7 @@ bool NodeDB::copyPublicKey(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out)
 #if HAS_TRAFFIC_MANAGEMENT
     // Last resort: a key the TrafficManagement NodeInfo cache learned from an observed frame
     // for a node no longer in either NodeDB tier. This extends the pool of peers we can
-    // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's signerProven), the
+    // encrypt to. Keys here may be trust-on-first-use (see copyPublicKey's keyProven), the
     // same first-contact trust NodeDB itself applies via updateUser().
     if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes)) {
         out.size = 32;
@@ -3976,10 +3989,10 @@ bool NodeDB::copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_k
     if (copyPublicKeyAuthoritative(n, out))
         return true;
 #if HAS_TRAFFIC_MANAGEMENT
-    // A cold-tier cache key backs an authenticated decrypt only when signer-proven; unverified TOFU
+    // A cold-tier cache key backs an authenticated decrypt only when key-proven; unverified TOFU
     // cache keys must not. Outbound encryption still uses the opportunistic copyPublicKey().
-    bool signerProven = false;
-    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &signerProven) && signerProven) {
+    bool keyProven = false;
+    if (trafficManagementModule && trafficManagementModule->copyPublicKey(n, out.bytes, &keyProven) && keyProven) {
         out.size = 32;
         return true;
     }
@@ -3999,7 +4012,7 @@ bool NodeDB::isVerifiedSignerForKey(NodeNum n, const uint8_t *key32)
 #if WARM_NODE_COUNT > 0
     uint8_t warmKey[32];
     if (warmStore.copyKey(n, warmKey) && memcmp(warmKey, key32, 32) == 0)
-        return warmStore.isVerifiedSigner(n);
+        return warmStore.hasXeddsaSigned(n);
 #endif
     return false;
 }
@@ -4011,7 +4024,7 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
     if (info)
         return nodeInfoLiteHasXeddsaSigned(info);
 #if WARM_NODE_COUNT > 0
-    return warmStore.isVerifiedSigner(n);
+    return warmStore.hasXeddsaSigned(n);
 #else
     return false;
 #endif
@@ -4133,9 +4146,9 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             // Restore the role the warm tier cached, so re-admission isn't stuck at CLIENT
             // until the next NodeInfo arrives.
             lite->role = static_cast<meshtastic_Config_DeviceConfig_Role>(warmRoleOf(warm));
-            // Restore the signer bit too: it is learned from verified traffic, not from
+            // Restore the XEdDSA-signed bit too: it is learned from verified traffic, not from
             // NodeInfo, so a round trip through the warm tier must not relearn it from zero.
-            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, warmSignerOf(warm));
+            nodeInfoLiteSetBit(lite, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, warmXeddsaSignedOf(warm));
             if (!memfll(warm.public_key, 0, sizeof(warm.public_key))) {
                 lite->public_key.size = 32;
                 memcpy(lite->public_key.bytes, warm.public_key, 32);
@@ -4152,7 +4165,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // its cached key matches the key we just restored from warm, so a name never attaches to
         // a different identity than the one we encrypt to. No-op without the TMM NodeInfo cache
         // or when no key is present (key-matched by design). CopyUserToNodeInfoLite sets only the
-        // user-related bits, so the warm-restored signer bit survives.
+        // user-related bits, so the warm-restored XEdDSA-signed bit survives.
         if (lite->public_key.size == 32 && !nodeInfoLiteHasUser(lite) && trafficManagementModule) {
             meshtastic_User tmmUser = meshtastic_User_init_zero;
             if (trafficManagementModule->copyUser(n, tmmUser) && tmmUser.public_key.size == 32 &&
