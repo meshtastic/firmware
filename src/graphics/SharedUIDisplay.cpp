@@ -540,8 +540,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
 bool isCompactPanel(OLEDDisplay *display)
 {
-#if defined(OLED_COMPACT_UI)
-    return display->getWidth() <= 80 && display->getHeight() <= 40;
+#if defined(OLED_TINY)
+    return display->getWidth() == 72 && display->getHeight() == 40;
 #else
     (void)display;
     return false;

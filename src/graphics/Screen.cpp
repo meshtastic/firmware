@@ -1360,13 +1360,18 @@ void Screen::setFrames(FrameFocus focus)
 #if defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
-#if defined(OLED_COMPACT_UI)
-        normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
-#elif defined(OLED_TINY)
-        normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
+        if (graphics::isCompactPanel(dispdev)) {
+            normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
+        }
+#if defined(OLED_TINY)
+        else {
+            normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
+        }
 #else
-        normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
-                                                                 : graphics::ClockRenderer::drawDigitalClockFrame;
+        else {
+            normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                                     : graphics::ClockRenderer::drawDigitalClockFrame;
+        }
 #endif
         indicatorIcons.push_back(digital_icon_clock);
     }
@@ -1449,12 +1454,10 @@ void Screen::setFrames(FrameFocus focus)
 #if !defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
-#if defined(OLED_COMPACT_UI)
-        normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
-#else
-        normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
-                                                                 : graphics::ClockRenderer::drawDigitalClockFrame;
-#endif
+        normalFrames[numframes++] = graphics::isCompactPanel(dispdev)
+                                        ? graphics::ClockRenderer::drawDigitalClockFrame
+                                        : (uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                                        : graphics::ClockRenderer::drawDigitalClockFrame);
         indicatorIcons.push_back(digital_icon_clock);
     }
 #endif

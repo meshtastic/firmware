@@ -116,7 +116,6 @@ static const uint8_t A0 = PIN_A0;
 #define OLED_Y_OFFSET_PAGES 3
 #define SSD1306_WIRE_I2C_FREQUENCY 100000
 #define OLED_TINY
-#define OLED_COMPACT_UI
 
 // Controls power 3V3 for all peripherals (GPS + LoRa + Sensor)
 #define PIN_POWER_EN (0 + 30) // RT9080_EN

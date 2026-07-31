@@ -1575,6 +1575,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // === First Row: My Location ===
 #if HAS_GPS
+    const bool compactPanel = graphics::isCompactPanel(display);
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
@@ -1637,35 +1638,33 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
-#if !defined(OLED_COMPACT_UI)
-        // === Second Row: Last GPS Fix ===
-        if (gpsStatus->getLastFixMillis() > 0) {
-            uint32_t delta = millis() - gpsStatus->getLastFixMillis();
-            char uptimeStr[32];
+        if (!compactPanel) {
+            // === Second Row: Last GPS Fix ===
+            if (gpsStatus->getLastFixMillis() > 0) {
+                uint32_t delta = millis() - gpsStatus->getLastFixMillis();
+                char uptimeStr[32];
 #if defined(USE_EINK)
-            // E-Ink: skip seconds, show only days/hours/mins
-            getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), false);
+                // E-Ink: skip seconds, show only days/hours/mins
+                getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), false);
 #else
-            // Non E-Ink: include seconds where useful
-            getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), true);
+                // Non E-Ink: include seconds where useful
+                getUptimeStr(delta, "Last: ", uptimeStr, sizeof(uptimeStr), true);
 #endif
 
-            display->drawString(0, textPos[line++], uptimeStr);
-        } else {
-            display->drawString(0, textPos[line++], "Last: ?");
+                display->drawString(0, textPos[line++], uptimeStr);
+            } else {
+                display->drawString(0, textPos[line++], "Last: ?");
+            }
         }
-#endif
 
         // === Third Row: Line 1 GPS Info ===
         UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line1");
 
-#if !defined(OLED_COMPACT_UI)
-        if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
+        if (!compactPanel && uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
             uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line2");
         }
-#endif
 
         // === Final Row: Altitude ===
         char altitudeLine[32] = {0};
