@@ -1433,22 +1433,31 @@ void GPS::publishUpdate()
 
 /// Is a post-lock ephemeris hold currently in force?
 ///
-/// Ask the question in this direction and the sentinel answers itself: `fixHoldEnds == 0` is the
-/// *absence* of a deadline, so "no hold is in force" is the only honest reading of it. Asked the
-/// other way round - "has the hold expired?" - 0 has no honest answer at all, and whichever guard
-/// you reach for silently picks one. That is how the re-arm site below broke: `fixHoldEnds != 0 &&`
-/// looks like the sentinel rule from AGENTS.md, but there it means "a hold that was never armed can
-/// never expire", so nothing re-armed and the receiver stayed powered until the search timeout.
+/// Asked in this direction the sentinel answers itself: `fixHoldEnds == 0` is the *absence* of a
+/// deadline, so "no hold is in force" is its only honest reading. Asked as "has the hold expired?"
+/// 0 has no honest answer, and whichever guard you reach for silently picks one - that is how the
+/// re-arm site below broke: `fixHoldEnds != 0 &&` looks like the sentinel rule from AGENTS.md, but
+/// there it meant "a hold that was never armed can never expire", so nothing re-armed and the
+/// receiver stayed powered until the search timeout.
 ///
-/// The `!= 0` test is not redundant with the arithmetic, though it looks it. deadlinePassed() is an
-/// unsigned half-range test: past 2^31 ms of uptime `now - threadIntervalMs` lands in the top half,
-/// so the sentinel reads as a deadline ~24.9 days in the *future* rather than in the past.
+/// The `!= 0` test is not redundant with the arithmetic, though it looks it: deadlinePassed() is an
+/// unsigned half-range test, so past 2^31 ms of uptime the sentinel reads as a deadline ~24.9 days
+/// in the *future*.
 ///
-/// Not static, and deliberately without a header: it lives beside its only caller, and the native
-/// test build compiles this file, so test/test_gps_fix_hold/ declares the two prototypes directly.
+/// Not static, and deliberately without a header: these live beside their only caller, and the
+/// native test build compiles this file, so test/test_gps_fix_hold/ declares the prototypes itself.
 bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs)
 {
     return fixHoldEnds != 0 && !Throttle::deadlinePassed(fixHoldEnds + threadIntervalMs);
+}
+
+/// Did an armed hold just expire, so the receiver should publish and sleep? The `!= 0` is the
+/// sentinel falling the other way: fixHoldInForce() reports an unarmed hold as "not in force", and
+/// negating that alone would call it expired on every cycle. No grace interval here - unlike the
+/// arm decision, the deadline itself is the moment to go down.
+bool holdJustExpired(uint32_t fixHoldEnds)
+{
+    return fixHoldEnds != 0 && !fixHoldInForce(fixHoldEnds, 0);
 }
 
 /// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold in force" is a reason to
@@ -1561,7 +1570,9 @@ int32_t GPS::runOnce()
                 uint32_t holdTime = updateInterval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS;
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
-                fixHoldEnds = millis() + holdTime;
+                // Same clock the Throttle evaluation reads, and never the "no hold" sentinel.
+                const uint32_t holdEnds = Time::getMillis() + holdTime;
+                fixHoldEnds = holdEnds == 0 ? 1 : holdEnds;
 #ifdef GPS_DEBUG
                 LOG_DEBUG("Holding for %ums after lock", holdTime);
 #endif
@@ -1583,9 +1594,7 @@ int32_t GPS::runOnce()
         }
 
         // Hold has expired , Search time has expired, we got a time only, or we never needed to hold.
-        // The other reading of the same sentinel: a hold must have existed before it can expire,
-        // where shouldArmFixHold() treats "none in force" as a reason to arm.
-        bool holdExpired = (fixHoldEnds != 0 && !fixHoldInForce(fixHoldEnds, 0));
+        bool holdExpired = holdJustExpired(fixHoldEnds);
         if (shouldPublish || tooLong || holdExpired) {
             if (gotTime && hasValidLocation) {
                 shouldPublish = true;
@@ -1602,7 +1611,7 @@ int32_t GPS::runOnce()
 
 #ifdef GPS_DEBUG
         } else if (fixHoldEnds != 0) {
-            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
+            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - Time::getMillis(), p.sats_in_view);
 #endif
         }
     }

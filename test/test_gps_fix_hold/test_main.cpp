@@ -20,6 +20,7 @@
 // own; the native test build compiles that file, so declaring the prototypes here is enough. A
 // signature change breaks the link rather than silently diverging from the definition.
 bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs);
+bool holdJustExpired(uint32_t fixHoldEnds);
 bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds, uint32_t threadIntervalMs);
 
 // GPS_THREAD_INTERVAL, spelled out so the suite does not pull in GPS.h and its hardware deps.
@@ -146,10 +147,24 @@ void test_no_hold_means_arm_but_does_not_mean_expired(void)
 
     TEST_ASSERT_FALSE_MESSAGE(fixHoldInForce(0, kThreadInterval), "a hold that was never armed is not in force");
     TEST_ASSERT_TRUE_MESSAGE(shouldArmFixHold(true, 3, 0, kThreadInterval), "...so it is a reason to arm one");
+    TEST_ASSERT_FALSE_MESSAGE(holdJustExpired(0), "...but not a reason to publish and sleep");
+}
 
-    // The expiry site's guard, spelled the way GPS::runOnce() spells it.
-    const bool holdExpired = (0 != 0 && !fixHoldInForce(0, 0));
-    TEST_ASSERT_FALSE_MESSAGE(holdExpired, "...but not a reason to publish and sleep");
+// The sentinel guard inside holdJustExpired() is load-bearing on every cycle, not just past the
+// half-range: fixHoldInForce() already reports an unarmed hold as "not in force", so negating it
+// alone reads as "expired" and would call down() on a receiver that was never holding.
+void test_only_an_armed_hold_can_expire(void)
+{
+    Time::setTestMillis(50 * 1000);
+    const uint32_t fixHoldEnds = armHoldNow();
+
+    TEST_ASSERT_FALSE_MESSAGE(holdJustExpired(fixHoldEnds), "still inside the hold");
+
+    Time::advanceTestMillis(kHoldMs); // the deadline itself, no grace interval at this site
+    TEST_ASSERT_TRUE_MESSAGE(holdJustExpired(fixHoldEnds), "the deadline is the moment to publish and sleep");
+
+    TEST_ASSERT_TRUE_MESSAGE(!fixHoldInForce(0, 0), "test premise: the negation alone calls an unarmed hold expired");
+    TEST_ASSERT_FALSE_MESSAGE(holdJustExpired(0), "so the sentinel test is what keeps it from expiring");
 }
 
 // The `fixHoldEnds != 0` term inside fixHoldInForce() looks redundant, and for the first half of
@@ -187,6 +202,7 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
     RUN_TEST(test_no_hold_means_arm_but_does_not_mean_expired);
+    RUN_TEST(test_only_an_armed_hold_can_expire);
     RUN_TEST(test_the_sentinel_guard_is_load_bearing_past_the_half_range);
     RUN_TEST(test_hold_in_force_tracks_the_deadline);
     RUN_TEST(test_arms_on_the_first_lock_of_a_cycle);
