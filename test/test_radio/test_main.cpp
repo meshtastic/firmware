@@ -329,6 +329,120 @@ class FakeLR11x0Ops
     int8_t receivedOutputPower = 0;
 };
 
+class FakeLR11x0BandOps
+{
+  public:
+    int setFrequency(float frequency, bool skipCalibration)
+    {
+        calls[callCount++] = skipCalibration ? 'S' : 'F';
+        receivedFrequency = frequency;
+        return frequencyResults[frequencyCallCount++];
+    }
+
+    int calibrateImage(float frequencyMin, float frequencyMax)
+    {
+        calls[callCount++] = 'C';
+        receivedCalibrationMin = frequencyMin;
+        receivedCalibrationMax = frequencyMax;
+        return calibrationResult;
+    }
+
+    void waitForFrequencyRetry() { frequencyRetryWaited = true; }
+    bool isRetryableFrequencyError(int error) { return error == RADIOLIB_ERR_SPI_CMD_FAILED; }
+
+    char calls[4] = {};
+    uint8_t callCount = 0;
+    float receivedFrequency = 0;
+    float receivedCalibrationMin = 0;
+    float receivedCalibrationMax = 0;
+    int frequencyResults[2] = {RADIOLIB_ERR_NONE, RADIOLIB_ERR_NONE};
+    uint8_t frequencyCallCount = 0;
+    bool frequencyRetryWaited = false;
+    int calibrationResult = RADIOLIB_ERR_NONE;
+};
+
+class FakeLR11x0BeginOps
+{
+  public:
+    int beginLoRa(float bandwidth, uint8_t spreadingFactor, uint8_t codingRate, uint8_t syncWord, uint16_t preambleLength,
+                  bool wideBand)
+    {
+        receivedBandwidth = bandwidth;
+        receivedSpreadingFactor = spreadingFactor;
+        receivedCodingRate = codingRate;
+        receivedSyncWord = syncWord;
+        receivedPreambleLength = preambleLength;
+        receivedWideBand = wideBand;
+        return result;
+    }
+
+    int result = RADIOLIB_ERR_NONE;
+    float receivedBandwidth = 0;
+    uint8_t receivedSpreadingFactor = 0;
+    uint8_t receivedCodingRate = 0;
+    uint8_t receivedSyncWord = 0;
+    uint16_t receivedPreambleLength = 0;
+    bool receivedWideBand = false;
+};
+
+static void test_lr11x0BeginForBand_forwardsBaseModemParameters()
+{
+    FakeLR11x0BeginOps ops;
+    const LR11x0ConfigApplyParams params = {5, 812.5f, 6, 0x2b, 12, 2441.40625f, 13, true, true};
+
+    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE, lr11x0BeginForBand(ops, params));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 812.5f, ops.receivedBandwidth);
+    TEST_ASSERT_EQUAL_UINT8(5, ops.receivedSpreadingFactor);
+    TEST_ASSERT_EQUAL_UINT8(6, ops.receivedCodingRate);
+    TEST_ASSERT_EQUAL_HEX8(0x2b, ops.receivedSyncWord);
+    TEST_ASSERT_EQUAL_UINT16(12, ops.receivedPreambleLength);
+    TEST_ASSERT_TRUE(ops.receivedWideBand);
+}
+
+static void test_lr11x0BandSwitch_calibratesOnlyAfterEnteringSubGhz()
+{
+    bool configuredWideBand = true;
+    FakeLR11x0BandOps ops;
+
+    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE, lr11x0SetFrequencyForBand(ops, 906.875f, false, configuredWideBand));
+    TEST_ASSERT_EQUAL_STRING("SC", ops.calls);
+    TEST_ASSERT_FALSE(configuredWideBand);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 902.875f, ops.receivedCalibrationMin);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 910.875f, ops.receivedCalibrationMax);
+}
+
+static void test_lr11x0BandSwitch_skipsImageCalibrationForWideBand()
+{
+    bool configuredWideBand = false;
+    FakeLR11x0BandOps ops;
+
+    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE, lr11x0SetFrequencyForBand(ops, 2441.40625f, true, configuredWideBand));
+    TEST_ASSERT_EQUAL_STRING("S", ops.calls);
+    TEST_ASSERT_TRUE(configuredWideBand);
+}
+
+static void test_lr11x0BandSwitch_sameSubGhzUsesRadioLibCalibration()
+{
+    bool configuredWideBand = false;
+    FakeLR11x0BandOps ops;
+
+    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE, lr11x0SetFrequencyForBand(ops, 906.875f, false, configuredWideBand));
+    TEST_ASSERT_EQUAL_STRING("F", ops.calls);
+    TEST_ASSERT_FALSE(configuredWideBand);
+}
+
+static void test_lr11x0BandSwitch_retriesTransientSpiFailure()
+{
+    bool configuredWideBand = true;
+    FakeLR11x0BandOps ops;
+    ops.frequencyResults[0] = RADIOLIB_ERR_SPI_CMD_FAILED;
+
+    TEST_ASSERT_EQUAL(RADIOLIB_ERR_NONE, lr11x0SetFrequencyForBand(ops, 906.875f, false, configuredWideBand));
+    TEST_ASSERT_EQUAL_STRING("SSC", ops.calls);
+    TEST_ASSERT_TRUE(ops.frequencyRetryWaited);
+    TEST_ASSERT_FALSE(configuredWideBand);
+}
+
 static void test_lr11x0Apply_returnsFirstOperationFailure()
 {
     static const LR11x0ApplyStep steps[] = {
@@ -904,6 +1018,11 @@ void setup()
     RUN_TEST(test_clampConfigLora_mediumTurboValidForUS);
     RUN_TEST(test_lr11x0Apply_returnsFirstOperationFailure);
     RUN_TEST(test_lr11x0Apply_usesProductionParameters);
+    RUN_TEST(test_lr11x0BandSwitch_calibratesOnlyAfterEnteringSubGhz);
+    RUN_TEST(test_lr11x0BandSwitch_skipsImageCalibrationForWideBand);
+    RUN_TEST(test_lr11x0BandSwitch_sameSubGhzUsesRadioLibCalibration);
+    RUN_TEST(test_lr11x0BandSwitch_retriesTransientSpiFailure);
+    RUN_TEST(test_lr11x0BeginForBand_forwardsBaseModemParameters);
     RUN_TEST(test_configApply_idle_success_keepsCandidatePrivate);
     RUN_TEST(test_configApply_applyFailure_rollsBack);
     RUN_TEST(test_configApply_rollbackFailure_inhibitsTx);

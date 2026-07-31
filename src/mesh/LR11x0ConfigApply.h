@@ -50,6 +50,29 @@ inline LR11x0ConfigApplyParams makeLR11x0ConfigApplyParams(uint8_t spreadingFact
             frequency,       outputPower, boostedGain, bandPolicy.wideBand};
 }
 
+template <typename Ops> int lr11x0BeginForBand(Ops &ops, const LR11x0ConfigApplyParams &params)
+{
+    return ops.beginLoRa(params.bandwidth, params.spreadingFactor, params.codingRate, params.syncWord, params.preambleLength,
+                         params.wideBand);
+}
+
+template <typename Ops> int lr11x0SetFrequencyForBand(Ops &ops, float frequency, bool targetWideBand, bool &configuredWideBand)
+{
+    if (configuredWideBand == targetWideBand)
+        return ops.setFrequency(frequency, targetWideBand);
+
+    int frequencyResult = ops.setFrequency(frequency, true);
+    if (ops.isRetryableFrequencyError(frequencyResult)) {
+        ops.waitForFrequencyRetry();
+        frequencyResult = ops.setFrequency(frequency, true);
+    }
+    if (frequencyResult != 0)
+        return frequencyResult;
+
+    configuredWideBand = targetWideBand;
+    return targetWideBand ? 0 : ops.calibrateImage(frequency - 4.0f, frequency + 4.0f);
+}
+
 inline const char *lr11x0ApplyStepName(LR11x0ApplyStep step)
 {
     static const char *const names[] = {"standby",  "spreading factor", "bandwidth",    "coding rate", "sync word",

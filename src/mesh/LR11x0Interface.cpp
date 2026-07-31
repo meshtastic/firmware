@@ -163,6 +163,9 @@ template <typename T> bool LR11x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
 
+    if (res == RADIOLIB_ERR_NONE)
+        configuredWideBand = getRegion(config.lora.region)->wideLora;
+
     return res == RADIOLIB_ERR_NONE;
 }
 
@@ -171,16 +174,83 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     const LR11x0ConfigApplyParams params = makeReconfigureParams();
     ConfigApplyOps ops(*this);
     LR11x0ApplyStep failedStep = LR11x0ApplyStep::COUNT;
-    const int error = LR11x0ConfigApply<ConfigApplyOps>::run(ops, params, &failedStep);
+    int error = LR11x0ConfigApply<ConfigApplyOps>::run(ops, params, &failedStep);
     if (error != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("LR11x0 reconfigure %s %s%d", lr11x0ApplyStepName(failedStep), radioLibErr, error);
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
-        return false;
+        LOG_WARN("LR11x0 live reconfigure %s %s%d; reinitializing radio", lr11x0ApplyStepName(failedStep), radioLibErr, error);
+        error = reinitializeForBand(params, &failedStep);
+        if (error != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR11x0 reinitialize %s %s%d", lr11x0ApplyStepName(failedStep), radioLibErr, error);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            return false;
+        }
     }
 
+    selectExternalRfPath(params.frequency);
     finishStartReceive();
     receiveStartedDuringReconfigure = true;
     return true;
+}
+
+template <typename T>
+int LR11x0Interface<T>::reinitializeForBand(const LR11x0ConfigApplyParams &params, LR11x0ApplyStep *failedStep)
+{
+    auto fail = [failedStep](LR11x0ApplyStep step, int error) {
+        if (failedStep)
+            *failedStep = step;
+        return error;
+    };
+
+    ConfigApplyOps ops(*this);
+    int error = lr11x0BeginForBand(ops, params);
+    if (error != RADIOLIB_ERR_NONE)
+        return fail(LR11x0ApplyStep::STANDBY, error);
+
+    error = lora.setCodingRate(params.codingRate, params.codingRate != 7);
+    if (error != RADIOLIB_ERR_NONE)
+        return fail(LR11x0ApplyStep::CODING_RATE, error);
+
+    error = lora.setFrequency(params.frequency, true);
+    if (error != RADIOLIB_ERR_NONE)
+        return fail(LR11x0ApplyStep::FREQUENCY, error);
+    configuredWideBand = params.wideBand;
+
+    if (!params.wideBand) {
+        error = lora.calibrateImageRejection(params.frequency - 4.0f, params.frequency + 4.0f);
+        if (error != RADIOLIB_ERR_NONE)
+            return fail(LR11x0ApplyStep::FREQUENCY, error);
+    }
+
+    error = lora.setOutputPower(params.outputPower);
+    if (error != RADIOLIB_ERR_NONE)
+        return fail(LR11x0ApplyStep::OUTPUT_POWER, error);
+
+    error = lora.setRegulatorDCDC();
+    if (error != RADIOLIB_ERR_NONE)
+        return fail(LR11x0ApplyStep::OUTPUT_POWER, error);
+
+#ifdef LR11X0_DIO_AS_RF_SWITCH
+    lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
+#elif ARCH_PORTDUINO
+    if (portduino_config.has_rfswitch_table)
+        lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
+#endif
+
+    error = lora.setRxBoostedGainMode(params.boostedGain);
+    if (error != RADIOLIB_ERR_NONE)
+        return fail(LR11x0ApplyStep::RX_GAIN, error);
+
+    error = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    return error == RADIOLIB_ERR_NONE ? error : fail(LR11x0ApplyStep::START_RECEIVE, error);
+}
+
+template <typename T> void LR11x0Interface<T>::selectExternalRfPath(float frequency)
+{
+#ifdef LR11X0_RF_SWITCH_SUBGHZ
+    digitalWrite(LR11X0_RF_SWITCH_SUBGHZ, frequency < 1000.0f ? HIGH : LOW);
+#endif
+#ifdef LR11X0_RF_SWITCH_2_4GHZ
+    digitalWrite(LR11X0_RF_SWITCH_2_4GHZ, frequency < 1000.0f ? LOW : HIGH);
+#endif
 }
 
 template <typename T> LR11x0ConfigApplyParams LR11x0Interface<T>::makeReconfigureParams()

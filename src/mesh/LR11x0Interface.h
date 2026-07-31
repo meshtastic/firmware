@@ -78,18 +78,40 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     LR11x0ConfigApplyParams makeReconfigureParams();
 
   private:
+    bool configuredWideBand = false;
+
     class ConfigApplyOps
     {
       public:
         explicit ConfigApplyOps(LR11x0Interface<T> &radio) : radio(radio) {}
 
+        int beginLoRa(float bandwidth, uint8_t spreadingFactor, uint8_t codingRate, uint8_t syncWord, uint16_t preambleLength,
+                      bool wideBand)
+        {
+            return static_cast<LR11x0 &>(radio.lora)
+                .begin(bandwidth, spreadingFactor, codingRate, syncWord, preambleLength, wideBand);
+        }
         int standby() { return radio.setStandbyForReconfigure(); }
         int setSpreadingFactor(uint8_t spreadingFactor) { return radio.lora.setSpreadingFactor(spreadingFactor); }
-        int setBandwidth(float bandwidth, bool wideBand) { return radio.lora.setBandwidth(bandwidth, wideBand); }
+        int setBandwidth(float bandwidth, bool wideBand)
+        {
+            targetWideBand = wideBand;
+            return radio.lora.setBandwidth(bandwidth, wideBand);
+        }
         int setCodingRate(uint8_t codingRate, bool interleaving) { return radio.lora.setCodingRate(codingRate, interleaving); }
         int setSyncWord(uint8_t syncWord) { return radio.lora.setSyncWord(syncWord); }
         int setPreambleLength(uint16_t preambleLength) { return radio.lora.setPreambleLength(preambleLength); }
-        int setFrequency(float frequency) { return radio.lora.setFrequency(frequency); }
+        int setFrequency(float frequency)
+        {
+            return lr11x0SetFrequencyForBand(*this, frequency, targetWideBand, radio.configuredWideBand);
+        }
+        int setFrequency(float frequency, bool skipCalibration) { return radio.lora.setFrequency(frequency, skipCalibration); }
+        int calibrateImage(float frequencyMin, float frequencyMax)
+        {
+            return radio.lora.calibrateImageRejection(frequencyMin, frequencyMax);
+        }
+        void waitForFrequencyRetry() { delay(100); }
+        bool isRetryableFrequencyError(int error) { return error == RADIOLIB_ERR_SPI_CMD_FAILED; }
         int setOutputPower(int8_t outputPower) { return radio.lora.setOutputPower(outputPower); }
         int setRxBoostedGainMode(bool boostedGain) { return radio.lora.setRxBoostedGainMode(boostedGain); }
         int startReceive()
@@ -100,10 +122,13 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
       private:
         LR11x0Interface<T> &radio;
+        bool targetWideBand = false;
     };
 
     int setStandbyForReconfigure();
     int setStandby(bool completePacket);
+    int reinitializeForBand(const LR11x0ConfigApplyParams &params, LR11x0ApplyStep *failedStep);
+    void selectExternalRfPath(float frequency);
     void finishStartReceive();
 
     bool receiveStartedDuringReconfigure = false;
