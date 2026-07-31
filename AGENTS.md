@@ -90,7 +90,9 @@ Key rotation to never trigger casually: only the **full** factory reset (`factor
 
   Raw `millis() > deadline` or `deadline < millis()` is rollover-unsafe: the comparison inverts while the deadline sits on the far side of the 32-bit wrap, so the action fires immediately or blocks for roughly the interval it should have waited. All five helpers subtract first, so unsigned wraparound cancels out. `Throttle` reads the clock through `Time::getMillis()` (`src/UptimeClock.h`), so all ~94 of its call sites are time-injectable and a native test can drive the wrap with `Time::setTestMillis()`.
 
-  **Sentinel hazard.** If a deadline variable also encodes "inactive" (`0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff`), test that sentinel _before_ the elapsed comparison - every such value is arithmetically far in the past, so a correct comparison fires on it immediately. Write `if (deadline && Throttle::deadlinePassed(deadline))`.
+  **Sentinel hazard.** If a deadline variable also encodes "inactive" (`0` for `rebootAtMsec`, `shutdownAtMsec`, `alertBannerUntil`, `fixHoldEnds`; `UINT32_MAX` for `nagCycleCutoff`), test that sentinel _before_ the elapsed comparison - every such value is arithmetically far in the past, so a correct comparison fires on it immediately. Match the test to the sentinel in use: `if (deadline && Throttle::deadlinePassed(deadline))` covers the `0` family, `nagCycleCutoff` needs `deadline != UINT32_MAX` or a separate armed flag (`isNagging`).
+
+  Then decide which way the sentinel should fall - "inactive" does not always mean "suppress". At the GPS fix-hold site `fixHoldEnds == 0` means _no hold is in force_, which is exactly when one must be armed; guarding it with `fixHoldEnds != 0 &&` looks like this rule and inverts the site. See `fixHoldInForce()` in `src/gps/GPS.cpp` and `test/test_gps_fix_hold/`.
 
 ## Typical agent workflows
 
