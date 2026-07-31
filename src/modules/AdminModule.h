@@ -207,6 +207,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
         meshtastic_User candidate = meshtastic_User_init_zero;
         bool active = false;
     };
+    static void clearPreparedLoRaConfig(PreparedLoRaConfig &prepared);
     bool prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
                            PreparedLoRaConfig &prepared);
     bool requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,

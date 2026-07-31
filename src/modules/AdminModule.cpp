@@ -16,6 +16,7 @@
 #include <FSCommon.h>
 #include <Throttle.h>
 #include <ctype.h> // for better whitespace handling
+#include <type_traits>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 #include "MeshtasticOTA.h"
 #endif
@@ -534,7 +535,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                                             pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr)) {
                 pendingChannelConfig = PendingChannelConfig{};
                 pendingOwnerConfig = PendingOwnerConfig{};
-                pendingLoRaConfig = PreparedLoRaConfig{};
+                clearPreparedLoRaConfig(pendingLoRaConfig);
                 pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
                 cancelLoRaConfigApply();
                 sendWarningAndLog("Radio configuration apply could not be queued; previous configuration retained");
@@ -550,7 +551,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
                 saveChanges(SEGMENT_CHANNELS, false, false);
                 queuePendingChannelWarnings();
                 pendingChannelConfig = PendingChannelConfig{};
-                pendingLoRaConfig = PreparedLoRaConfig{};
+                clearPreparedLoRaConfig(pendingLoRaConfig);
             }
             if (!editedSegments)
                 saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
@@ -976,10 +977,16 @@ static bool isBareKeypairRotation(const meshtastic_Config_SecurityConfig &incomi
                meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
 }
 
+void AdminModule::clearPreparedLoRaConfig(PreparedLoRaConfig &prepared)
+{
+    static_assert(std::is_trivially_copyable<PreparedLoRaConfig>::value, "Prepared LoRa state must remain byte-resettable");
+    memset(static_cast<void *>(&prepared), 0, sizeof(prepared));
+}
+
 bool AdminModule::prepareLoRaConfig(const meshtastic_Config_LoRaConfig &incoming, bool fromOthers, bool prospectiveLicensedOwner,
                                     PreparedLoRaConfig &prepared)
 {
-    prepared = PreparedLoRaConfig{};
+    clearPreparedLoRaConfig(prepared);
     prepared.previous = config.lora;
 #if !MESHTASTIC_EXCLUDE_BEACON
     meshtastic_ChannelSettings homePrimaryChannel;
@@ -1263,7 +1270,7 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
                                     prepared.previousLicensed, prepared.candidateLicensed,
                                     pendingChannelConfig.active ? &pendingChannelConfig.previousPrimary : nullptr,
                                     pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr)) {
-        pendingLoRaConfig = PreparedLoRaConfig{};
+        clearPreparedLoRaConfig(pendingLoRaConfig);
         pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
         if (!channelWasAlreadyPending)
             pendingChannelConfig = PendingChannelConfig{};
@@ -1410,7 +1417,7 @@ void AdminModule::completeLoRaConfigApply(const RadioConfigApplyRequest &request
         }
     }
 
-    pendingLoRaConfig = PreparedLoRaConfig{};
+    clearPreparedLoRaConfig(pendingLoRaConfig);
     pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
     pendingChannelConfig = PendingChannelConfig{};
     pendingOwnerConfig = PendingOwnerConfig{};
@@ -1873,7 +1880,7 @@ void AdminModule::normalizePendingChannelPrimary()
             pendingLoRaConfig.candidate.channel_num = 0;
         if (pendingLoRaConfig.channelNumAutoCorrected) {
             auto correctedCandidate = pendingLoRaConfig.candidate;
-            correctedCandidate.channel_num = UINT32_MAX;
+            correctedCandidate.channel_num = UINT16_MAX;
             const auto corrected = RadioInterface::normalizeConfigLora(
                 correctedCandidate, true, &pendingChannelConfig.candidatePrimary, router ? router->getRadioIface() : nullptr);
             if (corrected.valid)
@@ -1968,13 +1975,13 @@ bool AdminModule::handleSetChannel(const meshtastic_Channel &cc)
         queuePendingChannelWarnings();
         flushChannelWarnings();
         pendingChannelConfig = PendingChannelConfig{};
-        pendingLoRaConfig = PreparedLoRaConfig{};
+        clearPreparedLoRaConfig(pendingLoRaConfig);
         return true;
     }
 
     if (!service || !tryBeginLoRaConfigApply()) {
         pendingChannelConfig = PendingChannelConfig{};
-        pendingLoRaConfig = PreparedLoRaConfig{};
+        clearPreparedLoRaConfig(pendingLoRaConfig);
         sendWarningAndLog("Radio configuration apply is busy; channel change was not applied");
         return false;
     }
@@ -1982,7 +1989,7 @@ bool AdminModule::handleSetChannel(const meshtastic_Channel &cc)
                                     pendingLoRaConfig.previousLicensed, pendingLoRaConfig.candidateLicensed,
                                     &pendingChannelConfig.previousPrimary, &pendingChannelConfig.candidatePrimary)) {
         pendingChannelConfig = PendingChannelConfig{};
-        pendingLoRaConfig = PreparedLoRaConfig{};
+        clearPreparedLoRaConfig(pendingLoRaConfig);
         cancelLoRaConfigApply();
         sendWarningAndLog("Radio configuration apply could not be queued; previous channel retained");
         return false;
@@ -2418,7 +2425,7 @@ bool AdminModule::expireStaleEditTransaction()
                                         pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr)) {
             pendingChannelConfig = PendingChannelConfig{};
             pendingOwnerConfig = PendingOwnerConfig{};
-            pendingLoRaConfig = PreparedLoRaConfig{};
+            clearPreparedLoRaConfig(pendingLoRaConfig);
             pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
             cancelLoRaConfigApply();
             sendWarningAndLog("Radio configuration apply could not be queued; abandoned edits were discarded");
@@ -2431,7 +2438,7 @@ bool AdminModule::expireStaleEditTransaction()
             saveChanges(SEGMENT_CHANNELS, false, false);
             queuePendingChannelWarnings();
             pendingChannelConfig = PendingChannelConfig{};
-            pendingLoRaConfig = PreparedLoRaConfig{};
+            clearPreparedLoRaConfig(pendingLoRaConfig);
         }
         segments &= ~SEGMENT_CHANNELS;
         if (segments)
