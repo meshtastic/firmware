@@ -101,7 +101,10 @@ volatile bool touchControllerReady = false;
 volatile bool touchLightSleepActive = false;
 volatile bool touchNeedsWake = false;
 volatile bool touchIndicatorRefreshPending = false;
-volatile uint32_t touchResumeBlockUntilMs = 0;
+// When the light-sleep resume happened, not when the block expires: measuring forward from the
+// event keeps a missed 0-check wrong for the settle time rather than half a wrap cycle.
+constexpr uint32_t TOUCH_RESUME_BLOCK_MS = 150;
+volatile uint32_t touchResumeAtMs = 0;
 volatile uint32_t touchStateEpoch = 1;
 volatile bool homeCapButtonEventsEnabled = false;
 #if HAS_SCREEN
@@ -185,12 +188,8 @@ class SideKeyInterruptThread : public concurrency::OSThread
     {
         const uint32_t now = millis();
 
-        // 0 means no block armed. deadlinePassed(0) only reads as passed for the first half of
-        // each millis() wrap cycle, so a device that never light-sleeps would falsely stay
-        // blocked for ~24.8 days every ~49.7 days without this guard.
-        // TODO(deadline-type): the same guard is respelled at three sites in this file, plus
-        // suppressUntilMs below - four copies of what armed() would say once.
-        if (touchResumeBlockUntilMs != 0 && !Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
+        // 0 means the device has never light-slept, so no block is armed - test it first.
+        if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
             resetStateAndStop();
             return OSThread::disable();
         }
@@ -286,7 +285,7 @@ class SideKeyInterruptThread : public concurrency::OSThread
             return;
         }
         // See the runOnce() guard above for why 0 must be tested separately.
-        if (touchResumeBlockUntilMs != 0 && !Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
+        if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
             return;
         }
         if (state != State::REST) {
@@ -556,7 +555,7 @@ struct TouchLightSleepEndObserver {
         }
 
         touchStateEpoch++;
-        touchResumeBlockUntilMs = millis() + 150;
+        touchResumeAtMs = millis();
         touchIndicatorRefreshPending = !isTouchInputEnabled();
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
         // Clear sleep-time touch overlay after wake.
@@ -575,19 +574,18 @@ struct TouchLightSleepEndObserver {
 bool readTouch(int16_t *x, int16_t *y)
 {
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
-    static uint32_t suppressUntilMs = 0;
+    constexpr uint32_t TOUCH_WAKE_SUPPRESS_MS = 60;
+    static uint32_t suppressFromMs = 0; // 0 = not suppressing, same reading as touchResumeAtMs
     static uint32_t seenTouchStateEpoch = 0;
 
     // Reset transient gesture helpers whenever touch mode changes.
     if (seenTouchStateEpoch != touchStateEpoch) {
         seenTouchStateEpoch = touchStateEpoch;
-        suppressUntilMs = 0;
+        suppressFromMs = 0;
     }
 
-    // Let buses and peripherals settle briefly after light-sleep wake.
-    // 0 means "no block active". deadlinePassed(0) only reads as passed for the first half of each
-    // millis() wrap cycle, so a device that never light-sleeps would falsely stay blocked here.
-    if (touchResumeBlockUntilMs != 0 && !Throttle::deadlinePassed(touchResumeBlockUntilMs)) {
+    // Let buses and peripherals settle briefly after light-sleep wake. 0 means no wake yet.
+    if (touchResumeAtMs != 0 && Throttle::isWithinTimespanMs(touchResumeAtMs, TOUCH_RESUME_BLOCK_MS)) {
         return false;
     }
 
@@ -604,12 +602,12 @@ bool readTouch(int16_t *x, int16_t *y)
         LOG_DEBUG("touchscreen1: wakeup() on deferred resume");
         touch.wakeup();
         touchNeedsWake = false;
-        suppressUntilMs = millis() + 60;
+        suppressFromMs = millis();
         return false;
     }
 
     // After a recovery pulse, emit a brief "released" window so gesture state can reset.
-    if (suppressUntilMs != 0 && !Throttle::deadlinePassed(suppressUntilMs)) {
+    if (suppressFromMs != 0 && Throttle::isWithinTimespanMs(suppressFromMs, TOUCH_WAKE_SUPPRESS_MS)) {
         return false;
     }
 #endif
