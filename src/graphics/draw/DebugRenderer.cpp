@@ -129,12 +129,6 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 #endif
 }
 
-// Trampoline for framework callback compatibility
-void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrameWiFi(display, state, x, y);
-}
-
 // ****************************
 // * LoRa Focused Screen      *
 // ****************************

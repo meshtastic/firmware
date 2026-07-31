@@ -17,11 +17,8 @@ class Screen;
  */
 namespace DebugRenderer
 {
-// Debug frame functions
+// WiFi status display
 void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-// Trampoline functions for framework callback compatibility
-void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 // LoRa information display
 void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
