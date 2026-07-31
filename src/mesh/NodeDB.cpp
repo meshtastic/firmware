@@ -2428,7 +2428,7 @@ void NodeDB::loadFromDisk()
         installDefaultDeviceState();
 
         // Attempt recovery of owner fields from our own NodeDB entry if available.
-        meshtastic_NodeInfoLite *us = getMeshNode(getNodeNum());
+        const meshtastic_NodeInfoLite *us = getMeshNode(getNodeNum());
         if (nodeInfoLiteHasUser(us)) {
             LOG_WARN("Restoring owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for our node 0x%08x",
                      us->num);
