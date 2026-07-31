@@ -53,6 +53,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     time_t _start;             // for LONG_PRESS
     uint32_t _lastTouchSeenMs; // helps suppress brief touch-controller dropouts
     bool _tapped;              // for DOUBLE_TAP
+    uint32_t _lastRun = 0;     // helps suppress too fast consecutive runOnce() executions
 
     const char *_originName;
 };

@@ -6,11 +6,12 @@
 #define UART_TX 43
 #define UART_RX 44
 
-#define WIFI_LED 3
-#define WIFI_STATE_ON 0
+#define LED_PAIRING 46
+#define LED_LORA 46
 
-#define LED_PIN 46
+#define LED_PIN 3
 #define LED_STATE_ON 0
+#define LED_STATE_OFF 1
 #define BUTTON_PIN 4
 #define BUTTON_ACTIVE_LOW true
 #define BUTTON_ACTIVE_PULLUP true

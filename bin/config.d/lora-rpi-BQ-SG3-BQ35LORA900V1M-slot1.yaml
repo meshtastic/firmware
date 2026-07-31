@@ -1,0 +1,17 @@
+# Station G3 + BQ35LORA900V1M Primary Slot
+# Board Doc: https://wiki.bqvoy.com/en/devkits/station-g3
+Meta:
+  name: B&Q Station G3 + BQ35LORA900V1M Primary Slot
+  support: official
+  compatible:
+    - raspberry-pi
+
+Lora:
+  Module: sx1262
+  IRQ: 22
+  Reset: 16
+  Busy: 24
+  DIO3_TCXO_VOLTAGE: true
+  DIO2_AS_RF_SWITCH: true
+  spidev: spidev0.0
+  #CS: 8

@@ -33,9 +33,6 @@
 #ifndef HAS_TRAFFIC_MANAGEMENT
 #define HAS_TRAFFIC_MANAGEMENT 1
 #endif
-#ifndef TRAFFIC_MANAGEMENT_CACHE_SIZE
-#define TRAFFIC_MANAGEMENT_CACHE_SIZE 2048
-#endif
 
 // ---- GC1109 RF FRONT END CONFIGURATION ----
 // The Heltec V4.2 uses a GC1109 FEM chip with integrated PA and LNA
@@ -81,6 +78,7 @@
 #define LORA_KCT8103L_PA_CTX 5 // CTX - Switch between Receive LNA Mode and Receive Bypass Mode. (HIGH=RX bypass, LOW=RX LNA)
 
 #if HAS_TFT
+#define HAS_SPI_TFT 1
 #define USE_TFTDISPLAY 1
 #endif
 /*

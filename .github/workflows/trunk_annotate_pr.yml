@@ -18,9 +18,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Trunk Check
         uses: trunk-io/trunk-action@v1
         with:
           post-annotations: true
+          cache: false

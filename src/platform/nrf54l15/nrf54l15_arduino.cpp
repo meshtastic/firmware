@@ -1,5 +1,5 @@
 /**
- * nrf54l15_arduino.cpp — Arduino shim implementations for Zephyr/nRF54L15
+ * nrf54l15_arduino.cpp - Arduino shim implementations for Zephyr/nRF54L15
  *
  * Provides concrete implementations for Print, HardwareSerial, GPIO, SPI,
  * and String methods declared in Arduino.h / SPI.h.
@@ -22,7 +22,7 @@
 #include "bluefruit.h"
 BlueFruitClass Bluefruit;
 
-// ── _fini stub — ARM newlib's __libc_fini_array references _fini, but ────────
+// ── _fini stub - ARM newlib's __libc_fini_array references _fini, but ────────
 // Zephyr startup doesn't provide it. Provide a weak no-op so the linker
 // is satisfied when C++ global dtors or atexit() pull in __libc_fini_array.
 extern "C" void __attribute__((weak)) _fini(void) {}
@@ -38,7 +38,7 @@ HardwareSerial Serial;
 HardwareSerial Serial1;
 HardwareSerial Serial2;
 
-// ── Timing functions — C linkage to match extern "C" declarations ────────────
+// ── Timing functions - C linkage to match extern "C" declarations ────────────
 extern "C" uint32_t millis(void)
 {
     return (uint32_t)k_uptime_get_32();
@@ -60,7 +60,7 @@ extern "C" void yield(void)
     k_yield();
 }
 
-// ── NVIC_SystemReset — wraps __NVIC_SystemReset from CMSIS core_cm33.h ───────
+// ── NVIC_SystemReset - wraps __NVIC_SystemReset from CMSIS core_cm33.h ───────
 // core_cm33.h has #define NVIC_SystemReset __NVIC_SystemReset, so undef it
 // before defining our own implementation to prevent macro expansion collision.
 #pragma push_macro("NVIC_SystemReset")
@@ -100,7 +100,7 @@ int Print::printf(const char *fmt, ...)
     return n;
 }
 
-// ── strlcpy — BSD extension not in Zephyr newlib ────────────────────────────
+// ── strlcpy - BSD extension not in Zephyr newlib ────────────────────────────
 extern "C" size_t strlcpy(char *dst, const char *src, size_t size)
 {
     size_t len = strlen(src);
@@ -211,7 +211,7 @@ void String::replace(const String &from, const String &to)
 {
     if (from.isEmpty() || !_buf)
         return;
-    // Simple O(n²) replace — fine for typical Meshtastic string lengths
+    // Simple O(n²) replace - fine for typical Meshtastic string lengths
     String result;
     const char *p = _buf;
     while (*p) {
@@ -226,7 +226,7 @@ void String::replace(const String &from, const String &to)
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// GPIO — Real Zephyr implementation (Phase 3)
+// GPIO - Real Zephyr implementation (Phase 3)
 // Pin mapping: P0.n = n (0-15), P1.n = 16+n (16-31), P2.n = 32+n (32-47)
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -269,7 +269,7 @@ void pinMode(uint32_t pin, uint32_t mode)
     gpio_pin_configure(dev, zpin, flags);
 }
 
-// Bring-up diagnostics for the SX1262 wiring path. Off by default — enable by
+// Bring-up diagnostics for the SX1262 wiring path. Off by default - enable by
 // adding `-DNRF54L15_GPIO_DEBUG` to platformio.ini build_flags. Useful when
 // validating CS/NRESET toggles after a wiring change, diagnosing a "stuck HIGH"
 // BUSY before the first NRESET pulse, or tracing BUSY transitions during early
@@ -303,7 +303,7 @@ void digitalWrite(uint32_t pin, uint32_t value)
     gpio_pin_t zpin;
     const struct device *dev = _gpio_dev_for_pin(pin, &zpin);
     if (!device_is_ready(dev)) {
-        // Genuine hardware/DTS misconfiguration — keep this regardless of the
+        // Genuine hardware/DTS misconfiguration - keep this regardless of the
         // GPIO_DEBUG gate so it surfaces in production builds too.
         printk("[GPIO] pin%u dev NOT READY\n", (unsigned)pin);
         return;
@@ -351,7 +351,7 @@ int digitalRead(uint32_t pin)
     return v;
 }
 
-// ─── attachInterrupt — supports up to NRF54L15_MAX_IRQS pins ────────────────
+// ─── attachInterrupt - supports up to NRF54L15_MAX_IRQS pins ────────────────
 #define NRF54L15_MAX_IRQS 8
 
 struct _PinIrq {
@@ -432,12 +432,12 @@ void detachInterrupt(uint32_t pin)
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SPI — Real Zephyr implementation using SPIM00 (HP domain, 3.0V)
-// CS is handled by RadioLib via digitalWrite() — hardware CS not used.
+// SPI - Real Zephyr implementation using SPIM00 (HP domain, 3.0V)
+// CS is handled by RadioLib via digitalWrite() - hardware CS not used.
 // Mode 0 (CPOL=0, CPHA=0), MSB first.
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Use SPIM00 (HP domain, 3.0V) — SPIM20 is 1.8V LP domain, incompatible with SX1262.
+// Use SPIM00 (HP domain, 3.0V) - SPIM20 is 1.8V LP domain, incompatible with SX1262.
 // Lazy-init: DEVICE_DT_GET in global scope fails when the extern symbol is
 // not visible in this translation unit.  Use a function-local static instead.
 static const struct device *_spi00(void)
@@ -463,13 +463,13 @@ static const struct device *_spi00(void)
 // 1 MHz → prescaler = 128 > 126 → NRFX_ERROR_INVALID_PARAM → -EIO on every
 // transfer.  Minimum valid frequency is 2 MHz (prescaler = 64).
 static const struct spi_config _spi00_cfg = {
-    .frequency = 2000000U, // 2 MHz — minimum valid for SPIM00 at 128 MHz base
+    .frequency = 2000000U, // 2 MHz - minimum valid for SPIM00 at 128 MHz base
     .operation = SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB,
     .slave = 0,
     .cs = {}, // CS = NULL → RadioLib handles CS via GPIO
 };
 
-// Static DMA buffers — stack-allocated bufs on nRF54L15 may not be reachable
+// Static DMA buffers - stack-allocated bufs on nRF54L15 may not be reachable
 // by SPIM20 EasyDMA.  Static placement in .bss/.data is always in Global SRAM.
 // rx_byte is pre-filled with 0xAA before every transfer so we can distinguish:
 //   0xAA → DMA never wrote (EasyDMA can't reach the buffer)
@@ -510,7 +510,7 @@ uint8_t SPIClass::transfer(uint8_t data)
     return _spi_rx_byte;
 }
 
-// Static DMA-safe buffers for transfer16 — same EasyDMA reachability concern
+// Static DMA-safe buffers for transfer16 - same EasyDMA reachability concern
 // applies as for the byte path: stack buffers from a caller thread may sit in
 // per-thread RAM regions that EasyDMA cannot reach.
 static uint8_t _spi_tx16[2] __attribute__((aligned(4)));

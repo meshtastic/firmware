@@ -14,7 +14,7 @@
 #include <malloc.h>
 #include <unistd.h> // sbrk
 
-#ifdef ARCH_STM32WL
+#if defined(ARCH_STM32)
 // Returns the uncommitted sbrk headroom: addressable space between the current heap
 // break and the stack pointer that has not yet been committed to the arena.
 static uint32_t sbrkHeadroom()
@@ -106,16 +106,4 @@ uint32_t MemGet::getPsramSize()
 #else
     return 0;
 #endif
-}
-
-void displayPercentHeapFree()
-{
-    uint32_t freeHeap = memGet.getFreeHeap();
-    uint32_t totalHeap = memGet.getHeapSize();
-    if (totalHeap == 0 || totalHeap == UINT32_MAX) {
-        LOG_INFO("Heap size unavailable");
-        return;
-    }
-    int percent = (int)((freeHeap * 100) / totalHeap);
-    LOG_INFO("Heap free: %d%% (%u/%u bytes)", percent, freeHeap, totalHeap);
 }

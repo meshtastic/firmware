@@ -37,7 +37,7 @@ extern "C" {
 #define WS2812_DATA_3 (0 + 28)  // P0.28 - BLE pairing (blue)
 
 // Wire each WS2812 to a status role. Colour defaults are scaled to 25%
-// brightness (0x40) — the bare-die WS2812s on this board are very bright at
+// brightness (0x40) - the bare-die WS2812s on this board are very bright at
 // full intensity in a close-range enclosure.
 #define NEOPIXEL_STATUS_POWER_PIN WS2812_DATA_1
 #define NEOPIXEL_STATUS_NOTIFICATION_PIN WS2812_DATA_2
@@ -115,7 +115,7 @@ static const uint8_t A0 = PIN_A0;
 //   * relying on SSD1306Wire's built-in horizontal auto-centering
 //     ((128 - width) / 2 = 28), so no horizontal shim is needed;
 //   * calling SSD1306Wire::setYOffset(3) in Screen.cpp when
-//     OLED_Y_OFFSET_PAGES is defined — this shifts every PAGEADDR write by
+//     OLED_Y_OFFSET_PAGES is defined - this shifts every PAGEADDR write by
 //     three pages (24 rows) so data lands on the visible rows.
 // ───────────────────────────────────────────────────────────────────────────
 #define HAS_SCREEN 1

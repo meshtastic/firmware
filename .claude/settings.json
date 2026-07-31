@@ -6,8 +6,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import json,sys,subprocess,shutil,os; f=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); t=shutil.which('trunk') or os.path.expanduser('~/.cache/trunk/launcher/trunk'); f and os.path.exists(t) and subprocess.run([t,'fmt','--force',f],stderr=subprocess.DEVNULL)\" 2>/dev/null || true",
-            "statusMessage": "Formatting..."
+            "command": "f=$(tr -d '\\n' | grep -o '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' | head -1 | sed 's/.*:[[:space:]]*\"//; s/\"$//'); [ -n \"$f\" ] && [ -f \"$f\" ] || exit 0; t=$(command -v trunk || echo \"$HOME/.cache/trunk/launcher/trunk\"); [ -x \"$t\" ] || { echo \"trunk-fmt hook: trunk not found; its launcher needs curl or wget to bootstrap the CLI (see 'Formatting & the trunk toolchain' in .github/copilot-instructions.md)\" >&2; exit 1; }; out=$(\"$t\" fmt --force \"$f\" 2>&1) || { echo \"trunk-fmt hook: trunk fmt failed on $f: $out\" >&2; exit 1; }",
+            "timeout": 120,
+            "statusMessage": "Formatting (trunk)..."
           }
         ]
       }
