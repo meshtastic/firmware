@@ -8,6 +8,7 @@
 #define USE_SSD1306
 #define I2C_SDA 17
 #define I2C_SCL 18
+#define BICOLOR_OLED_DISPLAY
 
 // Powers the OLED/peripheral rail; active LOW
 #define VEXT_ENABLE 45

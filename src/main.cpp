@@ -108,6 +108,9 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #include "mesh/raspihttp/PiWebServer.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
+#ifdef _WIN32
+#include "platform/portduino/windows/WindowsService.h"
+#endif
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -1078,6 +1081,7 @@ void setup()
         nodeDB->hasWarned = true;
     }
 #endif
+    nodeDB->notifyPendingLicensedIdentityMigration();
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputBroker->Init();
@@ -1219,6 +1223,11 @@ void setup()
             }
         }
     }
+#endif
+
+#if defined(ARCH_PORTDUINO) && defined(_WIN32)
+    // The node is up; let the SCM stop waiting on START_PENDING. No-op unless --service.
+    windowsServiceReportRunning();
 #endif
 }
 
