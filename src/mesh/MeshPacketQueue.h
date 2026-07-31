@@ -21,6 +21,7 @@ class MeshPacketQueue
 
     /** enqueue a packet, return false if full
      * @param dropped Optional pointer to a bool that will be set to true if a packet was dropped
+     * @param evicted Optional displaced packet output; the caller owns and must release it
      */
     bool enqueue(meshtastic_MeshPacket *p, bool *dropped = nullptr, meshtastic_MeshPacket **evicted = nullptr);
 

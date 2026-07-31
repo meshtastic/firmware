@@ -3691,6 +3691,11 @@ void setUp(void)
     mockMeshService = new MockMeshService();
     service = mockMeshService;
     router = testRouter;
+    if (!scriptedRadio) {
+        auto replacement = std::make_unique<ScriptedConfigApplyRadio>();
+        scriptedRadio = replacement.get();
+        testRouter->addInterface(std::move(replacement));
+    }
     scriptedRadio->reset();
 
     savedAdminModule = adminModule;

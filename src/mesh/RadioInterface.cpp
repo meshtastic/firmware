@@ -1052,7 +1052,7 @@ void RadioInterface::serviceConfigApply(uint32_t nowMsec)
     if (!claimConfigApply(request))
         return;
 
-    if (static_cast<uint32_t>(nowMsec - request->requestedAtMsec) >= request->timeoutMsec) {
+    if (!Throttle::isWithinTimespanMs(request->requestedAtMsec, request->timeoutMsec, nowMsec)) {
         finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
         return;
     }
@@ -1147,7 +1147,7 @@ bool RadioInterface::init()
     meshtastic_Config_LoRaConfig bootConfig = hardwareConfigFor(config.lora);
     LoRaConfigNormalization validation = normalizeConfigLora(bootConfig, false, nullptr, this);
     if (!validation.valid) {
-        LoRaConfigNormalization corrected = normalizeConfigLora(config.lora, true, nullptr, this);
+        LoRaConfigNormalization corrected = normalizeConfigLora(bootConfig, true, nullptr, this);
         if (!corrected.valid && wideLora() && !supportsSubGhz()) {
             bootConfig.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
             bootConfig.use_preset = true;

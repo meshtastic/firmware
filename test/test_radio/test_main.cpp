@@ -53,7 +53,9 @@ class TestableRadioInterface : public RadioInterface
     bool reconfigure() override
     {
         RadioInterface::reconfigure();
-        return reconfigureResults[reconfigureCount++];
+        const size_t index = reconfigureCount < 2 ? reconfigureCount : 1;
+        ++reconfigureCount;
+        return reconfigureResults[index];
     }
 
     void scriptApply(bool applyResult, bool rollbackResult)
@@ -134,13 +136,14 @@ class TestableRadioLibInterface : public RadioLibInterface
     bool reconfigure() override
     {
         receptionWasHeldDuringApply = configApplyReceptionHeld.load();
-        appliedRegions[reconfigureCount] = getActiveLoRaConfig().region;
+        const size_t index = reconfigureCount < 2 ? reconfigureCount : 1;
+        appliedRegions[index] = getActiveLoRaConfig().region;
         ++reconfigureCount;
         if (reenterDuringApply) {
             reenterDuringApply = false;
             serviceConfigApply(millis());
         }
-        const bool result = reconfigureResults[reconfigureCount - 1];
+        const bool result = reconfigureResults[index];
         if (result)
             startReceive();
         if (!result && shouldRecordErrors && shouldRecordReconfigureFailure())

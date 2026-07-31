@@ -77,7 +77,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     uint32_t getPacketTime(uint32_t pl, bool received) override { return computePacketTime(lora, pl, received); }
 
-    LR11x0ConfigApplyParams makeReconfigureParams();
+    LR11x0ConfigApplyParams makeReconfigureParams(bool *baseSuccess = nullptr);
 
   private:
     bool configuredWideBand = false;

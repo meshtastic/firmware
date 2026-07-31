@@ -38,7 +38,8 @@ struct LR11x0BandPolicy {
 inline LR11x0BandPolicy lr11x0BandPolicyFor(const RegionInfo &region, bool supportsWideBand, int8_t subGhzMaxPower,
                                             int8_t wideBandMaxPower)
 {
-    return {region.wideLora && supportsWideBand, region.wideLora ? wideBandMaxPower : subGhzMaxPower};
+    const bool wideBand = region.wideLora && supportsWideBand;
+    return {wideBand, wideBand ? wideBandMaxPower : subGhzMaxPower};
 }
 
 inline LR11x0ConfigApplyParams makeLR11x0ConfigApplyParams(uint8_t spreadingFactor, float bandwidth, uint8_t codingRate,
@@ -59,6 +60,7 @@ template <typename Ops> int lr11x0BeginForBand(Ops &ops, const LR11x0ConfigApply
 template <typename Ops> int lr11x0SetFrequencyForBand(Ops &ops, float frequency, bool targetWideBand, bool &configuredWideBand)
 {
     if (configuredWideBand == targetWideBand)
+        // Wide-band operation skips the sub-GHz image calibration performed by RadioLib.
         return ops.setFrequency(frequency, targetWideBand);
 
     int frequencyResult = ops.setFrequency(frequency, true);

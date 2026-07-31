@@ -63,6 +63,10 @@ bool SimRadio::requestConfigApply(RadioConfigApplyRequest *request)
 
 bool SimRadio::finalizeConfigApply(RadioConfigApplyRequest *request)
 {
+    if (configApplyTxStartActive() || sendingPacket != nullptr) {
+        notify(CONFIG_APPLY_PENDING, false);
+        return false;
+    }
     if (!RadioInterface::finalizeConfigApply(request))
         return false;
     if (!txQueue.empty())

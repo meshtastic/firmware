@@ -361,6 +361,8 @@ static void applyLoRaPreset(meshtastic_Config_LoRaConfig_ModemPreset preset)
     auto candidate = config.lora;
     candidate.use_preset = true;
     candidate.modem_preset = preset;
+    candidate.channel_num = 0;
+    candidate.override_frequency = 0;
     requestMenuLoRaConfig(candidate);
 }
 

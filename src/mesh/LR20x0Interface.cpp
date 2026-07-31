@@ -265,7 +265,9 @@ template <typename T> int LR20x0Interface<T>::setStandby(bool completePacket)
 
 template <typename T> void LR20x0Interface<T>::setStandby()
 {
-    assert(setStandby(true) == RADIOLIB_ERR_NONE);
+    const int err = setStandby(true);
+    assert(err == RADIOLIB_ERR_NONE);
+    (void)err;
 }
 
 /**

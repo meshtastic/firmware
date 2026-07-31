@@ -177,7 +177,8 @@ template <typename T> bool LR11x0Interface<T>::init()
 
 template <typename T> bool LR11x0Interface<T>::reconfigure()
 {
-    const LR11x0ConfigApplyParams params = makeReconfigureParams();
+    bool baseSuccess = true;
+    const LR11x0ConfigApplyParams params = makeReconfigureParams(&baseSuccess);
     ConfigApplyOps ops(*this);
     LR11x0ApplyStep failedStep = LR11x0ApplyStep::COUNT;
     int error = LR11x0ConfigApply<ConfigApplyOps>::run(ops, params, &failedStep);
@@ -193,7 +194,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     }
 
     finishStartReceive();
-    return true;
+    return baseSuccess;
 }
 
 template <typename T>
@@ -259,9 +260,11 @@ template <typename T> void LR11x0Interface<T>::selectExternalRfPath(float freque
 #endif
 }
 
-template <typename T> LR11x0ConfigApplyParams LR11x0Interface<T>::makeReconfigureParams()
+template <typename T> LR11x0ConfigApplyParams LR11x0Interface<T>::makeReconfigureParams(bool *baseSuccess)
 {
-    RadioLibInterface::reconfigure();
+    const bool success = RadioLibInterface::reconfigure();
+    if (baseSuccess)
+        *baseSuccess = success;
     const meshtastic_Config_LoRaConfig &loraConfig = getActiveLoRaConfig();
 
     const LR11x0BandPolicy bandPolicy =
@@ -304,7 +307,9 @@ template <typename T> int LR11x0Interface<T>::setStandbyForReconfigure()
 
 template <typename T> void LR11x0Interface<T>::setStandby()
 {
-    assert(setStandby(true) == RADIOLIB_ERR_NONE);
+    const int err = setStandby(true);
+    assert(err == RADIOLIB_ERR_NONE);
+    (void)err;
 }
 
 /**

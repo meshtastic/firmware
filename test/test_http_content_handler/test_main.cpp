@@ -166,7 +166,7 @@ static void test_shutdownCancelsQueuedRequest()
     TEST_ASSERT_TRUE(api.values.empty());
 }
 
-static void test_shutdownCancelsInFlightRequest()
+static void test_shutdownWaitsForInFlightRequest()
 {
     std::promise<void> releaseDispatch;
     BlockingHttpAPI api(releaseDispatch.get_future().share());
@@ -181,15 +181,31 @@ static void test_shutdownCancelsInFlightRequest()
         entered = dispatchEntered.wait_for(std::chrono::seconds(1));
     }
 
-    api.stopAcceptingRequests();
-    const bool result = submitted.get();
+    auto stopping = std::async(std::launch::async, [&] { api.stopAcceptingRequests(); });
+    const auto stopBeforeRelease = stopping.wait_for(std::chrono::milliseconds(50));
     releaseDispatch.set_value();
     if (pump.valid())
         pump.get();
+    stopping.get();
+    const bool result = submitted.get();
 
     TEST_ASSERT_TRUE(pending);
     TEST_ASSERT_EQUAL(std::future_status::ready, entered);
+    TEST_ASSERT_EQUAL(std::future_status::timeout, stopBeforeRelease);
+    TEST_ASSERT_TRUE(result);
+}
+
+static void test_submissionTimesOutWithoutMainPump()
+{
+    RecordingHttpAPI api;
+    uint8_t payload[] = {11};
+    const auto started = std::chrono::steady_clock::now();
+    const bool result = api.submitToRadio(payload, sizeof(payload));
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
     TEST_ASSERT_FALSE(result);
+    TEST_ASSERT_TRUE(elapsed >= std::chrono::milliseconds(4500));
+    TEST_ASSERT_EQUAL_UINT32(0, api.pendingRequestCount());
 }
 
 static void test_fromRadioSubmissionWaitsForMainPump()
@@ -236,7 +252,8 @@ void setup()
     RUN_TEST(test_toRadioRequestsRemainFifo);
     RUN_TEST(test_toRadioQueueRejectsOverflowWithoutOverwriting);
     RUN_TEST(test_shutdownCancelsQueuedRequest);
-    RUN_TEST(test_shutdownCancelsInFlightRequest);
+    RUN_TEST(test_shutdownWaitsForInFlightRequest);
+    RUN_TEST(test_submissionTimesOutWithoutMainPump);
     RUN_TEST(test_fromRadioSubmissionWaitsForMainPump);
     RUN_TEST(test_invalidToRadioSizesAreRejected);
 #else

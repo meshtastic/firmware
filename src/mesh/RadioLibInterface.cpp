@@ -298,7 +298,7 @@ void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
     RadioConfigApplyRequest *request = nullptr;
     if (!claimConfigApply(request))
         return;
-    const bool timedOut = static_cast<uint32_t>(nowMsec - request->requestedAtMsec) >= request->timeoutMsec;
+    const bool timedOut = !Throttle::isWithinTimespanMs(request->requestedAtMsec, request->timeoutMsec, nowMsec);
 
     if (configApplyTxStartActive() || sendingPacket != nullptr) {
         if (timedOut) {
@@ -324,6 +324,10 @@ void RadioLibInterface::serviceConfigApply(uint32_t nowMsec)
 #if !MESHTASTIC_EXCLUDE_BEACON
     const auto beaconRestoreResult = MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
     if (beaconRestoreResult != MeshBeaconModule::RadioConfigResult::UNCHANGED) {
+        if (timedOut) {
+            finishConfigApply(request, RadioConfigApplyResult::TIMED_OUT);
+            return;
+        }
         deferConfigApply(request);
         if (beaconRestoreResult == MeshBeaconModule::RadioConfigResult::FAILED)
             scheduleBeaconRestoreRetry();
@@ -557,13 +561,13 @@ void RadioLibInterface::onNotify(uint32_t notification)
             break;
         }
 #endif
-        if (!configApplyReceptionIsHeld() || !configApplyTxInhibited())
+        if (!(configApplyReceptionIsHeld() || configApplyTxInhibited()))
             startReceive();
         setTransmitDelay();
         break;
     case ISR_RX:
         handleReceiveInterrupt();
-        if (!configApplyReceptionIsHeld() || !configApplyTxInhibited())
+        if (!(configApplyReceptionIsHeld() || configApplyTxInhibited()))
             startReceive();
         setTransmitDelay();
         break;

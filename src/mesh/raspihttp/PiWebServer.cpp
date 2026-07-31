@@ -72,6 +72,7 @@ mail:   marchammermann@googlemail.com
 #include <yder.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <string>
 
@@ -114,7 +115,16 @@ bool HttpAPI::submit(const std::shared_ptr<PendingRequest> &request)
 
     concurrency::mainDelay.interrupt();
     std::unique_lock<std::mutex> completionLock(request->completionMutex);
-    request->completion.wait(completionLock, [&request] { return request->completed; });
+    if (!request->completion.wait_for(completionLock, std::chrono::milliseconds(REQUEST_TIMEOUT_MS),
+                                      [&request] { return request->completed; })) {
+        request->cancelled = true;
+        completionLock.unlock();
+        std::lock_guard<std::mutex> guard(requestMutex);
+        auto queued = std::find(requests.begin(), requests.end(), request);
+        if (queued != requests.end())
+            requests.erase(queued);
+        return false;
+    }
     return !request->cancelled;
 }
 
@@ -188,10 +198,13 @@ void HttpAPI::processPendingRequests()
         }
         request->completion.notify_one();
 
-        std::lock_guard<std::mutex> guard(requestMutex);
-        auto entry = std::find(inFlightRequests.begin(), inFlightRequests.end(), request);
-        if (entry != inFlightRequests.end())
-            inFlightRequests.erase(entry);
+        {
+            std::lock_guard<std::mutex> guard(requestMutex);
+            auto entry = std::find(inFlightRequests.begin(), inFlightRequests.end(), request);
+            if (entry != inFlightRequests.end())
+                inFlightRequests.erase(entry);
+        }
+        requestDrain.notify_all();
     }
 }
 
@@ -202,8 +215,6 @@ void HttpAPI::stopAcceptingRequests()
         std::lock_guard<std::mutex> guard(requestMutex);
         acceptingRequests = false;
         cancelled.swap(requests);
-        cancelled.insert(cancelled.end(), inFlightRequests.begin(), inFlightRequests.end());
-        inFlightRequests.clear();
     }
 
     for (const auto &request : cancelled) {
@@ -214,6 +225,9 @@ void HttpAPI::stopAcceptingRequests()
         }
         request->completion.notify_one();
     }
+
+    std::unique_lock<std::mutex> guard(requestMutex);
+    requestDrain.wait(guard, [this] { return inFlightRequests.empty(); });
 }
 
 /**
@@ -372,7 +386,7 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
         return U_CALLBACK_COMPLETE;
     }
 
-    LOG_DEBUG("Received %d bytes from PUT request", s);
+    LOG_DEBUG("Received %zu bytes from PUT request", s);
     if (!static_cast<HttpAPI *>(user_data)->submitToRadio(static_cast<const uint8_t *>(req->binary_body), s)) {
         ulfius_set_string_body_response(res, 503, "ToRadio unavailable");
         return U_CALLBACK_COMPLETE;
@@ -659,8 +673,10 @@ PiWebServerThread::PiWebServerThread()
 void PiWebServerThread::processPendingRequests()
 {
     if (webAPI.hasPendingRequests()) {
+        const char *previousMountpoint = portduinoVFS->mountpoint();
         portduinoVFS->mountpoint(configWeb.rootPath);
         webAPI.processPendingRequests();
+        portduinoVFS->mountpoint(previousMountpoint);
     }
 }
 

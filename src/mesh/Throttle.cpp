@@ -31,6 +31,10 @@ bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, vo
 /// @param timeSpanMs The interval in milliseconds of the timespan
 bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs)
 {
-    uint32_t now = millis();
-    return (now - lastExecutionMs) < timeSpanMs;
+    return isWithinTimespanMs(lastExecutionMs, timeSpanMs, millis());
+}
+
+bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs, uint32_t nowMs)
+{
+    return (nowMs - lastExecutionMs) < timeSpanMs;
 }

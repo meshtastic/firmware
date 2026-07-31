@@ -159,6 +159,7 @@ bool MeshPacketQueue::find(const NodeNum from, const PacketId id)
  */
 bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p, meshtastic_MeshPacket **evicted)
 {
+    assert(evicted != nullptr);
 
     if (queue.empty()) {
         return false; // No packets to replace

@@ -329,11 +329,11 @@ template <typename T> int SX126xInterface<T>::setStandby(bool completePacket)
 
 template <typename T> void SX126xInterface<T>::setStandby()
 {
-#ifdef ARCH_PORTDUINO
-    setStandby(true);
-#else
-    assert(setStandby(true) == RADIOLIB_ERR_NONE);
+    const int err = setStandby(true);
+#ifndef ARCH_PORTDUINO
+    assert(err == RADIOLIB_ERR_NONE);
 #endif
+    (void)err;
 }
 
 /**

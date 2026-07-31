@@ -168,8 +168,6 @@ template <typename T> int SX128xInterface<T>::setStandby(bool completePacket)
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
-    if (err != RADIOLIB_ERR_NONE)
-        return err;
 #if ARCH_PORTDUINO
     if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
@@ -196,7 +194,9 @@ template <typename T> int SX128xInterface<T>::setStandby(bool completePacket)
 
 template <typename T> void SX128xInterface<T>::setStandby()
 {
-    assert(setStandby(true) == RADIOLIB_ERR_NONE);
+    const int err = setStandby(true);
+    assert(err == RADIOLIB_ERR_NONE);
+    (void)err;
 }
 
 /**

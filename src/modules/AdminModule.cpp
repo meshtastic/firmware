@@ -355,7 +355,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
         if (r->set_config.which_payload_variant == meshtastic_Config_lora_tag &&
             r->set_config.payload_variant.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24 &&
-            (!RadioLibInterface::instance || !RadioLibInterface::instance->wideLora())) {
+            RadioLibInterface::instance && !RadioLibInterface::instance->wideLora()) {
             LOG_WARN("Radio hardware does not support 2.4 GHz; rejecting LORA_24 region");
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
             break;
@@ -933,6 +933,8 @@ bool AdminModule::handleSetOwner(const meshtastic_User &o)
         return true;
     }
 
+    if (pendingOwnerConfig.active)
+        pendingOwnerConfig.candidate = candidate;
     owner = candidate;
     service->reloadOwner(!hasOpenEditTransaction);
     saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE);
@@ -1227,7 +1229,9 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
     if (!service || !tryBeginLoRaConfigApply())
         return false;
 
-    const bool channelWasAlreadyPending = pendingChannelConfig.active;
+    const PendingChannelConfig savedChannelConfig = pendingChannelConfig;
+    const PreparedLoRaConfig savedLoRaConfig = pendingLoRaConfig;
+    const StagedMenuLoRaTransition savedMenuTransition = pendingMenuLoRaTransition;
     if (prospectiveLicensedOwner && (!owner.is_licensed || pendingOwnerConfig.active)) {
         ensurePendingChannelConfig();
         pendingChannelConfig.licensedChannelsSanitized |= Channels::ensureLicensedOperation(pendingChannelConfig.candidate, true);
@@ -1237,8 +1241,7 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
 
     PreparedLoRaConfig prepared;
     if (!prepareLoRaConfig(incoming, fromOthers, prospectiveLicensedOwner, prepared)) {
-        if (!channelWasAlreadyPending)
-            pendingChannelConfig = PendingChannelConfig{};
+        pendingChannelConfig = savedChannelConfig;
         cancelLoRaConfigApply();
         return false;
     }
@@ -1270,10 +1273,9 @@ bool AdminModule::requestLoRaConfig(const meshtastic_Config_LoRaConfig &incoming
                                     prepared.previousLicensed, prepared.candidateLicensed,
                                     pendingChannelConfig.active ? &pendingChannelConfig.previousPrimary : nullptr,
                                     pendingChannelConfig.active ? &pendingChannelConfig.candidatePrimary : nullptr)) {
-        clearPreparedLoRaConfig(pendingLoRaConfig);
-        pendingMenuLoRaTransition = StagedMenuLoRaTransition{};
-        if (!channelWasAlreadyPending)
-            pendingChannelConfig = PendingChannelConfig{};
+        pendingLoRaConfig = savedLoRaConfig;
+        pendingMenuLoRaTransition = savedMenuTransition;
+        pendingChannelConfig = savedChannelConfig;
         cancelLoRaConfigApply();
         return false;
     }

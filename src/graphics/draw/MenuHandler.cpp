@@ -346,8 +346,8 @@ void menuHandler::licensedToNormalConfirmMenu()
     confirmBanner.optionsArrayPtr = confirmOptions;
     confirmBanner.optionsCount = 2;
     confirmBanner.bannerCallback = [](int selected) {
-        applyLoraRegion(pendingRegion,
-                        selected == 1 ? AdminModule::MenuLoRaTransition::EXIT_LICENSED : AdminModule::MenuLoRaTransition::NONE);
+        if (selected == 1)
+            applyLoraRegion(pendingRegion, AdminModule::MenuLoRaTransition::EXIT_LICENSED);
     };
     screen->showOverlayBanner(confirmBanner);
 }

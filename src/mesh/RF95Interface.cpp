@@ -284,6 +284,7 @@ int RF95Interface::setStandby(bool completePacket)
         return err;
 
     isReceiving = false; // If we were receiving, not any more
+    activeReceiveStart = 0;
     disableInterrupt();
     if (completePacket)
         completeSending(); // If we were sending, not anymore
@@ -293,7 +294,9 @@ int RF95Interface::setStandby(bool completePacket)
 
 void RF95Interface::setStandby()
 {
-    assert(setStandby(true) == RADIOLIB_ERR_NONE);
+    const int err = setStandby(true);
+    assert(err == RADIOLIB_ERR_NONE);
+    (void)err;
 }
 
 /** We override to turn on transmitter power as needed.

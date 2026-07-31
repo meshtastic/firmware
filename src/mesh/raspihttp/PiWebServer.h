@@ -50,6 +50,7 @@ class HttpAPI : public PhoneAPI
 
   private:
     static constexpr size_t REQUEST_QUEUE_SIZE = 8;
+    static constexpr uint32_t REQUEST_TIMEOUT_MS = 5000;
     enum class RequestType : uint8_t { TO_RADIO, FROM_RADIO };
     struct PendingRequest {
         RequestType type;
@@ -63,6 +64,7 @@ class HttpAPI : public PhoneAPI
 
     bool submit(const std::shared_ptr<PendingRequest> &request);
     std::mutex requestMutex;
+    std::condition_variable requestDrain;
     std::deque<std::shared_ptr<PendingRequest>> requests;
     std::deque<std::shared_ptr<PendingRequest>> inFlightRequests;
     bool acceptingRequests = true;
