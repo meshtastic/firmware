@@ -208,42 +208,40 @@ void RF95Interface::disableInterrupt()
 
 bool RF95Interface::reconfigure()
 {
-    RadioLibInterface::reconfigure();
+    bool success = RadioLibInterface::reconfigure();
+
+    const auto recordConfigError = [&success](const char *operation, int result) {
+        if (result == RADIOLIB_ERR_NONE)
+            return;
+        LOG_ERROR("RF95 %s %s%d", operation, radioLibErr, result);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    };
 
     // set mode to standby
     setStandby();
 
     // configure publicly accessible settings
     int err = lora->setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setSpreadingFactor", err);
 
     err = lora->setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setBandwidth", err);
 
     err = lora->setCodingRate(cr);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setCodingRate", err);
 
     err = lora->setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("RF95 setSyncWord %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    recordConfigError("setSyncWord", err);
 
     err = lora->setCurrentLimit(currentLimit);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("RF95 setCurrentLimit %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    recordConfigError("setCurrentLimit", err);
 
     err = lora->setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("RF95 setPreambleLength %s%d", radioLibErr, err);
-    assert(err == RADIOLIB_ERR_NONE);
+    recordConfigError("setPreambleLength", err);
 
     err = lora->setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setFrequency", err);
 
     limitPower(RF95_MAX_POWER);
 
@@ -252,12 +250,12 @@ bool RF95Interface::reconfigure()
 #else
     err = lora->setOutputPower(power);
 #endif
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setOutputPower", err);
 
-    startReceive(); // restart receiving
+    if (success)
+        startReceive(); // restart receiving
 
-    return true;
+    return success;
 }
 
 /**

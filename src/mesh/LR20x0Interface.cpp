@@ -174,27 +174,32 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 template <typename T> bool LR20x0Interface<T>::reconfigure()
 {
-    RadioLibInterface::reconfigure();
+    bool success = RadioLibInterface::reconfigure();
     const meshtastic_Config_LoRaConfig &loraConfig = getActiveLoRaConfig();
+
+    const auto recordConfigError = [&success](const char *operation, int result) {
+        if (result == RADIOLIB_ERR_NONE)
+            return;
+        LOG_ERROR("LR20x0 %s %s%d", operation, radioLibErr, result);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    };
 
     // set mode to standby
     setStandby();
 
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setSpreadingFactor", err);
 
     err = lora.setBandwidth(bw); // different form than LR11xx
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setBandwidth", err);
 
     err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setCodingRate", err);
 
     err = lora.setSyncWord(syncWord);
-    assert(err == RADIOLIB_ERR_NONE);
+    recordConfigError("setSyncWord", err);
 
     if (loraConfig.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) { // clamp if wide freq range
         limitPower(LR2021_MAX_POWER_HF);
@@ -203,23 +208,22 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     }
 
     err = lora.setPreambleLength(preambleLength);
-    assert(err == RADIOLIB_ERR_NONE);
+    recordConfigError("setPreambleLength", err);
 
     err = lora.setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    recordConfigError("setFrequency", err);
 
     err = lora.setOutputPower(power);
-    assert(err == RADIOLIB_ERR_NONE);
+    recordConfigError("setOutputPower", err);
 
     // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(loraConfig.sx126x_rx_boosted_gain);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
+    recordConfigError("setRxBoostedGainMode", err);
 
-    startReceive(); // restart receiving
+    if (success)
+        startReceive(); // restart receiving
 
-    return true;
+    return success;
 }
 
 template <typename T> void LR20x0Interface<T>::disableInterrupt()
