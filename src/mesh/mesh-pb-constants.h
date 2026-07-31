@@ -112,7 +112,15 @@ static inline int get_max_num_nodes()
 }
 #define MAX_NUM_NODES get_max_num_nodes()
 #elif defined(ARCH_PORTDUINO)
-#define MAX_NUM_NODES 250 // native host: no flash/RAM constraint; match the ESP32-S3 top tier
+// Unreachable in a normal build, and deliberately not a number. Portduino resolves the cap at
+// *runtime*: variants/native/portduino{,-buildroot}/variant.h define
+// `MAX_NUM_NODES portduino_config.MaxNodes` (default 200, YAML `General: MaxNodes`), and
+// configuration.h pulls variant.h in before this header is reached. Reaching here means a
+// translation unit included mesh-pb-constants.h without configuration.h and would otherwise get a
+// compile-time cap that silently disagrees with the rest of the build - which is exactly the trap
+// that made a saturated 200-node DB look arithmetically impossible during a test-failure diagnosis.
+#error                                                                                                                           \
+    "ARCH_PORTDUINO resolves MAX_NUM_NODES at runtime (see variants/native/portduino/variant.h) - include configuration.h first"
 #else
 #define MAX_NUM_NODES 120 // nRF52840 and generic ESP32 (inc. ESP32C3 etc.)
 #endif                    // platform
