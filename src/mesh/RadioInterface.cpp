@@ -590,10 +590,13 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             config.lora = loraConfigBeforeProbe;
             rIf->setConfigErrorReporting(true);
-            if (!rIf->reconfigure())
+            if (!rIf->reconfigure()) {
                 LOG_WARN("LR1120 reconfigure failed after probe");
-            LOG_INFO("LR1120 init success");
-            radioType = LR1120_RADIO;
+                rIf = nullptr;
+            } else {
+                LOG_INFO("LR1120 init success");
+                radioType = LR1120_RADIO;
+            }
         }
     }
 #endif
@@ -610,10 +613,13 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             config.lora = loraConfigBeforeProbe;
             rIf->setConfigErrorReporting(true);
-            if (!rIf->reconfigure())
+            if (!rIf->reconfigure()) {
                 LOG_WARN("LR1121 reconfigure failed after probe");
-            LOG_INFO("LR1121 init success");
-            radioType = LR1121_RADIO;
+                rIf = nullptr;
+            } else {
+                LOG_INFO("LR1121 init success");
+                radioType = LR1121_RADIO;
+            }
         }
     }
 #endif
@@ -630,10 +636,13 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             config.lora = loraConfigBeforeProbe;
             rIf->setConfigErrorReporting(true);
-            if (!rIf->reconfigure())
+            if (!rIf->reconfigure()) {
                 LOG_WARN("LR2021 reconfigure failed after probe");
-            LOG_INFO("LR2021 init success");
-            radioType = LR2021_RADIO;
+                rIf = nullptr;
+            } else {
+                LOG_INFO("LR2021 init success");
+                radioType = LR2021_RADIO;
+            }
         }
     }
 #endif
