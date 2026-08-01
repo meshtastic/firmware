@@ -589,13 +589,13 @@ std::unique_ptr<RadioInterface> initLoRa()
             rIf = nullptr;
         } else {
             config.lora = loraConfigBeforeProbe;
+            rIf->setConfigErrorReporting(true);
             if (!rIf->reconfigure()) {
                 LOG_WARN("LR1120 reconfigure failed after probe");
                 rIf->disable();
                 config.lora = loraConfigBeforeProbe;
                 rIf = nullptr;
             } else {
-                rIf->setConfigErrorReporting(true);
                 LOG_INFO("LR1120 init success");
                 radioType = LR1120_RADIO;
             }
@@ -614,13 +614,13 @@ std::unique_ptr<RadioInterface> initLoRa()
             rIf = nullptr;
         } else {
             config.lora = loraConfigBeforeProbe;
+            rIf->setConfigErrorReporting(true);
             if (!rIf->reconfigure()) {
                 LOG_WARN("LR1121 reconfigure failed after probe");
                 rIf->disable();
                 config.lora = loraConfigBeforeProbe;
                 rIf = nullptr;
             } else {
-                rIf->setConfigErrorReporting(true);
                 LOG_INFO("LR1121 init success");
                 radioType = LR1121_RADIO;
             }
@@ -639,13 +639,13 @@ std::unique_ptr<RadioInterface> initLoRa()
             rIf = nullptr;
         } else {
             config.lora = loraConfigBeforeProbe;
+            rIf->setConfigErrorReporting(true);
             if (!rIf->reconfigure()) {
                 LOG_WARN("LR2021 reconfigure failed after probe");
                 rIf->disable();
                 config.lora = loraConfigBeforeProbe;
                 rIf = nullptr;
             } else {
-                rIf->setConfigErrorReporting(true);
                 LOG_INFO("LR2021 init success");
                 radioType = LR2021_RADIO;
             }
@@ -1342,8 +1342,9 @@ void RadioInterface::applyModemConfig()
     } else { // if not using preset, then just use the custom settings
         if (validateConfigLora(loraConfig, this, reportConfigErrors)) {
         } else {
-            LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
-                     newRegion->name);
+            if (reportConfigErrors)
+                LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
+                         newRegion->name);
             clampConfigLora(loraConfig, this, reportConfigErrors);
         }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
