@@ -287,6 +287,8 @@ class RadioInterface
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
+    bool shouldReportConfigErrors() const { return reportConfigErrors; }
+
     float savedFreq;
     uint32_t savedChannelNum;
 

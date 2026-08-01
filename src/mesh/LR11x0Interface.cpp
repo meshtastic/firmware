@@ -168,23 +168,32 @@ template <typename T> bool LR11x0Interface<T>::init()
 
 template <typename T> bool LR11x0Interface<T>::reconfigure()
 {
-    RadioLibInterface::reconfigure();
+    bool success = RadioLibInterface::reconfigure();
 
     // set mode to standby
     setStandby();
 
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    if (err != RADIOLIB_ERR_NONE) {
+        if (shouldReportConfigErrors())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setBandwidth(bw, wideLora() && (getFreq() > 1000.0f));
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    if (err != RADIOLIB_ERR_NONE) {
+        if (shouldReportConfigErrors())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setCodingRate(cr, cr != 7); // use long interleaving except if CR is 4/7 which doesn't support it
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    if (err != RADIOLIB_ERR_NONE) {
+        if (shouldReportConfigErrors())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
@@ -199,8 +208,11 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
-    if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    if (err != RADIOLIB_ERR_NONE) {
+        if (shouldReportConfigErrors())
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
@@ -210,9 +222,10 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
 
-    startReceive(); // restart receiving
+    if (success)
+        startReceive(); // restart receiving
 
-    return true;
+    return success;
 }
 
 template <typename T> void LR11x0Interface<T>::disableInterrupt()

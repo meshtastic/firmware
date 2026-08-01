@@ -212,6 +212,46 @@ static void test_validateConfigLora_lr2021WideBandwidths()
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(invalid, testRadio));
 }
 
+static void test_validateConfigLora_rejectsUnsupportedRadioBandwidths()
+{
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+    const uint16_t lr1121Valid[] = {62, 125, 250, 500};
+    for (auto bandwidth : lr1121Valid) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+
+    const uint16_t lr1121Invalid[] = {31, 42, 83, 101, 200, 1600};
+    for (auto bandwidth : lr1121Invalid) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR20X0;
+    const uint16_t lr2021Valid[] = {31, 42, 62, 83, 101, 125, 200, 250, 400, 500, 800, 1000};
+    for (auto bandwidth : lr2021Valid) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+
+    const uint16_t lr2021Aliases[] = {30, 41, 82, 102, 202, 405, 1600};
+    for (auto bandwidth : lr2021Aliases) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, bandwidth);
+        TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+}
+
+static void test_clampConfigLora_sx128xUnsetProducesValidBandwidth()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_UNSET, 125);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::SX128X;
+
+    RadioInterface::clampConfigLora(cfg, testRadio);
+
+    TEST_ASSERT_EQUAL_UINT16(800, cfg.bandwidth);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
 static void test_reconfigure_can_suppress_speculativeProbeErrors()
 {
     config.lora = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
@@ -534,6 +574,8 @@ void setup()
     RUN_TEST(test_validateConfigLora_allowsSx128xWideBandwidths);
     RUN_TEST(test_validateConfigLora_rejectsLr1121Wide1600);
     RUN_TEST(test_validateConfigLora_lr2021WideBandwidths);
+    RUN_TEST(test_validateConfigLora_rejectsUnsupportedRadioBandwidths);
+    RUN_TEST(test_clampConfigLora_sx128xUnsetProducesValidBandwidth);
     RUN_TEST(test_reconfigure_can_suppress_speculativeProbeErrors);
     RUN_TEST(test_clampConfigLora_repairsLr1121TurboPreset);
     RUN_TEST(test_clampConfigLora_repairsLr2021TurboPreset);
