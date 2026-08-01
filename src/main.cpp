@@ -856,9 +856,13 @@ void setup()
 
 #if HAS_SCREEN
         // fixed screen override?
+        // The geometry picks below are skipped on variants that pin the panel size with
+        // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+#ifndef OLED_GEOMETRY_OVERRIDE
     screen_geometry = GEOMETRY_128_128;
+#endif
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
@@ -867,7 +871,9 @@ void setup()
 
         // Fix: update geometry for SH1107 128x128 selected via menu
         if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+#ifndef OLED_GEOMETRY_OVERRIDE
             screen_geometry = GEOMETRY_128_128;
+#endif
             screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // normalize
         }
     }
