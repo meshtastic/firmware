@@ -200,6 +200,9 @@ progress_monitor() {
 # line only when interactive AND --quiet (where pio's own output is hidden - otherwise pio's
 # streamed compile lines already show progress and a \r line would just fight them).
 mkdir -p ".pio/build/${ENV}" 2>/dev/null || true
+# Clear last run's failure logs: a green run must not leave a red one's log lying around looking
+# current.
+rm -f ".pio/build/${ENV}/build-failure.log" ".pio/build/${ENV}/test-failure.log" 2>/dev/null || true
 : >"$PROGRESS_FILE" 2>/dev/null || true
 MARKER="$(mktemp -t meshtest-mark.XXXXXX)"
 TOTTY=0
@@ -333,6 +336,14 @@ RAN_COUNT=${#RAN_SUITES[@]}
 mapfile -t SKIPPED_SUITES < <(grep -oE "${ENV}:test_[a-z0-9_]+.*\bSKIPPED\b" "$LOG" |
 	grep -oE "test_[a-z0-9_]+" | sort -u)
 
+# Keep the whole-run log, which the EXIT trap would otherwise delete. This is the cross-suite view
+# - order, pio-level output, what ran before the failure; bin/pio-test-isolate.sh separately keeps
+# the failing suite's own sandbox and log under .pio/test-state/<suite>/.
+preserve_run_log() {
+	local dest=".pio/build/${ENV}/test-failure.log"
+	cp "$LOG" "$dest" 2>/dev/null && echo "    -> full run output: $dest"
+}
+
 verdict_red() {
 	local detail bin
 	# The order IS the diagnostic for an order-dependent failure; without it a shuffled red is
@@ -347,12 +358,7 @@ verdict_red() {
 	echo "RED - failures detected:"
 	[[ -n $detail ]] && echo "$detail"
 	grep -E 'test cases:' "$LOG" | tail -1 | sed 's/^/    /'
-	# $LOG is a mktemp the EXIT trap removes, so without this the three lines above are all anyone
-	# ever sees - and the cause is often further up than the first [FAILED].
-	test_fail_log=".pio/build/${ENV}/test-failure.log"
-	if cp "$LOG" "$test_fail_log" 2>/dev/null; then
-		echo "    -> full run output: $test_fail_log"
-	fi
+	preserve_run_log
 
 	# Path to the test binary for the "run it bare" hint. For native/coverage the test program is
 	# the env executable (e.g. .pio/build/coverage/meshtasticd), NOT a file named 'program'.
@@ -399,7 +405,10 @@ if [[ $PIO_RC -ne 0 ]] || grep -qE "$FAIL_RE" "$LOG"; then
 fi
 if ! grep -qE "$PASS_RE" "$LOG"; then
 	echo ""
-	echo "RESULT: RED no success summary found (build error / no tests ran?) - see log"
+	# This path never runs verdict_red, and if the build died before any suite started there is no
+	# per-suite sandbox either - so without preserving here, "see log" points at nothing.
+	preserve_run_log
+	echo "RESULT: RED no success summary found (build error / no tests ran?)"
 	exit 1
 fi
 
