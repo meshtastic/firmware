@@ -15,8 +15,8 @@ using namespace NicheGraphics;
 // =====================================================================
 // Coordinate del luogo di cui mostrare il meteo.
 // Esempio: Roma = 41.9028, 12.4964 -- Milano = 45.4642, 9.1900
-static constexpr float WEATHER_LATITUDE = 45.067;
-static constexpr float WEATHER_LONGITUDE = 7.583;
+static constexpr float WEATHER_LATITUDE = 45.068;
+static constexpr float WEATHER_LONGITUDE = 7.577;
 // =====================================================================
 
 static const char *WEATHER_API_HOST = "https://api.open-meteo.com/v1/forecast";
