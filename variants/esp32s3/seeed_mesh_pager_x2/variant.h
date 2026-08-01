@@ -89,12 +89,12 @@
 #define LORA_MISO 5 // GPIO 5
 #define LORA_CS 6   // GPIO 6
 
-#define LORA_DIO0 -1 // Not connected
-#define LORA_DIO1 7  // GPIO 7 (IRQ)
-#define LORA_DIO2 8  // GPIO 8 (BUSY)
-#define LORA_DIO3 -1 // Not connected (managed via IO expander pin 22 for reset)
+#define LORA_DIO0 RADIOLIB_NC // Not connected
+#define LORA_DIO1 7           // GPIO 7 (IRQ)
+#define LORA_DIO2 8           // GPIO 8 (BUSY)
+#define LORA_DIO3 RADIOLIB_NC // Not connected (managed via IO expander pin 22 for reset)
 
-#define LORA_RESET -1 // Reset via IO Expander (TCA6424 pin 22)
+#define LORA_RESET RADIOLIB_NC // Reset via IO Expander (TCA6424 pin 22)
 
 #define LR2021_IRQ_PIN LORA_DIO1
 #define LR2021_NRESET_PIN LORA_RESET
