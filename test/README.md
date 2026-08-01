@@ -453,9 +453,15 @@ pio run -e native && ./bin/test-config-check.sh
 
 ## Existing Test Suites
 
+**This table is a description, not an inventory.** The canonical suite total lives in
+`test/native-suite-count`, is machine-checked against `test/test_*` on every full run and in CI
+(`test_native.yml`), and is the only number that should be trusted or quoted. Entries below carry
+per-suite descriptions the count cannot; do not infer completeness from the row count.
+
 | Suite                        | Module Under Test             |
 | ---------------------------- | ----------------------------- |
 | `test_admin_radio`           | Admin + LoRa region config    |
+| `test_fscommon_getfiles`     | Bounded file-manifest walk    |
 | `test_atak`                  | ATAK integration              |
 | `test_crypto`                | CryptoEngine                  |
 | `test_default`               | Default configuration helpers |

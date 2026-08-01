@@ -313,7 +313,7 @@ firmware/
 │   └── native/           # Linux/Portduino variants
 ├── protobufs/            # Protocol buffer definitions
 ├── boards/               # Custom PlatformIO board definitions
-├── test/                 # Unit tests (12 test suites)
+├── test/                 # Native unit-test suites (count: test/native-suite-count)
 └── bin/                  # Build and utility scripts
 ```
 
@@ -663,9 +663,10 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count` and is cross-checked on every full run. Current suites:
+Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count`, cross-checked against `test/test_*` on every full run and by the `suite-count-check` CI job. **Never state the count as a literal anywhere else** - point at that file. The list below is a partial description of what suites cover, not an inventory:
 
-- `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
+- `test_admin_radio/` - LoRa region/config validation, AdminModule dispatch, node-DB metadata saves
+- `test_fscommon_getfiles/` - bounded file-manifest walk (cap, depth, truncation reporting)
 - `test_atak/` - ATAK integration
 - `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
