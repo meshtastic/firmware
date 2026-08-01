@@ -68,7 +68,8 @@ lint:
           read_output_from: stdout
     # Flags node/packet IDs logged as bare %08x instead of the 0x%08x convention in
     # src/mesh/RadioInterface.cpp. Emits "note", trunk's only non-blocking level, so it
-    # advises without gating. Pre-existing sites: .github/node-id-format-allowlist.txt.
+    # advises without gating - including on the known pre-existing sites, which are left
+    # unlisted so they get cleaned up by whoever next edits those files.
     - name: node-id-format
       files: [cpp-sources]
       commands:

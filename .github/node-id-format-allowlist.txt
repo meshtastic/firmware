@@ -1,37 +1,15 @@
-# Draft exception list for bin/lint-node-id-format.sh (trunk linter: node-id-format).
+# Exception list for bin/lint-node-id-format.sh (trunk linter: node-id-format).
 #
 # Format:  <path>[:<line>]   <reason>
 #   - "<path>"          exempts the whole file
 #   - "<path>:<line>"   exempts one call site
 #   - blank lines and # comments are ignored; the reason column is mandatory
 #
-# These are pre-existing call sites captured when the linter landed, so the rule could
-# start green without a 22-site cleanup in an unrelated PR. They are a backlog, not a
-# blessing - the convention still applies. Line-scoped rather than file-scoped on
-# purpose: a new bad call site in these files is still flagged, and an entry that rots
-# as lines move just surfaces the site again, which is the nudge we want.
+# Intentionally empty. The known pre-existing sites - PacketHistory.cpp, NodeInfoModule.cpp
+# and PositionModule.cpp - are deliberately NOT listed, so trunk surfaces them the next time
+# someone edits those files and they get cleaned up in the change that was already touching
+# them. The rule emits "note", trunk's only non-blocking level, so this costs a notice rather
+# than a red PR.
 #
-# The rule is warning-level, so nothing here blocks a merge either way.
-
-src/mesh/PacketHistory.cpp:99	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:128	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:135	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:145	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:154	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:195	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:203	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:289	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:304	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:314	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:360	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:419	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:448	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:465	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:474	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:480	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:511	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:554	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:560	pre-existing at linter introduction - convention cleanup pending
-src/mesh/PacketHistory.cpp:580	pre-existing at linter introduction - convention cleanup pending
-src/modules/NodeInfoModule.cpp:28	pre-existing at linter introduction - convention cleanup pending
-src/modules/PositionModule.cpp:90	pre-existing at linter introduction - convention cleanup pending
+# Add an entry only for a value the linter has misread as an ID - a CRC, a register, a hash -
+# and say which, so the next reader can tell a real exemption from a deferred cleanup.
