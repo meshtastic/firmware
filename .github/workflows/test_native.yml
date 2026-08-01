@@ -211,6 +211,11 @@ jobs:
 
       - name: Run tests one area at a time
         shell: bash
+        # Both values reach the script through env: rather than ${{ }} inside run:, so nothing from
+        # the event payload is ever spliced into the shell text.
+        env:
+          SUITE_ORDER_SEED: ${{ inputs.suite_order_seed }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -uo pipefail
           # One runner, no matrix, no concurrency. Group the test_* suites by area and run each
@@ -259,11 +264,11 @@ jobs:
           # Intra-area order stays PlatformIO's: filters select suites, they do not order them
           # (list_test_names() walks test/ with os.walk()), so controlling it needs one invocation
           # per suite. bin/run-tests.sh --shuffle does exactly that locally.
-          seed_input="${{ inputs.suite_order_seed }}"
+          seed_input="${SUITE_ORDER_SEED:-}"
           if [ -n "$seed_input" ]; then
             seed="$seed_input"
             echo "area order: shuffled with explicitly supplied seed $seed"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          elif [ "${EVENT_NAME:-}" = "pull_request" ]; then
             seed=""
             echo "area order: fixed declared order (pull_request) - ${run_order[*]}"
             echo "  to exercise a different order, re-run this workflow with a suite_order_seed input"
@@ -273,14 +278,10 @@ jobs:
           fi
 
           if [ -n "$seed" ]; then
-            mapfile -t run_order < <(printf '%s\n' "${run_order[@]}" | awk -v seed="$seed" '
-              function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647 }
-              BEGIN { s = seed % 2147483647; if (s <= 0) s += 2147483646 }
-              { a[NR] = $0 }
-              END {
-                for (i = NR; i > 1; i--) { j = int(rnd() * i) + 1; t = a[i]; a[i] = a[j]; a[j] = t }
-                for (i = 1; i <= NR; i++) print a[i]
-              }')
+            # Same shuffle_suites() bin/run-tests.sh uses, so the replay hint below is true by
+            # construction rather than by two copies happening to agree.
+            source bin/lib/shuffle.sh
+            mapfile -t run_order < <(shuffle_suites "$seed" "${run_order[@]}")
             echo "area order: ${run_order[*]}"
             echo "  replay locally: ./bin/run-tests.sh --shuffle --seed $seed"
           fi
