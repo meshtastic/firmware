@@ -107,7 +107,8 @@ jobs:
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
     runs-on: ubuntu-latest
-    if: github.repository_owner == 'meshtastic' && github.event_name != 'workflow_dispatch' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
+    # Only run checks for PRs and Merge Queue runs.
+    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
     steps:
       - uses: actions/checkout@v7
         with:
