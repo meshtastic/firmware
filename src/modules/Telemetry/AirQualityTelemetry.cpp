@@ -228,7 +228,7 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
-        // Send to sleep sensors that consume power
+        // Send to sleep sensors that can be to save power
         for (TelemetrySensor *sensor : sensors) {
             LOG_DEBUG("Checking if %s can be sent to sleep", sensor->sensorName);
             if (sensor->isActive() && sensor->canSleep()) {
