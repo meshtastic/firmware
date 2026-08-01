@@ -24,7 +24,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
     {
-        return !wideBand || bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f;
+        return supportsLr11x0LoRaBandwidth(bandwidthKHz, wideBand);
     }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.

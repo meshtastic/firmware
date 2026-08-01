@@ -200,6 +200,21 @@ static inline uint16_t clampBandwidthCode(uint16_t bwCode)
     return bwCode;
 }
 
+static inline bool supportsSx128xLoRaBandwidth(float bandwidthKHz, bool wideBand)
+{
+    return wideBand && (bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f || bandwidthKHz == 1625.0f);
+}
+
+static inline bool supportsLr11x0LoRaBandwidth(float bandwidthKHz, bool wideBand)
+{
+    return !wideBand || bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f;
+}
+
+static inline bool supportsLr20x0LoRaBandwidth(float bandwidthKHz, bool wideBand)
+{
+    return !wideBand || bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f || bandwidthKHz == 1000.0f;
+}
+
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
                                        uint8_t &cr)
 {

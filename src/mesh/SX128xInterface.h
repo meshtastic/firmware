@@ -24,8 +24,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
     {
-        return wideBand &&
-               (bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f || bandwidthKHz == 1625.0f);
+        return supportsSx128xLoRaBandwidth(bandwidthKHz, wideBand);
     }
 
     /// Apply any radio provisioning changes

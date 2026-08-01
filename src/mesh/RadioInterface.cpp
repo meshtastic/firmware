@@ -373,6 +373,7 @@ extern SPIClass SPI1;
 std::unique_ptr<RadioInterface> initLoRa()
 {
     std::unique_ptr<RadioInterface> rIf = nullptr;
+    const auto loraConfigBeforeProbe = config.lora;
 
 #if ARCH_PORTDUINO
     SPISettings loraSpiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
@@ -583,6 +584,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             new LR1120Interface(loraHal, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN));
         if (!rIf->init()) {
             LOG_WARN("No LR1120 radio");
+            config.lora = loraConfigBeforeProbe;
             rIf = nullptr;
         } else {
             LOG_INFO("LR1120 init success");
@@ -597,6 +599,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             new LR1121Interface(loraHal, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN));
         if (!rIf->init()) {
             LOG_WARN("No LR1121 radio");
+            config.lora = loraConfigBeforeProbe;
             rIf = nullptr;
         } else {
             LOG_INFO("LR1121 init success");
@@ -611,6 +614,7 @@ std::unique_ptr<RadioInterface> initLoRa()
             new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
         if (!rIf->init()) {
             LOG_WARN("No LR2021 radio");
+            config.lora = loraConfigBeforeProbe;
             rIf = nullptr;
         } else {
             LOG_INFO("LR2021 init success");
