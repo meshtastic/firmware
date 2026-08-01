@@ -8,11 +8,25 @@
 #include "UptimeClock.h"
 #include "gps/RTC.h"
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <sys/time.h>
 #include <thread>
 #include <unity.h>
 #include <vector>
+
+namespace
+{
+std::atomic<bool> publishPaused{false};
+std::atomic<bool> releasePublish{false};
+
+void pauseMonotonicPublish()
+{
+    publishPaused.store(true, std::memory_order_release);
+    while (!releasePublish.load(std::memory_order_acquire))
+        std::this_thread::yield();
+}
+} // namespace
 
 void setUp(void)
 {
@@ -190,6 +204,46 @@ void test_monotonic_exact_with_concurrent_readers()
     TEST_ASSERT_EQUAL_UINT64(expected, Time::getMillisMonotonic());
 }
 
+// nRF BLE callbacks run above the main loop. A reader that preempts publication must be able to
+// consume the previous complete snapshot without waiting for the suspended writer.
+void test_monotonic_reader_completes_while_publish_is_paused()
+{
+    Time::setTestMillis(100);
+    Time::serviceMonotonic();
+    Time::advanceTestMillis(1);
+
+    publishPaused.store(false, std::memory_order_relaxed);
+    releasePublish.store(false, std::memory_order_relaxed);
+    Time::setMonotonicPublishHookForTests(pauseMonotonicPublish);
+
+    std::thread writer([]() { Time::serviceMonotonic(); });
+    while (!publishPaused.load(std::memory_order_acquire))
+        std::this_thread::yield();
+
+    std::atomic<bool> readerStarted{false};
+    std::atomic<bool> readerDone{false};
+    uint64_t readerValue = 0;
+    std::thread reader([&readerStarted, &readerDone, &readerValue]() {
+        readerStarted.store(true, std::memory_order_release);
+        readerValue = Time::getMillisMonotonic();
+        readerDone.store(true, std::memory_order_release);
+    });
+    while (!readerStarted.load(std::memory_order_acquire))
+        std::this_thread::yield();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+    while (!readerDone.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::yield();
+    const bool completedWhilePaused = readerDone.load(std::memory_order_acquire);
+
+    releasePublish.store(true, std::memory_order_release);
+    writer.join();
+    reader.join();
+    Time::setMonotonicPublishHookForTests(nullptr);
+
+    TEST_ASSERT_TRUE_MESSAGE(completedWhilePaused, "reader waited for a lower-priority publisher");
+    TEST_ASSERT_EQUAL_UINT64(101u, readerValue);
+}
+
 // --- getTime(): the wall clock must not retreat at the millis() wrap ---
 
 // Epoch used by the wall-clock cases; must sit between BUILD_EPOCH (stamped at build time) and
@@ -291,6 +345,7 @@ void setup()
     RUN_TEST(test_monotonic_misses_a_wrap_not_serviced_within_the_window);
     RUN_TEST(test_getUptimeSecs_stays_exact_across_the_wrap);
     RUN_TEST(test_monotonic_exact_with_concurrent_readers);
+    RUN_TEST(test_monotonic_reader_completes_while_publish_is_paused);
     RUN_TEST(test_getTime_stays_exact_across_the_wrap);
     RUN_TEST(test_getTime_anchored_after_a_wrap_is_exact);
     RUN_TEST(test_getTime_unaffected_by_concurrent_readers_across_the_wrap);

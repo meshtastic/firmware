@@ -683,6 +683,36 @@ static void test_node_heard_before_time_gets_last_heard_backfilled(void)
     TEST_ASSERT_UINT32_WITHIN(2, (uint32_t)networkTime.tv_sec - 3, info->last_heard);
 }
 
+// Uptime zero is a valid arrival instant during the first second of boot. It must not be confused
+// with an absent sidecar record when network time arrives.
+static void test_node_heard_during_first_uptime_second_gets_last_heard_backfilled(void)
+{
+    ScopedMeshService scopedService;
+    ScopedTimeFixture timeFixture(500);
+
+    const NodeNum sender = 0x33445566;
+    TEST_ASSERT_NOT_NULL(nodeDB->getOrCreateMeshNode(sender));
+    meshtastic_MeshPacket heard = meshtastic_MeshPacket_init_zero;
+    heard.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    heard.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    heard.from = sender;
+    heard.to = NODENUM_BROADCAST;
+    heard.rx_time = 0; // received during uptime second zero
+    heard.has_rx_time = false;
+    nodeDB->updateFrom(heard);
+
+    const meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(sender);
+    TEST_ASSERT_NOT_NULL(info);
+    TEST_ASSERT_EQUAL_UINT32(0u, info->last_heard);
+
+    struct timeval networkTime;
+    networkTime.tv_sec = time(NULL) + SEC_PER_DAY;
+    networkTime.tv_usec = 0;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &networkTime));
+
+    TEST_ASSERT_UINT32_WITHIN(1, (uint32_t)networkTime.tv_sec, info->last_heard);
+}
+
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
 /// Unity per-test teardown; fixtures clean themselves up.
@@ -708,6 +738,7 @@ void setup()
     RUN_TEST(test_time_given_at_handshake_start_reconciles_queued_packet);
     RUN_TEST(test_time_given_at_handshake_end_does_not_rewrite_already_sent_packet);
     RUN_TEST(test_node_heard_before_time_gets_last_heard_backfilled);
+    RUN_TEST(test_node_heard_during_first_uptime_second_gets_last_heard_backfilled);
     // usingProtobufs intentionally has no reset path, so this must run last.
     RUN_TEST(test_serial_console_suppresses_raw_output_in_protobuf_mode);
     exit(UNITY_END());

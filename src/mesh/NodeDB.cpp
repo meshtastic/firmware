@@ -3658,7 +3658,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // Gate on has_rx_time, not truthiness - rx_time may hold an uptime-seconds placeholder.
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
-        else if (mp.rx_time)
+        else
             // The placeholder is the packet's arrival instant in uptime seconds. Keep it in the
             // RAM sidecar so the clock-valid transition can date this sighting; last_heard itself
             // only ever holds a real epoch or 0.
@@ -4101,22 +4101,29 @@ void NodeDB::recordHeardWhileClockUntrusted(NodeNum num, uint32_t heardAtUptime)
     victim->heardAtUptimeSecs = heardAtUptime;
 }
 
-uint32_t NodeDB::heardAtUptimeSecs(NodeNum num) const
+bool NodeDB::getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const
 {
     for (const auto &h : heardAt) {
-        if (h.num == num)
-            return h.heardAtUptimeSecs;
+        if (h.num == num) {
+            stamp = h.heardAtUptimeSecs;
+            return true;
+        }
     }
-    return 0;
+    return false;
 }
 
-uint32_t NodeDB::evictionRecency(const meshtastic_NodeInfoLite *n) const
+NodeDB::EvictionRecency NodeDB::evictionRecency(const meshtastic_NodeInfoLite *n) const
 {
-    const uint32_t stamp = heardAtUptimeSecs(n->num);
-    // A RAM stamp means heard this boot but not yet datable: more recent than anything dated
-    // before this boot. The 2^31 bias keeps stamps above every pre-2038 epoch while preserving
-    // their order among themselves.
-    return stamp ? 0x80000000u + stamp : n->last_heard;
+    uint32_t stamp = 0;
+    const bool heardThisBoot = getHeardAtUptimeSecs(n->num, stamp);
+    return {heardThisBoot ? stamp : n->last_heard, heardThisBoot};
+}
+
+bool NodeDB::evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent)
+{
+    if (candidate.heardThisBoot != incumbent.heardThisBoot)
+        return !candidate.heardThisBoot;
+    return candidate.value < incumbent.value;
 }
 
 void NodeDB::stampContactHeardNow(meshtastic_NodeInfoLite *info)
@@ -4160,8 +4167,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             LOG_INFO("Node database full with %i nodes and %u bytes free. Erasing oldest entry", numMeshNodes,
                      memGet.getFreeHeap());
             // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            uint32_t oldestBoring = UINT32_MAX;
+            EvictionRecency oldest = {};
+            EvictionRecency oldestBoring = {};
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
@@ -4171,14 +4178,16 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
                 const bool isVerified = nodeInfoLiteIsKeyManuallyVerified(cand);
                 // last_heard, except that nodes heard this boot before the clock became trusted
                 // rank by their RAM arrival stamp instead of the 0 in the stored field.
-                const uint32_t candRecency = evictionRecency(cand);
+                const EvictionRecency candRecency = evictionRecency(cand);
                 // Simply the oldest non-favorite, non-ignored, non-verified node
-                if (!isFavoriteNode && !isIgnored && !isVerified && candRecency < oldest) {
+                if (!isFavoriteNode && !isIgnored && !isVerified &&
+                    (oldestIndex == -1 || evictionRecencyOlder(candRecency, oldest))) {
                     oldest = candRecency;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 && candRecency < oldestBoring) {
+                if (!isFavoriteNode && !isIgnored && cand->public_key.size == 0 &&
+                    (oldestBoringIndex == -1 || evictionRecencyOlder(candRecency, oldestBoring))) {
                     oldestBoring = candRecency;
                     oldestBoringIndex = i;
                 }

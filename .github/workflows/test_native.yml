@@ -57,14 +57,14 @@ jobs:
           fi
           echo "native-suite-count matches the $expected_count suite directories."
 
-  # Reject naive deadline comparisons against millis(). `millis() > deadline` and
+  # Reject naive deadline comparisons against the 32-bit uptime clocks. `millis() > deadline` and
   # `deadline < millis()` invert while the deadline sits on the far side of the 32-bit wrap: the
   # action fires immediately, or blocks for about the interval it should have waited. The correct
   # forms are
   # Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
   # Throttle::deadlinePassed (an absolute deadline). See .github/copilot-instructions.md.
   millis-deadline-check:
-    name: Naive millis() Deadline Compare
+    name: Naive Uptime Deadline Compare
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -73,15 +73,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Reject millis() used directly in a deadline comparison
+      - name: Reject 32-bit uptime clocks used directly in a deadline comparison
         shell: bash
         run: |
           set -euo pipefail
           allowlist=".github/millis-deadline-allowlist.txt"
 
-          # Flag millis() directly adjacent to a comparison operator, in either order. The correct
-          # idioms all subtract first - `(int32_t)(millis() - deadline) < 0`, `now - last >= span` -
-          # so they never place millis() next to the operator and are not matched.
+          # Flag millis() or its Time::getMillis() wrapper directly adjacent to a comparison
+          # operator, in either order. The correct idioms subtract first, so they are not matched.
           #
           # Line comments are stripped before matching, so prose may name the broken idiom (this
           # guard's own documentation does). Block comments are not stripped; keep `millis() >` out
@@ -92,7 +91,7 @@ jobs:
               {
                 line = $0
                 sub(/\/\/.*/, "", line)
-                if (line ~ /(millis\(\)[ \t]*[<>]=?)|([<>]=?[ \t]*millis\(\))/) {
+                if (line ~ /((millis|getMillis)\(\)[ \t]*[<>]=?)|([<>]=?[ \t]*(millis|getMillis)\(\))/) {
                   code = line
                   sub(/^[ \t]+/, "", code); sub(/[ \t]+$/, "", code)
                   printf "%s\t%s\t%s\n", FILENAME, FNR, code
@@ -117,10 +116,10 @@ jobs:
           done < /tmp/millis-hits.tsv
 
           if [[ $violations -gt 0 ]]; then
-            echo "::error title=Naive millis() deadline compare::$violations line(s) compare against millis() directly, which inverts while the deadline is on the far side of the 32-bit wrap - the action fires immediately, or blocks for about the interval it should have waited. Use Throttle::deadlinePassed(deadline) for a stored absolute deadline, or Throttle::hasElapsed(lastEvent, intervalMs) for an interval. If a match genuinely is not a deadline test (an uptime threshold, say), add it to $allowlist with a reason."
+            echo "::error title=Naive uptime deadline compare::$violations line(s) compare a 32-bit uptime clock directly, which inverts while the deadline is on the far side of the 32-bit wrap - the action fires immediately, or blocks for about the interval it should have waited. Use Throttle::deadlinePassed(deadline) for a stored absolute deadline, or Throttle::hasElapsed(lastEvent, intervalMs) for an interval. If a match genuinely is not a deadline test (an uptime threshold, say), add it to $allowlist with a reason."
             exit 1
           fi
-          echo "No naive millis() deadline comparisons in src/ (allowlist: $(wc -l < /tmp/millis-allowed.tsv) entr(y/ies))."
+          echo "No naive 32-bit uptime deadline comparisons in src/ (allowlist: $(wc -l < /tmp/millis-allowed.tsv) entr(y/ies))."
 
   simulator-tests:
     name: Native Simulator Tests

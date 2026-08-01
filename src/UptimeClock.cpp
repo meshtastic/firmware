@@ -14,12 +14,17 @@ uint32_t Time::getMillis()
 
 namespace
 {
-// The wrap carry, published by Time::serviceMonotonic() and read by everyone else. Split into two
-// 32-bit atomics behind a sequence counter: a 64-bit store is not atomic on a 32-bit MCU and the
-// halves must be read as a matched pair. Odd sequence = publish in progress.
-std::atomic<uint32_t> publishSeq{0};
-std::atomic<uint32_t> publishedHigh{0}; // wraps counted as of the last publish
-std::atomic<uint32_t> publishedLow{0};  // getMillis() at the last publish
+struct PublishedSnapshot {
+    std::atomic<uint32_t> high{0};
+    std::atomic<uint32_t> low{0};
+};
+
+// The constexpr atomic initializers make both snapshots available before firmware startup.
+PublishedSnapshot published[2];
+std::atomic<uint32_t> publishedGeneration{0};
+#ifdef PIO_UNIT_TESTING
+std::atomic<Time::MonotonicPublishHook> monotonicPublishHook{nullptr};
+#endif
 
 // Extend a published (high, low) snapshot to `now`. Unsigned subtraction is exact across the wrap
 // for any gap under 49.7 days, so neither caller inspects the boundary. One copy: the reader and
@@ -29,17 +34,17 @@ uint64_t extendPublished(uint32_t high, uint32_t low, uint32_t now)
     return ((((uint64_t)high << 32) | low) + (uint32_t)(now - low));
 }
 
-// Seqlock read. Single writer, so this only ever retries against a publish in flight.
+// A generation change means the writer completed a publish while this copy was being read. A
+// paused publish leaves the generation unchanged and writes only the inactive snapshot.
 void readPublished(uint32_t &high, uint32_t &low)
 {
     for (;;) {
-        const uint32_t before = publishSeq.load(std::memory_order_acquire);
-        if (before & 1u)
-            continue;
-        high = publishedHigh.load(std::memory_order_relaxed);
-        low = publishedLow.load(std::memory_order_relaxed);
+        const uint32_t before = publishedGeneration.load(std::memory_order_acquire);
+        PublishedSnapshot &snapshot = published[before & 1u];
+        high = snapshot.high.load(std::memory_order_relaxed);
+        low = snapshot.low.load(std::memory_order_relaxed);
         std::atomic_thread_fence(std::memory_order_acquire);
-        if (publishSeq.load(std::memory_order_relaxed) == before)
+        if (publishedGeneration.load(std::memory_order_relaxed) == before)
             return;
     }
 }
@@ -60,23 +65,35 @@ uint32_t Time::getUptimeSecs()
 
 void Time::serviceMonotonic()
 {
-    const uint32_t low = publishedLow.load(std::memory_order_relaxed);
-    const uint32_t high = publishedHigh.load(std::memory_order_relaxed);
+    const uint32_t generation = publishedGeneration.load(std::memory_order_relaxed);
+    PublishedSnapshot &active = published[generation & 1u];
+    const uint32_t low = active.low.load(std::memory_order_relaxed);
+    const uint32_t high = active.high.load(std::memory_order_relaxed);
     const uint64_t next = extendPublished(high, low, getMillis());
 
-    const uint32_t seq = publishSeq.load(std::memory_order_relaxed);
-    publishSeq.store(seq + 1, std::memory_order_relaxed); // odd: publish in progress
-    std::atomic_thread_fence(std::memory_order_release);
-    publishedHigh.store((uint32_t)(next >> 32), std::memory_order_relaxed);
-    publishedLow.store((uint32_t)next, std::memory_order_relaxed);
-    publishSeq.store(seq + 2, std::memory_order_release); // even: stable
+    PublishedSnapshot &inactive = published[(generation + 1u) & 1u];
+    inactive.high.store((uint32_t)(next >> 32), std::memory_order_relaxed);
+    inactive.low.store((uint32_t)next, std::memory_order_relaxed);
+#ifdef PIO_UNIT_TESTING
+    if (const auto hook = monotonicPublishHook.load(std::memory_order_relaxed))
+        hook();
+#endif
+    publishedGeneration.store(generation + 1u, std::memory_order_release);
 }
 
 #ifdef PIO_UNIT_TESTING
 void Time::resetMonotonicForTests()
 {
-    publishSeq.store(0, std::memory_order_relaxed);
-    publishedHigh.store(0, std::memory_order_relaxed);
-    publishedLow.store(0, std::memory_order_relaxed);
+    publishedGeneration.store(0, std::memory_order_relaxed);
+    for (auto &snapshot : published) {
+        snapshot.high.store(0, std::memory_order_relaxed);
+        snapshot.low.store(0, std::memory_order_relaxed);
+    }
+    monotonicPublishHook.store(nullptr, std::memory_order_relaxed);
+}
+
+void Time::setMonotonicPublishHookForTests(MonotonicPublishHook hook)
+{
+    monotonicPublishHook.store(hook, std::memory_order_relaxed);
 }
 #endif

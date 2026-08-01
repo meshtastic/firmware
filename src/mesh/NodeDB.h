@@ -660,12 +660,17 @@ class NodeDB
     /// RAM arrival stamp that evictionRecency() honours - never a boot-relative last_heard.
     void stampContactHeardNow(meshtastic_NodeInfoLite *info);
 
-    /// The node's RAM arrival stamp, or 0 if it has none.
-    uint32_t heardAtUptimeSecs(NodeNum num) const;
+    /// Read the node's RAM arrival stamp. The boolean carries presence because uptime second 0 is valid.
+    bool getHeardAtUptimeSecs(NodeNum num, uint32_t &stamp) const;
 
-    /// last_heard for eviction ranking, with RAM-stamped nodes ranked above every stored epoch:
-    /// a node heard this boot is more recent than anything dated before it.
-    uint32_t evictionRecency(const meshtastic_NodeInfoLite *n) const;
+    struct EvictionRecency {
+        uint32_t value;
+        bool heardThisBoot;
+    };
+
+    /// Eviction ranking with current-boot stamps newer than every persisted epoch.
+    EvictionRecency evictionRecency(const meshtastic_NodeInfoLite *n) const;
+    static bool evictionRecencyOlder(EvictionRecency candidate, EvictionRecency incumbent);
 
     /*
      * Internal boolean to track sorting paused
