@@ -213,21 +213,10 @@ if [[ ! -t 1 ]] && ! $QUIET; then
 	echo "hint: stdout is a pipe - build errors appear at the top of output and may be lost; use --quiet to get just the RESULT line" >&2
 fi
 
-# Deterministic Fisher-Yates over a MINSTD generator rather than awk's rand(), whose sequence
-# differs between gawk and mawk - a seed that does not reproduce the same order on another machine
-# is not a seed.
-shuffle_suites() {
-	local seed="$1"
-	shift
-	printf '%s\n' "$@" | awk -v seed="$seed" '
-		function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647 }
-		BEGIN { s = seed % 2147483647; if (s <= 0) s += 2147483646 }
-		{ a[NR] = $0 }
-		END {
-			for (i = NR; i > 1; i--) { j = int(rnd() * i) + 1; t = a[i]; a[i] = a[j]; a[j] = t }
-			for (i = 1; i <= NR; i++) print a[i]
-		}'
-}
+# shuffle_suites() lives in lib/ because the CI workflow runs the same permutation; see the header
+# of that file for why a second copy cannot be allowed to exist.
+# shellcheck source=bin/lib/shuffle.sh
+source "$SCRIPT_DIR/lib/shuffle.sh"
 
 RUN_ORDER=()
 if $SHUFFLE; then
