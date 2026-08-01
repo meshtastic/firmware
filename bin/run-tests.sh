@@ -15,6 +15,8 @@
 #   ./bin/run-tests.sh --write-manifest     # print the test/state-manifest.tsv entries this run
 #                                           # would need, for a human to paste and justify
 #   ./bin/run-tests.sh --keep-state         # keep every suite's sandbox, not just the interesting ones
+#   ./bin/run-tests.sh --shuffle            # randomise suite order (seed from HEAD; printed)
+#   ./bin/run-tests.sh --seed 12345         # replay an exact order (implies --shuffle)
 #
 # Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
 #
@@ -33,6 +35,13 @@
 #
 # Two orthogonal axes: PASS/FAIL × CLEAN/DIRTY. Each suite runs in its own scratch $HOME
 # (bin/pio-test-isolate.sh), so leftovers are harmless; DIRTY means "undeclared", not "dangerous".
+#
+# ORDER. PlatformIO chooses suite order itself - list_test_names() walks test/ with os.walk() and
+# filters only *select*, they do not order - so --shuffle runs one `pio test -f <suite>` invocation
+# per suite in the chosen order. That costs about 4.7s per suite in extra pio startup. The seed is
+# printed on every shuffled run and derived from HEAD by default: deterministic for a given commit,
+# varied across commits, so a red is reproducible and attributable rather than flaky. A single green
+# seed is not evidence of order independence; vary it.
 #
 # Sanitizers, per env - this trips people up: `coverage` (the default here) has ASan/LSan;
 # `native` has NONE. Verified: zero ASan symbols in the native binary. `-e native` runs are not
@@ -59,6 +68,8 @@ FILTER=""
 QUIET=false
 WRITE_MANIFEST=false
 KEEP_STATE=false
+SHUFFLE=false
+SEED=""
 PASSTHRU=()
 
 while [[ $# -gt 0 ]]; do
@@ -83,6 +94,15 @@ while [[ $# -gt 0 ]]; do
 	--keep-state)
 		KEEP_STATE=true
 		shift
+		;;
+	--shuffle)
+		SHUFFLE=true
+		shift
+		;;
+	--seed)
+		SEED="$2"
+		SHUFFLE=true
+		shift 2
 		;;
 	*)
 		PASSTHRU+=("$1")
@@ -193,13 +213,60 @@ if [[ ! -t 1 ]] && ! $QUIET; then
 	echo "hint: stdout is a pipe - build errors appear at the top of output and may be lost; use --quiet to get just the RESULT line" >&2
 fi
 
+# Deterministic Fisher-Yates over a MINSTD generator rather than awk's rand(), whose sequence
+# differs between gawk and mawk - a seed that does not reproduce the same order on another machine
+# is not a seed.
+shuffle_suites() {
+	local seed="$1"
+	shift
+	printf '%s\n' "$@" | awk -v seed="$seed" '
+		function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647 }
+		BEGIN { s = seed % 2147483647; if (s <= 0) s += 2147483646 }
+		{ a[NR] = $0 }
+		END {
+			for (i = NR; i > 1; i--) { j = int(rnd() * i) + 1; t = a[i]; a[i] = a[j]; a[j] = t }
+			for (i = 1; i <= NR; i++) print a[i]
+		}'
+}
+
+RUN_ORDER=()
+if $SHUFFLE; then
+	# Seed from HEAD when not given: same order for a given commit (so a PR's red is replayable and
+	# attributable to its diff), different orders as the project moves.
+	if [[ -z $SEED ]]; then
+		SEED=$((16#$(git rev-parse --short=8 HEAD 2>/dev/null || echo 0)))
+	fi
+	if [[ -n $FILTER ]]; then
+		mapfile -t RUN_ORDER < <(shuffle_suites "$SEED" "$FILTER")
+	else
+		mapfile -t RUN_ORDER < <(shuffle_suites "$SEED" "${ALL_SUITES[@]}")
+	fi
+	echo "suite order: shuffled with --seed $SEED (${#RUN_ORDER[@]} suites)"
+fi
+
 # Run pio, tee to log. PIPESTATUS[0] is pio's real exit (NOT tee's).
-if $QUIET; then
+PIO_RC=0
+if $SHUFFLE; then
+	# One invocation per suite: PlatformIO orders by its own directory walk, so this is the only way
+	# to control it. Output is appended to the one $LOG the verdict logic already parses.
+	: >"$LOG"
+	for suite in "${RUN_ORDER[@]}"; do
+		if $QUIET; then
+			"$PIO" test -e "$ENV" -f "$suite" >>"$LOG" 2>&1
+			rc=$?
+		else
+			"$PIO" test -e "$ENV" -f "$suite" 2>&1 | tee -a "$LOG"
+			rc=${PIPESTATUS[0]}
+		fi
+		((rc != 0)) && PIO_RC=$rc
+	done
+elif $QUIET; then
 	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" >"$LOG" 2>&1
+	PIO_RC=$?
 else
 	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" 2>&1 | tee "$LOG"
+	PIO_RC=${PIPESTATUS[0]}
 fi
-PIO_RC=${PIPESTATUS[0]}
 
 # Stop the heartbeat, clear its line, and cache this build's object total for next time.
 if [[ -n $PROGRESS_PID ]]; then
@@ -246,6 +313,13 @@ mapfile -t SKIPPED_SUITES < <(grep -oE "${ENV}:test_[a-z0-9_]+.*\bSKIPPED\b" "$L
 
 verdict_red() {
 	local detail bin
+	# The order IS the diagnostic for an order-dependent failure; without it a shuffled red is
+	# unreadable.
+	if $SHUFFLE; then
+		echo ""
+		echo "suite order (--seed $SEED):"
+		printf '%s\n' "${RUN_ORDER[@]}" | nl -ba | sed 's/^/    /'
+	fi
 	detail="$(grep -nE '\[FAILED\]|:FAIL:|\[ERRORED\]' "$LOG" | head -3 | sed 's/^/    /')"
 	echo ""
 	echo "RED - failures detected:"
@@ -306,9 +380,13 @@ fi
 # If the two counts diverge (suite added/removed without updating native-suite-count), that
 # is itself surfaced as AMBER before we reach any verdict.
 canonical_rating() {
+	local rating=""
 	if [[ -n $CANONICAL_COUNT ]]; then
-		echo "[canonical: ${RAN_COUNT}/${CANONICAL_COUNT}]"
+		rating="[canonical: ${RAN_COUNT}/${CANONICAL_COUNT}]"
 	fi
+	# Carry the seed into the machine-readable line so a verdict is always replayable from it alone.
+	$SHUFFLE && rating="$rating [seed: $SEED]"
+	echo "$rating"
 }
 
 # AMBER: directory count disagrees with native-suite-count - file needs updating.

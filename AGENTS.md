@@ -113,6 +113,7 @@ Sequence these; don't parallelize on the same port.
 2. **A signal name is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting `[ERRORED]`. Match it against the failure count first.
 3. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
 4. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
+5. **Reproduce a shuffled order.** `--shuffle` prints its seed and puts it on the `RESULT:` line; `--seed <n>` replays that exact order. One green seed proves nothing about order independence.
 
 ### Debugging a flaky hardware test
 

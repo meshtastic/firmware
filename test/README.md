@@ -20,6 +20,15 @@ Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
 
 **A signal name in the output is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal number (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting the suite `[ERRORED]`. Match it against the failure count before assuming a fault.
 
+**Suite order is randomisable, and reproducible.** `--shuffle` runs the suites in a seeded random order; `--seed <n>` replays an exact one. The seed defaults to the commit SHA - one order per commit, so a red is replayable and attributable rather than flaky - and is printed at the start of the run and on the `RESULT:` line. On failure the full order is printed, because for an order-dependent failure the order _is_ the diagnostic. **A single green seed is not evidence of order independence**; vary it.
+
+```bash
+./bin/run-tests.sh --shuffle              # seed from HEAD, printed
+./bin/run-tests.sh --seed 2855893161      # replay that exact order
+```
+
+Randomisation costs one `pio` invocation per suite (about 4.7s each), because PlatformIO orders suites by its own directory walk and `-f` only selects.
+
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
 **Raw `pio test` (no sanitizers, no verdict logic)** - use when you need to override the env or inspect verbose Unity output:

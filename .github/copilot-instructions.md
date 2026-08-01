@@ -704,6 +704,8 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 
 **A signal name from the runner is not a crash.** `exit(UNITY_END())` returns the failure count, and PlatformIO's native runner renders a non-zero exit code as a POSIX signal - 4 failures prints `Program received signal SIGILL`, 5 prints `SIGTRAP`, and the suite is reported `[ERRORED]` instead of `[FAILED]`. Check the exit code against the failure count before theorising about memory bugs; confirm any real crash under a debugger.
 
+**Suite order is randomisable.** `./bin/run-tests.sh --shuffle` runs suites in a seeded random order; `--seed <n>` replays one. The seed defaults to the commit SHA (deterministic per commit, varied across commits), is printed at the start and on the `RESULT:` line, and the full order is printed on failure. CI shuffles its area order the same way, seeded from `GITHUB_SHA`. A single green seed is not evidence of order independence.
+
 **`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
 
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
