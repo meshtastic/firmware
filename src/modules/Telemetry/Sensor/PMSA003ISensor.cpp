@@ -36,6 +36,7 @@ bool PMSA003ISensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_INFO("%s: restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* PMSA003I_I2C_CLOCK_SPEED */
+        sleep();
         return false;
     }
 

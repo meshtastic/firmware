@@ -207,7 +207,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
             int32_t pending = sensor->pendingForReadyMs();
             if (pending) {
-                LOG_DEBUG("%s pending %ums", sensor->sensorName, pending);
+                LOG_DEBUG("%s pending %dms", sensor->sensorName, pending);
                 return pending;
             }
         }
