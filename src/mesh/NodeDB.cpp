@@ -4167,8 +4167,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             LOG_INFO("Node database full with %i nodes and %u bytes free. Erasing oldest entry", numMeshNodes,
                      memGet.getFreeHeap());
             // look for oldest node and erase it
-            EvictionRecency oldest = {};
-            EvictionRecency oldestBoring = {};
+            // Newest-possible sentinel: a zeroed init ranks older than every candidate, so nothing
+            // would ever be selected. Keep it maximal even though the index guards below also cover it.
+            EvictionRecency oldest = {UINT32_MAX, true};
+            EvictionRecency oldestBoring = {UINT32_MAX, true};
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
