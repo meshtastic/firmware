@@ -293,7 +293,7 @@ void test_getTime_anchored_after_a_wrap_is_exact()
 void test_getTime_unaffected_by_concurrent_readers_across_the_wrap()
 {
     resetRTCStateForTests();
-    Time::setTestMillis(0xFFFFF000u);
+    Time::setTestMillis(0xFFFFF800u); // exactly 0x800 short of the wrap, so the first advance lands on it
     Time::serviceMonotonic();
 
     struct timeval tv = {};
