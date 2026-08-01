@@ -12,26 +12,15 @@
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
     "flash_mode": "qio",
-    "hwids": [
-      [
-        "0X303A",
-        "0x1001"
-      ]
-    ],
+    "hwids": [["0X303A", "0x1001"]],
     "mcu": "esp32s3",
     "variant": "esp32s3box"
   },
-  "connectivity": [
-    "wifi",
-    "bluetooth"
-  ],
+  "connectivity": ["wifi", "bluetooth"],
   "debug": {
     "openocd_target": "esp32s3.cfg"
   },
-  "frameworks": [
-    "arduino",
-    "espidf"
-  ],
+  "frameworks": ["arduino", "espidf"],
   "name": "SenseCAP MeshPager X2 (16 MB FLASH, 8 MB PSRAM)",
   "upload": {
     "flash_size": "16MB",

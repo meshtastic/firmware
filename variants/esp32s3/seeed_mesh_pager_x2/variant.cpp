@@ -1,10 +1,11 @@
 #include "variant.h"
 #include "Arduino.h"
 
-#include <Wire.h>
 #include "AudioBoard.h"
+#include <Wire.h>
 
-namespace {
+namespace
+{
 
 // TCA6424 register map
 constexpr uint8_t TCA6424_INPUT_PORT0 = 0x00;
@@ -35,7 +36,8 @@ constexpr uint8_t EXP_PIN_LCD_RST = 21;
 constexpr uint8_t EXP_PIN_LORA_RESET = 22;
 constexpr uint8_t EXP_PIN_GNSS_RST = 23;
 
-class Tca6424 {
+class Tca6424
+{
   public:
     explicit Tca6424(uint8_t address) : address(address) {}
 
@@ -157,7 +159,7 @@ void earlyInitVariant()
     ok &= configureOutput(EXP_PIN_LCD_RST, false); // assert reset (active low)
     delay(20);
     ok &= ioExpander.digitalWrite(EXP_PIN_LCD_RST, true); // release reset
-    delay(120); // allow ST7789P3 to complete internal initialization
+    delay(120);                                           // allow ST7789P3 to complete internal initialization
 
     // Match demo LR20xx reset sequence on expander pin 22.
     ok &= ioExpander.digitalWrite(EXP_PIN_LORA_RESET, false);
@@ -186,9 +188,9 @@ void lateInitVariant()
 {
     if (!expanderReady) {
         if (earlyInitFailed) {
-            //LOG_ERROR("Skipping ES8311 init because TCA6424 init/config failed");
+            // LOG_ERROR("Skipping ES8311 init because TCA6424 init/config failed");
         } else {
-            //LOG_ERROR("Skipping ES8311 init because TCA6424 is not ready");
+            // LOG_ERROR("Skipping ES8311 init because TCA6424 is not ready");
         }
         return;
     }
@@ -208,7 +210,7 @@ void lateInitVariant()
 
     board.begin(cfg);
     board.setVolume(75);
-    //LOG_INFO("ES8311 audio board initialized on I2C1");
+    // LOG_INFO("ES8311 audio board initialized on I2C1");
 }
 
 extern "C" void meshtastic_variant_pre_radio_reset(void)
