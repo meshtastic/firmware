@@ -166,10 +166,15 @@ inline bool isRadioProfileFile(const char *filename)
            strcmp(filename, backupFileName) == 0;
 }
 
+/// "No trustworthy arrival time", as distinct from "zero seconds ago". Deliberately huge so the
+/// display formatters fall into their existing unknown-age branches ("unknown age" / "?").
+inline constexpr uint32_t SINCE_UNKNOWN = UINT32_MAX;
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
-/// Given a packet, return how many seconds in the past (vs now) it was received
+/// Given a packet, return how many seconds in the past (vs now) it was received,
+/// or SINCE_UNKNOWN if it carries no trustworthy rx_time.
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
 /// Outcome of mapping a single on-wire last-byte (next_hop / relay_node) back to a full NodeNum.
@@ -414,15 +419,15 @@ class NodeDB
     bool copyPublicKeyAuthoritative(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
     /// Key for the inbound-decrypt path: authoritative (hot/warm), or a cold-tier cache key only when
-    /// it is signer-proven. Keeps unverified TOFU cache keys from backing pki_encrypted attribution.
+    /// it is key-proven. Keeps unverified TOFU cache keys from backing pki_encrypted attribution.
     bool copyPublicKeyForDecrypt(NodeNum n, meshtastic_NodeInfoLite_public_key_t &out);
 
     /// True if n is a known XEdDSA signer for exactly `key32` (hot signed bitfield or warm
-    /// signer bit); the key match stops a rotated key inheriting a stale signer verdict.
+    /// xeddsa-signed bit); the key match stops a rotated key inheriting a stale signer verdict.
     bool isVerifiedSignerForKey(NodeNum n, const uint8_t *key32);
 
-    /// Key-agnostic "should n's signable traffic arrive signed", per hot bitfield or warm signer
-    /// bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
+    /// Key-agnostic "should n's signable traffic arrive signed", per hot bitfield or warm
+    /// xeddsa-signed bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
     bool isKnownXeddsaSigner(NodeNum n);
 
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
@@ -740,7 +745,12 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_MASK (1u << NODEINFO_BITFIELD_HAS_IS_UNMESSAGABLE_SHIFT)
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 9
 #define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1u << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
-// Bits 10..31 reserved for future single-bit flags.
+// snr_q4 (persisted, sint32) is proto3 singular, so 0 == "never written", but 0 dB is valid.
+// This bit disambiguates: whenever snr_q4 is written from a genuine RF measurement.
+// Use this instead of `if (snr_q4)`. Legacy records (bit clear) are unambiguously "unknown".
+#define NODEINFO_BITFIELD_HAS_SNR_SHIFT 10
+#define NODEINFO_BITFIELD_HAS_SNR_MASK (1u << NODEINFO_BITFIELD_HAS_SNR_SHIFT)
+// Bits 11..31 reserved for future single-bit flags.
 
 // Convenience accessors so call sites read like the old struct fields.
 inline bool nodeInfoLiteHasUser(const meshtastic_NodeInfoLite *n)
@@ -782,6 +792,12 @@ inline bool nodeInfoLiteIsKeyManuallyVerified(const meshtastic_NodeInfoLite *n)
 inline bool nodeInfoLiteHasXeddsaSigned(const meshtastic_NodeInfoLite *n)
 {
     return n && (n->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK);
+}
+/// True if this node's snr_q4 was written from a genuine RF measurement (including a real
+/// 0 dB reading). False means "never measured" - do not treat 0 as data.
+inline bool nodeInfoLiteHasSnr(const meshtastic_NodeInfoLite *n)
+{
+    return n && (n->bitfield & NODEINFO_BITFIELD_HAS_SNR_MASK);
 }
 /// A node that the eviction/migration paths must not drop: a favourite, an
 /// ignored (blocked) node, or a manually-verified key.
