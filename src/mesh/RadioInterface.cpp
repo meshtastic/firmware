@@ -1274,14 +1274,15 @@ void RadioInterface::applyModemConfig()
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     const RegionInfo *newRegion = getRegion(loraConfig.region);
+    const bool useWideModemParameters = newRegion->wideLora || !supportsSubGhz();
     myRegion = newRegion;
 
     if (loraConfig.use_preset) {
-        if (!validateConfigLora(loraConfig)) {
+        if (!validateConfigLora(loraConfig, this)) {
             loraConfig.modem_preset = newRegion->getDefaultPreset();
         }
         uint8_t newcr;
-        modemPresetToParams(loraConfig.modem_preset, newRegion->wideLora, bw, sf, newcr);
+        modemPresetToParams(loraConfig.modem_preset, useWideModemParameters, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
         if (loraConfig.coding_rate >= 5 && loraConfig.coding_rate <= 8 && loraConfig.coding_rate < newcr) {
             cr = newcr;
@@ -1296,14 +1297,19 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        if (validateConfigLora(loraConfig)) {
+        if (validateConfigLora(loraConfig, this)) {
         } else {
             LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
                      newRegion->name);
-            clampConfigLora(loraConfig);
+            clampConfigLora(loraConfig, this);
         }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+        if (!supportsLoRaBandwidth(bw, useWideModemParameters)) {
+            // Keep 2.4 GHz-only radios operational while an incompatible or UNSET region is being corrected.
+            bw = modemPresetToBwKHz(newRegion->getDefaultPreset(), useWideModemParameters);
+            loraConfig.bandwidth = bwKHzToCode(bw);
+        }
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
     }
@@ -1375,7 +1381,7 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
 
-    if (newRegion->wideLora) {                          // clamp if wide freq range
+    if (useWideModemParameters) {                       // clamp if wide freq range
         preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
     } else {
         preambleLength =

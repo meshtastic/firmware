@@ -19,7 +19,9 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getCr() const { return cr; }
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
-    BandwidthProfile bandwidthProfile = BandwidthProfile::SX128X;
+    BandwidthProfile bandwidthProfile = BandwidthProfile::LR11X0;
+
+    bool supportsSubGhz() override { return bandwidthProfile != BandwidthProfile::SX128X; }
 
     bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
     {
@@ -266,6 +268,30 @@ static void test_applyModemConfig_freshFlashCodingRateNotZero()
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 250.0f, testRadio->getBw());
 }
 
+static void test_applyModemConfig_sx128xUsesSafeBandwidthWithUnsetRegion()
+{
+    config.lora = meshtastic_Config_LoRaConfig_init_zero;
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+    config.lora.use_preset = true;
+    config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::SX128X;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, testRadio->getBw());
+}
+
+static void test_applyModemConfig_sx128xRepairsCustomBandwidthWithUnsetRegion()
+{
+    config.lora = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_UNSET, 125);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::SX128X;
+
+    testRadio->reconfigure();
+
+    TEST_ASSERT_EQUAL_UINT16(800, config.lora.bandwidth);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 812.5f, testRadio->getBw());
+}
+
 // When coding_rate matches the preset exactly, should still use the preset value
 static void test_applyModemConfig_codingRateMatchesPreset()
 {
@@ -490,6 +516,8 @@ void setup()
     RUN_TEST(test_clampConfigLora_repairsLr2021TurboPreset);
     RUN_TEST(test_validateConfigLora_preservesSubGhzBandwidth);
     RUN_TEST(test_applyModemConfig_freshFlashCodingRateNotZero);
+    RUN_TEST(test_applyModemConfig_sx128xUsesSafeBandwidthWithUnsetRegion);
+    RUN_TEST(test_applyModemConfig_sx128xRepairsCustomBandwidthWithUnsetRegion);
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateLowerThanPreset);
