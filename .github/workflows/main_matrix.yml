@@ -211,9 +211,9 @@ jobs:
 
   # Single, stable status check for branch protection.
   # Always runs and passes only if every build and check that ran succeeded.
-  # Consumed in PRs and Merge Queue
   ci-gate:
-    if: always()
+    # Consumed in PRs and Merge Queue
+    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && !cancelled()
     needs: [build, check]
     runs-on: ubuntu-slim
     steps:
