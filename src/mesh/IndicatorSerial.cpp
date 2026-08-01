@@ -74,13 +74,11 @@ void SensecapIndicator::pump()
 
 // Pump the link until `flag` goes true, a nack arrives, or the timeout
 // expires
-bool SensecapIndicator::wait_response(bool &flag, uint32_t timeout_ms)
+bool SensecapIndicator::wait_response(const bool &flag, uint32_t timeout_ms)
 {
     uint32_t start = millis();
     while (!flag) {
         pump();
-        if (flag)
-            break;
         if (request_nacked)
             return false; // the other side could not handle the request
         if (!Throttle::isWithinTimespanMs(start, timeout_ms)) {

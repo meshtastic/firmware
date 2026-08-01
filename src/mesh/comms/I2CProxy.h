@@ -31,7 +31,7 @@
 class I2CProxy : public TwoWire
 {
   public:
-    I2CProxy() : TwoWire(0) {}
+    I2CProxy() : TwoWire(0), _ctx{} {}
 
     bool end() override { return true; }
     bool setClock(uint32_t) override { return true; }

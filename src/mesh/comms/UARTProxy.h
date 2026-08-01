@@ -49,7 +49,7 @@ class UARTProxy : public Stream
     // (An external RingBuf.h is ambiguous in this build: SdFat ships a
     // conflicting header via device-ui.)
     static const size_t BUF_SIZE = 2048;
-    uint8_t buf[BUF_SIZE];
+    uint8_t buf[BUF_SIZE] = {};
     volatile size_t buf_head = 0; // write index (producer)
     volatile size_t buf_tail = 0; // read index (consumer)
 

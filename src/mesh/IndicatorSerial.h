@@ -21,7 +21,7 @@
 class SensecapIndicator : public concurrency::OSThread
 {
   public:
-    SensecapIndicator(HardwareSerial &serial);
+    explicit SensecapIndicator(HardwareSerial &serial);
     int32_t runOnce() override;
     // Standalone send (e.g. NMEA from UARTProxy), takes link_lock to
     // serialize the shared TX buffer against the request methods
@@ -74,8 +74,8 @@ class SensecapIndicator : public concurrency::OSThread
     // The UI task requests map tiles while the main loop pumps the link;
     // every send/pump sequence must hold this lock
     concurrency::Lock link_lock;
-    pb_byte_t pb_tx_buf[PB_BUFSIZE];
-    pb_byte_t pb_rx_buf[PB_BUFSIZE];
+    pb_byte_t pb_tx_buf[PB_BUFSIZE] = {};
+    pb_byte_t pb_rx_buf[PB_BUFSIZE] = {};
     size_t pb_rx_size = 0; // Number of bytes currently in the buffer
     HardwareSerial *_serial = nullptr;
     uint32_t packets_received = 0;
@@ -97,8 +97,8 @@ class SensecapIndicator : public concurrency::OSThread
     // InterdeviceMessage is ~4.6KB, too large for task stacks. Both are
     // only touched while link_lock is held, so requests staged by one
     // thread cannot be overwritten by another.
-    meshtastic_InterdeviceMessage rx_message;
-    meshtastic_InterdeviceMessage tx_message;
+    meshtastic_InterdeviceMessage rx_message = meshtastic_InterdeviceMessage_init_zero;
+    meshtastic_InterdeviceMessage tx_message = meshtastic_InterdeviceMessage_init_zero;
     // Response destinations for the file operation in flight
     meshtastic_FileTransfer *pending_file = NULL;
     meshtastic_DirectoryListing *pending_dir = NULL;
@@ -131,7 +131,7 @@ class SensecapIndicator : public concurrency::OSThread
     bool send_uplink_unlocked(const meshtastic_InterdeviceMessage &message);
     // callers hold link_lock (the request was staged in the shared tx_message)
     bool file_request(meshtastic_InterdeviceMessage &request, meshtastic_FileTransfer *out, uint32_t timeout_ms);
-    bool wait_response(bool &flag, uint32_t timeout_ms);
+    bool wait_response(const bool &flag, uint32_t timeout_ms);
     void pump();
     size_t serial_check(char *buf, size_t space_left);
     void check_packet();

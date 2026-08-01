@@ -75,6 +75,8 @@ class IndicatorRemoteFS : public IRemoteFS
     }
 
   public:
+    IndicatorRemoteFS() : result(meshtastic_FileTransfer_init_zero), listing(meshtastic_DirectoryListing_init_zero) {}
+
     bool readChunk(const char *path, uint32_t offset, uint8_t *buf, uint32_t len, uint32_t *bytesRead,
                    uint32_t *fileSize) override
     {
@@ -128,7 +130,7 @@ class IndicatorRemoteFS : public IRemoteFS
     {
         if (!sensecapIndicator)
             return false;
-        meshtastic_SdCardInfo result = meshtastic_SdCardInfo_init_zero;
+        meshtastic_SdCardInfo sdState = meshtastic_SdCardInfo_init_zero;
         // A mount takes up to two seconds. Waiting it out here is worth it (an
         // empty slot reported once sticks in the UI), but this runs on the UI
         // task, so the wait is bounded well below what a user would call a
@@ -136,22 +138,22 @@ class IndicatorRemoteFS : public IRemoteFS
         Budget budget;
         budget.busy = INFO_BUSY_ATTEMPTS; // a mount, not a whole FAT scan
         while (true) {
-            result = meshtastic_SdCardInfo_init_zero;
-            bool answered = sensecapIndicator->sd_info(&result);
-            if (answered && !result.busy)
+            sdState = meshtastic_SdCardInfo_init_zero;
+            bool answered = sensecapIndicator->sd_info(&sdState);
+            if (answered && !sdState.busy)
                 break;
             meshtastic_FileStatus status = answered ? meshtastic_FileStatus_FILE_BUSY : meshtastic_FileStatus_FILE_UNSPECIFIED;
             if (!retryable(answered, status, budget))
                 return false;
         }
-        info.present = result.present;
-        info.cardType = (uint8_t)result.card_type;
-        info.fatType = (uint8_t)result.fat_type;
-        info.cardSize = result.card_size;
-        info.usedBytes = result.used_bytes;
-        info.freeBytes = result.free_bytes;
-        info.statsValid = result.stats_valid;
-        info.unformatted = result.unformatted;
+        info.present = sdState.present;
+        info.cardType = (uint8_t)sdState.card_type;
+        info.fatType = (uint8_t)sdState.fat_type;
+        info.cardSize = sdState.card_size;
+        info.usedBytes = sdState.used_bytes;
+        info.freeBytes = sdState.free_bytes;
+        info.statsValid = sdState.stats_valid;
+        info.unformatted = sdState.unformatted;
         return true;
     }
 

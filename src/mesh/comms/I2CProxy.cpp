@@ -91,7 +91,7 @@ size_t I2CProxy::requestFrom(uint8_t address, size_t len, bool stopBit)
 
 int I2CProxy::available()
 {
-    Context &c = ctx();
+    const Context &c = ctx();
     return (int)(c.rxLen - c.rxPos);
 }
 
@@ -103,7 +103,7 @@ int I2CProxy::read()
 
 int I2CProxy::peek()
 {
-    Context &c = ctx();
+    const Context &c = ctx();
     return c.rxPos < c.rxLen ? c.rxBuf[c.rxPos] : -1;
 }
 
