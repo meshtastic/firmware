@@ -17,23 +17,14 @@
 #define BUTTON_PIN 0 // BOOT doubles as user button
 
 // ─── Battery ──────────────────────────────────────────────────────────────────
-// Schematic W12-MB-V0.2 sheet 1: the divider hangs off a P-MOSFET high-side switch, so it only
-// draws from the cell while a reading is in flight.
-//
-//   BAT --S[Q6 AO3401A]D-- R50 390K --IO1_ADC_IN-- R51 100K -- GND
-//          |G  R49 1K to BAT (gate pull-up: Q6 off by default)
-//          +-- R48 1K -- C[Q7 S8050 NPN]E -- GND,  base <- R52 1K <- IO2
-//
-// The NPN inverts, so ADC_CTRL is active HIGH. Left undriven, Q6 stays off and GPIO1 reads a hard
-// 0 mV through R51 - which is how this board first shipped, reporting "no battery" on every boot.
+// GPIO2 gates a P-MOSFET high-side switch on the divider (schematic W12-MB-V0.2 sheet 1); an NPN
+// inverts it, so it is active HIGH. Undriven, the switch stays off and GPIO1 reads a hard 0 mV.
 #define BATTERY_PIN 1
 #define ADC_CHANNEL ADC_CHANNEL_0 // GPIO1 = ADC1_CH0
 #define ADC_CTRL 2
 #define ADC_CTRL_ENABLED HIGH
-// 4.2V at the cell is only ~857mV after the 390K/100K divider, so the 0-1250mV range fits it far
-// more tightly than the 0-3100mV default would.
-#define ADC_ATTENUATION ADC_ATTEN_DB_2_5
-#define ADC_MULTIPLIER (490.0 / 100.0) // R50 + R51 over R51
+#define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // 4.2V cell is only ~857mV after the divider
+#define ADC_MULTIPLIER (490.0 / 100.0)   // R50 390K + R51 100K, over R51
 
 // ─── LoRa radio ───────────────────────────────────────────────────────────────
 // RF switching is hardwired to the radio's CTX/CPS pins, and the external PA enables
