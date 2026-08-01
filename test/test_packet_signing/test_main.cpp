@@ -173,6 +173,11 @@ class AuthPipelineRouter : public ReliableRouter
         PendingPacket *entry = findPendingPacket(from, id);
         return entry ? entry->nextTxMsec : 0;
     }
+    uint8_t pendingTotalAttempts(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        return entry ? entry->initialNumRetransmissions + 1 : 0;
+    }
     size_t pendingCount() const { return pending.size(); }
     void clearPending()
     {
@@ -1508,6 +1513,26 @@ void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
     initRegion();
 }
 
+void test_C15_reliable_unicast_tracks_five_total_attempts(void)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    p.id = 0x51530001;
+    p.want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_EQUAL_UINT8(5, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
+}
+
+void test_C16_reliable_broadcast_keeps_three_total_attempts(void)
+{
+    meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
+    p.id = 0x51530002;
+    p.want_ack = true;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_EQUAL_UINT8(3, pipelineRouter->pendingTotalAttempts(LOCAL_NODE, p.id));
+}
+
 // C5: the packet survives (C4) but the identity claim inside it must not land - the pubkey guard
 // can't tell a signer from an impersonator replaying its (public) key. Only the write is refused.
 void test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name(void)
@@ -1976,6 +2001,8 @@ void setup()
     RUN_TEST(test_C12_exact_authenticated_replay_reuses_verdict_without_collision_bypass);
     RUN_TEST(test_C13_failed_initial_reliable_send_does_not_retry);
     RUN_TEST(test_C14_duty_cycle_limited_reliable_send_remains_pending);
+    RUN_TEST(test_C15_reliable_unicast_tracks_five_total_attempts);
+    RUN_TEST(test_C16_reliable_broadcast_keeps_three_total_attempts);
     printf("\n=== Group N: NodeInfoModule authentication ===\n");
     RUN_TEST(test_N1_unsigned_nodeinfo_from_signer_dropped);
     RUN_TEST(test_N2_signed_nodeinfo_from_signer_not_dropped);

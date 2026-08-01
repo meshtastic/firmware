@@ -11,6 +11,7 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "airtime.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "mesh/Default.h"
@@ -93,6 +94,44 @@ class NextHopRouterTestShim : public NextHopRouter
     using NextHopRouter::relayOpaquePacket;
     using Router::shouldDecrementHopLimit; // protected in Router
 
+    PendingPacket *trackForTest(const meshtastic_MeshPacket &packet, uint8_t totalAttempts)
+    {
+        auto *copy = packetPool.allocCopy(packet);
+        TEST_ASSERT_NOT_NULL(copy);
+        return startRetransmission(copy, totalAttempts);
+    }
+
+    PendingPacket *trackWithDefaultBudgetForTest(const meshtastic_MeshPacket &packet)
+    {
+        auto *copy = packetPool.allocCopy(packet);
+        TEST_ASSERT_NOT_NULL(copy);
+        return startRetransmission(copy);
+    }
+
+    bool stopForTest(NodeNum from, PacketId id) { return stopRetransmission(from, id); }
+
+    meshtastic_MeshPacket *pendingPacketForTest(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        return entry ? entry->packet : nullptr;
+    }
+
+    void fireNextRetryForTest(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        TEST_ASSERT_NOT_NULL(entry);
+        entry->nextTxMsec = 0;
+        doRetransmissions();
+    }
+
+    void markOneRetryFiredForTest(NodeNum from, PacketId id)
+    {
+        PendingPacket *entry = findPendingPacket(from, id);
+        TEST_ASSERT_NOT_NULL(entry);
+        TEST_ASSERT_GREATER_THAN_UINT8(0, entry->numRetransmissions);
+        --entry->numRetransmissions;
+    }
+
     void resetRouteHealthForTest()
     {
         for (auto &h : routeHealth)
@@ -112,6 +151,7 @@ class MockRadioInterface : public RadioInterface
         sendCount++;
         lastHopLimit = p->hop_limit;
         lastHopStart = p->hop_start;
+        sentNextHops.push_back(p->next_hop);
         if (declineAll || p->to == NODENUM_BROADCAST_NO_LORA)
             return ERRNO_SHOULD_RELEASE;
 
@@ -126,10 +166,18 @@ class MockRadioInterface : public RadioInterface
         return 0;
     }
 
+    bool cancelSending(NodeNum, PacketId) override
+    {
+        cancelCount++;
+        return true;
+    }
+
     int sendCount = 0;
+    uint32_t cancelCount = 0;
     bool declineAll = false;
     uint8_t lastHopLimit = 0;
     uint8_t lastHopStart = 0;
+    std::vector<uint8_t> sentNextHops;
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
@@ -472,6 +520,68 @@ static meshtastic_MeshPacket makeRebroadcastCandidate(NodeNum to)
     return p;
 }
 
+void test_pending_does_not_cancel_radio_queue_before_first_retry(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.from = kLocalNode;
+    p.id = 0x51000001;
+    shim->trackForTest(p, 5);
+
+    TEST_ASSERT_TRUE(shim->stopForTest(kLocalNode, p.id));
+    TEST_ASSERT_EQUAL_UINT32(0, mockIface->cancelCount);
+}
+
+void test_pending_cancels_radio_queue_after_first_retry_for_any_budget(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.from = kLocalNode;
+    p.id = 0x51000002;
+    shim->trackForTest(p, 5);
+    shim->markOneRetryFiredForTest(kLocalNode, p.id);
+
+    TEST_ASSERT_TRUE(shim->stopForTest(kLocalNode, p.id));
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->cancelCount);
+}
+
+void test_directed_hop_tracks_three_total_attempts(void)
+{
+    installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(0x33333333);
+    p.id = 0x51530003;
+
+    PendingPacket *entry = shim->trackWithDefaultBudgetForTest(p);
+    TEST_ASSERT_NOT_NULL(entry);
+    TEST_ASSERT_EQUAL_UINT8(3, entry->initialNumRetransmissions + 1);
+    TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
+}
+
+void test_intermediate_three_attempts_preserve_record_and_flood_last(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    constexpr NodeNum dest = 0x33333333;
+    mockNodeDB->addNode(dest, 2, true, 60, meshtastic_Config_DeviceConfig_Role_CLIENT, false, false, 0xAB);
+    mockNodeDB->addNode(0x000007AB, 0, true, 60);
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(dest);
+    p.id = 0x51530004;
+    p.next_hop = 0xAB;
+    PendingPacket *entry = shim->trackWithDefaultBudgetForTest(p);
+    TEST_ASSERT_NOT_NULL(entry);
+    meshtastic_MeshPacket *trackedPacket = entry->packet;
+
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_UINT32(1, mockIface->sentNextHops.size());
+    TEST_ASSERT_EQUAL_HEX8(0xAB, mockIface->sentNextHops[0]);
+    TEST_ASSERT_EQUAL_PTR(trackedPacket, shim->pendingPacketForTest(p.from, p.id));
+
+    shim->fireNextRetryForTest(p.from, p.id);
+    TEST_ASSERT_EQUAL_UINT32(2, mockIface->sentNextHops.size());
+    TEST_ASSERT_EQUAL_HEX8(NO_NEXT_HOP_PREFERENCE, mockIface->sentNextHops[1]);
+    TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
+}
+
 // Control: proves the NO_LORA case below turns on the `to` field alone.
 void test_rebroadcast_normal_broadcast_is_relayed(void)
 {
@@ -549,6 +659,8 @@ void test_event_mode_hop_behavior(void)
 void setup()
 {
     initializeTestEnvironment();
+    AirTime testAirTime;
+    airTime = &testAirTime;
     UNITY_BEGIN();
 
     mockNodeDB = new MockNodeDB();
@@ -593,6 +705,12 @@ void setup()
     RUN_TEST(test_hoplimit_preserve_unique_favorite_router);
     RUN_TEST(test_hoplimit_decrement_on_colliding_favorites);
     RUN_TEST(test_hoplimit_decrement_when_resolved_not_favorite);
+
+    printf("\n=== pending retransmission bookkeeping ===\n");
+    RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
+    RUN_TEST(test_pending_cancels_radio_queue_after_first_retry_for_any_budget);
+    RUN_TEST(test_directed_hop_tracks_three_total_attempts);
+    RUN_TEST(test_intermediate_three_attempts_preserve_record_and_flood_last);
 
     printf("\n=== rebroadcast of NODENUM_BROADCAST_NO_LORA ===\n");
     RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
