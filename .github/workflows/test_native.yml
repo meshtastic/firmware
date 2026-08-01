@@ -64,7 +64,9 @@ jobs:
   # Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
   # Throttle::deadlinePassed (an absolute deadline). See .github/copilot-instructions.md.
   millis-deadline-check:
-    name: Naive Uptime Deadline Compare
+    # Name is load-bearing: upstream branch protection matches the check by name. Widen the guard,
+    # not this string.
+    name: Naive millis() Deadline Compare
     runs-on: ubuntu-latest
     permissions:
       contents: read
