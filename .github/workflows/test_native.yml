@@ -2,7 +2,23 @@ name: Run Tests on Native platform
 
 on:
   workflow_call:
+    inputs:
+      suite_order_seed:
+        description: >-
+          Seed for shuffling the test-area order. Empty (the default) means: fixed declared order on
+          pull_request, so a contributor's PR never turns red because of an order they did not
+          choose; commit-SHA-derived elsewhere. Set a number to force that exact order anywhere -
+          that is how you replay a shuffled failure.
+        type: string
+        required: false
+        default: ""
   workflow_dispatch:
+    inputs:
+      suite_order_seed:
+        description: "Seed for shuffling the test-area order. Empty = fixed order on PRs, SHA-derived otherwise."
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -236,26 +252,44 @@ jobs:
           for rule in "${area_rules[@]}"; do run_order+=("${rule%%:*}"); done
           run_order+=("misc")
 
-          # Shuffle the area order. The rule order above is an accident of how the areas were
-          # written, and running it fixed means the suite set is only ever exercised in one
-          # sequence - order dependence between areas cannot be observed at all. Seeded from the
-          # commit SHA: one order per commit, so a red is replayable and attributable to that
-          # commit rather than flaky, while the project keeps exploring orders over time.
+          # Area order. The rule order above is an accident of how the areas were written, and
+          # running it fixed forever means order dependence between areas is never observed - but
+          # randomising it on a contributor's PR would turn their run red for an order they did not
+          # choose, which is how a randomisation gets reverted instead of the coupling fixed.
+          #
+          # So: pull_request keeps the fixed declared order. Everywhere else (push, schedule) the
+          # order is shuffled, seeded from the commit SHA - deterministic per commit, replayable,
+          # attributable, and it never blocks someone else's PR. An explicit seed input overrides
+          # both, which is how you replay a specific failing order anywhere.
           #
           # Intra-area order stays PlatformIO's: filters select suites, they do not order them
           # (list_test_names() walks test/ with os.walk()), so controlling it needs one invocation
           # per suite. bin/run-tests.sh --shuffle does exactly that locally.
-          seed=$((16#${GITHUB_SHA:0:8}))
-          echo "area order seed: $seed (from ${GITHUB_SHA:0:8}); replay locally with ./bin/run-tests.sh --shuffle --seed $seed"
-          mapfile -t run_order < <(printf '%s\n' "${run_order[@]}" | awk -v seed="$seed" '
-            function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647 }
-            BEGIN { s = seed % 2147483647; if (s <= 0) s += 2147483646 }
-            { a[NR] = $0 }
-            END {
-              for (i = NR; i > 1; i--) { j = int(rnd() * i) + 1; t = a[i]; a[i] = a[j]; a[j] = t }
-              for (i = 1; i <= NR; i++) print a[i]
-            }')
-          echo "area order: ${run_order[*]}"
+          seed_input="${{ inputs.suite_order_seed }}"
+          if [ -n "$seed_input" ]; then
+            seed="$seed_input"
+            echo "area order: shuffled with explicitly supplied seed $seed"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            seed=""
+            echo "area order: fixed declared order (pull_request) - ${run_order[*]}"
+            echo "  to exercise a different order, re-run this workflow with a suite_order_seed input"
+          else
+            seed=$((16#${GITHUB_SHA:0:8}))
+            echo "area order: shuffled with seed $seed (from ${GITHUB_SHA:0:8})"
+          fi
+
+          if [ -n "$seed" ]; then
+            mapfile -t run_order < <(printf '%s\n' "${run_order[@]}" | awk -v seed="$seed" '
+              function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647 }
+              BEGIN { s = seed % 2147483647; if (s <= 0) s += 2147483646 }
+              { a[NR] = $0 }
+              END {
+                for (i = NR; i > 1; i--) { j = int(rnd() * i) + 1; t = a[i]; a[i] = a[j]; a[j] = t }
+                for (i = 1; i <= NR; i++) print a[i]
+              }')
+            echo "area order: ${run_order[*]}"
+            echo "  replay locally: ./bin/run-tests.sh --shuffle --seed $seed"
+          fi
 
           fail=0
           for a in "${run_order[@]}"; do
