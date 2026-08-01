@@ -178,8 +178,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Default GPS L76K
 #if defined(SEEED_XIAO_NRF_KIT_DEFAULT) || defined(SEEED_XIAO_NRF_WIO_BTB)
 #define GPS_L76K
-#define GPS_TX_PIN D6 // This is data from the MCU
-#define GPS_RX_PIN D7 // This is data from the GNSS module
+#define GPS_TX_PIN (30) // This is data from the MCU
+#define GPS_RX_PIN (31) // This is data from the GNSS module
 #if defined(SEEED_XIAO_NRF_KIT_DEFAULT)
 #define PIN_GPS_STANDBY D0 // this is where the conflicting pinouts come from
 #endif
@@ -189,7 +189,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define GPS_RX_PIN (31)
 #endif
 
-#define HAS_GPS 1
+#define HAS_GPS 0
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
 #define PIN_SERIAL1_TX GPS_TX_PIN
@@ -215,26 +215,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define I2C_NO_RESCAN           // I2C is a bit finicky, don't scan too much
 #define WIRE_INTERFACES_COUNT 1 // changed to 1 for now, as LSM6DS3TR has issues.
 
-#if defined(XIAO_BLE_LEGACY_PINOUT)
-// Used for I2C by DIY xiao_ble variant
-#define PIN_WIRE_SDA D4
-#define PIN_WIRE_SCL D5
-#else
-// Put the I2C pins on the NFC pins by default
-#if defined(SEEED_XIAO_NRF_KIT_DEFAULT) || defined(SEEED_XIAO_NRF_WIO_BTB)
-#define PIN_WIRE_SDA 30
-#define PIN_WIRE_SCL 31
-#else
-// If not on legacy or defauly, we're wanting I2C on the back pins
+// Forzamos la asignación directa ignorando las reglas por defecto
 #define PIN_WIRE_SDA D6
 #define PIN_WIRE_SCL D7
-#endif // defined(SEEED_XIAO_NRF_KIT_DEFAULT) || defined(SEEED_XIAO_NRF_WIO_BTB)
-#endif // defined(XIAO_BLE_LEGACY_PINOUT)
 
-// // Internal LSM6DS3TR on XIAO nRF52840 Series - put it on wire1
-// // Note: disabled for now, as there are some issues with the LSM.
-// #define PIN_WIRE1_SDA (17)
-// #define PIN_WIRE1_SCL (16)
 
 static const uint8_t SDA = PIN_WIRE_SDA; // Not sure if this is needed
 static const uint8_t SCL = PIN_WIRE_SCL; // Not sure if this is needed
