@@ -154,6 +154,9 @@ class RadioInterface
     /// multiband chips like the LR1121 keep the default.
     virtual bool supportsSubGhz() { return true; }
 
+    /// Whether this radio accepts the exact bandwidth for the requested band.
+    virtual bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) { return true; }
+
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }
 
@@ -253,7 +256,7 @@ class RadioInterface
     // Whether we have a custom channel name
     static bool uses_custom_channel_name;
 
-    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp);
+    static bool checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, RadioInterface *radio = nullptr);
 
     // Check if a candidate region is compatible and valid, with no side effects (safe for
     // speculative UI checks). prospectiveLicensedOwner is for a UI flow that requires
@@ -266,10 +269,10 @@ class RadioInterface
     static bool validateConfigRegion(const meshtastic_Config_LoRaConfig &loraConfig);
 
     // Check if a candidate radio configuration is valid.
-    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig);
+    static bool validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio = nullptr);
 
     // Make a candidate radio configuration valid, even if it isn't.
-    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig);
+    static void clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio = nullptr);
 
     // If preset is locked to a sibling of currentRegion among the swappable EU regions
     // (EU_868/EU_866/EU_N_868), return the sibling region owning the preset, else nullptr.

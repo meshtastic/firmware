@@ -17,6 +17,15 @@ class TestableRadioInterface : public RadioInterface
     uint8_t getCr() const { return cr; }
     uint8_t getSf() const { return sf; }
     float getBw() const { return bw; }
+    bool allowWide1600 = true;
+
+    bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
+    {
+        if (!wideBand)
+            return true;
+        return bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f ||
+               (allowWide1600 && bandwidthKHz == 1625.0f);
+    }
 
     // Override reconfigure to call the base which invokes applyModemConfig()
     bool reconfigure() override { return RadioInterface::reconfigure(); }
@@ -25,6 +34,8 @@ class TestableRadioInterface : public RadioInterface
     uint32_t getPacketTime(uint32_t, bool) override { return 0; }
     ErrorCode send(meshtastic_MeshPacket *p) override { return ERRNO_OK; }
 };
+
+static TestableRadioInterface *testRadio;
 
 static void test_bwCodeToKHz_specialMappings()
 {
@@ -129,11 +140,81 @@ static void test_clampConfigLora_validPresetUnchanged()
     TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST, cfg.modem_preset);
 }
 
+static meshtastic_Config_LoRaConfig makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode region, uint16_t bandwidth)
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = region;
+    cfg.use_preset = false;
+    cfg.bandwidth = bandwidth;
+    cfg.spread_factor = 7;
+    cfg.coding_rate = 5;
+    return cfg;
+}
+
+static void test_validateConfigLora_rejectsSubGhzBandwidthOnLora24()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 125);
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    TEST_ASSERT_EQUAL_UINT16(125, cfg.bandwidth);
+}
+
+static void test_clampConfigLora_repairsSubGhzBandwidthOnLora24()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 125);
+
+    RadioInterface::clampConfigLora(cfg, testRadio);
+
+    TEST_ASSERT_EQUAL_UINT16(800, cfg.bandwidth);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
+static void test_validateConfigLora_allowsSx128xWideBandwidths()
+{
+    const uint16_t bandwidths[] = {200, 400, 800, 1600};
+    testRadio->allowWide1600 = true;
+
+    for (auto bandwidth : bandwidths) {
+        auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    }
+}
+
+static void test_validateConfigLora_rejectsLr1121Wide1600()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
+    testRadio->allowWide1600 = false;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
+static void test_clampConfigLora_repairsLr1121TurboPreset()
+{
+    meshtastic_Config_LoRaConfig cfg = meshtastic_Config_LoRaConfig_init_zero;
+    cfg.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
+    cfg.use_preset = true;
+    cfg.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO;
+    testRadio->allowWide1600 = false;
+
+    TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(cfg, testRadio));
+    RadioInterface::clampConfigLora(cfg, testRadio);
+
+    TEST_ASSERT_EQUAL(meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST, cfg.modem_preset);
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+}
+
+static void test_validateConfigLora_preservesSubGhzBandwidth()
+{
+    auto cfg = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_US, 125);
+
+    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(cfg, testRadio));
+    RadioInterface::clampConfigLora(cfg, testRadio);
+    TEST_ASSERT_EQUAL_UINT16(125, cfg.bandwidth);
+}
+
 // -----------------------------------------------------------------------
 // applyModemConfig() coding rate tests (via reconfigure)
 // -----------------------------------------------------------------------
-
-static TestableRadioInterface *testRadio;
 
 // After fresh flash: coding_rate=0, use_preset=true, modem_preset=LONG_FAST
 // CR should come from the preset (5 for LONG_FAST), not from the zero default.
@@ -368,6 +449,12 @@ void setup()
     RUN_TEST(test_validateConfigLora_rejectsInvalidPresetForRegion);
     RUN_TEST(test_clampConfigLora_invalidPresetClampedToDefault);
     RUN_TEST(test_clampConfigLora_validPresetUnchanged);
+    RUN_TEST(test_validateConfigLora_rejectsSubGhzBandwidthOnLora24);
+    RUN_TEST(test_clampConfigLora_repairsSubGhzBandwidthOnLora24);
+    RUN_TEST(test_validateConfigLora_allowsSx128xWideBandwidths);
+    RUN_TEST(test_validateConfigLora_rejectsLr1121Wide1600);
+    RUN_TEST(test_clampConfigLora_repairsLr1121TurboPreset);
+    RUN_TEST(test_validateConfigLora_preservesSubGhzBandwidth);
     RUN_TEST(test_applyModemConfig_freshFlashCodingRateNotZero);
     RUN_TEST(test_applyModemConfig_codingRateMatchesPreset);
     RUN_TEST(test_applyModemConfig_customCodingRateHigherThanPreset);

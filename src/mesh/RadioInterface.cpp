@@ -1085,7 +1085,7 @@ bool RadioInterface::validateConfigRegion(const meshtastic_Config_LoRaConfig &lo
  * When clamp==false, returns false on first error (pure validation).
  * When clamp==true, fixes invalid settings in-place and returns true.
  */
-bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp)
+bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, bool clamp, RadioInterface *radio)
 {
     char err_string[160];
     float check_bw;
@@ -1145,6 +1145,24 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     } else {
         // Clamp at the source so numFreqSlots below can never be 0 (bandwidth 0 is reachable from a crafted set_config)
         check_bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
+    }
+
+    RadioInterface *candidateRadio = radio ? radio : RadioLibInterface::instance;
+    if (candidateRadio && !candidateRadio->supportsLoRaBandwidth(check_bw, newRegion->wideLora)) {
+        const float defaultBandwidth = modemPresetToBwKHz(newRegion->getDefaultPreset(), newRegion->wideLora);
+        snprintf(err_string, sizeof(err_string), "Bandwidth %.3fkHz invalid for this radio in %s", check_bw, newRegion->name);
+        LOG_ERROR("%s", err_string);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        sendErrorNotification(err_string);
+
+        if (!clamp)
+            return false;
+
+        if (loraConfig.use_preset)
+            loraConfig.modem_preset = newRegion->getDefaultPreset();
+        else
+            loraConfig.bandwidth = bwKHzToCode(defaultBandwidth);
+        check_bw = defaultBandwidth;
     }
 
     // Calculate width of slots (aka channels) based on bandwidth and any spacing or padding required by the region:
@@ -1231,15 +1249,15 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
     return true;
 }
 
-bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig)
+bool RadioInterface::validateConfigLora(const meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio)
 {
     auto copy = loraConfig;
-    return checkOrClampConfigLora(copy, false);
+    return checkOrClampConfigLora(copy, false, radio);
 }
 
-void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig)
+void RadioInterface::clampConfigLora(meshtastic_Config_LoRaConfig &loraConfig, RadioInterface *radio)
 {
-    checkOrClampConfigLora(loraConfig, true);
+    checkOrClampConfigLora(loraConfig, true, radio);
 }
 
 /**
