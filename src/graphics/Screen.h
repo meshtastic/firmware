@@ -6,6 +6,7 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -193,27 +194,6 @@ enum class FrameDirection { NEXT, PREVIOUS };
 
 // Forward declarations
 class Screen;
-
-/// Handles gathering and displaying debug information.
-class DebugInfo
-{
-  public:
-    DebugInfo(const DebugInfo &) = delete;
-    DebugInfo &operator=(const DebugInfo &) = delete;
-
-  private:
-    friend Screen;
-
-    DebugInfo() {}
-
-    /// Renders the debug screen.
-    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    /// Protects all of internal state.
-    concurrency::Lock lock;
-};
 
 /**
  * @brief This class deals with showing things on the screen of the device.
@@ -646,11 +626,6 @@ class Screen : public concurrency::OSThread
                              // stick to standard EASCII codes)
     }
 
-    /// Returns a handle to the DebugInfo screen.
-    //
-    // Use this handle to set things like battery status, user count, GPS status, etc.
-    DebugInfo *debug_info() { return &debugInfo; }
-
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
@@ -823,9 +798,6 @@ class Screen : public concurrency::OSThread
     float compassHeading;
     uint32_t endCalibrationAt;
 
-    /// Holds state for debug information
-    DebugInfo debugInfo;
-
     /// Display device
 #ifdef USE_ST7789
     ST7789Spi *dispdev;
@@ -842,6 +814,6 @@ class Screen : public concurrency::OSThread
 // Extern declarations for function symbols used in UIRenderer
 extern std::vector<std::string> functionSymbol;
 extern std::string functionSymbolString;
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 #endif

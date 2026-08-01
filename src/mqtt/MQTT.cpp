@@ -143,6 +143,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     }
 
     UniquePacketPoolPacket p = packetPool.allocUniqueZeroed();
+    if (!p)
+        return;
     p->from = e.packet->from;
     p->to = e.packet->to;
     p->id = e.packet->id;

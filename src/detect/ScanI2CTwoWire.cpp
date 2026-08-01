@@ -8,6 +8,9 @@
 #if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
+#if defined(SENSECAP_INDICATOR)
+#include "mesh/comms/I2CProxy.h"
+#endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32)
 #include "meshUtils.h" // vformat
 
@@ -283,7 +286,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
 #if WIRE_INTERFACES_COUNT == 2
     if (port == I2CPort::WIRE1) {
+#if defined(SENSECAP_INDICATOR)
+        i2cBus = i2cProxy; // WIRE1 is bridged to the RP2040
+#else
         i2cBus = &Wire1;
+#endif
     } else {
 #endif
         i2cBus = &Wire;
@@ -691,6 +698,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
                     type = LIS3DH;
                     logFoundDevice("LIS3DH", (uint8_t)addr.address);
+                } else if ((registerValue & 0xFF00) == 0x1100) {
+                    // Silan SC7A20: LIS3DH register map, but answers 0x11 here.
+                    type = SC7A20;
+                    logFoundDevice("SC7A20", (uint8_t)addr.address);
                 } else {
                     type = BMA423;
                     logFoundDevice("BMA423", (uint8_t)addr.address);
@@ -968,7 +979,9 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address)
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;
     } else {
-#if WIRE_INTERFACES_COUNT == 2
+#if defined(SENSECAP_INDICATOR)
+        return i2cProxy; // WIRE1 is bridged to the RP2040
+#elif WIRE_INTERFACES_COUNT == 2
         return &Wire1;
 #else
         return &Wire;
