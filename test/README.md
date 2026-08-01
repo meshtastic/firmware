@@ -18,6 +18,10 @@ Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
 
 **Sanitizers are per env.** `coverage` (the default) has ASan/LSan; **`native` has none**, verified. `-e native` runs are not sanitized.
 
+**A signal name in the output is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal number (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting the suite `[ERRORED]`. Match it against the failure count before assuming a fault.
+
+**A signal name in the output is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal number (4 → `SIGILL`, 5 → `SIGTRAP`), reporting the suite `[ERRORED]`. Match it against the failure count before assuming a fault.
+
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
 **Raw `pio test` (no sanitizers, no verdict logic)** - use when you need to override the env or inspect verbose Unity output:

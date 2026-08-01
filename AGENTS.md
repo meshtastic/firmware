@@ -110,8 +110,9 @@ Sequence these; don't parallelize on the same port.
 ### Debugging a native unit-test failure
 
 1. **Run the full suite before believing a filtered one.** `-f` is not a gate: it removes the suites that _create_ the shared state a later suite trips over.
-2. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
-3. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
+2. **A signal name is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting `[ERRORED]`. Match it against the failure count first.
+3. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
+4. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
 
 ### Debugging a flaky hardware test
 

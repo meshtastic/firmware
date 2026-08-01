@@ -257,6 +257,17 @@ verdict_red() {
 	bin="$(find ".pio/build/${ENV}" -maxdepth 1 -type f -executable ! -name '*.so' 2>/dev/null | head -1)"
 	[[ -z $bin ]] && bin=".pio/build/${ENV}/<program>  (build it first: $PIO test -e ${ENV} ${FILTER:+-f $FILTER} --without-testing)"
 
+	# A signal name from this runner is almost never a crash. `exit(UNITY_END())` returns the
+	# FAILURE COUNT, and PlatformIO's native runner renders a non-zero exit code as a POSIX signal:
+	# 4 failures -> "Program received signal SIGILL", 5 -> SIGTRAP, and the suite is reported
+	# [ERRORED] rather than [FAILED]. That is pure noise, and it cost hours of hunting a memory bug
+	# that did not exist. Say so before anyone theorises.
+	if grep -qE 'Program received signal SIG' "$LOG"; then
+		echo "    -> the signal name above is Unity's exit code, not a crash: exit(UNITY_END()) returns the"
+		echo "       failure count and the runner renders it as a signal number (4 -> SIGILL, 5 -> SIGTRAP)."
+		echo "       Match it against the failure count before assuming a fault; confirm any real crash in gdb."
+	fi
+
 	# Sanitizer fault (ASan/LSan/UBSan/TSan): name the real cause instead of "build/crash error".
 	if grep -qE "$SAN_RE" "$LOG"; then
 		grep -nE "$SAN_RE" "$LOG" | head -4 | sed 's/^/    /'
