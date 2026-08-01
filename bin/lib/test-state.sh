@@ -101,7 +101,7 @@ state_path_declared() {
 # as a warning because some declared writes are legitimately conditional.
 state_classify() {
 	local changed="$1" declared="$2"
-	local undeclared=() missing=() path entry
+	local undeclared=() missing=() path entry found
 
 	while IFS= read -r path; do
 		[[ -z $path ]] && continue
@@ -110,10 +110,22 @@ state_classify() {
 		fi
 	done <<<"$changed"
 
+	# Ask state_path_declared() in the other direction rather than matching by hand: one rule for
+	# "does this path match this declaration", so the two directions cannot drift apart. Matching
+	# an entry as a regex would also let a metacharacter in a manifest name (`.`, `+`) match a file
+	# that is not the declared one.
 	IFS=',' read -ra _declared <<<"$declared"
 	for entry in "${_declared[@]}"; do
 		[[ -z $entry ]] && continue
-		grep -qE "(^|/)${entry}$" <<<"$changed" || missing+=("$entry")
+		found=1
+		while IFS= read -r path; do
+			[[ -z $path ]] && continue
+			if state_path_declared "$path" "$entry"; then
+				found=0
+				break
+			fi
+		done <<<"$changed"
+		((found)) && missing+=("$entry")
 	done
 
 	if ((${#undeclared[@]} > 0)); then

@@ -90,7 +90,9 @@ if [[ $GRANULARITY == "per-test" && -f $REPORT ]]; then
 		}' "$REPORT" | LC_ALL=C sort -u >"$SCRATCH/per-test-undeclared.txt"
 	# Keep the summary line readable; the full attribution stays in the sandbox's per-test.tsv.
 	PER_TEST_COUNT=$(wc -l <"$SCRATCH/per-test-undeclared.txt")
-	PER_TEST_DETAIL="$(head -5 "$SCRATCH/per-test-undeclared.txt" | paste -sd'; ' -)"
+	# Not `paste -sd'; '`: with -s, paste cycles through a multi-char delimiter one character per
+	# join, so five paths render as "a;b c;d e" rather than "a; b; c; d; e".
+	PER_TEST_DETAIL="$(head -5 "$SCRATCH/per-test-undeclared.txt" | awk '{printf "%s%s", (NR > 1 ? "; " : ""), $0} END {print ""}')"
 	((PER_TEST_COUNT > 5)) && PER_TEST_DETAIL="$PER_TEST_DETAIL; +$((PER_TEST_COUNT - 5)) more"
 fi
 
