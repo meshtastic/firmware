@@ -4,7 +4,7 @@ This directory contains C++ unit tests that run on the host machine via Platform
 
 ## Running Tests
 
-**Preferred: use `bin/run-tests.sh`** - it runs the `coverage` env (ASan/LSan sanitizers), cross-checks the number of suites that actually ran, and emits an unambiguous RED/AMBER/GREEN verdict:
+**Preferred: use `bin/run-tests.sh`** - it defaults to the `coverage` env, cross-checks the number of suites that actually ran, and emits an unambiguous RED/AMBER/GREEN verdict:
 
 ```bash
 ./bin/run-tests.sh                          # all suites
@@ -19,8 +19,6 @@ Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
 **Sanitizers are per env.** `coverage` (the default) has ASan/LSan; **`native` has none**, verified. `-e native` runs are not sanitized.
 
 **A signal name in the output is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal number (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting the suite `[ERRORED]`. Match it against the failure count before assuming a fault.
-
-**A signal name in the output is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal number (4 → `SIGILL`, 5 → `SIGTRAP`), reporting the suite `[ERRORED]`. Match it against the failure count before assuming a fault.
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
@@ -340,13 +338,32 @@ void setUp(void) {
 }
 ```
 
-### 2. File-Scope Mutable Globals Persist Across Tests
+### 2. A Shared Fixture Is Not a Fixture
+
+If your suite touches globals the code under test writes - `nodeDB`, `config`, `owner`, `devicestate`, `channelFile` - build and restore them in `setUp`/`tearDown` for **every** test, not just the ones that seem to need it. An opt-in fixture that only some tests arm leaves the rest sharing one never-reset object, and "the other tests set their own state and are unaffected" is a claim that quietly stops being true as tests are added.
+
+`test/test_admin_radio/test_main.cpp` is the worked example:
+
+```cpp
+void setUp(void) {
+    // ...
+    replaceAdminRadioGlobals();   // saves the globals, installs a fresh NodeDB
+}
+void tearDown(void) {
+    restoreAdminRadioGlobals();   // restores them, deletes the NodeDB, re-runs initRegion()
+    // ...
+}
+```
+
+A fresh `NodeDB` per test costs real time (`loadFromDisk()` plus, when the region is set, key generation) - in that suite roughly 7% of a ~7½-minute run. Pay it. If a test genuinely needs to observe the previous test's state, that is what `state=per-suite` in `test/state-manifest.tsv` is for; say so there rather than achieving it by omission.
+
+### 3. File-Scope Mutable Globals Persist Across Tests
 
 Variables like `static uint8_t someDenominator = 8;` in the module `.cpp` file retain mutations from previous tests. This is distinct from member variables - it affects all instances.
 
 **Fix:** Add a `static void resetGlobal()` method to the module and call it in `setUp()`.
 
-### 3. Randomness Breaks Determinism
+### 4. Randomness Breaks Determinism
 
 If the module uses `rand()` for jitter or similar, test results become non-reproducible.
 
@@ -363,7 +380,7 @@ YourModule::setJitter(false);
 YourModule::setJitter(true);
 ```
 
-### 4. Time-Dependent Logic Produces Zeros
+### 5. Time-Dependent Logic Produces Zeros
 
 Rolling averages weighted by `elapsedMs / ONE_HOUR_MS` collapse to zero when tests complete in microseconds. Sample windows, EMA alphas, and interval-based accumulators all suffer from this.
 
@@ -377,13 +394,13 @@ void setWindowStartMs(uint32_t ms) { windowStartMs = ms; }
 shim.setWindowStartMs(millis() - 3600000UL);  // pretend 1 hour elapsed
 ```
 
-### 5. Capacity Limits Cause Cascading Failures
+### 6. Capacity Limits Cause Cascading Failures
 
 Fixed-size data structures (hash sets, ring buffers) overflow when tests inject more data than fits. This triggers early flushes with near-zero time fractions, compounding the time-dependent-zeros problem.
 
 **Fix:** Simulate multiple realistic time windows rather than one massive burst. Let adaptive mechanisms (if any) self-tune over several rolls.
 
-### 6. Granting test access to private/protected members
+### 7. Granting test access to private/protected members
 
 PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several production headers (`TransmitHistory.h`, `CryptoEngine.h`, `MQTT.h`, `RTC.h`) use this to gate test-only visibility changes. PlatformIO also defines `UNIT_TEST` in the same builds for backward compatibility, but that spelling is deprecated - always use `PIO_UNIT_TESTING` in new code. The established pattern for exposing a private method to a test shim **without widening production visibility**:
 

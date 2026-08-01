@@ -81,13 +81,17 @@ IFS=$'\t' read -r VERDICT DETAIL <<<"$(state_classify "$CHANGED" "$DECLARED")"
 # carry *is* the declared behaviour - so only the suite boundary is meaningful there.
 PER_TEST_DETAIL=""
 if [[ $GRANULARITY == "per-test" && -f $REPORT ]]; then
-	PER_TEST_DETAIL="$(awk -F'\t' -v d="$DECLARED" '
+	awk -F'\t' -v d="$DECLARED" '
 		BEGIN { n = split(d, a, ","); }
 		{
 			path = $4; base = path; sub(/^.*\//, "", base);
 			for (i = 1; i <= n; i++) if (a[i] == path || a[i] == base) next;
 			print $2 " -> " base;
-		}' "$REPORT" | LC_ALL=C sort -u | paste -sd'; ' -)"
+		}' "$REPORT" | LC_ALL=C sort -u >"$SCRATCH/per-test-undeclared.txt"
+	# Keep the summary line readable; the full attribution stays in the sandbox's per-test.tsv.
+	PER_TEST_COUNT=$(wc -l <"$SCRATCH/per-test-undeclared.txt")
+	PER_TEST_DETAIL="$(head -5 "$SCRATCH/per-test-undeclared.txt" | paste -sd'; ' -)"
+	((PER_TEST_COUNT > 5)) && PER_TEST_DETAIL="$PER_TEST_DETAIL; +$((PER_TEST_COUNT - 5)) more"
 fi
 
 STATUS=$([[ $RC -eq 0 ]] && echo PASS || echo FAIL)

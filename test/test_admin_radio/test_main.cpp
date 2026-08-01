@@ -954,7 +954,6 @@ static void test_channelSpacingCalculation_placeholder()
 
 // AdminModuleTestShim comes from test/support - the friend seam AdminModule.h declares.
 static AdminModuleTestShim *testAdmin;
-static bool adminRadioGlobalsActive;
 static NodeDB *savedNodeDB;
 static NodeDB *replacementNodeDB;
 static NodeInfoModule *savedNodeInfoModule;
@@ -963,6 +962,9 @@ static meshtastic_User savedOwner;
 static meshtastic_LocalConfig savedConfig;
 static meshtastic_ChannelFile savedChannelFile;
 
+// Called from setUp/tearDown for every test, not opted into by a handful. A shared NodeDB plus
+// unrestored config/owner/devicestate/channelFile means each test inherits whatever its
+// predecessors left, and the admin handlers under test write all four.
 static void replaceAdminRadioGlobals()
 {
     savedNodeDB = nodeDB;
@@ -973,13 +975,10 @@ static void replaceAdminRadioGlobals()
     savedChannelFile = channelFile;
     replacementNodeDB = new NodeDB();
     nodeDB = replacementNodeDB;
-    adminRadioGlobalsActive = true;
 }
 
 static void restoreAdminRadioGlobals()
 {
-    if (!adminRadioGlobalsActive)
-        return;
     nodeInfoModule = savedNodeInfoModule;
     nodeDB = savedNodeDB;
     delete replacementNodeDB;
@@ -989,7 +988,6 @@ static void restoreAdminRadioGlobals()
     config = savedConfig;
     channelFile = savedChannelFile;
     initRegion();
-    adminRadioGlobalsActive = false;
 }
 
 static void installEncryptedAndAdminChannels()
@@ -1024,7 +1022,6 @@ static void assertLicensedChannelsSanitized()
 
 static void test_handleSetOwner_persistsLicensedChannelSanitation()
 {
-    replaceAdminRadioGlobals();
     owner = meshtastic_User_init_zero;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     installEncryptedAndAdminChannels();
@@ -1100,7 +1097,6 @@ static meshtastic_Config makeLoraSetConfig(meshtastic_Config_LoRaConfig_RegionCo
 
 static void test_handleSetConfig_persistsLicensedFirstRegionIdentity()
 {
-    replaceAdminRadioGlobals();
     owner = meshtastic_User_init_zero;
     owner.is_licensed = true;
     config.security = meshtastic_Config_SecurityConfig_init_zero;
@@ -1732,11 +1728,8 @@ void setUp(void)
     service = mockMeshService;
     testAdmin = new AdminModuleTestShim();
     capturedWarnings.clear();
-    // Committing an edit transaction triggers a full saveToDisk(), which dereferences nodeDB.
-    // Create it once (kept reachable via the global, so no leak) for the warning tests; the
-    // other tests in this suite set their own config/region state and are unaffected.
-    if (!nodeDB)
-        nodeDB = new NodeDB();
+    // Every test gets its own NodeDB and its own copy of the globals the admin handlers write.
+    replaceAdminRadioGlobals();
 }
 void tearDown(void)
 {
