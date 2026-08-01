@@ -1,0 +1,42 @@
+# Shared-state manifest for the native test suites.
+#
+# Every suite runs inside its own scratch $HOME (bin/pio-test-isolate.sh), so leftovers cannot reach
+# the next suite. This file is not what makes that safe - it is what makes each suite's intent
+# reviewable. A suite listed here is declaring "I mutate persisted state on purpose, and here is
+# why"; a suite that is not listed is expected to leave the sandbox as it found it.
+#
+# The invariant behind the flags: mutation *inside* a suite is free, carrying state *across* a suite
+# boundary is never permitted. No flag grants cross-suite carry - a suite that needs another suite's
+# output needs an explicit fixture, not inheritance. That is the whole bug, and per-suite isolation
+# keeps it impossible by construction rather than by policy.
+#
+# Format - three tab-separated columns, the same shape as an allowlist entry:
+#
+#   <suite>	<flags>	<reason>
+#
+# The reason column is mandatory and is reviewed on change. One central file rather than a file per
+# suite, so every opt-out is visible in one diffable list and attracts review pressure; per-suite
+# files hide growth. bin/run-tests.sh prints how many suites declare non-default handling, so the
+# number creeping upward is visible without anyone auditing this file.
+#
+# Flags (space separated; the default is no entry at all):
+#
+#   writes=<a,b>      files this suite mutates inside its sandbox. Matched against the path relative
+#                     to the scratch $HOME or just the basename, so `nodes.proto` is enough. A
+#                     declared write makes the change CLEAN instead of DIRTY - the list is the
+#                     documentation. A declared file that does NOT change is reported as MISSING,
+#                     which catches silently-broken persistence.
+#   state=per-suite   state persists across this suite's own test cases; the default is per-test.
+#                     Use for persistence round-trips, migration ladders, anything where test N must
+#                     observe test N-1's write. With this set, only the suite boundary is checked -
+#                     per-test checking would flag every test by design.
+#
+# state=per-suite is the one to watch. It is legitimate, and it is also the pattern that let
+# test_nodedb_blocked accumulate 198 protected nodes across its test cases. Requiring the flag makes
+# that an explicit, defended choice instead of an accident of setUp().
+#
+# To propose entries from a real run: ./bin/run-tests.sh --write-manifest prints the lines it would
+# add, for a human to paste and justify. It never applies them itself, and CI never applies them at
+# all - an auto-accepted baseline is the same rot as an auto-updated snapshot.
+#
+# suite	flags	reason

@@ -12,7 +12,11 @@ This directory contains C++ unit tests that run on the host machine via Platform
 ./bin/run-tests.sh -f test_traffic_management > /tmp/test_out.txt 2>&1; tail -5 /tmp/test_out.txt
 ```
 
-Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER.
+Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
+
+**`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
+
+**Sanitizers are per env.** `coverage` (the default) has ASan/LSan; **`native` has none**, verified. `-e native` runs are not sanitized.
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
@@ -292,11 +296,36 @@ void test_something() {
 
 ## Pitfalls and How to Avoid Them
 
-### 1. Persisted Filesystem State Leaks Between Tests
+### 1. Persisted Filesystem State
 
-Modules that save state to `/prefs/*.bin` will have that state loaded by the next test's constructor via `loadState()`. This causes values from one test (e.g. rolling averages from a megamesh scenario) to bleed into unrelated tests.
+**You are handed a clean sandbox. Declare what you write.**
 
-**Fix:** Delete state files at the start of `setUp()`:
+Each suite runs inside its own scratch `$HOME` (`bin/pio-test-isolate.sh`), so state cannot reach the next suite. The files in play are wider than module state, and all but the last live under `~/.portduino/default/prefs/`:
+
+| File                                                             | Written by                                                                                                                                                     |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nodes.proto`                                                    | any `NodeDB` save - including incidental ones from `removeNodeByNum()`, `resetNodes()`, `nodeDBSelfCare()`, and the constructor itself when the file is absent |
+| `config.proto`, `module.proto`, `channels.proto`, `device.proto` | config/channel saves, admin handlers                                                                                                                           |
+| `warm.dat`                                                       | `WarmNodeStore::saveIfDirty()`, on the node-DB save cadence                                                                                                    |
+| `transmit_history.dat`                                           | retransmission tracking                                                                                                                                        |
+| `/prefs/<module>.bin`                                            | per-module `saveState()`                                                                                                                                       |
+
+`NodeDB`'s constructor calls `loadFromDisk()`, so **any** suite that constructs one inherits whatever is there.
+
+**What you have to do:**
+
+- Nothing, if your suite is self-contained. That is the default and what almost every suite wants.
+- If your suite mutates persisted state on purpose, add a line to **`test/state-manifest.tsv`** with a reason:
+
+  ```text
+  test_nodedb_blocked	state=per-suite writes=nodes.proto,warm.dat	saturates the DB to test the protected-node cap
+  ```
+
+  An undeclared write is reported as **DIRTY** and grades the run AMBER. A declared write that never happens is reported as **MISSING** - a warning, and a useful one: it catches persistence that silently stopped working.
+
+- Use `state=per-suite` only if a test genuinely needs to observe the previous test's write (persistence round-trips, migration ladders). It relaxes per-test checking to the suite boundary, so make it a deliberate choice rather than an accident of `setUp()`.
+
+Deleting your own state in `setUp()` is still fine and still a good habit for intra-suite isolation - it is just no longer what stands between you and the next suite:
 
 ```cpp
 void setUp(void) {
@@ -370,7 +399,8 @@ PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several producti
 - [ ] Create and clear MockNodeDB (if needed)
 - [ ] Zero global configs: `config`, `moduleConfig`, `myNodeInfo`
 - [ ] Set `nodeDB = mockNodeDB`
-- [ ] Delete persisted state files (`FSCom.remove(...)`)
+- [ ] Delete your own persisted state files (`FSCom.remove(...)`) for intra-suite isolation - cross-suite isolation is already guaranteed, see Pitfall 1
+- [ ] Declare deliberate writes to shared state in `test/state-manifest.tsv`, with a reason
 - [ ] Reset file-scope mutable globals
 - [ ] Reset mock clock to a safe base value (e.g. `mockTime = ONE_HOUR_MS`) - prevents unsigned subtraction underflow in time-dependent logic
 - [ ] Disable randomness/jitter flags

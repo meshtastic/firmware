@@ -107,7 +107,13 @@ Sequence these; don't parallelize on the same port.
 4. On failure, open the run's `tests/report.html` → `Meshtastic debug` section for the firmware log tail + device state dump
 5. Iterate
 
-### Debugging a flaky test
+### Debugging a native unit-test failure
+
+1. **Run the full suite before believing a filtered one.** `-f` is not a gate: it removes the suites that _create_ the shared state a later suite trips over.
+2. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
+3. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
+
+### Debugging a flaky hardware test
 
 1. `/repro <test-node-id> [count]` - re-runs the test N times, diffs firmware logs between passes and failures
 2. If the first attempt always fails and the rest pass, that's a state-leak pattern → suggest `--force-bake` or a clean device state, don't chase the first failure

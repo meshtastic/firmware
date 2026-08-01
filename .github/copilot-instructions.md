@@ -692,21 +692,25 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 - `test_utf8/` - UTF-8 utilities
 - `test_warm_store/` - Warm-tier node store
 
-**Preferred run command - `bin/run-tests.sh`** (uses the `coverage` env with ASan/LSan sanitizers; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
+**Preferred run command - `bin/run-tests.sh`** (defaults to the `coverage` env; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
 
 ```bash
 ./bin/run-tests.sh                             # all suites
 ./bin/run-tests.sh -f test_traffic_management  # single suite (yields FILTERED, not GREEN)
 ```
 
+**Sanitizer coverage is per env, and only one env has any.** `coverage` (the default) adds gcov + ASan/LSan on top of `native`. **`native` itself has none** - verified, zero ASan symbols in the built binary. A `-e native` run is _not_ sanitized, so do not reason from "run-tests.sh uses ASan" when you passed `-e native`.
+
+**`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
+
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-| Exit | Verdict    | Meaning                                                                                                                                                                                                               |
-| ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                           |
-| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                 |
-| 2    | `AMBER`    | All that ran passed, but something was lost: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or `test/native-suite-count` disagrees with the `test/` directory count |
-| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                    |
+| Exit | Verdict    | Meaning                                                                                                                                                                                                                                                                                    |
+| ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                                                                                                |
+| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                                                                                      |
+| 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), `test/native-suite-count` disagrees with the `test/` directory count, or a suite left behind shared state it does not declare |
+| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                                                                                         |
 
 Examples - exact counts will vary by suite count and env:
 
@@ -745,6 +749,30 @@ Do **not** pipe `pio test` - line-buffering makes the terminal appear hung and h
 Simulation testing: `bin/test-simulator.sh`
 
 Quick entry point for new test modules: `test/README.md` (native unit-test authoring guide, skeleton, pitfalls, and setup checklist).
+
+### Shared state: every suite gets a clean sandbox
+
+Each suite runs inside its own scratch `$HOME` (`bin/pio-test-isolate.sh`, wired in per env as `test_testing_command`, so a bare `pio test` and CI get it too). **State never crosses a suite boundary.** Mutation _inside_ a suite is free; carrying state _out_ of one is impossible by construction, not by policy.
+
+The state in question lives in `~/.portduino/default/prefs/` - `nodes.proto`, `config.proto`, `channels.proto`, `module.proto`, `device.proto`, `warm.dat`, `transmit_history.dat`. `NodeDB`'s constructor calls `loadFromDisk()`, so any suite that constructs one reads it, and several `NodeDB` paths (`removeNodeByNum()`, `resetNodes()`, `nodeDBSelfCare()`, and the constructor when the file is absent) write it without being asked.
+
+Two orthogonal axes: **PASS/FAIL x CLEAN/DIRTY**.
+
+- **CLEAN** - nothing changed, or everything that changed is declared.
+- **DIRTY** - an undeclared path changed. Graded **AMBER**: with isolation in place it means "undeclared", not "dangerous".
+- **MISSING** - a declared write did not happen. A warning only; it catches persistence that silently stopped working.
+
+Declare deliberate writes in **`test/state-manifest.tsv`** - one central file, `<suite>` / `<flags>` / `<reason>`, with the reason mandatory and reviewed on change. Central so every opt-out is visible in one diffable list; per-suite files hide growth. `run-tests.sh` prints how many suites declare non-default handling on every run.
+
+| Flag              | Meaning                                                                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(no entry)_      | the default: fresh state in, contents discarded out                                                                                                                                                         |
+| `writes=<a,b>`    | files this suite mutates on purpose; matched on the path relative to the sandbox `$HOME` or just the basename                                                                                               |
+| `state=per-suite` | state persists across this suite's own test cases (persistence round-trips, migration ladders). Only the suite boundary is checked; the default is per-test, which names the exact test that dirtied things |
+
+No flag grants cross-suite carry. A suite that needs another suite's output needs an explicit fixture, not inheritance.
+
+`./bin/run-tests.sh --write-manifest` prints the entries a run would need, for a human to paste and justify - it never applies them, and neither does CI. `bin/test-state-check.sh` is the checker's own self-test: fixtures asserting CLEAN / CLEAN / DIRTY / MISSING, plus the before-empty assertion.
 
 ### Hardware-in-the-loop tests ([meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp))
 
