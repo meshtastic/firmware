@@ -13,12 +13,6 @@ on:
         required: false
         default: ""
   workflow_dispatch:
-    inputs:
-      suite_order_seed:
-        description: "Seed for shuffling the test-area order. Empty = fixed order on PRs, SHA-derived otherwise."
-        type: string
-        required: false
-        default: ""
 
 permissions: {}
 
