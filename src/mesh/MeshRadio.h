@@ -212,7 +212,26 @@ static inline bool supportsLr11x0LoRaBandwidth(float bandwidthKHz, bool wideBand
 
 static inline bool supportsLr20x0LoRaBandwidth(float bandwidthKHz, bool wideBand)
 {
-    return !wideBand || bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f || bandwidthKHz == 1000.0f;
+    if (!wideBand)
+        return true;
+
+    switch (static_cast<int>(bandwidthKHz / 2 + 0.01f)) {
+    case 15:
+    case 20:
+    case 31:
+    case 41:
+    case 50:
+    case 62:
+    case 101:
+    case 125:
+    case 203:
+    case 250:
+    case 406:
+    case 500:
+        return true;
+    default:
+        return false;
+    }
 }
 
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,

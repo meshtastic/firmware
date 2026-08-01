@@ -1,5 +1,6 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
 #include <unity.h>
@@ -199,12 +200,33 @@ static void test_validateConfigLora_rejectsLr1121Wide1600()
 
 static void test_validateConfigLora_lr2021WideBandwidths()
 {
+    const uint16_t validBandwidths[] = {31, 42, 62, 83, 101, 125, 200, 250, 400, 500, 800, 1000};
     testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR20X0;
-    auto valid = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1000);
-    auto invalid = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
 
-    TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(valid, testRadio));
+    for (auto bandwidth : validBandwidths) {
+        auto valid = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, bandwidth);
+        TEST_ASSERT_TRUE(RadioInterface::validateConfigLora(valid, testRadio));
+    }
+
+    auto invalid = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
     TEST_ASSERT_FALSE(RadioInterface::validateConfigLora(invalid, testRadio));
+}
+
+static void test_reconfigure_can_suppress_speculativeProbeErrors()
+{
+    config.lora = makeCustomBandwidth(meshtastic_Config_LoRaConfig_RegionCode_LORA_24, 1600);
+    testRadio->bandwidthProfile = TestableRadioInterface::BandwidthProfile::LR11X0;
+    error_code = meshtastic_CriticalErrorCode_NONE;
+    error_address = 0;
+
+    testRadio->setConfigErrorReporting(false);
+    TEST_ASSERT_TRUE(testRadio->reconfigure());
+    testRadio->setConfigErrorReporting(true);
+
+    TEST_ASSERT_EQUAL_UINT16(800, config.lora.bandwidth);
+    TEST_ASSERT_EQUAL(meshtastic_CriticalErrorCode_NONE, error_code);
+    TEST_ASSERT_EQUAL_UINT32(0, error_address);
+    TEST_ASSERT_EQUAL_UINT32(0, mockMeshService->notificationCount);
 }
 
 static void test_clampConfigLora_repairsLr1121TurboPreset()
@@ -512,6 +534,7 @@ void setup()
     RUN_TEST(test_validateConfigLora_allowsSx128xWideBandwidths);
     RUN_TEST(test_validateConfigLora_rejectsLr1121Wide1600);
     RUN_TEST(test_validateConfigLora_lr2021WideBandwidths);
+    RUN_TEST(test_reconfigure_can_suppress_speculativeProbeErrors);
     RUN_TEST(test_clampConfigLora_repairsLr1121TurboPreset);
     RUN_TEST(test_clampConfigLora_repairsLr2021TurboPreset);
     RUN_TEST(test_validateConfigLora_preservesSubGhzBandwidth);
