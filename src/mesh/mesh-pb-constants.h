@@ -7,6 +7,13 @@
 #include "mesh/generated/meshtastic/localonly.pb.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
+#if defined(ARCH_PORTDUINO)
+// Portduino resolves MAX_NUM_NODES and MAX_RX_TOPHONE at runtime from variant.h. A TU reaching this
+// header without configuration.h (the vendored device-ui sources do) would silently get the
+// compile-time defaults below, so pull it in ahead of every one of them, not just MAX_NUM_NODES.
+#include "configuration.h"
+#endif
+
 // this file defines constants which come from mesh.options
 //
 // RAM-shaped cache tiers key off MESHTASTIC_MEM_CLASS (memory/MemClass.h) so
@@ -112,15 +119,9 @@ static inline int get_max_num_nodes()
 }
 #define MAX_NUM_NODES get_max_num_nodes()
 #elif defined(ARCH_PORTDUINO)
-// Unreachable in a normal build, and deliberately not a number. Portduino resolves the cap at
-// *runtime*: variants/native/portduino{,-buildroot}/variant.h define
-// `MAX_NUM_NODES portduino_config.MaxNodes` (default 200, YAML `General: MaxNodes`), and
-// configuration.h pulls variant.h in before this header is reached. Reaching here means a
-// translation unit included mesh-pb-constants.h without configuration.h and would otherwise get a
-// compile-time cap that silently disagrees with the rest of the build - which is exactly the trap
-// that made a saturated 200-node DB look arithmetically impossible during a test-failure diagnosis.
-#error                                                                                                                           \
-    "ARCH_PORTDUINO resolves MAX_NUM_NODES at runtime (see variants/native/portduino/variant.h) - include configuration.h first"
+// Unreachable: the ARCH_PORTDUINO include at the top of this header defines it from variant.h.
+// Reaching here means that stopped working - still refuse to invent a divergent compile-time cap.
+#error "ARCH_PORTDUINO: configuration.h did not define MAX_NUM_NODES - check variants/native/portduino/variant.h"
 #else
 #define MAX_NUM_NODES 120 // nRF52840 and generic ESP32 (inc. ESP32C3 etc.)
 #endif                    // platform
