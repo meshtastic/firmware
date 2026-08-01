@@ -1683,16 +1683,9 @@ void menuHandler::manageNodeMenu()
         }
 
         if (selected == Mute) {
-            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
-            if (!n) {
-                return;
-            }
-
-            const bool wasMuted = nodeInfoLiteIsMuted(n);
-            nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
-            LOG_INFO(wasMuted ? "Unmuted node %08X" : "Muted node %08X", menuHandler::pickedNodeNum);
-            nodeDB->notifyObservers(true);
-            nodeDB->saveToDisk();
+            // No lookup or null check here: toggleNodeMuted() resolves the node itself and returns
+            // without writing if it is unknown.
+            menuHandler::toggleNodeMuted(menuHandler::pickedNodeNum);
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
@@ -3022,6 +3015,21 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     }
     menuQueue = MenuNone;
+}
+
+// Flips the mute bit on a node and persists. Returns without writing if the node is unknown, so a
+// stale pickedNodeNum can't cause a pointless flash write.
+void menuHandler::toggleNodeMuted(uint32_t nodeNum)
+{
+    meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(nodeNum);
+    if (!n)
+        return;
+
+    const bool wasMuted = nodeInfoLiteIsMuted(n);
+    nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
+    LOG_INFO(wasMuted ? "Unmuted node %08X" : "Muted node %08X", nodeNum);
+    nodeDB->notifyObservers(true);
+    nodeDB->saveToDisk();
 }
 
 void menuHandler::saveUIConfig()

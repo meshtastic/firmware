@@ -19,6 +19,7 @@
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "TestUtil.h"
+#include "graphics/draw/MenuHandler.h"
 #include "mesh/Channels.h"
 #include "modules/AdminModule.h"
 #include "modules/NodeInfoModule.h"
@@ -1794,6 +1795,63 @@ static void test_toggleMutedNode_skipsRadioReload_butPersists()
 }
 
 // -----------------------------------------------------------------------
+// Node menu mute toggle (graphics::menuHandler::toggleNodeMuted)
+// -----------------------------------------------------------------------
+//
+// Reachable only since the mute branch was lifted out of its banner-callback lambda; the lambda
+// runs via screen->showOverlayBanner(), so nothing in MenuHandler.cpp was testable before.
+
+#if HAS_SCREEN
+static void test_toggleNodeMuted_flipsBitAndSkipsRadioReload()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
+    TEST_ASSERT_TRUE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+
+    graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
+    TEST_ASSERT_FALSE(nodeInfoLiteIsMuted(nodeDB->getMeshNode(TEST_NODE_NUM)));
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+}
+
+static void test_toggleNodeMuted_unknownNodeDoesNothing()
+{
+    ConfigChangedCounter counter;
+    counter.observe(&service->configChanged);
+
+    graphics::menuHandler::toggleNodeMuted(0xDEADBEEF); // never added to the DB
+
+    TEST_ASSERT_EQUAL_INT(0, counter.count);
+    TEST_ASSERT_NULL(nodeDB->getMeshNode(0xDEADBEEF));
+}
+
+// CHARACTERIZATION OF A KNOWN DEFECT, not an endorsement. Flipping one NodeInfoLite bit currently
+// calls bare nodeDB->saveToDisk(), which rewrites all five segments. saveToDisk() is not virtual,
+// so the mask is observed through its effect: every prefs file reappears after being removed.
+//
+// A pending fix narrows this to SEGMENT_NODEDATABASE. When it lands, only nodes.proto should come
+// back and this assertion is EXPECTED to change - that diff is the point, so the improvement is
+// visible instead of silent.
+static void test_toggleNodeMuted_currentlyRewritesEverySegment()
+{
+    nodeDB->getOrCreateMeshNode(TEST_NODE_NUM);
+
+    const char *segmentFiles[] = {configFileName, moduleConfigFileName, deviceStateFileName, channelFileName,
+                                  nodeDatabaseFileName};
+    for (const char *f : segmentFiles)
+        FSCom.remove(f);
+
+    graphics::menuHandler::toggleNodeMuted(TEST_NODE_NUM);
+
+    for (const char *f : segmentFiles)
+        TEST_ASSERT_TRUE_MESSAGE(FSCom.exists(f), f);
+}
+#endif // HAS_SCREEN
+
+// -----------------------------------------------------------------------
 // Test runner
 // -----------------------------------------------------------------------
 
@@ -1936,6 +1994,13 @@ void setup()
     RUN_TEST(test_setFavoriteNode_skipsRadioReload_butPersists);
     RUN_TEST(test_setIgnoredNode_skipsRadioReload_butPersists);
     RUN_TEST(test_toggleMutedNode_skipsRadioReload_butPersists);
+
+#if HAS_SCREEN
+    // Node menu mute toggle
+    RUN_TEST(test_toggleNodeMuted_flipsBitAndSkipsRadioReload);
+    RUN_TEST(test_toggleNodeMuted_unknownNodeDoesNothing);
+    RUN_TEST(test_toggleNodeMuted_currentlyRewritesEverySegment);
+#endif
 
     exit(UNITY_END());
 }
