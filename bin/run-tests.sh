@@ -119,9 +119,12 @@ if [[ ! -x $PIO ]] && ! command -v "$PIO" >/dev/null 2>&1; then
 fi
 
 LOG="$(mktemp -t meshtest.XXXXXX.log)"
+# Build output stays out of $LOG on purpose: the outcome regexes below match "error:" and
+# "[ERRORED]", so a compiler diagnostic in the same file would read as a test failure.
+BUILD_LOG="$(mktemp -t meshtest-build.XXXXXX.log)"
 MARKER=""
 PROGRESS_PID=""
-trap 'rm -f "$LOG" "${MARKER:-}"; [[ -n ${PROGRESS_PID:-} ]] && kill "$PROGRESS_PID" 2>/dev/null' EXIT
+trap 'rm -f "$LOG" "$BUILD_LOG" "${MARKER:-}"; [[ -n ${PROGRESS_PID:-} ]] && kill "$PROGRESS_PID" 2>/dev/null' EXIT
 
 # --- Shared-state reporting ---------------------------------------------------
 # bin/pio-test-isolate.sh (wired in as test_testing_command) gives every suite its own scratch
@@ -233,6 +236,36 @@ if $SHUFFLE; then
 	echo "suite order: shuffled with --seed $SEED (${#RUN_ORDER[@]} suites)"
 fi
 
+# Build every test program before running any of them, the way .github/workflows/test_native.yml
+# does. Fused build+run makes whichever suite PlatformIO's directory walk reaches first absorb the
+# whole src compile and report it as its own duration - that is how a 35s suite once reported 13
+# minutes, and it hides the build cost from every timing the summary prints.
+BUILD_SECS=0
+build_started=$SECONDS
+if $QUIET; then
+	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" --without-testing >"$BUILD_LOG" 2>&1
+	BUILD_RC=$?
+else
+	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" --without-testing 2>&1 | tee "$BUILD_LOG"
+	BUILD_RC=${PIPESTATUS[0]}
+fi
+BUILD_SECS=$((SECONDS - build_started))
+if ((BUILD_RC != 0)); then
+	# The grep below shows the first few diagnostics; the first error: is usually a cascade from
+	# something further up, so keep the whole log rather than only what fits on screen.
+	BUILD_FAIL_LOG=".pio/build/${ENV}/build-failure.log"
+	cp "$BUILD_LOG" "$BUILD_FAIL_LOG" 2>/dev/null || BUILD_FAIL_LOG=""
+	echo ""
+	echo "RED - build failed before any suite ran:"
+	grep -nE 'error:|undefined reference|\[ERRORED\]' "$BUILD_LOG" | head -5 | sed 's/^/    /'
+	[[ -n $BUILD_FAIL_LOG ]] && echo "    -> full build output: $BUILD_FAIL_LOG"
+	echo "RESULT: RED build failed in ${BUILD_SECS}s (no suites ran)"
+	exit 1
+fi
+if ! $QUIET; then
+	echo "build: ${BUILD_SECS}s (shared by every suite; suite durations below exclude it)"
+fi
+
 # Run pio, tee to log. PIPESTATUS[0] is pio's real exit (NOT tee's).
 PIO_RC=0
 if $SHUFFLE; then
@@ -241,19 +274,19 @@ if $SHUFFLE; then
 	: >"$LOG"
 	for suite in "${RUN_ORDER[@]}"; do
 		if $QUIET; then
-			"$PIO" test -e "$ENV" -f "$suite" >>"$LOG" 2>&1
+			"$PIO" test -e "$ENV" -f "$suite" --without-building >>"$LOG" 2>&1
 			rc=$?
 		else
-			"$PIO" test -e "$ENV" -f "$suite" 2>&1 | tee -a "$LOG"
+			"$PIO" test -e "$ENV" -f "$suite" --without-building 2>&1 | tee -a "$LOG"
 			rc=${PIPESTATUS[0]}
 		fi
 		((rc != 0)) && PIO_RC=$rc
 	done
 elif $QUIET; then
-	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" >"$LOG" 2>&1
+	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" --without-building >"$LOG" 2>&1
 	PIO_RC=$?
 else
-	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" 2>&1 | tee "$LOG"
+	"$PIO" test -e "$ENV" "${PASSTHRU[@]}" --without-building 2>&1 | tee "$LOG"
 	PIO_RC=${PIPESTATUS[0]}
 fi
 
@@ -314,6 +347,12 @@ verdict_red() {
 	echo "RED - failures detected:"
 	[[ -n $detail ]] && echo "$detail"
 	grep -E 'test cases:' "$LOG" | tail -1 | sed 's/^/    /'
+	# $LOG is a mktemp the EXIT trap removes, so without this the three lines above are all anyone
+	# ever sees - and the cause is often further up than the first [FAILED].
+	test_fail_log=".pio/build/${ENV}/test-failure.log"
+	if cp "$LOG" "$test_fail_log" 2>/dev/null; then
+		echo "    -> full run output: $test_fail_log"
+	fi
 
 	# Path to the test binary for the "run it bare" hint. For native/coverage the test program is
 	# the env executable (e.g. .pio/build/coverage/meshtasticd), NOT a file named 'program'.
