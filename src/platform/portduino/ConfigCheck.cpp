@@ -23,10 +23,10 @@
 namespace
 {
 
-// Largest General.MaxNodes we accept. Generous for any real mesh - it exists to catch a typo or a
-// pasted-in garbage value, which would otherwise size the node DB and the nodes.proto decode
-// ceiling straight into a boot-time allocation failure.
-constexpr int MAX_NODES_SANITY_CEILING = 10000;
+// Largest General.MaxNodes we accept - artificial, not derived: nothing fails at 16001. Catches a
+// typo that would otherwise size the node DB into a boot-time allocation failure. Sits under the
+// 16384 (128 x 128) where HopScalingModule saturates and drops nodes. Raise it if a host needs more.
+constexpr int MAX_NODES_SANITY_CEILING = 16000;
 
 // ---------------------------------------------------------------------------
 // Schema
