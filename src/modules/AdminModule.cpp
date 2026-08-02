@@ -63,10 +63,10 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 #endif
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+// Unguarded: serialConfigIsValid() is declared here and the serial config is validated on every
+// platform, including the ones with no SerialModule behind it. The class itself stays guarded
+// inside the header.
 #include "SerialModule.h"
-#endif
 
 AdminModule *adminModule;
 
@@ -1271,14 +1271,16 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_serial_tag:
         LOG_INFO("Set module config: Serial");
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
-        if (!SerialModule::isValidConfig(c.payload_variant.serial)) {
+        // No architecture guard here. The guard this replaces was availability, not policy: it
+        // existed because SerialModule::isValidConfig lived inside the class's hardware guard, and
+        // it silently took disableBluetooth() with it. The assignment below was never inside it, so
+        // platforms without a SerialModule stored configs this rejects. disableBluetooth() guards
+        // itself on HAS_BLUETOOTH and compiles to an empty function where there is no radio.
+        if (!serialConfigIsValid(c.payload_variant.serial)) {
             LOG_ERROR("Invalid serial config");
             return false;
         }
         disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
-#endif
         moduleConfig.has_serial = true;
         moduleConfig.serial = c.payload_variant.serial;
         break;

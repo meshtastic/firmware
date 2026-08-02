@@ -49,6 +49,32 @@
 #include "meshSolarApp.h"
 #endif
 
+// Outside the architecture guard on purpose: this is config validation, not serial I/O. The admin
+// path validates a serial config before storing it on every platform, including the ones that have
+// no SerialModule to run it - see serialConfigIsValid() in SerialModule.h.
+bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+        const char *warning =
+            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
+        LOG_ERROR(warning);
+#ifndef PIO_UNIT_TESTING
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        if (cn) {
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            cn->time = getValidTime(RTCQualityFromNet);
+            snprintf(cn->message, sizeof(cn->message), "%s", warning);
+            service->sendClientNotification(cn);
+        }
+#endif
+        return false;
+    }
+
+    return true;
+}
+
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
@@ -85,29 +111,6 @@ static Print *serialPrint = &SERIAL_PRINT_OBJECT;
 
 char serialBytes[512];
 size_t serialPayloadSize;
-
-bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
-{
-    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
-        const char *warning =
-            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
-        LOG_ERROR(warning);
-#ifndef PIO_UNIT_TESTING
-        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-        if (cn) {
-            cn->level = meshtastic_LogRecord_Level_ERROR;
-            cn->time = getValidTime(RTCQualityFromNet);
-            snprintf(cn->message, sizeof(cn->message), "%s", warning);
-            service->sendClientNotification(cn);
-        }
-#endif
-        return false;
-    }
-
-    return true;
-}
 
 SerialModuleRadio::SerialModuleRadio() : SinglePortModule("SerialModuleRadio", meshtastic_PortNum_SERIAL_APP)
 {
