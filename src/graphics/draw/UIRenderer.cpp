@@ -1473,11 +1473,15 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 6 + (additionalYOffset / 2),
-                        title);
+#if defined(BICOLOR_OLED_DISPLAY)
+    additionalYOffset /= 2;
+#else
+    additionalYOffset = 0;
+#endif
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5 + additionalYOffset, title);
     if (gBootSplashBoldPass) {
-        display->drawString(x + getStringCenteredX(title) + 1,
-                            y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 6 + (additionalYOffset / 2), title);
+        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5 + additionalYOffset,
+                            title);
     }
     display->setFont(FONT_SMALL);
     // Draw region in upper left
