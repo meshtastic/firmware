@@ -14,6 +14,8 @@ This directory contains C++ unit tests that run on the host machine via Platform
 
 Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
 
+**The harness is Linux-only, by choice.** `bin/run-tests.sh` and the per-suite isolation it drives need bash 4+ and GNU coreutils/find (`find -printf`, `md5sum`), and the script refuses to start anywhere else rather than degrade quietly - a shared-state check that silently mis-hashes a sandbox still prints a verdict, and that verdict would be worthless. The `native-macos` PlatformIO env is a **build** target for `meshtasticd`, not a test host; the isolation wrapper is registered for `env:native` and `env:coverage` only. On macOS or Windows, run the suite in a container: `./bin/test-native-docker.sh`.
+
 **`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
 
 **Sanitizers are per env.** `coverage` (the default) has ASan/LSan; **`native` has none**, verified. `-e native` runs are not sanitized.

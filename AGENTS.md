@@ -114,6 +114,7 @@ Sequence these; don't parallelize on the same port.
 3. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
 4. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
 5. **Reproduce a shuffled order.** `--shuffle` prints its seed and puts it on the `RESULT:` line; `--seed <n>` replays that exact order. One green seed proves nothing about order independence.
+6. **Exit 2 with "Linux-only" is the host, not the tests.** The harness needs bash 4+ and GNU coreutils/find and rejects any other `uname` rather than degrade quietly. `native-macos` is a build target, not a test host; elsewhere use `./bin/test-native-docker.sh`.
 
 ### Debugging a flaky hardware test
 

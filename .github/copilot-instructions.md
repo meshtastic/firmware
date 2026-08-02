@@ -700,6 +700,8 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 ./bin/run-tests.sh -f test_traffic_management  # single suite (yields FILTERED, not GREEN)
 ```
 
+**The harness is Linux-only, and rejects anything else.** `bin/run-tests.sh` needs bash 4+ and GNU coreutils/find (`find -printf`, `md5sum`, `-executable`), so it exits 2 on a non-Linux `uname` rather than degrade quietly - a state check that silently mis-hashes a sandbox still prints a verdict, and that verdict would be worthless. The `native-macos` PlatformIO env is a **build** target for `meshtasticd`, not a test host. On macOS or Windows use `./bin/test-native-docker.sh`.
+
 **Sanitizer coverage is per env, and only one env has any.** `coverage` (the default) adds gcov + ASan/LSan on top of `native`. **`native` itself has none** - verified, zero ASan symbols in the built binary. A `-e native` run is _not_ sanitized, so do not reason from "run-tests.sh uses ASan" when you passed `-e native`.
 
 **A signal name from the runner is not a crash.** `exit(UNITY_END())` returns the failure count, and PlatformIO's native runner renders a non-zero exit code as a POSIX signal - 4 failures prints `Program received signal SIGILL`, 5 prints `SIGTRAP`, and the suite is reported `[ERRORED]` instead of `[FAILED]`. Check the exit code against the failure count before theorising about memory bugs; confirm any real crash under a debugger.

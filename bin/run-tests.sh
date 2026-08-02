@@ -20,6 +20,13 @@
 #
 # Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
 #
+# HOST. This is a Linux tool: bash 4+ (mapfile), GNU coreutils and GNU find (`-printf`, md5sum,
+# `-executable`). That is a deliberate choice, not an oversight - the alternative is a second,
+# untested code path per host, and a state check that silently degrades is worse than one that does
+# not run. It is enforced below rather than left to be discovered. macOS and Windows are supported as
+# *build* targets by CI, not as hosts for this harness; run it in a container there, via
+# ./bin/test-native-docker.sh.
+#
 # -f IS NOT A GATE. A filtered run can pass while a full run fails: filtering removes the suites
 # that create the shared state a later suite trips over. Use -f to iterate; gate on a full run.
 #
@@ -58,6 +65,15 @@
 #           as [ERRORED]/SIGHUP. The script names it and points at running the binary bare.)
 
 set -uo pipefail
+
+# Refuse to start off Linux rather than fail somewhere in the middle. This harness is a Linux tool by
+# choice (see the HOST note in the header); on a BSD userland it would not fail cleanly, it would
+# mis-hash the sandbox, mis-read a suite list and report a verdict that looks real.
+if [[ $(uname -s) != Linux ]]; then
+	echo "run-tests.sh is Linux-only (bash 4+, GNU coreutils, GNU find); this host is $(uname -s)." >&2
+	echo "Run the suite in a container instead: ./bin/test-native-docker.sh" >&2
+	exit 2
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

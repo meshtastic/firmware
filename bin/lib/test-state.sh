@@ -4,6 +4,9 @@
 # bin/pio-test-isolate.sh (which enforces it per suite) and bin/test-state-check.sh (which proves
 # the checker itself still works). Nothing here executes on its own.
 #
+# Linux-only, like the rest of the native harness: this uses GNU coreutils behaviour (`find -printf`,
+# md5sum) rather than carrying a per-host fallback. bin/run-tests.sh states and enforces that.
+#
 # The check answers one question: did this suite change any file it did not declare? It deliberately
 # does NOT compare file *contents* against a baseline. Content baselines over protobuf bytes are
 # snapshot tests - add a field to NodeInfoLite and every recorded hash in the repo churns, which is
@@ -33,6 +36,9 @@ state_assert_empty() {
 
 # Fingerprint every file under $1 as "<relative-path> <md5>", sorted. Empty output for an empty or
 # missing tree. Output is fed to comm/diff, so the sort order has to be stable across calls.
+#
+# GNU `find -printf` and md5sum(1), deliberately: this harness is Linux-only and bin/run-tests.sh
+# refuses to start anywhere else, so there is no host here that needs a BSD fallback.
 state_fingerprint() {
 	local root="$1"
 	[[ -d $root ]] || return 0
