@@ -15,6 +15,9 @@
 shuffle_suites() {
 	local seed="$1"
 	shift
+	# Nothing in, nothing out. `printf '%s\n'` with no arguments still writes one empty line, and the
+	# callers read this through mapfile - so an empty suite list would arrive as a suite named "".
+	(($#)) || return 0
 	printf '%s\n' "$@" | awk -v seed="$seed" '
 		function rnd() { s = (s * 16807) % 2147483647; return s / 2147483647 }
 		BEGIN { s = seed % 2147483647; if (s <= 0) s += 2147483646 }
