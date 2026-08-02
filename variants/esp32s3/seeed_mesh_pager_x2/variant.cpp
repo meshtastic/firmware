@@ -125,8 +125,50 @@ bool configureOutput(uint8_t pin, bool level)
 
 void earlyInitVariant()
 {
-    // Use explicit pins to avoid accidental macro drift during early startup.
-    Wire.begin(17, 18);
+    pinMode(BUTTON_PIN, INPUT);
+
+    // After a warm reboot (RTC_SW_CPU_RST) I2C slaves-particularly the ES8311
+    // audio codec at 0x18-can be left mid-transaction, holding SDA low.  This
+    // causes ESP_ERR_INVALID_STATE during the I2C scan, which leaves the I2C1
+    // peripheral generating spurious interrupt requests.  When RadioLib later
+    // calls gpio_install_isr_service(), it sends an IPI to CPU1; the IPI ISR
+    // runs esp_intr_alloc_intrstatus_bind() and cannot acquire the interrupt-
+    // controller lock because the spurious I2C ISR is competing, so it spins
+    // until the interrupt WDT fires.
+    //
+    // Fix: send 9 SCL clock pulses (enough to clock out any stuck byte) plus a
+    // STOP condition on both buses before the Wire driver initialises them.  On
+    // a cold boot the SDA line is already high so the loop exits after the first
+    // check and the overhead is negligible (~10 µs).
+    auto recoverI2C = [](uint8_t sda, uint8_t scl) {
+        pinMode(scl, OUTPUT);
+        digitalWrite(scl, HIGH);
+        pinMode(sda, INPUT_PULLUP);
+        delayMicroseconds(5);
+        for (int i = 0; i < 9; i++) {
+            if (digitalRead(sda))
+                break; // SDA released - slave is no longer driving the bus
+            digitalWrite(scl, LOW);
+            delayMicroseconds(5);
+            digitalWrite(scl, HIGH);
+            delayMicroseconds(5);
+        }
+        // STOP condition: SDA goes LOW then HIGH while SCL remains HIGH.
+        digitalWrite(scl, HIGH);
+        delayMicroseconds(2);
+        pinMode(sda, OUTPUT);
+        digitalWrite(sda, LOW);
+        delayMicroseconds(5);
+        digitalWrite(sda, HIGH);
+        delayMicroseconds(5);
+        // Release both pins so Wire.begin() can claim them as I2C.
+        pinMode(scl, INPUT);
+        pinMode(sda, INPUT);
+    };
+    recoverI2C(I2C_SDA, I2C_SCL);
+    recoverI2C(I2C_SDA1, I2C_SCL1);
+
+    Wire.begin(I2C_SDA, I2C_SCL);
 
     if (!ioExpander.begin(Wire)) {
         earlyInitFailed = true;
@@ -192,9 +234,12 @@ void lateInitVariant()
         } else {
             // LOG_ERROR("Skipping ES8311 init because TCA6424 is not ready");
         }
-        return;
     }
 
+    // main.cpp already called Wire1.begin() during its I2C init block.  End +
+    // begin here ensures the driver starts from a clean state before the codec
+    // init, removing any residual error flags from the warm-reboot I2C scan.
+    Wire1.end();
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 
     // I2C: function, bus
