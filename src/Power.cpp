@@ -61,6 +61,9 @@
 #define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #else
+// The ST HAL headers that define these are outside cppcheck's include path (check_skip_packages), so static
+// analysis always lands here even though real builds resolve one of the branches above.
+// cppcheck-suppress preprocessorErrorDirective
 #error "ADC resolution could not be defined!"
 #endif
 #define ADC_RANGE (1 << BATTERY_SENSE_RESOLUTION_BITS)
@@ -566,7 +569,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
         return powerHAL_isVBUSConnected();
 #endif
         return getBattVoltage() > chargingVolt;

@@ -79,6 +79,11 @@ class UdpMulticastHandler final
                 LOG_WARN("UDP packet with spoofed local from=0x%08x, dropping", mp.from);
                 return;
             }
+            // Same clamp the MQTT ingress applies: an out-of-range hop count is not relayable.
+            if (mp.hop_limit > HOP_MAX || mp.hop_start > HOP_MAX) {
+                LOG_WARN("UDP packet with invalid hop_limit(%u) or hop_start(%u), dropping", mp.hop_limit, mp.hop_start);
+                return;
+            }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
             // Authentication metadata is local-only; Router re-establishes it after successful PKI decryption.
             mp.pki_encrypted = false;

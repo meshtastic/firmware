@@ -767,6 +767,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send config: bluetooth");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_bluetooth_tag;
             fromRadioScratch.config.payload_variant.bluetooth = config.bluetooth;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!getAdminAuthorized()) {
+                // The pairing PIN is a shared secret; never expose it to an unauthenticated client.
+                fromRadioScratch.config.payload_variant.bluetooth.fixed_pin = 0;
+            }
+#endif
             break;
         case meshtastic_Config_security_tag:
             LOG_DEBUG("Send config: security");
@@ -1855,7 +1861,12 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         p.want_ack = true;
     }
 
-    lastPortNumToRadio[p.decoded.portnum] = millis();
+    // Only the rate-limited ports above are ever read back, so recording any other portnum would let
+    // a client grow this map without bound by cycling through them.
+    if (IS_ONE_OF(p.decoded.portnum, meshtastic_PortNum_TRACEROUTE_APP, meshtastic_PortNum_POSITION_APP,
+                  meshtastic_PortNum_WAYPOINT_APP, meshtastic_PortNum_ALERT_APP, meshtastic_PortNum_TELEMETRY_APP,
+                  meshtastic_PortNum_TEXT_MESSAGE_APP))
+        lastPortNumToRadio[p.decoded.portnum] = millis();
     service->handleToRadio(p);
     return true;
 }
