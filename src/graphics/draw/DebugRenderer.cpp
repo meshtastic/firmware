@@ -5,7 +5,6 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/RTC.h"
@@ -16,9 +15,6 @@
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
-#include "mesh/Channels.h"
-#include "mesh/generated/meshtastic/deviceonly.pb.h"
-#include "sleep.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -28,9 +24,6 @@
 #endif
 #endif
 
-#ifdef ARCH_ESP32
-#include "modules/StoreForwardModule.h"
-#endif
 #include <DisplayFormatters.h>
 #include <RadioLibInterface.h>
 #include <target_specific.h>
@@ -39,110 +32,16 @@ using namespace meshtastic;
 
 // External variables
 extern std::unique_ptr<graphics::Screen> screen;
-extern PowerStatus *powerStatus;
 extern NodeStatus *nodeStatus;
-extern GPSStatus *gpsStatus;
-extern Channels channels;
 extern AirTime *airTime;
 
 // External functions from Screen.cpp
 extern bool heartbeat;
 
-#ifdef ARCH_ESP32
-extern StoreForwardModule *storeForwardModule;
-#endif
-
 namespace graphics
 {
 namespace DebugRenderer
 {
-
-void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    char channelStr[20];
-    snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    // Display nodes status
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        UIRenderer::drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
-    } else {
-        UIRenderer::drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
-    }
-#if HAS_GPS
-    // Display GPS status
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        UIRenderer::drawGpsPowerStatus(display, x, y + 2, gpsStatus);
-    } else {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
-        } else {
-            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
-        }
-    }
-#endif
-    display->setColor(WHITE);
-    // Draw the channel name
-    display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
-    // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
-    if (moduleConfig.store_forward.enabled) {
-#ifdef ARCH_ESP32
-        if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
-                                          (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12,
-                                   8, imgQuestionL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12,
-                                   8, imgQuestionL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 8,
-                                   8, imgQuestion);
-#endif
-        } else {
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 16,
-                                   8, imgSFL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 16,
-                                   8, imgSFL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 13 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 11,
-                                   8, imgSF);
-#endif
-        }
-#endif
-    } else {
-        // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL1);
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL2);
-#else
-        display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8,
-                               imgInfo);
-#endif
-    }
-
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(screen->ourId), y + FONT_HEIGHT_SMALL, screen->ourId);
-
-    // Draw any log messages
-    display->drawLogBuffer(x, y + (FONT_HEIGHT_SMALL * 2));
-
-    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
-}
 
 // ****************************
 // * WiFi Screen              *
@@ -228,12 +127,6 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     heartbeat = !heartbeat;
 #endif
 #endif
-}
-
-// Trampoline functions for DebugInfo class access
-void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrameWiFi(display, state, x, y);
 }
 
 // ****************************

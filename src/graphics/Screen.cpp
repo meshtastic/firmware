@@ -1475,7 +1475,7 @@ void Screen::setFrames(FrameFocus focus)
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!hiddenFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoWiFiTrampoline;
+        normalFrames[numframes++] = graphics::DebugRenderer::drawFrameWiFi;
         indicatorIcons.push_back(icon_wifi);
     }
 #endif
