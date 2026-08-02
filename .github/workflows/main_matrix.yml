@@ -52,12 +52,6 @@ permissions: read-all
 
 jobs:
   setup:
-    strategy:
-      fail-fast: true
-      matrix:
-        arch:
-          - all
-          - check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -72,16 +66,15 @@ jobs:
           # PRs and (for now) merge_group builds use the narrowed --level pr board
           # subset. Full-matrix builds run on push / schedule / workflow_dispatch.
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr)
+            TARGETS=$(./bin/generate_ci_matrix.py all --level pr)
           else
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+            TARGETS=$(./bin/generate_ci_matrix.py all)
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
-          echo "${{matrix.arch}}=$TARGETS" >> $GITHUB_OUTPUT
+          echo "all=$TARGETS" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
-      check: ${{ steps.jsonStep.outputs.check }}
 
   version:
     runs-on: ubuntu-latest
@@ -103,11 +96,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: ${{ fromJson(needs.setup.outputs.check) }}
+        check: ${{ fromJson(needs.setup.outputs.all) }}
     # Runs on GitHub-hosted runners so checks don't compete with builds for the
     # self-hosted 'arctastic' pool (which builds use).
     runs-on: ubuntu-latest
-    if: github.repository_owner == 'meshtastic' && github.event_name != 'workflow_dispatch' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true'
+    # Only run checks for PRs and Merge Queue runs.
+    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
     steps:
       - uses: actions/checkout@v7
         with:
@@ -211,9 +205,9 @@ jobs:
 
   # Single, stable status check for branch protection.
   # Always runs and passes only if every build and check that ran succeeded.
-  # Consumed in PRs and Merge Queue
   ci-gate:
-    if: always()
+    # Consumed in PRs and Merge Queue
+    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && !cancelled()
     needs: [build, check]
     runs-on: ubuntu-slim
     steps:
