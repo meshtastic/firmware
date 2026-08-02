@@ -129,8 +129,9 @@ jobs:
       fail-fast: false
       matrix:
         check: ${{ fromJson(needs.setup.outputs.all) }}
-    # Use 'arctastic' self-hosted runner pool when running checks in the main repo
-    runs-on: ${{ github.repository_owner == 'meshtastic' && 'arctastic' || 'ubuntu-latest' }}
+    # Runs on GitHub-hosted runners so checks don't compete with builds for the
+    # self-hosted 'arctastic' pool (which builds use).
+    runs-on: ubuntu-latest
     # Only run checks for PRs and Merge Queue runs.
     if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name)
     steps:
@@ -236,9 +237,9 @@ jobs:
 
   # Single, stable status check for branch protection.
   # Always runs and passes only if every build and check that ran succeeded.
-  # Consumed in PRs and Merge Queue
   ci-gate:
-    if: always()
+    # Consumed in PRs and Merge Queue
+    if: contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && !cancelled()
     needs: [build, check]
     runs-on: ubuntu-slim
     steps:

@@ -61,6 +61,9 @@
 #define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #else
+// The ST HAL headers that define these are outside cppcheck's include path (check_skip_packages), so static
+// analysis always lands here even though real builds resolve one of the branches above.
+// cppcheck-suppress preprocessorErrorDirective
 #error "ADC resolution could not be defined!"
 #endif
 #define ADC_RANGE (1 << BATTERY_SENSE_RESOLUTION_BITS)
