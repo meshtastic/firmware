@@ -119,13 +119,20 @@ else
 	FAILURES=$((FAILURES + 1))
 fi
 
-leaked_pid="$(cat "$survivor_dir"/*/survivor.pid 2>/dev/null | head -1)"
-if [[ -n $leaked_pid ]] && kill -0 "$leaked_pid" 2>/dev/null; then
+# Find the pid file by search, not by a glob that assumes a directory depth: the wrapper renames
+# its mktemp'd sandbox to the suite name when it keeps it, so the path is not fixed. Assert the
+# file was found BEFORE asserting the process is gone - otherwise an empty pid takes the "not
+# running" branch and the check passes without having checked anything.
+leaked_pid="$(cat "$(find "$survivor_dir" -name survivor.pid -print -quit 2>/dev/null)" 2>/dev/null | head -1)"
+if [[ -z $leaked_pid ]]; then
+	echo "  FAIL  no survivor pid recorded - the reap assertion would pass vacuously"
+	FAILURES=$((FAILURES + 1))
+elif kill -0 "$leaked_pid" 2>/dev/null; then
 	echo "  FAIL  the survivor was reported but left running (pid $leaked_pid)"
 	kill -9 "$leaked_pid" 2>/dev/null
 	FAILURES=$((FAILURES + 1))
 else
-	echo "  PASS  the survivor is reaped, not just reported"
+	echo "  PASS  the survivor is reaped, not just reported (pid $leaked_pid)"
 	PASSES=$((PASSES + 1))
 fi
 

@@ -77,7 +77,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$ROOT_DIR"
+cd "$ROOT_DIR" || exit 1
 
 ENV="coverage"
 FILTER=""
@@ -87,6 +87,10 @@ KEEP_STATE=false
 SHUFFLE=false
 SEED=""
 PASSTHRU=()
+# Same passthrough args minus the -f pair. The shuffled loop supplies its own -f per suite, but
+# must still forward everything else the user gave (-v, -vvv, ...) - otherwise a shuffled run
+# builds with those flags and then runs without them.
+EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -122,6 +126,7 @@ while [[ $# -gt 0 ]]; do
 		;;
 	*)
 		PASSTHRU+=("$1")
+		EXTRA_ARGS+=("$1")
 		shift
 		;;
 	esac
@@ -293,10 +298,10 @@ if $SHUFFLE; then
 	: >"$LOG"
 	for suite in "${RUN_ORDER[@]}"; do
 		if $QUIET; then
-			"$PIO" test -e "$ENV" -f "$suite" --without-building >>"$LOG" 2>&1
+			"$PIO" test -e "$ENV" -f "$suite" "${EXTRA_ARGS[@]}" --without-building >>"$LOG" 2>&1
 			rc=$?
 		else
-			"$PIO" test -e "$ENV" -f "$suite" --without-building 2>&1 | tee -a "$LOG"
+			"$PIO" test -e "$ENV" -f "$suite" "${EXTRA_ARGS[@]}" --without-building 2>&1 | tee -a "$LOG"
 			rc=${PIPESTATUS[0]}
 		fi
 		((rc != 0)) && PIO_RC=$rc

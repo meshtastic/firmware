@@ -18,6 +18,13 @@
 # /* ... */ block comment that happens to mention the macro. A note-level rule that cries wolf
 # gets ignored, and then the real finding goes with it.
 #
+# bin/test-lint-unity-exit.sh is this rule's self-test. It exists because the scanner has now been
+# wrong twice: every false positive and false negative found in review is pinned there as a
+# fixture, so the next rewrite has to keep them all passing.
+#
+# Not handled: raw string literals (R"(...)"). There are none under test/, and delimiter tracking
+# for a case that does not occur would be untested code guarding untested code.
+#
 # Emitted at "note" - trunk's only non-blocking level - because the enforcing half of this pair is
 # bin/pio-test-isolate.sh, which detects an actual survivor at run time and grades it AMBER. This
 # is the author-time advice that stops it being written in the first place.
@@ -39,50 +46,64 @@ for target in "$@"; do
 	[[ $rel == test/* ]] || continue
 
 	awk -v path="$rel" '
-	# Comment stripper carrying /* ... */ state across lines. Comments are prose: without this the
-	# rule fires on the very sentence explaining it, and on any block comment naming the macro.
-	function strip_comments(s,   t, i) {
-		t = s
-		if (in_block) {
-			i = index(t, "*/")
-			if (i == 0) return ""	# whole line is inside a block comment
-			t = substr(t, i + 2)
-			in_block = 0
+	# Return the line with comments and string/char literals removed, carrying /* ... */ state
+	# across lines. A character-level scan, not layered regexes: regexes cannot tokenise C++ and
+	# each attempt was wrong differently - a /* inside a string literal flipped comment state and
+	# hid real calls, a greedy .* swallowed the code between two comments on one line, and
+	# UNITY_END() inside a string read as code. Literals collapse to a space rather than vanishing,
+	# so a token cannot be glued to its neighbour.
+	function strip_noncode(s,   out, i, n, c, two, q) {
+		n = length(s); i = 1; out = ""
+		while (i <= n) {
+			if (in_block) {
+				if (substr(s, i, 2) == "*/") { in_block = 0; i += 2 } else { i++ }
+				continue
+			}
+			two = substr(s, i, 2)
+			if (two == "//") return out	# rest of the line is a comment
+			if (two == "/*") { in_block = 1; i += 2; continue }
+			c = substr(s, i, 1)
+			if (c == "\"" || c == "'"'"'") {	# skip a whole literal, honouring backslash escapes
+				q = c; i++
+				while (i <= n) {
+					c = substr(s, i, 1)
+					if (c == "\\") { i += 2; continue }
+					i++
+					if (c == q) break
+				}
+				out = out " "
+				continue
+			}
+			out = out c; i++
 		}
-		while (match(t, /\/\*.*\*\//)) # complete /* ... */ pairs on one line
-			t = substr(t, 1, RSTART - 1) substr(t, RSTART + RLENGTH)
-		sub(/\/\/.*/, "", t)
-		i = index(t, "/*")	# an opener with no closer: rest of line, and following lines, are comment
-		if (i > 0) {
-			t = substr(t, 1, i - 1)
-			in_block = 1
-		}
-		return t
+		return out
 	}
 
 	# True when the statement still contains UNITY_END after every terminating form is removed:
 	#
 	#   exit(UNITY_END())      the documented one
-	#   return UNITY_END()     equally final, but only from main() - it does not compile in a void
-	#                          setup(), so allowing it cannot mask a leak
 	#   int rc = UNITY_END()   capture-then-exit, used by test_packet_signing to restore globals
 	#                          between the summary and the exit
 	#
-	# The last of those is where the rule gives ground: capturing the value and then never exiting
-	# would leak and is not flagged. That is a rarer mistake than the bare call, and flagging a
-	# correct idiom would push someone to "fix" working code.
+	# Both are token-bounded. `exit` must be a whole identifier, so myexit(UNITY_END()) is still
+	# reported; the assignment must be a plain `=`, so `==`, `!=`, `<=`, `>=` and `+=` are not
+	# mistaken for a capture. `return UNITY_END()` is deliberately NOT exempt - it only terminates
+	# from main(), there is no main() under test/, and from a helper it just returns a count.
+	#
+	# Where the rule gives ground: capturing the value and then never exiting would leak and is not
+	# flagged. That is rarer than the bare call, and flagging a correct idiom would push someone to
+	# "fix" working code.
 	function bare_unity_end(s,   t) {
 		t = s
-		gsub(/exit[ \t]*\([ \t]*UNITY_END[ \t]*\([ \t]*\)[ \t]*\)/, "", t)
-		gsub(/return[ \t]+UNITY_END[ \t]*\([ \t]*\)/, "", t)
-		gsub(/=[ \t]*UNITY_END[ \t]*\([ \t]*\)/, "", t)
+		gsub(/(^|[^A-Za-z0-9_])exit[ \t]*\([ \t]*UNITY_END[ \t]*\([ \t]*\)[ \t]*\)/, " ", t)
+		gsub(/[^-+*\/%&|^!<>=][ \t]*=[ \t]*UNITY_END[ \t]*\([ \t]*\)/, " ", t)
 		return (t ~ /UNITY_END[ \t]*\(/)
 	}
 
 	BEGIN { LINE_CAP = 12 }	# give up accumulating a statement after this many lines
 
 	{
-		code = strip_comments($0)
+		code = strip_noncode($0)
 
 		# Remember where the macro first appeared in this statement, for a useful caret position.
 		if (!hit_line && code ~ /UNITY_END[ \t]*\(/) {
