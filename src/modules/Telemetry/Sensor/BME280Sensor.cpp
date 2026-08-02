@@ -12,6 +12,7 @@ BME280Sensor::BME280Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BM
 
 bool BME280Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
+    bus->setTimeout(50);
     LOG_INFO("Init sensor: %s", sensorName);
     status = bme280.begin(dev->address.address, bus);
     if (!status) {
