@@ -344,6 +344,35 @@ preserve_run_log() {
 	cp "$LOG" "$dest" 2>/dev/null && echo "    -> full run output: $dest"
 }
 
+# PlatformIO prints one "N test cases: ... succeeded in T" line per invocation. A shuffled run is one
+# invocation per suite appending to the same $LOG, so taking the last line would report whatever the
+# LAST suite did - a failure in suite 3 printed under suite 44's "0 failed". Sum the lines instead.
+# One line in (the unshuffled case) is passed through verbatim, so the familiar output is unchanged.
+summarise_test_cases() {
+	# The patterns are strings, not /regex/ literals: awk evaluates a regex literal passed as a
+	# function argument as `$0 ~ /re/`, so the callee would receive 0 or 1 rather than a pattern.
+	awk '
+		function num(s, pat,   m) {
+			if (!match(s, pat)) return 0
+			m = substr(s, RSTART, RLENGTH); gsub(/[^0-9]/, "", m); return m + 0
+		}
+		/test cases:/ {
+			last = $0; n++
+			cases   += num($0, "[0-9]+ test cases")
+			failed  += num($0, "[0-9]+ failed")
+			skipped += num($0, "[0-9]+ skipped")
+			passed  += num($0, "[0-9]+ succeeded")
+		}
+		END {
+			if (n == 0) exit
+			if (n == 1) { print "    " last; exit }
+			printf "    %d test cases: ", cases
+			if (failed)  printf "%d failed, ", failed
+			if (skipped) printf "%d skipped, ", skipped
+			printf "%d succeeded, summed over %d suite invocations\n", passed, n
+		}' "$1"
+}
+
 verdict_red() {
 	local detail bin
 	# The order IS the diagnostic for an order-dependent failure; without it a shuffled red is
@@ -357,7 +386,7 @@ verdict_red() {
 	echo ""
 	echo "RED - failures detected:"
 	[[ -n $detail ]] && echo "$detail"
-	grep -E 'test cases:' "$LOG" | tail -1 | sed 's/^/    /'
+	summarise_test_cases "$LOG"
 	preserve_run_log
 
 	# Path to the test binary for the "run it bare" hint. For native/coverage the test program is
