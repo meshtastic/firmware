@@ -182,7 +182,7 @@ void setup()
     printf("\n=== Example group ===\n");           // header line to help find tests
 
     RUN_TEST(test_example);
-    exit(UNITY_END());             // exit() required - Unity runner expects it
+    exit(UNITY_END());             // REQUIRED - a bare UNITY_END() leaves the process running
 }
 
 void loop() {}
@@ -204,7 +204,19 @@ void loop() {}
 #endif
 ```
 
-### 3. Feature Guard
+### 3. Terminate with `exit(UNITY_END())`, on every branch
+
+**A bare `UNITY_END()` does not end the suite - it ends the _reporting_.** `setup()` returns, the runtime goes on calling `loop()`, and the process runs forever. PlatformIO does not notice: it reads the Unity summary off stdout, reports the suite `PASSED` and moves to the next one, so the run is green while the binary is still resident. Nothing surfaces it, and the leak is one process per suite per run.
+
+The consequences are worse than an idle process:
+
+- The per-suite sandbox is **deleted underneath a live process**, so its CLEAN/DIRTY verdict says what the suite had written by the time the harness stopped looking, not what it left behind.
+- `.gcda` coverage data and LeakSanitizer's report are both flushed by `atexit` handlers, so a suite that never exits contributes **no coverage and gets no leak check** - silently.
+- Each survivor pins its own deleted binary on disk (~94 MB), which `du` cannot see.
+
+So: `exit(UNITY_END())` in **every** `setup()` branch, including the `#else` of a feature or architecture guard where the suite does nothing. The empty-suite branch is the easiest one to get wrong, because it looks like there is nothing to clean up.
+
+### 4. Feature Guard
 
 Wrap the entire test body in the same `#if` guard the module uses (e.g. `#if HAS_VARIABLE_HOPS`, `#if !MESHTASTIC_EXCLUDE_GPS`). When the feature is disabled, the `#else` branch produces an empty passing suite.
 

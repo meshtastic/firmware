@@ -1195,7 +1195,7 @@ void setup()
     initializeTestEnvironment();
     LOG_WARN("This test requires the ARCH_PORTDUINO variant of WiFiClient");
     UNITY_BEGIN();
-    UNITY_END();
+    exit(UNITY_END());
 }
 #endif
 void loop() {}
