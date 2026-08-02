@@ -50,6 +50,31 @@ state_fingerprint() {
 	)
 }
 
+# Processes still running inside the suite's sandbox $HOME. Prints one PID per line.
+#
+# A suite that ends on a bare UNITY_END() does not stop: setup() returns, the runtime keeps calling
+# loop(), and PlatformIO - which reports a suite from its Unity output, not from process exit -
+# moves on with the binary still resident. Nothing else notices, and the damage is quiet: the
+# sandbox gets deleted under a live process, so the after-fingerprint below describes what the suite
+# had written when we stopped looking rather than what it left behind, and .gcda plus LeakSanitizer
+# both flush from atexit handlers that never run.
+#
+# Matching on the environment rather than on a remembered PID is deliberate: the sandbox HOME is
+# mktemp-unique per suite, so this identifies survivors whatever their parentage - a fork, a
+# grandchild, a process already reparented to init - none of which a $! comparison would catch.
+# Scoped to this user's processes: /proc/<pid>/environ is unreadable for anyone else's anyway, and
+# the narrower sweep costs ~270ms against ~460ms for all of /proc.
+state_find_survivors() {
+	local home="$1" pid
+	[[ -n $home ]] || return 0
+	for pid in $(ps -u "$(id -u)" -o pid= 2>/dev/null); do
+		[[ $pid == "$$" ]] && continue
+		if tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null | grep -qxF "HOME=$home"; then
+			printf '%s\n' "$pid"
+		fi
+	done
+}
+
 # Paths present in the "after" fingerprint ($2) that are absent or different in "before" ($1).
 # Prints one relative path per line.
 state_changed_paths() {

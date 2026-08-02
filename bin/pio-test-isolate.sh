@@ -56,6 +56,22 @@ HOME="$SUITE_HOME" \
 	"$@" 2>&1 | tee "$LOG"
 RC=${PIPESTATUS[0]}
 
+# Survivors, before anything else looks at the sandbox: reap them first so the after-fingerprint is
+# taken against a tree nobody is still writing to, and so a run cannot leave processes accumulating
+# on the host. SIGTERM, then SIGKILL for anything that ignores it. Reported on the summary line as a
+# fourth outcome - it is not a filesystem verdict, and folding it into DIRTY would lose the reason.
+SURVIVORS="$(state_find_survivors "$SUITE_HOME" | tr '\n' ' ')"
+SURVIVORS="${SURVIVORS% }"
+if [[ -n $SURVIVORS ]]; then
+	# shellcheck disable=SC2086 # deliberate word splitting: SURVIVORS is a PID list
+	kill $SURVIVORS 2>/dev/null
+	sleep 0.2
+	STILL="$(state_find_survivors "$SUITE_HOME" | tr '\n' ' ')"
+	# shellcheck disable=SC2086 # as above
+	[[ -n ${STILL// /} ]] && kill -9 $STILL 2>/dev/null
+	echo "pio-test-isolate: survivor(s) still running after the suite finished: $SURVIVORS (killed)" >&2
+fi
+
 # The suite name is not passed to a test_testing_command, so recover it from the output: every Unity
 # result line carries the suite's source path. Fall back to the per-test report, which records it
 # from __FILE__, and finally to the scratch dir name.
@@ -98,13 +114,14 @@ fi
 
 STATUS=$([[ $RC -eq 0 ]] && echo PASS || echo FAIL)
 mkdir -p "$(dirname "$SUMMARY")" 2>/dev/null
-printf '%s\t%s\t%s\t%s\t%s\n' "$SUITE" "$STATUS" "$VERDICT" "${DETAIL-}" "${PER_TEST_DETAIL-}" >>"$SUMMARY"
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$SUITE" "$STATUS" "$VERDICT" "${DETAIL-}" "${PER_TEST_DETAIL-}" \
+	"${SURVIVORS-}" >>"$SUMMARY"
 
 # Keep the sandbox when there is something to look at: on a failure it plus the built binary is a
 # complete, replayable reproduction, and on a DIRTY verdict the leftovers *are* the bug report. A
 # clean pass leaves nothing behind.
 KEEP="${MESHTASTIC_TEST_KEEP_STATE:-0}"
-if [[ $RC -ne 0 || $VERDICT != CLEAN || $KEEP == 1 ]]; then
+if [[ $RC -ne 0 || $VERDICT != CLEAN || -n ${SURVIVORS-} || $KEEP == 1 ]]; then
 	DEST="$STATE_ROOT/$SUITE"
 	rm -rf "$DEST" 2>/dev/null
 	mv "$SCRATCH" "$DEST" 2>/dev/null || DEST="$SCRATCH"

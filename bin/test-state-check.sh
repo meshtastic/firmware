@@ -82,6 +82,53 @@ expect_verdict "writes what it declares" test_fixture_declared "nodes.proto" CLE
 expect_verdict "writes something undeclared" test_fixture_undeclared "nodes.proto warm.dat" DIRTY
 expect_verdict "declares a write it skips" test_fixture_missing "" MISSING
 
+# Survivor axis. Stands in for a suite that ends on a bare UNITY_END(): it prints its Unity line and
+# returns, but leaves a process running inside the sandbox $HOME, exactly as the runtime's loop()
+# does. Asserts the wrapper both records it and kills it - a detector that reports without reaping
+# would leave the host accumulating processes, which is half the harm.
+echo
+echo "Survivor axis (state_find_survivors):"
+LEAKY="$WORK/leaky-suite.sh"
+cat >"$LEAKY" <<'EOF'
+#!/usr/bin/env bash
+set -u
+echo "test/${FIXTURE_SUITE}/test_main.cpp:1:test_fixture:PASS"
+mkdir -p "$HOME/.portduino/default/prefs"
+# Detached from this shell's stdout so the wrapper's `| tee` sees EOF and the pipeline returns -
+# the survivor outlives the suite exactly as a spun loop() does.
+setsid sleep 300 >/dev/null 2>&1 &
+printf '%s\n' "$!" > "$HOME/../survivor.pid"
+exit 0
+EOF
+chmod +x "$LEAKY"
+
+survivor_dir="$WORK/state-survivor"
+mkdir -p "$survivor_dir"
+FIXTURE_SUITE=test_fixture_survivor \
+	MESHTASTIC_TEST_STATE_DIR="$survivor_dir" \
+	MESHTASTIC_TEST_STATE_SUMMARY="$survivor_dir/summary.tsv" \
+	MESHTASTIC_TEST_STATE_MANIFEST="$MANIFEST" \
+	"$SCRIPT_DIR/pio-test-isolate.sh" "$LEAKY" >/dev/null 2>&1
+
+recorded="$(awk -F'\t' '$1 == "test_fixture_survivor" { print $6; exit }' "$survivor_dir/summary.tsv" 2>/dev/null)"
+if [[ -n ${recorded// /} ]]; then
+	echo "  PASS  a process outliving the suite is reported"
+	PASSES=$((PASSES + 1))
+else
+	echo "  FAIL  a process outliving the suite went unreported"
+	FAILURES=$((FAILURES + 1))
+fi
+
+leaked_pid="$(cat "$survivor_dir"/*/survivor.pid 2>/dev/null | head -1)"
+if [[ -n $leaked_pid ]] && kill -0 "$leaked_pid" 2>/dev/null; then
+	echo "  FAIL  the survivor was reported but left running (pid $leaked_pid)"
+	kill -9 "$leaked_pid" 2>/dev/null
+	FAILURES=$((FAILURES + 1))
+else
+	echo "  PASS  the survivor is reaped, not just reported"
+	PASSES=$((PASSES + 1))
+fi
+
 # Guard the guard. The wrapper mktemp's its own sandbox name, so the leak cannot be staged through
 # it; exercise the assertion the wrapper actually calls instead - same function, same code path.
 echo

@@ -487,9 +487,11 @@ fi
 # still wins, and before the pass/fail verdict lines so the state summary always prints.
 DIRTY_SUITES=()
 MISSING_SUITES=()
+SURVIVOR_SUITES=()
 if [[ -f $STATE_SUMMARY ]]; then
 	mapfile -t DIRTY_SUITES < <(awk -F'\t' '$3 == "DIRTY" { print $1 " (" $4 ")" }' "$STATE_SUMMARY")
 	mapfile -t MISSING_SUITES < <(awk -F'\t' '$3 == "MISSING" { print $1 " (" $4 ")" }' "$STATE_SUMMARY")
+	mapfile -t SURVIVOR_SUITES < <(awk -F'\t' '$6 != "" { print $1 " (pid " $6 ")" }' "$STATE_SUMMARY")
 fi
 
 # Print the opt-out count on every run, so the number creeping upward is visible without anyone
@@ -566,6 +568,22 @@ if ((${#DIRTY_SUITES[@]} > 0)); then
 	echo "    -> declare these in test/state-manifest.tsv with a reason, or stop the write."
 	echo "    -> ./bin/run-tests.sh --write-manifest prints the entries to paste."
 	echo "RESULT: AMBER ${#DIRTY_SUITES[@]} suite(s) left undeclared shared state $(canonical_rating)"
+	exit 2
+fi
+
+# AMBER: a suite was still running after PlatformIO reported it. A bare UNITY_END() ends the
+# reporting, not the process - the runtime goes on calling loop() - so the suite passes, the run goes
+# green, and the binary stays resident. The wrapper has already killed it, but the consequences do
+# not undo: its CLEAN/DIRTY verdict was measured against a tree it may still have been writing to,
+# and .gcda plus LeakSanitizer both flush from atexit handlers that never ran, so the suite silently
+# contributed no coverage and got no leak check. AMBER, not RED - the tests themselves did pass.
+if ((${#SURVIVOR_SUITES[@]} > 0)); then
+	echo ""
+	printf '    %s\n' "${SURVIVOR_SUITES[@]}"
+	echo ""
+	echo "    -> end every setup() branch with exit(UNITY_END()), not a bare UNITY_END()."
+	echo "    -> ./bin/lint-unity-exit.sh test/**/*.cpp finds the sites; see test/README.md."
+	echo "RESULT: AMBER ${#SURVIVOR_SUITES[@]} suite(s) still running after the suite finished $(canonical_rating)"
 	exit 2
 fi
 
