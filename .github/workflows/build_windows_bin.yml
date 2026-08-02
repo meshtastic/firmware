@@ -141,3 +141,25 @@ jobs:
           overwrite: true
           path: |
             .pio/build/native-windows/meshtasticd.exe
+
+      - name: Install WiX
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "$env:USERPROFILE\.dotnet\tools\wix.exe" extension add -g WixToolset.Util.wixext/5.0.2
+
+      - name: Build the MSI and winget manifests
+        shell: pwsh
+        run: ./bin/build-winget-package.ps1 -ReleaseTag "v$env:LONG_VERSION" -Validate
+        env:
+          LONG_VERSION: ${{ steps.version.outputs.long }}
+
+      - name: Store the MSI and winget manifests as an artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: meshtasticd-msi-${{ inputs.windows_ver }}-${{ steps.version.outputs.long }}
+          overwrite: true
+          path: |
+            release/winget/*.msi
+            release/winget/manifests/
