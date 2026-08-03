@@ -43,8 +43,7 @@
 #define DS248X_CH0 0xF0
 #endif
 
-// Returned by readTemperatureROM when the one-wire transaction fails or the
-// scratchpad CRC does not match, so callers can reject the reading.
+// Returned by readTemperatureROM when the transaction fails or the scratchpad CRC mismatches
 #ifndef DS248X_INVALID_TEMPERATURE
 #define DS248X_INVALID_TEMPERATURE -1000.0f
 #endif

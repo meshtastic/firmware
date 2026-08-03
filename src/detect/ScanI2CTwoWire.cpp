@@ -702,8 +702,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L", (uint8_t)addr.address)
             case HMC5883L_ADDR:
-                // Probe the defined WHO_AM_I first: the DS248X check below reads an address that is
-                // reserved on the IIS2MDCTR, so running it first risks claiming a magnetometer.
+                // WHO_AM_I first: the DS248X probe below reads a reserved address on the IIS2MDCTR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x4FU), 1); // get ID
                 if (registerValue == 0x40) {
                     type = IIS2MDCTR;

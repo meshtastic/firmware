@@ -96,8 +96,7 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
                     ds248x.OneWireReset();
 
-                    // Search into a scratch buffer: a failed pass must not erase a ROM that an
-                    // earlier pass already found on this channel.
+                    // Scratch buffer: a failed pass must not erase a ROM found on an earlier one
                     uint8_t foundROM[8]{};
                     if (ds248x.OneWireSearch(foundROM)) {
                         memcpy(ds2482800Data.ds248xData[channel].rom, foundROM, sizeof(foundROM));
@@ -283,13 +282,9 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
             return true;
         }
     } else if (_variant == ds248x_variant_t::DS248X_DS2482_800) {
-        // Only ch0 is reported. Every populated channel costs a blocking 750ms conversion in
-        // readTemperatureROM, so walking all eight would stall telemetry for up to 6s and then
-        // throw the other seven readings away.
+        // Only ch0 is reported, and each populated channel blocks 750ms on its conversion
         // TODO Support more than one temperature via repeated (3.0)
         // TODO Select which channel can be reported as main temperature
-        // When multi-channel reporting lands, start the conversion on every channel first and
-        // wait once, instead of reading each channel end to end.
         if (readTemperatureChannel(0)) {
             measurement->variant.environment_metrics.temperature = ds2482800Data.ds248xData[0].temperature;
             measurement->variant.environment_metrics.has_temperature = true;
