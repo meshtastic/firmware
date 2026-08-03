@@ -31,6 +31,7 @@ import os
 import re
 import shutil
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -137,9 +138,10 @@ def find_board_manifest(board_id, project_dir, core_dir, fetched_dir=None):
         fetched = os.path.join(fetched_dir, f"{board_id}.json")
         if os.path.isfile(fetched):
             return fetched
-    # Versions unpack side by side; sorted() puts the plain name first so the
-    # lookup is deterministic. CI only ever has one.
-    installed = sorted(glob.glob(os.path.join(core_dir, "platforms", "*", "boards", f"{board_id}.json")))
+    # Only espressif32*, so a same-named board in another installed platform can never
+    # answer; its versions unpack side by side, and sorted() keeps the pick deterministic.
+    pattern = os.path.join(core_dir, "platforms", "espressif32*", "boards", f"{board_id}.json")
+    installed = sorted(glob.glob(pattern))
     return installed[0] if installed else None
 
 
@@ -161,6 +163,17 @@ def check_manifest_url(url):
     return None
 
 
+class AllowlistedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-check the allowlist on each redirect target; the default opener follows
+    redirects blind, and this fetch does redirect (github.com to codeload.github.com)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        problem = check_manifest_url(newurl)
+        if problem:
+            raise urllib.error.HTTPError(newurl, code, f"refusing redirect: {problem}", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def fetch_board_manifests(url, dest_dir):
     """Download a platform archive and extract only its boards/*.json, as data.
 
@@ -171,11 +184,12 @@ def fetch_board_manifests(url, dest_dir):
     if problem:
         raise ValueError(f"refusing to fetch board manifests: {problem}")
 
-    # check_manifest_url() above rejects anything not https on an allowlisted host
-    # and owner, so file:// and untrusted hosts cannot reach either call.
+    # check_manifest_url() gates the initial URL and every redirect target, so file://
+    # and untrusted hosts cannot reach the fetch.
     request = urllib.request.Request(url, headers={"User-Agent": "meshtastic-firmware-ci"})  # noqa: S310
+    opener = urllib.request.build_opener(AllowlistedRedirectHandler)
     # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
-    with urllib.request.urlopen(request, timeout=MANIFEST_FETCH_TIMEOUT) as response:  # noqa: S310
+    with opener.open(request, timeout=MANIFEST_FETCH_TIMEOUT) as response:
         payload = response.read(MAX_ARCHIVE_BYTES + 1)
     if len(payload) > MAX_ARCHIVE_BYTES:
         raise ValueError(f"archive at {url} exceeds {MAX_ARCHIVE_BYTES} bytes")
@@ -240,9 +254,11 @@ def check_env(cfg, env_name, project_dir, core_dir, fetched_dir=None):
     manifest_path = find_board_manifest(board_id, project_dir, core_dir, fetched_dir)
     if not manifest_path:
         return [
-            f"{env_name}: board '{board_id}' not found in {project_dir}/boards or any "
-            f"installed platform under {core_dir}/platforms (install the platform, or pass "
-            "--fetch-board-manifests as CI does)"
+            (
+                f"{env_name}: board '{board_id}' not found in {project_dir}/boards or any "
+                f"installed platform under {core_dir}/platforms (install the platform, or pass "
+                "--fetch-board-manifests as CI does)"
+            )
         ]
     with open(manifest_path, encoding="utf-8") as fp:
         manifest = json.load(fp)
