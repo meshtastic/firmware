@@ -401,6 +401,8 @@ std::unique_ptr<RadioInterface> initLoRa()
             return std::unique_ptr<RadioInterface>(new LR1121Interface(hal, cs, irq, rst, busy));
         case use_llcc68:
             return std::unique_ptr<RadioInterface>(new LLCC68Interface(hal, cs, irq, rst, busy));
+        case use_lr2021:
+            return std::unique_ptr<RadioInterface>(new LR2021Interface(hal, cs, irq, rst, busy));
         case use_simradio:
             return std::unique_ptr<RadioInterface>(new SimRadio);
         default:
@@ -877,7 +879,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += DEBUG_PORT.mt_sprintf(" len=%d", p->encrypted.size + sizeof(PacketHeader));
     }
 
-    if (p->rx_time != 0)
+    if (p->has_rx_time) // rx_time has explicit presence; a millis() placeholder isn't a real reading to print
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
     if (p->rx_snr != 0.0)
         out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);

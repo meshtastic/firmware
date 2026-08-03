@@ -12,6 +12,7 @@
 #include "Power.h"
 #include "PowerFSM.h"
 #include "TypeConversions.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
@@ -180,6 +181,36 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     return nodenum;
 }
 
+// Back-calculate the real epoch for any queued packet still carrying a millis() rx_time
+// placeholder, now that the clock is trustworthy.
+void MeshService::reconcilePendingRxTimes()
+{
+    const uint32_t nowEpoch = getValidTime(RTCQualityFromNet);
+    if (nowEpoch == 0) // called before the clock was actually valid - nothing to reconcile against
+        return;
+    const uint32_t nowMillis = Time::getMillis();
+
+    // Rotate the queue once. TypedQueue is strictly FIFO on both backends, so dequeueing and
+    // re-enqueueing every element in turn leaves the delivery order unchanged.
+    for (int remaining = toPhoneQueue.numUsed(); remaining > 0; remaining--) {
+        meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
+        if (!p) // drained from under us - nothing left to rotate
+            break;
+        if (!p->has_rx_time) {
+            // Unsigned subtraction is wraparound-safe; rx_time is a 32-bit wire field, so the
+            // placeholder was never wider than 32 bits to begin with.
+            const uint32_t elapsedMs = nowMillis - p->rx_time;
+            p->rx_time = nowEpoch - (elapsedMs / 1000);
+            p->has_rx_time = true;
+        }
+        if (!toPhoneQueue.enqueue(p, 0)) { // mirrors sendToPhone()'s degrade-on-failure path
+            LOG_CRIT("Failed to requeue a packet into toPhoneQueue!");
+            releaseToPool(p);
+            fromNum++; // notify observers so the phone can resync
+        }
+    }
+}
+
 #if MESHTASTIC_ENABLE_FRAME_INJECTION
 // Deliver a client-supplied frame into the receive pipeline as if it arrived off the LoRa chip. Mirrors
 // the portduino SimRadio SIMULATOR_APP unwrap so the same host wire format works on real hardware: the
@@ -220,7 +251,9 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
         mp->rx_rssi = -40;
         mp->has_rx_rssi = true;
     }
-    mp->rx_time = getValidTime(RTCQualityFromNet);
+    // dispatchReceived() restamps this when the packet re-enters the pipeline below; stamp it
+    // here anyway so the packet is never observable with an unset arrival time.
+    stampRxTime(mp);
     LOG_INFO("inject: RX from=0x%08x to=0x%08x id=0x%08x ch=%d %s", mp->from, mp->to, mp->id, mp->channel,
              mp->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ? "encrypted" : "decoded");
     router->enqueueReceivedMessage(mp);
@@ -258,7 +291,8 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
 
-    p.rx_time = getValidTime(RTCQualityFromNet); // Record the time the packet arrived from the phone
+    // Record the time the packet arrived from the phone.
+    stampRxTime(&p);
 
     IF_SCREEN(if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 &&
                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only
@@ -595,6 +629,11 @@ bool MeshService::isToPhoneQueueEmpty()
 
 uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
+    // rx_time may be a millis() placeholder while has_rx_time is false - don't age it as
+    // wall-clock, and don't pass it off as "just now" either.
+    if (!mp->has_rx_time)
+        return SINCE_UNKNOWN;
+
     uint32_t now = getTime();
 
     uint32_t last_seen = mp->rx_time;

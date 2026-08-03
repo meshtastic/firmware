@@ -61,6 +61,9 @@
 #define LL_ADC_RESOLUTION LL_ADC_DS_DATA_WIDTH_12_BIT
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #else
+// The ST HAL headers that define these are outside cppcheck's include path (check_skip_packages), so static
+// analysis always lands here even though real builds resolve one of the branches above.
+// cppcheck-suppress preprocessorErrorDirective
 #error "ADC resolution could not be defined!"
 #endif
 #define ADC_RANGE (1 << BATTERY_SENSE_RESOLUTION_BITS)
@@ -81,6 +84,12 @@
 
 #ifndef DELAY_FOREVER
 #define DELAY_FOREVER portMAX_DELAY
+#endif
+
+// How often the free-heap line is written to the debug log. The Power thread polls every
+// 20s once it is initialized, so that is the effective granularity. Set to 0 to disable.
+#ifndef HEAP_LOG_INTERVAL_MS
+#define HEAP_LOG_INTERVAL_MS (5 * 60 * 1000)
 #endif
 
 #if defined(BATTERY_PIN) && defined(ARCH_ESP32)
@@ -566,7 +575,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 // technically speaking this should work for all(?) NRF52 boards
 // but needs testing across multiple devices. NRF52 USB would not even work if
 // VBUS was not properly connected and detected by the CPU
-#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO)
+#elif defined(MUZI_BASE) || defined(PROMICRO_DIY_TCXO) || defined(ELECROW_ThinkNode_M8)
         return powerHAL_isVBUSConnected();
 #endif
         return getBattVoltage() > chargingVolt;
@@ -1072,9 +1081,42 @@ void Power::readPowerStatus()
     }
 }
 
+/**
+ * Emit a free-heap line to the debug log every HEAP_LOG_INTERVAL_MS, so a slow leak shows up
+ * as a trend in a field log instead of only as an out-of-memory reboot. Unlike the DEBUG_HEAP
+ * instrumentation above this is always on, and costs one line per interval.
+ */
+void Power::logHeapUsage()
+{
+#if HEAP_LOG_INTERVAL_MS > 0
+    if (Throttle::isWithinTimespanMs(lastHeapLogTime, HEAP_LOG_INTERVAL_MS))
+        return;
+
+    const uint32_t heapTotal = memGet.getHeapSize();
+    // Platforms without heap accounting report UINT32_MAX (or 0) - nothing worth logging
+    if (heapTotal == 0 || heapTotal == UINT32_MAX)
+        return;
+
+    const uint32_t heapFree = memGet.getFreeHeap();
+    // The first line has no earlier sample to difference against
+    const int32_t delta = lastHeapLogTime ? (int32_t)(heapFree - lastHeapLogFree) : 0;
+
+    const uint32_t psramTotal = memGet.getPsramSize();
+    if (psramTotal)
+        LOG_INFO("Heap: %u/%u bytes free (%d since last), PSRAM: %u/%u bytes free", heapFree, heapTotal, delta,
+                 memGet.getFreePsram(), psramTotal);
+    else
+        LOG_INFO("Heap: %u/%u bytes free (%d since last)", heapFree, heapTotal, delta);
+
+    lastHeapLogFree = heapFree;
+    lastHeapLogTime = millis();
+#endif
+}
+
 int32_t Power::runOnce()
 {
     readPowerStatus();
+    logHeapUsage();
 
 #ifdef HAS_PMU
     // WE no longer use the IRQ line to wake the CPU (due to false wakes from

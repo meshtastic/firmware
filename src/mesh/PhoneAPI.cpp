@@ -767,6 +767,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             LOG_DEBUG("Send config: bluetooth");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_bluetooth_tag;
             fromRadioScratch.config.payload_variant.bluetooth = config.bluetooth;
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+            if (!getAdminAuthorized()) {
+                // The pairing PIN is a shared secret; never expose it to an unauthenticated client.
+                fromRadioScratch.config.payload_variant.bluetooth.fixed_pin = 0;
+            }
+#endif
             break;
         case meshtastic_Config_security_tag:
             LOG_DEBUG("Send config: security");
@@ -1238,6 +1244,17 @@ void setReplayHopFields(meshtastic_MeshPacket &pkt, const meshtastic_NodeInfoLit
     pkt.hop_limit = hopsAway < hopLimit ? (uint8_t)(hopLimit - hopsAway) : 0;
 }
 
+/// 2020-01-01: a boot-relative counter needs ~50 years of uptime to reach this, so it cannot be
+/// confused with a real epoch.
+constexpr uint32_t MIN_PLAUSIBLE_EPOCH = 1577836800u;
+
+/// Not every last_heard writer gates on RTC quality - NodeDB::addFromContact stamps it with a bare
+/// getTime(), which is boot-relative seconds on a node that has never had a clock.
+bool lastHeardIsWallClock(const meshtastic_NodeInfoLite *header)
+{
+    return header && header->last_heard >= MIN_PLAUSIBLE_EPOCH;
+}
+
 } // namespace
 
 // Replayed packets deliberately leave rx_rssi absent. NodeInfoLite stores no RSSI, and
@@ -1258,6 +1275,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayPositionPacket(NodeNum num, const mesh
     // fix time (which is often 0 and, when present, already round-trips inside the payload
     // via ConvertToPosition).
     pkt.rx_time = header ? header->last_heard : 0;
+    // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
+    pkt.has_rx_time = lastHeardIsWallClock(header);
     // Stable per-node/per-fix id: replaying the same unchanged history on every
     // reconnect must not look like a brand new packet to the phone's history/dedup.
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_POSITION_APP);
@@ -1285,6 +1304,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayTelemetryPacket(NodeNum num, const mes
     // No native timestamp on telemetry packets here; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
+    pkt.has_rx_time = lastHeardIsWallClock(header);
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_device_metrics_tag);
     pkt.channel = header ? header->channel : 0;
     pkt.rx_snr = header ? header->snr : 0;
@@ -1391,6 +1412,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayEnvironmentPacket(uint32_t num, const 
     pkt.to = NODENUM_BROADCAST;
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
+    pkt.has_rx_time = lastHeardIsWallClock(header);
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_Telemetry_environment_metrics_tag);
     pkt.channel = header ? header->channel : 0;
     pkt.rx_snr = header ? header->snr : 0;
@@ -1456,6 +1479,8 @@ meshtastic_MeshPacket PhoneAPI::makeReplayStatusPacket(uint32_t num, const mesht
     // StatusMessage has no native timestamp; use last_heard.
     const meshtastic_NodeInfoLite *header = nodeDB->getMeshNode(num);
     pkt.rx_time = header ? header->last_heard : 0;
+    // Present only when last_heard is a genuine epoch - see lastHeardIsWallClock().
+    pkt.has_rx_time = lastHeardIsWallClock(header);
     pkt.id = makeReplayPacketId(num, pkt.rx_time, meshtastic_PortNum_NODE_STATUS_APP);
     pkt.channel = header ? header->channel : 0;
     pkt.rx_snr = header ? header->snr : 0;
@@ -1836,7 +1861,12 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         p.want_ack = true;
     }
 
-    lastPortNumToRadio[p.decoded.portnum] = millis();
+    // Only the rate-limited ports above are ever read back, so recording any other portnum would let
+    // a client grow this map without bound by cycling through them.
+    if (IS_ONE_OF(p.decoded.portnum, meshtastic_PortNum_TRACEROUTE_APP, meshtastic_PortNum_POSITION_APP,
+                  meshtastic_PortNum_WAYPOINT_APP, meshtastic_PortNum_ALERT_APP, meshtastic_PortNum_TELEMETRY_APP,
+                  meshtastic_PortNum_TEXT_MESSAGE_APP))
+        lastPortNumToRadio[p.decoded.portnum] = millis();
     service->handleToRadio(p);
     return true;
 }
