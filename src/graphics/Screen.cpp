@@ -566,12 +566,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-    isI2cScreen = true;
 #if defined(OLED_Y_OFFSET_PAGES)
-    // Panels whose active window does not start at GDDRAM row 0 (e.g. 72x40
-    // modules on pages 3..7) need a fixed vertical page shift on every write.
+    // Shift writes to the panel's visible GDDRAM pages.
     static_cast<SSD1306Wire *>(dispdev)->setYOffset(OLED_Y_OFFSET_PAGES);
 #endif
+    isI2cScreen = true;
 #elif defined(USE_SPISSD1306)
     dispdev = new SSD1306Spi(SSD1306_RESET, SSD1306_RS, SSD1306_NSS, GEOMETRY_64_48);
     if (!dispdev->init()) {
@@ -732,6 +731,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
+            if (graphics::isCompactPanel(dispdev))
+                graphics::UIRenderer::notifyScreenWoke();
         } else {
             powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
 #ifdef USE_EINK
@@ -1352,6 +1353,7 @@ void Screen::setFrames(FrameFocus focus)
     showingNormalScreen = true;
 
     indicatorIcons.clear();
+    frameTitles.clear();
 
     size_t numframes = 0;
 
@@ -1360,19 +1362,23 @@ void Screen::setFrames(FrameFocus focus)
     if (error_code) {
         normalFrames[numframes++] = NotificationRenderer::drawCriticalFaultFrame;
         indicatorIcons.push_back(icon_error);
+        frameTitles.push_back("Alert");
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
 
 #if defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
-#if defined(OLED_TINY)
+#if defined(OLED_COMPACT_UI)
+        normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
+#elif defined(OLED_TINY)
         normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
 #else
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
 #endif
         indicatorIcons.push_back(digital_icon_clock);
+        frameTitles.push_back("Clock");
     }
 #endif
 
@@ -1380,6 +1386,7 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.home = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
         indicatorIcons.push_back(icon_home);
+        frameTitles.push_back("Home");
     }
 
 #if BASEUI_HAS_GAMES
@@ -1388,23 +1395,27 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.games = numframes;
         normalFrames[numframes++] = drawGamesFrame;
         indicatorIcons.push_back(joystick_small);
+        frameTitles.push_back("Games");
     }
 #endif
 
     fsi.positions.textMessage = numframes;
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
+    frameTitles.push_back("Messages");
 
 #ifndef USE_EINK
     if (!hiddenFrames.nodelist_nodes) {
         fsi.positions.nodelist_nodes = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Nodes;
         indicatorIcons.push_back(icon_nodes);
+        frameTitles.push_back("Nodes");
     }
     if (!hiddenFrames.nodelist_location) {
         fsi.positions.nodelist_location = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Location;
         indicatorIcons.push_back(icon_list);
+        frameTitles.push_back("Node List");
     }
 #endif
 
@@ -1414,16 +1425,19 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.nodelist_lastheard = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
         indicatorIcons.push_back(icon_nodes);
+        frameTitles.push_back("Nodes");
     }
     if (!hiddenFrames.nodelist_hopsignal) {
         fsi.positions.nodelist_hopsignal = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
         indicatorIcons.push_back(icon_signal);
+        frameTitles.push_back("Signal");
     }
     if (!hiddenFrames.nodelist_distance) {
         fsi.positions.nodelist_distance = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
         indicatorIcons.push_back(icon_distance);
+        frameTitles.push_back("Distance");
     }
 #endif
 #if HAS_GPS
@@ -1432,36 +1446,46 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.nodelist_bearings = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
         indicatorIcons.push_back(icon_list);
+        frameTitles.push_back("Bearings");
     }
 #endif
     if (!hiddenFrames.gps) {
         fsi.positions.gps = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
         indicatorIcons.push_back(icon_compass);
+        frameTitles.push_back("GPS");
     }
 #endif
     if (RadioLibInterface::instance && !hiddenFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);
+        frameTitles.push_back("LoRa");
     }
     if (!hiddenFrames.system) {
         fsi.positions.system = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawSystemScreen;
         indicatorIcons.push_back(icon_system);
+        frameTitles.push_back("System");
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
+#if defined(OLED_COMPACT_UI)
+        normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
+#else
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
+#endif
         indicatorIcons.push_back(digital_icon_clock);
+        frameTitles.push_back("Clock");
     }
 #endif
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
         indicatorIcons.push_back(chirpy_small);
+        frameTitles.push_back("Chirpy");
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -1469,6 +1493,7 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.wifi = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawFrameWiFi;
         indicatorIcons.push_back(icon_wifi);
+        frameTitles.push_back("WiFi");
     }
 #endif
 
@@ -1496,6 +1521,7 @@ void Screen::setFrames(FrameFocus focus)
                 fsi.positions.waypoint = numframes;
 
             indicatorIcons.push_back(icon_module);
+            frameTitles.push_back("Module");
             numframes++;
         }
     }
@@ -1524,6 +1550,7 @@ void Screen::setFrames(FrameFocus focus)
             for (const auto &f : favoriteFrames) {
                 normalFrames[numframes++] = f;
                 indicatorIcons.push_back(icon_node);
+                frameTitles.push_back("Favorite");
             }
             fsi.positions.lastFavorite = numframes - 1;
         } else {
@@ -2131,6 +2158,34 @@ int Screen::handleInputEvent(const InputEvent *event)
 
         if (event->inputEvent == INPUT_BROKER_DOWN) {
             graphics::NodeListRenderer::scrollDown();
+            setFastFramerate();
+            return 0;
+        }
+    }
+    // UP/DOWN on the compact position screen toggles compass vs coordinates+elevation
+    if (graphics::isCompactPanel(dispdev) && ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            graphics::UIRenderer::scrollPositionUp();
+            setFastFramerate();
+            return 0;
+        }
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            graphics::UIRenderer::scrollPositionDown();
+            setFastFramerate();
+            return 0;
+        }
+    }
+    // UP/DOWN on the compact favorite-node screen toggles compass+distance vs status/telemetry
+    if (graphics::isCompactPanel(dispdev) && framesetInfo.positions.firstFavorite != 255 &&
+        ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
+        ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
+        if (event->inputEvent == INPUT_BROKER_UP) {
+            graphics::UIRenderer::scrollFavoriteUp();
+            setFastFramerate();
+            return 0;
+        }
+        if (event->inputEvent == INPUT_BROKER_DOWN) {
+            graphics::UIRenderer::scrollFavoriteDown();
             setFastFramerate();
             return 0;
         }

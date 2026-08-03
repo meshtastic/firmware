@@ -117,6 +117,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
+    // Compact panels: no persistent header, see UIRenderer::drawNavigationBar instead.
+    if (isCompactPanel(display))
+        return;
     const int headerHeight = highlightHeight + 2;
     const uint16_t headerColorForRoles = getThemeHeaderBg();
     // Color TFT headers use a fixed dark background + white glyphs.
@@ -532,11 +535,28 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     display->setColor(WHITE); // Reset for other UI
 }
 
+bool isCompactPanel(OLEDDisplay *display)
+{
+#if defined(OLED_COMPACT_UI)
+    return display->getWidth() <= 80 && display->getHeight() <= 40;
+#else
+    (void)display;
+    return false;
+#endif
+}
+
 const int *getTextPositions(OLEDDisplay *display)
 {
     static int textPositions[7]; // Static array that persists beyond function scope
 
-    if (currentResolution == ScreenResolution::High) {
+    if (isCompactPanel(display)) {
+        // No header on compact panels (see drawCommonHeader) - start at the top edge and
+        // pack lines as tight as the font allows, to fit as many rows as possible.
+        for (int i = 0; i < 7; ++i) {
+            const int bodyLine = (i > 0) ? i - 1 : 0;
+            textPositions[i] = bodyLine * (FONT_HEIGHT_SMALL - 6);
+        }
+    } else if (currentResolution == ScreenResolution::High) {
         textPositions[0] = textZeroLine;
         textPositions[1] = textFirstLine_medium;
         textPositions[2] = textSecondLine_medium;
@@ -561,6 +581,9 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 {
+    if (isCompactPanel(display))
+        return;
+
     if (!isAPIConnected(service->api_state))
         return;
 

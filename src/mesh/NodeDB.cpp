@@ -1112,6 +1112,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.wake_on_tap_or_motion = true;
 #endif
 
+#if defined(T_ECHO_CARD)
+    config.display.screen_on_secs = 60;
+#endif
+
 #ifdef COMPASS_ORIENTATION
     config.display.compass_orientation = COMPASS_ORIENTATION;
 #endif
@@ -1229,6 +1233,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
     moduleConfig.external_notification.use_pwm = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
+#elif defined(HAS_I2S_SPEAKER_NRF52)
+    // No PWM piezo pin - alert playback goes through NRF52RtttlPlayer/I2S instead,
+    // gated only on alert_message_buzzer + canBuzz(), not output_buzzer/use_pwm.
+    moduleConfig.external_notification.alert_message_buzzer = true;
 #endif
 
 #if defined(PIN_VIBRATION)
@@ -1246,7 +1254,8 @@ void NodeDB::installDefaultModuleConfig()
 
 #if defined(PIN_VIBRATION)
     moduleConfig.external_notification.nag_timeout = 2;
-#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
+#elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN) ||                           \
+    defined(HAS_I2S_SPEAKER_NRF52)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 
