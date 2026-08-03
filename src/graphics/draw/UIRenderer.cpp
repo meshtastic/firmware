@@ -1461,15 +1461,27 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 #else
-    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
-                     icon_width, icon_height, icon_bits);
+
+    int additionalYOffset = 2;
+#if defined(BICOLOR_OLED_DISPLAY)
+    additionalYOffset += 5;
+#endif
+    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2,
+                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + additionalYOffset, icon_width, icon_height,
+                     icon_bits);
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5, title);
+#if defined(BICOLOR_OLED_DISPLAY)
+    additionalYOffset /= 2;
+#else
+    additionalYOffset = 0;
+#endif
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5 + additionalYOffset, title);
     if (gBootSplashBoldPass) {
-        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5, title);
+        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5 + additionalYOffset,
+                            title);
     }
     display->setFont(FONT_SMALL);
     // Draw region in upper left
