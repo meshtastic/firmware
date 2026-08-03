@@ -31,6 +31,11 @@
 #include "serialization/MeshPacketSerializer.h"
 #endif
 
+// The size checks below budget for the tag that encryptPacketCCM actually appends, so the
+// two constants must not drift apart.
+static_assert(MESHTASTIC_AEAD_OVERHEAD == CryptoEngine::AEAD_TAG_SIZE,
+              "MESHTASTIC_AEAD_OVERHEAD must match CryptoEngine::AEAD_TAG_SIZE");
+
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
 
