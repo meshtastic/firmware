@@ -1,5 +1,7 @@
 #include "NRF52I2SOutput.h"
 
+#if defined(HAS_I2S_SPEAKER_NRF52)
+
 #include <nrf_i2s.h>
 
 NRF52I2SOutput nrf52I2SOutput;
@@ -78,3 +80,5 @@ void NRF52I2SOutput::end()
     stopTone();
     started = false;
 }
+
+#endif // HAS_I2S_SPEAKER_NRF52
