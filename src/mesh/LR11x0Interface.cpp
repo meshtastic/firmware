@@ -379,4 +379,8 @@ template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
 #endif
     return (int16_t)round(rssi);
 }
+
+// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
+#undef rfswitch_dio_pins
+#undef rfswitch_table
 #endif

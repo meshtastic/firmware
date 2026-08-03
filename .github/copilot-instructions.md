@@ -557,8 +557,9 @@ pio run -e native-macos       # Build headless macOS meshtasticd (Homebrew prere
 1. Create directory under `variants/<arch>/<name>/`
 2. Add `variant.h` with pin definitions and hardware capability defines
 3. Add `platformio.ini` with build config - use `extends` to reference common base (e.g., `esp32s3_base`)
-4. Set `custom_meshtastic_support_level = 1` (PR builds) or `2` (merge builds)
-5. For e-ink displays, add `nicheGraphics.h` for InkHUD configuration
+4. Set `board_level` (required - `release` for a normal variant; see "Build Matrix Generation")
+5. Set `custom_meshtastic_support_level` (1-3) and the other `custom_meshtastic_*` metadata
+6. For e-ink displays, add `nicheGraphics.h` for InkHUD configuration
 
 ### Adding a New Telemetry Sensor
 
@@ -642,11 +643,16 @@ The CI uses `bin/generate_ci_matrix.py` to dynamically select which targets to b
 ./bin/generate_ci_matrix.py all --level pr
 ```
 
-Variants can specify their support level in `platformio.ini`:
+Every variant env **must** declare a `board_level` in its `platformio.ini`; the matrix
+generator exits non-zero if any env is missing it or uses an unrecognized value:
 
-- `custom_meshtastic_support_level = 1` - Actively supported, built on every PR
-- `custom_meshtastic_support_level = 2` - Supported, built on merge to main branches
-- `board_level = extra` - Extra builds, only on full releases
+- `board_level = pr` - Smallest subset, built on every PR (and in every larger matrix)
+- `board_level = release` - The full release matrix, built on push / schedule / `workflow_dispatch`
+- `board_level = extra` - Opt-in only, built when explicitly requested via `--level extra`
+
+`custom_meshtastic_support_level` (1-3) is **not** part of this filtering. It is variant
+metadata that `bin/platformio-custom.py` emits as `supportLevel` in the generated
+hardware list; changing it does not change which targets CI builds.
 
 ### Running Workflows Locally
 

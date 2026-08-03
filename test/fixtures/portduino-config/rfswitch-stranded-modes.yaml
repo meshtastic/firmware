@@ -1,0 +1,9 @@
+# FAULT: MODE_RX below is indented one level short, so it sits under Lora: rather than
+# inside rfswitch_table and does nothing at all. Expect a WARNING that says it is a
+# valid key of Lora.rfswitch_table -- the hint is what makes this findable.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5]
+    MODE_STBY: [LOW]
+  MODE_RX: [HIGH]

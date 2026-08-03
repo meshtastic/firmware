@@ -154,8 +154,13 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     }
 
     // Display "Pow. From: ..."
+    char agoStr[16];
+    if (agoSecs == SINCE_UNKNOWN)
+        snprintf(agoStr, sizeof(agoStr), "?"); // no trustworthy arrival time to age against
+    else
+        snprintf(agoStr, sizeof(agoStr), "%us", (unsigned)agoSecs);
     char fromStr[64];
-    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%us)", lastSender, agoSecs);
+    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%s)", lastSender, agoStr);
     display->drawString(x, graphics::getTextPositions(display)[line++], fromStr);
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
