@@ -47,6 +47,9 @@ InkHUD::TipsApplet::TipsApplet()
 
 void InkHUD::TipsApplet::onRender(bool full)
 {
+    const char *continuePrompt =
+        (inkhud && inkhud->hasTouchEnabledProvider()) ? "Tap screen to continue" : "Press button to continue";
+
     switch (tipQueue.front()) {
     case Tip::WELCOME:
         renderWelcome();
@@ -79,7 +82,7 @@ void InkHUD::TipsApplet::onRender(bool full)
         cursorY += fontSmall.lineHeight() / 2;
         drawBullet("More info at meshtastic.org");
 
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+        printAt(0, Y(1.0), continuePrompt, LEFT, BOTTOM);
     } break;
 
     case Tip::PICK_REGION: {
@@ -109,7 +112,7 @@ void InkHUD::TipsApplet::onRender(bool full)
         printWrapped(0, cursorY, width(), body);
         cursorY += bodyH + (fontSmall.lineHeight() / 2);
 
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+        printAt(0, Y(1.0), continuePrompt, LEFT, BOTTOM);
     } break;
 
     case Tip::CUSTOMIZATION: {
@@ -129,10 +132,13 @@ void InkHUD::TipsApplet::onRender(bool full)
         printWrapped(0, cursorY, width(), body);
         cursorY += bodyH + (fontSmall.lineHeight() / 2);
 
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+        printAt(0, Y(1.0), continuePrompt, LEFT, BOTTOM);
     } break;
 
     case Tip::BUTTONS: {
+#if defined(T5_S3_EPAPER_PRO)
+        renderT5S3ButtonsTip();
+#else
         setFont(fontMedium);
 
         const char *title = "Tip: Buttons";
@@ -164,7 +170,8 @@ void InkHUD::TipsApplet::onRender(bool full)
             drawBullet("- press: switch tile or close menu");
         }
 
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+        printAt(0, Y(1.0), continuePrompt, LEFT, BOTTOM);
+#endif
     } break;
 
     case Tip::ROTATION: {
@@ -189,7 +196,7 @@ void InkHUD::TipsApplet::onRender(bool full)
                          "To rotate the display, use the InkHUD menu. Press the user button > Options > Rotate.");
         }
 
-        printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
+        printAt(0, Y(1.0), continuePrompt, LEFT, BOTTOM);
 
         // Revert the "flip screen" setting, preventing this message showing again
         config.display.flip_screen = false;
@@ -197,6 +204,42 @@ void InkHUD::TipsApplet::onRender(bool full)
     } break;
     }
 }
+
+#if defined(T5_S3_EPAPER_PRO)
+void InkHUD::TipsApplet::renderT5S3ButtonsTip()
+{
+    setFont(fontMedium);
+
+    const char *title = "Tip: T5-S3 Buttons";
+    uint16_t h = getWrappedTextHeight(0, width(), title);
+    printWrapped(0, 0, width(), title);
+
+    setFont(fontSmall);
+    int16_t cursorY = h + fontSmall.lineHeight();
+
+    auto drawBullet = [&](const char *text) {
+        uint16_t bh = getWrappedTextHeight(0, width(), text);
+        printWrapped(0, cursorY, width(), text);
+        cursorY += bh + (fontSmall.lineHeight() / 3);
+    };
+
+    drawBullet("BOOT button");
+    drawBullet("- short press: next");
+    drawBullet("- long press: open menu or select");
+
+    drawBullet("IO48 button");
+    drawBullet("- short press: toggle touch on/off");
+    drawBullet("- long press: toggle backlight on/off");
+
+    drawBullet("PWR button");
+    drawBullet("- Hold Press to wake after Shutdown");
+
+    drawBullet("HOME button");
+    drawBullet("- press: back/exit in InkHUD and open App switcher");
+
+    printAt(0, Y(1.0), "Tap screen to continue", LEFT, BOTTOM);
+}
+#endif
 
 // This tip has its own render method, only because it's a big block of code
 // Didn't want to clutter up the switch in onRender too much
@@ -244,7 +287,9 @@ void InkHUD::TipsApplet::renderWelcome()
 
     // Block 3 - press to continue
     // ============================
-    printAt(X(0.5), Y(1), "Press button to continue", CENTER, BOTTOM);
+    const char *continuePrompt =
+        (inkhud && inkhud->hasTouchEnabledProvider()) ? "Tap screen to continue" : "Press button to continue";
+    printAt(X(0.5), Y(1), continuePrompt, CENTER, BOTTOM);
 }
 
 void InkHUD::TipsApplet::onForeground()

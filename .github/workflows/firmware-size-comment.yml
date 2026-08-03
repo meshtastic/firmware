@@ -1,0 +1,62 @@
+name: Post Firmware Size Comment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  post-size-comment:
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.repository == 'meshtastic/firmware'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download size report
+        id: download
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: size-report
+          path: ./
+
+      - name: Post or update PR comment
+        if: steps.download.outcome == 'success'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- firmware-size-report -->';
+            const body = fs.readFileSync('./size-report.md', 'utf8');
+            const prNumber = parseInt(fs.readFileSync('./pr-number.txt', 'utf8').trim(), 10);
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }

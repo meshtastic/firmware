@@ -6,13 +6,13 @@
 #include "GPS.h"
 #endif
 #include "MeshService.h"
+#include "Power.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
 #include "input/InputBroker.h"
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -143,6 +143,10 @@ int32_t ButtonThread::runOnce()
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
+#ifdef INPUT_DEBUG
+    if (buttonCurrentlyPressed)
+        LOG_WARN("Button held for %u ms", millis() - buttonPressStartTime);
+#endif
 
     // Progressive lead-up sound system
     if (!_suppressLeadUp && buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
@@ -223,7 +227,13 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
             LOG_INFO("Double press!");
-
+#if defined(ELECROW_ThinkNode_M8)
+            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED;
+            else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
+                config.device.buzzer_mode = meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED;
+            service->reloadConfig(SEGMENT_CONFIG);
+#endif
             // Reset combination tracking
             waitingForLongPress = false;
 
@@ -311,7 +321,8 @@ int32_t ButtonThread::runOnce()
 void ButtonThread::attachButtonInterrupts()
 {
     // Interrupt for user button, during normal use. Improves responsiveness.
-    attachInterrupt(_pinNum, _intRoutine, CHANGE);
+    if (_intRoutine != nullptr)
+        attachInterrupt(_pinNum, _intRoutine, CHANGE);
 }
 
 /*
@@ -320,7 +331,8 @@ void ButtonThread::attachButtonInterrupts()
  */
 void ButtonThread::detachButtonInterrupts()
 {
-    detachInterrupt(_pinNum);
+    if (_intRoutine != nullptr)
+        detachInterrupt(_pinNum);
 }
 
 #ifdef ARCH_ESP32

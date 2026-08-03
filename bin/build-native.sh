@@ -31,5 +31,6 @@ basename=meshtasticd-$1-$VERSION
 pio pkg install --environment "$PIO_ENV" || platformioFailed
 pio run --environment "$PIO_ENV" || platformioFailed
 
-cp "$BUILDDIR/meshtasticd" "$OUTDIR/meshtasticd_linux_$(uname -m)"
+os_name=$(uname -s | tr '[:upper:]' '[:lower:]')
+cp "$BUILDDIR/meshtasticd" "$OUTDIR/meshtasticd_${os_name}_$(uname -m)"
 cp bin/native-install.* $OUTDIR/

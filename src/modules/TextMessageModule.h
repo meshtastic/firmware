@@ -7,8 +7,8 @@
  * Text message handling for Meshtastic.
  *
  * This module is responsible for receiving and storing incoming text messages
- * from the mesh. It updates device state and notifies observers so that other
- * components (such as the MessageRenderer) can later display or process them.
+ * from the mesh. It notifies observers so that other components (such as the
+ * MessageRenderer) can later display or process them.
  *
  * Rendering of messages on screen is no longer done here.
  */

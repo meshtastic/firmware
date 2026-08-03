@@ -6,6 +6,12 @@
 #include "RadioInterface.h"
 #include "modules/NodeInfoModule.h"
 
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+// receivePacket() dispatches ToRadio straight to MeshService, bypassing handleToRadioPacket and so
+// the lockdown admin gate. Fail the build rather than silently ship an admin-auth bypass.
+#error "USE_PACKET_API is incompatible with MESHTASTIC_PHONEAPI_ACCESS_CONTROL (PacketAPI bypasses the lockdown admin gate)"
+#endif
+
 PacketAPI *packetAPI = nullptr;
 
 PacketAPI *PacketAPI::create(PacketServer *_server)
@@ -48,7 +54,7 @@ bool PacketAPI::receivePacket(void)
         isConnected = true;
         data_received = true;
 
-        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+        powerFSM.trigger(EVENT_INPUT);
         lastContactMsec = millis();
 
         meshtastic_ToRadio *mr;

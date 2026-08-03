@@ -2,6 +2,7 @@
 
 #include "StatusMessageModule.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "ProtobufModule.h"
 
 StatusMessageModule *statusMessageModule;
@@ -14,6 +15,8 @@ int32_t StatusMessageModule::runOnce()
         strncpy(ourStatus.status, moduleConfig.statusmessage.node_status, sizeof(ourStatus.status));
         ourStatus.status[sizeof(ourStatus.status) - 1] = '\0'; // ensure null termination
         meshtastic_MeshPacket *p = allocDataPacket();
+        if (!p)
+            return 1000 * 12 * 60 * 60;
         p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                      meshtastic_StatusMessage_fields, &ourStatus);
         p->to = NODENUM_BROADCAST;
@@ -29,10 +32,15 @@ int32_t StatusMessageModule::runOnce()
 ProcessMessage StatusMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        meshtastic_StatusMessage incomingMessage;
+        meshtastic_StatusMessage incomingMessage = meshtastic_StatusMessage_init_zero;
+
         if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_StatusMessage_fields,
                                  &incomingMessage)) {
+
             LOG_INFO("Received a NodeStatus message %s", incomingMessage.status);
+
+            if (nodeDB)
+                nodeDB->setNodeStatus(mp.from, incomingMessage);
         }
     }
     return ProcessMessage::CONTINUE;

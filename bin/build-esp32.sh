@@ -12,7 +12,8 @@ rm -f $OUTDIR/firmware*
 rm -r $OUTDIR/* || true
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-platformio pkg install -e $1
+# platformio pkg install -e $1
+# ...redundant with pioarduino
 
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f $BUILDDIR/firmware*
@@ -38,4 +39,4 @@ cp bin/device-install.* $OUTDIR/
 cp bin/device-update.* $OUTDIR/
 
 echo "Copying manifest"
-cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json || true
+cp $BUILDDIR/$basename.mt.json $OUTDIR/$basename.mt.json

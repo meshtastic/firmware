@@ -2,7 +2,6 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_DS248x.h>)
 
-#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "DS248XSensor.h"
 #include "TelemetrySensor.h"
@@ -38,27 +37,20 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     _address = dev->address.address;
     _bus = bus;
+    _port = dev->address.port;
     LOG_INFO("Init sensor: %s", sensorName);
 
 #ifdef DS248X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(DS248X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(DS248X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setup(_bus, _port);
+
+    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
-    // #ifdef DS248X_I2C_CLOCK_SPEED
-    //     uint32_t currentClock = reClockI2C(DS248X_I2C_CLOCK_SPEED, _bus, false);
-    // #endif /* DS248X_I2C_CLOCK_SPEED */
-
     if (!ds248x.begin(bus, _address)) {
-#if defined(DS248X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef DS248X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* DS248X_I2C_CLOCK_SPEED */
         return false;
     }
 
@@ -132,9 +124,9 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         }
 
         if (initError && retry == numRetries) {
-#if defined(DS248X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-            reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef DS248X_I2C_CLOCK_SPEED
+            reClockI2C.restoreClock();
+#endif /* DS248X_I2C_CLOCK_SPEED */
             LOG_ERROR("%s: Max retries for one-wire init (%u/%u). Aborting", sensorName, retry, numRetries);
             return false;
         }
@@ -152,6 +144,11 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         delay(500);
     }
 
+#ifdef DS248X_I2C_CLOCK_SPEED
+    LOG_INFO("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
+#endif /* DS248X_I2C_CLOCK_SPEED */
+
     initI2CSensor();
     return status;
 }
@@ -165,19 +162,9 @@ bool DS248XSensor::isValidROM(const uint8_t *rom)
 float DS248XSensor::readTemperatureROM(const uint8_t *rom)
 {
 #ifdef DS248X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(DS248X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(DS248X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return -1000.0;
-#endif /* CAN_RECLOCK_I2C */
+    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
+    reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
-
-    // #ifdef DS248X_I2C_CLOCK_SPEED
-    //     uint32_t currentClock = reClockI2C(DS248X_I2C_CLOCK_SPEED, _bus, false);
-    // #endif /* DS248X_I2C_CLOCK_SPEED */
 
     // Select the DS18B20 device
     ds248x.OneWireReset();
@@ -203,9 +190,10 @@ float DS248XSensor::readTemperatureROM(const uint8_t *rom)
         ds248x.OneWireReadByte(&data[i]);
     }
 
-#if defined(DS248X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef DS248X_I2C_CLOCK_SPEED
+    LOG_DEBUG("%s: restoring clock speed", sensorName);
+    reClockI2C.restoreClock();
+#endif /* DS248X_I2C_CLOCK_SPEED */
 
     // Calculate temperature
     int16_t raw = (data[1] << 8) | data[0];

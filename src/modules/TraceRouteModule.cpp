@@ -8,7 +8,11 @@
 #include "meshUtils.h"
 #include <vector>
 
-extern graphics::Screen *screen;
+#if HAS_TRAFFIC_MANAGEMENT
+#include "modules/TrafficManagementModule.h"
+#endif
+
+extern std::unique_ptr<graphics::Screen> screen;
 
 TraceRouteModule *traceRouteModule;
 
@@ -301,6 +305,15 @@ void TraceRouteModule::updateNextHops(const meshtastic_MeshPacket &p, meshtastic
         }
         uint8_t nextHopByte = nodeDB->getLastByteOfNodeNum(nextHop);
 
+        // The route array is unauthenticated payload, so only learn from it when the node it names as our
+        // next hop is the one that actually relayed this packet to us. Otherwise a forged response could
+        // point any node's next_hop anywhere. relay_node is 0 for MQTT-sourced packets, which cannot
+        // corroborate an RF route either.
+        if (p.relay_node == NO_RELAY_NODE || nextHopByte != p.relay_node) {
+            LOG_DEBUG("Ignore traceroute next-hop 0x%02x, packet was relayed by 0x%02x", nextHopByte, p.relay_node);
+            return;
+        }
+
         // For the rest of the nodes in the route, set their next-hop
         // Note: if we are the last in the route, this loop will not run
         for (int8_t i = nextHopIndex; i < r->route_count; i++) {
@@ -323,6 +336,14 @@ void TraceRouteModule::maybeSetNextHop(NodeNum target, uint8_t nextHopByte)
         LOG_INFO("Updating next-hop for 0x%08x to 0x%02x based on traceroute", target, nextHopByte);
         node->next_hop = nextHopByte;
     }
+
+#if HAS_TRAFFIC_MANAGEMENT
+    // Mirror into the TMM overflow cache. Traceroute is the highest-confidence
+    // source (full known route), and this captures the target even when it isn't
+    // in the hot NodeDB - same rationale as the ACK-confirmed path in NextHopRouter.
+    if (trafficManagementModule)
+        trafficManagementModule->setNextHop(target, nextHopByte);
+#endif
 }
 
 void TraceRouteModule::processUpgradedPacket(const meshtastic_MeshPacket &mp)
@@ -401,7 +422,11 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
     }
 
     if (*snr_count < ROUTE_SIZE) {
-        snr_list[*snr_count] = (int8_t)(snr * 4); // Convert SNR to 1 byte
+        // Clamp before the cast: q4-scaled SNR at or below the demodulation floor can reach
+        // -128 (=-32dB), which is bit-identical to the INT8_MIN "unknown SNR" sentinel used
+        // throughout this file. Reserve -128 for the sentinel; clamp real readings to -127.
+        int32_t q4 = clamp<int32_t>(lroundf(snr * 4.0f), -127, 127);
+        snr_list[*snr_count] = (int8_t)q4;
         *snr_count += 1;
     }
     if (SNRonly)
@@ -440,7 +465,7 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
         route += "\n";
-        if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
+        if (origin == nodeDB->getNodeNum() && r->snr_back_count > 0 && r->snr_back[r->snr_back_count - 1] != INT8_MIN)
             route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
         else
             route += "...";
@@ -492,12 +517,12 @@ TraceRouteModule::TraceRouteModule()
 const char *TraceRouteModule::getNodeName(NodeNum node)
 {
     meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    if (info && info->has_user) {
-        if (strlen(info->user.short_name) > 0) {
-            return info->user.short_name;
+    if (nodeInfoLiteHasUser(info)) {
+        if (strlen(info->short_name) > 0) {
+            return info->short_name;
         }
-        if (strlen(info->user.long_name) > 0) {
-            return info->user.long_name;
+        if (strlen(info->long_name) > 0) {
+            return info->long_name;
         }
     }
 

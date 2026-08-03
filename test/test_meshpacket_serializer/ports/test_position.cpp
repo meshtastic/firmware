@@ -3,8 +3,8 @@
 static size_t encode_position(uint8_t *buffer, size_t buffer_size)
 {
     meshtastic_Position position = meshtastic_Position_init_zero;
-    position.latitude_i = 374208000;    // 37.4208 degrees * 1e7
-    position.longitude_i = -1221981000; // -122.1981 degrees * 1e7
+    position.latitude_i = 374208000;
+    position.longitude_i = -1221981000;
     position.altitude = 123;
     position.time = 1609459200;
     position.has_altitude = true;
@@ -16,7 +16,6 @@ static size_t encode_position(uint8_t *buffer, size_t buffer_size)
     return stream.bytes_written;
 }
 
-// Test POSITION_APP port
 void test_position_serialization()
 {
     uint8_t buffer[256];
@@ -27,31 +26,23 @@ void test_position_serialization()
     std::string json = MeshPacketSerializer::JsonSerialize(&packet, false);
     TEST_ASSERT_TRUE(json.length() > 0);
 
-    JSONValue *root = JSON::Parse(json.c_str());
-    TEST_ASSERT_NOT_NULL(root);
-    TEST_ASSERT_TRUE(root->IsObject());
+    Json::Value root = parse_json(json);
+    TEST_ASSERT_TRUE(root.isObject());
 
-    JSONObject jsonObj = root->AsObject();
+    TEST_ASSERT_TRUE(root.isMember("type"));
+    TEST_ASSERT_EQUAL_STRING("position", root["type"].asString().c_str());
 
-    // Check message type
-    TEST_ASSERT_TRUE(jsonObj.find("type") != jsonObj.end());
-    TEST_ASSERT_EQUAL_STRING("position", jsonObj["type"]->AsString().c_str());
+    TEST_ASSERT_TRUE(root.isMember("payload"));
+    TEST_ASSERT_TRUE(root["payload"].isObject());
 
-    // Check payload
-    TEST_ASSERT_TRUE(jsonObj.find("payload") != jsonObj.end());
-    TEST_ASSERT_TRUE(jsonObj["payload"]->IsObject());
+    const Json::Value &payload = root["payload"];
 
-    JSONObject payload = jsonObj["payload"]->AsObject();
+    TEST_ASSERT_TRUE(payload.isMember("latitude_i"));
+    TEST_ASSERT_EQUAL(374208000, payload["latitude_i"].asInt());
 
-    // Verify position data
-    TEST_ASSERT_TRUE(payload.find("latitude_i") != payload.end());
-    TEST_ASSERT_EQUAL(374208000, (int)payload["latitude_i"]->AsNumber());
+    TEST_ASSERT_TRUE(payload.isMember("longitude_i"));
+    TEST_ASSERT_EQUAL(-1221981000, payload["longitude_i"].asInt());
 
-    TEST_ASSERT_TRUE(payload.find("longitude_i") != payload.end());
-    TEST_ASSERT_EQUAL(-1221981000, (int)payload["longitude_i"]->AsNumber());
-
-    TEST_ASSERT_TRUE(payload.find("altitude") != payload.end());
-    TEST_ASSERT_EQUAL(123, (int)payload["altitude"]->AsNumber());
-
-    delete root;
+    TEST_ASSERT_TRUE(payload.isMember("altitude"));
+    TEST_ASSERT_EQUAL(123, payload["altitude"].asInt());
 }
