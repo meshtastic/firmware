@@ -41,6 +41,9 @@ class TipsApplet : public SystemApplet
 
   protected:
     void renderWelcome(); // Very first screen of tutorial
+#if defined(T5_S3_EPAPER_PRO)
+    void renderT5S3ButtonsTip();
+#endif
 
     std::deque<Tip> tipQueue; // List of tips to show, one after another
 

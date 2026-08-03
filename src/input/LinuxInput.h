@@ -1,5 +1,8 @@
 #pragma once
-#if ARCH_PORTDUINO
+// Linux evdev keyboard input. Only compiled on Linux portduino targets;
+// macOS / non-Linux builds have no <linux/input.h> or epoll, and the
+// headless build doesn't need real keyboards anyway.
+#if ARCH_PORTDUINO && defined(__linux__)
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
 #include <assert.h>
@@ -41,7 +44,7 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
     int fd = -1;
     int ret;
     uint8_t report[8];
-    int epollfd;
+    int epollfd = -1;
     struct epoll_event ev;
     uint8_t modifiers = 0;
     std::map<int, char> keymap{

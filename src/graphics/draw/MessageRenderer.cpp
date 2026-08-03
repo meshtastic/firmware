@@ -11,16 +11,19 @@
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TFTColorRegions.h"
+#include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
+#include "modules/CannedMessageModule.h"
 #include <string>
 #include <vector>
 
 // External declarations
 extern bool hasUnreadMessage;
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 using graphics::Emote;
 using graphics::emotes;
@@ -254,6 +257,76 @@ struct MessageBlock {
     bool mine;
 };
 
+#if GRAPHICS_TFT_COLORING_ENABLED
+static void setDarkModeBubbleRoleColors(uint32_t themeId, bool mine)
+{
+    uint16_t bubbleOnColor;
+    uint16_t bubbleOffColor;
+
+    if (themeId == ThemeID::Blue) {
+        bubbleOnColor = mine ? TFTPalette::Navy : TFTPalette::White;
+        bubbleOffColor = mine ? TFTPalette::SkyBlue : TFTPalette::DeepBlue;
+    } else {
+        bubbleOnColor = mine ? TFTPalette::Black : getThemeBodyFg();
+        bubbleOffColor = mine ? TFTPalette::SkyBlue : TFTPalette::DarkGray;
+    }
+
+    setTFTColorRole(TFTColorRole::ActionMenuBody, bubbleOnColor, bubbleOffColor);
+}
+
+static void registerRoundedBubbleFillRegion(int x, int y, int w, int h, int radius)
+{
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    if (radius <= 0 || w < 3 || h < 3) {
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, y, w, h);
+        return;
+    }
+
+    // Keep region count low so we don't churn MAX_TFT_COLOR_REGIONS while
+    // scrolling long message lists (which can flatten older bubble corners).
+    int capRows = 0;
+    if (radius >= 4 && h >= 5) {
+        capRows = 2; // 5 regions total (2 top caps + middle + 2 bottom caps)
+    } else if (radius >= 2 && h >= 3) {
+        capRows = 1; // 3 regions total
+    }
+    if (capRows <= 0) {
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, y, w, h);
+        return;
+    }
+
+    for (int row = 0; row < capRows; ++row) {
+        int inset = 0;
+        if (radius >= 4) {
+            inset = (row == 0) ? 2 : 1;
+        } else if (radius >= 2) {
+            inset = 1;
+        }
+        const int stripW = w - (inset * 2);
+        if (stripW <= 0) {
+            continue;
+        }
+
+        const int topY = y + row;
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x + inset, topY, stripW, 1);
+
+        const int bottomY = y + h - 1 - row;
+        if (bottomY != topY) {
+            registerTFTColorRegion(TFTColorRole::ActionMenuBody, x + inset, bottomY, stripW, 1);
+        }
+    }
+
+    const int middleY = y + capRows;
+    const int middleH = h - (capRows * 2);
+    if (middleH > 0) {
+        registerTFTColorRegion(TFTColorRole::ActionMenuBody, x, middleY, w, middleH);
+    }
+}
+#endif
+
 static int getDrawnLinePixelBottom(int lineTopY, const std::string &line, bool isHeaderLine)
 {
     if (isHeaderLine) {
@@ -331,6 +404,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Filter messages based on thread mode
     std::deque<StoredMessage> filtered;
     for (const auto &m : messageStore.getLiveMessages()) {
+        if (!messageStore.isMessageVisible(m))
+            continue;
         bool include = false;
         switch (currentMode) {
         case ThreadMode::ALL:
@@ -390,8 +465,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
     case ThreadMode::DIRECT: {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(currentPeer);
-        if (node && node->has_user && node->user.short_name[0]) {
-            snprintf(titleStr, sizeof(titleStr), "@%s", node->user.short_name);
+        if (nodeInfoLiteHasUser(node) && node->short_name[0]) {
+            snprintf(titleStr, sizeof(titleStr), "@%s", node->short_name);
         } else {
             snprintf(titleStr, sizeof(titleStr), "@%08x", currentPeer);
         }
@@ -513,11 +588,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         meshtastic_NodeInfoLite *node_recipient = nodeDB->getMeshNode(m.dest);
 
         char senderName[64] = "";
-        if (node && node->has_user) {
-            if (node->user.long_name[0]) {
-                strncpy(senderName, node->user.long_name, sizeof(senderName) - 1);
-            } else if (node->user.short_name[0]) {
-                strncpy(senderName, node->user.short_name, sizeof(senderName) - 1);
+        if (nodeInfoLiteHasUser(node)) {
+            if (node->long_name[0]) {
+                strncpy(senderName, node->long_name, sizeof(senderName) - 1);
+            } else if (node->short_name[0]) {
+                strncpy(senderName, node->short_name, sizeof(senderName) - 1);
             }
             senderName[sizeof(senderName) - 1] = '\0';
         }
@@ -527,28 +602,37 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // If this is *our own* message, override senderName to who the recipient was
         bool mine = (m.sender == nodeDB->getNodeNum());
-        if (mine && node_recipient && node_recipient->has_user) {
-            if (node_recipient->user.long_name[0]) {
-                strncpy(senderName, node_recipient->user.long_name, sizeof(senderName) - 1);
+        if (mine && nodeInfoLiteHasUser(node_recipient)) {
+            if (node_recipient->long_name[0]) {
+                strncpy(senderName, node_recipient->long_name, sizeof(senderName) - 1);
                 senderName[sizeof(senderName) - 1] = '\0';
-            } else if (node_recipient->user.short_name[0]) {
-                strncpy(senderName, node_recipient->user.short_name, sizeof(senderName) - 1);
+            } else if (node_recipient->short_name[0]) {
+                strncpy(senderName, node_recipient->short_name, sizeof(senderName) - 1);
                 senderName[sizeof(senderName) - 1] = '\0';
             }
         }
         // If recipient info is missing/empty, prefer a recipient identifier for outbound messages.
-        if (mine && (!node_recipient || !node_recipient->has_user ||
-                     (!node_recipient->user.long_name[0] && !node_recipient->user.short_name[0]))) {
+        if (mine && (!nodeInfoLiteHasUser(node_recipient) || (!node_recipient->long_name[0] && !node_recipient->short_name[0]))) {
             snprintf(senderName, sizeof(senderName), "(%08x)", m.dest);
         }
 
         // Shrink Sender name if needed
         int availWidth = (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
-                         display->getStringWidth(chanType) - graphics::UIRenderer::measureStringWithEmotes(display, "   @...");
+                         display->getStringWidth(chanType) - graphics::UIRenderer::measureStringWithEmotes(display, "  *@...");
         if (availWidth < 0)
             availWidth = 0;
         char truncatedSender[64];
         graphics::UIRenderer::truncateStringWithEmotes(display, senderName, truncatedSender, sizeof(truncatedSender), availWidth);
+
+        // Determine signed-message prefix before building the header line, since it needs to go
+        // at the front of headerStr rather than appended after (strncat only appends at the end).
+        const char *signPrefix = "";
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+        bool is_xeddsa_signed = m.xeddsaSigned;
+        if (is_xeddsa_signed) {
+            signPrefix = "*";
+        }
+#endif
 
         // Final header line
         char headerStr[128];
@@ -563,7 +647,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 snprintf(headerStr, sizeof(headerStr), "%s", timeBuf);
             }
         } else {
-            snprintf(headerStr, sizeof(headerStr), chanType[0] ? "%s @%s %s" : "%s @%s", timeBuf, truncatedSender, chanType);
+            snprintf(headerStr, sizeof(headerStr), chanType[0] ? "%s %s@%s %s" : "%s %s@%s", timeBuf, signPrefix, truncatedSender,
+                     chanType);
         }
 
         // Push header line
@@ -648,6 +733,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int contentBottom = scrollBottom; // already excludes nav line
     const int rightEdge = SCREEN_WIDTH - SCROLLBAR_WIDTH - RIGHT_MARGIN;
     const int bubbleGapY = std::max(1, MESSAGE_BLOCK_GAP / 2);
+#if GRAPHICS_TFT_COLORING_ENABLED
+    const uint32_t themeId = getActiveTheme().id;
+    // Blue is a dark variant but uses full frame inversion, Keep it on the same filled bubble style as Default Dark.
+    const bool useDarkModeBubbleFill = showBubbles && (!isThemeFullFrameInvert() || themeId == ThemeID::Blue);
+#endif
 
     std::vector<int> lineTop;
     lineTop.resize(cachedLines.size());
@@ -685,6 +775,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
             int visualBottom = getDrawnLinePixelBottom(lineTop[b.end], cachedLines[b.end], isHeader[b.end]);
             int bottomY = visualBottom + BUBBLE_PAD_Y;
+
+            // On high-res screens, keep a 1px gap under the header
+            if (currentResolution == ScreenResolution::High) {
+                const int minTopY = contentTop + 1;
+                if (topY < minTopY) {
+                    // Preserve bubble height when we push it down from the header.
+                    const int shift = minTopY - topY;
+                    topY = minTopY;
+                    bottomY += shift;
+                }
+            }
 
             if (bi + 1 < blocks.size()) {
                 int nextHeaderIndex = (int)blocks[bi + 1].start;
@@ -735,24 +836,56 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 const int by = topY;
                 const int bw = bubbleW;
                 const int bh = bubbleH;
+#if GRAPHICS_TFT_COLORING_ENABLED
+                const bool drawBubbleOutline = !useDarkModeBubbleFill;
+#else
+                const bool drawBubbleOutline = true;
+#endif
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (useDarkModeBubbleFill) {
+                    setDarkModeBubbleRoleColors(themeId, b.mine);
+                    registerRoundedBubbleFillRegion(bx, by, bw, bh, r);
+                }
+#endif
 
-                // Draw the 4 corner arcs using drawCircleQuads
-                display->drawCircleQuads(bx + r, by + r, r, 0x2);                   // Top-left
-                display->drawCircleQuads(bx + bw - r - 1, by + r, r, 0x1);          // Top-right
-                display->drawCircleQuads(bx + r, by + bh - r - 1, r, 0x4);          // Bottom-left
-                display->drawCircleQuads(bx + bw - r - 1, by + bh - r - 1, r, 0x8); // Bottom-right
+                if (drawBubbleOutline) {
+                    // Draw the 4 corner arcs using drawCircleQuads
+                    display->drawCircleQuads(bx + r, by + r, r, 0x2);                   // Top-left
+                    display->drawCircleQuads(bx + bw - r - 1, by + r, r, 0x1);          // Top-right
+                    display->drawCircleQuads(bx + r, by + bh - r - 1, r, 0x4);          // Bottom-left
+                    display->drawCircleQuads(bx + bw - r - 1, by + bh - r - 1, r, 0x8); // Bottom-right
 
-                // Draw the 4 edges between corners
-                display->drawHorizontalLine(bx + r, by, bw - 2 * r);          // Top edge
-                display->drawHorizontalLine(bx + r, by + bh - 1, bw - 2 * r); // Bottom edge
-                display->drawVerticalLine(bx, by + r, bh - 2 * r);            // Left edge
-                display->drawVerticalLine(bx + bw - 1, by + r, bh - 2 * r);   // Right edge
+                    // Draw the 4 edges between corners
+                    display->drawHorizontalLine(bx + r, by, bw - 2 * r);          // Top edge
+                    display->drawHorizontalLine(bx + r, by + bh - 1, bw - 2 * r); // Bottom edge
+                    display->drawVerticalLine(bx, by + r, bh - 2 * r);            // Left edge
+                    display->drawVerticalLine(bx + bw - 1, by + r, bh - 2 * r);   // Right edge
+                }
             } else if (bubbleW > 1 && bubbleH > 1) {
                 // Fallback to simple rectangle for very small bubbles
-                display->drawRect(bubbleX, topY, bubbleW, bubbleH);
+#if GRAPHICS_TFT_COLORING_ENABLED
+                const bool drawBubbleOutline = !useDarkModeBubbleFill;
+#else
+                const bool drawBubbleOutline = true;
+#endif
+#if GRAPHICS_TFT_COLORING_ENABLED
+                if (useDarkModeBubbleFill) {
+                    setDarkModeBubbleRoleColors(themeId, b.mine);
+                    registerTFTColorRegion(TFTColorRole::ActionMenuBody, bubbleX, topY, bubbleW, bubbleH);
+                }
+#endif
+                if (drawBubbleOutline) {
+                    display->drawRect(bubbleX, topY, bubbleW, bubbleH);
+                }
             }
         }
     } // end if (showBubbles)
+#if GRAPHICS_TFT_COLORING_ENABLED
+    if (useDarkModeBubbleFill) {
+        // Restore theme role defaults so other screens keep their intended palette.
+        loadThemeDefaults();
+    }
+#endif
 
     // Render visible lines
     int lineY = yOffset;
@@ -772,7 +905,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     headerX = x + textIndent;
                 }
                 graphics::UIRenderer::drawStringWithEmotes(display, headerX, lineY, cachedLines[i].c_str(), FONT_HEIGHT_SMALL, 1,
-                                                           false);
+                                                           true);
 
                 // Draw underline just under header text
                 int underlineY = lineY + FONT_HEIGHT_SMALL;
@@ -941,6 +1074,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
 {
     if (packet.from != 0) {
         hasUnreadMessage = true;
+        const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
 
         // Determine if message belongs to a muted channel
         bool isChannelMuted = false;
@@ -953,12 +1087,12 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         // Banner logic
         const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet.from);
         char longName[64] = "?";
-        if (node && node->has_user) {
-            if (node->user.long_name[0]) {
-                strncpy(longName, node->user.long_name, sizeof(longName) - 1);
+        if (nodeInfoLiteHasUser(node)) {
+            if (node->long_name[0]) {
+                strncpy(longName, node->long_name, sizeof(longName) - 1);
                 longName[sizeof(longName) - 1] = '\0';
-            } else if (node->user.short_name[0]) {
-                strncpy(longName, node->user.short_name, sizeof(longName) - 1);
+            } else if (node->short_name[0]) {
+                strncpy(longName, node->short_name, sizeof(longName) - 1);
                 longName[sizeof(longName) - 1] = '\0';
             }
         }
@@ -1031,11 +1165,13 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
         // Shorter banner if already in a conversation (Channel or Direct)
         bool inThread = (getThreadMode() != ThreadMode::ALL);
 
-        if (shouldWakeOnReceivedMessage()) {
+        if (!suppressBanner && shouldWakeOnReceivedMessage()) {
             screen->setOn(true);
         }
 
-        screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
+        if (!suppressBanner) {
+            screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
+        }
     }
 
     // Always focus into the correct conversation thread when a message with real text arrives

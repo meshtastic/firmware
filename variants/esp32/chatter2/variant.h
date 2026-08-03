@@ -43,6 +43,7 @@
 #define HAS_SCREEN 1 // Assume no screen present by default to prevent crash...
 
 // ST7735S TFT LCD
+#define HAS_SPI_TFT 1
 #define ST7735S 1 // there are different (sub-)versions of ST7735
 #define ST7735_CS -1
 #define ST7735_RS 33  // DC
@@ -70,7 +71,7 @@
 // Battery
 
 #define BATTERY_PIN 34 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO34_CHANNEL
+#define ADC_CHANNEL ADC_CHANNEL_6
 #define ADC_ATTENUATION                                                                                                          \
     ADC_ATTEN_DB_2_5       // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
                            // ESP32-S2/C3/S3 are different

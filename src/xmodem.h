@@ -52,6 +52,14 @@ class XModemAdapter
     meshtastic_XModem getForPhone();
     void resetForPhone();
 
+    // True while a file transfer is in flight; lets callers avoid racing our `file` handle.
+    bool isBusy() const { return isReceiving || isTransmitting; }
+
+    // Reject a transfer filename that could escape the filesystem root via a ".." path component.
+    // Absolute/subdirectory paths are allowed - PortduinoFS confines them to its mountpoint - so
+    // this is only about traversal, which matters on the posix daemon where FSCom is the host FS.
+    static bool isValidFilename(const char *name);
+
   private:
     bool isReceiving = false;
     bool isTransmitting = false;
@@ -61,11 +69,7 @@ class XModemAdapter
 
     uint16_t packetno = 0;
 
-#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
-    File file = File(FSCom);
-#else
     File file;
-#endif
 
     char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
 

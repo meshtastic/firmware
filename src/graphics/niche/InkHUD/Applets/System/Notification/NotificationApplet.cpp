@@ -3,12 +3,13 @@
 #include "./NotificationApplet.h"
 
 #include "./Notification.h"
+#include "MessageStore.h"
 #include "graphics/niche/InkHUD/Persistence.h"
 
 #include "meshUtils.h"
 #include "modules/TextMessageModule.h"
 
-#include "RTC.h"
+#include "gps/RTC.h"
 
 using namespace NicheGraphics;
 
@@ -231,9 +232,10 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         bool msgIsBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
 
         // Pick source of message
-        const MessageStore::Message *message =
+        const StoredMessage *message =
             msgIsBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
-
+        if (!message->sender || !messageStore.isMessageVisible(*message))
+            return parse(text);
         // Find info about the sender
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(message->sender);
 
@@ -241,7 +243,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         text += msgIsBroadcast ? "From:" : "DM: ";
 
         // Sender id
-        if (node && node->has_user)
+        if (nodeInfoLiteHasUser(node))
             text += parseShortName(node);
         else
             text += hexifyNodeNum(message->sender);
@@ -255,13 +257,13 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text += msgIsBroadcast ? "Msg from " : "DM from ";
 
             // Sender id
-            if (node && node->has_user)
+            if (nodeInfoLiteHasUser(node))
                 text += parseShortName(node);
             else
                 text += hexifyNodeNum(message->sender);
 
             text += ": ";
-            text += message->text;
+            text += MessageStore::getText(*message);
         }
     }
 

@@ -6,6 +6,7 @@
 #include "CannedMessageModule.h"
 #include "Channels.h"
 #include "FSCommon.h"
+#include "MeshRadio.h"
 #include "MeshService.h"
 #include "MessageStore.h"
 #include "NodeDB.h"
@@ -81,9 +82,12 @@ CannedMessageModule::CannedMessageModule()
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;
@@ -109,21 +113,15 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     LOG_DEBUG("[CannedMessage] LaunchWithDestination dest=0x%08x ch=%d", dest, channel);
 }
 
-void CannedMessageModule::LaunchRepeatDestination()
-{
-    if (!lastDestSet) {
-        LaunchWithDestination(NODENUM_BROADCAST, 0);
-    } else {
-        LaunchWithDestination(lastDest, lastChannel);
-    }
-}
-
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
     // Do NOT override explicit broadcast replies
-    // Only reuse lastDest in LaunchRepeatDestination()
 
-    dest = newDest;
+    if (newDest == 0) {
+        dest = NODENUM_BROADCAST;
+    } else {
+        dest = newDest;
+    }
     channel = newChannel;
 
     lastDest = dest;
@@ -141,7 +139,7 @@ void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t
 static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
-    return node && node->has_user && node->user.public_key.size > 0;
+    return nodeInfoLiteHasUser(node) && node->public_key.size > 0;
 }
 /**
  * @brief Items in array this->messages will be set to be pointing on the right
@@ -181,7 +179,7 @@ int CannedMessageModule::splitConfiguredMessages()
     while (i < upTo) {
         if (this->messageBuffer[i] == '|') {
             this->messageBuffer[i] = '\0'; // End previous message
-            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT)
+            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT - 1)
                 break;
             tempMessages[tempCount++] = (this->messageBuffer + i + 1);
         }
@@ -262,10 +260,10 @@ void CannedMessageModule::updateDestinationSelectionList()
 
     for (size_t i = 0; i < numMeshNodes; ++i) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == myNodeNum || !node->has_user || node->user.public_key.size != 32)
+        if (!node || node->num == myNodeNum || !nodeInfoLiteHasUser(node) || node->public_key.size != 32)
             continue;
 
-        const String &nodeName = node->user.long_name;
+        const String &nodeName = node->long_name;
 
         if (searchQuery.length() == 0) {
             this->filteredNodes.push_back({node, sinceLastSeen(node)});
@@ -279,10 +277,6 @@ void CannedMessageModule::updateDestinationSelectionList()
             }
         }
     }
-
-    meshtastic_MeshPacket *p = allocDataPacket();
-    p->pki_encrypted = true;
-    p->channel = 0;
 
     // Populate active channels
     std::vector<String> seenChannels;
@@ -301,12 +295,6 @@ void CannedMessageModule::updateDestinationSelectionList()
         LOG_INFO("Nodes changed, forcing UI refresh.");
         screen->forceDisplay();
     }
-}
-
-// Returns true if character input is currently allowed (used for search/freetext states)
-bool CannedMessageModule::isCharInputAllowed() const
-{
-    return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
 }
 
 static int getRowHeightForEmoteText(const char *text, int minimumHeight, int emoteSpacing = 2)
@@ -892,8 +880,10 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // All hardware keys fall through to here (CardKB, physical, etc.)
 
     if (event->kbchar == INPUT_BROKER_MSG_EMOTE_LIST) {
-        updateState(CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
-        screen->forceDisplay();
+        if (graphics::numEmotes > 0) { // no picker on EXCLUDE_EMOJI builds (empty emotes[])
+            updateState(CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
+            screen->forceDisplay();
+        }
         return true;
     }
     // Confirm select (Enter)
@@ -977,6 +967,11 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 {
     int numEmotes = graphics::numEmotes;
+    if (numEmotes == 0) { // EXCLUDE_EMOJI: emotes[] is empty, any index would read out of bounds
+        updateState(CANNED_MESSAGE_RUN_STATE_FREETEXT, true);
+        screen->forceDisplay();
+        return 1;
+    }
 
     // Override isDown and isSelect ONLY for emote picker behavior
     bool isUp = isUpEvent(event);
@@ -1034,6 +1029,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     lastDestSet = true;
 
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;
@@ -1054,7 +1051,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     }
 
     NodeNum myNodeNum = nodeDB->getNodeNum();
-    if (node && node->num != myNodeNum && node->has_user && node->user.public_key.size == 32) {
+    if (node && node->num != myNodeNum && nodeInfoLiteHasUser(node) && node->public_key.size == 32) {
         p->pki_encrypted = true;
         p->channel = 0; // force PKI
     }
@@ -1066,7 +1063,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size + 1 < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size++] = 7;
         p->decoded.payload.bytes[p->decoded.payload.size] = '\0';
     }
@@ -1360,7 +1357,7 @@ int32_t CannedMessageModule::runOnce()
             case INPUT_BROKER_RIGHT:
                 break;
             default:
-                // Only insert ASCII printable characters (32–126)
+                // Only insert ASCII printable characters (32-126)
                 if (this->payload >= 32 && this->payload <= 126) {
                     requestFocus();
                     if (this->cursor == this->freetext.length()) {
@@ -1415,8 +1412,8 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
         return "Broadcast";
 
     meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-    if (info && info->has_user && strlen(info->user.long_name) > 0) {
-        return info->user.long_name;
+    if (nodeInfoLiteHasUser(info) && strlen(info->long_name) > 0) {
+        return info->long_name;
     }
 
     static char fallback[12];
@@ -1430,13 +1427,6 @@ bool CannedMessageModule::shouldDraw()
     return (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
             this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
             this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER);
-}
-
-// Has the user defined any canned messages?
-// Expose publicly whether canned message module is ready for use
-bool CannedMessageModule::hasMessages()
-{
-    return (this->messagesCount > 0);
 }
 
 int CannedMessageModule::getNextIndex()
@@ -1723,17 +1713,17 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
                 if (node) {
                     if (display->getWidth() <= 64) {
-                        entryText = node->user.short_name;
-                    } else if (node->user.long_name[0]) {
-                        entryText = node->user.long_name;
+                        entryText = node->short_name;
+                    } else if (node->long_name[0]) {
+                        entryText = node->long_name;
                     } else {
-                        entryText = node->user.short_name;
+                        entryText = node->short_name;
                     }
                 }
 
                 int availWidth = display->getWidth() -
                                  ((graphics::currentResolution == graphics::ScreenResolution::High) ? 40 : 20) -
-                                 ((node && node->is_favorite) ? 10 : 0);
+                                 ((nodeInfoLiteIsFavorite(node)) ? 10 : 0);
                 if (availWidth < 0)
                     availWidth = 0;
                 char truncatedEntry[96];
@@ -1742,7 +1732,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
                 entryText = truncatedEntry;
 
                 // Prepend "* " if this is a favorite
-                if (node && node->is_favorite) {
+                if (nodeInfoLiteIsFavorite(node)) {
                     entryText = "* " + entryText;
                 }
                 graphics::UIRenderer::truncateStringWithEmotes(display, entryText.c_str(), truncatedEntry, sizeof(truncatedEntry),
@@ -2103,23 +2093,24 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 static float getSnrLimit(meshtastic_Config_LoRaConfig_ModemPreset preset)
 {
     switch (preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
+    case PRESET(LONG_SLOW):
+    case PRESET(LONG_MODERATE):
+    case PRESET(LONG_FAST):
         return -6.0f;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+    case PRESET(MEDIUM_SLOW):
+    case PRESET(MEDIUM_FAST):
+    case PRESET(MEDIUM_TURBO):
         return -5.5f;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+    case PRESET(SHORT_SLOW):
+    case PRESET(SHORT_FAST):
+    case PRESET(SHORT_TURBO):
         return -4.5f;
     default:
         return -6.0f;
     }
 }
 
-// Return Good/Fair/Bad label and set 1–5 bars based on SNR and RSSI
+// Return Good/Fair/Bad label and set 1-5 bars based on SNR and RSSI
 static const char *getSignalGrade(float snr, int32_t rssi, float snrLimit, int &bars)
 {
     // 5-bar logic: strength inside Good/Fair/Bad category

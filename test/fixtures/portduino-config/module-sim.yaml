@@ -1,0 +1,3 @@
+# CLEAN. The simulated radio takes no pins or SPI device at all.
+Lora:
+  Module: sim

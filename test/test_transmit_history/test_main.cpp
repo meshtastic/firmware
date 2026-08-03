@@ -61,7 +61,7 @@ static void test_throttle_blocks_within_interval()
 
 static void test_throttle_allows_after_interval()
 {
-    // Unknown key returns 0 — throttle should NOT block
+    // Unknown key returns 0 - throttle should NOT block
     uint32_t lastMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_NODEINFO_APP);
     TEST_ASSERT_EQUAL_UINT32(0, lastMs);
 
@@ -72,13 +72,13 @@ static void test_throttle_allows_after_interval()
 
 static void test_throttle_blocks_after_set_then_zero_does_not()
 {
-    // Set it — now throttle should block
+    // Set it - now throttle should block
     transmitHistory->setLastSentToMesh(meshtastic_PortNum_TELEMETRY_APP);
     uint32_t lastMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_TELEMETRY_APP);
     bool shouldSend = (lastMs == 0) || !Throttle::isWithinTimespanMs(lastMs, 60 * 60 * 1000);
     TEST_ASSERT_FALSE(shouldSend); // Should be blocked (within 1hr interval)
 
-    // Different key — should allow
+    // Different key - should allow
     uint32_t otherMs = transmitHistory->getLastSentToMeshMillis(meshtastic_PortNum_POSITION_APP);
     bool otherShouldSend = (otherMs == 0) || !Throttle::isWithinTimespanMs(otherMs, 60 * 60 * 1000);
     TEST_ASSERT_TRUE(otherShouldSend);
@@ -200,7 +200,7 @@ static void test_boot_after_recent_send_still_throttles()
 
 // Regression test for issue #9901:
 // A device powered off for longer than the throttle window must broadcast NodeInfo
-// on its next boot — it must not be silenced because loadFromDisk() once treated
+// on its next boot - it must not be silenced because loadFromDisk() once treated
 // every loaded entry as "just sent" by seeding lastMillis to millis() at boot.
 static void test_boot_after_long_gap_allows_nodeinfo()
 {
@@ -302,6 +302,10 @@ static void test_boot_without_time_source_expires_boot_relative_history()
 void setup()
 {
     initializeTestEnvironment();
+
+    // Wait for portduino's millis() clock to start ticking before tests run
+    testDelay(10);
+    testDelay(2000);
 
     UNITY_BEGIN();
 

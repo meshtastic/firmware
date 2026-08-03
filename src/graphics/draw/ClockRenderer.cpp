@@ -145,7 +145,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr, true, true);
+    graphics::drawCommonHeader(display, x, y, titleStr, true, true, true);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     char timeString[16];
@@ -178,14 +178,20 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     snprintf(secondString, sizeof(secondString), "%02d", second);
 
     static bool scaleInitialized = false;
-    static float scale = 0.75f;
+    static float scale = 0.50f;
     static float segmentWidth = SEGMENT_WIDTH * 0.75f;
     static float segmentHeight = SEGMENT_HEIGHT * 0.75f;
 
     if (!scaleInitialized) {
+#ifdef DISPLAY_FORCE_SMALL_FONTS
+        float screenwidth_target_ratio = 0.70f; // Target 70% of display width (adjustable)
+#elif defined(BICOLOR_OLED_DISPLAY)
+        float screenwidth_target_ratio = 0.60f; // Forced for BICOLOR_OLED_DISPLAY due to two color display
+#else
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
-        float max_scale = 3.5f;                 // Safety limit to avoid runaway scaling
-        float step = 0.05f;                     // Step increment per iteration
+#endif
+        float max_scale = 3.5f; // Safety limit to avoid runaway scaling
+        float step = 0.05f;     // Step increment per iteration
 
         float target_width = display->getWidth() * screenwidth_target_ratio;
         float target_height =
@@ -293,11 +299,15 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 // Draw an analog clock
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Clear previous frame pixels so moving hands don't leave stale artifacts on TFT light theme.
+    display->clear();
+#endif
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr, true, true);
+    graphics::drawCommonHeader(display, x, y, titleStr, true, true, true);
 
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;
@@ -307,6 +317,9 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t radius = (std::min(display->getWidth(), display->getHeight()) / 2) * 0.9;
 #ifdef T_WATCH_S3
     radius = (display->getWidth() / 2) * 0.8;
+#elif defined(BICOLOR_OLED_DISPLAY)
+    centerY += 6;
+    radius = (display->getHeight() / 2) * 0.7;
 #endif
 
     // noon (0 deg) coordinates (outermost circle)
