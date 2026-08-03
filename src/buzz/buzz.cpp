@@ -125,6 +125,10 @@ void playTones(const ToneDuration *tone_durations, int size)
     digitalWrite(SPEAKER_EN_2, HIGH);
 #endif
     if (!nrf52I2SOutput.begin(SPEAKER_BCLK, SPEAKER_WS_LRCK, SPEAKER_DATA)) {
+        digitalWrite(SPEAKER_EN, LOW);
+#if defined(SPEAKER_EN_2)
+        digitalWrite(SPEAKER_EN_2, LOW);
+#endif
         return;
     }
     for (int i = 0; i < size; i++) {
