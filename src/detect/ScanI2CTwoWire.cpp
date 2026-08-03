@@ -702,6 +702,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L", (uint8_t)addr.address)
             case HMC5883L_ADDR:
+                // Probe the defined WHO_AM_I first: the DS248X check below reads an address that is
+                // reserved on the IIS2MDCTR, so running it first risks claiming a magnetometer.
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x4FU), 1); // get ID
+                if (registerValue == 0x40) {
+                    type = IIS2MDCTR;
+                    logFoundDevice("IIS2MDCTR", (uint8_t)addr.address);
+                    break;
+                }
+
                 // Check status register (0xF0) for DS284X status and one-wire reset
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xF0), 1);
                 if (registerValue & 0x16) { // One-wire reset after power-on
@@ -709,16 +718,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
                 }
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x4FU), 1); // get ID
-                if (registerValue == 0x40) {
-                    type = IIS2MDCTR;
-                    logFoundDevice("IIS2MDCTR", (uint8_t)addr.address);
-                    break;
-                } else {
-                    type = HMC5883L;
-                    logFoundDevice("HMC5883L", (uint8_t)addr.address);
-                    break;
-                }
+
+                type = HMC5883L;
+                logFoundDevice("HMC5883L", (uint8_t)addr.address);
+                break;
 #ifdef HAS_QMA6100P
                 SCAN_SIMPLE_CASE(QMA6100P_ADDR, QMA6100P, "QMA6100P", (uint8_t)addr.address)
 #else

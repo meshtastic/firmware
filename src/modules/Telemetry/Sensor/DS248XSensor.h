@@ -43,6 +43,12 @@
 #define DS248X_CH0 0xF0
 #endif
 
+// Returned by readTemperatureROM when the one-wire transaction fails or the
+// scratchpad CRC does not match, so callers can reject the reading.
+#ifndef DS248X_INVALID_TEMPERATURE
+#define DS248X_INVALID_TEMPERATURE -1000.0f
+#endif
+
 typedef enum { DS248X_UNKNOWN = 0, DS248X_DS2484, DS248X_DS2482_800 } ds248x_variant_t;
 
 struct _DS248XData {
