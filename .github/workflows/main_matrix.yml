@@ -38,6 +38,7 @@ permissions: read-all
 
 jobs:
   setup:
+    if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: true
       matrix:
@@ -68,6 +69,7 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   version:
+    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -104,6 +106,7 @@ jobs:
           pio_target: check
 
   build:
+    if: github.repository == 'meshtastic/firmware'
     needs: [setup, version]
     strategy:
       fail-fast: false
