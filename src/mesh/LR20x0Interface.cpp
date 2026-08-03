@@ -1,6 +1,7 @@
 #include "configuration.h"
 
 #if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#include "LR20x0Band.h"
 #include "LR20x0Interface.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
@@ -101,14 +102,14 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 #ifdef LR2021_RF_SWITCH_SUBGHZ
     pinMode(LR2021_RF_SWITCH_SUBGHZ, OUTPUT);
-    digitalWrite(LR2021_RF_SWITCH_SUBGHZ, getFreq() < 1e9 ? HIGH : LOW);
-    LOG_DEBUG("Set RF0 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+    digitalWrite(LR2021_RF_SWITCH_SUBGHZ, isLr20x0HighBand(getFreq()) ? LOW : HIGH);
+    LOG_DEBUG("Set RF0 switch to %s", isLr20x0HighBand(getFreq()) ? "2.4GHz" : "SubGHz");
 #endif
 
 #ifdef LR2021_RF_SWITCH_2_4GHZ
     pinMode(LR2021_RF_SWITCH_2_4GHZ, OUTPUT);
-    digitalWrite(LR2021_RF_SWITCH_2_4GHZ, getFreq() < 1e9 ? LOW : HIGH);
-    LOG_DEBUG("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+    digitalWrite(LR2021_RF_SWITCH_2_4GHZ, isLr20x0HighBand(getFreq()) ? HIGH : LOW);
+    LOG_DEBUG("Set RF1 switch to %s", isLr20x0HighBand(getFreq()) ? "2.4GHz" : "SubGHz");
 #endif
 
     // Allow extra time for TCXO to stabilize after power-on
@@ -178,7 +179,7 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 template <typename T> bool LR20x0Interface<T>::reconfigure()
 {
-    RadioLibInterface::reconfigure();
+    bool success = RadioLibInterface::reconfigure();
 
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) {
         limitPower(LR2021_MAX_POWER_HF);
@@ -187,7 +188,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     }
 
     const float freq = getFreq();
-    const bool bandHop = (lr20x0LastFreqMHz > 0) && ((lr20x0LastFreqMHz > 1500.0f) != (freq > 1500.0f));
+    const bool bandHop = isLr20x0BandHop(lr20x0LastFreqMHz, freq);
 
     if (bandHop) {
         LOG_INFO("LR20x0 LF/HF band hop %.1f -> %.1f MHz, full begin()", lr20x0LastFreqMHz, freq);
@@ -196,13 +197,13 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
         // Match init(): external LF/HF front-end GPIOs (if board defines them).
 #ifdef LR2021_RF_SWITCH_SUBGHZ
         pinMode(LR2021_RF_SWITCH_SUBGHZ, OUTPUT);
-        digitalWrite(LR2021_RF_SWITCH_SUBGHZ, freq < 1e9 ? HIGH : LOW);
-        LOG_DEBUG("Set RF0 switch to %s", freq < 1e9 ? "SubGHz" : "2.4GHz");
+        digitalWrite(LR2021_RF_SWITCH_SUBGHZ, isLr20x0HighBand(freq) ? LOW : HIGH);
+        LOG_DEBUG("Set RF0 switch to %s", isLr20x0HighBand(freq) ? "2.4GHz" : "SubGHz");
 #endif
 #ifdef LR2021_RF_SWITCH_2_4GHZ
         pinMode(LR2021_RF_SWITCH_2_4GHZ, OUTPUT);
-        digitalWrite(LR2021_RF_SWITCH_2_4GHZ, freq < 1e9 ? LOW : HIGH);
-        LOG_DEBUG("Set RF1 switch to %s", freq < 1e9 ? "SubGHz" : "2.4GHz");
+        digitalWrite(LR2021_RF_SWITCH_2_4GHZ, isLr20x0HighBand(freq) ? HIGH : LOW);
+        LOG_DEBUG("Set RF1 switch to %s", isLr20x0HighBand(freq) ? "2.4GHz" : "SubGHz");
 #endif
 
 #if ARCH_PORTDUINO
@@ -235,10 +236,14 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
             return false;
         }
+        lr20x0LastFreqMHz = freq;
 
         res = lora.setCRC(2);
-        if (res != RADIOLIB_ERR_NONE)
-            LOG_WARN("LR20x0 band-hop setCRC %s%d", radioLibErr, res);
+        if (res != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 band-hop setCRC %s%d", radioLibErr, res);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            return false;
+        }
 
 #ifdef LR2021_DIO_AS_RF_SWITCH
         lora.setRfSwitchTable(lr20x0_rfswitch_dio_pins, lr20x0_rfswitch_table);
@@ -248,11 +253,13 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 #endif
 
         res = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-        if (res != RADIOLIB_ERR_NONE)
-            LOG_WARN("LR20x0 band-hop setRxBoostedGainMode %s%d", radioLibErr, res);
+        if (res != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR20x0 band-hop setRxBoostedGainMode %s%d", radioLibErr, res);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            return false;
+        }
 
         startReceive();
-        lr20x0LastFreqMHz = freq;
         return true;
     }
 
@@ -263,39 +270,57 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("LR20x0 setFrequency %.3f MHz %s%d", freq, radioLibErr, err);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
     }
 
     err = lora.setSpreadingFactor(sf);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setBandwidth(bw);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setCodingRate(cr, cr != 7);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setSyncWord(syncWord);
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE) {
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setPreambleLength(preambleLength);
-    assert(err == RADIOLIB_ERR_NONE);
+    if (err != RADIOLIB_ERR_NONE) {
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
+    }
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("LR20x0 setOutputPower %d dBm @ %.3f MHz %s%d", power, freq, radioLibErr, err);
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+        success = false;
     }
 
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
+        success = false;
+    }
 
-    startReceive();
-    lr20x0LastFreqMHz = freq;
-    return true;
+    if (success) {
+        startReceive();
+        lr20x0LastFreqMHz = freq;
+    }
+    return success;
 }
 
 template <typename T> void LR20x0Interface<T>::disableInterrupt()
