@@ -247,6 +247,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
@@ -378,4 +379,8 @@ template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
 #endif
     return (int16_t)round(rssi);
 }
+
+// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
+#undef rfswitch_dio_pins
+#undef rfswitch_table
 #endif
