@@ -536,23 +536,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     display->setColor(WHITE); // Reset for other UI
 }
 
-bool isCompactPanel(OLEDDisplay *display)
-{
-#if defined(OLED_COMPACT_UI)
-    return display->getWidth() <= 80 && display->getHeight() <= 40;
-#else
-    (void)display;
-    return false;
-#endif
-}
-
 const int *getTextPositions(OLEDDisplay *display)
 {
     static int textPositions[7]; // Static array that persists beyond function scope
 
     if (isCompactPanel(display)) {
-        // No header on compact panels (see drawCommonHeader) - start at the top edge and
-        // pack lines as tight as the font allows, to fit as many rows as possible.
+        // No header on compact panels - pack rows as tight as the font allows.
         for (int i = 0; i < 7; ++i) {
             const int bodyLine = (i > 0) ? i - 1 : 0;
             textPositions[i] = bodyLine * (FONT_HEIGHT_SMALL - 6);

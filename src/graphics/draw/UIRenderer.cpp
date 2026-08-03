@@ -778,10 +778,8 @@ void UIRenderer::drawFavoriteNode(OLEDDisplay *display, OLEDDisplayUiState *stat
     // === Draw battery/time/mail header (common across screens) ===
     graphics::drawCommonHeader(display, x, y, titlestr, false, false, false, true, TFTPalette::Yellow);
 
-#if HAS_GPS
-    // Compact panels: page 0 = name + distance + compass (bearing to node), page 1 = the
-    // rest (status/signal/heard/uptime/battery) - scroll down to see it, mirroring the
-    // position screen's compass/coordinates split.
+#if HAS_GPS && defined(OLED_COMPACT_UI)
+    // Compact panels: page 0 = name/distance/compass, page 1 = status/telemetry (scroll down)
     if (graphics::isCompactPanel(display)) {
         int cline = 1;
         const meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -1831,6 +1829,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED || config.position.fixed_position;
 
     // Compact panels: GPS status row above is shared; scroll down for coordinates+elevation.
+#if defined(OLED_COMPACT_UI)
     if (compactPanel) {
         if (positionViewIndex == 0) {
             // Compass comes from the IMU/magnetometer, not GPS - keep it showing even with GPS off.
@@ -1865,8 +1864,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             display->drawString((SCREEN_WIDTH - textWidth) / 2, textPos[line], displayLine);
         }
 
-        // Two-page indicator (compass / coordinates), matching NodeListRenderer::drawScrollbar's
-        // thin vertical thumb on the right edge rather than a bespoke style.
+        // Two-page indicator, matching NodeListRenderer::drawScrollbar's thumb style.
         const int scrollbarX = SCREEN_WIDTH - 2;
         const int thumbHeight = SCREEN_HEIGHT / 2;
         const int thumbY = positionViewIndex * (SCREEN_HEIGHT - thumbHeight);
@@ -1877,6 +1875,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         graphics::drawCommonFooter(display, x, y);
         return;
     }
+#endif
 
     // If GPS is off or not present (and position isn't fixed), no need to display these parts
     if (hasGpsData) {
@@ -2076,7 +2075,8 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (totalIcons == 0)
         return;
 
-    // Compact panels: briefly show current frame's icon+title centered, then nothing.
+        // Compact panels: briefly show current frame's icon+title centered, then nothing.
+#if defined(OLED_COMPACT_UI)
     if (compactPanel) {
         const bool introVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS_COMPACT;
         if (!introVisible)
@@ -2132,6 +2132,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         return;
     }
+#endif
 
     const int navPadding = compactPanel ? 8 : ((currentResolution == ScreenResolution::High) ? 24 : 12);
 

@@ -625,13 +625,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             snprintf(senderName, sizeof(senderName), "(%08x)", m.dest);
         }
 
-        // Shrink Sender name if needed. Compact panels put the name on its own line (below the
-        // time), so it doesn't need to share width with timeBuf/chanType like the combined line does.
+        // Shrink Sender name if needed; compact panels put it on its own line, so no sharing with timeBuf/chanType.
         int availWidth = compactPanel ? (mine ? rightTextWidth : leftTextWidth)
                                       : (mine ? rightTextWidth : leftTextWidth) - display->getStringWidth(timeBuf) -
                                             display->getStringWidth(chanType);
-        // Compact panels hard-cut (no "...") so drop its width reservation too - more of the
-        // actual name fits.
+        // Compact panels hard-cut (no "...") so drop its width reservation too.
         availWidth -= graphics::UIRenderer::measureStringWithEmotes(display, compactPanel ? "*@" : "  *@...");
         if (availWidth < 0)
             availWidth = 0;

@@ -731,8 +731,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
+#if defined(OLED_COMPACT_UI)
             if (graphics::isCompactPanel(dispdev))
                 graphics::UIRenderer::notifyScreenWoke();
+#endif
         } else {
             powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
 #ifdef USE_EINK
@@ -1336,6 +1338,15 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 
 // Regenerate the normal set of frames, focusing a specific frame if requested
 // Called when a frame should be added / removed, or custom frames should be cleared
+// No-op on other boards, so this costs them no flash/RAM.
+#if defined(OLED_COMPACT_UI)
+#define PUSH_FRAME_TITLE(x) frameTitles.push_back(x)
+#define CLEAR_FRAME_TITLES() frameTitles.clear()
+#else
+#define PUSH_FRAME_TITLE(x)
+#define CLEAR_FRAME_TITLES()
+#endif
+
 void Screen::setFrames(FrameFocus focus)
 {
     // Block setFrames calls when virtual keyboard is active to prevent overlay interference
@@ -1353,7 +1364,7 @@ void Screen::setFrames(FrameFocus focus)
     showingNormalScreen = true;
 
     indicatorIcons.clear();
-    frameTitles.clear();
+    CLEAR_FRAME_TITLES();
 
     size_t numframes = 0;
 
@@ -1362,7 +1373,7 @@ void Screen::setFrames(FrameFocus focus)
     if (error_code) {
         normalFrames[numframes++] = NotificationRenderer::drawCriticalFaultFrame;
         indicatorIcons.push_back(icon_error);
-        frameTitles.push_back("Alert");
+        PUSH_FRAME_TITLE("Alert");
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
 
@@ -1378,7 +1389,7 @@ void Screen::setFrames(FrameFocus focus)
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
 #endif
         indicatorIcons.push_back(digital_icon_clock);
-        frameTitles.push_back("Clock");
+        PUSH_FRAME_TITLE("Clock");
     }
 #endif
 
@@ -1386,7 +1397,7 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.home = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
         indicatorIcons.push_back(icon_home);
-        frameTitles.push_back("Home");
+        PUSH_FRAME_TITLE("Home");
     }
 
 #if BASEUI_HAS_GAMES
@@ -1395,27 +1406,27 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.games = numframes;
         normalFrames[numframes++] = drawGamesFrame;
         indicatorIcons.push_back(joystick_small);
-        frameTitles.push_back("Games");
+        PUSH_FRAME_TITLE("Games");
     }
 #endif
 
     fsi.positions.textMessage = numframes;
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
-    frameTitles.push_back("Messages");
+    PUSH_FRAME_TITLE("Messages");
 
 #ifndef USE_EINK
     if (!hiddenFrames.nodelist_nodes) {
         fsi.positions.nodelist_nodes = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Nodes;
         indicatorIcons.push_back(icon_nodes);
-        frameTitles.push_back("Nodes");
+        PUSH_FRAME_TITLE("Nodes");
     }
     if (!hiddenFrames.nodelist_location) {
         fsi.positions.nodelist_location = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicListScreen_Location;
         indicatorIcons.push_back(icon_list);
-        frameTitles.push_back("Node List");
+        PUSH_FRAME_TITLE("Node List");
     }
 #endif
 
@@ -1425,19 +1436,19 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.nodelist_lastheard = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
         indicatorIcons.push_back(icon_nodes);
-        frameTitles.push_back("Nodes");
+        PUSH_FRAME_TITLE("Nodes");
     }
     if (!hiddenFrames.nodelist_hopsignal) {
         fsi.positions.nodelist_hopsignal = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
         indicatorIcons.push_back(icon_signal);
-        frameTitles.push_back("Signal");
+        PUSH_FRAME_TITLE("Signal");
     }
     if (!hiddenFrames.nodelist_distance) {
         fsi.positions.nodelist_distance = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
         indicatorIcons.push_back(icon_distance);
-        frameTitles.push_back("Distance");
+        PUSH_FRAME_TITLE("Distance");
     }
 #endif
 #if HAS_GPS
@@ -1446,27 +1457,27 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.nodelist_bearings = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
         indicatorIcons.push_back(icon_list);
-        frameTitles.push_back("Bearings");
+        PUSH_FRAME_TITLE("Bearings");
     }
 #endif
     if (!hiddenFrames.gps) {
         fsi.positions.gps = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
         indicatorIcons.push_back(icon_compass);
-        frameTitles.push_back("GPS");
+        PUSH_FRAME_TITLE("GPS");
     }
 #endif
     if (RadioLibInterface::instance && !hiddenFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);
-        frameTitles.push_back("LoRa");
+        PUSH_FRAME_TITLE("LoRa");
     }
     if (!hiddenFrames.system) {
         fsi.positions.system = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawSystemScreen;
         indicatorIcons.push_back(icon_system);
-        frameTitles.push_back("System");
+        PUSH_FRAME_TITLE("System");
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     if (!hiddenFrames.clock) {
@@ -1478,14 +1489,14 @@ void Screen::setFrames(FrameFocus focus)
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
 #endif
         indicatorIcons.push_back(digital_icon_clock);
-        frameTitles.push_back("Clock");
+        PUSH_FRAME_TITLE("Clock");
     }
 #endif
     if (!hiddenFrames.chirpy) {
         fsi.positions.chirpy = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
         indicatorIcons.push_back(chirpy_small);
-        frameTitles.push_back("Chirpy");
+        PUSH_FRAME_TITLE("Chirpy");
     }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -1493,7 +1504,7 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.wifi = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawFrameWiFi;
         indicatorIcons.push_back(icon_wifi);
-        frameTitles.push_back("WiFi");
+        PUSH_FRAME_TITLE("WiFi");
     }
 #endif
 
@@ -1521,7 +1532,7 @@ void Screen::setFrames(FrameFocus focus)
                 fsi.positions.waypoint = numframes;
 
             indicatorIcons.push_back(icon_module);
-            frameTitles.push_back("Module");
+            PUSH_FRAME_TITLE("Module");
             numframes++;
         }
     }
@@ -1550,7 +1561,7 @@ void Screen::setFrames(FrameFocus focus)
             for (const auto &f : favoriteFrames) {
                 normalFrames[numframes++] = f;
                 indicatorIcons.push_back(icon_node);
-                frameTitles.push_back("Favorite");
+                PUSH_FRAME_TITLE("Favorite");
             }
             fsi.positions.lastFavorite = numframes - 1;
         } else {
@@ -2162,6 +2173,7 @@ int Screen::handleInputEvent(const InputEvent *event)
             return 0;
         }
     }
+#if defined(OLED_COMPACT_UI)
     // UP/DOWN on the compact position screen toggles compass vs coordinates+elevation
     if (graphics::isCompactPanel(dispdev) && ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
         if (event->inputEvent == INPUT_BROKER_UP) {
@@ -2190,6 +2202,7 @@ int Screen::handleInputEvent(const InputEvent *event)
             return 0;
         }
     }
+#endif
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {

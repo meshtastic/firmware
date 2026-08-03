@@ -118,10 +118,7 @@ std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
     }
 #endif
 
-    // If we didn't compose from status, use normal long/short selection.
-    // Compact panels always prefer the long name (falling back to short if empty),
-    // regardless of the use_long_node_name setting - there's room for it and it's
-    // more useful than the 4-char short name.
+    // Compact panels always prefer the long name, ignoring use_long_node_name.
     if (!raw) {
         if (nodeInfoLiteHasUser(node)) {
             if (isCompactPanel(display)) {
@@ -610,8 +607,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
                         EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
-    // Compact panels: 4 rows fit comfortably (0,9,18,27) - a 5th would be too tight, so it
-    // pushes to the next page via the existing scrollIndex pagination instead of cramming in.
+    // Compact panels: 4 rows fit (0,9,18,27), a 5th pages instead of cramming in.
     const int rowYOffset = graphics::isCompactPanel(display) ? (FONT_HEIGHT_SMALL - 4) : (FONT_HEIGHT_SMALL - 3);
     bool locationScreen = false;
 

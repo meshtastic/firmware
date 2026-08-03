@@ -250,9 +250,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
-    // Compact panels: the dedicated DOWN button cancels menus instead of scrolling them -
-    // selection already moves via the main button (USER_PRESS). Rewriting here covers every
-    // picker handler below without touching each one individually.
+    // Compact panels: DOWN cancels menus instead of scrolling (covers every picker below).
     if (graphics::isCompactPanel(display) && inEvent.inputEvent == INPUT_BROKER_DOWN) {
         inEvent.inputEvent = INPUT_BROKER_CANCEL;
     }
@@ -649,9 +647,7 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
                                            ? UIRenderer::measureStringWithEmotes(display, ">  <")
                                            : UIRenderer::measureStringWithEmotes(display, "><");
                 const bool compactPanel = graphics::isCompactPanel(display);
-                // Compact panels: the box already spans the full screen width (see
-                // drawNotificationBox), so only reserve a small edge margin, not the
-                // wider-screen padding.
+                // Compact panels: box spans the full width, so just a small edge margin.
                 const int margin = compactPanel ? 4 : 28;
                 const int maxTextWidth = std::max(0, display->getWidth() - margin - arrowWidth);
                 UIRenderer::truncateStringWithEmotes(display, rawName, tempName, sizeof(tempName), maxTextWidth,
