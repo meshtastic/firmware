@@ -26,7 +26,7 @@ class NRF52I2SOutput
     static constexpr uint32_t kSampleRateHz = 15625; // 32MHz/8/256
     static constexpr size_t kMaxSamples = 512;
 
-    uint32_t buffer[kMaxSamples];
+    uint32_t buffer[kMaxSamples] = {};
     bool started = false;
 };
 
