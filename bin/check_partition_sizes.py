@@ -37,19 +37,8 @@ import zipfile
 
 from platformio.project.config import ProjectConfig
 
-# --- board-manifest fetch limits -------------------------------------------
-#
-# CI needs the board manifests of the pinned espressif32 platform, because ~20
-# ESP32 environments use a stock board id rather than one from this repo's
-# boards/ directory. It must NOT get them via 'pio pkg install': that calls
-# PlatformFactory.new(), which exec_module()s the downloaded package's
-# platform.py. The platform URL comes from a file in the checkout, so on a fork
-# PR that would run attacker-supplied code. Instead we fetch the archive and
-# read board JSON out of it as pure data - nothing from the archive is
-# imported, executed, or written outside the destination directory.
-#
-# The owner allowlist is the control that matters: restricting the host alone
-# would be useless, since anyone can host a repository on github.com.
+# Board manifests are fetched as data, never via 'pio pkg install', which
+# exec_module()s the downloaded platform.py. Owner allowlist, not just host.
 ALLOWED_MANIFEST_HOSTS = ("github.com", "codeload.github.com", "raw.githubusercontent.com")
 ALLOWED_MANIFEST_OWNERS = ("meshtastic", "pioarduino", "platformio")
 MANIFEST_FETCH_TIMEOUT = 120
@@ -68,9 +57,8 @@ FLASH_TIERS = (
     64 * 1024 * 1024,
 )
 
-# The partition table itself lives at 0x8000 and occupies a whole 0x1000 sector,
-# so an omitted first offset starts right after it. Same constant the builder and
-# extra_scripts/esp32_pre.py use.
+# Partition table sits at 0x8000 and fills a 0x1000 sector, so an omitted first
+# offset starts right after it. Same constant the builder uses.
 FIRST_PARTITION_OFFSET = 0x9000
 
 
@@ -149,9 +137,8 @@ def find_board_manifest(board_id, project_dir, core_dir, fetched_dir=None):
         fetched = os.path.join(fetched_dir, f"{board_id}.json")
         if os.path.isfile(fetched):
             return fetched
-    # Several platform versions can be unpacked side by side ('espressif32',
-    # 'espressif32@6.13.0', 'espressif32@src-<hash>'); sorted() puts the plain
-    # name first so the lookup is deterministic. CI only ever has one.
+    # Versions unpack side by side; sorted() puts the plain name first so the
+    # lookup is deterministic. CI only ever has one.
     installed = sorted(glob.glob(os.path.join(core_dir, "platforms", "*", "boards", f"{board_id}.json")))
     return installed[0] if installed else None
 
@@ -184,7 +171,10 @@ def fetch_board_manifests(url, dest_dir):
     if problem:
         raise ValueError(f"refusing to fetch board manifests: {problem}")
 
-    request = urllib.request.Request(url, headers={"User-Agent": "meshtastic-firmware-ci"})
+    # check_manifest_url() above rejects anything not https on an allowlisted host
+    # and owner, so file:// and untrusted hosts cannot reach either call.
+    request = urllib.request.Request(url, headers={"User-Agent": "meshtastic-firmware-ci"})  # noqa: S310
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     with urllib.request.urlopen(request, timeout=MANIFEST_FETCH_TIMEOUT) as response:  # noqa: S310
         payload = response.read(MAX_ARCHIVE_BYTES + 1)
     if len(payload) > MAX_ARCHIVE_BYTES:
@@ -291,9 +281,8 @@ def check_env(cfg, env_name, project_dir, core_dir, fetched_dir=None):
 
     csv_path = csv_name if os.path.isabs(csv_name) else os.path.join(project_dir, csv_name)
     if not os.path.isfile(csv_path):
-        # The builder would fall back to a table shipped with the IDF framework, which
-        # is not checked out here. Keep every variant's table in the repo so its
-        # geometry is reviewable.
+        # The builder would fall back to an IDF-shipped table, not checked out here.
+        # Keep every variant's table in the repo so its geometry is reviewable.
         return [f"{env_name}: partition table '{csv_name}' not found at {csv_path}"]
 
     try:
