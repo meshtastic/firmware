@@ -7,6 +7,9 @@ on:
 permissions: {}
 
 env:
+  # Only pushes to the default branch (develop) populate the cache; PR / merge_group runs
+  # restore it but never save, so they stop filling up the repo's Actions cache storage.
+  SAVE_CACHE: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
   LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
 
 jobs:
@@ -17,7 +20,7 @@ jobs:
   # check here and fail the PR on a mismatch, keeping the manual count honest.
   suite-count-check:
     name: Native Suite Count
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: read
     steps:
@@ -56,7 +59,7 @@ jobs:
 
   simulator-tests:
     name: Native Simulator Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: suite-count-check
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -70,9 +73,25 @@ jobs:
       - name: Install simulator dependencies
         run: pip install -U dotmap
 
+      - name: Restore PlatformIO cache
+        id: pio-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-simulator-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
+          restore-keys: |
+            pio-simulator-tests-
+
       # We now run integration test before other build steps (to quickly see runtime failures)
       - name: Build for native/coverage
         run: platformio run -e coverage
+
+      - name: Save PlatformIO cache
+        if: env.SAVE_CACHE == 'true' && steps.pio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-simulator-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
 
       - name: Capture initial coverage information
         shell: bash
@@ -139,7 +158,7 @@ jobs:
 
   platformio-tests:
     name: Native PlatformIO Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: suite-count-check
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -159,10 +178,26 @@ jobs:
       - name: Disable BUILD_EPOCH
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
+      - name: Restore PlatformIO cache
+        id: pio-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-coverage-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
+          restore-keys: |
+            pio-coverage-tests-
+
       - name: Build test programs once
         # One shared build of src + every test program. This is the single source build; gcov then
         # accumulates coverage counts into this shared .pio/build/coverage/src as the chunks run.
         run: platformio test -e coverage --without-testing
+
+      - name: Save PlatformIO cache
+        if: env.SAVE_CACHE == 'true' && steps.pio-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.platformio/.cache
+          key: pio-coverage-tests-${{ hashFiles('platformio.ini', 'variants/native/portduino.ini', 'variants/native/portduino/platformio.ini') }}
 
       - name: Run tests one area at a time
         shell: bash
@@ -270,7 +305,8 @@ jobs:
     needs:
       - simulator-tests
       - platformio-tests
-    if: always()
+    # Run this job even if the previous jobs failed, but skip if the workflow was cancelled.
+    if: ${{ !cancelled() }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
