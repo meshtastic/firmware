@@ -154,9 +154,8 @@ bool SGM41562::applyInitSequence()
                writeReg(REG_EXT_INPUT_CURRENT, 0xCA) && writeReg(REG_POWER_ON_CFG, 0xA4);
     }
 
-    return writeReg(REG_SYS_VOLTAGE_REG, 0xB7) && writeReg(REG_MISC_OP_CONTROL, 0x40) &&
-           writeReg(REG_CHARGE_TERM_TIMER, 0x1A) && writeReg(REG_SYSTEM_STATUS, 0x40) &&
-           writeReg(REG_POWER_ON_CFG, 0xA4);
+    return writeReg(REG_SYS_VOLTAGE_REG, 0xB7) && writeReg(REG_MISC_OP_CONTROL, 0x40) && writeReg(REG_CHARGE_TERM_TIMER, 0x1A) &&
+           writeReg(REG_SYSTEM_STATUS, 0x40) && writeReg(REG_POWER_ON_CFG, 0xA4);
 }
 
 bool SGM41562::hasExtendedRegisterMap() const
