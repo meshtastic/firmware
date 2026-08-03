@@ -7,6 +7,26 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_DS248x.h>
 
+// Dallas/Maxim CRC8 (reflected polynomial 0x8C), used to validate a DS18B20 scratchpad
+static uint8_t ds18b20CRC8(const uint8_t *data, uint8_t len)
+{
+    uint8_t crc = 0;
+
+    while (len--) {
+        uint8_t inbyte = *data++;
+        for (uint8_t i = 8; i; i--) {
+            uint8_t mix = (crc ^ inbyte) & 0x01;
+            crc >>= 1;
+            if (mix) {
+                crc ^= 0x8C;
+            }
+            inbyte >>= 1;
+        }
+    }
+
+    return crc;
+}
+
 DS248XSensor::DS248XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_DS248X, "DS248X") {}
 
 ds248x_variant_t DS248XSensor::detectVariant()
@@ -14,7 +34,8 @@ ds248x_variant_t DS248XSensor::detectVariant()
 
     // Wait until idle
     if (!ds248x.busyWait(1000)) {
-        return DS248X_UNKNOWN;
+        _variant = DS248X_UNKNOWN;
+        return _variant;
     }
 
     // Try Channel Select command (only valid on DS2482-800)
@@ -63,7 +84,9 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         bool initError = false;
         uint8_t nROMDetected = 0;
 
-        if (detectVariant() == DS248X_DS2482_800) {
+        detectVariant();
+
+        if (_variant == DS248X_DS2482_800) {
 
             LOG_INFO("%s: Multi-channel DS2482-800 detected", sensorName);
 
@@ -73,19 +96,24 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
                     ds248x.OneWireReset();
 
-                    if (!ds248x.OneWireSearch(ds2482800Data.ds248xData[channel].rom)) {
-                        LOG_DEBUG("%s: no one-wire rom detected on channel %u (%u/%u)", sensorName, channel, retry, numRetries);
-                        for (uint8_t i = 0; i < 8; i++) {
-                            ds2482800Data.ds248xData[channel].rom[i] = 0;
-                        }
-                    } else {
+                    // Search into a scratch buffer: a failed pass must not erase a ROM that an
+                    // earlier pass already found on this channel.
+                    uint8_t foundROM[8]{};
+                    if (ds248x.OneWireSearch(foundROM)) {
+                        memcpy(ds2482800Data.ds248xData[channel].rom, foundROM, sizeof(foundROM));
                         LOG_INFO("%s: One-wire rom detected on channel %u (%u/%u)", sensorName, channel, retry, numRetries);
                         printROM(ds2482800Data.ds248xData[channel].rom);
-                        nROMDetected += 1;
+                    } else {
+                        LOG_DEBUG("%s: no one-wire rom detected on channel %u (%u/%u)", sensorName, channel, retry, numRetries);
                     }
 
                 } else {
                     LOG_WARN("%s: Failed to select channel %u", sensorName, channel);
+                }
+
+                // Count every channel holding a ROM, including ones carried over from an earlier pass
+                if (isValidROM(ds2482800Data.ds248xData[channel].rom)) {
+                    nROMDetected += 1;
                 }
             }
 
@@ -93,7 +121,7 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
                 initError = true;
             }
 
-        } else {
+        } else if (_variant == DS248X_DS2484) {
             LOG_INFO("%s: Single-channel DS2484 detected", sensorName);
 
             if (!ds248x.OneWireReset()) {
@@ -121,6 +149,9 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
                 LOG_INFO("%s: One-wire rom detected (%u/%u)", sensorName, retry, numRetries);
                 printROM(ds248xData.rom);
             }
+        } else {
+            LOG_WARN("%s: Could not determine variant (%u/%u)", sensorName, retry, numRetries);
+            initError = true;
         }
 
         if (initError && retry == numRetries) {
@@ -166,34 +197,47 @@ float DS248XSensor::readTemperatureROM(const uint8_t *rom)
     reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
+    uint8_t data[9]{};
+
     // Select the DS18B20 device
-    ds248x.OneWireReset();
-    ds248x.OneWireWriteByte(DS18B20_CMD_MATCH_ROM); // Match ROM command
-    for (int i = 0; i < 8; i++) {
-        ds248x.OneWireWriteByte(rom[i]);
+    bool ok = ds248x.OneWireReset() && ds248x.OneWireWriteByte(DS18B20_CMD_MATCH_ROM); // Match ROM command
+    for (int i = 0; ok && i < 8; i++) {
+        ok = ds248x.OneWireWriteByte(rom[i]);
     }
 
     // Start temperature conversion
-    ds248x.OneWireWriteByte(DS18B20_CMD_CONVERT_T); // Convert T command
-    delay(750);                                     // Wait for conversion (750ms for maximum precision)
+    ok = ok && ds248x.OneWireWriteByte(DS18B20_CMD_CONVERT_T); // Convert T command
 
-    // Read scratchpad
-    ds248x.OneWireReset();
-    ds248x.OneWireWriteByte(DS18B20_CMD_MATCH_ROM); // Match ROM command
-    for (int i = 0; i < 8; i++) {
-        ds248x.OneWireWriteByte(rom[i]);
-    }
-    ds248x.OneWireWriteByte(DS18B20_CMD_READ_SCRATCHPAD); // Read Scratchpad command
+    if (ok) {
+        delay(750); // Wait for conversion (750ms for maximum precision)
 
-    uint8_t data[9];
-    for (int i = 0; i < 9; i++) {
-        ds248x.OneWireReadByte(&data[i]);
+        // Read scratchpad
+        ok = ds248x.OneWireReset() && ds248x.OneWireWriteByte(DS18B20_CMD_MATCH_ROM); // Match ROM command
+        for (int i = 0; ok && i < 8; i++) {
+            ok = ds248x.OneWireWriteByte(rom[i]);
+        }
+        ok = ok && ds248x.OneWireWriteByte(DS18B20_CMD_READ_SCRATCHPAD); // Read Scratchpad command
+
+        for (int i = 0; ok && i < 9; i++) {
+            ok = ds248x.OneWireReadByte(&data[i]);
+        }
     }
 
 #ifdef DS248X_I2C_CLOCK_SPEED
     LOG_DEBUG("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* DS248X_I2C_CLOCK_SPEED */
+
+    if (!ok) {
+        LOG_WARN("%s: One-wire transaction failed", sensorName);
+        return DS248X_INVALID_TEMPERATURE;
+    }
+
+    // The scratchpad ends with a CRC8 over its first eight bytes
+    if (ds18b20CRC8(data, 8) != data[8]) {
+        LOG_WARN("%s: Scratchpad CRC mismatch", sensorName);
+        return DS248X_INVALID_TEMPERATURE;
+    }
 
     // Calculate temperature
     int16_t raw = (data[1] << 8) | data[0];
@@ -218,10 +262,13 @@ bool DS248XSensor::readTemperatureChannel(uint8_t channel)
     float temperature;
     temperature = readTemperatureROM(ds2482800Data.ds248xData[channel].rom);
 
-    if (temperature != -1000.0) {
-        ds2482800Data.ds248xData[channel].temperature = temperature;
-        LOG_DEBUG("%s: read temperature in channel %u: %0.2f", sensorName, channel, temperature);
+    if (temperature == DS248X_INVALID_TEMPERATURE) {
+        LOG_WARN("%s: Failed to read temperature in channel %u", sensorName, channel);
+        return false;
     }
+
+    ds2482800Data.ds248xData[channel].temperature = temperature;
+    LOG_DEBUG("%s: read temperature in channel %u: %0.2f", sensorName, channel, temperature);
     return true;
 }
 
@@ -229,7 +276,7 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     if (_variant == ds248x_variant_t::DS248X_DS2484) {
         float temperature = readTemperatureROM(ds248xData.rom);
-        if (temperature != -1000.0) {
+        if (temperature != DS248X_INVALID_TEMPERATURE) {
             measurement->variant.environment_metrics.temperature = temperature;
             measurement->variant.environment_metrics.has_temperature = true;
             LOG_DEBUG("Got %s readings: temperature=%.2f", sensorName, measurement->variant.environment_metrics.temperature);
