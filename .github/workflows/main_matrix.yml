@@ -55,7 +55,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+        with:
+          # Nothing in this job runs git after the checkout, so there is no reason to
+          # leave the token in .git/config while it executes scripts from the branch.
+          persist-credentials: false
+      - uses: actions/setup-python@v7
         with:
           python-version: 3.x
           cache: pip
@@ -73,6 +77,28 @@ jobs:
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
           echo "all=$TARGETS" >> $GITHUB_OUTPUT
           echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
+
+      # Reconcile, per ESP32 env, the board's upload.maximum_size against the end of
+      # the selected partition CSV and against custom_meshtastic_partition_scheme.
+      # Nothing at build time does this: the espressif32 builder overwrites
+      # upload.maximum_size with the app slot size from the partition table, so a
+      # variant pointing at a 16MB table on an 8MB board links clean and only fails
+      # when it is flashed, and a wrong partition_scheme just ships in the .mt.json
+      # manifest. This lives here, next to the board_level validation in
+      # generate_ci_matrix.py, because it is the same kind of static config check:
+      # no toolchain, no compile, and it covers every ESP32 env instead of only the
+      # subset the matrix happens to build for this event.
+      #
+      # --fetch-board-manifests reads the ~20 stock board JSONs the check needs (the
+      # ones not in this repo's boards/ directory) straight out of the pinned platform
+      # archive, as data. Deliberately not 'pio pkg install': that calls
+      # PlatformFactory.new(), which exec_module()s the downloaded platform.py, and the
+      # platform URL comes from the checkout - so on a fork PR it would run code from
+      # whatever archive that PR points at. The URL is allowlisted by owner in the
+      # script. This job holds no secrets and its token is read-only (permissions:
+      # read-all), so nothing here can reach a repository secret either way.
+      - name: Check ESP32 flash geometry
+        run: python3 bin/check_partition_sizes.py --fetch-board-manifests "$RUNNER_TEMP/esp32-boards"
     outputs:
       all: ${{ steps.jsonStep.outputs.all }}
 
