@@ -5,6 +5,7 @@
 #include "SPILock.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "endian.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -636,8 +637,9 @@ void RadioLibInterface::handleReceiveInterrupt()
         // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
         LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
                   "nextHop=0x%x relay=0x%x)",
-                  state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
-                  iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
+                  state, meshLe32toH(radioBuffer.header.id), meshLe32toH(radioBuffer.header.from),
+                  meshLe32toH(radioBuffer.header.to), radioBuffer.header.flags, iface->getSNR(), lround(iface->getRSSI()),
+                  radioBuffer.header.next_hop, radioBuffer.header.relay_node);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, rxMsec);
@@ -654,7 +656,7 @@ void RadioLibInterface::handleReceiveInterrupt()
         } else {
             rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission
-            if (radioBuffer.header.from == 0) {
+            if (meshLe32toH(radioBuffer.header.from) == 0) {
                 LOG_WARN("Ignore received packet without sender");
                 return;
             }
@@ -669,9 +671,9 @@ void RadioLibInterface::handleReceiveInterrupt()
             }
 
             // Keep the assigned fields in sync with src/mqtt/MQTT.cpp:onReceiveProto
-            mp->from = radioBuffer.header.from;
-            mp->to = radioBuffer.header.to;
-            mp->id = radioBuffer.header.id;
+            mp->from = meshLe32toH(radioBuffer.header.from);
+            mp->to = meshLe32toH(radioBuffer.header.to);
+            mp->id = meshLe32toH(radioBuffer.header.id);
             mp->channel = radioBuffer.header.channel;
             assert(HOP_MAX <= PACKET_FLAGS_HOP_LIMIT_MASK); // If hopmax changes, carefully check this code
             mp->hop_limit = radioBuffer.header.flags & PACKET_FLAGS_HOP_LIMIT_MASK;
