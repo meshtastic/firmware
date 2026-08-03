@@ -1377,7 +1377,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
         // === Node Identity: long name (falls back to short), truncated with "..." if too wide ===
         const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
-        const char *shortName = owner.short_name ? owner.short_name : "";
+        const char *shortName = owner.short_name[0] ? owner.short_name : "";
         const char *rawName = longName[0] ? longName : shortName;
         char nodeName[32];
         UIRenderer::truncateStringWithEmotes(display, rawName, nodeName, sizeof(nodeName), SCREEN_WIDTH - 4);
@@ -1387,7 +1387,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
                                          false);
     } else {
         // === Node Identity ===
-        const char *shortName = owner.short_name ? owner.short_name : "";
+        const char *shortName = owner.short_name[0] ? owner.short_name : "";
         int textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
         UIRenderer::drawStringWithEmotes(display, nameX, getTextPositions(display)[line++], shortName, FONT_HEIGHT_SMALL, 1,
@@ -1476,7 +1476,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int nameX = 0;
     int yOffset = (currentResolution == ScreenResolution::High) ? 0 : 5;
     const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
-    const char *shortName = owner.short_name ? owner.short_name : "";
+    const char *shortName = owner.short_name[0] ? owner.short_name : "";
     char combinedName[96];
     if (longName[0] && shortName[0]) {
         snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortName);
@@ -1661,7 +1661,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     }
     // Draw version and short name in bottom middle
     char footer[64];
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         snprintf(footer, sizeof(footer), "%s   %s", xstr(APP_VERSION_SHORT), owner.short_name);
     } else {
         snprintf(footer, sizeof(footer), "%s", xstr(APP_VERSION_SHORT));
@@ -1716,7 +1716,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     if (gBootSplashBoldPass) {
         display->drawString(versionX + 1, y + 5, version);
     }
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW - 5;
@@ -2015,7 +2015,7 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
     const char *version = xstr(APP_VERSION_SHORT);
     int versionX = x + SCREEN_WIDTH - display->getStringWidth(version);
     display->drawString(versionX, y + 0, version);
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW;
