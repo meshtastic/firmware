@@ -26,12 +26,6 @@ on:
       - "**.md"
       #- "**.yml"
 
-  schedule:
-    # Nightly develop build, published to meshtastic.github.io firmware-nightly/ (no GitHub release).
-    # Scheduled runs execute on the default branch (develop). 09:00 UTC avoids the 00:00 tests
-    # and 02:00 daily_packaging crons.
-    - cron: 0 9 * * * # Nightly develop build/publish (default branch is develop)
-
   workflow_dispatch:
     inputs:
       # trunk-ignore(checkov/CKV_GHA_7): intentional manual-test switch for the nightly publish path
@@ -44,6 +38,7 @@ permissions: read-all
 
 jobs:
   setup:
+    if: github.repository == 'meshtastic/firmware'
     strategy:
       fail-fast: true
       matrix:
@@ -61,9 +56,9 @@ jobs:
       - name: Generate matrix
         id: jsonStep
         run: |
-          if [[ "$GITHUB_HEAD_REF" == "" ]]; then
+          if [[ "$GITHUB_HEAD_REF" == "" && "${{ github.repository }}" == "meshtastic/firmware" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
-          else  
+          else
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} --level pr)
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF"
@@ -74,6 +69,7 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   version:
+    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -110,6 +106,7 @@ jobs:
           pio_target: check
 
   build:
+    if: github.repository == 'meshtastic/firmware'
     needs: [setup, version]
     strategy:
       fail-fast: false
@@ -130,7 +127,7 @@ jobs:
     secrets: inherit
 
   MacOS:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +142,7 @@ jobs:
     # secrets: inherit
 
   Windows:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -172,7 +169,7 @@ jobs:
     uses: ./.github/workflows/test_native.yml
 
   build-wasm:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     # Build the WebAssembly portduino node ([env:native-wasm]) as part of normal CI,
     # like the other platforms. It's a dedicated job (not a row in the `build`
     # matrix) because its artifact is meshnode.{mjs,wasm} - not a flashable
@@ -181,7 +178,7 @@ jobs:
     uses: ./.github/workflows/build_portduino_wasm.yml
 
   docker:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     permissions: # Needed for pushing to GHCR.
       contents: read
       packages: write
@@ -406,7 +403,7 @@ jobs:
   # exceeds its static RAM (.data+.bss) or flash budget. Kept separate from
   # firmware-size-report, which is informational and continue-on-error.
   size-budget-gate:
-    if: ${{ github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
+    if: ${{ github.repository == 'meshtastic/firmware' && github.event_name != 'schedule' && github.event.inputs.nightly != 'true' }}
     permissions:
       contents: read
       actions: read
