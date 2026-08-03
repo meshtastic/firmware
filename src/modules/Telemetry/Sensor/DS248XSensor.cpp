@@ -283,22 +283,20 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
             return true;
         }
     } else if (_variant == ds248x_variant_t::DS248X_DS2482_800) {
-        // If using DS248X_DS2482_800, we read all channels, but we will only report ch0
-        bool readChannel0 = false;
-        for (uint8_t channel = 0; channel < 8; channel++) {
-            if (readTemperatureChannel(channel)) {
-                // TODO Support more than one temperature via repeated (3.0)
-                // TODO Select which channel can be reported as main temperature
-                if (channel == 0) {
-                    readChannel0 = true;
-                    measurement->variant.environment_metrics.temperature = ds2482800Data.ds248xData[0].temperature;
-                    measurement->variant.environment_metrics.has_temperature = true;
-                    LOG_DEBUG("Got %s readings: temperature=%.2f", sensorName,
-                              measurement->variant.environment_metrics.temperature);
-                }
-            }
+        // Only ch0 is reported. Every populated channel costs a blocking 750ms conversion in
+        // readTemperatureROM, so walking all eight would stall telemetry for up to 6s and then
+        // throw the other seven readings away.
+        // TODO Support more than one temperature via repeated (3.0)
+        // TODO Select which channel can be reported as main temperature
+        // When multi-channel reporting lands, start the conversion on every channel first and
+        // wait once, instead of reading each channel end to end.
+        if (readTemperatureChannel(0)) {
+            measurement->variant.environment_metrics.temperature = ds2482800Data.ds248xData[0].temperature;
+            measurement->variant.environment_metrics.has_temperature = true;
+            LOG_DEBUG("Got %s readings: temperature=%.2f", sensorName, measurement->variant.environment_metrics.temperature);
+            return true;
         }
-        return readChannel0;
+        return false;
     }
     return false;
 }
