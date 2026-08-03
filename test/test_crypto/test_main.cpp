@@ -644,6 +644,17 @@ void test_AES_CCM_AEAD(void)
         memset(ciphertextWithTag, 0xAA, sizeof(ciphertextWithTag));
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(emptyPsk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
                                                    ciphertextWithTag, decrypted));
+
+        // CryptoKey uses -1 as the "invalid key - do not use" sentinel. length is int8_t
+        // and the aes_ccm_* key length is size_t, so -1 would widen to a huge unsigned
+        // length rather than being rejected. Both directions must refuse it.
+        CryptoKey invalidPsk;
+        memset(&invalidPsk, 0, sizeof(invalidPsk));
+        invalidPsk.length = -1;
+
+        TEST_ASSERT_FALSE(crypto->encryptPacketCCM(invalidPsk, fromNode, packetId, 8, plaintext, ciphertextWithTag));
+        TEST_ASSERT_FALSE(crypto->decryptPacketCCM(invalidPsk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
+                                                   ciphertextWithTag, decrypted));
     }
 
     // =========================================================================

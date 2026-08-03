@@ -376,8 +376,11 @@ bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_pu
 bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t numBytes,
                                     const uint8_t *plaintext, uint8_t *ciphertextWithTag)
 {
-    if (psk.length == 0) {
-        LOG_ERROR("AEAD encryption requires a non-empty PSK");
+    // CryptoKey documents -1 as "invalid key - do not use". psk.length is int8_t and the
+    // aes_ccm_* key length is size_t, so a negative sentinel would widen into a huge
+    // unsigned length instead of being rejected.
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD encryption requires a valid, non-empty PSK");
         return false;
     }
     initNonce(fromNode, packetId);
@@ -389,8 +392,8 @@ bool CryptoEngine::encryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uin
 bool CryptoEngine::decryptPacketCCM(const CryptoKey &psk, uint32_t fromNode, uint64_t packetId, size_t totalBytes,
                                     const uint8_t *ciphertextWithTag, uint8_t *plaintext)
 {
-    if (psk.length == 0) {
-        LOG_ERROR("AEAD decryption requires a non-empty PSK");
+    if (psk.length <= 0) {
+        LOG_ERROR("AEAD decryption requires a valid, non-empty PSK");
         return false;
     }
     if (totalBytes <= AEAD_TAG_SIZE)
