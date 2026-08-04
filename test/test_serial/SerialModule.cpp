@@ -41,6 +41,16 @@ void test_serialConfigWithOverrideConsoleCalTopoModeIsValid(void)
     TEST_ASSERT_TRUE(serialConfigIsValid(config));
 }
 
+// Test that configuration with override_console_serial_port and MS Config mode is valid.
+void test_serialConfigWithOverrideConsoleMsConfigModeIsValid(void)
+{
+    meshtastic_ModuleConfig_SerialConfig config = {.enabled = true,
+                                                   .mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG,
+                                                   .override_console_serial_port = true};
+
+    TEST_ASSERT_TRUE(serialConfigIsValid(config));
+}
+
 // Test that configuration with override_console_serial_port and DEFAULT mode is invalid.
 void test_serialConfigWithOverrideConsoleDefaultModeIsInvalid(void)
 {
@@ -116,6 +126,7 @@ void setup()
     RUN_TEST(test_serialConfigEnabledIsValid);
     RUN_TEST(test_serialConfigWithOverrideConsoleNmeaModeIsValid);
     RUN_TEST(test_serialConfigWithOverrideConsoleCalTopoModeIsValid);
+    RUN_TEST(test_serialConfigWithOverrideConsoleMsConfigModeIsValid);
     RUN_TEST(test_serialConfigWithOverrideConsoleDefaultModeIsInvalid);
     RUN_TEST(test_serialConfigWithOverrideConsoleSimpleModeIsInvalid);
     RUN_TEST(test_serialConfigWithOverrideConsoleTextMsgModeIsInvalid);
