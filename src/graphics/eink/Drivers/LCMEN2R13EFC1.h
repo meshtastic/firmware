@@ -37,7 +37,7 @@ class LCMEN213EFC1 : public EInk
     void update(uint8_t *imageData, UpdateTypes type) override;
 
   protected:
-    void wait();
+    void wait(uint32_t timeoutMs = 5000);
     void reset();
     void sendCommand(const uint8_t command);
     void sendData(const uint8_t data);
