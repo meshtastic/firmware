@@ -637,6 +637,21 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
     }
 };
 
+// One log notify per log line shares the msys_1 mbuf pool with the fromNum doorbell and ATT
+// responses, so a logging burst starves them; back off on rejection until the pool refills.
+static constexpr uint32_t LOG_NOTIFY_BACKOFF_MS = 250;
+static std::atomic<uint32_t> lastLogNotifyFailureMs{0};
+
+class NimbleBluetoothLogRadioCallback : public BLECharacteristicCallbacks
+{
+    void onStatus(BLECharacteristic *, Status s, uint32_t) override
+    {
+        // ERROR_GATT is the only status meaning the host refused it; the rest never allocated.
+        if (s == Status::ERROR_GATT)
+            lastLogNotifyFailureMs.store(millis());
+    }
+};
+
 class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
 {
     void onPassKeyNotify(uint32_t passkey) override
@@ -1005,6 +1020,9 @@ void NimbleBluetooth::setupService()
     static NimbleBluetoothFromRadioCallback fromRadioCallbacks;
     FromRadioCharacteristic->setCallbacks(&fromRadioCallbacks);
 
+    static NimbleBluetoothLogRadioCallback logRadioCallbacks;
+    logRadioCharacteristic->setCallbacks(&logRadioCallbacks);
+
     bleService->start();
 
     // Setup the battery service
@@ -1056,6 +1074,11 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
     if (!isConnected() || length > 512) {
         return;
     }
+    if (!logRadioCharacteristic) // BLE may have been torn down; never notify a freed characteristic
+        return;
+    // Pool still under pressure; drop this line rather than spend a buffer fromNum needs.
+    if (Throttle::isWithinTimespanMs(lastLogNotifyFailureMs.load(), LOG_NOTIFY_BACKOFF_MS))
+        return;
     logRadioCharacteristic->setValue(logMessage, length);
     logRadioCharacteristic->notify();
 }

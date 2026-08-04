@@ -18,7 +18,7 @@
     Only for cases where we can know it (ESP32 or known screen) we can do this.
 */
 
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 class ReClockI2C
 {

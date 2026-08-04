@@ -167,9 +167,9 @@ bool PositionModule::hasGPS()
 }
 
 // Allocate a packet with our position data if we have one
-meshtastic_MeshPacket *PositionModule::allocPositionPacket()
+meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
 {
-    if (precision == 0) {
+    if (atPrecision == 0) {
         LOG_DEBUG("Skip location send because precision is set to 0!");
         return nullptr;
     }
@@ -196,12 +196,12 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
     }
 
     // lat/lon are unconditionally included - IF AVAILABLE!
-    LOG_DEBUG("Send location with precision %i", precision);
+    LOG_DEBUG("Send location with precision %i", atPrecision);
     p.latitude_i = localPosition.latitude_i;
     p.longitude_i = localPosition.longitude_i;
     p.has_latitude_i = true;
     p.has_longitude_i = true;
-    applyPositionPrecision(p, precision);
+    applyPositionPrecision(p, atPrecision);
     // Always use NTP / GPS time if available
     if (getValidTime(RTCQualityNTP) > 0) {
         p.time = getValidTime(RTCQualityNTP);
@@ -281,7 +281,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         return nullptr;
     }
 
-    meshtastic_MeshPacket *reply = allocPositionPacket();
+    meshtastic_MeshPacket *reply = allocPositionPacket(precision);
     if (reply) {
         lastSentReply = millis(); // Track when we sent this reply
     }
@@ -373,13 +373,34 @@ void PositionModule::sendOurPosition()
     currentGeneration = radioGeneration;
 
     // If we changed channels, ask everyone else for their latest info
-    LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
     for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
         if (getPositionPrecisionForChannel(channelNum) != 0) {
+            LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
             sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
             return;
         }
     }
+    LOG_INFO("Skip pos@%x:6 broadcast; position sharing is opt-in and disabled on all channels", localPosition.timestamp);
+}
+
+// Position broadcasts are opt-in per channel in 2.8, but our own position still plays to the
+// connected phone/UI at full precision, like telemetry does. This copy never touches the mesh.
+// Returns true only when a packet was actually handed to the phone queue, so the caller can
+// hold off the cadence stamp (and retry soon) after a guard or allocation failure.
+bool PositionModule::sendOurPositionToPhone()
+{
+    if (!config.position.fixed_position && !nodeDB->hasLocalPositionSinceBoot())
+        return false; // Same stale-restored-position guard as sendOurPosition()
+
+    meshtastic_MeshPacket *p = allocPositionPacket(32);
+    if (p == nullptr)
+        return false;
+
+    p->to = NODENUM_BROADCAST;
+    p->decoded.want_response = false;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    service->sendToPhone(p);
+    return true;
 }
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
@@ -396,7 +417,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     // Set the class precision value for this particular packet.
     precision = getPositionPrecisionForChannel(channel);
 
-    meshtastic_MeshPacket *p = allocPositionPacket();
+    meshtastic_MeshPacket *p = allocPositionPacket(precision);
     if (p == nullptr) {
         LOG_DEBUG("allocPositionPacket returned a nullptr");
         return;
@@ -465,6 +486,14 @@ bool PositionModule::positionWithinPrecisionCell(int32_t aLat, int32_t aLon, int
            truncateCoordinate(aLon, precision) == truncateCoordinate(bLon, precision);
 }
 
+bool PositionModule::shouldSendPositionToPhone(bool hasValidPosition, bool phoneQueueEmpty, bool everSentToPhone, uint32_t nowMs,
+                                               uint32_t lastSentMs, uint32_t intervalMs)
+{
+    if (!hasValidPosition || !phoneQueueEmpty)
+        return false;
+    return !everSentToPhone || (nowMs - lastSentMs) >= intervalMs;
+}
+
 uint32_t PositionModule::effectiveBroadcastIntervalMs(uint32_t configuredIntervalMs, bool stationary, uint32_t stationaryFloorMs)
 {
     if (stationary && stationaryFloorMs > configuredIntervalMs)
@@ -485,8 +514,20 @@ int32_t PositionModule::runOnce()
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
-    // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
+
+    // Local-only delivery, so it runs regardless of mesh opt-in state or channel utilization.
+    // Only send while the queue is empty (phone assumed connected), like telemetry. The cadence
+    // stamp only advances when a packet was actually queued, so a guard or allocation failure
+    // retries on the next tick instead of waiting out a full interval.
+    if (shouldSendPositionToPhone(nodeDB->hasValidPosition(node), service->isToPhoneQueueEmpty(), hasSentPositionToPhone, now,
+                                  lastPhoneSendMs, sendToPhoneIntervalMs) &&
+        sendOurPositionToPhone()) {
+        hasSentPositionToPhone = true;
+        lastPhoneSendMs = now;
+    }
+
+    // We limit our GPS broadcasts to a max rate
     uint32_t intervalMs = Default::getConfiguredOrDefaultMsScaled(
         config.position.position_broadcast_secs, default_broadcast_interval_secs, numOnlineNodes, TrafficType::POSITION);
     uint32_t msSinceLastSend = now - lastGpsSend;
