@@ -241,14 +241,9 @@ enum LoadFileResult {
 
 enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
 
-/**
- * RAM-only arrival stamp for a node heard while the wall clock was untrusted. last_heard must only
- * ever hold a real epoch or 0 - it persists to flash and the warm tier, where an uptime-relative
- * value would be meaningless after a reboot - so the arrival instant waits here in monotonic
- * uptime seconds until the clock arrives, is backfilled into last_heard as an epoch, and the table
- * empties. Bounded, linear-scan, reuse-oldest, never persisted: the same shape as NextHopRouter's
- * RouteHealth table. Dies with the boot, which is correct - so does its timebase.
- */
+// RAM-only arrival stamp (monotonic uptime secs) for nodes heard before the wall clock was trusted;
+// backfilled into last_heard as an epoch once available, since last_heard persists and can't hold
+// an uptime-relative value. Bounded, linear-scan, reuse-oldest, never persisted - dies with the boot.
 struct NodeHeardAt {
     NodeNum num = 0;                ///< node this stamp describes; 0 == empty slot
     uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard

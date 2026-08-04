@@ -35,9 +35,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
         // A local dedup window, not a wall-clock reading - uptime avoids RTC jumps and replayed
-        // packets' stale rx_time perturbing it. Seconds, not millis: entries outlive a 32-bit
-        // millisecond stamp, which aliases back into the window past 49.7 days of uptime and
-        // silently suppresses a legitimate reply for up to 12h.
+        // packets' stale rx_time perturbing it. Seconds, not millis - this is a wide window.
         const uint32_t nowSecs = Time::getUptimeSecs();
         auto it = lastNodeInfoSeen.find(sender);
         if (it != lastNodeInfoSeen.end() && (uint32_t)(nowSecs - it->second) < NodeInfoReplySuppressSeconds) {

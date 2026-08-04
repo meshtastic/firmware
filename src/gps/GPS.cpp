@@ -1431,38 +1431,26 @@ void GPS::publishUpdate()
     }
 }
 
-/// Is a post-lock ephemeris hold currently in force?
-///
-/// Asked in this direction the sentinel answers itself: `fixHoldEnds == 0` is the *absence* of a
-/// deadline, so "no hold is in force" is its only honest reading. Asked as "has the hold expired?"
-/// 0 has no honest answer, and whichever guard you reach for silently picks one - that is how the
-/// re-arm site below broke: `fixHoldEnds != 0 &&` looks like the sentinel rule from AGENTS.md, but
-/// there it meant "a hold that was never armed can never expire", so nothing re-armed and the
-/// receiver stayed powered until the search timeout.
-///
-/// The `!= 0` test is not redundant with the arithmetic, though it looks it: deadlinePassed() is an
-/// unsigned half-range test, so past 2^31 ms of uptime the sentinel reads as a deadline ~24.9 days
-/// in the *future*.
-///
-/// Not static, and deliberately without a header: these live beside their only caller, and the
-/// native test build compiles this file, so test/test_gps_fix_hold/ declares the prototypes itself.
+/// Is a post-lock ephemeris hold currently in force? `fixHoldEnds == 0` means "never armed", not
+/// "expired" - a prior `!= 0 &&` guard treated the two as the same and left the receiver powered
+/// until the search timeout. The `!= 0` check is still needed alongside deadlinePassed(), since
+/// that's an unsigned half-range test and reads a 0 sentinel as ~24.9 days in the future past 2^31
+/// ms of uptime. Not static and no header: lives beside its only caller; test_gps_fix_hold declares
+/// the prototype itself.
 bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs)
 {
     return fixHoldEnds != 0 && !Throttle::deadlinePassed(fixHoldEnds + threadIntervalMs);
 }
 
-/// Did an armed hold just expire, so the receiver should publish and sleep? The `!= 0` is the
-/// sentinel falling the other way: fixHoldInForce() reports an unarmed hold as "not in force", and
-/// negating that alone would call it expired on every cycle. No grace interval here - unlike the
-/// arm decision, the deadline itself is the moment to go down.
+/// Did an armed hold just expire? `!= 0` guards against negating fixHoldInForce() alone, which would
+/// call an unarmed hold "expired" every cycle. No grace interval: the deadline itself is go-down time.
 bool holdJustExpired(uint32_t fixHoldEnds)
 {
     return fixHoldEnds != 0 && !fixHoldInForce(fixHoldEnds, 0);
 }
 
-/// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold in force" is a reason to
-/// arm, and it is reached often: the hold is cleared by every publish, including the ones that do
-/// not put the receiver back to sleep.
+/// Should a post-lock ephemeris hold be (re-)armed this cycle? "No hold in force" fires often, since
+/// every publish clears the hold, including ones that don't put the receiver back to sleep.
 bool shouldArmFixHold(bool hasValidLocation, uint8_t prevFixQual, uint32_t fixHoldEnds, uint32_t threadIntervalMs)
 {
     // First lock of a cycle, first lock after the receiver was off, or nothing holding right now.
