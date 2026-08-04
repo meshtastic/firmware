@@ -95,8 +95,11 @@ typedef struct _meshtastic_NodeInfoLite {
     /* The public key of the user's device, for PKI-based encrypted DMs. */
     meshtastic_NodeInfoLite_public_key_t public_key;
     /* Q4-encoded SNR: dB × 4, sint32 zigzag. Matches RouteDiscovery convention.
- Encode: snr_q4 = (int32_t)(snr * 4.0f). Decode: snr = snr_q4 / 4.0f.
- float snr is always zeroed on disk; this field carries all persisted SNR. */
+ Encode: snr_q4 = (int32_t)lroundf(snr * 4.0f). Decode: snr = snr_q4 / 4.0f.
+ float snr is always zeroed on disk; this field carries all persisted SNR.
+ A stored 0 does not by itself mean "unknown" here - see NODEINFO_BITFIELD_HAS_SNR in
+ src/mesh/NodeDB.h for the presence bit that disambiguates a genuine 0 dB reading from
+ "never measured". */
     int32_t snr_q4;
 } meshtastic_NodeInfoLite;
 

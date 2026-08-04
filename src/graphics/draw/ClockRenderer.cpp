@@ -178,13 +178,15 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     snprintf(secondString, sizeof(secondString), "%02d", second);
 
     static bool scaleInitialized = false;
-    static float scale = 0.75f;
+    static float scale = 0.50f;
     static float segmentWidth = SEGMENT_WIDTH * 0.75f;
     static float segmentHeight = SEGMENT_HEIGHT * 0.75f;
 
     if (!scaleInitialized) {
 #ifdef DISPLAY_FORCE_SMALL_FONTS
         float screenwidth_target_ratio = 0.70f; // Target 70% of display width (adjustable)
+#elif defined(BICOLOR_OLED_DISPLAY)
+        float screenwidth_target_ratio = 0.60f; // Forced for BICOLOR_OLED_DISPLAY due to two color display
 #else
         float screenwidth_target_ratio = 0.80f; // Target 80% of display width (adjustable)
 #endif
@@ -315,6 +317,9 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t radius = (std::min(display->getWidth(), display->getHeight()) / 2) * 0.9;
 #ifdef T_WATCH_S3
     radius = (display->getWidth() / 2) * 0.8;
+#elif defined(BICOLOR_OLED_DISPLAY)
+    centerY += 6;
+    radius = (display->getHeight() / 2) * 0.7;
 #endif
 
     // noon (0 deg) coordinates (outermost circle)
