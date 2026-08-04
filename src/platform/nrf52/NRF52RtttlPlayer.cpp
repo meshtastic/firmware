@@ -3,6 +3,7 @@
 #if defined(HAS_I2S_SPEAKER_NRF52)
 
 #include "NRF52I2SOutput.h"
+#include "mesh/Throttle.h"
 #include <cctype>
 
 NRF52RtttlPlayer nrf52RtttlPlayer;
@@ -25,7 +26,8 @@ void NRF52RtttlPlayer::begin(const char *songBuffer, uint8_t loopCountIn, unsign
     defaultOctave = 6;
     bpm = 63;
     playing = true;
-    noteEndAt = 0;
+    noteStartAt = millis();
+    noteDurationMs = 0;
     loopCount = loopCountIn;
     loopGap = loopGapMs;
 
@@ -141,7 +143,8 @@ void NRF52RtttlPlayer::nextNote()
     if (note && scale >= 4 && scale <= 7) {
         nrf52I2SOutput.startTone(kNoteFreq[(scale - 4) * 12 + note]);
     }
-    noteEndAt = millis() + (unsigned long)duration;
+    noteStartAt = millis();
+    noteDurationMs = (uint32_t)duration;
 }
 
 void NRF52RtttlPlayer::play()
@@ -149,12 +152,13 @@ void NRF52RtttlPlayer::play()
     if (!playing)
         return;
 
-    if (millis() < noteEndAt)
+    if (Throttle::isWithinTimespanMs(noteStartAt, noteDurationMs))
         return;
 
     if (*buffer == '\0') {
         if (--loopCount) {
-            noteEndAt = millis() + loopGap;
+            noteStartAt = millis();
+            noteDurationMs = (uint32_t)loopGap;
             buffer = firstNote;
         } else {
             stop();

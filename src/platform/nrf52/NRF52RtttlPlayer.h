@@ -23,7 +23,8 @@ class NRF52RtttlPlayer
     uint8_t defaultOctave = 6;
     int bpm = 63;
     long wholeNoteMs = 0;
-    unsigned long noteEndAt = 0;
+    uint32_t noteStartAt = 0;
+    uint32_t noteDurationMs = 0;
     unsigned long loopGap = 1000;
     uint8_t loopCount = 1;
     bool playing = false;
