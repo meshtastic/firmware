@@ -611,7 +611,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     LOG_DEBUG("Make TFTDisplay!");
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#elif defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
     // NicheGraphics-backed BaseUI E-Ink path. Variant provides setupNicheGraphicsBaseUI() in its nicheGraphics.h.
     dispdev = setupNicheGraphicsBaseUI();
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY) && !defined(USE_EINK_PARALLELDISPLAY)
@@ -893,7 +893,7 @@ void Screen::setup()
     // observer can see them.
     if (meshtastic_security::shouldRedactDisplay()) {
         drawLockdownLockScreen(dispdev);
-#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
         static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay();
 #elif defined(USE_EINK_PARALLELDISPLAY)
         // Parallel-display variants drive refresh through a different path;
@@ -1056,7 +1056,7 @@ void Screen::forceDisplay(bool forceUiUpdate)
     }
 
     // Tell EInk class to update the display
-#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
     static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay();
 #elif defined(USE_EINK_PARALLELDISPLAY)
     static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay();
@@ -1298,7 +1298,8 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     static FrameCallback screensaverFrame;
     static OverlayCallback screensaverOverlay;
 
-#if (defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)) || defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if (defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)) ||                                                         \
+    (defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD))
     // Join (await) a currently running async refresh, then run the post-update code.
     // Avoid skipping of screensaver frame. Would otherwise be handled by NotifiedWorkerThread.
     EINK_JOIN_ASYNCREFRESH(dispdev);
@@ -1325,7 +1326,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
         updateUiFrame(ui);
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
-#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
     static_cast<NicheGraphics::BaseUIEInkDisplay *>(dispdev)->forceDisplay(0);
 #elif defined(USE_EINK_PARALLELDISPLAY)
     static_cast<EInkParallelDisplay *>(dispdev)->forceDisplay(0);

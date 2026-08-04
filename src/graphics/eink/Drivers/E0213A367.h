@@ -1,10 +1,10 @@
 /*
 
 E-Ink display driver
-    - SSD1682
+    - E0213A367
     - Manufacturer: SEEKINK
     - Size: 2.13 inch
-    - Resolution: 122px x 255px
+    - Resolution: 122px x 250px
     - Flex connector marking: HINK-E0213A162-A1 (hidden, printed on reverse)
 
 */

@@ -1,10 +1,10 @@
 /*
 
 E-Ink display driver
-    - SSD1680
+    - LCMEN2R13ECC1 (SSD1680)
     - Manufacturer: WISEVAST
     - Size: 2.13 inch
-    - Resolution: 122px x 255px
+    - Resolution: 122px x 250px
 
 */
 

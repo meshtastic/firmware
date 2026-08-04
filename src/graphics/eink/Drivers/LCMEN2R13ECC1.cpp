@@ -58,10 +58,10 @@ void LCMEN2R13ECC1::detachFromUpdate()
 {
     switch (updateType) {
     case FAST:
-        return beginPolling(50, 800); // At least 500ms for fast refresh
+        return beginPolling(50, 800); // At least 800ms for fast refresh
     case FULL:
     default:
-        return beginPolling(100, 2500); // At least 2 seconds for full refresh
+        return beginPolling(100, 2500); // At least 2.5 seconds for full refresh
     }
 }
 

@@ -94,7 +94,8 @@ void LCMEN213EFC1::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t 
     pinMode(pin_busy, INPUT);
 
     // Reset is active low, hold high
-    pinMode(pin_rst, INPUT_PULLUP);
+    if (pin_rst != (uint8_t)-1)
+        pinMode(pin_rst, INPUT_PULLUP);
 
     reset();
 }
@@ -133,18 +134,21 @@ void LCMEN213EFC1::update(uint8_t *imageData, UpdateTypes type)
 
 void LCMEN213EFC1::wait()
 {
-    // Busy when LOW
-    while (digitalRead(pin_busy) == LOW)
+    // Busy when LOW; bounded so a dead panel cannot hang the firmware
+    const uint32_t start = millis();
+    while (digitalRead(pin_busy) == LOW && millis() - start < 5000)
         yield();
 }
 
 void LCMEN213EFC1::reset()
 {
-    pinMode(pin_rst, OUTPUT);
-    digitalWrite(pin_rst, LOW);
-    delay(10);
-    pinMode(pin_rst, INPUT_PULLUP);
-    wait();
+    if (pin_rst != (uint8_t)-1) {
+        pinMode(pin_rst, OUTPUT);
+        digitalWrite(pin_rst, LOW);
+        delay(10);
+        pinMode(pin_rst, INPUT_PULLUP);
+        wait();
+    }
 
     sendCommand(0x12);
     wait();

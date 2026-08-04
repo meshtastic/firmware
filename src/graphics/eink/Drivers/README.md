@@ -20,7 +20,7 @@ void setupNicheGraphics()
     hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
 
     // Setup EInk driver
-    Drivers::EInk *driver = new Drivers::DEPG0290BNS800;
+    Drivers::EInk *driver = new Drivers::DEPG0290BNS800();
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY);
 
     // Pass the driver to your UI
@@ -53,11 +53,11 @@ Update the image on the display
 
 The imageData is a 1-bit image. X-Pixels are 8-per byte, with the MSB being the leftmost pixel. This was not an InkHUD design decision; it is the raw format accepted by the E-Ink display controllers ICs.
 
-_To-do: add a helper method to `InkHUD::Drivers::EInk` to do this arithmetic for you._
+_To-do: add a helper method to `NicheGraphics::Drivers::EInk` to do this arithmetic for you._
 
 ```cpp
-uint16_t w = driver::width();
-uint16_t h = driver::height();
+uint16_t w = driver->width;
+uint16_t h = driver->height;
 
 uint8_t image[ (w/8) * h ]; // X pixels are 8-per-byte
 
@@ -70,7 +70,7 @@ uint8_t y = 2;
 uint8_t yBytes = y * (w/8);
 uint8_t xBytes = x / 8;
 uint8_t xBits = (7-x) % 8;
-image[yByte + xByte] |= (1 << xBits); // Set pixel x=12, y=2
+image[yBytes + xBytes] |= (1 << xBits); // Set pixel x=12, y=2
 ```
 
 ### `await()`
@@ -87,11 +87,11 @@ Check if display supports a specific update type. `true` if supported.
 
 Check if display is already performing an `update()`. `true` if already updating.
 
-### `width()`
+### `width`
 
 Width of the display, in pixels. Note: most displays are portrait. Your UI will need to implement rotation in software.
 
-### `height()`
+### `height`
 
 Height of the display, in pixels. Note: most displays are portrait. Your UI will need to implement rotation in software.
 
@@ -99,7 +99,7 @@ Height of the display, in pixels. Note: most displays are portrait. Your UI will
 
 _This topic is not covered in depth, but these notes may be helpful._
 
-The `InkHUD::Drivers::EInk` class contains only the mechanism for implementing an E-Ink driver on-top of Meshtastic's `OSThread`. A driver for a specific display needs to extend this class.
+The `NicheGraphics::Drivers::EInk` class contains only the mechanism for implementing an E-Ink driver on-top of Meshtastic's `OSThread`. A driver for a specific display needs to extend this class.
 
 ### Controller IC
 
@@ -107,7 +107,7 @@ If your display uses a controller IC from Solomon Systech, you can probably exte
 
 At this stage, displays using controller ICS from other manufacturers (UltraChip, Fitipower, etc) need to manually implemented. See `Drivers::LCMEN2R13EFC1` for an example.
 
-Generic base classes for manufacturers other than Solomon Systech might be added here in future.
+Generic base classes for manufacturers other than Solomon Systech might be added here in the future.
 
 ### Finding Information
 
