@@ -93,6 +93,7 @@ class Power : public concurrency::OSThread
 
     void powerCommandsCheck();
     void readPowerStatus();
+    void logHeapUsage();
     virtual bool setup();
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
@@ -131,6 +132,9 @@ class Power : public concurrency::OSThread
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
     uint32_t lastLogTime = 0;
+    // Periodic free-heap logging: time of the last line emitted, and the reading it carried
+    uint32_t lastHeapLogTime = 0;
+    uint32_t lastHeapLogFree = 0;
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends

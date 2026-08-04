@@ -1170,7 +1170,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Node Identity ===
     int textWidth = 0;
     int nameX = 0;
-    const char *shortName = owner.short_name ? owner.short_name : "";
+    const char *shortName = owner.short_name[0] ? owner.short_name : "";
 
     // === ShortName Centered ===
     textWidth = UIRenderer::measureStringWithEmotes(display, shortName);
@@ -1259,7 +1259,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int nameX = 0;
     int yOffset = (currentResolution == ScreenResolution::High) ? 0 : 5;
     const char *longName = (nodeInfoLiteHasUser(ourNode) && ourNode->long_name[0]) ? ourNode->long_name : "";
-    const char *shortName = owner.short_name ? owner.short_name : "";
+    const char *shortName = owner.short_name[0] ? owner.short_name : "";
     char combinedName[96];
     if (longName[0] && shortName[0]) {
         snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortName);
@@ -1444,7 +1444,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     }
     // Draw version and short name in bottom middle
     char footer[64];
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         snprintf(footer, sizeof(footer), "%s   %s", xstr(APP_VERSION_SHORT), owner.short_name);
     } else {
         snprintf(footer, sizeof(footer), "%s", xstr(APP_VERSION_SHORT));
@@ -1461,15 +1461,27 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
 
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 #else
-    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
-                     icon_width, icon_height, icon_bits);
+
+    int additionalYOffset = 2;
+#if defined(BICOLOR_OLED_DISPLAY)
+    additionalYOffset += 5;
+#endif
+    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2,
+                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + additionalYOffset, icon_width, icon_height,
+                     icon_bits);
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5, title);
+#if defined(BICOLOR_OLED_DISPLAY)
+    additionalYOffset /= 2;
+#else
+    additionalYOffset = 0;
+#endif
+    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5 + additionalYOffset, title);
     if (gBootSplashBoldPass) {
-        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5, title);
+        display->drawString(x + getStringCenteredX(title) + 1, y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - 5 + additionalYOffset,
+                            title);
     }
     display->setFont(FONT_SMALL);
     // Draw region in upper left
@@ -1487,7 +1499,7 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
     if (gBootSplashBoldPass) {
         display->drawString(versionX + 1, y + 5, version);
     }
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW - 5;
@@ -1715,7 +1727,7 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
     const char *version = xstr(APP_VERSION_SHORT);
     int versionX = x + SCREEN_WIDTH - display->getStringWidth(version);
     display->drawString(versionX, y + 0, version);
-    if (owner.short_name && owner.short_name[0]) {
+    if (owner.short_name[0]) {
         const char *shortName = owner.short_name;
         int shortNameW = UIRenderer::measureStringWithEmotes(display, shortName);
         int shortNameX = x + SCREEN_WIDTH - shortNameW;
