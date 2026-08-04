@@ -170,11 +170,11 @@ void test_only_an_armed_hold_can_expire(void)
 // each wrap cycle it is: deadlinePassed(0 + interval) is true once uptime exceeds one interval, so
 // "not in force" would fall out of the arithmetic on its own. Past 2^31 ms of uptime it flips.
 // deadlinePassed() is an unsigned half-range test, so `now - interval` lands in the top half and
-// the sentinel reads as a deadline ~24.9 days in the FUTURE - an unarmed hold would look like one
+// the sentinel reads as a deadline ~24.8 days in the FUTURE - an unarmed hold would look like one
 // in force for the whole second half of every cycle, and nothing would ever re-arm.
 void test_the_sentinel_guard_is_load_bearing_past_the_half_range(void)
 {
-    Time::setTestMillis(0x90000000u); // ~27.8 days of uptime, past the 24.85-day half-range point
+    Time::setTestMillis(0x90000000u); // ~27.8 days of uptime, past the ~24.8-day half-range point
 
     // The arithmetic alone now says "not yet" for the sentinel...
     TEST_ASSERT_FALSE_MESSAGE(Throttle::deadlinePassed(0 + kThreadInterval),

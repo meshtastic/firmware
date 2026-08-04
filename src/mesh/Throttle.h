@@ -29,11 +29,18 @@ class Throttle
     /// as passed.
     ///
     /// TODO(deadline-type): mistake-proof that MUST by giving a deadline its own one-field type -
-    /// Deadline::in(ms) / .armed() / .passed() / .disarm(). The sentinel then cannot be forged by a
-    /// hand-built `now + interval`, and "armed" stays a question separate from "passed", which is
-    /// the split that must survive: which way "inactive" falls is the caller's to decide. Same size
-    /// and cost; the work is the sites marked TODO(deadline-type), which today spell the sentinel
-    /// four ways - 0, UINT32_MAX, 0-means-forever and 0-means-due-now.
+    /// Deadline::in(ms) / .armed() / .passed() / .disarm(). A hand-built `now + interval` could then
+    /// no longer land on the sentinel by accident, and "armed" would stay a question separate from
+    /// "passed" - the split that has to survive, because which way "inactive" falls is the caller's
+    /// to decide. Same size and cost as the bare uint32_t. The conversion sites, grouped by the four
+    /// meanings they give the sentinel today:
+    ///   0 = unarmed - Power.cpp rebootAtMsec/shutdownAtMsec (the cheapest pair to convert), and
+    ///                 GPS.cpp fixHoldEnds, whose arm site remaps a 0 result to 1 by hand.
+    ///   0 = forever - NotificationRenderer.cpp alertBannerUntil. Every read spells its own `> 0`
+    ///                 guard, so this third state wants naming rather than repeating.
+    ///   0 = due now - ethClient.cpp ntp_renew, forced at link-up.
+    ///   UINT32_MAX  - ExternalNotificationModule.cpp nagCycleCutoff, whose armed() also lives in a
+    ///                 second variable (isNagging) and whose arm site can land on the sentinel.
     static bool deadlinePassed(uint32_t deadlineMs);
 
     /// deadlinePassed() against a caller-supplied "now", for a loop that snapshots the time once and

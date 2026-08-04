@@ -66,8 +66,8 @@ class AirTime : private concurrency::OSThread
     bool firstTime = true;
     uint8_t lastUtilPeriod = 0;
     uint8_t lastUtilPeriodTX = 0;
-    // Time::getUptimeSecs() checkpoint at the last window rotation, so windows stay correct
-    // even if the scheduler was paused by light sleep.
+    // Time::getUptimeSecs() as of the last syncNow(); the gap since is what the windows rotate by,
+    // so they stay correct even if the scheduler was paused by light sleep.
     uint32_t secSinceBoot = 0;
     uint8_t max_channel_util_percent = 40;
     uint8_t polite_channel_util_percent = 25;

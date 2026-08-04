@@ -832,7 +832,6 @@ bool Power::setup()
 void Power::powerCommandsCheck()
 {
     // 0 means "not scheduled" for both, and reads as long expired - test it first.
-    // TODO(deadline-type): the plain 0-sentinel pair, and the cheapest pair to convert first.
     if (rebootAtMsec && Throttle::deadlinePassed(rebootAtMsec)) {
         LOG_INFO("Rebooting");
         reboot();

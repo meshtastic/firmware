@@ -970,10 +970,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         }
 
         if (infoToSend.num != 0) {
-            // A record prefetched before the clock became trusted can carry last_heard == 0 while
-            // the store has since been backfilled with a real epoch - re-read at send time so
-            // handshake ordering (time-set vs node-list download) doesn't decide what the phone
-            // sees.
+            // A record prefetched before the clock became trusted carries last_heard == 0 even
+            // once the store is backfilled, so re-read it at send time: handshake ordering
+            // (time-set vs node-list download) must not decide what the phone sees.
             if (infoToSend.last_heard == 0 && infoToSend.num != nodeDB->getNodeNum()) {
                 const meshtastic_NodeInfoLite *fresh = nodeDB->getMeshNode(infoToSend.num);
                 if (fresh)

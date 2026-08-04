@@ -197,10 +197,8 @@ void MeshService::reconcilePendingRxTimes()
         if (!p) // drained from under us - nothing left to rotate
             break;
         if (!p->has_rx_time) {
-            // Both stamps come off the monotonic uptime counter, so the elapsed term is exact at
-            // any age - there is no wrap window to alias in. If the elapsed time somehow exceeds
-            // the epoch itself, leave the packet un-dated (absent, never wrong) rather than
-            // fabricating a pre-1970 value.
+            // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
+            // If it somehow exceeds the epoch, leave the packet un-dated rather than pre-1970.
             const uint32_t elapsedSecs = nowUptimeSecs - p->rx_time;
             if (elapsedSecs < nowEpoch) {
                 p->rx_time = nowEpoch - elapsedSecs;

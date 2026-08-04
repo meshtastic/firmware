@@ -61,11 +61,9 @@ uint32_t getUptimeSecs();
 
 /// Advances the published wrap carry. THE ONLY WRITER - call it from the main loop and nowhere
 /// else. Two concurrent callers could count one wrap twice, jumping every uptime and wall-clock
-/// reading ~49.7 days forward for the rest of the boot; keeping the write on one thread is what
-/// makes that unrepresentable rather than merely unlikely.
+/// reading ~49.7 days forward for the rest of the boot.
 ///
-/// Must run at least once per ~49.7-day wrap window. The main loop calls it every iteration, so
-/// the real margin is the whole window rather than the instruction-wide race it replaces.
+/// Must run at least once per ~49.7-day wrap window; the main loop calls it every iteration.
 void serviceMonotonic();
 
 } // namespace Time

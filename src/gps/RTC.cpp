@@ -42,9 +42,8 @@ RTCQuality getRTCQuality()
 }
 
 // stuff that really should be in in the instance instead...
-// The monotonic (Time::getMillisMonotonic) instant that corresponds to zeroOffsetSecs. 64-bit so
-// getTime()'s elapsed term cannot wrap: with a 32-bit anchor the wall clock silently fell back
-// 49.7 days once the device outlived one millis() cycle after its last time-set.
+// The Time::getMillisMonotonic() instant corresponding to zeroOffsetSecs. 64-bit so getTime()'s
+// elapsed term cannot wrap: a 32-bit anchor walks the wall clock back 49.7 days per millis() cycle.
 static uint64_t timeStartMs64;
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
@@ -494,8 +493,7 @@ int32_t getTZOffset()
  */
 uint32_t getTime(bool local)
 {
-    // 64-bit monotonic elapsed term: a 32-bit one wraps after 49.7 days of uptime, walking the
-    // wall clock back one full cycle per wrap on any node that outlives its last time-set.
+    // Both terms are 64-bit monotonic, so the elapsed time cannot wrap - see timeStartMs64.
     const uint64_t elapsedSecs = (Time::getMillisMonotonic() - timeStartMs64) / 1000;
     if (local) {
         return elapsedSecs + zeroOffsetSecs + getTZOffset();

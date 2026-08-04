@@ -3659,9 +3659,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.has_rx_time)
             info->last_heard = mp.rx_time;
         else
-            // The placeholder is the packet's arrival instant in uptime seconds. Keep it in the
-            // RAM sidecar so the clock-valid transition can date this sighting; last_heard itself
-            // only ever holds a real epoch or 0.
+            // rx_time is the arrival instant in uptime seconds. It goes to the RAM sidecar, not
+            // last_heard, which only ever holds a real epoch or 0.
             recordHeardWhileClockUntrusted(getFrom(&mp), mp.rx_time);
 
         // Gate on the packet actually having been received over our own radio, not on rx_snr being
@@ -4146,9 +4145,8 @@ void NodeDB::backfillHeardAt()
             continue;
         meshtastic_NodeInfoLite *info = getMeshNode(h.num);
         if (info) {
-            // Both stamps come off the monotonic uptime counter, so the elapsed term is exact at
-            // any age. Skip (rather than clamp) the pathological elapsed > epoch case, and never
-            // move last_heard backwards - the node may have been re-heard with a trusted clock.
+            // Both stamps are monotonic uptime seconds, so the elapsed term is exact at any age.
+            // Never move last_heard backwards: the node may since have been re-heard on a good clock.
             const uint32_t elapsedSecs = nowUptimeSecs - h.heardAtUptimeSecs;
             if (elapsedSecs < nowEpoch && nowEpoch - elapsedSecs > info->last_heard)
                 info->last_heard = nowEpoch - elapsedSecs;

@@ -101,8 +101,8 @@ volatile bool touchControllerReady = false;
 volatile bool touchLightSleepActive = false;
 volatile bool touchNeedsWake = false;
 volatile bool touchIndicatorRefreshPending = false;
-// When the light-sleep resume happened, not when the block expires: measuring forward from the
-// event keeps a missed 0-check wrong for the settle time rather than half a wrap cycle.
+// When the light-sleep resume happened, not when the block expires: an interval bounds a missed
+// 0-check by the settle time, where a stored deadline would block for up to half a wrap cycle.
 constexpr uint32_t TOUCH_RESUME_BLOCK_MS = 150;
 volatile uint32_t touchResumeAtMs = 0;
 volatile uint32_t touchStateEpoch = 1;

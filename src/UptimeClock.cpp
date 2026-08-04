@@ -26,9 +26,8 @@ std::atomic<uint32_t> publishedGeneration{0};
 std::atomic<Time::MonotonicPublishHook> monotonicPublishHook{nullptr};
 #endif
 
-// Extend a published (high, low) snapshot to `now`. Unsigned subtraction is exact across the wrap
-// for any gap under 49.7 days, so neither caller inspects the boundary. One copy: the reader and
-// the writer must agree on this arithmetic exactly, or the carry drifts from what readers report.
+// Extend a published (high, low) snapshot to `now`; unsigned subtraction is exact across the wrap
+// for any gap under 49.7 days. One copy, because reader and writer must agree on it exactly.
 uint64_t extendPublished(uint32_t high, uint32_t low, uint32_t now)
 {
     return ((((uint64_t)high << 32) | low) + (uint32_t)(now - low));

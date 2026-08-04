@@ -241,9 +241,9 @@ enum LoadFileResult {
 
 enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
 
-// RAM-only arrival stamp (monotonic uptime secs) for nodes heard before the wall clock was trusted;
-// backfilled into last_heard as an epoch once available, since last_heard persists and can't hold
-// an uptime-relative value. Bounded, linear-scan, reuse-oldest, never persisted - dies with the boot.
+// RAM-only arrival stamp (monotonic uptime secs) for nodes heard before the wall clock was trusted,
+// backfilled into last_heard as an epoch once it is. last_heard persists, so it cannot hold this.
+// Bounded, linear-scan, reuse-oldest, never persisted - dies with the boot, as does its timebase.
 struct NodeHeardAt {
     NodeNum num = 0;                ///< node this stamp describes; 0 == empty slot
     uint32_t heardAtUptimeSecs = 0; ///< Time::getUptimeSecs() when last heard
@@ -309,9 +309,8 @@ class NodeDB
 
     void addFromContact(const meshtastic_SharedContact);
 
-    /// On the clock-becoming-trusted transition (see RTC.cpp): convert every RAM arrival stamp
-    /// into a real last_heard epoch, never moving last_heard backwards, then empty the table -
-    /// from that point on updateFrom() writes epochs directly.
+    /// On the clock-becoming-trusted transition (see RTC.cpp): convert every RAM arrival stamp into
+    /// a real last_heard epoch, never backwards, then empty the table. updateFrom() takes over.
     void backfillHeardAt();
 
     /** Update position info for this node based on received position data

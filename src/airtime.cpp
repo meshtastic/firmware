@@ -59,9 +59,8 @@ void AirTime::airtimeRotatePeriod()
 
 void AirTime::syncNow()
 {
-    // Use monotonic uptime rather than RTC/network time; user, GPS, or NTP clock changes
-    // must not move airtime accounting backward or forward. This is a pure read - the wrap carry
-    // it derives from is published by the main loop's Time::serviceMonotonic().
+    // Monotonic uptime, not RTC/network time: a user, GPS, or NTP clock change must not move
+    // airtime accounting. Pure read; the main loop publishes the wrap carry it derives from.
     uint32_t nowSecs = Time::getUptimeSecs();
 
     if (firstTime) {

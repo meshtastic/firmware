@@ -1431,12 +1431,9 @@ void GPS::publishUpdate()
     }
 }
 
-/// Is a post-lock ephemeris hold currently in force? `fixHoldEnds == 0` means "never armed", not
-/// "expired" - a prior `!= 0 &&` guard treated the two as the same and left the receiver powered
-/// until the search timeout. The `!= 0` check is still needed alongside deadlinePassed(), since
-/// that's an unsigned half-range test and reads a 0 sentinel as ~24.9 days in the future past 2^31
-/// ms of uptime. Not static and no header: lives beside its only caller; test_gps_fix_hold declares
-/// the prototype itself.
+/// Is a post-lock ephemeris hold currently in force? The `!= 0` is the "never armed" sentinel, which
+/// deadlinePassed() reads as passed for the first half of each wrap cycle and as ~24.8 days in the
+/// future for the second. No header: test_gps_fix_hold declares the prototypes itself.
 bool fixHoldInForce(uint32_t fixHoldEnds, uint32_t threadIntervalMs)
 {
     return fixHoldEnds != 0 && !Throttle::deadlinePassed(fixHoldEnds + threadIntervalMs);
@@ -1559,8 +1556,6 @@ int32_t GPS::runOnce()
                 if (holdTime > GPS_FIX_HOLD_MAX_MS)
                     holdTime = GPS_FIX_HOLD_MAX_MS;
                 // Same clock the Throttle evaluation reads, and never the "no hold" sentinel.
-                // TODO(deadline-type): this remap is what Deadline::in() would own; fixHoldInForce()
-                // and holdJustExpired() are the two readings armed() would keep separate.
                 const uint32_t holdEnds = Time::getMillis() + holdTime;
                 fixHoldEnds = holdEnds == 0 ? 1 : holdEnds;
 #ifdef GPS_DEBUG

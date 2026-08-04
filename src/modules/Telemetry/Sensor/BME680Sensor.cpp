@@ -184,8 +184,7 @@ void BME680Sensor::updateState()
             file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
             file.flush();
             file.close();
-            // Checkpoint on success only: stamping at the interval test left the first save at 0
-            // (next save timed from boot) and deferred the retry a full period after a failed write.
+            // Checkpoint on success only, so a failed write is retried at the next interval.
             lastStateSaveMs = Time::getMillis();
         } else {
             LOG_INFO("Can't write %s state (File: %s)", sensorName, bsecConfigFileName);

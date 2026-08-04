@@ -259,8 +259,8 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     const uint32_t now = millis();
     const uint32_t endCalibrationAt = screen->getEndCalibration();
     uint32_t timeRemaining = 0;
-    // Signed delta, as in ::runOnce(): this needs the remaining magnitude, not just whether the
-    // deadline passed, so it cannot use Throttle::deadlinePassed().
+    // Signed delta, as in finishCalibrationIfExpired(): this needs the remaining magnitude, not
+    // just whether the deadline passed, so it cannot use Throttle::deadlinePassed().
     const int32_t remainingMs = (int32_t)(endCalibrationAt - now);
     if (remainingMs > 0) {
         timeRemaining = ((uint32_t)remainingMs + 999) / 1000;

@@ -409,8 +409,8 @@ int32_t NextHopRouter::doRetransmissions()
 
         bool stillValid = true; // assume we'll keep this record around
 
-        // Half-range compare from #10227 (nightjoker7), now via Throttle: judged against the
-        // snapshot above, so one pass sees one instant and the 49.7 day wrap can't stall retx.
+        // Judged against the snapshot above, so one pass sees one instant and the 49.7 day wrap
+        // can't stall retransmission.
         if (Throttle::deadlinePassedAt(now, p.nextTxMsec)) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
