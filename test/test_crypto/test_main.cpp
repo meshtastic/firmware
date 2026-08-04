@@ -4,6 +4,7 @@
 #include "TestUtil.h"
 #include "aes-ccm.h"
 #include <XEdDSA.h>
+#include <cassert>
 #include <unity.h>
 
 void HexToBytes(uint8_t *result, const std::string hex, size_t len = 0)
@@ -441,6 +442,7 @@ void test_AES_CCM_rfc3610(void)
 static CryptoKey makePsk(const std::string &hex)
 {
     CryptoKey k;
+    assert(hex.length() / 2 <= sizeof(k.bytes));
     memset(k.bytes, 0, sizeof(k.bytes));
     k.length = hex.length() / 2;
     HexToBytes(k.bytes, hex);
@@ -548,7 +550,9 @@ void test_AES_CCM_AEAD(void)
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
         uint8_t dummy[CryptoEngine::AEAD_TAG_SIZE] = {0};
-        uint8_t out[1];
+        // Sized for the whole input so a regressed length guard fails the assertion below
+        // instead of corrupting the stack on its way out.
+        uint8_t out[CryptoEngine::AEAD_TAG_SIZE];
 
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x5678, CryptoEngine::AEAD_TAG_SIZE, dummy, out));
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x5678, 0, dummy, out));
@@ -638,23 +642,35 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_EQUAL_MEMORY(ct1, ct2, 5 + CryptoEngine::AEAD_TAG_SIZE);
     }
 
-    // Test 10: Wrong fromNode — nonce mismatch, verify rejection
+    // Test 10: Wrong nonce input — the nonce derives from both fromNode and packetId,
+    // so each one on its own must be enough to make the tag check fail
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
         uint32_t fromNodeA = 0x11111111;
         uint32_t fromNodeB = 0x22222222;
-        uint64_t packetId = 0xAAAABBBB;
+        uint64_t packetIdA = 0xAAAABBBB;
+        uint64_t packetIdB = 0xCCCCDDDD;
 
         uint8_t plaintext[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
         uint8_t ciphertextWithTag[6 + CryptoEngine::AEAD_TAG_SIZE];
 
-        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNodeA, packetId, 6, plaintext, ciphertextWithTag));
+        TEST_ASSERT_TRUE(crypto->encryptPacketCCM(psk, fromNodeA, packetIdA, 6, plaintext, ciphertextWithTag));
 
-        // Decrypt with different fromNode (nonce will differ)
         uint8_t decrypted[6];
+        // Wrong fromNode, right packetId
         TEST_ASSERT_FALSE(
-            crypto->decryptPacketCCM(psk, fromNodeB, packetId, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+            crypto->decryptPacketCCM(psk, fromNodeB, packetIdA, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        // Right fromNode, wrong packetId
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(psk, fromNodeA, packetIdB, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        // Both wrong
+        TEST_ASSERT_FALSE(
+            crypto->decryptPacketCCM(psk, fromNodeB, packetIdB, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        // Both right still succeeds, so the assertions above are not passing for free
+        TEST_ASSERT_TRUE(
+            crypto->decryptPacketCCM(psk, fromNodeA, packetIdA, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
+        TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 6);
     }
 
     // Test 11: Empty PSK — must return false, not crash
@@ -679,9 +695,8 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(emptyPsk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE,
                                                    ciphertextWithTag, decrypted));
 
-        // CryptoKey uses -1 as the "invalid key - do not use" sentinel. length is int8_t
-        // and the aes_ccm_* key length is size_t, so -1 would widen to a huge unsigned
-        // length rather than being rejected. Both directions must refuse it.
+        // CryptoKey uses -1 as its "invalid key - do not use" sentinel, and it would widen
+        // into a huge unsigned length rather than be rejected. Both directions must refuse it.
         CryptoKey invalidPsk;
         memset(&invalidPsk, 0, sizeof(invalidPsk));
         invalidPsk.length = -1;
