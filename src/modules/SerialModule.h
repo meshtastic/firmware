@@ -8,12 +8,9 @@
 #include <Arduino.h>
 #include <functional>
 
-/**
- * Is this serial config one we will accept? Declared outside the architecture guard below because
- * validation is pure config logic with no serial hardware behind it, and AdminModule has to run it
- * on every platform - including the ones where SerialModule itself does not exist. Guarding it with
- * the class meant meshtasticd stored configs it should have rejected.
- */
+// Is this serial config one we will accept? Outside the architecture guard below because validation
+// is pure config logic with no serial hardware behind it, and AdminModule must run it on every
+// platform - including those where SerialModule itself does not exist.
 bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config);
 
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \

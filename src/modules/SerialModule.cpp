@@ -49,9 +49,7 @@
 #include "meshSolarApp.h"
 #endif
 
-// Outside the architecture guard on purpose: this is config validation, not serial I/O. The admin
-// path validates a serial config before storing it on every platform, including the ones that have
-// no SerialModule to run it - see serialConfigIsValid() in SerialModule.h.
+// Outside the architecture guard on purpose: config validation, not serial I/O. See SerialModule.h.
 bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
 {
     if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
