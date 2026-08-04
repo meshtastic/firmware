@@ -283,6 +283,9 @@ void ExternalNotificationModule::stopNow()
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
 #endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+    nrf52RtttlPlayer.stop();
+#endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
     for (int i = 0; i < 3; i++) {
