@@ -1879,7 +1879,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // If GPS is off or not present (and position isn't fixed), no need to display these parts
     if (hasGpsData) {
-#if !defined(OLED_COMPACT_UI)
         // === Second Row: Last GPS Fix ===
         if (gpsStatus->getLastFixMillis() > 0) {
             uint32_t delta = millis() - gpsStatus->getLastFixMillis();
@@ -1896,18 +1895,15 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             display->drawString(0, textPos[line++], "Last: ?");
         }
-#endif
 
         // === Third Row: Line 1 GPS Info ===
         UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line1");
 
-#if !defined(OLED_COMPACT_UI)
         if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_OLC &&
             uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_MLS) {
             // === Fourth Row: Line 2 GPS Info ===
             UIRenderer::drawGpsCoordinates(display, x, textPos[line++], gpsStatus, "line2");
         }
-#endif
 
         // === Final Row: Altitude ===
         char altitudeLine[32] = {0};

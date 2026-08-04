@@ -161,15 +161,15 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int nameX = (SCREEN_WIDTH - textWidth);
     display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
 
-#if !defined(OLED_COMPACT_UI)
-    // === Second Row: Role ===
-    auto role = DisplayFormatters::getDeviceRole(config.device.role);
-    char device_role[25];
-    snprintf(device_role, sizeof(device_role), "Role: %s", role);
-    textWidth = display->getStringWidth(device_role);
-    nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, getTextPositions(display)[line++], device_role);
-#endif
+    if (!graphics::isCompactPanel(display)) {
+        // === Second Row: Role ===
+        auto role = DisplayFormatters::getDeviceRole(config.device.role);
+        char device_role[25];
+        snprintf(device_role, sizeof(device_role), "Role: %s", role);
+        textWidth = display->getStringWidth(device_role);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], device_role);
+    }
 
     // === Third Row: Radio Preset ===
     // For custom modem settings show the actual parameters; for presets use the preset name.
@@ -425,14 +425,14 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // System Uptime
-#if defined(OLED_COMPACT_UI)
-    line += 1;
-#else
-    if (line < 2) {
+    if (graphics::isCompactPanel(display)) {
+        line += 1;
+    } else {
+        if (line < 2) {
+            line += 1;
+        }
         line += 1;
     }
-    line += 1;
-#endif
 
     char appversionstr[35];
     char appversionstr_formatted[40];
@@ -467,15 +467,14 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
 
-#if !defined(OLED_COMPACT_UI)
-    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
+    if (!graphics::isCompactPanel(display) &&
+        (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5))) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
         getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], uptimeStr);
     }
-#endif
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
         char api_state[32] = "";
