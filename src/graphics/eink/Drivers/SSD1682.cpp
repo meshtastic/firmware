@@ -18,7 +18,7 @@ void SSD1682::configFullscreen()
     const uint8_t sx = bufferOffsetX; // Notice the offset
     const uint8_t sy = 0;
     const uint8_t ex = bufferRowSize + bufferOffsetX - 1; // End is "max index", not "count". Minus 1 handles this
-    const uint8_t ey = height;
+    const uint8_t ey = height - 1;                        // Same: 0x45 Y-range is inclusive
 
     // Data entry mode - Left to Right, Top to Bottom
     sendCommand(0x11);
