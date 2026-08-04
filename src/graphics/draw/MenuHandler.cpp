@@ -677,16 +677,19 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
+    enum optionsNumbers { Back = 0, Clock, Time, Timezone };
 #if defined(OLED_TINY)
     static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
+    static const int optionsEnumArray[] = {Back, Time, Timezone};
 #else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
+    static const int optionsEnumArray[] = {Back, Clock, Time, Timezone};
 #endif
-    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = sizeof(optionsArray) / sizeof(optionsArray[0]);
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Clock) {
             menuHandler::menuQueue = menuHandler::ClockFacePicker;
@@ -1475,7 +1478,11 @@ void menuHandler::nodeListMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
+#if defined(OLED_TINY)
+    optionsArray[options] = "Node Action";
+#else
     optionsArray[options] = "Node Actions / Settings";
+#endif
     optionsEnumArray[options++] = NodePicker;
 
     if (currentResolution != ScreenResolution::UltraLow) {
