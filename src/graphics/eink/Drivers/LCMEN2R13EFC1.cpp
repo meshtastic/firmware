@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include "SPILock.h"
+#include "Throttle.h"
 
 using namespace NicheGraphics::Drivers;
 
@@ -132,12 +133,21 @@ void LCMEN213EFC1::update(uint8_t *imageData, UpdateTypes type)
     detachFromUpdate();
 }
 
-void LCMEN213EFC1::wait()
+void LCMEN213EFC1::wait(uint32_t timeoutMs)
 {
-    // Busy when LOW; bounded so a dead panel cannot hang the firmware
+    // Fail-through: skip if an earlier step of this update sequence already failed
+    if (failed)
+        return;
+
+    // Busy when LOW; timeout sets failed so the sequence fails through (cleared by EInk::runOnce)
     const uint32_t start = millis();
-    while (digitalRead(pin_busy) == LOW && millis() - start < 5000)
+    while (digitalRead(pin_busy) == LOW) {
+        if (!Throttle::isWithinTimespanMs(start, timeoutMs)) {
+            failed = true;
+            break;
+        }
         yield();
+    }
 }
 
 void LCMEN213EFC1::reset()
@@ -156,6 +166,9 @@ void LCMEN213EFC1::reset()
 
 void LCMEN213EFC1::sendCommand(const uint8_t command)
 {
+    if (failed)
+        return;
+
     // Take firmware's SPI lock
     spiLock->lock();
 
@@ -177,6 +190,9 @@ void LCMEN213EFC1::sendData(uint8_t data)
 
 void LCMEN213EFC1::sendData(const uint8_t *data, uint32_t size)
 {
+    if (failed)
+        return;
+
     // Take firmware's SPI lock
     spiLock->lock();
 
