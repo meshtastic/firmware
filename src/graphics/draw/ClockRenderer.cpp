@@ -212,7 +212,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             segmentHeight = SEGMENT_HEIGHT * scale;
 
             calculated_width_size = segmentHeight + ((segmentWidth + (segmentHeight * 2) + 4) * 4);
-            calculated_height_size = segmentHeight + ((segmentHeight + (segmentHeight * 2) + 4) * 2);
+            calculated_height_size = (segmentWidth * 2) + (segmentHeight * 3) + 8;
 
             if (calculated_width_size >= target_width || calculated_height_size >= target_height || scale >= max_scale) {
                 break;
@@ -259,6 +259,12 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
     uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2) + 2;
 
+#if !defined(OLED_COMPACT_UI)
+    const uint16_t bottomRowY = hourMinuteTextY + ((uint16_t)segmentWidth * 2) + ((uint16_t)segmentHeight * 3) + 8 + 1;
+#else
+    const uint16_t bottomRowY = (display->getHeight() - hourMinuteTextY) + 1;
+#endif
+
     // iterate over characters in hours:minutes string and draw segmented characters
     for (size_t i = 0; i < len; i++) {
         char character = timeString[i];
@@ -288,12 +294,11 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 #else
         const char *period = isPM ? "p" : "a";
 #endif
-        display->drawString(startingHourMinuteTextX, (display->getHeight() - hourMinuteTextY) + 1, period);
+        display->drawString(startingHourMinuteTextX, bottomRowY, period);
     }
 
 #ifndef USE_EINK
-    display->drawString(hourMinuteTextX - CLOCK_CHAR_GAP - display->getStringWidth(secondString),
-                        (display->getHeight() - hourMinuteTextY) + 1, secondString);
+    display->drawString(hourMinuteTextX - CLOCK_CHAR_GAP - display->getStringWidth(secondString), bottomRowY, secondString);
 #endif
 
     graphics::drawCommonFooter(display, x, y);
