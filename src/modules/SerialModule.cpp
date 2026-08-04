@@ -58,7 +58,7 @@ bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config)
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
                                                           meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
         const char *warning =
-            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
+            "Invalid Serial config: override console serial port is only supported in NMEA, CalTopo, or MS Config output-only modes.";
         LOG_ERROR(warning);
 #ifndef PIO_UNIT_TESTING
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
