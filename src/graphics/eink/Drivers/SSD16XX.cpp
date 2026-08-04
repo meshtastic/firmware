@@ -144,7 +144,7 @@ void SSD16XX::configFullscreen()
     const uint16_t sx = bufferOffsetX; // Notice the offset
     const uint16_t sy = 0;
     const uint16_t ex = bufferRowSize + bufferOffsetX - 1; // End is "max index", not "count". Minus 1 handles this
-    const uint16_t ey = height;
+    const uint16_t ey = height - 1;                        // Same: 0x45 Y-range is inclusive
 
     // Split into bytes
     const uint8_t sy1 = sy & 0xFF;
