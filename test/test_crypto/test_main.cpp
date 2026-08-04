@@ -1,6 +1,5 @@
 // trunk-ignore-all(gitleaks): These are dummy values. Not real secrets.
 #include "CryptoEngine.h"
-#include "aes-ccm.h"
 
 #include "TestUtil.h"
 #include "aes-ccm.h"
@@ -382,6 +381,62 @@ void test_AES_CCM_partial_block_bounds(void)
     }
 }
 
+void test_AES_CCM_rfc3610(void)
+{
+    // Known-answer vectors from RFC 3610 section 8. They all use L=2, which is what
+    // aes_ccm_ae()/aes_ccm_ad() hardcode, and each ends in a partial block.
+    struct CcmVector {
+        const char *key;
+        const char *nonce;
+        const char *aad;
+        const char *plain;
+        const char *crypt;
+        const char *tag;
+    };
+    const CcmVector vectors[] = {
+        // Packet Vector #1, M=8
+        {"C0C1C2C3C4C5C6C7C8C9CACBCCCDCECF", "00000003020100A0A1A2A3A4A5", "0001020304050607",
+         "08090A0B0C0D0E0F101112131415161718191A1B1C1D1E", "588C979A61C663D2F066D0C2C0F989806D5F6B61DAC384", "17E8D12CFDF926E0"},
+        // Packet Vector #2, M=8
+        {"C0C1C2C3C4C5C6C7C8C9CACBCCCDCECF", "00000004030201A0A1A2A3A4A5", "0001020304050607",
+         "08090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F", "72C91A36E135F8CF291CA894085C87E3CC15C439C9E43A3B",
+         "A091D56E10400916"},
+        // Packet Vector #7, M=10
+        {"C0C1C2C3C4C5C6C7C8C9CACBCCCDCECF", "00000009080706A0A1A2A3A4A5", "0001020304050607",
+         "08090A0B0C0D0E0F101112131415161718191A1B1C1D1E", "0135D1B2C95F41D5D1D4FEC185D166B8094E999DFED96C",
+         "048C56602C97ACBB7490"},
+    };
+
+    for (size_t v = 0; v < sizeof(vectors) / sizeof(vectors[0]); v++) {
+        const CcmVector &vec = vectors[v];
+        const size_t plainLen = strlen(vec.plain) / 2;
+        const size_t aadLen = strlen(vec.aad) / 2;
+        const size_t tagLen = strlen(vec.tag) / 2;
+
+        uint8_t key[16], nonce[13], aad[8];
+        uint8_t plain[32], expectedCrypt[32], expectedTag[16];
+        uint8_t crypt[32], tag[16], decrypted[32];
+
+        HexToBytes(key, vec.key);
+        HexToBytes(nonce, vec.nonce);
+        HexToBytes(aad, vec.aad);
+        HexToBytes(plain, vec.plain);
+        HexToBytes(expectedCrypt, vec.crypt);
+        HexToBytes(expectedTag, vec.tag);
+
+        TEST_ASSERT_EQUAL(0, aes_ccm_ae(key, sizeof(key), nonce, tagLen, plain, plainLen, aad, aadLen, crypt, tag));
+        TEST_ASSERT_EQUAL_MEMORY(expectedCrypt, crypt, plainLen);
+        TEST_ASSERT_EQUAL_MEMORY(expectedTag, tag, tagLen);
+
+        TEST_ASSERT_TRUE(aes_ccm_ad(key, sizeof(key), nonce, tagLen, crypt, plainLen, aad, aadLen, tag, decrypted));
+        TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, plainLen);
+
+        // The AAD is authenticated but not encrypted: corrupting it must fail the tag check
+        aad[0] ^= 0x01;
+        TEST_ASSERT_FALSE(aes_ccm_ad(key, sizeof(key), nonce, tagLen, crypt, plainLen, aad, aadLen, tag, decrypted));
+    }
+}
+
 // Helper to create a zero-initialized CryptoKey (matching Channels::getKey() behavior)
 static CryptoKey makePsk(const std::string &hex)
 {
@@ -394,9 +449,8 @@ static CryptoKey makePsk(const std::string &hex)
 
 void test_AES_CCM_AEAD(void)
 {
-    // =========================================================================
-    // Test 1: Known-answer AES-CCM encrypt + verify tag
-    // =========================================================================
+    // Test 1: Smoke test — encryption changes the payload and produces a tag
+    // (the known-answer coverage lives in test_AES_CCM_rfc3610)
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -425,9 +479,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_FALSE(tagAllZero);
     }
 
-    // =========================================================================
     // Test 2: Round-trip encrypt → decrypt → compare (AES-256)
-    // =========================================================================
     {
         CryptoKey psk = makePsk("603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
 
@@ -449,9 +501,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_EQUAL_MEMORY(msg, decrypted, msgLen);
     }
 
-    // =========================================================================
     // Test 3: Tampered ciphertext — flip a bit, verify rejection
-    // =========================================================================
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -471,9 +521,7 @@ void test_AES_CCM_AEAD(void)
             crypto->decryptPacketCCM(psk, fromNode, packetId, 8 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
-    // =========================================================================
     // Test 4: Tampered auth tag — modify tag, verify rejection
-    // =========================================================================
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -495,9 +543,7 @@ void test_AES_CCM_AEAD(void)
             crypto->decryptPacketCCM(psk, fromNode, packetId, 16 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
-    // =========================================================================
     // Test 5: Packet too small for AEAD — totalBytes <= AEAD_TAG_SIZE
-    // =========================================================================
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -508,9 +554,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_FALSE(crypto->decryptPacketCCM(psk, 0x1234, 0x5678, 0, dummy, out));
     }
 
-    // =========================================================================
     // Test 6: Wrong PSK — decrypt with different key, verify rejection
-    // =========================================================================
     {
         CryptoKey pskA = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
         CryptoKey pskB = makePsk("00112233445566778899aabbccddeeff");
@@ -529,9 +573,7 @@ void test_AES_CCM_AEAD(void)
             crypto->decryptPacketCCM(pskB, fromNode, packetId, 12 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
-    // =========================================================================
     // Test 7: Round-trip with AES-128 PSK (16-byte key, true AES-128-CCM)
-    // =========================================================================
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -549,9 +591,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 20);
     }
 
-    // =========================================================================
     // Test 8: AES-256-CCM round-trip + per-byte tamper detection
-    // =========================================================================
     {
         CryptoKey psk = makePsk("603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
 
@@ -571,8 +611,8 @@ void test_AES_CCM_AEAD(void)
             crypto->decryptPacketCCM(psk, fromNode, packetId, 32 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
         TEST_ASSERT_EQUAL_MEMORY(plaintext, decrypted, 32);
 
-        // Tamper with each of first 4 ciphertext bytes and verify rejection
-        for (int i = 0; i < 4; i++) {
+        // Flip a bit in every byte in turn, tag included, and verify each one is rejected
+        for (size_t i = 0; i < 32 + CryptoEngine::AEAD_TAG_SIZE; i++) {
             uint8_t tampered[32 + CryptoEngine::AEAD_TAG_SIZE];
             memcpy(tampered, ciphertextWithTag, sizeof(tampered));
             tampered[i] ^= 0x80;
@@ -581,9 +621,7 @@ void test_AES_CCM_AEAD(void)
         }
     }
 
-    // =========================================================================
     // Test 9: Deterministic — same inputs produce same output
-    // =========================================================================
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -600,9 +638,7 @@ void test_AES_CCM_AEAD(void)
         TEST_ASSERT_EQUAL_MEMORY(ct1, ct2, 5 + CryptoEngine::AEAD_TAG_SIZE);
     }
 
-    // =========================================================================
     // Test 10: Wrong fromNode — nonce mismatch, verify rejection
-    // =========================================================================
     {
         CryptoKey psk = makePsk("d4f1bb3a20290759f0bcffabcf4e6901");
 
@@ -621,9 +657,7 @@ void test_AES_CCM_AEAD(void)
             crypto->decryptPacketCCM(psk, fromNodeB, packetId, 6 + CryptoEngine::AEAD_TAG_SIZE, ciphertextWithTag, decrypted));
     }
 
-    // =========================================================================
     // Test 11: Empty PSK — must return false, not crash
-    // =========================================================================
     {
         CryptoKey emptyPsk;
         memset(&emptyPsk, 0, sizeof(emptyPsk));
@@ -657,10 +691,8 @@ void test_AES_CCM_AEAD(void)
                                                    ciphertextWithTag, decrypted));
     }
 
-    // =========================================================================
     // Test 12: AES-128 vs AES-256 produce different ciphertexts
     // Verifies that 16-byte keys use true AES-128, not AES-256 with padding.
-    // =========================================================================
     {
         // Same 16 bytes of key material, but one is AES-128 (16 bytes)
         // and the other is AES-256 (32 bytes, zero-padded).
@@ -712,6 +744,7 @@ void setup()
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_AES_CCM_partial_block_bounds);
+    RUN_TEST(test_AES_CCM_rfc3610);
     RUN_TEST(test_PKC);
     RUN_TEST(test_XEdDSA);
     RUN_TEST(test_XEdDSA_cross_key_reject);
