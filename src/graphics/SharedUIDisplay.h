@@ -63,7 +63,7 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y);
 static inline bool isCompactPanel(OLEDDisplay *display)
 {
 #if defined(OLED_COMPACT_UI)
-    // Covers both known compact panels: T-Echo Card's 72x40 and Unit C6L's 64x48.
+    // Covers both known compact panels (72x40 and 64x48).
     return display->getWidth() <= 80 && display->getHeight() <= 48;
 #else
     (void)display;
