@@ -60,6 +60,7 @@ class EInkParallel : public EInk
     bool panelReady = false;
 
     UpdateTypes pendingType = UpdateTypes::UNSPECIFIED;
+    int pendingClearMode = 0; // CLEAR_FAST/CLEAR_SLOW picked in update(), consumed by asyncFullTask
     std::atomic<bool> asyncRunning{false};
     TaskHandle_t asyncTaskHandle = nullptr;
 

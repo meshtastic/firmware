@@ -16,11 +16,8 @@ BaseUIEInkDisplay::BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation) : 
     this->displayWidth = swap ? driver->height : driver->width;
     this->displayHeight = swap ? driver->width : driver->height;
 
-    uint16_t shortSide = min(displayWidth, displayHeight);
-    uint16_t longSide = max(displayWidth, displayHeight);
-    if (shortSide % 8 != 0)
-        shortSide = (shortSide | 7) + 1;
-    this->displayBufferSize = longSide * (shortSide / 8);
+    // OLEDDisplay indexes buffer[x + (y/8) * displayWidth]
+    this->displayBufferSize = displayWidth * ((displayHeight + 7) / 8);
 
     // Panel-native row-major buffer
     panelRowBytes = ((driver->width - 1) / 8) + 1;

@@ -13,14 +13,12 @@ EInkParallel::EInkParallel(uint16_t width, uint16_t height, uint32_t panelType, 
 
 EInkParallel::~EInkParallel()
 {
-    if (asyncRunning.load()) {
-        for (int i = 0; i < 50 && asyncRunning.load(); ++i)
-            delay(50);
-        if (asyncTaskHandle) {
-            vTaskDelete(asyncTaskHandle);
-            asyncTaskHandle = nullptr;
-        }
-    }
+    // The refresh task deletes itself; if it never finishes, leak epaper rather than
+    // free state under a live task.
+    for (int i = 0; i < 100 && asyncRunning.load(); ++i)
+        delay(50);
+    if (asyncRunning.load())
+        return;
     delete epaper;
 }
 
@@ -52,35 +50,37 @@ void EInkParallel::update(uint8_t *imageData, UpdateTypes type)
     if (!epaper || !panelReady)
         return;
 
+    // A running async refresh still reads the framebuffer; defer this frame (caller
+    // polls isUpdateDone() and re-renders).
+    if (asyncRunning.load())
+        return;
+
     pendingType = type;
     copyImageInverted(imageData);
 
     if (type == FULL) {
         // Pick CLEAR_SLOW periodically to clear ghosting.
-        const int clearMode = (fastRefreshCount >= FULL_SLOW_PERIOD) ? CLEAR_SLOW : CLEAR_FAST;
+        pendingClearMode = (fastRefreshCount >= FULL_SLOW_PERIOD) ? CLEAR_SLOW : CLEAR_FAST;
         fastRefreshCount = 0;
 
-        if (!asyncRunning.load()) {
-            asyncRunning.store(true);
-            BaseType_t rc =
-                xTaskCreatePinnedToCore(asyncFullTask, "epd_full", 4096 / sizeof(StackType_t), this, 2, &asyncTaskHandle,
+        asyncRunning.store(true);
+        BaseType_t rc = xTaskCreatePinnedToCore(asyncFullTask, "epd_full", 4096 / sizeof(StackType_t), this, 2, &asyncTaskHandle,
 #if CONFIG_FREERTOS_UNICORE
-                                        0
+                                                0
 #else
-                                        1
+                                                1
 #endif
-                );
-            if (rc != pdPASS) {
-                LOG_WARN("Async full failed; running blocking");
-                epaper->fullUpdate(clearMode, false);
-                epaper->backupPlane();
-                asyncRunning.store(false);
-                asyncTaskHandle = nullptr;
-                return; // synchronous: nothing to poll
-            }
-            // Begin polling for completion.
-            beginPolling(100, 1500);
+        );
+        if (rc != pdPASS) {
+            LOG_WARN("Async full failed; running blocking");
+            epaper->fullUpdate(pendingClearMode, false);
+            epaper->backupPlane();
+            asyncRunning.store(false);
+            asyncTaskHandle = nullptr;
+            return; // synchronous: nothing to poll
         }
+        // Begin polling for completion.
+        beginPolling(100, 1500);
     } else {
         // FAST: synchronous partial / clipped fullUpdate. Block briefly here.
         epaper->fullUpdate(CLEAR_FAST, false);
@@ -98,10 +98,11 @@ void EInkParallel::asyncFullTask(void *param)
         vTaskDelete(nullptr);
         return;
     }
-    self->epaper->fullUpdate(CLEAR_FAST, false);
+    self->epaper->fullUpdate(self->pendingClearMode, false);
     self->epaper->backupPlane();
-    self->asyncRunning.store(false);
+    // Handle first: once asyncRunning reads false, no other thread may touch task state.
     self->asyncTaskHandle = nullptr;
+    self->asyncRunning.store(false);
     vTaskDelete(nullptr);
 }
 

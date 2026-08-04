@@ -140,16 +140,17 @@ void SSD16XX::configFullscreen()
     // Should make it tidier to override SSD16XX::configure
 
     // Define the boundaries of the "fullscreen" region, for the controller IC
-    static const uint16_t sx = bufferOffsetX; // Notice the offset
-    static const uint16_t sy = 0;
-    static const uint16_t ex = bufferRowSize + bufferOffsetX - 1; // End is "max index", not "count". Minus 1 handles this
-    static const uint16_t ey = height;
+    // Not static: bounds must come from this instance, not whichever instance ran first
+    const uint16_t sx = bufferOffsetX; // Notice the offset
+    const uint16_t sy = 0;
+    const uint16_t ex = bufferRowSize + bufferOffsetX - 1; // End is "max index", not "count". Minus 1 handles this
+    const uint16_t ey = height;
 
     // Split into bytes
-    static const uint8_t sy1 = sy & 0xFF;
-    static const uint8_t sy2 = (sy >> 8) & 0xFF;
-    static const uint8_t ey1 = ey & 0xFF;
-    static const uint8_t ey2 = (ey >> 8) & 0xFF;
+    const uint8_t sy1 = sy & 0xFF;
+    const uint8_t sy2 = (sy >> 8) & 0xFF;
+    const uint8_t ey1 = ey & 0xFF;
+    const uint8_t ey2 = (ey >> 8) & 0xFF;
 
     // Data entry mode - Left to Right, Top to Bottom
     sendCommand(0x11);

@@ -89,10 +89,8 @@ void UC8175::reset()
         delay(20);
         digitalWrite(pin_rst, HIGH);
         delay(20);
-    } else {
-        sendCommand(0x12); // Software reset.
-        delay(10);
     }
+    // No soft-reset fallback: UC8175 command 0x12 is display refresh, not reset.
 
     wait(3000);
 }

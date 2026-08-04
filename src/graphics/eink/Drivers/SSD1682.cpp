@@ -14,10 +14,11 @@ SSD1682::SSD1682(uint16_t width, uint16_t height, EInk::UpdateTypes supported, u
 void SSD1682::configFullscreen()
 {
     // Define the boundaries of the "fullscreen" region, for the controller IC
-    static const uint8_t sx = bufferOffsetX; // Notice the offset
-    static const uint8_t sy = 0;
-    static const uint8_t ex = bufferRowSize + bufferOffsetX - 1; // End is "max index", not "count". Minus 1 handles this
-    static const uint8_t ey = height;
+    // Not static: bounds must come from this instance, not whichever instance ran first
+    const uint8_t sx = bufferOffsetX; // Notice the offset
+    const uint8_t sy = 0;
+    const uint8_t ex = bufferRowSize + bufferOffsetX - 1; // End is "max index", not "count". Minus 1 handles this
+    const uint8_t ey = height;
 
     // Data entry mode - Left to Right, Top to Bottom
     sendCommand(0x11);

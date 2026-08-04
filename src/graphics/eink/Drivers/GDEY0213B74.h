@@ -4,7 +4,7 @@ E-Ink display driver
     - GDEY0213B74
     - Manufacturer: Goodisplay
     - Size: 2.13 inch
-    - Resolution: 250px x 122px
+    - Resolution: 122px x 250px
     - Flex connector marking (not a unique identifier):
       - FPC-A002
       - FPC-A005 20.06.15 TRX
