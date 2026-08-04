@@ -118,8 +118,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
     // Compact panels: no persistent header, see UIRenderer::drawNavigationBar instead.
-    if (isCompactPanel(display))
+    if (isCompactPanel(display)) {
+        display->setColor(WHITE); // Reset for other UI - normally done at the end of this function
         return;
+    }
     const int headerHeight = highlightHeight + 2;
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
@@ -571,8 +573,10 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    if (isCompactPanel(display))
+    if (isCompactPanel(display)) {
+        display->setColor(WHITE); // Reset for other UI - normally done at the end of this function
         return;
+    }
 
     if (!isAPIConnected(service->api_state))
         return;
