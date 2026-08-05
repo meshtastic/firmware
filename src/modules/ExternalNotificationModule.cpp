@@ -163,7 +163,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (canBuzz() && buzzerShouldAlert) {
             if (nrf52RtttlPlayer.isPlaying()) {
                 nrf52RtttlPlayer.play();
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
                 nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
             }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
