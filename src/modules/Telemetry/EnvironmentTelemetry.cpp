@@ -123,16 +123,16 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/SPA06Sensor.h"
 #endif
 
-#ifdef SENSECAP_INDICATOR
-#include "Sensor/IndicatorSensor.h"
-#endif
-
 #if __has_include(<Adafruit_TSL2561_U.h>)
 #include "Sensor/TSL2561Sensor.h"
 #endif
 
 #if __has_include(<BH1750_WE.h>)
 #include "Sensor/BH1750Sensor.h"
+#endif
+
+#if __has_include(<Adafruit_DS248x.h>)
+#include "Sensor/DS248XSensor.h"
 #endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -275,10 +275,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // Not a real I2C device
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #else
-#ifdef SENSECAP_INDICATOR
-    // Not a real I2C device, uses UART
-    addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
-#endif
 #if HAS_SPA06 && __has_include(<Adafruit_SPA06_003.h>)
     addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
 #endif
@@ -355,6 +351,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // TODO Can we scan for multiple sensors connected on the same bus?
     addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
 #endif
+#if __has_include(<Adafruit_DS248x.h>)
+    addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
+#endif
+
 #endif
 }
 

@@ -1,0 +1,8 @@
+# FAULT: MODE_TRANSMIT is not a mode. The real ones are MODE_STBY, MODE_RX, MODE_TX,
+# MODE_TX_HP, MODE_TX_HF, MODE_GNSS and MODE_WIFI.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5]
+    MODE_STBY: [LOW]
+    MODE_TRANSMIT: [HIGH]

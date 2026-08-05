@@ -8,6 +8,11 @@
 #include <Arduino.h>
 #include <functional>
 
+// Is this serial config one we will accept? Outside the architecture guard below because it touches
+// no serial hardware, and AdminModule must run it on every platform - including those where
+// SerialModule itself does not exist. Logs and notifies the client on rejection.
+bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config);
+
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
@@ -19,8 +24,6 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
 
   public:
     SerialModule();
-
-    static bool isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config);
 
   protected:
     virtual int32_t runOnce() override;

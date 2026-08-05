@@ -111,10 +111,12 @@ and the request is left to propagate normally:
 4. **Staleness gate (6 h)**: never vouch for a node not genuinely _heard_ within the serve
    window. Only a real observed frame stamps the recency bit - seeding and write-through are
    knowledge, not observation, so a silent node can never look alive to this path.
-5. **Signer-provenance gate** (`TMM_NODEINFO_REPLAY_SIGNED_GATE`, default on): vouch only for
-   an identity whose key is signer-proven (XEdDSA-verified, directly or inherited from
-   NodeDB). A trust-on-first-use identity is left for the genuine node - or another
-   cache-holder that _has_ proof - to answer. Bypassed when PKI is compiled out.
+5. **Key-provenance gate** (`TMM_NODEINFO_REPLAY_SIGNED_GATE`, default on): vouch only for
+   an identity whose key is proven - XEdDSA-verified (directly or inherited from NodeDB) **or**
+   manually verified out-of-band. Both paths honour both channels: the cache path via
+   `keyProven()`, the NodeDB fallback path via `HAS_XEDDSA_SIGNED | IS_KEY_MANUALLY_VERIFIED`. A
+   trust-on-first-use identity is left for the genuine node - or another cache-holder that _has_
+   proof - to answer. Bypassed when PKI is compiled out.
 6. **Throttle** (`directResponseAllowed()`): see the next section.
 
 **The spoofed reply.** On success TMM emits a NodeInfo reply with `from` set to the _target_
@@ -174,6 +176,33 @@ stamp for the NodeDB fallback (30 s, neither per-requester nor per-target). Thos
 were unified into the symmetric per-requester + per-target RAM tables above, aligned to a
 single 60 s window, so both axes hold with and without PSRAM and the cache entry no longer
 carries throttle state.
+
+---
+
+## Tick clocks and wrap safety
+
+Every per-node timestamp in TMM's caches is a free-running modular tick (uint8 or nibble) taken
+from `clockMs()` - never an absolute time. That is what keeps `UnifiedCacheEntry` at 10 bytes
+across up to 2048 entries. The cost is that modular subtraction is only correct while the true age
+stays below the counter's period, so every clock needs something to clear expired state before it
+aliases. (The direct-serve throttle above is the deliberate exception: full `uint32` milliseconds
+compared by wrap-safe subtraction, hence no tick and no sweep.)
+
+| Clock              | Tick / period  | Window          | Kept honest by                                     |
+| ------------------ | -------------- | --------------- | -------------------------------------------------- |
+| pos                | 6 min / 25.6 h | <=255 ticks     | 60 s sweep (margin as low as 1 tick at the clamp)  |
+| rate               | 5 min / 80 min | <=15 ticks      | sweep + read-time window reset (`isRateLimited()`) |
+| unknown            | 1 min / 16 min | 12 ticks        | sweep + read-time window reset                     |
+| NodeInfo `obsTick` | 3 min / 12.8 h | 120 ticks (6 h) | sweep only                                         |
+
+`obsTick` is the sharp case: `maintainNodeInfoCacheLocked()` clearing `hasObserved` is the
+_sole_ guarantee the 6 h serve gate never reads an aliased stamp. That makes the sweep a
+compile-time invariant - guarded by `TMM_HAS_NODEINFO_CACHE` **alone** (never
+`TRAFFIC_MANAGEMENT_CACHE_SIZE`, which a variant may zero independently), mirroring `purgeAll()`:
+a build that has the cache always has its sweep.
+
+The stores these clocks stamp, and the warm tier's contrasting absolute timestamps, are described
+in [node_info_stores.md](node_info_stores.md).
 
 ---
 
