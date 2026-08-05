@@ -6,11 +6,6 @@
 
 AirTime *airTime = NULL;
 
-// Don't read out of this directly. Use the helper functions.
-
-uint32_t air_period_tx[PERIODS_TO_LOG];
-uint32_t air_period_rx[PERIODS_TO_LOG];
-
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
     // A packet may be logged immediately after waking from light sleep. Sync first so
@@ -20,13 +15,11 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
     if (reportType == TX_LOG) {
         LOG_DEBUG("Packet TX: %ums", airtime_ms);
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
-        air_period_tx[0] = air_period_tx[0] + airtime_ms;
 
         this->utilizationTX[this->getPeriodUtilHour()] = this->utilizationTX[this->getPeriodUtilHour()] + airtime_ms;
     } else if (reportType == RX_LOG) {
         LOG_DEBUG("Packet RX: %ums", airtime_ms);
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
-        air_period_rx[0] = air_period_rx[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
         LOG_DEBUG("Packet RX (noise?) : %ums", airtime_ms);
         this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
@@ -34,11 +27,6 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 
     // Log all airtime type for channel utilization
     this->channelUtilization[this->getPeriodUtilMinute()] = channelUtilization[this->getPeriodUtilMinute()] + airtime_ms;
-}
-
-uint8_t AirTime::currentPeriodIndex()
-{
-    return ((secSinceBoot / SECONDS_PER_PERIOD) % PERIODS_TO_LOG);
 }
 
 uint8_t AirTime::getPeriodUtilMinute()
@@ -69,13 +57,8 @@ void AirTime::syncNow()
         memset(this->airtimes.periodTX, 0, sizeof(this->airtimes.periodTX));
         memset(this->airtimes.periodRX, 0, sizeof(this->airtimes.periodRX));
         memset(this->airtimes.periodRX_ALL, 0, sizeof(this->airtimes.periodRX_ALL));
-        memset(air_period_tx, 0, sizeof(air_period_tx));
-        memset(air_period_rx, 0, sizeof(air_period_rx));
 
         this->secSinceBoot = nowSecs;
-        this->lastUtilPeriod = this->getPeriodUtilMinute();
-        this->lastUtilPeriodTX = this->getPeriodUtilHour();
-        this->airtimes.lastPeriodIndex = this->currentPeriodIndex();
         firstTime = false;
         return;
     }
@@ -94,27 +77,21 @@ void AirTime::syncNow()
         memset(this->airtimes.periodTX, 0, sizeof(this->airtimes.periodTX));
         memset(this->airtimes.periodRX, 0, sizeof(this->airtimes.periodRX));
         memset(this->airtimes.periodRX_ALL, 0, sizeof(this->airtimes.periodRX_ALL));
-        memset(air_period_tx, 0, sizeof(air_period_tx));
-        memset(air_period_rx, 0, sizeof(air_period_rx));
     } else {
+        uint32_t rotation = 0;
         while (elapsedAirtimePeriods-- > 0) {
-            LOG_DEBUG("Rotate airtimes to a new period = %u", this->currentPeriodIndex());
+            LOG_DEBUG("Rotate airtimes to a new period (%u of the hours just crossed)", ++rotation);
             for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
                 this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
                 this->airtimes.periodRX[i + 1] = this->airtimes.periodRX[i];
                 this->airtimes.periodRX_ALL[i + 1] = this->airtimes.periodRX_ALL[i];
-                air_period_tx[i + 1] = this->airtimes.periodTX[i];
-                air_period_rx[i + 1] = this->airtimes.periodRX[i];
             }
 
             this->airtimes.periodTX[0] = 0;
             this->airtimes.periodRX[0] = 0;
             this->airtimes.periodRX_ALL[0] = 0;
-            air_period_tx[0] = 0;
-            air_period_rx[0] = 0;
         }
     }
-    this->airtimes.lastPeriodIndex = this->currentPeriodIndex();
 
     // Channel utilization is a rolling 60-second view split into six 10-second buckets.
     // Clear every bucket crossed while asleep so old airtime decays by real elapsed time.
@@ -126,7 +103,6 @@ void AirTime::syncNow()
             this->channelUtilization[((oldSecSinceBoot / 10) + i) % CHANNEL_UTILIZATION_PERIODS] = 0;
         }
     }
-    this->lastUtilPeriod = this->getPeriodUtilMinute();
 
     // TX utilization is a rolling 60-minute view used by duty-cycle checks.
     uint32_t elapsedUtilTXPeriods = (this->secSinceBoot / 60) - (oldSecSinceBoot / 60);
@@ -137,7 +113,6 @@ void AirTime::syncNow()
             this->utilizationTX[((oldSecSinceBoot / 60) + i) % MINUTES_IN_HOUR] = 0;
         }
     }
-    this->lastUtilPeriodTX = this->getPeriodUtilHour();
 }
 
 bool AirTime::airtimeReport(reportTypes reportType, uint32_t *out, size_t count)

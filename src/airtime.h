@@ -35,10 +35,6 @@
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
-void logAirtime(reportTypes reportType, uint32_t airtime_ms);
-
-uint32_t *airtimeReport(reportTypes reportType);
-
 // Not thread-safe: everything but getPeriodsToLog()/getSecondsPerPeriod() either rotates the
 // windows via syncNow() or reads the buckets. Current callers are all on the OSThread scheduler -
 // RadioLibInterface/SimRadio, RadioInterface, Router, DeviceTelemetry, ContentHandler, and the
@@ -55,7 +51,6 @@ class AirTime : private concurrency::OSThread
     float channelUtilizationPercent();
     float utilizationTXPercent();
 
-    float UtilizationPercentTX();
     uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0};
     uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};
 
@@ -73,8 +68,6 @@ class AirTime : private concurrency::OSThread
 
   private:
     bool firstTime = true;
-    uint8_t lastUtilPeriod = 0;
-    uint8_t lastUtilPeriodTX = 0;
     // Time::getUptimeSecs() as of the last syncNow(); the gap since is what the windows rotate by,
     // so they stay correct even if the scheduler was paused by light sleep.
     uint32_t secSinceBoot = 0;
@@ -86,12 +79,10 @@ class AirTime : private concurrency::OSThread
         uint32_t periodTX[PERIODS_TO_LOG];     // AirTime transmitted
         uint32_t periodRX[PERIODS_TO_LOG];     // AirTime received and repeated (Only valid mesh packets)
         uint32_t periodRX_ALL[PERIODS_TO_LOG]; // AirTime received regardless of valid mesh packet. Could include noise.
-        uint8_t lastPeriodIndex;
     } airtimes;
 
     uint8_t getPeriodUtilMinute();
     uint8_t getPeriodUtilHour();
-    uint8_t currentPeriodIndex();
     // Advance rolling airtime windows from monotonic uptime, not from runOnce() calls.
     void syncNow();
 
