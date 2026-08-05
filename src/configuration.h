@@ -303,6 +303,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DS248X_ADDR_ALT5 0x1D // same as DFROBOT_RAIN_ADDR
 #define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
 #define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
+#define HM330X_ADDR 0x40
+
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
