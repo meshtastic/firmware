@@ -104,7 +104,8 @@ class ScanI2C
         ISM330DHCX,
         SPA06,
         DS248X,
-    } DeviceType;
+        HM330X
+   } DeviceType;
 
     // typedef uint8_t DeviceAddress;
     typedef enum I2CPort {
