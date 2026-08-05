@@ -249,6 +249,9 @@ class Screen : public concurrency::OSThread
     void setFrames(FrameFocus focus = FOCUS_DEFAULT);
 
     std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
+#if defined(OLED_COMPACT_UI)
+    std::vector<const char *> frameTitles;       // Per-frame short labels, parallel to indicatorIcons
+#endif
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 

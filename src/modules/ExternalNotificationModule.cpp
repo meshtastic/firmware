@@ -41,6 +41,10 @@ bool ascending = true;
 #define PIN_BUZZER false
 #endif
 
+#if defined(HAS_I2S_SPEAKER_NRF52)
+#include "platform/nrf52/NRF52RtttlPlayer.h"
+#endif
+
 /*
     Documentation:
         https://meshtastic.org/docs/configuration/module/external-notification
@@ -78,6 +82,9 @@ int32_t ExternalNotificationModule::runOnce()
 #ifdef HAS_I2S
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
         // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
         // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
@@ -148,6 +155,17 @@ int32_t ExternalNotificationModule::runOnce()
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+        }
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        // Play RTTTL over the I2S speaker (no piezo on this board).
+        if (canBuzz() && buzzerShouldAlert) {
+            if (nrf52RtttlPlayer.isPlaying()) {
+                nrf52RtttlPlayer.play();
+            } else if (isNagging && (nagCycleCutoff >= millis())) {
+                nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
+            }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
@@ -269,6 +287,9 @@ void ExternalNotificationModule::stopNow()
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+    nrf52RtttlPlayer.stop();
 #endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");

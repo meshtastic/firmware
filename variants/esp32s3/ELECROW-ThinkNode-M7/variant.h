@@ -33,6 +33,14 @@
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.8
 #define LR11X0_DIO_AS_RF_SWITCH
 
+// TEMPORARY: units shipped with LR1110 transceiver FW 0x0303 (the original 2020 release), which cannot
+// reliably demodulate 500 kHz LoRa - Turbo presets fail RX with ~41% byte errors while TX and narrower
+// bandwidths are fine. 0x0303 also predates GetLoRaRxHeaderInfos, which computePacketTime() calls on every
+// received packet. Confirmed fixed by updating to 0x0307; targeting 0x0402 additionally picks up the
+// out-of-band emission fix for consecutive LoRa transmissions (0x0401) and three CVE fixes (0x0402).
+// Costs ~240 kB of flash. Remove once the affected units are updated.
+#define LR11X0_UPDATE_FIRMWARE_TO 0x0402
+
 #define HAS_ETHERNET 1
 #define USE_CH390D 1
 
