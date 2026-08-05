@@ -39,10 +39,12 @@ void logAirtime(reportTypes reportType, uint32_t airtime_ms);
 
 uint32_t *airtimeReport(reportTypes reportType);
 
-// Not thread-safe: the accessors rotate the windows in place via syncNow(), so they mutate shared
-// state rather than just reading it. Every current caller runs on the OSThread scheduler -
+// Not thread-safe: everything but getPeriodsToLog()/getSecondsPerPeriod() either rotates the
+// windows via syncNow() or reads the buckets. Current callers are all on the OSThread scheduler -
 // RadioLibInterface/SimRadio, RadioInterface, Router, DeviceTelemetry, ContentHandler, and the
 // screen renderers. New callers must be on that thread too, or this needs a lock.
+// TODO: airtime lock-guarding - serialise the above behind a lock so the contract is enforced
+// rather than documented. Kept out of this PR: it is a separate concern from millis() rollover.
 class AirTime : private concurrency::OSThread
 {
 
