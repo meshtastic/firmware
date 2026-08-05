@@ -60,6 +60,10 @@ class AccelerometerThread : public concurrency::OSThread
         }
     }
 
+    // True if the active sensor drives the compass heading in runOnce(). Callers must not
+    // disable() the thread in this case, or the compass would freeze until the next reboot.
+    bool providesHeading() const { return isInitialised && sensor && sensor->providesHeading(); }
+
   protected:
     int32_t runOnce() override
     {
@@ -102,6 +106,7 @@ class AccelerometerThread : public concurrency::OSThread
             break;
 #if __has_include(<Adafruit_LIS3DH.h>)
         case ScanI2C::DeviceType::LIS3DH:
+        case ScanI2C::DeviceType::SC7A20:
             sensor = new LIS3DHSensor(device);
             break;
 #endif

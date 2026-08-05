@@ -128,11 +128,13 @@ bool Channels::ensureLicensedOperation()
         }
         auto &channelSettings = channel.settings;
         if (strcasecmp(channelSettings.name, Channels::adminChannel) == 0) {
-            channel.role = meshtastic_Channel_Role_DISABLED;
-            channelSettings.psk.bytes[0] = 0;
-            channelSettings.psk.size = 0;
-            hasEncryptionOrAdmin = true;
-            channels.setChannel(channel);
+            if (channel.role != meshtastic_Channel_Role_DISABLED || channelSettings.psk.size > 0) {
+                channel.role = meshtastic_Channel_Role_DISABLED;
+                channelSettings.psk.bytes[0] = 0;
+                channelSettings.psk.size = 0;
+                hasEncryptionOrAdmin = true;
+                channels.setChannel(channel);
+            }
 
         } else if (channelSettings.psk.size > 0) {
             channelSettings.psk.bytes[0] = 0;
@@ -516,7 +518,7 @@ bool Channels::hasDefaultChannel()
  */
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
-    if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
+    if (chIndex >= getNumChannels() || getHash(chIndex) != channelHash) {
         // LOG_DEBUG("Skip channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;

@@ -13,8 +13,10 @@
 
 #include "configuration.h"
 #include "gps/RTC.h"
+#include "mesh/Default.h"
 #include "mesh/NextHopRouter.h"
 #include "mesh/NodeDB.h"
+#include "mesh/RadioInterface.h"
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -87,6 +89,8 @@ class NextHopRouterTestShim : public NextHopRouter
     using NextHopRouter::noteRouteFailure;
     using NextHopRouter::noteRouteLearned;
     using NextHopRouter::noteRouteSuccess;
+    using NextHopRouter::perhapsRebroadcast;
+    using NextHopRouter::relayOpaquePacket;
     using Router::shouldDecrementHopLimit; // protected in Router
 
     void resetRouteHealthForTest()
@@ -94,6 +98,38 @@ class NextHopRouterTestShim : public NextHopRouter
         for (auto &h : routeHealth)
             h = RouteHealth{};
     }
+};
+
+// ---------------------------------------------------------------------------
+// MockRadioInterface - mirrors RadioLibInterface::send()'s NODENUM_BROADCAST_NO_LORA branch, which
+// returns ERRNO_SHOULD_RELEASE without releasing.
+// ---------------------------------------------------------------------------
+class MockRadioInterface : public RadioInterface
+{
+  public:
+    ErrorCode send(meshtastic_MeshPacket *p) override
+    {
+        sendCount++;
+        lastHopLimit = p->hop_limit;
+        lastHopStart = p->hop_start;
+        if (declineAll || p->to == NODENUM_BROADCAST_NO_LORA)
+            return ERRNO_SHOULD_RELEASE;
+
+        packetPool.release(p);
+        return ERRNO_OK;
+    }
+
+    uint32_t getPacketTime(uint32_t totalPacketLen, bool received = false) override
+    {
+        (void)totalPacketLen;
+        (void)received;
+        return 0;
+    }
+
+    int sendCount = 0;
+    bool declineAll = false;
+    uint8_t lastHopLimit = 0;
+    uint8_t lastHopStart = 0;
 };
 
 static MockNodeDB *mockNodeDB = nullptr;
@@ -410,6 +446,105 @@ void test_hoplimit_decrement_when_resolved_not_favorite(void)
 }
 
 // ===========================================================================
+// Rebroadcast of NODENUM_BROADCAST_NO_LORA
+// ===========================================================================
+
+static MockRadioInterface *installMockIface()
+{
+    MockRadioInterface *m = new MockRadioInterface();
+    shim->addInterface(std::unique_ptr<RadioInterface>(m));
+    return m;
+}
+
+// Eligible for rebroadcast: not from/to us, hops left, nonzero id, no next-hop preference.
+// Encrypted variant so Router::send() skips the encode path.
+static meshtastic_MeshPacket makeRebroadcastCandidate(NodeNum to)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = 0x22222222; // not us
+    p.to = to;
+    p.id = 0x0BADF00D;
+    p.hop_start = 3;
+    p.hop_limit = 3;
+    p.next_hop = NO_NEXT_HOP_PREFERENCE;
+    p.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
+    p.encrypted.size = 8;
+    return p;
+}
+
+// Control: proves the NO_LORA case below turns on the `to` field alone.
+void test_rebroadcast_normal_broadcast_is_relayed(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+
+    TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&p), "ordinary broadcast must be rebroadcast");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "exactly one packet should reach the radio");
+}
+
+void test_rebroadcast_no_lora_broadcast_is_not_relayed(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST_NO_LORA);
+
+    TEST_ASSERT_FALSE_MESSAGE(shim->perhapsRebroadcast(&p), "no-LoRa broadcast must not be rebroadcast");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mockIface->sendCount, "no packet should be handed to the radio at all");
+}
+
+// Declining mock bypasses the guard so send() is reached; the release itself is only observable as
+// a sanitizer leak report, not an assertion.
+void test_rebroadcast_declined_send_releases_packet(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    mockIface->declineAll = true;
+
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+
+    TEST_ASSERT_TRUE_MESSAGE(shim->perhapsRebroadcast(&p), "the rebroadcast must still be attempted");
+    TEST_ASSERT_EQUAL_MESSAGE(1, mockIface->sendCount, "the copy must have reached the mock radio");
+}
+
+#if USERPREFS_EVENT_MODE
+void test_event_mode_hop_behavior(void)
+{
+    MockRadioInterface *mockIface = installMockIface();
+    meshtastic_MeshPacket p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.from = kLocalNode;
+    p.hop_start = 0;
+    p.hop_limit = HOP_MAX;
+
+    TEST_ASSERT_EQUAL(ERRNO_OK, shim->send(packetPool.allocCopy(p)));
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(HOP_MAX, mockIface->lastHopStart);
+
+    p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.hop_start = HOP_MAX;
+    p.hop_limit = HOP_MAX;
+
+    TEST_ASSERT_TRUE(shim->perhapsRebroadcast(&p));
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeRelayHopLimit, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(Default::eventModeRelayHopLimit + 1), mockIface->lastHopStart);
+
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.hop_start = HOP_MAX;
+    p.hop_limit = HOP_MAX;
+
+    TEST_ASSERT_TRUE(shim->relayOpaquePacket(&p));
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeRelayHopLimit, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(Default::eventModeRelayHopLimit + 1), mockIface->lastHopStart);
+
+    p = makeRebroadcastCandidate(NODENUM_BROADCAST);
+    p.hop_start = 0;
+    p.hop_limit = HOP_MAX;
+
+    TEST_ASSERT_TRUE(shim->relayOpaquePacket(&p));
+    TEST_ASSERT_EQUAL_UINT8(Default::eventModeRelayHopLimit, mockIface->lastHopLimit);
+    TEST_ASSERT_EQUAL_UINT8(0, mockIface->lastHopStart);
+}
+#endif
+
+// ===========================================================================
 
 void setup()
 {
@@ -458,6 +593,14 @@ void setup()
     RUN_TEST(test_hoplimit_preserve_unique_favorite_router);
     RUN_TEST(test_hoplimit_decrement_on_colliding_favorites);
     RUN_TEST(test_hoplimit_decrement_when_resolved_not_favorite);
+
+    printf("\n=== rebroadcast of NODENUM_BROADCAST_NO_LORA ===\n");
+    RUN_TEST(test_rebroadcast_normal_broadcast_is_relayed);
+    RUN_TEST(test_rebroadcast_no_lora_broadcast_is_not_relayed);
+    RUN_TEST(test_rebroadcast_declined_send_releases_packet);
+#if USERPREFS_EVENT_MODE
+    RUN_TEST(test_event_mode_hop_behavior);
+#endif
 
     exit(UNITY_END());
 }

@@ -231,8 +231,6 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
     }
 }
 
-static void handleWebResponse() {}
-
 /*
  * Adapt the radioapi to the Webservice handleAPIv1ToRadio
  * Trigger : WebGui(SAVE)->WebServcice->phoneApi

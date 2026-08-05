@@ -3,6 +3,7 @@
 #include <esp_ota_ops.h>
 #endif
 #include "ProtobufModule.h"
+#include "meshUtils.h"
 #include <sys/types.h>
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -39,24 +40,43 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
   private:
     bool hasOpenEditTransaction = false;
+    // Each deferred write restarts the clock, so this bounds the gap between writes, not the length
+    // of the edit; a bulk import sends them milliseconds apart.
+    static constexpr uint32_t EDIT_TRANSACTION_IDLE_MS = 60 * 1000;
+    uint32_t editTransactionActivityMs = 0; // millis() of the last save this transaction deferred
+    int deferredEditSegments = 0;           // segments that transaction has touched but not yet saved
+    /// Retire an open edit transaction whose client stopped talking, persisting what it applied.
+    void expireStaleEditTransaction();
+#ifdef PIO_UNIT_TESTING
+    int lastSaveWhatForTest = 0;
+#endif
 
     uint8_t session_passkey[8] = {0};
-    uint session_time = 0;
+    uint32_t session_time = 0;        // millis() when the current session passkey was issued
+    bool sessionPasskeyValid = false; // separate flag: millis() 0 at boot is a valid issue time
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
 
     /**
      * Getters
+     *
+     * Each of the NOINLINE ones below builds a whole meshtastic_AdminMessage (480 bytes) on the
+     * stack. They are only ever reached from one case of handleReceivedProtobuf()'s switch, but
+     * when the compiler inlines them the dispatcher's frame has to reserve a slot for every one of
+     * them at once - measured at 3008 bytes on ESP32-S3, 37% of the 8 KB Arduino loopTask stack
+     * that also has to carry PhoneAPI, the router, nanopb and LittleFS below it. Keeping them out
+     * of line means only the request actually being served pays for its response buffer.
+     * See issue #11237.
      */
     void handleGetModuleConfigResponse(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *p);
-    void handleGetOwner(const meshtastic_MeshPacket &req);
-    void handleGetConfig(const meshtastic_MeshPacket &req, uint32_t configType);
-    void handleGetModuleConfig(const meshtastic_MeshPacket &req, uint32_t configType);
-    void handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex);
-    void handleGetDeviceMetadata(const meshtastic_MeshPacket &req);
-    void handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req);
-    void handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req);
-    void handleGetDeviceUIConfig(const meshtastic_MeshPacket &req);
+    NOINLINE void handleGetOwner(const meshtastic_MeshPacket &req);
+    NOINLINE void handleGetConfig(const meshtastic_MeshPacket &req, uint32_t configType);
+    NOINLINE void handleGetModuleConfig(const meshtastic_MeshPacket &req, uint32_t configType);
+    NOINLINE void handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex);
+    NOINLINE void handleGetDeviceMetadata(const meshtastic_MeshPacket &req);
+    NOINLINE void handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req);
+    NOINLINE void handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req);
+    NOINLINE void handleGetDeviceUIConfig(const meshtastic_MeshPacket &req);
     /**
      * Setters
      */
@@ -77,7 +97,37 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
   public:
     void handleSetHamMode(const meshtastic_HamParameters &req);
 
+    /// Note an admin request leaving this node for a remote, so that remote's response is
+    /// accepted. Called from the client-to-mesh path (MeshService::handleToRadio).
+    void noteOutgoingAdminRequest(const meshtastic_MeshPacket &p);
+
   private:
+    // An admin response has no session passkey and its sender need not hold an admin key, so a
+    // request we sent is the only thing vouching for it. Track each request independently (its own
+    // expiry and pinned key) so a later one can't extend or relax an earlier one.
+    static constexpr size_t kOutstandingAdminRequests = 8;
+    static constexpr uint32_t kOutstandingAdminRequestMs = 300 * 1000; // same window as the session passkey
+    struct OutstandingAdminRequest {
+        NodeNum to;                 // 0 = free slot
+        uint32_t requestId;         // our request's packet id; the response must echo it as request_id
+        uint32_t sentAtMs;          // millis() when this request went out
+        pb_size_t expectedResponse; // the one response variant this request authorizes
+        uint8_t moduleConfigType;   // for get_module_config_request: which ModuleConfigType we asked
+        uint8_t key[32];            // pinned destination key when the request goes out over PKC
+        bool keyValid;
+    };
+    OutstandingAdminRequest outstandingAdminRequests[kOutstandingAdminRequests] = {};
+
+    /// Whether a response (variant responseVariant, module-config subtype moduleConfigTag or 0)
+    /// from mp.from answers a request we sent; consumes the matched request so it can't be replayed.
+    bool responseIsSolicited(const meshtastic_MeshPacket &mp, pb_size_t responseVariant, pb_size_t moduleConfigTag);
+
+    /// Offer an admin message we have no case for to the module API, and let observers (e.g. the UI)
+    /// see every admin message. Both build a response on the stack, so like the getters above they
+    /// stay out of line to keep handleReceivedProtobuf()'s frame small.
+    NOINLINE void handleViaModuleApi(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r);
+    NOINLINE void handleViaObservers(const meshtastic_AdminMessage *r);
+
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent);
     void reboot(int32_t seconds);
@@ -114,6 +164,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 
 static constexpr const char *licensedModeMessage =
     "Licensed mode activated, removing admin channel and encryption from all channels";
+
+static constexpr const char *licensedIdentityMigrationMessage =
+    "Licensed signing requires an identity key; this node identity will change after key generation";
 
 static constexpr const char *publicChannelPrecisionMessage =
     "Precise position is not allowed on a public (open / known-key) channel; reduced to coarse precision";

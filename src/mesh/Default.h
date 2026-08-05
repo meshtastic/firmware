@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <meshUtils.h>
+#include <type_traits>
 #define ONE_DAY 24 * 60 * 60
 #define ONE_MINUTE_MS 60 * 1000
 #define THIRTY_SECONDS_MS 30 * 1000
@@ -75,7 +76,20 @@ enum class TrafficType { POSITION, TELEMETRY };
 
 class Default
 {
+#if USERPREFS_EVENT_MODE && defined(USERPREFS_EVENT_MODE_HOP_LIMIT)
+    static constexpr auto eventModeHopLimitSetting = USERPREFS_EVENT_MODE_HOP_LIMIT;
+#else
+    static constexpr auto eventModeHopLimitSetting = HOP_RELIABLE;
+#endif
+    using EventModeHopLimitType = typename std::remove_cv<decltype(eventModeHopLimitSetting)>::type;
+    static_assert(std::is_integral<EventModeHopLimitType>::value && !std::is_same<EventModeHopLimitType, bool>::value &&
+                      eventModeHopLimitSetting >= 0 && eventModeHopLimitSetting <= HOP_MAX,
+                  "USERPREFS_EVENT_MODE_HOP_LIMIT must be an integer between 0 and 7");
+
   public:
+    static constexpr uint8_t eventModeHopLimit = static_cast<uint8_t>(eventModeHopLimitSetting);
+    static constexpr uint8_t eventModeRelayHopLimit = eventModeHopLimit > 0 ? eventModeHopLimit - 1 : 0;
+
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval);
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);

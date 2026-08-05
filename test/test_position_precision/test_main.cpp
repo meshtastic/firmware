@@ -214,7 +214,8 @@ static void test_cryptoKeyIsPublic_invalidKeyIsNotPublic()
 // Pre-fix, latitude_i = INT32_MAX made latLongToUTM read latBands[36] on a 21-char string
 // (stack-buffer-overflow at GeoCoord.cpp:128, an AddressSanitizer abort); extreme longitude produced
 // a negative UTM zone feeding the MGRS letter tables. The fix clamps the zone/band/col/row indices.
-// This exercises the fix under the coverage env's ASan.
+// This exercises the fix under the coverage env's ASan. Each representation is computed lazily,
+// so its getter must be called explicitly here to exercise its conversion path.
 static void test_geocoord_extreme_coords_no_oob()
 {
     const int32_t vals[] = {INT32_MIN,  INT32_MAX,   INT32_MIN + 1, INT32_MAX - 1, 0, 1, -1, 900000000, -900000000, // +/-90 deg
@@ -223,7 +224,13 @@ static void test_geocoord_extreme_coords_no_oob()
     const size_t n = sizeof(vals) / sizeof(vals[0]);
     for (size_t i = 0; i < n; i++)
         for (size_t j = 0; j < n; j++) {
-            GeoCoord g(vals[i], vals[j], 0); // ctor -> setCoords() -> UTM/MGRS/OSGR/OLC
+            GeoCoord g(vals[i], vals[j], 0); // ctor -> setCoords() -> DMS only
+            // Force UTM/MGRS/OSGR/OLC computation (each lazy on first getter access).
+            g.getUTMZone();
+            g.getMGRSZone();
+            g.getOSGRE100k();
+            char olcCode[OLC_CODE_LEN + 1];
+            g.getOLCCode(olcCode);
             // Surviving every extreme pair (no ASan fault) means the index clamps hold.
             TEST_ASSERT_EQUAL_INT32(vals[i], g.getLatitude());
         }

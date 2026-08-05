@@ -59,16 +59,18 @@ int32_t KbI2cBase::runOnce()
         case ScanI2C::WIRE1:
 #if WIRE_INTERFACES_COUNT == 2
             LOG_DEBUG("Use I2C Bus 1 (the second one)");
-            i2cBus = &Wire1;
+            // resolved via the scanner: WIRE1 may be a bridged bus rather
+            // than the local Wire1 (e.g. SenseCAP Indicator)
+            i2cBus = ScanI2CTwoWire::fetchI2CBus(cardkb_found);
             if (cardkb_found.address == BBQ10_KB_ADDR) {
-                Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
+                Q10keyboard.begin(BBQ10_KB_ADDR, i2cBus);
                 Q10keyboard.setBacklight(0);
             }
             if (cardkb_found.address == MPR121_KB_ADDR) {
-                MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
+                MPRkeyboard.begin(MPR121_KB_ADDR, i2cBus);
             }
             if (cardkb_found.address == TCA8418_KB_ADDR) {
-                TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire1);
+                TCAKeyboard.begin(TCA8418_KB_ADDR, i2cBus);
             }
             break;
 #endif

@@ -51,29 +51,33 @@ void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketI
                                bool ackWantsAck)
 {
     auto p = allocAckNak(err, to, idFrom, chIndex, hopLimit);
+    if (!p)
+        return;
 
     // Allow the caller to set want_ack on this ACK packet if it's important that the ACK be delivered reliably
     p->want_ack = ackWantsAck;
 
-    router->sendLocal(p); // we sometimes send directly to the local node
+    if (router->sendLocal(p) == ERRNO_SHOULD_RELEASE) // we sometimes send directly to the local node
+        packetPool.release(p);
 }
 
 uint8_t RoutingModule::getHopLimitForResponse(const meshtastic_MeshPacket &mp)
 {
     const int8_t hopsUsed = getHopsAway(mp);
+    const uint8_t responseHopLimit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     if (hopsUsed >= 0) {
-        if (hopsUsed > (int32_t)(config.lora.hop_limit)) {
-// In event mode, we never want to send packets with more than our default 3 hops.
-#if !(EVENTMODE)             // This falls through to the default.
+        if (hopsUsed > static_cast<int32_t>(responseHopLimit)) {
+// In event mode, never exceed the configured event hop limit.
+#if !USERPREFS_EVENT_MODE    // This falls through to the default.
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
 #endif
         } else if (mp.hop_start == 0) {
             return 0; // The requesting node wanted 0 hops, so the response also uses a direct/local path.
-        } else if ((uint8_t)(hopsUsed + 2) < config.lora.hop_limit) {
+        } else if (static_cast<uint8_t>(hopsUsed + 2) < responseHopLimit) {
             return hopsUsed + 2; // Use only the amount of hops needed with some margin as the way back may be different
         }
     }
-    return Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit); // Use the default hop limit
+    return responseHopLimit;
 }
 
 meshtastic_MeshPacket *RoutingModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,

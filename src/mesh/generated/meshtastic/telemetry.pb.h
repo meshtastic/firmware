@@ -121,7 +121,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* ICM-42607-P 6‑Axis IMU */
     meshtastic_TelemetrySensorType_ICM42607P = 53,
     /* SPA06 pressure and temperature */
-    meshtastic_TelemetrySensorType_SPA06 = 54
+    meshtastic_TelemetrySensorType_SPA06 = 54,
+    /* HM330X PM SENSOR */
+    meshtastic_TelemetrySensorType_HM330X = 55
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -502,8 +504,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SPA06
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SPA06+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_HM330X
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_HM330X+1))
 
 
 

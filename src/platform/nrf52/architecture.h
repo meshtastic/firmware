@@ -99,6 +99,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M6
 #elif defined(ELECROW_ThinkNode_M4)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M4
+#elif defined(ELECROW_ThinkNode_M8)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M8
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)

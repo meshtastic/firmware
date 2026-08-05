@@ -22,13 +22,18 @@
 
 #include "FSCommon.h"
 #include "Power.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
+#include "gps/RTC.h"
+
+#ifdef SENSECAP_INDICATOR // on the indicator run the additional serial port for the RP2040
+#include "IndicatorSerial.h"
+#include "mesh/comms/I2CProxy.h"
+#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CConsumer.h"
@@ -108,6 +113,9 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #include "mesh/raspihttp/PiWebServer.h"
 #endif
 #include "platform/portduino/PortduinoGlue.h"
+#ifdef _WIN32
+#include "platform/portduino/windows/WindowsService.h"
+#endif
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -212,7 +220,7 @@ using namespace concurrency;
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
 
 // We always create a screen object, but we only init it if we find the hardware
-graphics::Screen *screen = nullptr;
+std::unique_ptr<graphics::Screen> screen = nullptr;
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
@@ -428,10 +436,14 @@ void setup()
 #if ARCH_PORTDUINO
     RTCQuality ourQuality = RTCQualityDevice;
 
+#ifdef __linux__
+    // timedatectl is systemd-only, so macOS, Windows and WASM stay at
+    // RTCQualityDevice rather than claim NTP quality we have not verified.
     std::string timeCommandResult = exec("timedatectl status | grep synchronized | grep yes -c");
     if (timeCommandResult[0] == '1') {
         ourQuality = RTCQualityNTP;
     }
+#endif
 
     struct timeval tv;
     tv.tv_sec = time(NULL);
@@ -561,7 +573,10 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if defined(I2C_SDA1) && defined(ARCH_RP2040)
+#if defined(SENSECAP_INDICATOR)
+    // The Sensecap Indicator has its second I2C bus on the RP2040, bridged
+    // over serial as i2cProxy. No local interface to initialize.
+#elif defined(I2C_SDA1) && defined(ARCH_RP2040)
     Wire1.setSDA(I2C_SDA1);
     Wire1.setSCL(I2C_SCL1);
     Wire1.begin();
@@ -624,6 +639,20 @@ void setup()
     mcp23017EarlyInit();
 #endif
 
+#ifdef SENSECAP_INDICATOR
+    // Power the RP2040 co-processor and start the interdevice link before the
+    // I2C scan, so that its bus can be probed through the bridge
+#ifdef SENSOR_POWER_CTRL_EXPANDER
+    pinMode(SENSOR_POWER_CTRL_EXPANDER, OUTPUT);
+    digitalWrite(SENSOR_POWER_CTRL_EXPANDER, SENSOR_POWER_ON_EXPANDER);
+#endif
+    sensecapIndicator = new SensecapIndicator(Serial2);
+    // the bus behind it is scanned right below and its devices are registered
+    // once, so the link has to be up by then
+    if (!sensecapIndicator->wait_ready(5000))
+        LOG_ERROR("RP2040 co-processor did not answer, its sensors, GPS and SD card are unavailable this session");
+#endif
+
 #if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
@@ -632,7 +661,7 @@ void setup()
     LOG_INFO("Scan for i2c devices");
 #endif
 
-#if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
+#if defined(SENSECAP_INDICATOR) || defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
 #endif
 
@@ -816,6 +845,10 @@ void setup()
     rp2040Setup();
 #endif
 
+#ifdef ARCH_STM32WL
+    stm32wlSetup();
+#endif
+
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
@@ -845,9 +878,13 @@ void setup()
 
 #if HAS_SCREEN
         // fixed screen override?
+        // The geometry picks below are skipped on variants that pin the panel size with
+        // OLED_GEOMETRY_OVERRIDE (see the end of this block) - there they would only be dead stores.
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+#ifndef OLED_GEOMETRY_OVERRIDE
     screen_geometry = GEOMETRY_128_128;
+#endif
 #elif defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #else
@@ -856,7 +893,9 @@ void setup()
 
         // Fix: update geometry for SH1107 128x128 selected via menu
         if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
+#ifndef OLED_GEOMETRY_OVERRIDE
             screen_geometry = GEOMETRY_128_128;
+#endif
             screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // normalize
         }
     }
@@ -958,15 +997,15 @@ void setup()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
 #if defined(HAS_SPI_TFT) || defined(USE_EINK) || defined(USE_SPISSD1306)
-        screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+        screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
             config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+            screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
         }
 #else
         if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
-            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+            screen = std::make_unique<graphics::Screen>(screen_found, screen_model, screen_geometry);
 #endif
     }
 #endif // HAS_SCREEN
@@ -1070,6 +1109,7 @@ void setup()
         nodeDB->hasWarned = true;
     }
 #endif
+    nodeDB->notifyPendingLicensedIdentityMigration();
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
     if (inputBroker)
         inputBroker->Init();
@@ -1101,6 +1141,23 @@ void setup()
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
         screen->setup();
 #endif
+#endif
+
+#if defined(SENSECAP_INDICATOR)
+    // The ST7701 panel shares SCK/MOSI/MISO (41/48/47) with the SX1262, and its host is SPI2_HOST,
+    // which on the S3 is the same peripheral as the Arduino `SPI` object (FSPI == SPI2).
+    // LovyanGFX bit-bangs the ST7701 init sequence on those pins, and because this variant builds
+    // with USE_ARDUINO_HAL_GPIO it does so via Arduino pinMode()/digitalWrite(). pinMode() calls
+    // perimanSetPinBus(.., ESP32_BUS_TYPE_GPIO, ..), whose deinit callback (spiDetachBus_SCK) ends
+    // up in spiStopBus() and gates the SPI2 clock. RadioLib then spins forever in spiTransferByte()
+    // waiting on cmd.update, which never clears on a stopped peripheral, and the watchdog fires.
+    //
+    // Restart the bus here, after the panel is up and before the radio is touched. Note that
+    // SPIClass::begin() early-returns when _spi is already non-NULL, so end() first is required.
+    SPI.end();
+    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, -1); // CS is an IO-expander pin, driven by RadioLib
+    SPI.setFrequency(4000000);
+    LOG_DEBUG("SPI2 restarted after ST7701 init (SCK=%d, MISO=%d, MOSI=%d)", LORA_SCK, LORA_MISO, LORA_MOSI);
 #endif
 
     auto rIf = initLoRa();
@@ -1195,6 +1252,11 @@ void setup()
         }
     }
 #endif
+
+#if defined(ARCH_PORTDUINO) && defined(_WIN32)
+    // The node is up; let the SCM stop waiting on START_PENDING. No-op unless --service.
+    windowsServiceReportRunning();
+#endif
 }
 
 #endif
@@ -1214,7 +1276,7 @@ bool runASAP;
 // TODO find better home than main.cpp
 extern meshtastic_DeviceMetadata getDeviceMetadata()
 {
-    meshtastic_DeviceMetadata deviceMetadata;
+    meshtastic_DeviceMetadata deviceMetadata = meshtastic_DeviceMetadata_init_default;
     strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
@@ -1254,6 +1316,8 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
+    // Range test is always excluded as of 2.8
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_RANGETEST_CONFIG;
 
 // No bluetooth on these targets (yet):
 // Pico W / 2W may get it at some point
@@ -1270,6 +1334,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
+#endif
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    deviceMetadata.has_xeddsa = true;
 #endif
     return deviceMetadata;
 }

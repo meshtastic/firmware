@@ -9,7 +9,6 @@
  */
 #include "memGet.h"
 #include "configuration.h"
-#include "memory/MemAudit.h"
 
 #if defined(MESHTASTIC_DYNAMIC_SBRK_HEAP)
 #include <malloc.h>
@@ -24,7 +23,10 @@ static uint32_t sbrkHeadroom()
     extern char _estack;
     extern char _Min_Stack_Size;
 
-    uint32_t max_sp = (uint32_t)(&_estack - &_Min_Stack_Size);
+    // Both are linker-script symbols rather than real objects: _estack is the top-of-RAM address and
+    // _Min_Stack_Size is a plain value. Convert each to an integer before subtracting - differencing the
+    // pointers themselves is pointer arithmetic across unrelated objects.
+    uint32_t max_sp = (uint32_t)&_estack - (uint32_t)&_Min_Stack_Size;
     uint32_t heap_end = (uint32_t)sbrk(0);
     return (max_sp > heap_end) ? (max_sp - heap_end) : 0;
 }
@@ -107,17 +109,4 @@ uint32_t MemGet::getPsramSize()
 #else
     return 0;
 #endif
-}
-
-void displayPercentHeapFree()
-{
-    uint32_t freeHeap = memGet.getFreeHeap();
-    uint32_t totalHeap = memGet.getHeapSize();
-    if (totalHeap == 0 || totalHeap == UINT32_MAX) {
-        LOG_INFO("Heap size unavailable");
-        return;
-    }
-    int percent = (int)((freeHeap * 100) / totalHeap);
-    LOG_INFO("Heap free: %d%% (%u/%u bytes)", percent, freeHeap, totalHeap);
-    memaudit::logBreakdown("heap"); // per-subsystem breakdown rides along with the periodic heap log
 }

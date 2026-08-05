@@ -40,6 +40,9 @@ class EInkParallelDisplay : public OLEDDisplay
     uint32_t lastDrawMsec = 0;
     FASTEPD *epaper;
 
+    // Set only when connect() fully succeeds; framebuffer-touching methods no-op while false.
+    bool displayReady = false;
+
   private:
     // Async full-refresh support
     std::atomic<bool> asyncFullRunning{false};
