@@ -27,6 +27,11 @@
 #define GPS_STANDBY_ACTIVE LOW
 #endif
 
+// Allow defining the polarity of an external GPS RF front-end enable. Default is active high.
+#ifndef GPS_RF_EN_ACTIVE
+#define GPS_RF_EN_ACTIVE HIGH
+#endif
+
 static constexpr uint32_t GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS = 10 * 1000UL;
 static constexpr uint32_t GPS_FIX_HOLD_MAX_MS = 20000;
 
@@ -256,6 +261,10 @@ class GPS : private concurrency::OSThread
     /** Set the value of the STANDBY pin, if relevant
      */
     void writePinStandby(bool standby);
+
+    /** Set the external RF front-end enable pin, if relevant
+     */
+    void writePinRFEN(bool on);
 
     /** Set GPS power with PMU, if relevant
      */
