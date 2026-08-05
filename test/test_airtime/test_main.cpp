@@ -1157,6 +1157,42 @@ void test_backwards_uptime_degrades_safely()
     TEST_ASSERT_TRUE_MESSAGE(pct >= 0.0f && pct <= 100.0f, g_msg);
 }
 
+// --- the lock ----------------------------------------------------------------------------------
+
+// Every public method must take the lock exactly once. A second Held on the same instance trips the
+// re-entry assert in a build where NDEBUG is unset - which is this one. It is the only nesting check
+// that works natively: Portduino compiles Lock::lock() to an empty body, so a genuine nested take
+// would silently succeed here and only deadlock on hardware.
+//
+// This is also the guard rail for the deferred accuracy work: if plan4's addSpanned() is added as a
+// method on AirTime rather than on the lock-free core, logAirtime() calls it while already holding
+// the lock, and this fails immediately instead of watchdog-rebooting a device.
+void test_no_public_method_reenters_the_lock()
+{
+    Time::setTestMillis(0);
+    AirTime a;
+    uint32_t report[PERIODS_TO_LOG] = {0};
+
+    a.logAirtime(TX_LOG, 100);
+    a.logAirtime(RX_LOG, 100);
+    a.logAirtime(RX_ALL_LOG, 100);
+    (void)a.channelUtilizationPercent();
+    (void)a.utilizationTXPercent();
+    a.airtimeRotatePeriod();
+    (void)a.getPeriodsToLog();
+    (void)a.getSecondsPerPeriod();
+    (void)a.getSecondsSinceBoot();
+    (void)a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG);
+    (void)a.getSilentMinutes(10.0f, 2.5f);
+    (void)a.isTxAllowedChannelUtil(false);
+    (void)a.isTxAllowedChannelUtil(true);
+    (void)a.isTxAllowedAirUtil();
+
+    // Reaching here without the assert firing IS the assertion; check the object still works.
+    TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
+    TEST_ASSERT_EQUAL_UINT32(100, report[0]);
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -1231,6 +1267,7 @@ void setup()
     RUN_TEST(test_survives_heavy_sleep_across_the_wrap);
     RUN_TEST(test_multi_day_sleep_clears_every_window);
     RUN_TEST(test_backwards_uptime_degrades_safely);
+    RUN_TEST(test_no_public_method_reenters_the_lock);
     exit(UNITY_END());
 }
 

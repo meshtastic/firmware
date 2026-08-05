@@ -1,6 +1,8 @@
 #pragma once
 
 #include "MeshRadio.h"
+#include "concurrency/Lock.h"
+#include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>
@@ -18,8 +20,7 @@
                                 promiscuous, so this counts packets not
                                 addressed to us and every duplicate relay copy.
     logAirtime(RX_ALL_LOG, ms)  one per reception we could NOT parse: failed
-                                CRC, truncated, region unset, or a simulated
-                                collision.
+                                CRC, truncated, region unset, or a collision.
     elapsed time                read from Time::getUptimeSecs() by syncNow() on
                                 every public entry point. The only input that
                                 *removes* airtime.
@@ -103,12 +104,23 @@
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
-// Not thread-safe: everything but getPeriodsToLog()/getSecondsPerPeriod() either rotates the
-// windows via syncNow() or reads the buckets. Current callers are all on the OSThread scheduler -
-// RadioLibInterface/SimRadio, RadioInterface, Router, DeviceTelemetry, ContentHandler, and the
-// screen renderers. New callers must be on that thread too, or this needs a lock.
-// TODO: airtime lock-guarding - serialise the above behind a lock so the contract is enforced
-// rather than documented. Kept out of this PR: it is a separate concern from millis() rollover.
+// Serialised behind `lock`. Two mechanisms, solving different halves:
+//
+//   - a lock-free inner core (Windows) holds ALL state and ALL logic. It has no lock and no way to
+//     reach one, so nesting is impossible by construction rather than by discipline. That matters
+//     here because concurrency::Lock is a non-recursive binary semaphore taken with portMAX_DELAY:
+//     a nested take blocks forever and watchdog-reboots.
+//   - a private Held token takes the lock in its own constructor and is the only thing that can be
+//     passed where a core method demands one, so the lock cannot be forgotten either.
+//
+// The rule is uniform, with no exceptions to remember: every public method takes the lock exactly
+// once and delegates; nothing inside ever locks. In particular isTxAllowed*() now lock like
+// everything else, because they call the core rather than the public accessors.
+//
+// Adding state later does not change any of this - it is more state inside the core. The one rule a
+// future change must keep: a new write-path helper belongs to Windows or is a free function, never a
+// method on AirTime. An AirTime method would take the lock, and it would be called from inside
+// logAirtime() which already holds it.
 class AirTime : private concurrency::OSThread
 {
 
@@ -118,11 +130,6 @@ class AirTime : private concurrency::OSThread
     void logAirtime(reportTypes reportType, uint32_t airtime_ms);
     float channelUtilizationPercent();
     float utilizationTXPercent();
-
-    // Modular rings: index is (uptime secs / period) % N, i.e. absolute phase and NOT age.
-    // The oldest bucket is (current + 1) % N. Public only because tests still reach in.
-    uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0}; // 6 x 10s
-    uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};                  // 60 x 60s, our TX only
 
     /// Compatibility shim: no caller in the tree. Kept because out-of-tree callers are plausible.
     void airtimeRotatePeriod();
@@ -138,26 +145,73 @@ class AirTime : private concurrency::OSThread
     bool isTxAllowedAirUtil();
 
   private:
-    bool firstTime = true;
-    // Time::getUptimeSecs() as of the last syncNow(); the gap since is what the windows rotate by,
-    // so they stay correct even if the scheduler was paused by light sleep.
-    uint32_t secSinceBoot = 0;
+    concurrency::Lock lock;
+
+#ifdef PIO_UNIT_TESTING
+    // Set for the lifetime of a Held, and checked BEFORE the lock is taken so a nested take is
+    // reported rather than hung at. On Portduino this is the ONLY nesting check that can work at
+    // all: Lock::lock() is an empty body there, so a second take succeeds silently.
+    //
+    // Test builds only, and deliberately. Nothing in this tree defines DEBUG or NDEBUG, so an
+    // assert() guarded on either ships to every board - which it did, until
+    // nrf52_promicro_diy_tcxo (~128 bytes of headroom under its 0xEA000 warm-store cap) refused to
+    // link. It would have worked on hardware, since the check precedes the guard member; the
+    // objection is that abort()ing a live mesh node is a poor trade for a bug never seen in the
+    // field, and that this board has no flash to spend on it.
+    bool reentryFlag = false;
+#endif
+
+    /// Takes `lock` for its lifetime and doubles as proof that it is held. Only AirTime can
+    /// construct one, so a core method taking `const Held &` cannot be called without the lock.
+    /// A bare LockGuard would not do: it proves only that *some* lock is held.
+    class Held
+    {
+      public:
+        explicit Held(AirTime *a) : owner(armReentryCheck(a)), guard(&a->lock) {}
+        ~Held();
+        Held(const Held &) = delete;
+        Held &operator=(const Held &) = delete;
+
+      private:
+        static AirTime *armReentryCheck(AirTime *a);
+        AirTime *owner; // declared first, so its initialiser runs before the lock is taken
+        concurrency::LockGuard guard;
+    };
+
+    /// All state, all logic, no lock. Cannot take one, so cannot nest.
+    struct Windows {
+        bool firstTime = true;
+        // Time::getUptimeSecs() as of the last syncNow(); the gap since is what the windows rotate
+        // by, so they stay correct even if the scheduler was paused by light sleep.
+        uint32_t secSinceBoot = 0;
+
+        // Modular rings: index is (uptime secs / period) % N, i.e. absolute phase and NOT age.
+        // The oldest bucket is (current + 1) % N.
+        uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0}; // 6 x 10s
+        uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};                  // 60 x 60s, our TX only
+
+        // Shift-ordered, unlike the two rings above: slot 0 is the newest hour and the index IS an
+        // age. Slot 0 is a partial hour - see the storage note at the top of this file.
+        struct airtimeStruct {
+            uint32_t periodTX[PERIODS_TO_LOG] = {0};     // AirTime transmitted
+            uint32_t periodRX[PERIODS_TO_LOG] = {0};     // AirTime received and repeated (valid mesh packets)
+            uint32_t periodRX_ALL[PERIODS_TO_LOG] = {0}; // AirTime received regardless of validity. May be noise.
+        } airtimes;
+
+        void logAirtime(reportTypes reportType, uint32_t airtime_ms, const Held &);
+        float channelUtilizationPercent(const Held &);
+        float utilizationTXPercent(const Held &);
+        bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count, const Held &);
+        uint8_t getSilentMinutes(float txPercent, float dutyCycle, const Held &);
+        uint8_t getPeriodUtilMinute(const Held &);
+        uint8_t getPeriodUtilHour(const Held &);
+        // Advance rolling airtime windows from monotonic uptime, not from runOnce() calls.
+        void syncNow(const Held &);
+    } w;
+
     uint8_t max_channel_util_percent = 40;
     uint8_t polite_channel_util_percent = 25;
     uint8_t polite_duty_cycle_percent = 50; // half of Duty Cycle allowance is ok for metadata
-
-    // Shift-ordered, unlike the two rings above: slot 0 is the newest hour and the index IS an
-    // age. Slot 0 is a partial hour - see the storage note at the top of this file.
-    struct airtimeStruct {
-        uint32_t periodTX[PERIODS_TO_LOG];     // AirTime transmitted
-        uint32_t periodRX[PERIODS_TO_LOG];     // AirTime received and repeated (Only valid mesh packets)
-        uint32_t periodRX_ALL[PERIODS_TO_LOG]; // AirTime received regardless of valid mesh packet. Could include noise.
-    } airtimes;
-
-    uint8_t getPeriodUtilMinute();
-    uint8_t getPeriodUtilHour();
-    // Advance rolling airtime windows from monotonic uptime, not from runOnce() calls.
-    void syncNow();
 
   protected:
     virtual int32_t runOnce() override;

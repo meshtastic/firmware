@@ -37,25 +37,33 @@ constexpr NodeNum kTargetNode = 0x33333333;
 // a fresh requester for their "served again" step to avoid the per-requester window masking them.
 constexpr NodeNum kRemoteNode2 = 0x44444444;
 
-// Telemetry hop exhaustion is gated on channel congestion (alterReceived checks
-// airTime->isTxAllowedChannelUtil/isTxAllowedAirUtil). Installs a global
-// airTime reporting 100% channel utilization for the enclosing scope.
-class ScopedBusyAirTime
-{
-  public:
-    ScopedBusyAirTime() : previous(airTime)
-    {
-        for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++)
-            busy.channelUtilization[i] = 10000; // 10 s of airtime per 10 s period
-        airTime = &busy;
-    }
-    ~ScopedBusyAirTime() { airTime = previous; }
-
-  private:
-    AirTime busy;
-    AirTime *previous;
-};
-
+// INERT - commented out, not deleted. Two independent reasons it does nothing:
+//
+//   1. TrafficManagementModule contains no reference to airTime at all. The gating this fixture
+//      describes was removed with exhaust_hop_telemetry / exhaust_hop_position ("shelved until the
+//      right heuristics are clearer", alterReceived()); shouldExhaustHops() is now a pure compare
+//      of three members that nothing sets, so its test passes with no airTime installed.
+//   2. Even when it was consulted, it never worked: writing channelUtilization[] on a freshly
+//      constructed AirTime is undone by the first accessor call, which takes the firstTime branch
+//      and memsets every window. It reported 0%, not the 100% the comment claimed.
+//
+// Kept, commented, in case hop exhaustion is un-shelved - but note the buckets are private now, so
+// a revived version must fill them via logAirtime() as below rather than by writing the array.
+//
+// class ScopedBusyAirTime
+// {
+//   public:
+//     ScopedBusyAirTime() : previous(airTime)
+//     {
+//         busy.logAirtime(RX_ALL_LOG, CHANNEL_UTILIZATION_PERIODS * 10 * 1000); // a full window
+//         airTime = &busy;
+//     }
+//     ~ScopedBusyAirTime() { airTime = previous; }
+//
+//   private:
+//     AirTime busy;
+//     AirTime *previous;
+// };
 class MockNodeDB : public NodeDB
 {
   public:
@@ -2307,7 +2315,7 @@ static void test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed(void)
  */
 static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 {
-    ScopedBusyAirTime busyChannel; // congestion present but exhaust is disabled
+    // ScopedBusyAirTime busyChannel; // INERT: the module never reads airTime - see the note above
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
     packet.hop_start = 5;

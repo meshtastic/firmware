@@ -425,11 +425,10 @@ void tearDown(void)
 
     // Restore globals here, not at the end of a test body: an assertion aborts the body, and these
     // would otherwise leak into every later case. The injected clock is the one the N8-N11
-    // suppression-window cases drive; the region and TX bucket are C14's duty-cycle setup.
+    // suppression-window cases drive; the region is C14's duty-cycle setup. C14's saturated
+    // airTime needs no reset here - it is a scoped instance that restores the global itself.
     Time::useRealClock();
     Time::resetMonotonicForTests();
-    if (airTime)
-        airTime->utilizationTX[0] = 0;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
 }
@@ -1500,12 +1499,30 @@ void test_C13_failed_initial_reliable_send_does_not_retry(void)
                                      "failed interface enqueue must not leave a retransmission pending");
 }
 
+// C14 needs a node that has already used its whole hourly duty-cycle allowance. Install a local
+// AirTime for the scope rather than poking the global's buckets: they are private, and a scoped
+// instance also restores the global on the way out even if an assertion aborts the test body.
+class ScopedDutyCycleSaturatedAirTime
+{
+  public:
+    ScopedDutyCycleSaturatedAirTime() : previous(airTime)
+    {
+        saturated.logAirtime(TX_LOG, MS_IN_HOUR); // utilizationTXPercent() sums every bucket -> 100%
+        airTime = &saturated;
+    }
+    ~ScopedDutyCycleSaturatedAirTime() { airTime = previous; }
+
+  private:
+    AirTime saturated;
+    AirTime *previous;
+};
+
 void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
 {
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
     config.lora.override_duty_cycle = false;
     initRegion();
-    airTime->utilizationTX[0] = MS_IN_HOUR;
+    ScopedDutyCycleSaturatedAirTime saturated;
 
     meshtastic_MeshPacket initial = makeDecoded(LOCAL_NODE, REMOTE_NODE, meshtastic_PortNum_ROUTING_APP, SMALL_PAYLOAD);
     initial.id = 0xC14C14C1;
@@ -1519,7 +1536,6 @@ void test_C14_duty_cycle_limited_reliable_send_remains_pending(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, pipelineRouter->pendingCount(),
                                      "duty-cycle rejection must retain the retry for when airtime is available");
 
-    airTime->utilizationTX[0] = 0;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
     initRegion();
 }
