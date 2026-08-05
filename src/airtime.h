@@ -39,6 +39,10 @@ void logAirtime(reportTypes reportType, uint32_t airtime_ms);
 
 uint32_t *airtimeReport(reportTypes reportType);
 
+// Not thread-safe: the accessors rotate the windows in place via syncNow(), so they mutate shared
+// state rather than just reading it. Every current caller runs on the OSThread scheduler -
+// RadioLibInterface/SimRadio, RadioInterface, Router, DeviceTelemetry, ContentHandler, and the
+// screen renderers. New callers must be on that thread too, or this needs a lock.
 class AirTime : private concurrency::OSThread
 {
 
