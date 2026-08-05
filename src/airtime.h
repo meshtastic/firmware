@@ -63,7 +63,10 @@ class AirTime : private concurrency::OSThread
     uint8_t getPeriodsToLog();
     uint32_t getSecondsPerPeriod();
     uint32_t getSecondsSinceBoot();
-    uint32_t *airtimeReport(reportTypes reportType);
+    /// Copies `count` buckets into `out`, newest first. Copies rather than returning the array so a
+    /// caller cannot hold a handle to buckets that every other entry point rotates underneath it.
+    /// False if `out` is null, `count` exceeds the log depth, or the report type is unknown.
+    bool airtimeReport(reportTypes reportType, uint32_t *out, size_t count);
     uint8_t getSilentMinutes(float txPercent, float dutyCycle);
     bool isTxAllowedChannelUtil(bool polite = false);
     bool isTxAllowedAirUtil();

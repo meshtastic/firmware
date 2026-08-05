@@ -140,19 +140,27 @@ void AirTime::syncNow()
     this->lastUtilPeriodTX = this->getPeriodUtilHour();
 }
 
-uint32_t *AirTime::airtimeReport(reportTypes reportType)
+bool AirTime::airtimeReport(reportTypes reportType, uint32_t *out, size_t count)
 {
+    if (!out || count > PERIODS_TO_LOG)
+        return false;
+
     // Reports may be requested before runOnce() executes after wake.
     syncNow();
 
+    const uint32_t *src = nullptr;
     if (reportType == TX_LOG) {
-        return this->airtimes.periodTX;
+        src = this->airtimes.periodTX;
     } else if (reportType == RX_LOG) {
-        return this->airtimes.periodRX;
+        src = this->airtimes.periodRX;
     } else if (reportType == RX_ALL_LOG) {
-        return this->airtimes.periodRX_ALL;
+        src = this->airtimes.periodRX_ALL;
     }
-    return 0;
+    if (!src)
+        return false;
+
+    memcpy(out, src, count * sizeof(*out));
+    return true;
 }
 
 uint8_t AirTime::getPeriodsToLog()

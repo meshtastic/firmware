@@ -32,7 +32,9 @@ void test_logAirtime_writes_into_current_bucket_immediately()
 
     a.logAirtime(TX_LOG, 100);
 
-    TEST_ASSERT_EQUAL_UINT32(100, a.airtimeReport(TX_LOG)[0]);
+    uint32_t report[PERIODS_TO_LOG] = {0};
+    TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
+    TEST_ASSERT_EQUAL_UINT32(100, report[0]);
 }
 
 void test_getSecondsSinceBoot_tracks_elapsed_time()
@@ -55,7 +57,8 @@ void test_period_rotates_after_one_hour()
 
     Time::advanceTestMillis(3600u * 1000u); // exactly one SECONDS_PER_PERIOD
 
-    uint32_t *report = a.airtimeReport(TX_LOG);
+    uint32_t report[PERIODS_TO_LOG] = {0};
+    TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
     TEST_ASSERT_EQUAL_UINT32(0, report[0]);   // new period starts empty
     TEST_ASSERT_EQUAL_UINT32(500, report[1]); // old period shifted back one slot
 }
@@ -70,7 +73,8 @@ void test_period_rotates_once_per_hour_crossed_while_asleep()
 
     Time::advanceTestMillis(3u * 3600u * 1000u); // 3 hours in one jump
 
-    uint32_t *report = a.airtimeReport(TX_LOG);
+    uint32_t report[PERIODS_TO_LOG] = {0};
+    TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
     TEST_ASSERT_EQUAL_UINT32(200, report[3]);
     TEST_ASSERT_EQUAL_UINT32(0, report[0]);
     TEST_ASSERT_EQUAL_UINT32(0, report[1]);
@@ -87,7 +91,8 @@ void test_period_history_clears_when_asleep_longer_than_the_whole_log()
 
     Time::advanceTestMillis(9u * 3600u * 1000u); // 9 hours > PERIODS_TO_LOG (8)
 
-    uint32_t *report = a.airtimeReport(TX_LOG);
+    uint32_t report[PERIODS_TO_LOG] = {0};
+    TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
     for (uint8_t i = 0; i < a.getPeriodsToLog(); i++) {
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, report[i], "stale history must be cleared, not rotated in");
     }
@@ -170,7 +175,8 @@ void test_period_rotation_survives_millis_wrap()
     Time::advanceTestMillis(3600u * 1000u); // wraps partway through
     Time::serviceMonotonic();
 
-    uint32_t *report = a.airtimeReport(TX_LOG);
+    uint32_t report[PERIODS_TO_LOG] = {0};
+    TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
     TEST_ASSERT_EQUAL_UINT32(0, report[0]);
     TEST_ASSERT_EQUAL_UINT32(777, report[1]);
 }

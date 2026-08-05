@@ -628,13 +628,14 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         return s;
     };
 
-    uint32_t *logArray;
-    logArray = airTime->airtimeReport(TX_LOG);
-    std::string txLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
-    logArray = airTime->airtimeReport(RX_LOG);
-    std::string rxLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
-    logArray = airTime->airtimeReport(RX_ALL_LOG);
-    std::string rxAllLog = arrayFromLog(logArray, airTime->getPeriodsToLog());
+    const uint8_t periods = airTime->getPeriodsToLog();
+    uint32_t logArray[PERIODS_TO_LOG] = {0};
+    airTime->airtimeReport(TX_LOG, logArray, periods);
+    std::string txLog = arrayFromLog(logArray, periods);
+    airTime->airtimeReport(RX_LOG, logArray, periods);
+    std::string rxLog = arrayFromLog(logArray, periods);
+    airTime->airtimeReport(RX_ALL_LOG, logArray, periods);
+    std::string rxAllLog = arrayFromLog(logArray, periods);
 
     String wifiIPString = WiFi.localIP().toString();
     std::string wifiIP = wifiIPString.c_str();
