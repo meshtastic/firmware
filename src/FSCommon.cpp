@@ -12,6 +12,85 @@
 #include "SPILock.h"
 #include "configuration.h"
 
+#if defined(ARCH_PORTDUINO)
+#include <filesystem>
+#endif
+
+#if defined(ARCH_NRF52) || defined(ARCH_STM32)
+// Adafruit_LittleFS (nRF52) and STM32_LittleFS both wrap littlefs v1, which predates lfs_fs_size().
+// Count the blocks currently in use with lfs_traverse() instead.
+static int fsCountBlockCb(void *ctx, lfs_block_t)
+{
+    *static_cast<size_t *>(ctx) += 1;
+    return 0;
+}
+
+size_t fsTotalBytes()
+{
+    lfs_t *fs = FSCom._getFS();
+    if (!fs || !fs->cfg)
+        return 0;
+    return (size_t)fs->cfg->block_count * (size_t)fs->cfg->block_size;
+}
+
+size_t fsUsedBytes()
+{
+    lfs_t *fs = FSCom._getFS();
+    if (!fs || !fs->cfg)
+        return 0;
+    size_t blocks = 0;
+    FSCom._lockFS();
+    int err = lfs_traverse(fs, fsCountBlockCb, &blocks);
+    FSCom._unlockFS();
+    if (err < 0)
+        return fsTotalBytes(); // report "full" so capacity checks fail safe
+    return blocks * (size_t)fs->cfg->block_size;
+}
+#elif defined(ARCH_RP2040)
+// arduino-pico reports capacity through FSInfo rather than as methods.
+size_t fsTotalBytes()
+{
+    FSInfo info;
+    return FSCom.info(info) ? (size_t)info.totalBytes : 0;
+}
+
+size_t fsUsedBytes()
+{
+    FSInfo info;
+    return FSCom.info(info) ? (size_t)info.usedBytes : 0;
+}
+#elif defined(ARCH_PORTDUINO)
+// Portduino is backed by the host filesystem; ask the OS about the volume holding the working
+// directory. std::filesystem keeps this working on native-windows too, where statvfs() does not
+// exist. On error we report "full" so capacity checks fail safe.
+size_t fsTotalBytes()
+{
+    std::error_code ec;
+    const auto info = std::filesystem::space(".", ec);
+    return ec ? 0 : (size_t)info.capacity;
+}
+
+size_t fsUsedBytes()
+{
+    std::error_code ec;
+    const auto info = std::filesystem::space(".", ec);
+    if (ec || info.capacity < info.available)
+        return fsTotalBytes();
+    return (size_t)(info.capacity - info.available);
+}
+#else
+// ESP32 LittleFS and the nRF54L15 wrapper expose these directly.
+size_t fsTotalBytes()
+{
+    return FSCom.totalBytes();
+}
+
+size_t fsUsedBytes()
+{
+    return FSCom.usedBytes();
+}
+#endif
+
 // Software SPI is used by MUI so disable SD card here until it's also implemented
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 #include <SD.h>
@@ -29,44 +108,6 @@ SPIClass SPI_HSPI(HSPI);
 #endif
 
 #endif // HAS_SDCARD
-
-/**
- * @brief Copies a file from one location to another.
- *
- * @param from The path of the source file.
- * @param to The path of the destination file.
- * @return true if the file was successfully copied, false otherwise.
- */
-bool copyFile(const char *from, const char *to)
-{
-#ifdef FSCom
-    // take SPI Lock
-    concurrency::LockGuard g(spiLock);
-    unsigned char cbuffer[16];
-
-    File f1 = FSCom.open(from, FILE_O_READ);
-    if (!f1) {
-        LOG_ERROR("Failed to open source file %s", from);
-        return false;
-    }
-
-    File f2 = FSCom.open(to, FILE_O_WRITE);
-    if (!f2) {
-        LOG_ERROR("Failed to open destination file %s", to);
-        return false;
-    }
-
-    while (f1.available() > 0) {
-        byte i = f1.read(cbuffer, 16);
-        f2.write(cbuffer, i);
-    }
-
-    f2.flush();
-    f2.close();
-    f1.close();
-    return true;
-#endif
-}
 
 /**
  * Renames a file from pathFrom to pathTo.

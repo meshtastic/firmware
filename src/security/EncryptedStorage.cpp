@@ -5,10 +5,10 @@
 // Common includes - available for all platform implementations
 #include "EncryptedStorage.h"
 #include "FSCommon.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "SecureZero.h"
+#include "gps/RTC.h"
 #include <algorithm>
 
 #ifdef ARCH_NRF52
@@ -1076,16 +1076,6 @@ bool isSessionExpired()
     if (s_sessionMaxMs == 0)
         return false;
     return (millis() - s_sessionStartedMs) > s_sessionMaxMs;
-}
-
-uint32_t getSessionRemainingSeconds()
-{
-    if (s_sessionMaxMs == 0)
-        return 0;
-    uint32_t elapsedMs = millis() - s_sessionStartedMs;
-    if (elapsedMs >= s_sessionMaxMs)
-        return 0;
-    return (s_sessionMaxMs - elapsedMs) / 1000UL;
 }
 
 uint8_t consumeSessionBoot()

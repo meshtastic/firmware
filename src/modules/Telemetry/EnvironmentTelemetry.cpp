@@ -9,11 +9,11 @@
 #include "NodeDB.h"
 #include "Power.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "UnitConversions.h"
 #include "buzz.h"
+#include "gps/RTC.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
 #include "main.h"
@@ -123,16 +123,16 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/SPA06Sensor.h"
 #endif
 
-#ifdef SENSECAP_INDICATOR
-#include "Sensor/IndicatorSensor.h"
-#endif
-
 #if __has_include(<Adafruit_TSL2561_U.h>)
 #include "Sensor/TSL2561Sensor.h"
 #endif
 
 #if __has_include(<BH1750_WE.h>)
 #include "Sensor/BH1750Sensor.h"
+#endif
+
+#if __has_include(<Adafruit_DS248x.h>)
+#include "Sensor/DS248XSensor.h"
 #endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -167,10 +167,6 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // Not a real I2C device
     addSensor<T1000xSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
 #else
-#ifdef SENSECAP_INDICATOR
-    // Not a real I2C device, uses UART
-    addSensor<IndicatorSensor>(i2cScanner, ScanI2C::DeviceType::NONE);
-#endif
 #if HAS_SPA06 && __has_include(<Adafruit_SPA06_003.h>)
     addSensor<SPA06Sensor>(i2cScanner, ScanI2C::DeviceType::SPA06);
 #endif
@@ -247,6 +243,10 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     // TODO Can we scan for multiple sensors connected on the same bus?
     addSensor<SHTXXSensor>(i2cScanner, ScanI2C::DeviceType::SHTXX);
 #endif
+#if __has_include(<Adafruit_DS248x.h>)
+    addSensor<DS248XSensor>(i2cScanner, ScanI2C::DeviceType::DS248X);
+#endif
+
 #endif
 }
 
@@ -661,34 +661,38 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.soil_moisture);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
-        p->to = dest;
-        p->decoded.want_response = false;
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-        else
-            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        // release previous packet before occupying a new spot
-        if (lastMeasurementPacket != nullptr)
-            packetPool.release(lastMeasurementPacket);
-
-        lastMeasurementPacket = packetPool.allocCopy(*p);
-        if (phoneOnly) {
-            LOG_INFO("Send packet to phone");
-            service->sendToPhone(p);
+        if (!p) {
+            validTelemetry = false;
         } else {
-            LOG_INFO("Send packet to mesh");
-            service->sendToMesh(p, RX_SRC_LOCAL, true);
+            p->to = dest;
+            p->decoded.want_response = false;
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            else
+                p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+            // release previous packet before occupying a new spot
+            if (lastMeasurementPacket != nullptr)
+                packetPool.release(lastMeasurementPacket);
 
-            if (isPowerSavingSensor()) {
-                meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
-                if (notification) {
-                    notification->level = meshtastic_LogRecord_Level_INFO;
-                    notification->time = getValidTime(RTCQualityFromNet);
-                    sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
-                            Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
-                                                              default_telemetry_broadcast_interval_secs) /
-                                1000U);
-                    service->sendClientNotification(notification);
+            lastMeasurementPacket = packetPool.allocCopy(*p);
+            if (phoneOnly) {
+                LOG_INFO("Send packet to phone");
+                service->sendToPhone(p);
+            } else {
+                LOG_INFO("Send packet to mesh");
+                service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+                if (isPowerSavingSensor()) {
+                    meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+                    if (notification) {
+                        notification->level = meshtastic_LogRecord_Level_INFO;
+                        notification->time = getValidTime(RTCQualityFromNet);
+                        sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                                Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                                  default_telemetry_broadcast_interval_secs) /
+                                    1000U);
+                        service->sendClientNotification(notification);
+                    }
                 }
             }
         }

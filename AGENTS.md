@@ -50,6 +50,7 @@ The [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) server expose
 - **Serial sessions**: `serial_open`, `serial_read`, `serial_list`, `serial_close`
 - **Device reads**: `device_info`, `list_nodes`
 - **Device writes** (require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **Frame injection**: `inject_frame` - deliver a crafted frame into a board's real RX pipeline as if received off LoRa (reaches `from != 0` / decrypt / remote-admin paths the `toRadio` API can't). Needs firmware built with `-D MESHTASTIC_ENABLE_FRAME_INJECTION=1` (`MeshService::injectAsReceived`); sim nodes always. See the copilot-instructions **Frame injection** section.
 - **userPrefs admin**: `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_*`, `nrfutil_*`, `picotool_*`
 

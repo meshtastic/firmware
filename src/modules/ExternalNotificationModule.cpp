@@ -16,10 +16,10 @@
 #include "ExternalNotificationModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
@@ -38,6 +38,10 @@ bool ascending = true;
 
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
+#endif
+
+#if defined(HAS_I2S_SPEAKER_NRF52)
+#include "platform/nrf52/NRF52RtttlPlayer.h"
 #endif
 
 /*
@@ -77,6 +81,9 @@ int32_t ExternalNotificationModule::runOnce()
 #ifdef HAS_I2S
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
         if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
@@ -143,6 +150,17 @@ int32_t ExternalNotificationModule::runOnce()
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+        }
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        // Play RTTTL over the I2S speaker (no piezo on this board).
+        if (canBuzz() && buzzerShouldAlert) {
+            if (nrf52RtttlPlayer.isPlaying()) {
+                nrf52RtttlPlayer.play();
+            } else if (isNagging && (nagCycleCutoff >= millis())) {
+                nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
+            }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
@@ -264,6 +282,9 @@ void ExternalNotificationModule::stopNow()
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+    nrf52RtttlPlayer.stop();
 #endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
