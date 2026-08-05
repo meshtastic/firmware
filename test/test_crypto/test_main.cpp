@@ -2,6 +2,7 @@
 #include "CryptoEngine.h"
 
 #include "TestUtil.h"
+#include "aes-ccm.h"
 #include <XEdDSA.h>
 #include <unity.h>
 
@@ -310,6 +311,42 @@ void test_AES_CTR(void)
     TEST_ASSERT_EQUAL_MEMORY(expected, plain, 16);
 }
 
+void test_AES_CCM_partial_block_bounds(void)
+{
+    // aes_ccm_encr() used to write a whole 16-byte AES block at the output before XOR-ing,
+    // so a trailing partial block scribbled up to 15 bytes past what the caller allocated.
+    const uint8_t guard = 0xA5;
+    const size_t guardLen = 16;
+    const size_t lengths[] = {5, 20}; // pure partial block, and one full block plus a partial one
+    uint8_t key[32];
+    uint8_t nonce[13];
+    uint8_t auth[8];
+
+    HexToBytes(key, "603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
+    HexToBytes(nonce, "000102030405060708090A0B0C");
+
+    for (size_t n = 0; n < sizeof(lengths) / sizeof(lengths[0]); n++) {
+        const size_t len = lengths[n];
+        uint8_t plain[32];
+        uint8_t crypt[32 + guardLen];
+        uint8_t decrypted[32 + guardLen];
+
+        for (size_t i = 0; i < len; i++)
+            plain[i] = (uint8_t)i;
+        memset(crypt + len, guard, guardLen);
+        memset(decrypted + len, guard, guardLen);
+
+        TEST_ASSERT_EQUAL(0, aes_ccm_ae(key, sizeof(key), nonce, sizeof(auth), plain, len, nullptr, 0, crypt, auth));
+        for (size_t i = 0; i < guardLen; i++)
+            TEST_ASSERT_EQUAL_UINT8(guard, crypt[len + i]);
+
+        TEST_ASSERT_TRUE(aes_ccm_ad(key, sizeof(key), nonce, sizeof(auth), crypt, len, nullptr, 0, auth, decrypted));
+        for (size_t i = 0; i < guardLen; i++)
+            TEST_ASSERT_EQUAL_UINT8(guard, decrypted[len + i]);
+        TEST_ASSERT_EQUAL_MEMORY(plain, decrypted, len);
+    }
+}
+
 void setup()
 {
     // NOTE!!! Wait for >2 secs
@@ -323,6 +360,7 @@ void setup()
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
+    RUN_TEST(test_AES_CCM_partial_block_bounds);
     RUN_TEST(test_PKC);
     RUN_TEST(test_XEdDSA);
     RUN_TEST(test_XEdDSA_cross_key_reject);

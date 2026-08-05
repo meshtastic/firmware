@@ -1,0 +1,9 @@
+# FAULT, and it is a firmware bug rather than a typo. This file is loaded LAST and says
+# MODE_RX is LOW on both pins, but the loader only ever writes HIGH and never writes
+# LOW back, so the HIGH from a-first.yaml survives. The effective table is the OR of
+# both files -- a switch state that neither file asked for. Verified with --output-yaml.
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_RX: [LOW, LOW]

@@ -1,6 +1,6 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
-#include "RTC.h"
+#include "gps/RTC.h"
 
 #include "GeoCoord.h"
 #include "NodeDB.h"

@@ -168,6 +168,8 @@ void ReplyBotModule::sendDm(const meshtastic_MeshPacket &rx, const char *text)
     if (!text)
         return;
     meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p)
+        return;
     p->to = rx.from;
     p->channel = rx.channel;
     p->want_ack = false;

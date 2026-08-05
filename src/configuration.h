@@ -88,6 +88,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_PREHOP_DROP 1
 #endif
 
+// Debug/test only: let a wired client (serial/TCP) inject frames into the RX pipeline as if they had
+// arrived over LoRa - a SIMULATOR_APP ToRadio packet is delivered through the real receive path on real
+// hardware (see MeshService::injectAsReceived). This forges over-the-air traffic, so it MUST stay 0 in
+// any shipping build; enable per-build with -D MESHTASTIC_ENABLE_FRAME_INJECTION=1.
+#ifndef MESHTASTIC_ENABLE_FRAME_INJECTION
+#define MESHTASTIC_ENABLE_FRAME_INJECTION 0
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
@@ -287,6 +295,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
 #define SCD30_ADDR 0x61
+#define DS248X_ADDR 0x18      // same as MCP9808_ADDR, STK8BXX_ADDR and LIS3DH_ADDR
+#define DS248X_ADDR_ALT1 0x19 // same as LIS3DH_ADDR_ALT and BMA423_ADDR
+#define DS248X_ADDR_ALT2 0x1A // same as CST328_ADDR
+#define DS248X_ADDR_ALT3 0x1B
+#define DS248X_ADDR_ALT4 0x1C // same as QMC6310U_ADDR
+#define DS248X_ADDR_ALT5 0x1D // same as DFROBOT_RAIN_ADDR
+#define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
+#define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -395,7 +411,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef WIRE_INTERFACES_COUNT
 // Officially an NRF52 macro
 // Repurposed cross-platform to identify devices using Wire1
-#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA)
+// The SenseCAP Indicator has a second bus bridged to the RP2040 (I2CProxy)
+#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA) || defined(SENSECAP_INDICATOR)
 #define WIRE_INTERFACES_COUNT 2
 #elif HAS_WIRE
 #define WIRE_INTERFACES_COUNT 1
@@ -415,6 +432,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_TFT
 #define HAS_TFT 0
+#endif
+// Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
+// -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).
+#ifndef BASEUI_HAS_GAMES
+#define BASEUI_HAS_GAMES 0
 #endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0

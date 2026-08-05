@@ -95,8 +95,11 @@ typedef struct _meshtastic_NodeInfoLite {
     /* The public key of the user's device, for PKI-based encrypted DMs. */
     meshtastic_NodeInfoLite_public_key_t public_key;
     /* Q4-encoded SNR: dB × 4, sint32 zigzag. Matches RouteDiscovery convention.
- Encode: snr_q4 = (int32_t)(snr * 4.0f). Decode: snr = snr_q4 / 4.0f.
- float snr is always zeroed on disk; this field carries all persisted SNR. */
+ Encode: snr_q4 = (int32_t)lroundf(snr * 4.0f). Decode: snr = snr_q4 / 4.0f.
+ float snr is always zeroed on disk; this field carries all persisted SNR.
+ A stored 0 does not by itself mean "unknown" here - see NODEINFO_BITFIELD_HAS_SNR in
+ src/mesh/NodeDB.h for the presence bit that disambiguates a genuine 0 dB reading from
+ "never measured". */
     int32_t snr_q4;
 } meshtastic_NodeInfoLite;
 
@@ -452,7 +455,7 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_NodeDatabase_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
-#define meshtastic_BackupPreferences_size        2738
+#define meshtastic_BackupPreferences_size        2740
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_DeviceState_size              1944
 #define meshtastic_NodeEnvironmentEntry_size     170

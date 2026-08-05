@@ -326,44 +326,6 @@ void InkHUD::InkHUD::touchNavDown()
     }
 }
 
-// Call this when touch input needs joystick-like left navigation independent of joystick-enabled mode
-void InkHUD::InkHUD::touchNavLeft()
-{
-    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
-    case 1: // 90 deg
-        events->onTouchNavDown();
-        break;
-    case 2: // 180 deg
-        events->onTouchNavRight();
-        break;
-    case 3: // 270 deg
-        events->onTouchNavUp();
-        break;
-    default: // 0 deg
-        events->onTouchNavLeft();
-        break;
-    }
-}
-
-// Call this when touch input needs joystick-like right navigation independent of joystick-enabled mode
-void InkHUD::InkHUD::touchNavRight()
-{
-    switch ((persistence->settings.rotation + persistence->settings.joystick.alignment) % 4) {
-    case 1: // 90 deg
-        events->onTouchNavUp();
-        break;
-    case 2: // 180 deg
-        events->onTouchNavLeft();
-        break;
-    case 3: // 270 deg
-        events->onTouchNavDown();
-        break;
-    default: // 0 deg
-        events->onTouchNavRight();
-        break;
-    }
-}
-
 void InkHUD::InkHUD::touchTap(uint16_t x, uint16_t y)
 {
     events->onTouchTap(x, y, false);

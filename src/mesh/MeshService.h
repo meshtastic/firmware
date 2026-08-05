@@ -137,6 +137,10 @@ class MeshService
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
 
+    // Rewrite any queued-for-phone packet still carrying a millis() rx_time placeholder into a
+    // real epoch, now that the wall clock is trustworthy.
+    void reconcilePendingRxTimes();
+
     // Release QueueStatus packet to pool
     void releaseQueueStatusToPool(meshtastic_QueueStatus *p) { queueStatusPool.release(p); }
 
@@ -158,6 +162,12 @@ class MeshService
      * a reference
      */
     void handleToRadio(meshtastic_MeshPacket &p);
+
+#if MESHTASTIC_ENABLE_FRAME_INJECTION
+    /// Test/debug seam (build-flag gated, off by default): deliver a client-supplied frame into the
+    /// receive pipeline as if it had arrived off the LoRa chip. See the definition for the wire format.
+    void injectAsReceived(meshtastic_MeshPacket &p);
+#endif
 
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
      * @return true if client devices should be sent a new set of radio configs
@@ -199,6 +209,7 @@ class MeshService
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
 
+    /// Seconds since the packet arrived, or SINCE_UNKNOWN if it carries no trustworthy rx_time.
     uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
 
   private:

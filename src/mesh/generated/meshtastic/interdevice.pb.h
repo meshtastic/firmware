@@ -52,6 +52,14 @@ typedef enum _meshtastic_FileStatus {
     meshtastic_FileStatus_FILE_NOT_A_FILE = 7 /* path is a directory (GET) or not one (listing) */
 } meshtastic_FileStatus;
 
+/* What to do with the SD card of the co-processor */
+typedef enum _meshtastic_SdCommand {
+    meshtastic_SdCommand_SD_COMMAND_UNSPECIFIED = 0,
+    meshtastic_SdCommand_SD_MOUNT = 1, /* mount a card that is in the slot, also after an eject */
+    meshtastic_SdCommand_SD_EJECT = 2, /* flush and release the card so it can be pulled safely */
+    meshtastic_SdCommand_SD_FORMAT = 3 /* wipe the card and put a fresh FAT on it, then mount it */
+} meshtastic_SdCommand;
+
 typedef enum _meshtastic_SdCardInfo_CardType {
     meshtastic_SdCardInfo_CardType_NONE = 0,
     meshtastic_SdCardInfo_CardType_MMC = 1,
@@ -142,6 +150,9 @@ typedef struct _meshtastic_SdCardInfo {
  present is not decided yet. Ask again rather than concluding the slot
  is empty. */
     bool busy;
+    /* A card answers in the slot but carries no filesystem that could be
+ mounted (present is false then). Formatting it makes it usable. */
+    bool unformatted;
 } meshtastic_SdCardInfo;
 
 typedef PB_BYTES_ARRAY_T(256) meshtastic_I2CResult_read_data_t;
@@ -178,6 +189,11 @@ typedef struct _meshtastic_InterdeviceMessage {
      Echoes the id when known, 0 when the frame was undecodable. Never
      sent in reaction to a nack. */
         bool nack;
+        /* Request: mount the card, or release it so it can be pulled safely. The
+     co-processor answers with sd_info. Without an eject the card is mounted
+     on its own and kept mounted; after one it stays released until a mount
+     is asked for. */
+        meshtastic_SdCommand sd_command;
     } data;
     /* Correlates a response with its request: responses echo the id of the
  request they answer. 0 for unsolicited messages (e.g. the nmea stream). */
@@ -201,6 +217,10 @@ extern "C" {
 #define _meshtastic_FileStatus_MIN meshtastic_FileStatus_FILE_UNSPECIFIED
 #define _meshtastic_FileStatus_MAX meshtastic_FileStatus_FILE_NOT_A_FILE
 #define _meshtastic_FileStatus_ARRAYSIZE ((meshtastic_FileStatus)(meshtastic_FileStatus_FILE_NOT_A_FILE+1))
+
+#define _meshtastic_SdCommand_MIN meshtastic_SdCommand_SD_COMMAND_UNSPECIFIED
+#define _meshtastic_SdCommand_MAX meshtastic_SdCommand_SD_FORMAT
+#define _meshtastic_SdCommand_ARRAYSIZE ((meshtastic_SdCommand)(meshtastic_SdCommand_SD_FORMAT+1))
 
 #define _meshtastic_SdCardInfo_CardType_MIN meshtastic_SdCardInfo_CardType_NONE
 #define _meshtastic_SdCardInfo_CardType_MAX meshtastic_SdCardInfo_CardType_UNKNOWN_CARD
@@ -227,19 +247,20 @@ extern "C" {
 
 #define meshtastic_InterdeviceMessage_data_ping_ENUMTYPE meshtastic_InterdeviceVersion
 #define meshtastic_InterdeviceMessage_data_pong_ENUMTYPE meshtastic_InterdeviceVersion
+#define meshtastic_InterdeviceMessage_data_sd_command_ENUMTYPE meshtastic_SdCommand
 
 
 /* Initializer values for message structs */
 #define meshtastic_FileTransfer_init_default     {_meshtastic_FileOperation_MIN, "", {0, {0}}, _meshtastic_FileStatus_MIN, "", 0, 0, 0}
 #define meshtastic_DirectoryListing_init_default {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, _meshtastic_FileStatus_MIN, "", 0, 0}
 #define meshtastic_I2CTransaction_init_default   {0, {0, {0}}, 0}
-#define meshtastic_SdCardInfo_init_default       {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0, 0}
+#define meshtastic_SdCardInfo_init_default       {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_default        {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
 #define meshtastic_InterdeviceMessage_init_default {0, {""}, 0}
 #define meshtastic_FileTransfer_init_zero        {_meshtastic_FileOperation_MIN, "", {0, {0}}, _meshtastic_FileStatus_MIN, "", 0, 0, 0}
 #define meshtastic_DirectoryListing_init_zero    {"", 0, {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}, _meshtastic_FileStatus_MIN, "", 0, 0}
 #define meshtastic_I2CTransaction_init_zero      {0, {0, {0}}, 0}
-#define meshtastic_SdCardInfo_init_zero          {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0, 0}
+#define meshtastic_SdCardInfo_init_zero          {0, _meshtastic_SdCardInfo_CardType_MIN, _meshtastic_SdCardInfo_FatType_MIN, 0, 0, 0, 0, 0, 0}
 #define meshtastic_I2CResult_init_zero           {_meshtastic_I2CResult_Status_MIN, {0, {0}}}
 #define meshtastic_InterdeviceMessage_init_zero  {0, {""}, 0}
 
@@ -269,6 +290,7 @@ extern "C" {
 #define meshtastic_SdCardInfo_free_bytes_tag     6
 #define meshtastic_SdCardInfo_stats_valid_tag    7
 #define meshtastic_SdCardInfo_busy_tag           8
+#define meshtastic_SdCardInfo_unformatted_tag    9
 #define meshtastic_I2CResult_status_tag          1
 #define meshtastic_I2CResult_read_data_tag       2
 #define meshtastic_InterdeviceMessage_nmea_tag   1
@@ -284,6 +306,7 @@ extern "C" {
 #define meshtastic_InterdeviceMessage_ping_tag   11
 #define meshtastic_InterdeviceMessage_pong_tag   12
 #define meshtastic_InterdeviceMessage_nack_tag   13
+#define meshtastic_InterdeviceMessage_sd_command_tag 14
 #define meshtastic_InterdeviceMessage_id_tag     15
 
 /* Struct field encoding specification for nanopb */
@@ -324,7 +347,8 @@ X(a, STATIC,   SINGULAR, UINT64,   card_size,         4) \
 X(a, STATIC,   SINGULAR, UINT64,   used_bytes,        5) \
 X(a, STATIC,   SINGULAR, UINT64,   free_bytes,        6) \
 X(a, STATIC,   SINGULAR, BOOL,     stats_valid,       7) \
-X(a, STATIC,   SINGULAR, BOOL,     busy,              8)
+X(a, STATIC,   SINGULAR, BOOL,     busy,              8) \
+X(a, STATIC,   SINGULAR, BOOL,     unformatted,       9)
 #define meshtastic_SdCardInfo_CALLBACK NULL
 #define meshtastic_SdCardInfo_DEFAULT NULL
 
@@ -348,6 +372,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (data,sd_info,data.sd_info),  10) \
 X(a, STATIC,   ONEOF,    UENUM,    (data,ping,data.ping),  11) \
 X(a, STATIC,   ONEOF,    UENUM,    (data,pong,data.pong),  12) \
 X(a, STATIC,   ONEOF,    BOOL,     (data,nack,data.nack),  13) \
+X(a, STATIC,   ONEOF,    UENUM,    (data,sd_command,data.sd_command),  14) \
 X(a, STATIC,   SINGULAR, UINT32,   id,               15)
 #define meshtastic_InterdeviceMessage_CALLBACK NULL
 #define meshtastic_InterdeviceMessage_DEFAULT NULL
@@ -379,7 +404,7 @@ extern const pb_msgdesc_t meshtastic_InterdeviceMessage_msg;
 #define meshtastic_I2CResult_size                261
 #define meshtastic_I2CTransaction_size           271
 #define meshtastic_InterdeviceMessage_size       4666
-#define meshtastic_SdCardInfo_size               43
+#define meshtastic_SdCardInfo_size               45
 
 #ifdef __cplusplus
 } /* extern "C" */

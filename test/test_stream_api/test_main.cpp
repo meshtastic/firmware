@@ -1,14 +1,18 @@
 #include "MeshTypes.h"
 #include "SerialConsole.h"
 #include "TestUtil.h"
+#include "UptimeClock.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "mesh-pb-constants.h"
 #include "mesh/MeshService.h"
+#include "mesh/NodeDB.h"
 #include "mesh/StreamAPI.h"
 #include "mesh/StreamFrameWriter.h"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdint>
+#include <ctime>
 #include <deque>
 #include <limits>
 #include <unity.h>
@@ -134,6 +138,13 @@ class StreamAPITestShim : public StreamAPI
         capturedPayload.assign(buf + 4, buf + 4 + len);
         return false;
     }
+};
+
+/// Minimal PhoneAPI transport for config-stream tests.
+class PhoneAPITestShim : public PhoneAPI
+{
+  protected:
+    bool checkIsConnected() override { return true; }
 };
 
 /// Exposes framed-log hooks and records best-effort writes.
@@ -408,6 +419,237 @@ void test_serial_console_suppresses_raw_output_in_protobuf_mode()
     TEST_ASSERT_TRUE(emptyAfterProtobuf);
 }
 
+// Build a phone->radio ADMIN_APP packet carrying `admin`, with an arbitrary wire `from`.
+static meshtastic_MeshPacket makeAdminPacket(NodeNum from, const meshtastic_AdminMessage &admin)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.from = from;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_AdminMessage_msg, &admin);
+    return p;
+}
+
+// The lockdown admin gate must decide on the connection's authorization, not the wire `from`. A
+// client that sets from != 0 previously skipped the gate, so an unauthorized connection could run
+// admin. classifyLocalAdminPacket ignores `from`, so the same spoofed packet is still dropped.
+static void test_lockdown_admin_gate_ignores_wire_from(void)
+{
+    meshtastic_AdminMessage setter = meshtastic_AdminMessage_init_zero;
+    setter.which_payload_variant = meshtastic_AdminMessage_set_owner_tag;
+    meshtastic_MeshPacket spoofed = makeAdminPacket(0x12345678, setter); // from != 0, the bypass
+
+    meshtastic_AdminMessage out;
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::DropUnauthorized,
+                              (int)PhoneAPI::classifyLocalAdminPacket(spoofed, /*adminAuthorized=*/false, out),
+                              "unauthorized admin with from != 0 must still be dropped");
+    // Control: an authorized connection's identical packet passes through.
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::AuthorizedPassThrough,
+                              (int)PhoneAPI::classifyLocalAdminPacket(spoofed, /*adminAuthorized=*/true, out),
+                              "authorized admin must not be dropped");
+
+    // lockdown_auth is the authentication itself, so it is delivered inline regardless of from/auth.
+    meshtastic_AdminMessage la = meshtastic_AdminMessage_init_zero;
+    la.which_payload_variant = meshtastic_AdminMessage_lockdown_auth_tag;
+    meshtastic_MeshPacket authPkt = makeAdminPacket(0x99, la);
+    TEST_ASSERT_EQUAL((int)PhoneAPI::LocalAdminGate::LockdownAuth,
+                      (int)PhoneAPI::classifyLocalAdminPacket(authPkt, /*adminAuthorized=*/false, out));
+
+    // A non-admin packet is outside the gate entirely.
+    meshtastic_MeshPacket text = meshtastic_MeshPacket_init_zero;
+    text.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    text.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    TEST_ASSERT_EQUAL((int)PhoneAPI::LocalAdminGate::NotAdmin,
+                      (int)PhoneAPI::classifyLocalAdminPacket(text, /*adminAuthorized=*/false, out));
+}
+
+// An ADMIN_APP packet whose payload is not a decodable AdminMessage must fall through to the
+// normal reject path (NotAdmin), never be acted on as an admin command. The authorized control
+// proves the decode-failure check runs before the auth branch, so it can't pass for the wrong reason.
+static void test_lockdown_admin_gate_rejects_undecodable_admin(void)
+{
+    meshtastic_MeshPacket p = meshtastic_MeshPacket_init_zero;
+    p.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p.decoded.portnum = meshtastic_PortNum_ADMIN_APP;
+    // Length-delimited field (tag 0x0A) claiming 16 bytes with none following: pb_decode fails.
+    p.decoded.payload.bytes[0] = 0x0A;
+    p.decoded.payload.bytes[1] = 0x10;
+    p.decoded.payload.size = 2;
+
+    meshtastic_AdminMessage out;
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::NotAdmin,
+                              (int)PhoneAPI::classifyLocalAdminPacket(p, /*adminAuthorized=*/false, out),
+                              "undecodable ADMIN_APP payload must fall through to the reject path");
+    TEST_ASSERT_EQUAL_MESSAGE((int)PhoneAPI::LocalAdminGate::NotAdmin,
+                              (int)PhoneAPI::classifyLocalAdminPacket(p, /*adminAuthorized=*/true, out),
+                              "undecodable ADMIN_APP payload must not pass through even when authorized");
+}
+
+static void test_want_config_includes_status_message_module_config(void)
+{
+    ScopedMeshService scopedService;
+    NodeDB testNodeDB;
+    NodeDB *const savedNodeDB = nodeDB;
+    nodeDB = &testNodeDB;
+    const auto savedModuleConfig = moduleConfig;
+    moduleConfig.has_statusmessage = true;
+    strncpy(moduleConfig.statusmessage.node_status, "Ready", sizeof(moduleConfig.statusmessage.node_status) - 1);
+    moduleConfig.statusmessage.node_status[sizeof(moduleConfig.statusmessage.node_status) - 1] = '\0';
+
+    meshtastic_ToRadio request = meshtastic_ToRadio_init_zero;
+    request.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
+    request.want_config_id = SPECIAL_NONCE_ONLY_CONFIG;
+    uint8_t requestBytes[meshtastic_ToRadio_size];
+    const size_t requestSize = pb_encode_to_bytes(requestBytes, sizeof(requestBytes), &meshtastic_ToRadio_msg, &request);
+
+    PhoneAPITestShim api;
+    api.handleToRadio(requestBytes, requestSize);
+
+    bool foundStatusMessageConfig = false;
+    for (unsigned i = 0; i < 64 && !foundStatusMessageConfig; ++i) {
+        uint8_t responseBytes[meshtastic_FromRadio_size];
+        const size_t responseSize = api.getFromRadio(responseBytes);
+        meshtastic_FromRadio response = meshtastic_FromRadio_init_zero;
+        TEST_ASSERT_TRUE(pb_decode_from_bytes(responseBytes, responseSize, &meshtastic_FromRadio_msg, &response));
+        if (response.which_payload_variant == meshtastic_FromRadio_moduleConfig_tag &&
+            response.moduleConfig.which_payload_variant == meshtastic_ModuleConfig_statusmessage_tag) {
+            foundStatusMessageConfig = true;
+            TEST_ASSERT_EQUAL_STRING("Ready", response.moduleConfig.payload_variant.statusmessage.node_status);
+        }
+    }
+
+    api.close();
+    moduleConfig = savedModuleConfig;
+    nodeDB = savedNodeDB;
+    TEST_ASSERT_TRUE(foundStatusMessageConfig);
+}
+
+/// Queue a packet as Router::dispatchReceived would have, before any time source existed.
+static void queuePendingTimePlaceholderPacket(NodeNum from, uint32_t placeholderMillis)
+{
+    meshtastic_MeshPacket pending = meshtastic_MeshPacket_init_zero;
+    pending.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    pending.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    pending.from = from;
+    pending.to = NODENUM_BROADCAST;
+    pending.rx_time = placeholderMillis;
+    pending.has_rx_time = false;
+    service->sendToPhone(packetPool.allocCopy(pending));
+}
+
+static void startHandshake(PhoneAPITestShim &api)
+{
+    meshtastic_ToRadio request = meshtastic_ToRadio_init_zero;
+    request.which_payload_variant = meshtastic_ToRadio_want_config_id_tag;
+    request.want_config_id = SPECIAL_NONCE_ONLY_CONFIG;
+    uint8_t requestBytes[meshtastic_ToRadio_size];
+    const size_t requestSize = pb_encode_to_bytes(requestBytes, sizeof(requestBytes), &meshtastic_ToRadio_msg, &request);
+    api.handleToRadio(requestBytes, requestSize);
+}
+
+/// Drain the config stream looking for the first packet from `from`; false if never delivered.
+static bool drainHandshakeForPacketFrom(PhoneAPITestShim &api, NodeNum from, meshtastic_MeshPacket &outPacket)
+{
+    for (unsigned i = 0; i < 256; ++i) {
+        uint8_t responseBytes[meshtastic_FromRadio_size];
+        const size_t responseSize = api.getFromRadio(responseBytes);
+        if (responseSize == 0)
+            return false;
+        meshtastic_FromRadio response = meshtastic_FromRadio_init_zero;
+        TEST_ASSERT_TRUE(pb_decode_from_bytes(responseBytes, responseSize, &meshtastic_FromRadio_msg, &response));
+        if (response.which_payload_variant == meshtastic_FromRadio_packet_tag && response.packet.from == from) {
+            outPacket = response.packet;
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Swaps in a scratch NodeDB and the injected clock, restoring both plus the RTC on destruction.
+/// Unity's TEST_ASSERT longjmps out on failure, so cleanup must not live at the end of the test.
+class ScopedTimeFixture
+{
+  public:
+    ScopedTimeFixture(uint32_t startMillis) : previous(nodeDB)
+    {
+        resetRTCStateForTests();
+        nodeDB = &instance;
+        Time::setTestMillis(startMillis);
+    }
+    ~ScopedTimeFixture()
+    {
+        nodeDB = previous;
+        Time::useRealClock();
+        resetRTCStateForTests();
+    }
+
+  private:
+    NodeDB instance;
+    NodeDB *previous;
+};
+
+// Time given at the start of the handshake, before the queued packet is drained: reconciliation
+// (fired by the RTC quality crossing hook in RTC.cpp) rewrites the placeholder in place.
+static void test_time_given_at_handshake_start_reconciles_queued_packet(void)
+{
+    ScopedMeshService scopedService;
+    ScopedTimeFixture timeFixture(5000);
+
+    const NodeNum sender = 0x12345678;
+    queuePendingTimePlaceholderPacket(sender, 2000); // "received" 3s before the test's current millis()
+
+    PhoneAPITestShim api;
+    startHandshake(api);
+
+    struct timeval networkTime;
+    networkTime.tv_sec = time(NULL) + SEC_PER_DAY;
+    networkTime.tv_usec = 0;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &networkTime));
+
+    meshtastic_MeshPacket delivered;
+    TEST_ASSERT_TRUE_MESSAGE(drainHandshakeForPacketFrom(api, sender, delivered),
+                             "queued packet was not delivered during the handshake");
+    TEST_ASSERT_TRUE(delivered.has_rx_time);
+    TEST_ASSERT_UINT32_WITHIN(2, (uint32_t)networkTime.tv_sec - 3, delivered.rx_time);
+
+    api.close();
+}
+
+// Time given at the end - after the queued packet already left via the handshake: the delivered
+// copy keeps its unresolved placeholder, since reconciliation can only rewrite what's still queued.
+static void test_time_given_at_handshake_end_does_not_rewrite_already_sent_packet(void)
+{
+    ScopedMeshService scopedService;
+    ScopedTimeFixture timeFixture(5000);
+
+    const NodeNum sender = 0x12345678;
+    queuePendingTimePlaceholderPacket(sender, 2000);
+
+    PhoneAPITestShim api;
+    startHandshake(api);
+
+    // rx_time is proto3 optional, so has_rx_time false omits it from the wire entirely: the
+    // decoded copy reads back 0 and the placeholder itself never left the device.
+    meshtastic_MeshPacket delivered;
+    TEST_ASSERT_TRUE_MESSAGE(drainHandshakeForPacketFrom(api, sender, delivered),
+                             "queued packet was not delivered during the handshake");
+    TEST_ASSERT_FALSE(delivered.has_rx_time);
+    TEST_ASSERT_EQUAL_UINT32(0u, delivered.rx_time);
+
+    // Time-giving transaction happens only now, at the end of the handshake.
+    struct timeval networkTime;
+    networkTime.tv_sec = time(NULL) + SEC_PER_DAY;
+    networkTime.tv_usec = 0;
+    TEST_ASSERT_EQUAL_INT(RTCSetResultSuccess, perhapsSetRTC(RTCQualityFromNet, &networkTime));
+
+    // The already-delivered copy is a value, not a queue reference - untouched either way.
+    TEST_ASSERT_FALSE(delivered.has_rx_time);
+    TEST_ASSERT_EQUAL_UINT32(0u, delivered.rx_time);
+
+    api.close();
+}
+
 /// Unity per-test setup; fixtures are local to each test.
 void setUp(void) {}
 /// Unity per-test teardown; fixtures clean themselves up.
@@ -427,6 +669,11 @@ void setup()
     RUN_TEST(test_stream_api_short_write_reports_failure_without_flush);
     RUN_TEST(test_stream_api_finishes_pending_before_advancing_phone_api);
     RUN_TEST(test_stream_api_gates_logs_and_marks_them_best_effort);
+    RUN_TEST(test_lockdown_admin_gate_ignores_wire_from);
+    RUN_TEST(test_lockdown_admin_gate_rejects_undecodable_admin);
+    RUN_TEST(test_want_config_includes_status_message_module_config);
+    RUN_TEST(test_time_given_at_handshake_start_reconciles_queued_packet);
+    RUN_TEST(test_time_given_at_handshake_end_does_not_rewrite_already_sent_packet);
     // usingProtobufs intentionally has no reset path, so this must run last.
     RUN_TEST(test_serial_console_suppresses_raw_output_in_protobuf_mode);
     exit(UNITY_END());

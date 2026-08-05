@@ -15,11 +15,11 @@
 #include "StoreForwardModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "Throttle.h"
 #include "airtime.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "memGet.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/storeforward.pb.h"
@@ -193,6 +193,9 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     }
 
     this->packetHistory[this->packetHistoryTotalCount].time = getTime();
+    // getTime() silently falls back to a boot-relative count with no RTC source at all; record
+    // whether it was actually trustworthy so replay doesn't have to guess from current quality.
+    this->packetHistory[this->packetHistoryTotalCount].has_rx_time = (getRTCQuality() >= RTCQualityFromNet);
     this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
     this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
     this->packetHistory[this->packetHistoryTotalCount].from = getFrom(&mp);
@@ -201,6 +204,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].emoji = (bool)p.emoji;
     this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
     this->packetHistory[this->packetHistoryTotalCount].rx_rssi = mp.rx_rssi;
+    this->packetHistory[this->packetHistoryTotalCount].has_rx_rssi = mp.has_rx_rssi;
     this->packetHistory[this->packetHistoryTotalCount].rx_snr = mp.rx_snr;
     this->packetHistory[this->packetHistoryTotalCount].hop_start = mp.hop_start;
     this->packetHistory[this->packetHistoryTotalCount].hop_limit = mp.hop_limit;
@@ -248,6 +252,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == dest)) {
 
                 meshtastic_MeshPacket *p = allocDataPacket();
+                if (!p)
+                    return nullptr;
 
                 p->to = local ? this->packetHistory[i].to : dest; // PhoneAPI can handle original `to`
                 p->from = this->packetHistory[i].from;
@@ -255,8 +261,10 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                 p->channel = this->packetHistory[i].channel;
                 p->decoded.reply_id = this->packetHistory[i].reply_id;
                 p->rx_time = this->packetHistory[i].time;
+                p->has_rx_time = this->packetHistory[i].has_rx_time; // presence captured at store time, not replay time
                 p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
                 p->rx_rssi = this->packetHistory[i].rx_rssi;
+                p->has_rx_rssi = this->packetHistory[i].has_rx_rssi; // presence captured at store time, not replay time
                 p->rx_snr = this->packetHistory[i].rx_snr;
                 p->hop_start = this->packetHistory[i].hop_start;
                 p->hop_limit = this->packetHistory[i].hop_limit;
@@ -304,6 +312,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForward &payload)
 {
     meshtastic_MeshPacket *p = allocDataProtobuf(payload);
+    if (!p)
+        return;
 
     p->to = dest;
 
@@ -340,6 +350,8 @@ void StoreForwardModule::sendMessage(NodeNum dest, meshtastic_StoreAndForward_Re
 void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
 {
     meshtastic_MeshPacket *pr = allocDataPacket();
+    if (!pr)
+        return;
     pr->to = dest;
     pr->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     pr->want_ack = false;
