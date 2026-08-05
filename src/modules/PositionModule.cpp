@@ -283,7 +283,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     meshtastic_MeshPacket *reply = allocPositionPacket(precision);
     if (reply) {
-        lastSentReply = millis(); // Track when we sent this reply
+        lastSentReply = Time::getMillis(); // Track when we sent this reply
     }
     return reply;
 }
@@ -514,7 +514,7 @@ int32_t PositionModule::runOnce()
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     // Local-only delivery, so it runs regardless of mesh opt-in state or channel utilization.
     // Only send while the queue is empty (phone assumed connected), like telemetry. The cadence
@@ -697,7 +697,7 @@ void PositionModule::handleNewPosition()
         if (!nodeDB->copyNodePosition(node->num, selfPos))
             return;
         auto smartPosition = getDistanceTraveledSinceLastSend(selfPos);
-        uint32_t msSinceLastSend = millis() - lastGpsSend;
+        uint32_t msSinceLastSend = Time::getMillis() - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold &&
             Throttle::execute(
                 &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },

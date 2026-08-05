@@ -11,6 +11,7 @@
 #include "gps/RTC.h"
 #include "input/InputBroker.h"
 #include "meshUtils.h"
+#include "modules/RouterRetirementModule.h"
 #include <ErriezCRC32.h>
 #include <FSCommon.h>
 #include <Throttle.h>
@@ -128,6 +129,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
         return handled;
     }
+
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+    // Any admin session — local (USB/BLE, from==0) or remote (over-mesh) — proves this node is
+    // still actively managed, so reset the router-retirement unmanaged-uptime credit. (v1 counts
+    // any serviced admin message; gating strictly on auth-success is a possible later refinement.)
+    if (routerRetirementModule)
+        routerRetirementModule->noteAdminSession();
+#endif
 #ifdef ARCH_PORTDUINO
     // Simulator only: honor exit_simulator unconditionally for the local client (from==0).
     // The from==0 branch below now covers pki_encrypted local packets too, but is_managed
@@ -430,13 +439,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         int s = 1; // Reboot in 1 second, hard coded
         LOG_INFO("Reboot in %d seconds", s);
-        rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        rebootAtMsec = (s < 0) ? 0 : (Time::getMillis() + s * 1000);
         break;
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
         LOG_INFO("Shutdown in %d seconds", s);
-        shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
+        shutdownAtMsec = (s < 0) ? 0 : (Time::getMillis() + s * 1000);
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
@@ -1873,7 +1882,7 @@ void AdminModule::reboot(int32_t seconds)
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
         screen->showSimpleBanner("Rebooting...", 0); // stays on screen
-    rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
+    rebootAtMsec = (seconds < 0) ? 0 : (Time::getMillis() + seconds * 1000);
 }
 
 // Without this, a commit that never arrives leaves the transaction open forever and every later
@@ -1986,7 +1995,7 @@ AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_AP
 void AdminModule::setPassKey(meshtastic_AdminMessage *res)
 {
     // Regenerate once there is no session yet or the current key is older than 150s. session_time
-    // holds millis(); the Throttle check is rollover-safe, unlike the previous seconds comparison.
+    // holds Time::getMillis(); the Throttle check is rollover-safe, unlike the previous seconds comparison.
     if (!sessionPasskeyValid || !Throttle::isWithinTimespanMs(session_time, 150 * 1000UL)) {
         // Session passkey authenticates admin replies, so it must be unpredictable: prefer the
         // hardware RNG, falling back to the seeded CSPRNG only when no hardware source exists.
@@ -1998,7 +2007,7 @@ void AdminModule::setPassKey(meshtastic_AdminMessage *res)
             if (!HardwareRNG::fill(session_passkey, sizeof(session_passkey)))
                 CryptRNG.rand(session_passkey, sizeof(session_passkey));
         }
-        session_time = millis();
+        session_time = Time::getMillis();
         sessionPasskeyValid = true;
     }
     memcpy(res->session_passkey.bytes, session_passkey, 8);

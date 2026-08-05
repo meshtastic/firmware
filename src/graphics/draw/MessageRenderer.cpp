@@ -91,8 +91,8 @@ void resetScrollState()
     scrollY = 0.0f;
     scrollStarted = false;
     waitingToReset = false;
-    scrollStartDelay = millis();
-    lastTime = millis();
+    scrollStartDelay = Time::getMillis();
+    lastTime = Time::getMillis();
     manualScrolling = false;
     didReset = false;
 }
@@ -134,8 +134,8 @@ void nudgeScroll(int8_t direction)
         scrollY = newScroll;
         waitingToReset = false;
         scrollStarted = false;
-        scrollStartDelay = millis();
-        lastTime = millis();
+        scrollStartDelay = Time::getMillis();
+        lastTime = Time::getMillis();
     }
 }
 
@@ -570,7 +570,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         } else if (m.timestamp > 0 && nowSecs == 0) {
             // RTC not valid: only trust boot-relative if same boot
-            uint32_t bootNow = millis() / 1000;
+            uint32_t bootNow = Time::getMillis() / 1000;
             if (m.isBootRelative && m.timestamp <= bootNow) {
                 seconds = bootNow - m.timestamp;
                 invalidTime = false;
@@ -740,7 +740,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int scrollStop = std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
 
 #ifndef USE_EINK
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     float delta = (now - lastTime) / 400.0f;
     lastTime = now;
     const float scrollSpeed = 2.0f;
@@ -774,7 +774,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     scrollY = 0.0f;
     waitingToReset = false;
     scrollStarted = false;
-    lastTime = millis();
+    lastTime = Time::getMillis();
 #endif
 
     int finalScroll = (int)scrollY;

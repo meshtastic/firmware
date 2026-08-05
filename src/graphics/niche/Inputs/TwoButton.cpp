@@ -143,7 +143,7 @@ void TwoButton::isrPrimary()
         TwoButton *b = TwoButton::getInstance();
         if (b->buttons[0].state == State::REST) {
             b->buttons[0].state = State::IRQ;
-            b->buttons[0].irqAtMillis = millis();
+            b->buttons[0].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -161,7 +161,7 @@ void TwoButton::isrSecondary()
         TwoButton *b = TwoButton::getInstance();
         if (b->buttons[1].state == State::REST) {
             b->buttons[1].state = State::IRQ;
-            b->buttons[1].irqAtMillis = millis();
+            b->buttons[1].irqAtMillis = Time::getMillis();
             b->startThread();
         }
         isrRunning = false;
@@ -222,7 +222,7 @@ int32_t TwoButton::runOnce()
         // An existing press continues
         // Not held long enough to register as longpress
         case POLLING_UNFIRED: {
-            uint32_t length = millis() - buttons[i].irqAtMillis;
+            uint32_t length = Time::getMillis() - buttons[i].irqAtMillis;
 
             // If button released since last thread tick,
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {

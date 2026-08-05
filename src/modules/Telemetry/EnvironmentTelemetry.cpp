@@ -333,7 +333,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::getMillis();
         }
     }
     if (sleepOnNextExecution) {
@@ -461,7 +461,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
         // === IAQ alert logic ===
         static uint32_t lastAlertTime = 0;
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
 
         bool isOwnTelemetry = lastMeasurementPacket->from == nodeDB->getNodeNum();
         bool isCooldownOver = (now - lastAlertTime > 60000);

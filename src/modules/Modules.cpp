@@ -50,6 +50,9 @@
 #if HAS_VARIABLE_HOPS
 #include "modules/HopScalingModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+#include "modules/RouterRetirementModule.h"
+#endif
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
 #include "modules/TraceRouteModule.h"
@@ -141,6 +144,9 @@ void setupModules()
 
 #if HAS_VARIABLE_HOPS
     hopScalingModule = new HopScalingModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_ROUTER_RETIREMENT
+    routerRetirementModule = new RouterRetirementModule();
 #endif
 
 #if !MESHTASTIC_EXCLUDE_ADMIN

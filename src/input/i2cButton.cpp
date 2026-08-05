@@ -55,13 +55,13 @@ int32_t i2cButtonThread::runOnce()
         if (!getbit(input_state, 0)) {
             if (!btn1_pressed) {
                 btn1_pressed = true;
-                press_start_time = millis();
+                press_start_time = Time::getMillis();
                 long_press_triggered = false;
             }
         } else {
             if (btn1_pressed) {
                 btn1_pressed = false;
-                uint32_t press_duration = millis() - press_start_time;
+                uint32_t press_duration = Time::getMillis() - press_start_time;
                 if (long_press_triggered) {
                     long_press_triggered = false;
                     return 50;
@@ -80,7 +80,7 @@ int32_t i2cButtonThread::runOnce()
         }
     }
 
-    if (btn1_pressed && !long_press_triggered && (millis() - press_start_time >= LONG_PRESS_TIME)) {
+    if (btn1_pressed && !long_press_triggered && (Time::getMillis() - press_start_time >= LONG_PRESS_TIME)) {
         long_press_triggered = true;
         InputEvent evt;
         evt.source = "UserButton";

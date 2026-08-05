@@ -193,7 +193,7 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
 #endif
 
     display->setFont(FONT_SMALL);
-    if ((millis() / 1000) % 2) {
+    if ((Time::getMillis() / 1000) % 2) {
         display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
     } else {
         display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
@@ -233,7 +233,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     // Handle text_input notifications first - they have their own timeout/banner logic
     if (current_notification_type == notificationTypeEnum::text_input) {
         // Check for timeout and reset if needed for text input
-        if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+        if (Time::getMillis() > alertBannerUntil && alertBannerUntil > 0) {
             resetBanner();
             return;
         }
@@ -241,7 +241,7 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         return;
     }
 
-    if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+    if (Time::getMillis() > alertBannerUntil && alertBannerUntil > 0) {
         resetBanner();
     }
 
@@ -1213,7 +1213,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
 
 bool NotificationRenderer::isOverlayBannerShowing()
 {
-    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || Time::getMillis() <= alertBannerUntil);
 }
 
 } // namespace graphics

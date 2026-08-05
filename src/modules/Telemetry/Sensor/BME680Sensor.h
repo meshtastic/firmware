@@ -13,7 +13,7 @@
 #include <memory>
 #endif
 
-#define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // That's 6 hours worth of millis()
+#define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // That's 6 hours worth of Time::getMillis()
 
 #if __has_include(<bsec2.h>)
 const uint8_t bsec_config[] = {

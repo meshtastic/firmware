@@ -58,10 +58,10 @@ int safeEPDiyV7EinkPower(void *pBBEP, int bOn)
         bbepPCA9535DigitalWrite(12, 1); // VCOM CTRL on
         delay(1);
 
-        const uint32_t pgoodStart = millis();
+        const uint32_t pgoodStart = Time::getMillis();
         bool pgoodSeen = false;
         while (!bbepPCA9535DigitalRead(14)) { // CFG_PIN_PWRGOOD
-            if ((millis() - pgoodStart) > 1200) {
+            if ((Time::getMillis() - pgoodStart) > 1200) {
                 if (!warnedPgood) {
                     LOG_WARN("ED047TC1: PWRGOOD timeout, continuing with fallback power-on path");
                     warnedPgood = true;

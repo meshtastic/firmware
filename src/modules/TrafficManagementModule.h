@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MeshModule.h"
+#include "Time.h"
 #include "concurrency/Lock.h"
 #include "concurrency/OSThread.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
@@ -101,13 +102,13 @@ class TrafficManagementModule : public MeshModule, private concurrency::OSThread
     }
 
     // Injectable monotonic clock (ms): tests advance s_testNowMs instead of sleeping across
-    // ticks (mirrors HopScalingModule); production reads millis().
+    // ticks (mirrors HopScalingModule); production reads the central Time:: seam.
     inline static uint32_t s_testNowMs = 0;
     /// Monotonic module clock in ms (virtual under PIO_UNIT_TESTING).
 #ifdef PIO_UNIT_TESTING
     static uint32_t clockMs() { return s_testNowMs; }
 #else
-    static uint32_t clockMs() { return millis(); }
+    static uint32_t clockMs() { return Time::getMillis(); }
 #endif
 
   protected:

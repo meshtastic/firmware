@@ -4,6 +4,7 @@
 #include "MeshService.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "Time.h"
 #include "modules/NodeInfoModule.h"
 
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
@@ -55,7 +56,7 @@ bool PacketAPI::receivePacket(void)
         data_received = true;
 
         powerFSM.trigger(EVENT_INPUT);
-        lastContactMsec = millis();
+        lastContactMsec = Time::getMillis();
 
         meshtastic_ToRadio *mr;
         auto p = server->receivePacket()->move();

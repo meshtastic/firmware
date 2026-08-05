@@ -485,7 +485,7 @@ class NimbleBluetoothToRadioCallback : public BLECharacteristicCallbacks
         int currentWriteCount = bluetoothPhoneAPI->writeCount.fetch_add(1);
 
 #ifdef DEBUG_NIMBLE_ON_WRITE_TIMING
-        int startMillis = millis();
+        int startMillis = Time::getMillis();
         LOG_DEBUG("BLE onWrite(%d): start millis=%d", currentWriteCount, startMillis);
 #endif
 
@@ -511,7 +511,7 @@ class NimbleBluetoothToRadioCallback : public BLECharacteristicCallbacks
                 concurrency::mainDelay.interrupt(); // wake up main loop if sleeping
 
 #ifdef DEBUG_NIMBLE_ON_WRITE_TIMING
-                int finishMillis = millis();
+                int finishMillis = Time::getMillis();
                 LOG_DEBUG("BLE onWrite(%d): append to fromPhoneQueue took %u ms. numBytes=%d", currentWriteCount,
                           finishMillis - startMillis, val.getLength());
 #endif
@@ -533,7 +533,7 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
 
         int currentReadCount = bluetoothPhoneAPI->readCount.fetch_add(1);
         int tries = 0;
-        int startMillis = millis();
+        int startMillis = Time::getMillis();
 
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
         LOG_DEBUG("BLE onRead(%d): start millis=%d", currentReadCount, startMillis);
@@ -569,7 +569,7 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
                     // already
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
                     LOG_DEBUG("BLE onRead(%d): broke before delay after %u ms, %d tries", currentReadCount,
-                              millis() - startMillis, tries);
+                              Time::getMillis() - startMillis, tries);
 #endif
                     break;
                 }
@@ -582,7 +582,7 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
                 if (tries == 4000) {
                     LOG_WARN(
                         "BLE onRead(%d): timeout waiting for data after %u ms, %d tries, giving up and returning 0-size response",
-                        currentReadCount, millis() - startMillis, tries);
+                        currentReadCount, Time::getMillis() - startMillis, tries);
                 }
             }
         }
@@ -622,7 +622,7 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
         }
 
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
-        int finishMillis = millis();
+        int finishMillis = Time::getMillis();
         LOG_DEBUG("BLE onRead(%d): onReadCallbackIsWaitingForData took %u ms, %d tries. numBytes=%d", currentReadCount,
                   finishMillis - startMillis, tries, numBytes);
 #endif

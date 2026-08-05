@@ -72,7 +72,7 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.begin(SERIAL_BAUD);
     // Boot with console TX in non-blocking mode: no host is provably listening yet.
     setHostDraining(false);
-    time_t timeout = millis();
+    time_t timeout = Time::getMillis();
     while (!Port) {
         if (Throttle::isWithinTimespanMs(timeout, FIVE_SECONDS_MS)) {
             delay(100);

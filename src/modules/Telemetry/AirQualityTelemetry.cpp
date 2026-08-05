@@ -225,7 +225,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         } else if (phoneDue && phoneAllowed) {
             // Mesh transmission isn't due yet, but we can still update the phone.
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::getMillis();
         }
 
         // Send to sleep sensors that can be to save power

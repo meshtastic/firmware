@@ -81,7 +81,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         default:
             break;
         }
-        rak9154Sensor.setLastRead(millis());
+        rak9154Sensor.setLastRead(Time::getMillis());
 
         break;
     case SNHUBAPI_EVT_REPORT:
@@ -110,7 +110,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         default:
             break;
         }
-        rak9154Sensor.setLastRead(millis());
+        rak9154Sensor.setLastRead(Time::getMillis());
 
         break;
 

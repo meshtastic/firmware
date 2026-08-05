@@ -1,6 +1,7 @@
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 #include "./SSD16XX.h"
+#include "Time.h"
 
 #include "SPILock.h"
 
@@ -49,12 +50,12 @@ void SSD16XX::wait(uint32_t timeout)
     if (failed)
         return;
 
-    uint32_t startMs = millis();
+    uint32_t startMs = Time::getMillis();
 
     // Busy when HIGH
     while (digitalRead(pin_busy) == HIGH) {
         // Check for timeout
-        if (millis() - startMs > timeout) {
+        if (Time::getMillis() - startMs > timeout) {
             failed = true;
             break;
         }

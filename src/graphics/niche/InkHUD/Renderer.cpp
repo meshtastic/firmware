@@ -427,10 +427,10 @@ void InkHUD::Renderer::renderUserApplets()
             if (ua->wantsFullRender() && !renderAll)
                 clearTile(ua->getTile());
 
-            uint32_t start = millis();
+            uint32_t start = Time::getMillis();
             bool full = ua->wantsFullRender() || renderAll;
             ua->render(full); // Draw!
-            uint32_t stop = millis();
+            uint32_t stop = Time::getMillis();
             LOG_DEBUG("%s took %dms to render", ua->name, stop - start);
         }
     }
@@ -470,10 +470,10 @@ void InkHUD::Renderer::renderSystemApplets()
         if (sa->wantsFullRender() && !renderAll)
             clearTile(sa->getTile());
 
-        // uint32_t start = millis();
+        // uint32_t start = Time::getMillis();
         bool full = sa->wantsFullRender() || renderAll;
         sa->render(full); // Draw!
-        // uint32_t stop = millis();
+        // uint32_t stop = Time::getMillis();
         // LOG_DEBUG("%s took %dms to render", sa->name, stop - start);
     }
 }
@@ -496,7 +496,7 @@ void InkHUD::Renderer::renderPlaceholders()
 
     SystemApplet *placeholder = inkhud->getSystemApplet("Placeholder");
 
-    // uint32_t start = millis();
+    // uint32_t start = Time::getMillis();
     for (Tile *t : emptyTiles) {
         t->assignApplet(placeholder);
         // Clear the tile unless everything is getting re-rendered
@@ -505,7 +505,7 @@ void InkHUD::Renderer::renderPlaceholders()
         placeholder->render(true); // full render
         t->assignApplet(nullptr);
     }
-    // uint32_t stop = millis();
+    // uint32_t stop = Time::getMillis();
     // LOG_DEBUG("Placeholders took %dms to render", stop - start);
 }
 

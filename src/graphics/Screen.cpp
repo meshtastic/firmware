@@ -324,7 +324,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::parseBannerMessageWithFonts(NotificationRenderer::alertBannerMessage);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
     NotificationRenderer::alertBannerUntil =
-        (banner_overlay_options.durationMs == 0) ? 0 : millis() + banner_overlay_options.durationMs;
+        (banner_overlay_options.durationMs == 0) ? 0 : Time::getMillis() + banner_overlay_options.durationMs;
     NotificationRenderer::optionsArrayPtr = banner_overlay_options.optionsArrayPtr;
     NotificationRenderer::optionsEnumPtr = banner_overlay_options.optionsEnumPtr;
     NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
@@ -348,7 +348,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::getMillis() + durationMs;
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -370,7 +370,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::getMillis() + durationMs;
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::curSelected = 0;
@@ -436,7 +436,7 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
     // Store the message and set the expiration timestamp (use same pattern as other notifications)
     strncpy(NotificationRenderer::alertBannerMessage, header ? header : "Text Input", 255);
     NotificationRenderer::alertBannerMessage[255] = '\0';
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : Time::getMillis() + durationMs;
     NotificationRenderer::pauseBanner = false;
     NotificationRenderer::current_notification_type = notificationTypeEnum::text_input;
 
@@ -489,7 +489,7 @@ float Screen::estimatedHeading(double lat, double lon)
     static double oldLat, oldLon;
     static float b = -1.0f;
     static uint32_t lastHeadingAtMs = 0;
-    const uint32_t now = millis();
+    const uint32_t now = Time::getMillis();
     const uint32_t gpsUpdateIntervalSecs =
         Default::getConfiguredOrDefault(config.position.gps_update_interval, default_gps_update_interval);
     uint32_t effectiveUpdateIntervalSecs = gpsUpdateIntervalSecs;
@@ -973,7 +973,7 @@ void Screen::setup()
 #ifndef USE_EINK
     updateUiFrame(ui); // Some SSD1306 clones drop the first draw, so run twice
 #endif
-    serialSinceMsec = millis();
+    serialSinceMsec = Time::getMillis();
 
 #if ARCH_PORTDUINO
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
@@ -1048,7 +1048,7 @@ void Screen::forceDisplay(bool forceUiUpdate)
         // Ensure at least one frame has drawn
         uint64_t startUpdate;
         do {
-            startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+            startUpdate = Time::getMillis(); // Handle impossibly unlikely corner case of a Time::getMillis() overflow..
             delay(10);
             updateUiFrame(ui);
         } while (ui->getUiState()->lastUpdate < startUpdate);
@@ -1109,7 +1109,7 @@ int32_t Screen::runOnce()
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
-    if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
+    if (showingBootScreen && (Time::getMillis() > (logo_timeout + serialSinceMsec))) {
         LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;
@@ -1117,7 +1117,7 @@ int32_t Screen::runOnce()
 
 #ifdef USERPREFS_OEM_TEXT
     static bool showingOEMBootScreen = true;
-    if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
+    if (showingOEMBootScreen && (Time::getMillis() > ((logo_timeout / 2) + serialSinceMsec))) {
         LOG_INFO("Switch to OEM screen...");
         // Change frames.
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
@@ -1268,7 +1268,7 @@ int32_t Screen::runOnce()
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
 
-            LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (Time::getMillis() - lastScreenTransition));
             handleOnPress();
         }
     }
@@ -1324,7 +1324,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     setFastFramerate();
     uint64_t startUpdate;
     do {
-        startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+        startUpdate = Time::getMillis(); // Handle impossibly unlikely corner case of a Time::getMillis() overflow..
         delay(1);
         updateUiFrame(ui);
     } while (ui->getUiState()->lastUpdate < startUpdate);
@@ -1941,7 +1941,7 @@ void Screen::handleOnPress()
     // If we are in a transition, the press must have bounced, drop it.
     if (ui->getUiState()->frameState == FIXED) {
         ui->nextFrame();
-        lastScreenTransition = millis();
+        lastScreenTransition = Time::getMillis();
         setFastFramerate();
     }
 }
@@ -2023,7 +2023,7 @@ void Screen::showFrame(FrameDirection direction)
             ui->previousFrame();
         }
 
-        lastScreenTransition = millis();
+        lastScreenTransition = Time::getMillis();
         setFastFramerate();
     }
 }
@@ -2266,35 +2266,35 @@ int Screen::handleInputEvent(const InputEvent *event)
 #ifdef USERPREFS_UI_TEST_LOG
                 logFrameChange("fn_f1", 0);
 #endif
-                lastScreenTransition = millis();
+                lastScreenTransition = Time::getMillis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F2) {
                 this->ui->switchToFrame(1);
 #ifdef USERPREFS_UI_TEST_LOG
                 logFrameChange("fn_f2", 1);
 #endif
-                lastScreenTransition = millis();
+                lastScreenTransition = Time::getMillis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F3) {
                 this->ui->switchToFrame(2);
 #ifdef USERPREFS_UI_TEST_LOG
                 logFrameChange("fn_f3", 2);
 #endif
-                lastScreenTransition = millis();
+                lastScreenTransition = Time::getMillis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F4) {
                 this->ui->switchToFrame(3);
 #ifdef USERPREFS_UI_TEST_LOG
                 logFrameChange("fn_f4", 3);
 #endif
-                lastScreenTransition = millis();
+                lastScreenTransition = Time::getMillis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_FN_F5) {
                 this->ui->switchToFrame(4);
 #ifdef USERPREFS_UI_TEST_LOG
                 logFrameChange("fn_f5", 4);
 #endif
-                lastScreenTransition = millis();
+                lastScreenTransition = Time::getMillis();
                 setFastFramerate();
             } else if (event->inputEvent == INPUT_BROKER_UP_LONG) {
                 // Long press up button for fast frame switching

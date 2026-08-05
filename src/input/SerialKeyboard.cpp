@@ -148,7 +148,7 @@ int32_t SerialKeyboard::runOnce()
             }
 
             if (keyPressed < 11) {
-                if (keyPressed == lastKeyPressed && millis() - lastPressTime < 500) {
+                if (keyPressed == lastKeyPressed && Time::getMillis() - lastPressTime < 500) {
                     quickPress += 1;
                     if (quickPress > 3) {
                         quickPress = 0;
@@ -158,7 +158,7 @@ int32_t SerialKeyboard::runOnce()
                     quickPress = 0;
                 }
                 if (keyPressed < 10) { // if it's a letter
-                    if (keyPressed == lastKeyPressed && millis() - lastPressTime < 500) {
+                    if (keyPressed == lastKeyPressed && Time::getMillis() - lastPressTime < 500) {
                         erase();
                     }
                     e.inputEvent = INPUT_BROKER_ANYKEY;
@@ -169,7 +169,7 @@ int32_t SerialKeyboard::runOnce()
                         shift = 0;
                     }
                 }
-                lastPressTime = millis();
+                lastPressTime = Time::getMillis();
                 lastKeyPressed = keyPressed;
                 keyPressed = 13;
             }

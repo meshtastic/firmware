@@ -105,7 +105,7 @@ int32_t PowerTelemetryModule::runOnce()
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            lastSentToPhone = Time::getMillis();
         }
     }
     if (sleepOnNextExecution) {

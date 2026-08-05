@@ -452,7 +452,7 @@ void setup()
 #endif
 
     powerMonInit();
-    serialSinceMsec = millis();
+    serialSinceMsec = Time::getMillis();
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
 
@@ -1365,7 +1365,7 @@ void loop()
         if (nodeDB->disableLockdownToPlaintext()) {
             LOG_INFO("Lockdown: disabled, rebooting into normal mode");
             PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_DISABLED, "", 0, 0, 0);
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
         } else {
             // Revert failed mid-way (a file couldn't be decrypted/rewritten).
             // The DEK file is still present (it's deleted last), so the device
@@ -1396,11 +1396,11 @@ void loop()
         PhoneAPI::completePendingUnlocks(reloadOk);
     }
 
-    // Periodic session-expiry check. Cheap - millis() comparison. Don't
+    // Periodic session-expiry check. Cheap - Time::getMillis() comparison. Don't
     // hammer it every loop tick; once a second is plenty.
     static uint32_t lastSessionCheckMs = 0;
-    if (millis() - lastSessionCheckMs > 1000) {
-        lastSessionCheckMs = millis();
+    if (Time::getMillis() - lastSessionCheckMs > 1000) {
+        lastSessionCheckMs = Time::getMillis();
         if (rebootAtMsec == 0 && EncryptedStorage::isUnlocked() && EncryptedStorage::isSessionExpired()) {
             // The session expired. Two paths:
             //   1. Budget remains (bootsRemaining > 0): decrement the
@@ -1419,7 +1419,7 @@ void loop()
                 EncryptedStorage::lockNow();
                 PhoneAPI::revokeAllAuth();
                 PhoneAPI::broadcastLockdownStatus(meshtastic_LockdownStatus_State_LOCKED, "session_budget_exhausted", 0, 0, 0);
-                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+                rebootAtMsec = Time::getMillis() + DEFAULT_REBOOT_SECONDS * 1000;
             } else {
                 uint8_t newBoots = EncryptedStorage::consumeSessionBoot();
                 LOG_WARN("Lockdown: session expired, rolled to next budget slot (boots=%u remaining)", newBoots);
@@ -1454,14 +1454,14 @@ void loop()
     if (RadioLibInterface::instance != nullptr) {
         static uint32_t lastRadioMissedIrqPoll;
         if (!Throttle::isWithinTimespanMs(lastRadioMissedIrqPoll, 1000)) {
-            lastRadioMissedIrqPoll = millis();
+            lastRadioMissedIrqPoll = Time::getMillis();
             RadioLibInterface::instance->pollMissedIrqs();
         }
 
         // Periodic AGC reset - warm sleep + recalibrate to prevent stuck AGC gain
         static uint32_t lastAgcReset;
         if (!Throttle::isWithinTimespanMs(lastAgcReset, AGC_RESET_INTERVAL_MS)) {
-            lastAgcReset = millis();
+            lastAgcReset = Time::getMillis();
             RadioLibInterface::instance->resetAGC();
         }
     }
@@ -1469,7 +1469,7 @@ void loop()
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
     if (!Throttle::isWithinTimespanMs(lastPrint, 10 * 1000L)) {
-        lastPrint = millis();
+        lastPrint = Time::getMillis();
         meshtastic::printThreadInfo("main");
     }
 #endif
@@ -1510,7 +1510,7 @@ void loop()
             if (screen) {
                 screen->showSimpleBanner("Rebooting...");
             }
-            rebootAtMsec = millis() + 25;
+            rebootAtMsec = Time::getMillis() + 25;
         }
     }
 #if HAS_TFT

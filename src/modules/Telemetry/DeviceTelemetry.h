@@ -19,7 +19,7 @@ class DeviceTelemetryModule : private concurrency::OSThread,
           ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         uptimeWrapCount = 0;
-        uptimeLastMs = millis();
+        uptimeLastMs = Time::getMillis();
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(setStartDelay()); // Wait until NodeInfo is sent
     }
@@ -54,7 +54,7 @@ class DeviceTelemetryModule : private concurrency::OSThread,
 
     void refreshUptime()
     {
-        auto now = millis();
+        auto now = Time::getMillis();
         // If we wrapped around (~49 days), increment the wrap count
         if (now < uptimeLastMs)
             uptimeWrapCount++;

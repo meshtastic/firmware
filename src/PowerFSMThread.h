@@ -27,11 +27,12 @@ class PowerFSMThread : public OSThread
         canSleep = (state != &statePOWER) && (state != &stateSERIAL);
 
         if (powerStatus->getHasUSB()) {
-            timeLastPowered = millis();
+            timeLastPowered = Time::getMillis();
         } else if (config.power.on_battery_shutdown_after_secs > 0 && config.power.on_battery_shutdown_after_secs != UINT32_MAX &&
-                   millis() > (timeLastPowered +
-                               Default::getConfiguredOrDefaultMs(
-                                   config.power.on_battery_shutdown_after_secs))) { // shutdown after 30 minutes unpowered
+                   Time::getMillis() >
+                       (timeLastPowered +
+                        Default::getConfiguredOrDefaultMs(
+                            config.power.on_battery_shutdown_after_secs))) { // shutdown after 30 minutes unpowered
             powerFSM.trigger(EVENT_SHUTDOWN);
         }
 

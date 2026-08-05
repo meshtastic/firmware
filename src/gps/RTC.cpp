@@ -70,7 +70,7 @@ static struct timeval mockSystemTime = {};
 {
     struct timeval tv;
     if (readSystemTime(&tv)) {
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
         if (currentQuality == RTCQualityNone) {
             LOG_DEBUG("Seed time from system clock: %lu", (unsigned long)printableEpoch);
@@ -100,7 +100,7 @@ RTCSetResult readFromRTC()
     [[maybe_unused]] struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
     if (rtc_found.address == RV3028_RTC) {
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
         Melopero_RV3028 rtc;
 #if WIRE_INTERFACES_COUNT == 2
         rtc.initI2C(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
@@ -149,7 +149,7 @@ RTCSetResult readFromRTC()
         SensorPCF85063 rtc;
 
 #endif
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
 
 #if WIRE_INTERFACES_COUNT == 2
         rtc.begin(*ScanI2CTwoWire::fetchI2CBus(rtc_found));
@@ -167,7 +167,7 @@ RTCSetResult readFromRTC()
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
                 LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-                lastTimeValidationWarning = millis();
+                lastTimeValidationWarning = Time::getMillis();
             }
             return RTCSetResultInvalidTime;
         }
@@ -188,7 +188,7 @@ RTCSetResult readFromRTC()
     }
 #elif defined(RX8130CE_RTC)
     if (rtc_found.address == RX8130CE_RTC) {
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
 #ifdef MUZI_BASE
         ArtronShop_RX8130CE rtc(&Wire1);
 #else
@@ -206,7 +206,7 @@ RTCSetResult readFromRTC()
             if (tv.tv_sec < BUILD_EPOCH) {
                 if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
                     LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-                    lastTimeValidationWarning = millis();
+                    lastTimeValidationWarning = Time::getMillis();
                 }
                 return RTCSetResultInvalidTime;
             }
@@ -223,7 +223,7 @@ RTCSetResult readFromRTC()
     }
 #elif HAS_LSE
     if (stm32wlRtcAvailable()) {
-        uint32_t now = millis();
+        uint32_t now = Time::getMillis();
         tv.tv_sec = STM32RTC::getInstance().getEpoch();
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
@@ -231,7 +231,7 @@ RTCSetResult readFromRTC()
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
                 LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-                lastTimeValidationWarning = millis();
+                lastTimeValidationWarning = Time::getMillis();
             }
             return RTCSetResultInvalidTime;
         }
@@ -263,13 +263,13 @@ RTCSetResult readFromRTC()
 RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 {
     static uint32_t lastSetMsec = 0;
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
         if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
             LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-            lastTimeValidationWarning = millis();
+            lastTimeValidationWarning = Time::getMillis();
         }
         return RTCSetResultInvalidTime;
     } else if ((uint64_t)tv->tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
@@ -279,7 +279,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
             LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
                      (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
-            lastTimeValidationWarning = millis();
+            lastTimeValidationWarning = Time::getMillis();
         }
         return RTCSetResultInvalidTime;
     }
@@ -436,7 +436,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
     if (tv.tv_sec < BUILD_EPOCH) {
         if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
             LOG_WARN("Ignore time (%lu) before build epoch (%lu)!", printableEpoch, BUILD_EPOCH);
-            lastTimeValidationWarning = millis();
+            lastTimeValidationWarning = Time::getMillis();
         }
         return RTCSetResultInvalidTime;
     } else if ((uint64_t)tv.tv_sec > ((uint64_t)BUILD_EPOCH + FORTY_YEARS)) {
@@ -446,7 +446,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
             uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
             LOG_WARN("Ignore time (%lu) too far in the future (build epoch: %lu, max allowed: %lu)!", printableEpoch,
                      (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
-            lastTimeValidationWarning = millis();
+            lastTimeValidationWarning = Time::getMillis();
         }
         return RTCSetResultInvalidTime;
     }
@@ -487,9 +487,9 @@ int32_t getTZOffset()
 uint32_t getTime(bool local)
 {
     if (local) {
-        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs + getTZOffset();
+        return (((uint32_t)Time::getMillis() - timeStartMsec) / 1000) + zeroOffsetSecs + getTZOffset();
     } else {
-        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+        return (((uint32_t)Time::getMillis() - timeStartMsec) / 1000) + zeroOffsetSecs;
     }
 }
 
@@ -509,7 +509,7 @@ void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot)
 {
     currentQuality = RTCQualityNone;
     zeroOffsetSecs = 0;
-    timeStartMsec = millis() - (secondsSinceBoot * 1000);
+    timeStartMsec = Time::getMillis() - (secondsSinceBoot * 1000);
     lastSetFromPhoneNtpOrGps = 0;
     lastTimeValidationWarning = 0;
 }

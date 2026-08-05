@@ -1,6 +1,7 @@
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 #include "./UC8175.h"
+#include "Time.h"
 
 #include <cstring>
 
@@ -72,9 +73,9 @@ void UC8175::wait(uint32_t timeoutMs)
     if (failed)
         return;
 
-    uint32_t started = millis();
+    uint32_t started = Time::getMillis();
     while (digitalRead(pin_busy) == BUSY_ACTIVE) {
-        if ((millis() - started) > timeoutMs) {
+        if ((Time::getMillis() - started) > timeoutMs) {
             failed = true;
             break;
         }

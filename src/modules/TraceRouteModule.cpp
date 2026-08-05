@@ -534,13 +534,13 @@ const char *TraceRouteModule::getNodeName(NodeNum node)
 bool TraceRouteModule::startTraceRoute(NodeNum node)
 {
     LOG_INFO("=== TraceRoute startTraceRoute CALLED: node=0x%08x ===", node);
-    unsigned long now = millis();
+    unsigned long now = Time::getMillis();
 
     if (node == 0 || node == NODENUM_BROADCAST) {
         LOG_ERROR("Invalid node number for trace route: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Invalid node");
-        resultShowTime = millis();
+        resultShowTime = Time::getMillis();
         tracingNode = 0;
 
         requestFocus();
@@ -554,7 +554,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         LOG_ERROR("Cannot trace route to self: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Cannot trace self");
-        resultShowTime = millis();
+        resultShowTime = Time::getMillis();
         tracingNode = 0;
 
         requestFocus();
@@ -639,7 +639,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
             LOG_ERROR("MeshService is NULL!");
             runState = TRACEROUTE_STATE_RESULT;
             setResultText("Service unavailable");
-            resultShowTime = millis();
+            resultShowTime = Time::getMillis();
             tracingNode = 0;
 
             requestFocus();
@@ -652,7 +652,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         LOG_ERROR("Failed to allocate TraceRoute packet from router");
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Failed to send");
-        resultShowTime = millis();
+        resultShowTime = Time::getMillis();
         tracingNode = 0;
 
         requestFocus();
@@ -670,7 +670,7 @@ void TraceRouteModule::launch(NodeNum node)
         LOG_ERROR("Invalid node number for trace route: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Invalid node");
-        resultShowTime = millis();
+        resultShowTime = Time::getMillis();
         tracingNode = 0;
 
         requestFocus();
@@ -684,7 +684,7 @@ void TraceRouteModule::launch(NodeNum node)
         LOG_ERROR("Cannot trace route to self: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Cannot trace self");
-        resultShowTime = millis();
+        resultShowTime = Time::getMillis();
         tracingNode = 0;
 
         requestFocus();
@@ -700,7 +700,7 @@ void TraceRouteModule::launch(NodeNum node)
         LOG_INFO("TraceRoute initialized for first time");
     }
 
-    unsigned long now = millis();
+    unsigned long now = Time::getMillis();
     if (initialized && lastTraceRouteTime > 0 && now - lastTraceRouteTime < cooldownMs) {
         unsigned long wait = (cooldownMs - (now - lastTraceRouteTime)) / 1000;
         bannerText = String("Wait for ") + String(wait) + String("s");
@@ -756,14 +756,14 @@ void TraceRouteModule::launch(NodeNum node)
             LOG_ERROR("MeshService is NULL!");
             runState = TRACEROUTE_STATE_RESULT;
             setResultText("Service unavailable");
-            resultShowTime = millis();
+            resultShowTime = Time::getMillis();
             tracingNode = 0;
         }
     } else {
         LOG_ERROR("Failed to allocate TraceRoute packet from router");
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Failed to send");
-        resultShowTime = millis();
+        resultShowTime = Time::getMillis();
         tracingNode = 0;
     }
 }
@@ -772,7 +772,7 @@ void TraceRouteModule::handleTraceRouteResult(const String &result)
 {
     setResultText(result);
     runState = TRACEROUTE_STATE_RESULT;
-    resultShowTime = millis();
+    resultShowTime = Time::getMillis();
     tracingNode = 0;
 
     LOG_INFO("TraceRoute result ready, requesting focus. Result: %s", result.c_str());
@@ -842,7 +842,7 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 #endif // HAS_SCREEN
 int32_t TraceRouteModule::runOnce()
 {
-    unsigned long now = millis();
+    unsigned long now = Time::getMillis();
 
     if (runState == TRACEROUTE_STATE_IDLE) {
         return INT32_MAX;

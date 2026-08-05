@@ -342,7 +342,7 @@ class HopScalingModule : private concurrency::OSThread
 #ifdef PIO_UNIT_TESTING
     static uint32_t nowMs() { return s_testNowMs; }
 #else
-    static uint32_t nowMs() { return millis(); }
+    static uint32_t nowMs() { return Time::getMillis(); }
 #endif
 };
 

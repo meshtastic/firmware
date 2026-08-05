@@ -1,4 +1,5 @@
 #include "EInkParallelDisplay.h"
+#include "Time.h"
 
 #ifdef USE_EINK_PARALLELDISPLAY
 
@@ -206,7 +207,7 @@ void EInkParallelDisplay::display(void)
     const uint16_t h = this->displayHeight;
 
     // Simple rate limiting: avoid very-frequent responsive updates
-    uint32_t nowMs = millis();
+    uint32_t nowMs = Time::getMillis();
     if (lastUpdateMs != 0 && (nowMs - lastUpdateMs) < EPD_RESPONSIVE_MIN_MS) {
         LOG_DEBUG("rate-limited, skipping update");
         return;
@@ -365,11 +366,11 @@ void EInkParallelDisplay::display(void)
         startAsyncFullUpdate(forceFull ? CLEAR_SLOW : CLEAR_FAST);
     }
 
-    lastUpdateMs = millis();
+    lastUpdateMs = Time::getMillis();
     previousImageHash = imageHash;
 
     // Keep same behavior as before
-    lastDrawMsec = millis();
+    lastDrawMsec = Time::getMillis();
 }
 
 #ifdef EINK_LIMIT_GHOSTING_PX
@@ -418,7 +419,7 @@ bool EInkParallelDisplay::forceDisplay(uint32_t msecLimit)
     if (!displayReady)
         return false;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     if (lastDrawMsec == 0 || (now - lastDrawMsec) > msecLimit) {
         display();
         return true;

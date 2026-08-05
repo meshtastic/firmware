@@ -143,7 +143,7 @@ void HackadayCommunicatorKeyboard::pressed(uint8_t key)
     }
     LOG_DEBUG("Key pressed: %u", key);
 
-    if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
+    if (modifierFlag && (Time::getMillis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
         modifierFlag = 0;
     }
 
@@ -156,7 +156,7 @@ void HackadayCommunicatorKeyboard::pressed(uint8_t key)
     next_key = row * _TCA8418_COLS + col;
     state = Held;
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     tap_interval = now - last_tap;
 
     updateModifierFlag(next_key);
@@ -192,7 +192,7 @@ void HackadayCommunicatorKeyboard::released()
         return;
     }
 
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     last_tap = now;
     if (HackadayCommunicatorTapMod[last_key])
         queueEvent(HackadayCommunicatorTapMap[last_key][modifierFlag % HackadayCommunicatorTapMod[last_key]]);

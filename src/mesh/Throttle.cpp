@@ -1,4 +1,5 @@
 #include "Throttle.h"
+#include "Time.h"
 #include <Arduino.h>
 
 /// @brief Execute a function throttled to a minimum interval
@@ -10,11 +11,11 @@
 bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, void (*throttleFunc)(void), void (*onDefer)(void))
 {
     if (*lastExecutionMs == 0) {
-        *lastExecutionMs = millis();
+        *lastExecutionMs = Time::getMillis();
         throttleFunc();
         return true;
     }
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     if ((now - *lastExecutionMs) >= minumumIntervalMs) {
         throttleFunc();
@@ -31,6 +32,6 @@ bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, vo
 /// @param timeSpanMs The interval in milliseconds of the timespan
 bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs)
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     return (now - lastExecutionMs) < timeSpanMs;
 }

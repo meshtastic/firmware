@@ -191,7 +191,7 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
         this->_client->print(F(" "));
     }
     this->_client->print(F("["));
-    this->_client->print(int(millis() / 1000));
+    this->_client->print(int(Time::getMillis() / 1000));
     this->_client->print(F("]: "));
     this->_client->print(message);
     this->_client->endPacket();

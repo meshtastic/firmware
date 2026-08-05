@@ -21,6 +21,9 @@ PB_BIND(meshtastic_ModuleConfig_RemoteHardwareConfig, meshtastic_ModuleConfig_Re
 PB_BIND(meshtastic_ModuleConfig_NeighborInfoConfig, meshtastic_ModuleConfig_NeighborInfoConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_RouterRetirementConfig, meshtastic_ModuleConfig_RouterRetirementConfig, AUTO)
+
+
 PB_BIND(meshtastic_ModuleConfig_DetectionSensorConfig, meshtastic_ModuleConfig_DetectionSensorConfig, AUTO)
 
 

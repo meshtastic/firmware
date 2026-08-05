@@ -795,7 +795,7 @@ void MQTT::perhapsReportToMap()
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
         if (Throttle::isWithinTimespanMs(lastPositionUnavailableWarning, POSITION_UNAVAILABLE_WARNING_INTERVAL_MS) == false) {
             LOG_WARN("MQTT Map report enabled, but no position available");
-            lastPositionUnavailableWarning = millis();
+            lastPositionUnavailableWarning = Time::getMillis();
         }
         return;
     }
@@ -855,5 +855,5 @@ void MQTT::perhapsReportToMap()
     packetPool.release(mp);
 
     // Update the last report time
-    last_report_to_map = millis();
+    last_report_to_map = Time::getMillis();
 }

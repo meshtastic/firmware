@@ -1,6 +1,7 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
 #include "./Events.h"
+#include "Time.h"
 
 #include "MessageStore.h"
 #include "PowerFSM.h"
@@ -364,7 +365,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
     // A long-press used to open the menu can be followed by a synthetic/queued tap at release.
     // Ignore that brief follow-up window so touch-opened menus do not auto-select an item.
     if (touchEnabledBuild && !longPress && suppressTouchTapUntilMs != 0) {
-        if ((int32_t)(millis() - suppressTouchTapUntilMs) < 0) {
+        if ((int32_t)(Time::getMillis() - suppressTouchTapUntilMs) < 0) {
             noteInkHUDUserInteraction();
             return;
         }
@@ -400,7 +401,7 @@ void InkHUD::Events::onTouchTap(uint16_t x, uint16_t y, bool longPress)
         // Only arm suppression if the long-press actually opened menu foreground.
         SystemApplet *menu = inkhud->getSystemApplet("Menu");
         if (touchEnabledBuild && menu && menu->isForeground()) {
-            suppressTouchTapUntilMs = millis() + TOUCH_MENU_OPEN_TAP_SUPPRESS_MS;
+            suppressTouchTapUntilMs = Time::getMillis() + TOUCH_MENU_OPEN_TAP_SUPPRESS_MS;
         }
     } else
         onButtonShort();

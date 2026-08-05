@@ -300,7 +300,7 @@ void MPR121Keyboard::pressed(uint16_t keyRegister)
     }
     uint8_t next_key = MPR121_KeyMap[next_pin];
     LOG_DEBUG("MPR121 Pin: %i Key: %i", next_pin, next_key);
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     int32_t tap_interval = now - last_tap;
     if (tap_interval < 0) {
         // long running, millis has overflowed.
@@ -335,7 +335,7 @@ void MPR121Keyboard::held(uint16_t keyRegister)
             next_key = MPR121_KeyMap[i];
         }
     }
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     int32_t held_interval = now - last_tap;
     if (held_interval < 0 || next_key != last_key) {
         // long running, millis has overflowed, or a key has been switched quickly...

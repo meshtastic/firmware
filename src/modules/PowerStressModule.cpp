@@ -115,7 +115,7 @@ int32_t PowerStressModule::runOnce()
                 doDeepSleep(sleep_msec, true, true);
                 break;
             case meshtastic_PowerStressMessage_Opcode_CPU_FULLON: {
-                uint32_t start_msec = millis();
+                uint32_t start_msec = Time::getMillis();
                 while (Throttle::isWithinTimespanMs(start_msec, sleep_msec))
                     ;           // Don't let CPU idle at all
                 sleep_msec = 0; // we already slept

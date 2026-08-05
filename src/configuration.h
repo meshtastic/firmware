@@ -26,6 +26,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 
+// Monotonic uptime clock seam (Time::getMillis / getMillis64). Hosted here so the whole
+// codebase can use it without per-file includes; see src/Time.h.
+#include "Time.h"
+
 #if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif

@@ -232,8 +232,8 @@ void EInkDynamicDisplay::checkForPromotion()
 // Is it too soon for another frame of this type?
 void EInkDynamicDisplay::checkRateLimiting()
 {
-    // Sanity check: millis() overflow - just let the update run..
-    if (previousRunMs > millis())
+    // Sanity check: Time::getMillis() overflow - just let the update run..
+    if (previousRunMs > Time::getMillis())
         return;
 
     // Skip update: too soon for BACKGROUND
@@ -372,7 +372,7 @@ void EInkDynamicDisplay::checkFastRequested()
 // Reset the timer used for rate-limiting
 void EInkDynamicDisplay::resetRateLimiting()
 {
-    previousRunMs = millis();
+    previousRunMs = Time::getMillis();
 }
 
 // Generate a hash of this frame, to compare against previous update

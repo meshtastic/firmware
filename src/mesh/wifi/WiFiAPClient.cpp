@@ -241,7 +241,7 @@ static int32_t reconnectWiFi()
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
 
         // Start the non-blocking wait for 5 seconds
-        wifiReconnectStartMillis = millis();
+        wifiReconnectStartMillis = Time::getMillis();
         wifiReconnectPending = true;
         // Do not attempt to connect yet, wait for the next invocation
         return 5000; // Schedule next check soon
@@ -249,7 +249,7 @@ static int32_t reconnectWiFi()
 
     // Check if we are ready to proceed with the WiFi connection after the 5s wait
     if (wifiReconnectPending) {
-        if (millis() - wifiReconnectStartMillis >= 5000) {
+        if (Time::getMillis() - wifiReconnectStartMillis >= 5000) {
             if (!WiFi.isConnected()) {
 #ifdef CONFIG_IDF_TARGET_ESP32C3
                 WiFi.mode(WIFI_MODE_NULL);
@@ -277,7 +277,7 @@ static int32_t reconnectWiFi()
             tv.tv_usec = 0;
 
             perhapsSetRTC(RTCQualityNTP, &tv);
-            lastrun_ntp = millis();
+            lastrun_ntp = Time::getMillis();
         } else {
             LOG_DEBUG("NTP Update failed");
         }

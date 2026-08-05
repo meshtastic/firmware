@@ -1,4 +1,5 @@
 #include "TCA8418Keyboard.h"
+#include "Time.h"
 
 #define _TCA8418_COLS 3
 #define _TCA8418_ROWS 4
@@ -76,7 +77,7 @@ void TCA8418Keyboard::pressed(uint8_t key)
     // LOG_DEBUG("TCA8418: Key %u -> Next Key %u", key, next_key);
 
     state = Held;
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     tap_interval = now - last_tap;
     if (tap_interval < 0) {
         // Long running, millis has overflowed.
@@ -110,7 +111,7 @@ void TCA8418Keyboard::released()
         state = Idle;
         return;
     }
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
     int32_t held_interval = now - last_tap;
     last_tap = now;
     if (tap_interval < _TCA8418_MULTI_TAP_THRESHOLD && should_backspace) {
