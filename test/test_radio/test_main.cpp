@@ -1,3 +1,4 @@
+#include "LR20x0Band.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
@@ -8,6 +9,47 @@
 #include "support/MockMeshService.h"
 
 static MockMeshService *mockMeshService;
+
+static void test_lr20x0BandClassification()
+{
+    TEST_ASSERT_FALSE(isLr20x0HighBand(906.875f));
+    TEST_ASSERT_FALSE(isLr20x0HighBand(1500.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2400.0f));
+    TEST_ASSERT_TRUE(isLr20x0HighBand(2420.71875f));
+}
+
+static void test_lr20x0BandHopDetection()
+{
+    TEST_ASSERT_FALSE(isLr20x0BandHop(0.0f, 2420.71875f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 915.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2400.0f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(906.875f, 2420.71875f));
+    TEST_ASSERT_TRUE(isLr20x0BandHop(2420.71875f, 906.875f));
+    // Invalid requested frequency must not look like a band hop.
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, 0.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(2420.71875f, -1.0f));
+    TEST_ASSERT_FALSE(isLr20x0BandHop(906.875f, -915.0f));
+}
+
+static void test_lr20x0ReconfigurePathSelection()
+{
+    // LF -> HF and HF -> LF take full begin(); same-band stays incremental.
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::FullBegin),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 906.875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, 915.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2400.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(0.0f, 2420.71875f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(2420.71875f, 0.0f)));
+    TEST_ASSERT_EQUAL(static_cast<int>(Lr20x0ReconfigurePath::Incremental),
+                      static_cast<int>(lr20x0ReconfigurePath(906.875f, -1.0f)));
+}
 
 // Test shim to expose protected radio parameters set by applyModemConfig()
 class TestableRadioInterface : public RadioInterface
@@ -359,6 +401,9 @@ void setup()
     initializeTestEnvironment();
 
     UNITY_BEGIN();
+    RUN_TEST(test_lr20x0BandClassification);
+    RUN_TEST(test_lr20x0BandHopDetection);
+    RUN_TEST(test_lr20x0ReconfigurePathSelection);
     RUN_TEST(test_bwCodeToKHz_specialMappings);
     RUN_TEST(test_bwCodeToKHz_passthrough);
     RUN_TEST(test_bwCodeToKHz_roundTrip);
