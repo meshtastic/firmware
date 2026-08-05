@@ -2336,7 +2336,14 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
-                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size()) {
+                    // moduleFrames is padded with nullptrs so it stays index-aligned with the
+                    // absolute frame index (see GetMeshModulesWithUIFrames), which means its
+                    // size() is the total frame count, not the module count - testing only the
+                    // bound would match every built-in frame too and, being mid-chain, swallow
+                    // SELECT for every branch below. A non-null entry is what marks a real
+                    // module frame.
+                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
+                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
                     const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
                     if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {
