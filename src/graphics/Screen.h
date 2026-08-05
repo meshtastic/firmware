@@ -108,8 +108,15 @@ class Screen
 #include <AutoOLEDWire.h>
 #endif
 
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+// NicheGraphics-backed BaseUI e-ink stack; supplies the EINK_* compat macros for converted variants.
+// InkHUD builds keep the legacy includes: their TUs carry InkHUD's own NicheGraphics::Drivers classes,
+// which would collide with graphics/eink/ declarations until InkHUD moves onto the shared layer.
+#include "BaseUIEInkDisplay.h"
+#else
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
+#endif
 #include "PointStruct.h"
 #include "Power.h"
 #include "TFTDisplay.h"
@@ -195,27 +202,6 @@ enum class FrameDirection { NEXT, PREVIOUS };
 // Forward declarations
 class Screen;
 
-/// Handles gathering and displaying debug information.
-class DebugInfo
-{
-  public:
-    DebugInfo(const DebugInfo &) = delete;
-    DebugInfo &operator=(const DebugInfo &) = delete;
-
-  private:
-    friend Screen;
-
-    DebugInfo() {}
-
-    /// Renders the debug screen.
-    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    /// Protects all of internal state.
-    concurrency::Lock lock;
-};
-
 /**
  * @brief This class deals with showing things on the screen of the device.
  *
@@ -263,6 +249,9 @@ class Screen : public concurrency::OSThread
     void setFrames(FrameFocus focus = FOCUS_DEFAULT);
 
     std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
+#if defined(OLED_COMPACT_UI)
+    std::vector<const char *> frameTitles;       // Per-frame short labels, parallel to indicatorIcons
+#endif
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
@@ -647,11 +636,6 @@ class Screen : public concurrency::OSThread
                              // stick to standard EASCII codes)
     }
 
-    /// Returns a handle to the DebugInfo screen.
-    //
-    // Use this handle to set things like battery status, user count, GPS status, etc.
-    DebugInfo *debug_info() { return &debugInfo; }
-
     // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
@@ -823,9 +807,6 @@ class Screen : public concurrency::OSThread
     bool hasCompass = false;
     float compassHeading;
     uint32_t endCalibrationAt;
-
-    /// Holds state for debug information
-    DebugInfo debugInfo;
 
     /// Display device
 #ifdef USE_ST7789

@@ -422,7 +422,11 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
     }
 
     if (*snr_count < ROUTE_SIZE) {
-        snr_list[*snr_count] = (int8_t)(snr * 4); // Convert SNR to 1 byte
+        // Clamp before the cast: q4-scaled SNR at or below the demodulation floor can reach
+        // -128 (=-32dB), which is bit-identical to the INT8_MIN "unknown SNR" sentinel used
+        // throughout this file. Reserve -128 for the sentinel; clamp real readings to -127.
+        int32_t q4 = clamp<int32_t>(lroundf(snr * 4.0f), -127, 127);
+        snr_list[*snr_count] = (int8_t)q4;
         *snr_count += 1;
     }
     if (SNRonly)

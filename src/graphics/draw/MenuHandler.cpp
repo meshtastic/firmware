@@ -10,6 +10,7 @@
 #include "MessageStore.h"
 #include "NodeDB.h"
 #include "buzz.h"
+#include "graphics/Backlight.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
@@ -227,6 +228,16 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
+#ifdef HAS_HAM_2M_ONLY
+    // Hardware is restricted to the amateur 2m band - offer only the 2m regions
+    // so the user cannot pick a sub-GHz region the RF path cannot emit or receive.
+    static const LoraRegionOption regionOptions[] = {
+        {"Back", OptionsAction::Back},
+        {"ITU1_2M (144-146)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M},
+        {"ITU2_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M},
+        {"ITU3_2M (144-148)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M},
+    };
+#else
     static const LoraRegionOption regionOptions[] = {
         {"Back", OptionsAction::Back},
         {"US", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_US},
@@ -265,6 +276,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
         {"ITU3_70CM (430-450)", OptionsAction::Select, meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM},
 
     };
+#endif
 
     constexpr size_t regionCount = sizeof(regionOptions) / sizeof(regionOptions[0]);
     static std::array<const char *, regionCount> regionLabels{};
@@ -285,21 +297,19 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 return;
             }
 
-            // Guard: without a reboot, reconfigure() applies the region directly, so reject
-            // regions this node can't use up front: unrecognized codes, licensed-only regions,
-            // and radio hardware mismatches (2.4 GHz vs sub-GHz) - the same checks the admin
-            // set-config path applies, but side-effect-free: ignoring a menu selection should
-            // not record a critical error or notify clients. getRadio() used to catch hardware
-            // mismatches post-reboot only.
+            const RegionInfo *selectedRegionInfo = getRegion(selectedRegion);
+            bool hamMode = selectedRegionInfo->code == selectedRegion && selectedRegionInfo->profile &&
+                           selectedRegionInfo->profile->licensedOnly;
+
+            // Validate radio compatibility for a prospective Ham region before confirmation.
             auto candidateLora = config.lora;
             candidateLora.region = selectedRegion;
-            char regionErr[160];
-            if (!RadioInterface::checkConfigRegion(candidateLora, regionErr, sizeof(regionErr))) {
+            char regionErr[160] = {};
+            if (!RadioInterface::checkConfigRegion(candidateLora, regionErr, sizeof(regionErr), hamMode)) {
                 LOG_WARN("Ignoring region selection: %s", regionErr);
                 return;
             }
 
-            bool hamMode = getRegion(selectedRegion)->profile->licensedOnly;
             if (hamMode) {
                 LOG_INFO("User chose an amateur radio mode region");
                 pendingRegion = selectedRegion;
@@ -667,16 +677,19 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
+    enum optionsNumbers { Back = 0, Clock, Time, Timezone };
 #if defined(OLED_TINY)
     static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
+    static const int optionsEnumArray[] = {Back, Time, Timezone};
 #else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
+    static const int optionsEnumArray[] = {Back, Clock, Time, Timezone};
 #endif
-    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = sizeof(optionsArray) / sizeof(optionsArray[0]);
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Clock) {
             menuHandler::menuQueue = menuHandler::ClockFacePicker;
@@ -1099,7 +1112,7 @@ void menuHandler::homeBaseMenu()
         }
         optionsEnumArray[options++] = Mute;
     }
-#if defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
+#if HAS_PWM_BACKLIGHT || defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
     optionsArray[options] = "Toggle Backlight";
     optionsEnumArray[options++] = Backlight;
 #else
@@ -1129,7 +1142,10 @@ void menuHandler::homeBaseMenu()
             }
         } else if (selected == Backlight) {
             screen->setOn(false);
-#if defined(PIN_EINK_EN)
+#if HAS_PWM_BACKLIGHT
+            graphics::backlightToggle();
+            saveUIConfig();
+#elif defined(PIN_EINK_EN)
             if (uiconfig.screen_brightness == 1) {
                 uiconfig.screen_brightness = 0;
                 digitalWrite(PIN_EINK_EN, LOW);
@@ -1462,7 +1478,11 @@ void menuHandler::nodeListMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
+#if defined(OLED_TINY)
+    optionsArray[options] = "Node Action";
+#else
     optionsArray[options] = "Node Actions / Settings";
+#endif
     optionsEnumArray[options++] = NodePicker;
 
     if (currentResolution != ScreenResolution::UltraLow) {

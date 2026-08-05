@@ -342,7 +342,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         p->hop_limit = 0; // all beacon packets are zero hopped to limit spamming.
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         p->want_ack = false;
-        p->rx_time = getValidTime(RTCQualityFromNet);
+        stampRxTime(p);
     };
 
     // ── Packet type decisions ────────────────────────────────────────────────
