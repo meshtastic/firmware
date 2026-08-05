@@ -63,10 +63,8 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 #endif
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+// Unguarded: serialConfigIsValid() is needed on every platform. The class stays guarded in the header.
 #include "SerialModule.h"
-#endif
 
 AdminModule *adminModule;
 
@@ -1271,14 +1269,13 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_serial_tag:
         LOG_INFO("Set module config: Serial");
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
-        if (!SerialModule::isValidConfig(c.payload_variant.serial)) {
+        // No architecture guard: the check and the store below must agree on every platform.
+        // disableBluetooth() self-guards on HAS_BLUETOOTH, so it is empty where there is no radio.
+        if (!serialConfigIsValid(c.payload_variant.serial)) {
             LOG_ERROR("Invalid serial config");
             return false;
         }
         disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
-#endif
         moduleConfig.has_serial = true;
         moduleConfig.serial = c.payload_variant.serial;
         break;
