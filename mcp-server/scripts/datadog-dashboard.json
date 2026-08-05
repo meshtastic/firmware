@@ -1,0 +1,217 @@
+{
+  "title": "Meshtastic Firmware — Recorder Stream",
+  "description": "Live view of `.mtlog/` streams shipped by `mtlog_to_datadog.py`. Heap, packet volume, log levels, errors. One row per port.",
+  "widgets": [
+    {
+      "definition": {
+        "title": "Free heap (bytes)",
+        "type": "timeseries",
+        "show_legend": true,
+        "requests": [
+          {
+            "queries": [
+              {
+                "name": "free_heap",
+                "data_source": "metrics",
+                "query": "avg:mesh.local.heap_free_bytes{service:meshtastic-firmware} by {port}"
+              }
+            ],
+            "response_format": "timeseries",
+            "display_type": "line"
+          }
+        ],
+        "yaxis": { "label": "bytes" }
+      }
+    },
+    {
+      "definition": {
+        "title": "Heap slope (bytes/min) — last 1h",
+        "type": "query_value",
+        "precision": 0,
+        "requests": [
+          {
+            "queries": [
+              {
+                "name": "slope",
+                "data_source": "metrics",
+                "query": "derivative(avg:mesh.local.heap_free_bytes{service:meshtastic-firmware})",
+                "aggregator": "avg"
+              }
+            ],
+            "response_format": "scalar"
+          }
+        ],
+        "conditional_formats": [
+          { "comparator": "<", "value": -100, "palette": "white_on_red" },
+          { "comparator": "<", "value": 0, "palette": "white_on_yellow" },
+          { "comparator": ">=", "value": 0, "palette": "white_on_green" }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Total heap (bytes)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "queries": [
+              {
+                "name": "total_heap",
+                "data_source": "metrics",
+                "query": "avg:mesh.local.heap_total_bytes{service:meshtastic-firmware} by {port}"
+              }
+            ],
+            "response_format": "timeseries",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Battery level (%)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "queries": [
+              {
+                "name": "battery",
+                "data_source": "metrics",
+                "query": "avg:mesh.device.battery_level{service:meshtastic-firmware} by {port}"
+              }
+            ],
+            "response_format": "timeseries",
+            "display_type": "line"
+          }
+        ],
+        "yaxis": { "min": "0", "max": "105" }
+      }
+    },
+    {
+      "definition": {
+        "title": "Air utilization (TX %)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "queries": [
+              {
+                "name": "airutil",
+                "data_source": "metrics",
+                "query": "avg:mesh.device.air_util_tx{service:meshtastic-firmware} by {port}"
+              }
+            ],
+            "response_format": "timeseries",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Channel utilization (%)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "queries": [
+              {
+                "name": "chutil",
+                "data_source": "metrics",
+                "query": "avg:mesh.device.channel_utilization{service:meshtastic-firmware} by {port}"
+              }
+            ],
+            "response_format": "timeseries",
+            "display_type": "line"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Log volume by level",
+        "type": "timeseries",
+        "show_legend": true,
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "display_type": "bars",
+            "queries": [
+              {
+                "name": "log_count",
+                "data_source": "logs",
+                "indexes": ["*"],
+                "compute": { "aggregation": "count" },
+                "search": { "query": "service:meshtastic-firmware" },
+                "group_by": [
+                  {
+                    "facet": "@level",
+                    "limit": 10,
+                    "sort": { "order": "desc", "aggregation": "count" }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Recent ERROR / CRIT firmware logs",
+        "type": "list_stream",
+        "requests": [
+          {
+            "response_format": "event_list",
+            "query": {
+              "data_source": "logs_stream",
+              "query_string": "service:meshtastic-firmware (status:error OR @level:ERROR OR @level:CRIT)",
+              "indexes": [],
+              "sort": { "column": "timestamp", "order": "desc" }
+            },
+            "columns": [
+              { "field": "timestamp", "width": "auto" },
+              { "field": "host", "width": "auto" },
+              { "field": "@port", "width": "auto" },
+              { "field": "@level", "width": "auto" },
+              { "field": "@thread", "width": "auto" },
+              { "field": "message", "width": "stretch" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "title": "Recorder marker events",
+        "type": "list_stream",
+        "requests": [
+          {
+            "response_format": "event_list",
+            "query": {
+              "data_source": "logs_stream",
+              "query_string": "service:meshtastic-firmware @level:MARK",
+              "indexes": [],
+              "sort": { "column": "timestamp", "order": "desc" }
+            },
+            "columns": [
+              { "field": "timestamp", "width": "auto" },
+              { "field": "host", "width": "auto" },
+              { "field": "message", "width": "stretch" }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "template_variables": [
+    {
+      "name": "port",
+      "prefix": "port",
+      "available_values": [],
+      "default": "*"
+    },
+    { "name": "host", "prefix": "host", "available_values": [], "default": "*" }
+  ],
+  "layout_type": "ordered",
+  "notify_list": [],
+  "reflow_type": "auto"
+}

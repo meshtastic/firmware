@@ -5,6 +5,7 @@
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
 #include "LR1121Interface.h"
+#include "LR2021Interface.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -28,9 +29,15 @@
 #include "platform/portduino/USBHal.h"
 #endif
 
+#if defined(ARCH_ESP32) && defined(USE_MCP23017)
+#include "platform/esp32/MCP23017LockingArduinoHal.h"
+#endif
+
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
+
+Observable<uint32_t> RadioInterface::loraRxPacketObservable;
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
@@ -294,6 +301,10 @@ std::unique_ptr<RadioInterface> initLoRa()
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI1, loraSpiSettings);
     RadioLibHAL = loraHal;
+#elif defined(ARCH_ESP32) && defined(USE_MCP23017)
+    // Radio control lines (RESET/DIO1/BUSY) are virtual pins on an MCP23017 I2C expander
+    LockingArduinoHal *loraHal = new MCP23017LockingArduinoHal(SPI, loraSpiSettings, mcpIoExpander);
+    RadioLibHAL = loraHal;
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *loraHal = new LockingArduinoHal(SPI, loraSpiSettings);
     RadioLibHAL = loraHal;
@@ -454,6 +465,20 @@ std::unique_ptr<RadioInterface> initLoRa()
         } else {
             LOG_INFO("LR1121 init success");
             radioType = LR1121_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+    if (!rIf) {
+        rIf = std::unique_ptr<LR2021Interface>(
+            new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
+        if (!rIf->init()) {
+            LOG_WARN("No LR2021 radio");
+            rIf = nullptr;
+        } else {
+            LOG_INFO("LR2021 init success");
+            radioType = LR2021_RADIO;
         }
     }
 #endif

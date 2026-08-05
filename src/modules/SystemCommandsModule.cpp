@@ -115,6 +115,17 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_SHUTDOWN:
         shutdownAtMsec = millis();
         return true;
+    // factory reset
+    case INPUT_BROKER_FACTORY_RST:
+        disableBluetooth();
+        LOG_INFO("Initiate full factory reset");
+        nodeDB->factoryReset(true);
+        // reboot(DEFAULT_REBOOT_SECONDS);
+        LOG_INFO("Reboot in %d seconds", DEFAULT_REBOOT_SECONDS);
+        if (screen)
+            screen->showSimpleBanner("Rebooting...", 0); // stays on screen
+        rebootAtMsec = (DEFAULT_REBOOT_SECONDS < 0) ? 0 : (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        return true;
 
     default:
         // No other input events handled here

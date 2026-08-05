@@ -1,0 +1,33 @@
+# MeshAdv Mini E22-900M22S
+# https://github.com/chrismyers2000/MeshAdv-Mini
+Meta:
+  name: MeshAdv Mini E22-900M22S
+  support: community
+  compatible:
+    - ebyte-ecb41-pge # Armbian
+
+Lora:
+  Module: sx1262 # Ebyte E22-900M22S
+  CS: # GPIO0_B6 (physical 24, SPI1_CSN0)
+    pin: 14
+    gpiochip: 0
+    line: 14
+  IRQ: # GPIO0_A3 (physical 36)
+    pin: 3
+    gpiochip: 0
+    line: 3
+  Busy: # GPIO0_A0 (physical 38)
+    pin: 0
+    gpiochip: 0
+    line: 0
+  Reset: # GPIO1_C3 (physical 18)
+    pin: 51
+    gpiochip: 1
+    line: 19
+  RXen: # GPIO1_B3 (physical 32)
+    pin: 43
+    gpiochip: 1
+    line: 11
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  spidev: spidev0.0

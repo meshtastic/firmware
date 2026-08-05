@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
-"""
-Generate release notes from merged PRs on develop and master branches.
-Categorizes PRs into Enhancements and Bug Fixes/Maintenance sections.
-"""
+"""Generate release notes from the actual release commit range."""
 
-import subprocess
-import re
+import argparse
 import json
+import re
+import subprocess
 import sys
-from datetime import datetime
 
 
-def get_last_release_tag():
-    """Get the most recent release tag."""
+def get_last_release_tag(compare_ref, exclude_tag=None):
+    """Get the most recent version tag merged into compare_ref."""
     result = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0"],
+        ["git", "tag", "--merged", compare_ref, "--sort=-version:refname", "v*"],
         capture_output=True,
         text=True,
         check=True,
     )
-    return result.stdout.strip()
+
+    for line in result.stdout.splitlines():
+        candidate = line.strip()
+        if not candidate:
+            continue
+        if exclude_tag and candidate == exclude_tag:
+            continue
+        return candidate
+
+    raise subprocess.CalledProcessError(result.returncode, result.args, output=result.stdout, stderr=result.stderr)
 
 
 def get_tag_date(tag):
@@ -33,18 +39,18 @@ def get_tag_date(tag):
     return result.stdout.strip()
 
 
-def get_merged_prs_since_tag(tag, branch):
-    """Get all merged PRs since the given tag on the specified branch."""
-    # Get commits since tag on the branch - look for PR numbers in parentheses
+def get_merged_prs_in_range(tag, compare_ref):
+    """Get all merged PRs in the git range between tag and compare_ref."""
     result = subprocess.run(
         [
             "git",
             "log",
-            f"{tag}..origin/{branch}",
+            f"{tag}..{compare_ref}",
             "--oneline",
         ],
         capture_output=True,
         text=True,
+        check=True,
     )
 
     prs = []
@@ -63,6 +69,25 @@ def get_merged_prs_since_tag(tag, branch):
                 prs.append(pr_number)
 
     return prs
+
+
+def parse_args():
+    """Parse CLI arguments."""
+    parser = argparse.ArgumentParser(
+        description="Generate release notes from the actual release commit range."
+    )
+    parser.add_argument("new_version", help="Version that will be tagged for this release")
+    parser.add_argument(
+        "--base-tag",
+        dest="base_tag",
+        help="Existing version tag to diff from. Defaults to the latest version tag merged into the compare ref.",
+    )
+    parser.add_argument(
+        "--compare-ref",
+        default="HEAD",
+        help="Git ref to diff to. Defaults to HEAD.",
+    )
+    return parser.parse_args()
 
 
 def get_pr_details(pr_number):
@@ -268,28 +293,28 @@ def get_new_contributors(pr_details_list, tag, repo="meshtastic/firmware"):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: generate_release_notes.py <new_version>", file=sys.stderr)
-        sys.exit(1)
-
-    new_version = sys.argv[1]
+    args = parse_args()
+    new_version = args.new_version
+    compare_ref = args.compare_ref
+    current_tag = f"v{new_version}"
 
     # Get last release tag
     try:
-        last_tag = get_last_release_tag()
+        last_tag = args.base_tag or get_last_release_tag(compare_ref, exclude_tag=current_tag)
     except subprocess.CalledProcessError:
         print("Error: Could not find last release tag", file=sys.stderr)
         sys.exit(1)
 
-    # Collect PRs from both branches
-    all_pr_numbers = set()
+    print(
+        f"Resolved release note range: {last_tag}..{compare_ref}",
+        file=sys.stderr,
+    )
 
-    for branch in ["develop", "master"]:
-        try:
-            prs = get_merged_prs_since_tag(last_tag, branch)
-            all_pr_numbers.update(prs)
-        except Exception as e:
-            print(f"Warning: Could not get PRs from {branch}: {e}", file=sys.stderr)
+    try:
+        all_pr_numbers = set(get_merged_prs_in_range(last_tag, compare_ref))
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Could not get PRs for range {last_tag}..{compare_ref}: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Get details for all PRs
     enhancements = []

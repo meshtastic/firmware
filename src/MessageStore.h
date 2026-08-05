@@ -21,7 +21,14 @@
 // How many messages are stored (RAM + flash).
 // Define -DMESSAGE_HISTORY_LIMIT=N in build_flags to control memory usage.
 #ifndef MESSAGE_HISTORY_LIMIT
+#if defined(ARCH_ESP32) &&                                                                                                       \
+    !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32S2))
+// Baseline ESP32 (non-PSRAM variants) has limited heap; reduce message history on resource-constrained builds.
+// Override with -DMESSAGE_HISTORY_LIMIT=N if needed.
+#define MESSAGE_HISTORY_LIMIT 10
+#else
 #define MESSAGE_HISTORY_LIMIT 20
+#endif
 #endif
 
 // Internal alias used everywhere in code – do NOT redefine elsewhere.

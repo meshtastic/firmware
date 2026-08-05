@@ -9,8 +9,6 @@
 #define BUTTON_PIN 0 // The middle button GPIO on the T-Beam S3
 //  #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
-#define LED_STATE_ON 0 // State when LED is lit
-
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
 #define USE_SX1262

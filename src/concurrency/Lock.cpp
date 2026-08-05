@@ -14,6 +14,11 @@ Lock::Lock() : handle(xSemaphoreCreateBinary())
     }
 }
 
+Lock::~Lock()
+{
+    vSemaphoreDelete(handle);
+}
+
 void Lock::lock()
 {
     if (xSemaphoreTake(handle, portMAX_DELAY) == false) {
@@ -29,6 +34,8 @@ void Lock::unlock()
 }
 #else
 Lock::Lock() {}
+
+Lock::~Lock() {}
 
 void Lock::lock() {}
 

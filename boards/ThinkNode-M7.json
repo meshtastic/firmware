@@ -1,0 +1,42 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32s3_out.ld",
+      "memory_type": "qio_opi"
+    },
+    "core": "esp32",
+    "extra_flags": [
+      "-D BOARD_HAS_PSRAM",
+      "-D ARDUINO_USB_CDC_ON_BOOT=0",
+      "-D ARDUINO_USB_MODE=0",
+      "-D ARDUINO_RUNNING_CORE=1",
+      "-D ARDUINO_EVENT_RUNNING_CORE=0"
+    ],
+    "f_cpu": "240000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "qio",
+    "psram_type": "qio_opi",
+    "hwids": [["0x303A", "0x1001"]],
+    "mcu": "esp32s3",
+    "variant": "ELECROW-ThinkNode-M7"
+  },
+  "connectivity": ["wifi", "bluetooth", "lora"],
+  "debug": {
+    "default_tool": "esp-builtin",
+    "onboard_tools": ["esp-builtin"],
+    "openocd_target": "esp32s3.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "ELECROW ThinkNode M7",
+  "upload": {
+    "flash_size": "8MB",
+    "maximum_ram_size": 524288,
+    "maximum_size": 8388608,
+    "use_1200bps_touch": true,
+    "wait_for_upload_port": true,
+    "require_upload_port": true,
+    "speed": 921600
+  },
+  "url": "https://www.elecrow.com",
+  "vendor": "ELECROW"
+}

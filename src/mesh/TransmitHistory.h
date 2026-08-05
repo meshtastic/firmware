@@ -76,6 +76,13 @@ class TransmitHistory
      */
     bool saveToDisk();
 
+    /**
+     * Wipe in-memory throttle state + remove the on-disk file. Required
+     * alongside rmDir("/prefs") in factoryReset — otherwise the 5-min
+     * auto-flush resurrects the file from the still-populated maps.
+     */
+    void clear();
+
   private:
     TransmitHistory() = default;
 

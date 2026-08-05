@@ -88,8 +88,12 @@ class AppletFont
 
 // Greek
 #include "graphics/niche/Fonts/FreeSans12pt_Win1253.h"
+#include "graphics/niche/Fonts/FreeSans18pt_Win1253.h"
+#include "graphics/niche/Fonts/FreeSans24pt_Win1253.h"
 #include "graphics/niche/Fonts/FreeSans6pt_Win1253.h"
 #include "graphics/niche/Fonts/FreeSans9pt_Win1253.h"
+#define FREESANS_24PT_WIN1253 InkHUD::AppletFont(FreeSans24pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -5, 3)
+#define FREESANS_18PT_WIN1253 InkHUD::AppletFont(FreeSans18pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -4, 2)
 #define FREESANS_12PT_WIN1253 InkHUD::AppletFont(FreeSans12pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -3, 1)
 #define FREESANS_9PT_WIN1253 InkHUD::AppletFont(FreeSans9pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -2, -1)
 #define FREESANS_6PT_WIN1253 InkHUD::AppletFont(FreeSans6pt_Win1253, InkHUD::AppletFont::WINDOWS_1253, -1, -2)

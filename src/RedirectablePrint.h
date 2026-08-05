@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../freertosinc.h"
+#include "Print.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
-#include <Print.h>
 #include <stdarg.h>
 #include <string>
 

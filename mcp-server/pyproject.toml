@@ -1,0 +1,54 @@
+[project]
+name = "meshtastic-mcp"
+version = "0.1.0"
+description = "MCP server for Meshtastic firmware development: device discovery, PlatformIO tooling, flashing, serial monitoring, and device administration via the meshtastic Python API."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-only" }
+authors = [{ name = "thebentern" }]
+dependencies = ["mcp>=1.2", "pyserial>=3.5", "meshtastic>=2.7.8"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+test = [
+  "pytest>=8",
+  "pytest-html>=4",
+  "pytest-reportlog>=0.4",
+  "pytest-timeout>=2.3",
+  "coverage[toml]>=7",
+  "pyyaml>=6",
+  # textual is required by the `meshtastic-mcp-test-tui` script (see
+  # `src/meshtastic_mcp/cli/test_tui.py`). Bundled into `test` rather than a
+  # separate `[tui]` extra because v1 expects test operators are the only
+  # consumers; revisit if install cost pushes back.
+  "textual>=0.50",
+]
+# UI test tier + `capture_screen` MCP tool. Optional because the ML OCR
+# model alone is ~100 MB and camera hardware is user-supplied.
+#   pip install -e '.[ui]'     — full (OpenCV + easyocr)
+#   pip install -e '.[ui-min]' — image capture only, no OCR
+ui = [
+  "opencv-python-headless>=4.9",
+  "numpy>=1.26",
+  "easyocr>=1.7",
+  "Pillow>=10.0",
+  # Renders the latest camera capture as Unicode half-blocks in the TUI
+  # (MESHTASTIC_UI_TUI_CAMERA=1). Terminal-agnostic — no kitty / sixel
+  # dependency. Pure Python, tiny.
+  "rich-pixels>=3.0",
+]
+ui-min = ["opencv-python-headless>=4.9", "numpy>=1.26"]
+
+[project.scripts]
+meshtastic-mcp = "meshtastic_mcp.__main__:main"
+# Live TUI wrapping run-tests.sh — shells out to the same script the plain
+# CLI uses, tails pytest-reportlog for per-test state, and polls the device
+# list at startup + post-run (port lock forces it to stay idle during the run).
+meshtastic-mcp-test-tui = "meshtastic_mcp.cli.test_tui:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meshtastic_mcp"]

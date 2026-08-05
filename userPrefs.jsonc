@@ -57,6 +57,7 @@
   // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
   // "USERPREFS_RINGTONE_NAG_SECS": "60",
   // "USERPREFS_NODEINFO_REPLY_SUPPRESS_SECS": "43200",
+  // "USERPREFS_UI_TEST_LOG": "true", // Test-only: emits `Screen: frame N/M name=... reason=...` log per UI transition (for the mcp-server ui test tier); off in release builds.
   "USERPREFS_RINGTONE_RTTTL": "24:d=32,o=5,b=565:f6,p,f6,4p,p,f6,p,f6,2p,p,b6,p,b6,p,b6,p,b6,p,b,p,b,p,b,p,b,p,b,p,b,p,b,p,b,1p.,2p.,p",
   // "USERPREFS_NETWORK_IPV6_ENABLED": "1",
   "USERPREFS_TZ_STRING": "tzplaceholder                                         "

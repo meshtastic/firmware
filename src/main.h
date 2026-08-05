@@ -35,6 +35,7 @@ extern bool kb_found;
 extern bool osk_found;
 extern ScanI2C::DeviceAddress rtc_found;
 extern ScanI2C::DeviceAddress accelerometer_found;
+extern ScanI2C::DeviceAddress magnetometer_found;
 extern ScanI2C::FoundDevice rgb_found;
 extern ScanI2C::DeviceAddress aqi_found;
 
@@ -68,6 +69,10 @@ extern graphics::Screen *screen;
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_ACCELEROMETER
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
+#endif
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
+#include "motion/MagnetometerThread.h"
+extern MagnetometerThread *magnetometerThread;
 #endif
 
 extern bool isVibrating;

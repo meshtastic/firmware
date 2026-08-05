@@ -9,6 +9,7 @@
 #define ST7789_BUSY -1
 // #define VTFT_CTRL 38
 #define VTFT_LEDA 38
+#define TFT_BACKLIGHT_ON HIGH
 // #define ST7789_BL (32+6)
 #define ST7789_SPI_HOST SPI2_HOST
 // #define TFT_BL (32+6)
@@ -57,6 +58,14 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #define TCXO_OPTIONAL
+
+// SD card slot — shares the SPI bus with the LoRa radio (separate chip select).
+// The default SPI instance is used; spiLock arbitrates access between radio and SD.
+#define HAS_SDCARD
+#define SPI_SCK 40
+#define SPI_MISO 39
+#define SPI_MOSI 14
+#define SDCARD_CS 12
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN

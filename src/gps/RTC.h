@@ -56,6 +56,10 @@ RTCSetResult readFromRTC();
 
 #ifdef PIO_UNIT_TESTING
 void setBootRelativeTimeForUnitTest(uint32_t secondsSinceBoot);
+void resetRTCStateForTests();
+void setRTCSystemTimeForTests(const struct timeval *tv);
+void clearRTCSystemTimeForTests();
+void setReadFromRTCUseSystemTimeForTests(bool enabled);
 #endif
 
 time_t gm_mktime(const struct tm *tm);

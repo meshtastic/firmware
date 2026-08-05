@@ -1,0 +1,40 @@
+# !! WARNING: Hats on the OK3506 board are installed "backwards" (facing outwards)
+
+Meta:
+  name: RAK6421 + RAK13300 Slot 1
+  support: community # Promote when tested
+  compatible:
+    - forlinx-ok3506-s12 # Armbian
+
+Lora:
+  Module: sx1262
+  IRQ: # GPIO3_B5 (IO6, physical 15)
+    pin: 109
+    gpiochip: 3
+    line: 13
+  Reset: # GPIO3_B0 (IO4, physical 36)
+    pin: 104
+    gpiochip: 3
+    line: 8
+  Busy: # GPIO3_A6 (IO5, physical 18)
+    pin: 102
+    gpiochip: 3
+    line: 6
+  # Ant_sw: # GPIO0_A3 (IO3, physical 33)
+  #   pin: 3
+  #   gpiochip: 0
+  #   line: 3
+  Enable_Pins:
+    - pin: 2 # GPIO0_A2 (physical 32)
+      gpiochip: 0
+      line: 2
+    - pin: 3 # GPIO0_A3 (physical 33)
+      gpiochip: 0
+      line: 3
+  DIO3_TCXO_VOLTAGE: true
+  DIO2_AS_RF_SWITCH: true
+  spidev: spidev0.0
+  # CS: # GPIO0_C3 (SPI0_CSN0, physical 24)
+  #   pin: 19
+  #   gpiochip: 0
+  #   line: 19

@@ -363,3 +363,9 @@ uint32_t SimRadio::getPacketTime(uint32_t pl, bool received)
     uint32_t msecs = tPacket * 1000;
     return msecs;
 }
+
+int16_t SimRadio::getCurrentRSSI()
+{
+    // Simulated radio - return a reasonable default noise floor
+    return -120;
+}

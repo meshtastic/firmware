@@ -40,7 +40,7 @@ jobs:
       checks: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -177,7 +177,7 @@ jobs:
 
       - name: Comment test results on PR
         if: github.event_name == 'pull_request' && needs.native-tests.result != 'skipped'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');

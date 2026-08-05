@@ -1,0 +1,190 @@
+name: Post Web Flasher Link Comment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  post-flasher-link:
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.repository == 'meshtastic/firmware'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      # Per-board manifests carry the firmware's own metadata (activelySupported,
+      # displayName, ...) generated from each target's custom_meshtastic_* config.
+      - name: Download board manifests
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: manifest-*
+          path: ./manifests
+          merge-multiple: true
+
+      - name: Post or update web flasher link comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const marker = '<!-- web-flasher-link -->';
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+
+            // Resolve the PR number (run.pull_requests is empty for fork PRs)
+            let prNumber = run.pull_requests?.[0]?.number;
+            if (!prNumber) {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner, repo, commit_sha: run.head_sha,
+              });
+              prNumber = (prs.find((pr) => pr.head.sha === run.head_sha) ?? prs[0])?.number;
+            }
+            if (!prNumber) {
+              core.info('No pull request associated with this run; skipping.');
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+
+            // Only comment on PRs authored by members of the organization.
+            // author_association MEMBER is computed by GitHub and reflects org
+            // membership (including concealed members); OWNER covers a repo owner.
+            const allowedAssociations = ['OWNER', 'MEMBER'];
+            if (!allowedAssociations.includes(pr.author_association)) {
+              core.info(`Author association ${pr.author_association} is not an org member; skipping.`);
+              return;
+            }
+            if (pr.state !== 'open') {
+              core.info('Pull request is not open; skipping.');
+              return;
+            }
+            if (pr.head.sha !== run.head_sha) {
+              core.info('Run is for an outdated commit; skipping.');
+              return;
+            }
+
+            // Require at least one per-arch firmware artifact from gather-artifacts
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner, repo, run_id: run.id, per_page: 100,
+            });
+            const archRe = /^firmware-(esp32|esp32s3|esp32c3|esp32c6|nrf52840|rp2040|rp2350|stm32)-(\d+\.\d+\.\d+\.[0-9a-f]+)$/;
+            const archArtifacts = artifacts.filter((a) => archRe.test(a.name) && !a.expired);
+            if (archArtifacts.length === 0) {
+              core.info('No per-arch firmware artifacts found; skipping.');
+              return;
+            }
+
+            const version = archRe.exec(archArtifacts[0].name)[2];
+            const expiresAt = archArtifacts[0].expires_at
+              ? new Date(archArtifacts[0].expires_at).toISOString().slice(0, 10)
+              : null;
+
+            // Read each built board's manifest (.mt.json). activelySupported,
+            // displayName and architecture come straight from the board's
+            // custom_meshtastic_* platformio config, so the list is in sync with
+            // the firmware itself — no external device database needed.
+            const fs = require('fs');
+            let boards = [];
+            try {
+              boards = fs.readdirSync('./manifests')
+                .filter((f) => f.endsWith('.mt.json'))
+                .map((f) => {
+                  try { return JSON.parse(fs.readFileSync(`./manifests/${f}`, 'utf8')); }
+                  catch { return null; }
+                })
+                .filter((m) => m && m.activelySupported === true && m.platformioTarget)
+                .map((m) => ({
+                  board: m.platformioTarget,
+                  platform: m.architecture || '',
+                  // displayName is maintainer-authored text; escape table-breaking pipes
+                  displayName: String(m.displayName || m.platformioTarget).replace(/\|/g, '\\|'),
+                  image: Array.isArray(m.images) && m.images[0] ? String(m.images[0]) : '',
+                }))
+                .sort((a, b) => a.board.localeCompare(b.board));
+            } catch (e) {
+              core.warning(`Could not read board manifests: ${e.message}`);
+            }
+
+            const flasherUrl = `https://flasher.meshtastic.org/?pr=${prNumber}`;
+            // Device illustrations are served by the flasher from the same image
+            // names the manifest declares (custom_meshtastic_images). The flasher
+            // serves its SPA shell (HTML, 200) for unknown paths, so confirm each
+            // image really resolves to an image before linking it.
+            const imageBase = 'https://flasher.meshtastic.org/img/devices/';
+            await Promise.all(boards.map(async (b) => {
+              if (!b.image) return;
+              try {
+                const res = await fetch(`${imageBase}${encodeURIComponent(b.image)}`);
+                const type = res.headers.get('content-type') || '';
+                if (!res.ok || !type.startsWith('image/')) b.image = '';
+              } catch { b.image = ''; }
+            }));
+
+            const boardLines = boards
+              .map((b) => {
+                const img = b.image ? `<img src="${imageBase}${encodeURIComponent(b.image)}" alt="" height="34">` : '';
+                return `| ${img} | ${b.displayName} | [\`${b.board}\`](${flasherUrl}&device=${encodeURIComponent(b.board)}) | ${b.platform} |`;
+              })
+              .join('\n');
+
+            // Shields.io badges. Only non-user-controlled, charset-constrained values
+            // (version, commit sha, counts, dates) go into badge URLs — never board
+            // names or the PR title — so the rendered comment cannot be spoofed.
+            const shieldText = (s) =>
+              encodeURIComponent(String(s).replace(/-/g, '--').replace(/_/g, '__').replace(/ /g, '_'));
+            const shield = (label, message, color) =>
+              `https://img.shields.io/badge/${shieldText(label)}-${shieldText(message)}-${color}`;
+            const buttonUrl =
+              `https://img.shields.io/badge/${shieldText('Flash this PR in the Web Flasher')}-2C2D3C?style=for-the-badge`;
+            const badges = [
+              `![firmware](${shield('firmware', version, '67EA94')})`,
+              `![commit](${shield('commit', run.head_sha.slice(0, 7), '2C2D3C')})`,
+              `![boards](${shield('boards', boards.length, '5C6BC0')})`,
+            ];
+            if (expiresAt) badges.push(`![expires](${shield('expires', expiresAt, '9A4E00')})`);
+
+            // Only render the board table when there are supported boards to list
+            const boardTable = boards.length > 0 ? [
+              `<details><summary>Supported boards built by this PR (${boards.length})</summary>`,
+              '',
+              '| | Device | Board | Platform |',
+              '| --- | --- | --- | --- |',
+              boardLines,
+              '',
+              '</details>',
+              '',
+            ] : [];
+
+            const body = [
+              marker,
+              '## ⚡ Try this PR in the Web Flasher',
+              '',
+              `[![Flash this PR in the Web Flasher](${buttonUrl})](${flasherUrl})`,
+              '',
+              badges.join(' '),
+              '',
+              '> [!WARNING]',
+              '> This is an automated, unreviewed CI test build. Back up your device configuration',
+              '> before flashing, and only flash devices you are able to recover.',
+              '',
+              ...boardTable,
+              `*Build artifacts expire${expiresAt ? ` on ${expiresAt}` : ' after 30 days'}. Updated for \`${run.head_sha.slice(0, 7)}\`.*`,
+            ].join('\n');
+
+            // Sticky comment: update in place when the marker is found
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+            }

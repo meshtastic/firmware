@@ -104,8 +104,13 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 // End the update process - virtual method, overridden in derived class
 void EInkDisplay::endUpdate()
 {
-    // Power off display hardware, then deep-sleep (Except Wireless Paper V1.1, no deep-sleep)
+#ifndef EINK_NOT_HIBERNATE
+    // By default, power off the E-Ink display hardware and enter hibernate().
+    // Boards/panels that define EINK_NOT_HIBERNATE intentionally skip this step.
+    // Skipping hibernate() can help avoid panel-specific wake/refresh or ghosting issues,
+    // but it typically trades lower power savings for that compatibility.
     adafruitDisplay->hibernate();
+#endif
 }
 
 // Write the buffer to the display memory

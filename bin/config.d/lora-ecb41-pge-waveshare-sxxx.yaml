@@ -1,0 +1,30 @@
+Meta:
+  name: Waveshare SX1262
+  support: deprecated
+  compatible:
+    - ebyte-ecb41-pge # Armbian
+
+Lora:
+  Module: sx1262  # Waveshare SX126X XXXM
+  DIO2_AS_RF_SWITCH: true
+  CS: # GPIO0_A1 (physical 40)
+    pin: 1
+    gpiochip: 0
+    line: 1
+  IRQ: # GPIO0_A3 (physical 36)
+    pin: 3
+    gpiochip: 0
+    line: 3
+  Busy: # GPIO0_A0 (physical 38)
+    pin: 0
+    gpiochip: 0
+    line: 0
+  Reset: # GPIO0_B4 (physical 12)
+    pin: 12
+    gpiochip: 0
+    line: 12
+  SX126X_ANT_SW: # GPIO1_B2 (physical 31)
+    pin: 42
+    gpiochip: 1
+    line: 10
+  spidev: spidev0.0
