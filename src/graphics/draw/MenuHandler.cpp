@@ -26,6 +26,9 @@
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/KeyVerificationModule.h"
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/EnvironmentTelemetry.h"
+#endif
 #include "modules/TraceRouteModule.h"
 #include <algorithm>
 #include <array>
@@ -677,16 +680,19 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
+    enum optionsNumbers { Back = 0, Clock, Time, Timezone };
 #if defined(OLED_TINY)
     static const char *optionsArray[] = {"Back", "Time Format", "Timezone"};
+    static const int optionsEnumArray[] = {Back, Time, Timezone};
 #else
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
+    static const int optionsEnumArray[] = {Back, Clock, Time, Timezone};
 #endif
-    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = sizeof(optionsArray) / sizeof(optionsArray[0]);
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Clock) {
             menuHandler::menuQueue = menuHandler::ClockFacePicker;
@@ -1468,6 +1474,76 @@ void menuHandler::positionBaseMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::environmentTelemetryMenu()
+{
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    enum optionsNumbers { Back, Source, enumEnd };
+
+    static const char *optionsArray[] = {"Back", "Source"};
+    static int optionsEnumArray[] = {Back, Source};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Environment";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = enumEnd;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Source) {
+            menuQueue = EnvironmentTelemetrySourceMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
+void menuHandler::environmentTelemetrySourceMenu()
+{
+#if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+    enum optionsNumbers { Back, LocalSensor, Mesh, FavoritesOnly, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back", "Local Sensor", "Mesh", "Favorite Nodes Only"};
+    static int optionsEnumArray[enumEnd] = {Back, LocalSensor, Mesh, FavoritesOnly};
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Source";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = enumEnd;
+
+    switch (EnvironmentTelemetryModule::getDisplaySource()) {
+    case EnvironmentTelemetryModule::DisplaySource::LocalSensor:
+        bannerOptions.InitialSelected = LocalSensor;
+        break;
+    case EnvironmentTelemetryModule::DisplaySource::FavoriteNodesOnly:
+        bannerOptions.InitialSelected = FavoritesOnly;
+        break;
+    case EnvironmentTelemetryModule::DisplaySource::Mesh:
+    default:
+        bannerOptions.InitialSelected = Mesh;
+        break;
+    }
+
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuQueue = EnvironmentTelemetryMenu;
+            screen->runNow();
+            return;
+        }
+
+        if (selected == LocalSensor) {
+            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::LocalSensor);
+        } else if (selected == Mesh) {
+            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::Mesh);
+        } else if (selected == FavoritesOnly) {
+            EnvironmentTelemetryModule::setDisplaySource(EnvironmentTelemetryModule::DisplaySource::FavoriteNodesOnly);
+        }
+
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+#endif
+}
+
 void menuHandler::nodeListMenu()
 {
     enum optionsNumbers { Back, NodePicker, TraceRoute, Verify, Reset, NodeNameLength, enumEnd };
@@ -1475,7 +1551,11 @@ void menuHandler::nodeListMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
+#if defined(OLED_TINY)
+    optionsArray[options] = "Node Action";
+#else
     optionsArray[options] = "Node Actions / Settings";
+#endif
     optionsEnumArray[options++] = NodePicker;
 
     if (currentResolution != ScreenResolution::UltraLow) {
@@ -2882,6 +2962,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case NumberTest:
         numberTest();
+        break;
+    case EnvironmentTelemetryMenu:
+        environmentTelemetryMenu();
+        break;
+    case EnvironmentTelemetrySourceMenu:
+        environmentTelemetrySourceMenu();
         break;
     case WifiToggleMenu:
         wifiToggleMenu();
