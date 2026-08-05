@@ -5,6 +5,7 @@
 #include "NodeStatus.h"
 #include "Router.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -33,7 +34,9 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Suppress replies to senders we've replied to recently (12H window)
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
-        const uint32_t now = mp.rx_time ? mp.rx_time : getTime();
+        // A local dedup window, not a wall-clock reading - uptime avoids RTC-quality jumps and
+        // replayed packets' stale rx_time perturbing it.
+        const uint32_t now = (uint32_t)(Time::getMillis64() / 1000);
         auto it = lastNodeInfoSeen.find(sender);
         if (it != lastNodeInfoSeen.end()) {
             uint32_t sinceLast = now >= it->second ? now - it->second : 0;
@@ -50,10 +53,9 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         return true;
     }
     NodeNum sourceNum = getFrom(&mp);
-    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
-    // Broadcasts only: senders never sign unicast NodeInfo, so dropping it would break exchanges
-    // with signer nodes. Backstops ingress that skips Router's downgrade drop (e.g. decoded MQTT).
-    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
+    // Broadcasts only: unicast NodeInfo is unsigned off ham, so updateUser refuses the identity
+    // write instead. isKnownXeddsaSigner also covers the warm tier.
+    if (nodeDB->isKnownXeddsaSigner(sourceNum) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
         LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
         return true;
     }

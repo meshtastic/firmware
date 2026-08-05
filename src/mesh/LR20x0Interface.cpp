@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#if (defined(USE_LR2021) || defined(ARCH_PORTDUINO)) && RADIOLIB_EXCLUDE_LR2021 != 1
 #include "LR20x0Band.h"
 #include "LR20x0Interface.h"
 #include "error.h"
@@ -483,4 +483,9 @@ template <typename T> int16_t LR20x0Interface<T>::getCurrentRSSI()
     float rssi = lora.getRSSI(false, true);
     return (int16_t)round(rssi);
 }
+
+// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
+#undef lr20x0_rfswitch_dio_pins
+#undef lr20x0_rfswitch_table
+#undef LR20x0
 #endif

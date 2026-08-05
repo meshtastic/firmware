@@ -1079,7 +1079,14 @@ typedef struct _meshtastic_MeshPacket {
     /* The time this message was received by the esp32 (secs since 1970).
  Note: this field is _never_ sent on the radio link itself (to save space) Times
  are typically not sent over the mesh, but they will be added to any Packet
- (chain of SubPacket) sent to the phone (so the phone can know exact time of reception) */
+ (chain of SubPacket) sent to the phone (so the phone can know exact time of reception)
+ Explicit presence: firmware cannot always attach a trustworthy wall-clock timestamp at the
+ moment of reception - a node with no GPS and no phone connected yet has no time source at
+ all. has_rx_time disambiguates that state from a genuine (if coincidental) 1970-01-01
+ reading. A packet delivered with this field absent may still be re-timestamped once a valid
+ clock becomes available, before the phone ever sees it - "absent" is not guaranteed
+ permanent, only "not yet known at last observation". */
+    bool has_rx_time;
     uint32_t rx_time;
     /* *Never* sent over the radio links.
  Set during reception to indicate the SNR of this packet.
@@ -1740,7 +1747,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1779,7 +1786,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -2199,7 +2206,7 @@ X(a, STATIC,   SINGULAR, UINT32,   channel,           3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,decoded,decoded),   4) \
 X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,encrypted,encrypted),   5) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                6) \
-X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           7) \
+X(a, STATIC,   OPTIONAL, FIXED32,  rx_time,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
