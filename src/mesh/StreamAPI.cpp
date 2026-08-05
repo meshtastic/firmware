@@ -1,26 +1,31 @@
 #include "StreamAPI.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 
 #define START1 0x94
 #define START2 0xc3
 #define HEADER_LEN 4
 
+/// Poll the underlying stream, drain output, and update connection state.
 int32_t StreamAPI::runOncePart()
 {
     auto result = readStream();
-    writeStream();
+    // More to send: come straight back instead of sleeping out readStream's idle delay.
+    if (writeStream())
+        result = 0;
     checkConnectionTimeout();
     return result;
 }
 
+/// Consume supplied input bytes, drain output, and update connection state.
 int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 {
     auto result = readStream(buf, bufLen);
-    writeStream();
+    if (writeStream())
+        result = 0;
     checkConnectionTimeout();
     return result;
 }
@@ -42,21 +47,32 @@ int32_t StreamAPI::readStream(const char *buf, uint16_t bufLen)
     }
 }
 
-/**
- * call getFromRadio() and deliver encapsulated packets to the Stream
- */
-void StreamAPI::writeStream()
+/// Emit a slice of pending output. True means "more to send, come straight back"; false covers
+/// both a drained queue and backpressure, where retrying at once would only spin.
+bool StreamAPI::writeStream()
 {
-    if (canWrite) {
-        uint32_t len;
-        do {
-            // Send every packet we can
-            len = getFromRadio(txBuf + HEADER_LEN);
-            emitTxBuffer(len);
-        } while (len);
-    }
+    if (!canWrite)
+        return false;
+
+    // A retained short frame must complete before getFromRadio() advances the PhoneAPI state.
+    if (!finishPendingFrame())
+        return false;
+
+    // Draining a full dump in one call never returns to loop(), so the 8s hardware watchdog
+    // fires mid-dump. PhoneAPI is resumable, so stop at the budget and continue next dispatch.
+    uint32_t len;
+    uint32_t started = millis();
+    do {
+        // Send every packet we can, up to this slice's budget
+        len = getFromRadio(txBuf + HEADER_LEN);
+        if (len != 0 && !emitTxBuffer(len))
+            return false;
+    } while (len && Throttle::isWithinTimespanMs(started, STREAM_WRITE_BUDGET_MSEC));
+
+    return len != 0;
 }
 
+/// Parse supplied bytes through the framed ToRadio receive state machine.
 int32_t StreamAPI::handleRecStream(const char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
@@ -166,26 +182,50 @@ int32_t StreamAPI::readStream()
     }
 }
 
+/// Encode the stream marker and big-endian payload length.
+size_t StreamAPI::buildFrameHeader(uint8_t *buf, size_t payloadLen)
+{
+    buf[0] = START1;
+    buf[1] = START2;
+    buf[2] = (payloadLen >> 8) & 0xff;
+    buf[3] = payloadLen & 0xff;
+    return payloadLen + HEADER_LEN;
+}
+
 /**
  * Send the current txBuffer over our stream
  */
-void StreamAPI::emitTxBuffer(size_t len)
+/// Write one framed payload using the transport's failure semantics.
+bool StreamAPI::writeFrame(uint8_t *buf, size_t len, bool bestEffort)
 {
-    if (len != 0) {
-        txBuf[0] = START1;
-        txBuf[1] = START2;
-        txBuf[2] = (len >> 8) & 0xff;
-        txBuf[3] = len & 0xff;
+    (void)bestEffort;
+    if (len == 0 || !canWrite)
+        return false;
 
-        auto totalLen = len + HEADER_LEN;
-        // Serialize stream writes against `emitLogRecord` so a LOG_ firing
-        // mid-packet-emission can't interleave bytes on the wire.
-        concurrency::LockGuard guard(&streamLock);
-        stream->write(txBuf, totalLen);
+    const size_t totalLen = buildFrameHeader(buf, len);
+    // Serialize write-readiness checks, writes and write-failure handling
+    // against concurrent stream writes/close.
+    concurrency::LockGuard guard(&streamLock);
+    if (!canWriteFrame(totalLen))
+        return false;
+
+    size_t written = stream->write(buf, totalLen);
+    if (written == totalLen) {
         stream->flush();
+        return true;
     }
+
+    onFrameWriteFailed(totalLen, written);
+    return false;
 }
 
+/// Emit the prepared main PhoneAPI payload as required output.
+bool StreamAPI::emitTxBuffer(size_t len)
+{
+    return writeFrame(txBuf, len, false);
+}
+
+/// Emit the initial reboot notification as a framed FromRadio payload.
 void StreamAPI::emitRebooted()
 {
     // In case we send a FromRadio packet
@@ -197,9 +237,14 @@ void StreamAPI::emitRebooted()
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 
+/// Encode and emit one protobuf LogRecord using the dedicated log buffers.
 void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
 {
-    // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here — those
+    // A retained short log frame still points into txBufLog, so do not overwrite it.
+    if (!canEncodeLogRecord())
+        return;
+
+    // IMPORTANT: do NOT touch `fromRadioScratch` or `txBuf` here - those
     // belong to the main packet-emission path and a LOG_ firing during
     // `writeStream()` would corrupt an in-flight encode. We keep a
     // dedicated `fromRadioScratchLog` + `txBufLog` for log records and
@@ -221,20 +266,7 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
 
     size_t len =
         pb_encode_to_bytes(txBufLog + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratchLog);
-    if (len != 0) {
-        txBufLog[0] = START1;
-        txBufLog[1] = START2;
-        txBufLog[2] = (len >> 8) & 0xff;
-        txBufLog[3] = len & 0xff;
-
-        auto totalLen = len + HEADER_LEN;
-        // Serialize stream writes against `emitTxBuffer` so a packet
-        // emission in flight on another task doesn't interleave bytes
-        // with this log record.
-        concurrency::LockGuard guard(&streamLock);
-        stream->write(txBufLog, totalLen);
-        stream->flush();
-    }
+    writeFrame(txBufLog, len, true);
 }
 
 /// Hookable to find out when connection changes

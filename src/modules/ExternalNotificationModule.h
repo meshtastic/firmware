@@ -23,7 +23,7 @@ extern AmbientLightingThread *ambientLightingThread;
 #endif
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include <NonBlockingRtttl.h>
 #else
 // Noop class for portduino.
@@ -90,6 +90,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     bool isNagging = false;
 
     bool isSilenced = false;
+    bool buzzerShouldAlert = false;
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,

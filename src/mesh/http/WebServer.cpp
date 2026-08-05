@@ -96,14 +96,6 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
-#if 0
-    // Delete the saved certs (used in debugging)
-    LOG_DEBUG("Delete any saved SSL keys");
-    // prefs.clear();
-    prefs.remove("PK");
-    prefs.remove("cert");
-#endif
-
     LOG_INFO("Checking if we have a saved SSL Certificate");
 
     size_t pkLen = prefs.getBytesLength("PK");

@@ -4,8 +4,10 @@
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -275,7 +277,16 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-    Bluefruit.begin();
+    if (!Bluefruit.begin()) {
+        // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
+        // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
+        // current Bluefruit config. Without this check the node would silently run without BLE.
+        // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
+        // raise the ORIGIN accordingly.
+        LOG_ERROR("Bluefruit.begin failed - SoftDevice RAM reservation too small for this config");
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
+        return;
+    }
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
@@ -359,6 +370,15 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    // shutdown() latches onUnwantedPairing to actively refuse pairing (used on the factory-reset /
+    // BT-disable teardown path). The real pairing passkey callback is installed only in setup(), but a
+    // shutdown()->resumeAdvertising() re-enable cycle skips setup() entirely (see setBluetoothEnable() in
+    // main-nrf52.cpp), so restore the correct callback here - otherwise the device silently refuses all
+    // pairing until the next reboot. Mirror the mode check in setup(): only PIN modes drive a passkey-
+    // display callback, so NO_PIN (Just Works) needs no restore.
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN)
+        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
@@ -413,7 +433,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
             "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
         // Use the pairing_pin notification type so the lockdown UI short-
         // circuit (Screen.cpp updateUiFrame) allows the overlay through
-        // even on a locked device — see H13 audit fix. The banner content
+        // even on a locked device - see H13 audit fix. The banner content
         // is the per-attempt ephemeral pair PIN, not operator content.
         graphics::BannerOverlayOptions opts;
         opts.message = ble_message.c_str();
@@ -447,17 +467,23 @@ bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passk
 // Disconnect any BLE connections
 void NRF52Bluetooth::disconnect()
 {
+    static constexpr uint32_t DISCONNECT_TIMEOUT_MSEC = 1000;
     uint8_t connection_num = Bluefruit.connected();
     if (connection_num) {
         // Close all connections. We're only expecting one.
         for (uint8_t i = 0; i < connection_num; i++)
             Bluefruit.disconnect(i);
 
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
+        // Best-effort wait: on Bluefruit's BLE event task the DISCONNECTED event can't be processed
+        // until this callback returns, so an unbounded wait would deadlock until the watchdog fires.
+        uint32_t start = millis();
+        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, DISCONNECT_TIMEOUT_MSEC))
+            delay(1);
 
-        LOG_INFO("Ended BLE connection");
+        if (Bluefruit.connected())
+            LOG_WARN("BLE disconnect unconfirmed after %ums, continuing shutdown", millis() - start);
+        else
+            LOG_INFO("Ended BLE connection");
     }
 }
 

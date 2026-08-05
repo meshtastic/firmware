@@ -3,10 +3,11 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "NodeStatus.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <Throttle.h>
 #include <algorithm>
@@ -33,7 +34,9 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Suppress replies to senders we've replied to recently (12H window)
     if (mp.decoded.want_response && !isFromUs(&mp)) {
         const NodeNum sender = getFrom(&mp);
-        const uint32_t now = mp.rx_time ? mp.rx_time : getTime();
+        // A local dedup window, not a wall-clock reading - uptime avoids RTC-quality jumps and
+        // replayed packets' stale rx_time perturbing it.
+        const uint32_t now = (uint32_t)(Time::getMillis64() / 1000);
         auto it = lastNodeInfoSeen.find(sender);
         if (it != lastNodeInfoSeen.end()) {
             uint32_t sinceLast = now >= it->second ? now - it->second : 0;
@@ -50,16 +53,19 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         return true;
     }
     NodeNum sourceNum = getFrom(&mp);
-    const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(sourceNum);
-    if (node && nodeInfoLiteHasXeddsaSigned(node) && !mp.xeddsa_signed) {
-        LOG_WARN("Dropping unsigned NodeInfo from node 0x%08x that previously signed", sourceNum);
+    // Broadcasts only: unicast NodeInfo is unsigned off ham, so updateUser refuses the identity
+    // write instead. isKnownXeddsaSigner also covers the warm tier.
+    if (nodeDB->isKnownXeddsaSigner(sourceNum) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
+        LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
         return true;
     }
 
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
 
-    bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel);
+    // updateUser() refuses the identity write for a known signer sending unsigned (all unicast
+    // NodeInfo), so the exchange above still proceeds but cannot spoof the stored name.
+    bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel, mp.xeddsa_signed);
 
     bool wasBroadcast = isBroadcast(mp.to);
 
@@ -67,12 +73,13 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // if user has changed while packet was not for us, inform phone
     if (hasChanged && !wasBroadcast && !isToUs(&mp)) {
         auto packetCopy = packetPool.allocCopy(mp); // Keep a copy of the packet for later analysis
+        if (packetCopy) {
+            // Re-encode the user protobuf, as we have stripped out the user.id
+            packetCopy->decoded.payload.size = pb_encode_to_bytes(
+                packetCopy->decoded.payload.bytes, sizeof(packetCopy->decoded.payload.bytes), &meshtastic_User_msg, &p);
 
-        // Re-encode the user protobuf, as we have stripped out the user.id
-        packetCopy->decoded.payload.size = pb_encode_to_bytes(
-            packetCopy->decoded.payload.bytes, sizeof(packetCopy->decoded.payload.bytes), &meshtastic_User_msg, &p);
-
-        service->sendToPhone(packetCopy);
+            service->sendToPhone(packetCopy);
+        }
     }
 
     pruneLastNodeInfoCache();
@@ -164,14 +171,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         ignoreRequest = true;
         return NULL;
     } else {
-        ignoreRequest = false;     // Don't ignore requests anymore
-        meshtastic_User u = owner; // deliberate copy: the licensed strip below must not clobber the global owner state
-
-        // Strip the public key if the user is licensed
-        if (u.is_licensed && u.public_key.size > 0) {
-            memset(u.public_key.bytes, 0, sizeof(u.public_key.bytes));
-            u.public_key.size = 0;
-        }
+        ignoreRequest = false; // Don't ignore requests anymore
+        meshtastic_User u = owner;
 
         // FIXME: Clear the user.id field since it should be derived from node number on the receiving end
         // u.id[0] = '\0';

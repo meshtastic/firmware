@@ -8,10 +8,10 @@
 #include "GpioLogic.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
-#include "RTC.h"
 #include "Throttle.h"
 #include "buzz.h"
 #include "concurrency/Periodic.h"
+#include "gps/RTC.h"
 #include "meshUtils.h"
 
 #include "main.h" // pmu_found
@@ -25,6 +25,7 @@
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
+#include "GpsdSerial.h"
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
 #include <algorithm>
@@ -45,7 +46,9 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 #define GPS_SERIAL_PORT Serial1
 #endif
 
-#if defined(ARCH_NRF52)
+#if defined(SENSECAP_INDICATOR)
+UARTProxy *GPS::_serial_gps = nullptr; // assigned in createGps(), see there
+#elif defined(ARCH_NRF52)
 Uart *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #elif defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32)
 HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
@@ -97,8 +100,9 @@ struct GPSProbeCacheRecord {
 
 bool isValidGnssModel(uint8_t model)
 {
-    // Keep persisted values bounded to known enum range.
-    return model <= static_cast<uint8_t>(GNSS_MODEL_CM121);
+    // Only real chip identifiers belong in the probe cache.
+    // GNSS_MODEL_UNKNOWN and GNSS_MODEL_GENERIC_NMEA are runtime-only values.
+    return model != static_cast<uint8_t>(GNSS_MODEL_UNKNOWN) && model < static_cast<uint8_t>(GNSS_MODEL_GENERIC_NMEA);
 }
 
 bool isValidProbeBaud(uint32_t baud)
@@ -1161,7 +1165,10 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
-        if (oldState == GPS_ACTIVE || oldState == GPS_IDLE) // If hardware already awake, no changes needed
+        if (oldState == GPS_ACTIVE)
+            break;
+        gotTime = false;
+        if (oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
             clearBuffer();
@@ -1177,6 +1184,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                         // Power (EN pin): on
         setPowerPMU(true);                                        // Power (PMU): on
+        writePinRFEN(true);                                       // External RF front-end: on
         writePinStandby(false);                                   // Standby (pin): awake (not standby)
         setPowerUBLOX(true);                                      // Standby (UBLOX): awake
         break;
@@ -1185,15 +1193,17 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                           // Power (EN pin): on
         setPowerPMU(true);                                          // Power (PMU): on
+        writePinRFEN(false);                                        // External RF front-end: off
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_HARDSLEEP:
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinRFEN(false);                                        // External RF front-end: off
+        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         writePinEN(false);                                          // Power (EN pin): off
         setPowerPMU(false);                                         // Power (PMU): off
-        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
 #ifdef GNSS_AIROHA
         digitalWrite(PIN_GPS_EN, LOW);
@@ -1203,9 +1213,10 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     case GPS_OFF:
         assert(sleepTime == 0);                                     // This is an indefinite sleep
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinRFEN(false);                                        // External RF front-end: off
+        writePinStandby(true);                                      // Standby (pin): asleep
         writePinEN(false);                                          // Power (EN pin): off
         setPowerPMU(false);                                         // Power (PMU): off
-        writePinStandby(true);                                      // Standby (pin): asleep
         setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
 #ifdef GNSS_AIROHA
         digitalWrite(PIN_GPS_EN, LOW);
@@ -1252,6 +1263,21 @@ void GPS::writePinStandby(bool standby)
 #ifdef GPS_DEBUG
     LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
+#endif
+}
+
+// Set the external RF front-end enable pin, if relevant
+void GPS::writePinRFEN(bool on)
+{
+#ifdef PIN_GPS_RF_EN
+    bool val = on ? GPS_RF_EN_ACTIVE : !GPS_RF_EN_ACTIVE;
+    pinMode(PIN_GPS_RF_EN, OUTPUT);
+    digitalWrite(PIN_GPS_RF_EN, val);
+#ifdef GPS_DEBUG
+    LOG_DEBUG("Pin RF EN %s", val == HIGH ? "HI" : "LOW");
+#endif
+#else
+    (void)on;
 #endif
 }
 
@@ -1384,6 +1410,13 @@ void GPS::down()
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
             softsleepSupported = true;
 
+#ifdef GPS_FORCE_SOFT_SLEEP
+        if (softsleepSupported) {
+            setPowerState(GPS_SOFTSLEEP, sleepTime);
+            return;
+        }
+#endif
+
         if (softsleepSupported) {
             // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
             // GPS_SOFTSLEEP? Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M
@@ -1424,6 +1457,21 @@ void GPS::publishUpdate()
 
 int32_t GPS::runOnce()
 {
+#if defined(SENSECAP_INDICATOR)
+    // No model probe on the bridged fake UART (the module only streams
+    // NMEA), but the user's GPS mode setting must still be honored
+    if (!GPSInitFinished) {
+        if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            LOG_INFO("GPS set to not-present. Skip probe");
+            return disable();
+        }
+        if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+            return disable();
+        }
+        GPSInitFinished = true;
+        publishUpdate();
+    }
+#else
     if (!GPSInitFinished) {
         if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
             LOG_INFO("GPS set to not-present. Skip probe");
@@ -1444,6 +1492,7 @@ int32_t GPS::runOnce()
         GPSInitFinished = true;
         publishUpdate();
     }
+#endif
 
     // ======================== GPS_ACTIVE state ========================
     // In GPS_ACTIVE state, GPS is powered on and we're receiving NMEA messages.
@@ -1485,8 +1534,7 @@ int32_t GPS::runOnce()
         // if gps_update_interval is <=10s, GPS never goes off, so we treat that differently
         uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
-        // 1. Got a time for the first time
-        bool gotTime = (getRTCQuality() >= RTCQualityGPS);
+        // 1. Got a time for the first time this cycle
         if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
             gotTime = true;
         }
@@ -1900,15 +1948,32 @@ std::unique_ptr<GPS> GPS::createGps()
         // They are not used for any hardware access.
         _rx_gpio = 1;
         _tx_gpio = 1;
+        if (!portduino_config.gpsd_host.empty()) {
+            gpsdSerial.setAddress(portduino_config.gpsd_host, portduino_config.gpsd_port);
+            _serial_gps = &gpsdSerial;
+        }
     } else
         return nullptr;
 #endif
+#if defined(SENSECAP_INDICATOR)
+    // assigned at runtime, static initialization order across translation
+    // units is undefined
+    _serial_gps = uartProxy;
+    if (!_serial_gps)
+        return nullptr;
+#else
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
+#endif
 
     auto new_gps = std::unique_ptr<GPS>(new GPS());
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
+#ifdef ARCH_PORTDUINO
+    // Skip chip-specific probing for gpsd - it's a generic NMEA stream.
+    if (!portduino_config.gpsd_host.empty())
+        new_gps->gnssModel = GNSS_MODEL_GENERIC_NMEA;
+#endif
 
     GpioVirtPin *virtPin = new GpioVirtPin();
     new_gps->enablePin = virtPin; // Always at least populate a virtual pin
@@ -1960,8 +2025,12 @@ std::unique_ptr<GPS> GPS::createGps()
         _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
+#if defined(SENSECAP_INDICATOR)
+        LOG_DEBUG("Use the RP2040 tunnel for GPS, no local pins");
+#else
         LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
         LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
+#endif
 
 //  ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
@@ -2189,11 +2258,6 @@ bool GPS::hasLock()
     return false;
 }
 
-bool GPS::hasFlow()
-{
-    return reader.passedChecksum() > 0;
-}
-
 bool GPS::whileActive()
 {
     unsigned int charsInBuf = 0;
@@ -2254,6 +2318,11 @@ int32_t GPS::disable()
     setPowerState(GPS_OFF);
 
     return INT32_MAX;
+}
+
+bool GPS::isEnabled()
+{
+    return enabled;
 }
 
 void GPS::toggleGpsMode()

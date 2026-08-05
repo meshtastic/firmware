@@ -3,7 +3,7 @@
 #include "./RecentsListApplet.h"
 #include "Time.h"
 
-#include "RTC.h"
+#include "gps/RTC.h"
 
 using namespace NicheGraphics;
 

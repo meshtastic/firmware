@@ -92,6 +92,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_PREHOP_DROP 1
 #endif
 
+// Debug/test only: let a wired client (serial/TCP) inject frames into the RX pipeline as if they had
+// arrived over LoRa - a SIMULATOR_APP ToRadio packet is delivered through the real receive path on real
+// hardware (see MeshService::injectAsReceived). This forges over-the-air traffic, so it MUST stay 0 in
+// any shipping build; enable per-build with -D MESHTASTIC_ENABLE_FRAME_INJECTION=1.
+#ifndef MESHTASTIC_ENABLE_FRAME_INJECTION
+#define MESHTASTIC_ENABLE_FRAME_INJECTION 0
+#endif
+
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
@@ -180,6 +188,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if !defined(NUM_PA_POINTS) || !defined(TX_GAIN_LORA)
 #error "USE_KCT8103L_PA is defined, but no PA gain curve (NUM_PA_POINTS / TX_GAIN_LORA) is configured for this board."
 #endif
+#endif
+#endif
+
+#ifdef USE_KCT8103L_PA_ONLY
+#if defined(HELTEC_MESH_TOWER_V2)
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 8, 7
 #endif
 #endif
 
@@ -284,6 +299,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LTR553ALS_ADDR 0x23
 #define SEN5X_ADDR 0x69
 #define SCD30_ADDR 0x61
+#define DS248X_ADDR 0x18      // same as MCP9808_ADDR, STK8BXX_ADDR and LIS3DH_ADDR
+#define DS248X_ADDR_ALT1 0x19 // same as LIS3DH_ADDR_ALT and BMA423_ADDR
+#define DS248X_ADDR_ALT2 0x1A // same as CST328_ADDR
+#define DS248X_ADDR_ALT3 0x1B
+#define DS248X_ADDR_ALT4 0x1C // same as QMC6310U_ADDR
+#define DS248X_ADDR_ALT5 0x1D // same as DFROBOT_RAIN_ADDR
+#define DS248X_ADDR_ALT6 0x1E // same as HMC5883L_ADDR
+#define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -392,7 +415,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef WIRE_INTERFACES_COUNT
 // Officially an NRF52 macro
 // Repurposed cross-platform to identify devices using Wire1
-#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA)
+// The SenseCAP Indicator has a second bus bridged to the RP2040 (I2CProxy)
+#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA) || defined(SENSECAP_INDICATOR)
 #define WIRE_INTERFACES_COUNT 2
 #elif HAS_WIRE
 #define WIRE_INTERFACES_COUNT 1
@@ -412,6 +436,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_TFT
 #define HAS_TFT 0
+#endif
+// Opt-in: build the BaseUI games frame (Snake). Off by default; enable per build/variant with
+// -DBASEUI_HAS_GAMES=1 (requires HAS_SCREEN and a non-color BaseUI display).
+#ifndef BASEUI_HAS_GAMES
+#define BASEUI_HAS_GAMES 0
 #endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
@@ -578,15 +607,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
-// MESHTASTIC_LOCKDOWN — runtime, client-toggleable hardening (nRF52 only)
+// MESHTASTIC_LOCKDOWN - runtime, client-toggleable hardening (nRF52 only)
 //
 // Lockdown/protect support is opt-in at build time. Builds that need it pass
 // -DMESHTASTIC_ENABLE_LOCKDOWN=1. When enabled on nRF52 (CC310 hardware
 // crypto), whether it is ACTIVE is decided entirely at runtime by
 // EncryptedStorage::isLockdownActive()
 // (== a passphrase has been provisioned, i.e. /prefs/.dek exists). A device
-// that has never been provisioned — or that the operator disabled from the
-// client app — behaves exactly like stock firmware: plaintext storage, no
+// that has never been provisioned - or that the operator disabled from the
+// client app - behaves exactly like stock firmware: plaintext storage, no
 // redaction, normal logging, normal display.
 //
 // The operator toggles lockdown from the client app:
@@ -594,7 +623,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //               firmware generates a DEK, encrypts the stored config, and
 //               authorizes the connection.
 //   on -> off : AdminMessage.lockdown_auth { disable=true } with the
-//               passphrase — decrypts storage back to plaintext and removes
+//               passphrase - decrypts storage back to plaintext and removes
 //               the DEK / token / monotonic-counter / backoff files, then
 //               reboots into normal mode. APPROTECT is the one thing that
 //               does NOT revert (see below).
@@ -604,20 +633,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // that genuinely cannot afford the ~tens-of-KB of crypto + access-control code
 // may also opt out with -DMESHTASTIC_EXCLUDE_LOCKDOWN=1.
 //
-//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL — per-connection auth + redaction,
+//   MESHTASTIC_PHONEAPI_ACCESS_CONTROL - per-connection auth + redaction,
 //                                        gated at runtime on isLockdownActive()
-//   MESHTASTIC_ENCRYPTED_STORAGE       — AES-128-CTR + HMAC-SHA256 at-rest
-//   MESHTASTIC_ENABLE_APPROTECT        — UICR APPROTECT capability. The actual
+//   MESHTASTIC_ENCRYPTED_STORAGE       - AES-128-CTR + HMAC-SHA256 at-rest
+//   MESHTASTIC_ENABLE_APPROTECT        - UICR APPROTECT capability. The actual
 //                                        one-way burn happens at runtime, only
 //                                        once provisioned, only on non-vulnerable
 //                                        silicon, and is STICKY: disabling
 //                                        lockdown does NOT (cannot) reverse it.
 //
-// DEBUG_MUTE is intentionally NOT coupled to lockdown — a capable-but-off
+// DEBUG_MUTE is intentionally NOT coupled to lockdown - a capable-but-off
 // device must log normally. Define DEBUG_MUTE separately for a silent build.
 //
 // -DMESHTASTIC_LOCKDOWN_DEBUG=1 keeps the irreversible APPROTECT burn disabled
-// even when provisioned — for development so dev boards never lose SWD.
+// even when provisioned - for development so dev boards never lose SWD.
 // -----------------------------------------------------------------------------
 #if defined(ARCH_NRF52)
 #ifndef MESHTASTIC_ENABLE_LOCKDOWN
@@ -655,7 +684,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 // Override at build time. Suggested:
 //   carry device:        3600  (1h sessions, periodic re-auth from phone)
-//   tower / infra node:  0     (default — relies on token TTLs only)
+//   tower / infra node:  0     (default - relies on token TTLs only)
 //
 // A future LockdownAuth.max_session_seconds proto field will let the
 // client set this per-token; until that lands the build-time value is

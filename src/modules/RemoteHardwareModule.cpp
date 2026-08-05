@@ -1,9 +1,9 @@
 #include "RemoteHardwareModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <Throttle.h>
 
@@ -103,8 +103,10 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             r.gpio_value = res;
             r.gpio_mask = p.gpio_mask;
             meshtastic_MeshPacket *p2 = allocDataProtobuf(r);
-            setReplyTo(p2, req);
-            myReply = p2;
+            if (p2) {
+                setReplyTo(p2, req);
+                myReply = p2;
+            }
             break;
         }
 
@@ -149,7 +151,8 @@ int32_t RemoteHardwareModule::runOnce()
                 r.type = meshtastic_HardwareMessage_Type_GPIOS_CHANGED;
                 r.gpio_value = curVal;
                 meshtastic_MeshPacket *p = allocDataProtobuf(r);
-                service->sendToMesh(p);
+                if (p)
+                    service->sendToMesh(p);
             }
         }
     } else {

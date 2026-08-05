@@ -9,8 +9,8 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
+#include "Power.h"
 #include "SPILock.h"
-#include "power.h"
 #include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -74,15 +74,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeAPIv1FromRadioOptions = new ResourceNode("/api/v1/fromradio", "OPTIONS", &handleAPIv1FromRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
-    //    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
-    //    ResourceNode *nodeHotspotAndroid = new ResourceNode("/generate_204", "GET", &handleHotspot);
-
     ResourceNode *nodeAdmin = new ResourceNode("/admin", "GET", &handleAdmin);
-    //    ResourceNode *nodeAdminSettings = new ResourceNode("/admin/settings", "GET", &handleAdminSettings);
-    //    ResourceNode *nodeAdminSettingsApply = new ResourceNode("/admin/settings/apply", "POST", &handleAdminSettingsApply);
-    //    ResourceNode *nodeAdminFs = new ResourceNode("/admin/fs", "GET", &handleFs);
-    //    ResourceNode *nodeUpdateFs = new ResourceNode("/admin/fs/update", "POST", &handleUpdateFs);
-    //    ResourceNode *nodeDeleteFs = new ResourceNode("/admin/fs/delete", "GET", &handleDeleteFsContent);
 
     ResourceNode *nodeRestart = new ResourceNode("/restart", "POST", &handleRestart);
     ResourceNode *nodeFormUpload = new ResourceNode("/upload", "POST", &handleFormUpload);
@@ -100,8 +92,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeAPIv1ToRadio);
     secureServer->registerNode(nodeAPIv1FromRadioOptions);
     secureServer->registerNode(nodeAPIv1FromRadio);
-    //    secureServer->registerNode(nodeHotspotApple);
-    //    secureServer->registerNode(nodeHotspotAndroid);
     secureServer->registerNode(nodeRestart);
     secureServer->registerNode(nodeFormUpload);
     secureServer->registerNode(nodeJsonScanNetworks);
@@ -109,12 +99,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
     secureServer->registerNode(nodeJsonNodes);
-    //    secureServer->registerNode(nodeUpdateFs);
-    //    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
-    //    secureServer->registerNode(nodeAdminFs);
-    //    secureServer->registerNode(nodeAdminSettings);
-    //    secureServer->registerNode(nodeAdminSettingsApply);
     secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
@@ -122,20 +107,13 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     insecureServer->registerNode(nodeAPIv1ToRadio);
     insecureServer->registerNode(nodeAPIv1FromRadioOptions);
     insecureServer->registerNode(nodeAPIv1FromRadio);
-    //    insecureServer->registerNode(nodeHotspotApple);
-    //    insecureServer->registerNode(nodeHotspotAndroid);
     insecureServer->registerNode(nodeRestart);
     insecureServer->registerNode(nodeFormUpload);
     insecureServer->registerNode(nodeJsonScanNetworks);
     insecureServer->registerNode(nodeJsonFsBrowseStatic);
     insecureServer->registerNode(nodeJsonDelete);
     insecureServer->registerNode(nodeJsonReport);
-    //    insecureServer->registerNode(nodeUpdateFs);
-    //    insecureServer->registerNode(nodeDeleteFs);
     insecureServer->registerNode(nodeAdmin);
-    //    insecureServer->registerNode(nodeAdminFs);
-    //    insecureServer->registerNode(nodeAdminSettings);
-    //    insecureServer->registerNode(nodeAdminSettingsApply);
     insecureServer->registerNode(nodeRoot); // This has to be last
 }
 
@@ -228,36 +206,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     res->write(buffer, s);
     LOG_DEBUG("webAPI handleAPIv1ToRadio");
-}
-
-void htmlDeleteDir(const char *dirname)
-{
-
-    File root = FSCom.open(dirname);
-    if (!root) {
-        return;
-    }
-    if (!root.isDirectory()) {
-        return;
-    }
-
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
-            htmlDeleteDir(file.name());
-            file.flush();
-            file.close();
-        } else {
-            String fileName = String(file.name());
-            file.flush();
-            file.close();
-            LOG_DEBUG("    %s", fileName.c_str());
-            FSCom.remove(fileName);
-        }
-        file = root.openNextFile();
-    }
-    root.flush();
-    root.close();
 }
 
 // Escape a string into a JSON double-quoted literal. Matches the previous
@@ -858,45 +806,6 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     res->print(out.c_str());
 }
 
-/*
-    This supports the Apple Captive Network Assistant (CNA) Portal
-*/
-void handleHotspot(HTTPRequest *req, HTTPResponse *res)
-{
-    LOG_INFO("Hotspot Request");
-
-    /*
-        If we don't do a redirect, be sure to return a "Success" message
-        otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
-    */
-
-    // Status code is 200 OK by default.
-    // We want to deliver a simple HTML page, so we send a corresponding content type:
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    // res->println("<!DOCTYPE html>");
-    res->println("<meta http-equiv=\"refresh\" content=\"0;url=/\" />");
-}
-
-void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    res->println("<h1>Meshtastic</h1>");
-    res->println("Delete Content in /static/*");
-
-    LOG_INFO("Delete files from /static/* : ");
-
-    concurrency::LockGuard g(spiLock);
-    htmlDeleteDir("/static");
-
-    res->println("<p><hr><p><a href=/admin>Back to admin</a>");
-}
-
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
 {
     res->setHeader("Content-Type", "text/html");
@@ -907,52 +816,6 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res)
     //    res->println("<a href=/admin/settings>Settings</a><br>");
     //    res->println("<a href=/admin/fs>Manage Web Content</a><br>");
     res->println("<a href=/json/report>Device Report</a><br>");
-}
-
-void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    res->println("<h1>Meshtastic</h1>");
-    res->println("This isn't done.");
-    res->println("<form action=/admin/settings/apply method=post>");
-    res->println("<table border=1>");
-    res->println("<tr><td>Set?</td><td>Setting</td><td>current value</td><td>new value</td></tr>");
-    res->println("<tr><td><input type=checkbox></td><td>WiFi SSID</td><td>false</td><td><input type=radio></td></tr>");
-    res->println("<tr><td><input type=checkbox></td><td>WiFi Password</td><td>false</td><td><input type=radio></td></tr>");
-    res->println(
-        "<tr><td><input type=checkbox></td><td>Smart Position Update</td><td>false</td><td><input type=radio></td></tr>");
-    res->println("</table>");
-    res->println("<table>");
-    res->println("<input type=submit value=Apply New Settings>");
-    res->println("<form>");
-    res->println("<p><hr><p><a href=/admin>Back to admin</a>");
-}
-
-void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "POST");
-    res->println("<h1>Meshtastic</h1>");
-    res->println(
-        "<html><head><meta http-equiv=\"refresh\" content=\"1;url=/admin/settings\" /><title>Settings Applied. </title>");
-
-    res->println("Settings Applied. Please wait.");
-}
-
-void handleFs(HTTPRequest *req, HTTPResponse *res)
-{
-    res->setHeader("Content-Type", "text/html");
-    res->setHeader("Access-Control-Allow-Origin", "*");
-    res->setHeader("Access-Control-Allow-Methods", "GET");
-
-    res->println("<h1>Meshtastic</h1>");
-    res->println("<a href=/admin/fs/delete>Delete Web Content</a><p><form action=/admin/fs/update "
-                 "method=post><input type=submit value=UPDATE_WEB_CONTENT></form>Be patient!");
-    res->println("<p><hr><p><a href=/admin>Back to admin</a>");
 }
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)

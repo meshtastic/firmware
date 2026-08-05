@@ -88,6 +88,11 @@ extern const RegionInfo *myRegion;
 extern void initRegion();
 extern const RegionInfo *getRegion(meshtastic_Config_LoRaConfig_RegionCode code);
 
+// Fill `map` with the region->valid-preset table, grouped so regions sharing a
+// preset list reference the same group. Sent to clients during want_config so
+// their UI can block illegal region+preset combinations.
+extern void getRegionPresetMap(meshtastic_LoRaRegionPresetMap &map);
+
 // Valid LoRa spread factor range and defaults
 constexpr uint8_t LORA_SF_MIN = 5;
 constexpr uint8_t LORA_SF_MAX = 12;
@@ -185,6 +190,16 @@ static inline uint16_t bwKHzToCode(float bwKHz)
     return (uint16_t)(bwKHz + 0.5f);
 }
 
+/// Clamp a bandwidth *code* (the on-wire config.lora.bandwidth value) to a usable value.
+/// A code of 0 (proto default / unset) returns the default bandwidth's code; any other value
+/// is returned unchanged (RadioLib validates the exact discrete bandwidth downstream).
+static inline uint16_t clampBandwidthCode(uint16_t bwCode)
+{
+    if (bwCode == 0)
+        return bwKHzToCode(LORA_BW_DEFAULT_KHZ);
+    return bwCode;
+}
+
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
                                        uint8_t &cr)
 {
@@ -213,6 +228,11 @@ static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset 
         bwKHz = wideLora ? 812.5f : 250.0f;
         cr = 5;
         sf = 10;
+        break;
+    case PRESET(MEDIUM_TURBO):
+        bwKHz = wideLora ? 1625.0f : 500.0f;
+        cr = 5;
+        sf = 9;
         break;
     case PRESET(LONG_TURBO):
         bwKHz = wideLora ? 1625.0f : 500.0f;

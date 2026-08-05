@@ -1,5 +1,5 @@
 /*
- * Unit tests for PacketHistory — the packet deduplication engine
+ * Unit tests for PacketHistory - the packet deduplication engine
  * used by the mesh routing stack.
  *
  * PacketHistory maintains a fixed-size array of PacketRecords with an
@@ -41,7 +41,7 @@ static meshtastic_MeshPacket makePacket(uint32_t from, uint32_t id, uint8_t hop_
 }
 
 // ---------------------------------------------------------------------------
-// setUp / tearDown — called before and after every test
+// setUp / tearDown - called before and after every test
 // ---------------------------------------------------------------------------
 void setUp(void)
 {
@@ -56,7 +56,7 @@ void tearDown(void)
 }
 
 // ===========================================================================
-// Group 1 — Initialization
+// Group 1 - Initialization
 // ===========================================================================
 
 void test_init_valid_size(void)
@@ -79,7 +79,7 @@ void test_init_too_small_falls_back(void)
 }
 
 // ===========================================================================
-// Group 2 — Basic Deduplication
+// Group 2 - Basic Deduplication
 // ===========================================================================
 
 void test_first_packet_not_seen(void)
@@ -128,7 +128,7 @@ void test_withUpdate_true_inserts(void)
 }
 
 // ===========================================================================
-// Group 3 — LRU Eviction
+// Group 3 - LRU Eviction
 // ===========================================================================
 
 void test_fill_capacity_all_found(void)
@@ -157,7 +157,7 @@ void test_eviction_oldest_replaced(void)
     // entries with identical timestamps all have age 0 and none gets selected.
     delay(1);
 
-    // Insert a 9th packet — should evict the oldest
+    // Insert a 9th packet - should evict the oldest
     auto p9 = makePacket(0xAAAA, 9);
     ph->wasSeenRecently(&p9);
 
@@ -176,7 +176,7 @@ void test_eviction_oldest_replaced(void)
 
 void test_matching_slot_reused(void)
 {
-    // Insert packet, then re-insert same (sender, id) — should reuse slot, not evict others
+    // Insert packet, then re-insert same (sender, id) - should reuse slot, not evict others
     auto p1 = makePacket(0xAAAA, 1);
     auto p2 = makePacket(0xBBBB, 2);
     ph->wasSeenRecently(&p1);
@@ -192,7 +192,7 @@ void test_matching_slot_reused(void)
 
 void test_free_slot_preferred(void)
 {
-    // Insert 4 packets into capacity-8 history — next insert should use a free slot, not evict
+    // Insert 4 packets into capacity-8 history - next insert should use a free slot, not evict
     for (uint32_t i = 1; i <= 4; i++) {
         auto p = makePacket(0xAAAA, i);
         ph->wasSeenRecently(&p);
@@ -236,7 +236,7 @@ void test_evict_all_old_packets(void)
 }
 
 // ===========================================================================
-// Group 4 — Relayer Tracking
+// Group 4 - Relayer Tracking
 // ===========================================================================
 
 void test_wasRelayer_true(void)
@@ -326,7 +326,7 @@ void test_wasRelayer_all_six_slots(void)
 }
 
 // ===========================================================================
-// Group 5 — removeRelayer
+// Group 5 - removeRelayer
 // ===========================================================================
 
 void test_removeRelayer_removes(void)
@@ -366,12 +366,12 @@ void test_removeRelayer_nonexistent_safe(void)
 
 void test_removeRelayer_packet_not_found_safe(void)
 {
-    // Packet not in history — should not crash
+    // Packet not in history - should not crash
     ph->removeRelayer(0xAA, 999, 0x9999);
 }
 
 // ===========================================================================
-// Group 6 — checkRelayers
+// Group 6 - checkRelayers
 // ===========================================================================
 
 void test_checkRelayers_both_found(void)
@@ -414,7 +414,7 @@ void test_checkRelayers_r2WasSole(void)
 }
 
 // ===========================================================================
-// Group 7 — wasSeenRecently Merge Logic
+// Group 7 - wasSeenRecently Merge Logic
 // ===========================================================================
 
 void test_merge_preserves_original_next_hop(void)
@@ -461,11 +461,11 @@ void test_merge_no_duplicate_relayers(void)
     auto p1 = makePacket(0x1111, 100, 3, NO_NEXT_HOP_PREFERENCE, OUR_RELAY_ID);
     ph->wasSeenRecently(&p1);
 
-    // Re-observe with same relay_node=ourRelayID — should not create duplicates
+    // Re-observe with same relay_node=ourRelayID - should not create duplicates
     auto p2 = makePacket(0x1111, 100, 2, NO_NEXT_HOP_PREFERENCE, OUR_RELAY_ID);
     ph->wasSeenRecently(&p2);
 
-    // ourRelayID should appear exactly once — wasSole should still be true
+    // ourRelayID should appear exactly once - wasSole should still be true
     bool wasSole = false;
     TEST_ASSERT_TRUE(ph->wasRelayer(OUR_RELAY_ID, 100, 0x1111, &wasSole));
     TEST_ASSERT_TRUE(wasSole);
@@ -508,7 +508,7 @@ void test_merge_heard_back_stores_relay_node(void)
 }
 
 // ===========================================================================
-// Group 8 — Fallback-to-Flooding Detection
+// Group 8 - Fallback-to-Flooding Detection
 // ===========================================================================
 
 void test_fallback_detected(void)
@@ -531,7 +531,7 @@ void test_fallback_detected(void)
     // Step 3: Router removes us from the relayer list
     ph->removeRelayer(OUR_RELAY_ID, 100, 0x1111);
 
-    // Step 4: Sender falls back to flooding — same packet, NO_NEXT_HOP_PREFERENCE, from 0xAA
+    // Step 4: Sender falls back to flooding - same packet, NO_NEXT_HOP_PREFERENCE, from 0xAA
     auto p3 = makePacket(0x1111, 100, 1, NO_NEXT_HOP_PREFERENCE, 0xAA);
     bool wasFallback = false;
     ph->wasSeenRecently(&p3, true, &wasFallback);
@@ -554,7 +554,7 @@ void test_fallback_not_when_we_relayed(void)
 
 void test_fallback_not_on_first_observation(void)
 {
-    // First time seen — can't be a fallback
+    // First time seen - can't be a fallback
     auto p = makePacket(0x1111, 100, 3, NO_NEXT_HOP_PREFERENCE, 0xAA);
     bool wasFallback = false;
     ph->wasSeenRecently(&p, true, &wasFallback);
@@ -562,7 +562,7 @@ void test_fallback_not_on_first_observation(void)
 }
 
 // ===========================================================================
-// Group 9 — Next-Hop and Upgrade Detection
+// Group 9 - Next-Hop and Upgrade Detection
 // ===========================================================================
 
 void test_weWereNextHop_true(void)
@@ -620,7 +620,7 @@ void test_wasUpgraded_false(void)
 }
 
 // ===========================================================================
-// Group 10 — Edge Cases
+// Group 10 - Edge Cases
 // ===========================================================================
 
 void test_packet_id_zero_not_stored(void)
@@ -632,7 +632,7 @@ void test_packet_id_zero_not_stored(void)
 
 void test_sender_zero_substituted(void)
 {
-    // from=0 means "from us" — getFrom() substitutes nodeDB->getNodeNum()
+    // from=0 means "from us" - getFrom() substitutes nodeDB->getNodeNum()
     auto p = makePacket(0, 100);
     ph->wasSeenRecently(&p);
 
@@ -663,7 +663,7 @@ void test_multiple_instances_independent(void)
 }
 
 // ===========================================================================
-// Group 11 — Hash Table Stress
+// Group 11 - Hash Table Stress
 // ===========================================================================
 
 void test_many_packets_no_false_negatives(void)
@@ -739,12 +739,12 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN();
 
-    // Group 1 — Initialization
+    // Group 1 - Initialization
     RUN_TEST(test_init_valid_size);
     RUN_TEST(test_init_minimum_size);
     RUN_TEST(test_init_too_small_falls_back);
 
-    // Group 2 — Basic Deduplication
+    // Group 2 - Basic Deduplication
     RUN_TEST(test_first_packet_not_seen);
     RUN_TEST(test_same_packet_seen_twice);
     RUN_TEST(test_different_id_not_confused);
@@ -752,14 +752,14 @@ void setup()
     RUN_TEST(test_withUpdate_false_no_insert);
     RUN_TEST(test_withUpdate_true_inserts);
 
-    // Group 3 — LRU Eviction
+    // Group 3 - LRU Eviction
     RUN_TEST(test_fill_capacity_all_found);
     RUN_TEST(test_eviction_oldest_replaced);
     RUN_TEST(test_matching_slot_reused);
     RUN_TEST(test_free_slot_preferred);
     RUN_TEST(test_evict_all_old_packets);
 
-    // Group 4 — Relayer Tracking
+    // Group 4 - Relayer Tracking
     RUN_TEST(test_wasRelayer_true);
     RUN_TEST(test_wasRelayer_false);
     RUN_TEST(test_wasRelayer_zero_returns_false);
@@ -768,18 +768,18 @@ void setup()
     RUN_TEST(test_wasRelayer_wasSole_false);
     RUN_TEST(test_wasRelayer_all_six_slots);
 
-    // Group 5 — removeRelayer
+    // Group 5 - removeRelayer
     RUN_TEST(test_removeRelayer_removes);
     RUN_TEST(test_removeRelayer_compacts);
     RUN_TEST(test_removeRelayer_nonexistent_safe);
     RUN_TEST(test_removeRelayer_packet_not_found_safe);
 
-    // Group 6 — checkRelayers
+    // Group 6 - checkRelayers
     RUN_TEST(test_checkRelayers_both_found);
     RUN_TEST(test_checkRelayers_one_found);
     RUN_TEST(test_checkRelayers_r2WasSole);
 
-    // Group 7 — Merge Logic
+    // Group 7 - Merge Logic
     RUN_TEST(test_merge_preserves_original_next_hop);
     RUN_TEST(test_merge_preserves_highest_hop_limit);
     RUN_TEST(test_merge_no_duplicate_relayers);
@@ -787,23 +787,23 @@ void setup()
     RUN_TEST(test_merge_we_relay_sets_slot_zero);
     RUN_TEST(test_merge_heard_back_stores_relay_node);
 
-    // Group 8 — Fallback-to-Flooding Detection
+    // Group 8 - Fallback-to-Flooding Detection
     RUN_TEST(test_fallback_detected);
     RUN_TEST(test_fallback_not_when_we_relayed);
     RUN_TEST(test_fallback_not_on_first_observation);
 
-    // Group 9 — Next-Hop and Upgrade Detection
+    // Group 9 - Next-Hop and Upgrade Detection
     RUN_TEST(test_weWereNextHop_true);
     RUN_TEST(test_weWereNextHop_false);
     RUN_TEST(test_wasUpgraded_true);
     RUN_TEST(test_wasUpgraded_false);
 
-    // Group 10 — Edge Cases
+    // Group 10 - Edge Cases
     RUN_TEST(test_packet_id_zero_not_stored);
     RUN_TEST(test_sender_zero_substituted);
     RUN_TEST(test_multiple_instances_independent);
 
-    // Group 11 — Hash Table Stress
+    // Group 11 - Hash Table Stress
     RUN_TEST(test_many_packets_no_false_negatives);
     RUN_TEST(test_many_packets_no_false_positives);
     RUN_TEST(test_churn_correctness);

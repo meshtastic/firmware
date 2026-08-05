@@ -4,6 +4,25 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
+
+// A variant may define LR11X0_UPDATE_FIRMWARE_TO to a Semtech transceiver firmware version (e.g. 0x0402) to
+// bake that image in and update the radio on first boot. Every supported image is 61320 words, so this costs
+// ~240 kB of flash regardless of the version chosen - only enable it on a variant with the headroom, and
+// only for as long as it takes to update the affected units.
+#ifdef LR11X0_UPDATE_FIRMWARE_TO
+#if LR11X0_UPDATE_FIRMWARE_TO == 0x0402
+#define RADIOLIB_LR1110_FIRMWARE_0402
+#elif LR11X0_UPDATE_FIRMWARE_TO == 0x0401
+#define RADIOLIB_LR1110_FIRMWARE_0401
+#elif LR11X0_UPDATE_FIRMWARE_TO == 0x0307
+#define RADIOLIB_LR1110_FIRMWARE_0307
+#else
+// Note: RadioLib ships lr1110_transceiver_0308.h but has no selector for it in LR11x0_firmware.h.
+#error "LR11X0_UPDATE_FIRMWARE_TO must be one of 0x0307, 0x0401, 0x0402"
+#endif
+#include <modules/LR11x0/LR11x0_firmware.h>
+#endif
+
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
@@ -117,14 +136,59 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
-        return false;
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED) {
+#ifdef LR11X0_UPDATE_FIRMWARE_TO
+        // An interrupted update leaves the radio sitting in bootloader mode, where begin() fails. Retry the
+        // flash from here rather than giving up, otherwise the device could never recover on its own.
+        LOG_WARN("LR11x0 did not start; attempting firmware recovery in case an update was interrupted");
+        if (lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true) == RADIOLIB_ERR_NONE) {
+            LOG_INFO("LR1110 firmware recovery succeeded, re-initializing radio");
+            res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        }
+#endif
+        if (res != RADIOLIB_ERR_NONE)
+            return false;
+    }
 
     LR11x0VersionInfo_t version;
     res = lora.getVersionInfo(&version);
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
         LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
                   version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
+        transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
+        transceiverDevice = version.device;
+    }
+
+#ifdef LR11X0_UPDATE_FIRMWARE_TO
+    // One-shot transceiver firmware update, opt-in per variant. Only runs when the part is an LR1110 running
+    // older firmware than the baked-in image, so once it has succeeded it is a no-op on subsequent boots.
+    if (transceiverDevice == RADIOLIB_LR11X0_DEVICE_LR1110 && transceiverFw != 0 && transceiverFw < LR11X0_UPDATE_FIRMWARE_TO) {
+        LOG_WARN("LR1110 transceiver FW %d.%d is older than %d.%d - updating now. DO NOT POWER OFF: this "
+                 "erases and rewrites the radio's own flash.",
+                 transceiverFw >> 8, transceiverFw & 0xFF, LR11X0_UPDATE_FIRMWARE_TO >> 8, LR11X0_UPDATE_FIRMWARE_TO & 0xFF);
+
+        int upd = lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true);
+        if (upd != RADIOLIB_ERR_NONE) {
+            // The radio is likely sitting in bootloader mode. It is not bricked - the update is retried on
+            // the next boot because the version check above will still see old (or unreadable) firmware.
+            LOG_ERROR("LR1110 firmware update FAILED %s%d - power-cycle to retry", radioLibErr, upd);
+            return false;
+        }
+
+        LOG_INFO("LR1110 firmware update complete, re-initializing radio");
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        if (res != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR11x0 re-init after firmware update failed %s%d", radioLibErr, res);
+            return false;
+        }
+
+        if (lora.getVersionInfo(&version) == RADIOLIB_ERR_NONE) {
+            transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
+            transceiverDevice = version.device;
+            LOG_INFO("LR1110 now running transceiver FW %d.%d", version.fwMajor, version.fwMinor);
+        }
+    }
+#endif
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
@@ -205,7 +269,7 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
-    // Apply RX gain mode — valid in STDBY, matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR11x0 setRxBoostedGainMode %s%d", radioLibErr, err);
@@ -247,6 +311,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
@@ -326,7 +391,7 @@ template <typename T> void LR11x0Interface<T>::resetAGC()
 
     LOG_DEBUG("LR11x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
-    // 1. Warm sleep — powers down the analog frontend, resetting AGC state
+    // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
 
     // 2. Wake to RC standby for stable calibration
@@ -371,7 +436,15 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 
 template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
 {
+#ifdef ARCH_PORTDUINO_WASM
+    float rssi = lora.getRSSI(); // installed RadioLib's LR11x0 getRSSI() is 0-arg
+#else
     float rssi = lora.getRSSI(false, true);
+#endif
     return (int16_t)round(rssi);
 }
+
+// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
+#undef rfswitch_dio_pins
+#undef rfswitch_table
 #endif

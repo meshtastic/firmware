@@ -15,6 +15,8 @@ void c6l_init();
 #define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 #define ENABLE_AMBIENTLIGHTING               // Turn on Ambient Lighting
 
+#define OLED_COMPACT_UI
+
 // #define BUTTON_PIN 9
 #define BUTTON_EXTENDER
 
@@ -42,13 +44,12 @@ void c6l_init();
 #define SX126X_DIO3_TCXO_VOLTAGE 3.0
 
 #define USE_SPISSD1306
-#ifdef USE_SPISSD1306
+#define DISPLAY_FORCE_SMALL_FONTS
 #define SSD1306_NSS 6 // CS
 #define SSD1306_RS 18 // DC
 #define SSD1306_RESET 15
 // #define OLED_DG 1
-#endif
-// Tiny OLED panel — opts into compile-time layout/font/feature substitutions
+// Tiny OLED panel - opts into compile-time layout/font/feature substitutions
 // gated on OLED_TINY across the graphics stack.
 #define OLED_TINY
 #define SCREEN_TRANSITION_FRAMERATE 10

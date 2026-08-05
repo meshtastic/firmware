@@ -6,10 +6,10 @@ Guide for adding a new I2C telemetry sensor driver to Meshtastic firmware.
 
 Telemetry sensors live in `src/modules/Telemetry/Sensor/`. There are 50+ existing drivers organized by measurement type. Each sensor integrates with one of the telemetry modules:
 
-- **EnvironmentTelemetryModule** — Temperature, humidity, pressure, gas, light
-- **AirQualityTelemetryModule** — Particulate matter, VOCs
-- **PowerTelemetryModule** — Voltage, current, power monitoring
-- **HealthTelemetryModule** — Heart rate, SpO2, body temperature
+- **EnvironmentTelemetryModule** - Temperature, humidity, pressure, gas, light
+- **AirQualityTelemetryModule** - Particulate matter, VOCs
+- **PowerTelemetryModule** - Voltage, current, power monitoring
+- **HealthTelemetryModule** - Heart rate, SpO2, body temperature
 
 ## Sensor Driver Pattern
 
@@ -75,10 +75,10 @@ The scan runs at boot and populates a device map that telemetry modules use to d
 If the sensor provides data not covered by existing telemetry fields:
 
 1. Add fields to the appropriate message in `protobufs/meshtastic/telemetry.proto`:
-   - `EnvironmentMetrics` — Environmental measurements
-   - `AirQualityMetrics` — Air quality data
-   - `PowerMetrics` — Power/energy data
-   - `HealthMetrics` — Health/biometric data
+   - `EnvironmentMetrics` - Environmental measurements
+   - `AirQualityMetrics` - Air quality data
+   - `PowerMetrics` - Power/energy data
+   - `HealthMetrics` - Health/biometric data
 2. Add a `.options` constraint if needed (field sizes for nanopb)
 3. Regenerate: `bin/regen-protos.sh`
 

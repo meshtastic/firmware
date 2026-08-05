@@ -17,14 +17,8 @@
 #include "meshUtils.h"
 #include <algorithm>
 
-// Forward declarations for functions defined in Screen.cpp
-namespace graphics
-{
-extern bool haveGlyphs(const char *str);
-} // namespace graphics
-
 // Global screen instance
-extern graphics::Screen *screen;
+extern std::unique_ptr<graphics::Screen> screen;
 
 #if defined(OLED_TINY)
 static uint32_t lastSwitchTime = 0;
@@ -33,6 +27,10 @@ namespace graphics
 {
 namespace NodeListRenderer
 {
+
+// Y position of the first row (either column) in the current list screen, set by
+// drawNodeListScreen(). Used by entry renderers that need to special-case the top row.
+static int16_t firstRowY = 0;
 
 // Function moved from Screen.cpp to NodeListRenderer.cpp since it's primarily used here
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display)
@@ -86,7 +84,6 @@ void scrollDown()
 
 std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int columnWidth)
 {
-    (void)display;
     (void)columnWidth;
 
     auto fallbackId = [&] {
@@ -121,10 +118,14 @@ std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
     }
 #endif
 
-    // If we didn't compose from status, use normal long/short selection
+    // Compact panels always prefer the long name, ignoring use_long_node_name.
     if (!raw) {
         if (nodeInfoLiteHasUser(node)) {
-            raw = config.display.use_long_node_name ? node->long_name : node->short_name;
+            if (isCompactPanel(display)) {
+                raw = (node->long_name[0]) ? node->long_name : node->short_name;
+            } else {
+                raw = config.display.use_long_node_name ? node->long_name : node->short_name;
+            }
         }
     }
 
@@ -178,11 +179,6 @@ static int getNodeNameMaxWidth(int columnWidth, int baseWidth)
 unsigned long getModeCycleIntervalMs()
 {
     return 3000;
-}
-
-int calculateMaxScroll(int totalEntries, int visibleRows)
-{
-    return max(0, (totalEntries - 1) / (visibleRows * 2));
 }
 
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
@@ -249,7 +245,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
-                                         nameMaxWidth);
+                                         nameMaxWidth, graphics::isCompactPanel(display) ? "" : "...");
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
@@ -311,7 +307,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
-                                         nameMaxWidth);
+                                         nameMaxWidth, graphics::isCompactPanel(display) ? "" : "...");
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
@@ -374,10 +370,18 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         const int gap = 1;
         const int totalWidth = hopCountWidth + gap + hop_width;
         const int hopX = barsRightEdge - totalWidth;
+
+#if defined(BICOLOR_OLED_DISPLAY)
+        int iconY = y + (FONT_HEIGHT_SMALL - hop_height) / 2;
+        if (y == firstRowY) {
+            iconY += 1; // Nudge the hop icon down 1px on the top row to avoid the two color display
+        }
+#else
         const int iconY = y + (FONT_HEIGHT_SMALL - hop_height) / 2;
+#endif
 
         display->drawString(hopX, y, hopCount);
-        display->drawXbm(hopX + hopCountWidth + gap, iconY, hop_width, hop_height, hop);
+        display->drawXbm(hopX + hopCountWidth + gap, iconY, hop_width, hop_height, imghop);
     }
 }
 
@@ -391,7 +395,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
-                                         nameMaxWidth);
+                                         nameMaxWidth, graphics::isCompactPanel(display) ? "" : "...");
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
@@ -503,7 +507,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     const int nameX = x + ((currentResolution == ScreenResolution::High) ? 6 : 3);
     char nodeName[96];
     UIRenderer::truncateStringWithEmotes(display, getSafeNodeName(display, node, columnWidth).c_str(), nodeName, sizeof(nodeName),
-                                         nameMaxWidth);
+                                         nameMaxWidth, graphics::isCompactPanel(display) ? "" : "...");
 #if GRAPHICS_TFT_COLORING_ENABLED
     applyFavoriteNodeNameColor(display, node, nodeName, nameX, y, nameMaxWidth);
 #endif
@@ -603,7 +607,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
                         EntryRenderer renderer, NodeExtrasRenderer extras, float headingRadian, double lat, double lon)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
-    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    // Compact panels: 4 rows fit (0,9,18,27), a 5th pages instead of cramming in.
+    const int rowYOffset = graphics::isCompactPanel(display) ? (FONT_HEIGHT_SMALL - 4) : (FONT_HEIGHT_SMALL - 3);
     bool locationScreen = false;
 
     if (strcmp(title, "Bearings") == 0)
@@ -615,12 +620,16 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Draw the battery/time header
     graphics::drawCommonHeader(display, x, y, title);
 
-    // Space below header
-    y += COMMON_HEADER_HEIGHT;
+    // Compact panels have no header (see drawCommonHeader) - don't reserve space for one.
+    if (!graphics::isCompactPanel(display))
+        y += COMMON_HEADER_HEIGHT;
+    firstRowY = y;
 
     int totalColumns = 1; // Default to 1 column
 
-    if (config.display.use_long_node_name) {
+    if (graphics::isCompactPanel(display)) {
+        totalColumns = 1; // Too narrow to split - use the full line per entry.
+    } else if (config.display.use_long_node_name) {
         if (SCREEN_WIDTH <= 240) {
             totalColumns = 1;
         } else if (SCREEN_WIDTH > 240) {
@@ -667,7 +676,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     }
 
     if (scrollIndex > maxScroll)
-        scrollIndex = maxScroll;
+        // Compact panels: scrolling past the last page wraps back to the top.
+        scrollIndex = graphics::isCompactPanel(display) ? 0 : maxScroll;
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
     int endIndex = min(startIndex + visibleNodeRows * totalColumns, totalEntries);
     int yOffset = 0;
@@ -908,29 +918,6 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     }
 
     drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, headingRadian, lat, lon);
-}
-
-/// Draw a series of fields in a column, wrapping to multiple columns if needed
-void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
-{
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    const char **f = fields;
-    int xo = x, yo = y;
-    while (*f) {
-        display->drawString(xo, yo, *f);
-        if ((display->getColor() == BLACK) && config.display.heading_bold)
-            display->drawString(xo + 1, yo, *f);
-
-        display->setColor(WHITE);
-        yo += FONT_HEIGHT_SMALL;
-        if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
-            xo += SCREEN_WIDTH / 2;
-            yo = 0;
-        }
-        f++;
-    }
 }
 
 } // namespace NodeListRenderer

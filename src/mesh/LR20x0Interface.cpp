@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
+#if (defined(USE_LR2021) || defined(ARCH_PORTDUINO)) && RADIOLIB_EXCLUDE_LR2021 != 1
 #include "LR20x0Interface.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
@@ -211,7 +211,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);
 
-    // Apply RX gain mode — valid in STDBY, matches resetAGC() pattern
+    // Apply RX gain mode - valid in STDBY, matches resetAGC() pattern
     err = lora.setRxBoostedGainMode(config.lora.sx126x_rx_boosted_gain);
     if (err != RADIOLIB_ERR_NONE)
         LOG_WARN("LR20x0 setRxBoostedGainMode %s%d", radioLibErr, err);
@@ -253,6 +253,7 @@ template <typename T> void LR20x0Interface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     // LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError()); // not implemented for LR20x0, but noop for LR11x0
     // too(!)
 }
@@ -332,7 +333,7 @@ template <typename T> void LR20x0Interface<T>::resetAGC()
 
     LOG_DEBUG("LR20x0 AGC reset: warm sleep + Calibrate(0x3F)");
 
-    // 1. Warm sleep — powers down the analog frontend, resetting AGC state
+    // 1. Warm sleep - powers down the analog frontend, resetting AGC state
     lora.sleep(true, 0);
 
     // 2. Wake to RC standby for stable calibration
@@ -380,4 +381,9 @@ template <typename T> int16_t LR20x0Interface<T>::getCurrentRSSI()
     float rssi = lora.getRSSI(false, true);
     return (int16_t)round(rssi);
 }
+
+// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
+#undef lr20x0_rfswitch_dio_pins
+#undef lr20x0_rfswitch_table
+#undef LR20x0
 #endif
