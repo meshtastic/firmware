@@ -218,7 +218,8 @@ On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node e
 - **Write:** `getOrCreateMeshNode`'s eviction and `demoteOldestHotNodesToWarm` (the over-cap boot migration) call `warmStore.absorb(num, last_heard, key)` _before_ the node leaves the header.
 - **Read-back:** `getOrCreateMeshNode` calls `warmStore.take()` to rehydrate `last_heard` + key when a warm node is re-admitted; `copyPublicKey()` falls back to the warm tier so the PKI send path finds keys for evicted peers.
 - **Persistence:** nRF52840 uses a 12 KB raw-flash record-ring at `0xEA000` (below LittleFS; append + replay + compact-on-rotate, link-guarded by `nrf52840_s140_v7.ld` and `extra_scripts/nrf52_warm_region.py`). Everywhere else: a `/prefs/warm.dat` snapshot flushed by `saveIfDirty()` on the node-DB save cadence.
-- **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap - 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 keeps its flash-scaled 100/200/250, portduino 250). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
+- **Tunables** (`mesh-pb-constants.h`): `WARM_NODE_COUNT` (per-arch; `0` disables the tier) and `MAX_NUM_NODES` (hot cap - 120 on nRF52840/generic ESP32 to fit the 28 KB LittleFS; ESP32-S3 picks 100/200/250 at boot from its flash size). Verbose migration/self-care tracing routes through `LOG_MIGRATION`, gated by `MESHTASTIC_NODEDB_MIGRATION_VERBOSE`.
+- **`MAX_NUM_NODES` on native is not in that header and is not a constant.** `variants/native/portduino{,-buildroot}/variant.h` define it as `portduino_config.MaxNodes` - resolved at **runtime**, default **200**, overridable per-host with `General: MaxNodes` in the portduino YAML. `variant.h` is reached first, so the `ARCH_PORTDUINO` branch in `mesh-pb-constants.h` never fires; it is now `#error`-guarded rather than holding a plausible-looking `250`. Reading 250 there yields a protected-node cap of 248 when the real one is 198 (`numProtectedNodes() < MAX_NUM_NODES - 2`), which has already produced one wrong diagnosis. The separate 250 in `NodeDB::getMaxNodesAllocatedSize()` is `NODEDB_MIGRATION_LOAD_CEILING`, a decode allowance for files from larger-cap firmware - not a cap.
 
 ### Satellite caps
 
@@ -312,7 +313,7 @@ firmware/
 │   └── native/           # Linux/Portduino variants
 ├── protobufs/            # Protocol buffer definitions
 ├── boards/               # Custom PlatformIO board definitions
-├── test/                 # Unit tests (12 test suites)
+├── test/                 # Native unit-test suites (count: test/native-suite-count)
 └── bin/                  # Build and utility scripts
 ```
 
@@ -662,9 +663,10 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count` and is cross-checked on every full run. Current suites:
+Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count`, cross-checked against `test/test_*` on every full run and by the `suite-count-check` CI job. **Never state the count as a literal anywhere else** - point at that file. The list below is a partial description of what suites cover, not an inventory:
 
-- `test_admin_radio/` - LoRa region/config validation and AdminModule dispatch
+- `test_admin_radio/` - LoRa region/config validation, AdminModule dispatch, node-DB metadata saves
+- `test_fscommon_getfiles/` - bounded file-manifest walk (cap, depth, truncation reporting)
 - `test_atak/` - ATAK integration
 - `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
@@ -691,21 +693,31 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 - `test_utf8/` - UTF-8 utilities
 - `test_warm_store/` - Warm-tier node store
 
-**Preferred run command - `bin/run-tests.sh`** (uses the `coverage` env with ASan/LSan sanitizers; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
+**Preferred run command - `bin/run-tests.sh`** (defaults to the `coverage` env; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
 
 ```bash
 ./bin/run-tests.sh                             # all suites
 ./bin/run-tests.sh -f test_traffic_management  # single suite (yields FILTERED, not GREEN)
 ```
 
+**The harness is Linux-only, and rejects anything else.** `bin/run-tests.sh` needs bash 4+ and GNU coreutils/find (`find -printf`, `md5sum`, `-executable`), so it exits 2 on a non-Linux `uname` rather than degrade quietly - a state check that silently mis-hashes a sandbox still prints a verdict, and that verdict would be worthless. The `native-macos` PlatformIO env is a **build** target for `meshtasticd`, not a test host. On macOS or Windows use `./bin/test-native-docker.sh`.
+
+**Sanitizer coverage is per env, and only one env has any.** `coverage` (the default) adds gcov + ASan/LSan on top of `native`. **`native` itself has none** - verified, zero ASan symbols in the built binary. A `-e native` run is _not_ sanitized, so do not reason from "run-tests.sh uses ASan" when you passed `-e native`.
+
+**A signal name from the runner is not a crash.** `exit(UNITY_END())` returns the failure count, and PlatformIO's native runner renders a non-zero exit code as a POSIX signal - 4 failures prints `Program received signal SIGILL`, 5 prints `SIGTRAP`, and the suite is reported `[ERRORED]` instead of `[FAILED]`. Check the exit code against the failure count before theorising about memory bugs; confirm any real crash under a debugger.
+
+**Suite order is randomisable.** `./bin/run-tests.sh --shuffle` runs suites in a seeded random order; `--seed <n>` replays one. The seed defaults to the commit SHA (deterministic per commit, varied across commits), is printed at the start and on the `RESULT:` line, and the full order is printed on failure. CI shuffles its area order the same way, seeded from `GITHUB_SHA`. A single green seed is not evidence of order independence.
+
+**`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
+
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-| Exit | Verdict    | Meaning                                                                                                                                                                                                               |
-| ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                           |
-| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                 |
-| 2    | `AMBER`    | All that ran passed, but something was lost: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or `test/native-suite-count` disagrees with the `test/` directory count |
-| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                    |
+| Exit | Verdict    | Meaning                                                                                                                                                                                                                                                                                    |
+| ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                                                                                                |
+| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                                                                                      |
+| 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), `test/native-suite-count` disagrees with the `test/` directory count, or a suite left behind shared state it does not declare |
+| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                                                                                         |
 
 Examples - exact counts will vary by suite count and env:
 
@@ -744,6 +756,30 @@ Do **not** pipe `pio test` - line-buffering makes the terminal appear hung and h
 Simulation testing: `bin/test-simulator.sh`
 
 Quick entry point for new test modules: `test/README.md` (native unit-test authoring guide, skeleton, pitfalls, and setup checklist).
+
+### Shared state: every suite gets a clean sandbox
+
+Each suite runs inside its own scratch `$HOME` (`bin/pio-test-isolate.sh`, wired in per env as `test_testing_command`, so a bare `pio test` and CI get it too). **State never crosses a suite boundary.** Mutation _inside_ a suite is free; carrying state _out_ of one is impossible by construction, not by policy.
+
+The state in question lives in `~/.portduino/default/prefs/` - `nodes.proto`, `config.proto`, `channels.proto`, `module.proto`, `device.proto`, `warm.dat`, `transmit_history.dat`. `NodeDB`'s constructor calls `loadFromDisk()`, so any suite that constructs one reads it, and several `NodeDB` paths (`removeNodeByNum()`, `resetNodes()`, `nodeDBSelfCare()`, and the constructor when the file is absent) write it without being asked.
+
+Two orthogonal axes: **PASS/FAIL x CLEAN/DIRTY**.
+
+- **CLEAN** - nothing changed, or everything that changed is declared.
+- **DIRTY** - an undeclared path changed. Graded **AMBER**: with isolation in place it means "undeclared", not "dangerous".
+- **MISSING** - a declared write did not happen. A warning only; it catches persistence that silently stopped working.
+
+Declare deliberate writes in **`test/state-manifest.tsv`** - one central file, `<suite>` / `<flags>` / `<reason>`, with the reason mandatory and reviewed on change. Central so every opt-out is visible in one diffable list; per-suite files hide growth. `run-tests.sh` prints how many suites declare non-default handling on every run.
+
+| Flag              | Meaning                                                                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(no entry)_      | the default: fresh state in, contents discarded out                                                                                                                                                         |
+| `writes=<a,b>`    | files this suite mutates on purpose; matched on the path relative to the sandbox `$HOME` or just the basename                                                                                               |
+| `state=per-suite` | state persists across this suite's own test cases (persistence round-trips, migration ladders). Only the suite boundary is checked; the default is per-test, which names the exact test that dirtied things |
+
+No flag grants cross-suite carry. A suite that needs another suite's output needs an explicit fixture, not inheritance.
+
+`./bin/run-tests.sh --write-manifest` prints the entries a run would need, for a human to paste and justify - it never applies them, and neither does CI. `bin/test-state-check.sh` is the checker's own self-test: fixtures asserting CLEAN / CLEAN / DIRTY / MISSING, plus the before-empty assertion.
 
 ### Hardware-in-the-loop tests ([meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp))
 
