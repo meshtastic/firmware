@@ -83,6 +83,18 @@
 
 enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 
+// Arms AirTime's nested-take check. Sound only where the lock is not a real lock: the check runs
+// before the take, because a nested take blocks forever and a later check would never run - so
+// under preemption it would false-positive on legitimate contention and race on its own write.
+// Portduino is where it earns its keep anyway; there Lock::lock() is empty, so a nested take
+// succeeds silently and nothing else would notice. On an on-target test build the nesting it
+// catches shows up as a hang instead. Test builds only: nothing in this tree defines DEBUG or
+// NDEBUG, so either spelling would ship an abort() to every board, and nrf52_promicro_diy_tcxo
+// has no flash for it.
+#if defined(PIO_UNIT_TESTING) && !defined(HAS_FREE_RTOS)
+#define AIRTIME_REENTRY_CHECK
+#endif
+
 // Serialised behind `lock`, by two mechanisms:
 //
 //   - a lock-free inner core (Windows) holds all state and all logic. It has no lock and no way to
@@ -122,12 +134,9 @@ class AirTime : private concurrency::OSThread
   private:
     concurrency::Lock lock;
 
-#ifdef PIO_UNIT_TESTING
+#ifdef AIRTIME_REENTRY_CHECK
     // Set for the lifetime of a Held and checked before the lock is taken, so a nested take is
-    // reported rather than hung at. Test builds only: nothing in this tree defines DEBUG or NDEBUG,
-    // so either spelling would ship an abort() to every board, and nrf52_promicro_diy_tcxo has no
-    // flash for it. Portduino is where it earns its keep anyway - Lock::lock() is empty there, so a
-    // nested take succeeds silently and nothing else would notice.
+    // reported rather than hung at. See the macro's definition for why it is host-only.
     bool reentryFlag = false;
 #endif
 

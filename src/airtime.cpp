@@ -9,7 +9,7 @@ AirTime *airTime = NULL;
 
 AirTime *AirTime::Held::armReentryCheck(AirTime *a)
 {
-#ifdef PIO_UNIT_TESTING
+#ifdef AIRTIME_REENTRY_CHECK
     // Before the lock: a nested take blocks forever, so a later check would never run.
     assert(!a->reentryFlag);
     a->reentryFlag = true;
@@ -19,7 +19,7 @@ AirTime *AirTime::Held::armReentryCheck(AirTime *a)
 
 AirTime::Held::~Held()
 {
-#ifdef PIO_UNIT_TESTING
+#ifdef AIRTIME_REENTRY_CHECK
     owner->reentryFlag = false;
 #else
     (void)owner;
