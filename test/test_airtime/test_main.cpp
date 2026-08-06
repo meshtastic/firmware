@@ -186,9 +186,7 @@ void test_period_rotation_survives_millis_wrap()
 
 // --- report routing: which array each type feeds ---
 //
-// Deliberately asserted through the public API rather than the public bucket arrays. Those arrays
-// become private later; a test that reads them would have to be rewritten then, and a test that
-// would have to be rewritten is not pinning a contract.
+// Asserted through the public API, not the bucket arrays: those are private.
 
 void test_tx_log_feeds_tx_report_and_tx_utilization()
 {
@@ -335,9 +333,8 @@ void test_airtimeReport_returns_a_snapshot_not_an_alias()
 
 // --- storage conventions ---
 //
-// The class holds two incompatible orderings and nothing states which is which. The report arrays
-// are shift-ordered (slot 0 newest); channelUtilization and utilizationTX are modular rings indexed
-// by uptime phase. Reading one as if it were the other is a defect that has already happened once.
+// Two orderings: the report arrays are shift-ordered (slot 0 newest); channelUtilization and
+// utilizationTX are modular rings indexed by uptime phase. Reading one as the other is a defect.
 
 void test_report_arrays_are_shift_ordered_slot_zero_newest()
 {
@@ -357,9 +354,8 @@ void test_report_arrays_are_shift_ordered_slot_zero_newest()
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(100, report[2], "index is age in hours, not ring phase");
 }
 
-// Slot 0 covers only the time since the last rotation, so a consumer treating it as a whole hour
-// under-reports. getSecondsSinceBoot() % getSecondsPerPeriod() is how much of it has elapsed - the
-// contract the HTTP JSON publishes both halves of.
+// Slot 0 covers only the time since the last rotation; treating it as a whole hour under-reports.
+// getSecondsSinceBoot() % getSecondsPerPeriod() recovers the elapsed part.
 void test_report_slot_zero_is_a_partial_hour()
 {
     Time::setTestMillis(0);
@@ -381,8 +377,8 @@ void test_report_slot_zero_is_a_partial_hour()
 
 // --- first sync and seeding ---
 
-// The firstTime branch seeds secSinceBoot from the clock. A naive `secSinceBoot = 0` would make the
-// first access believe 500s had elapsed and rotate 500s of empty windows through.
+// The firstTime branch seeds secSinceBoot from the clock; seeding 0 would rotate 500s of empty
+// windows through on first access.
 void test_first_sync_seeds_from_current_uptime_not_zero()
 {
     Time::setTestMillis(500u * 1000u);
@@ -443,8 +439,7 @@ void test_repeated_sync_within_one_second_does_not_rotate()
 }
 
 // Every public entry point syncs. Calling several in the same interval must not compound the
-// rotation. Guards the later restructure where each becomes a lock-and-delegate wrapper: two
-// instances see identical wall time and identical airtime, and differ only in how many entry
+// rotation: two instances see identical wall time and airtime, differing only in how many entry
 // points were called.
 void test_rotation_is_once_per_second_regardless_of_entry_point()
 {
@@ -481,24 +476,20 @@ void test_period_constants_are_stable()
 }
 
 // ============================================================================
-// Phase 3: window decay, gates, and sleep behaviour.
+// Window decay, gates, and sleep behaviour. Three kinds of test:
 //
-// Three kinds of test here, and the distinction is the audit trail:
-//   invariant       - must hold now and forever; any failure is a bug
-//   boundary        - pins an off-by-one a refactor would silently move
-//   characterisation - encodes today's *wrong* number, tagged with the phase
-//                      that flips it. Each is tagged on its own comment line so
-//                      the count is greppable. See
-//                      .notes/2026-08-05-airtime-lockguard/plan4a.md.
+//   invariant        - must hold now and forever; any failure is a bug
+//   boundary         - pins an off-by-one a refactor would silently move
+//   CHARACTERISATION - encodes today's wrong number. Replace it when the defect
+//                      it describes is fixed; the tag is greppable.
 // ============================================================================
 
 // --- the oracle -------------------------------------------------------------
 //
 // The definition the buckets approximate: airtime physically on air inside
-// (now - window, now]. Assert against this rather than hand-worked constants,
-// so a test says "this matches the definition" rather than "this looked right
-// when I wrote it". A packet is stamped with its END time, which is what
-// completeSending() has; its start is end - airtime.
+// (now - window, now]. Assert against this rather than hand-worked constants.
+// A packet is stamped with its END time, as completeSending() has it; the
+// start is end - airtime.
 
 struct AirtimeEvent {
     uint64_t endMs;
@@ -533,8 +524,8 @@ static char g_msg[160]; // Unity messages must outlive the assert
 
 // --- hourly period rotation: boundaries the first three tests miss -----------
 
-// The shift loop runs PERIODS_TO_LOG-2 -> 0. An off-by-one there silently
-// resurrects hour-old data into slot 0 instead of dropping it off the end.
+// The shift loop runs PERIODS_TO_LOG-2 -> 0; an off-by-one resurrects hour-old
+// data into slot 0 instead of dropping it.
 void test_oldest_period_falls_off_the_end()
 {
     Time::setTestMillis(0);
@@ -603,10 +594,10 @@ void test_period_clear_boundary_is_exactly_the_log_depth()
 
 // --- channelUtilization: the 6 x 10 s modular ring --------------------------
 
-// The ordering property, stated so it survives a change of geometry: airtime
-// ages out oldest-first. The ring's index is absolute uptime phase, so the
-// oldest bucket is (current + 1) % N and never index N-1 - the assumption
-// getSilentMinutes() makes about the *other* ring, wrongly.
+// Airtime ages out oldest-first. The ring's index is absolute uptime phase, so
+// the oldest bucket is (current + 1) % N, never index N-1 - the assumption
+// getSilentMinutes() wrongly makes about the other ring. Stated as a property
+// so it holds at any geometry.
 void test_channel_utilization_ages_out_oldest_first()
 {
     Time::setTestMillis(0);
@@ -670,8 +661,6 @@ void test_channel_utilization_is_zero_when_nothing_logged()
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, a.channelUtilizationPercent());
 }
 
-// Pre-#11291 this stayed flat: the window advanced once per scheduler pass, and
-// light sleep pauses the scheduler.
 void test_channel_utilization_decays_proportionally_across_light_sleep()
 {
     Time::setTestMillis(0);
@@ -693,14 +682,13 @@ void test_channel_utilization_decays_proportionally_across_light_sleep()
     snprintf(g_msg, sizeof(g_msg), "before %.4f%%, after a 30s gap %.4f%%, oracle %.4f%%", full, after, truth);
     TEST_ASSERT_TRUE_MESSAGE(after < full, g_msg);
     // Whole buckets shed, so the survivors are exactly what was still on air in
-    // the last 60s - the ring sheds three of the five, not "half".
+    // the last 60s.
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, truth, after, g_msg);
 }
 
-// The non-tautological form: hold wall time and airtime fixed, vary only how
-// often the class is polled, and assert the answer does not move. Pre-#11291
-// these diverged by ~6x. If rotation is ever moved back into runOnce() only,
-// this is the alarm.
+// Hold wall time and airtime fixed, vary only how often the class is polled,
+// and assert the answer does not move. Fails if rotation moves back into
+// runOnce() only.
 void test_channel_utilization_is_independent_of_scheduler_rate()
 {
     Time::setTestMillis(0);
@@ -720,9 +708,8 @@ void test_channel_utilization_is_independent_of_scheduler_rate()
                                      g_msg);
 }
 
-// A percentage of a fixed window cannot exceed 100. Pre-#11291 this reached
-// 250.2%. Holds for every preset whose packets fit inside a bucket; the
-// LONG_SLOW exception is characterised separately below.
+// A percentage of a fixed window cannot exceed 100. Holds for every preset
+// whose packets fit inside a bucket; LONG_SLOW is characterised below.
 void test_channel_utilization_never_exceeds_100_percent()
 {
     Time::setTestMillis(0);
@@ -749,15 +736,13 @@ void test_channel_utilization_counts_each_packet_once()
     a.logAirtime(RX_LOG, 2000);
     a.logAirtime(RX_ALL_LOG, 3000);
 
-    // 6000ms of the 60s window, counted once each - no double counting between
-    // the parsed and unparseable receive paths.
+    // 6000ms of the 60s window, counted once each.
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, a.channelUtilizationPercent());
 }
 
-// CHARACTERISATION -> plan4 phase 5. The structural form of the quantisation
-// bias: the current bucket is zeroed on entry and fills across its period, so
-// the window covers (N-1)p + phase while the denominator claims Np. Right after
-// a boundary that is 50s of coverage sold as 60s.
+// CHARACTERISATION. The current bucket is zeroed on entry and fills across its
+// period, so the window covers (N-1)p + phase against a denominator of Np -
+// right after a boundary, 50s of coverage divided by 60s.
 void test_channel_utilization_covers_less_than_its_denominator()
 {
     Time::setTestMillis(0);
@@ -781,9 +766,8 @@ void test_channel_utilization_covers_less_than_its_denominator()
     TEST_ASSERT_TRUE_MESSAGE(reported < truth - 1.0f, g_msg);
 }
 
-// CHARACTERISATION -> plan4 phase 5. The numeric form of the same defect: the
-// reading sweeps with position inside the current bucket instead of holding
-// steady under a steady load.
+// CHARACTERISATION. The same defect numerically: under a steady load the
+// reading sweeps with position inside the current bucket instead of holding.
 void test_channel_utilization_quantisation_error_by_phase()
 {
     Time::setTestMillis(0);
@@ -810,10 +794,9 @@ void test_channel_utilization_quantisation_error_by_phase()
     TEST_ASSERT_TRUE_MESSAGE(hi - lo > 1.0f, g_msg); // and the sawtooth is the jitter defect
 }
 
-// CHARACTERISATION -> plan4 phase 4b. A packet's whole airtime is credited to
-// the bucket it *completed* in, so a bucket can hold more airtime than its own
-// period and the window more than its own length. LONG_SLOW at max payload is
-// 14 164 ms against a 10 s bucket.
+// CHARACTERISATION. A packet's whole airtime is credited to the bucket it
+// completed in, so a bucket can hold more than its own period. LONG_SLOW at max
+// payload is 14 164 ms against a 10 s bucket.
 void test_channel_utilization_exceeds_100_percent_on_long_slow()
 {
     Time::setTestMillis(0);
@@ -900,9 +883,8 @@ void test_tx_utilization_counts_only_transmissions()
     TEST_ASSERT_TRUE(a.utilizationTXPercent() > 0.0f);
 }
 
-// CHARACTERISATION -> plan4 phase 5. The same quantisation defect on the hour
-// window: 10x smaller because N is 60 rather than 6, but not zero - which is
-// what rules out fixing it by geometry alone.
+// CHARACTERISATION. The same quantisation defect on the hour window: 10x
+// smaller because N is 60 rather than 6, but not zero.
 void test_tx_utilization_quantisation_error()
 {
     Time::setTestMillis(0);
@@ -1065,11 +1047,10 @@ void test_getSilentMinutes_counts_minutes_until_enough_ages_out()
     TEST_ASSERT_TRUE_MESSAGE(mins <= 60, "the answer is bounded by the window");
 }
 
-// CHARACTERISATION -> plan4 phase 6. getSilentMinutes() walks utilizationTX from
-// index 59 down to 0 and returns 59 - i, i.e. it treats the index as an age.
-// That is the report array's convention; utilizationTX is a modular ring whose
-// index is absolute minute phase. Identical airtime and an identical
-// utilizationTXPercent() therefore give different answers at different phases.
+// CHARACTERISATION. getSilentMinutes() walks utilizationTX from index 59 down
+// to 0 and returns 59 - i, treating the index as an age. That is the report
+// array's convention; utilizationTX is a modular ring indexed by minute phase,
+// so identical airtime gives different answers at different phases.
 void test_getSilentMinutes_depends_on_ring_phase()
 {
     uint8_t answers[6] = {0};
@@ -1098,8 +1079,7 @@ void test_getSilentMinutes_depends_on_ring_phase()
 
 // --- clock robustness ---------------------------------------------------------
 
-// The existing two wrap tests each cover one half; this is the combination -
-// a gap longer than the window that also crosses the 49.7-day millis() wrap.
+// A gap longer than the window that also crosses the 49.7-day millis() wrap.
 void test_survives_heavy_sleep_across_the_wrap()
 {
     const uint32_t beforeWrap = 0xFFFFFFFFu - (30u * 1000u);
@@ -1138,11 +1118,10 @@ void test_multi_day_sleep_clears_every_window()
     }
 }
 
-// getUptimeSecs() is monotonic by construction, so this documents what happens
-// if it ever stops being: the elapsed calculation underflows to a huge value,
-// which trips every >= branch and clears the windows. Benign - and worth
-// pinning so a future swap back to bare millis() fails loudly rather than
-// corrupting buckets.
+// getUptimeSecs() is monotonic by construction. If it ever stops being, the
+// elapsed calculation underflows to a huge value, which trips every >= branch
+// and clears the windows. Benign, and pinned so a swap back to bare millis()
+// fails loudly rather than corrupting buckets.
 void test_backwards_uptime_degrades_safely()
 {
     Time::setTestMillis(600u * 1000u);
@@ -1160,13 +1139,9 @@ void test_backwards_uptime_degrades_safely()
 // --- the lock ----------------------------------------------------------------------------------
 
 // Every public method must take the lock exactly once. A second Held on the same instance trips the
-// re-entry assert in a build where NDEBUG is unset - which is this one. It is the only nesting check
-// that works natively: Portduino compiles Lock::lock() to an empty body, so a genuine nested take
-// would silently succeed here and only deadlock on hardware.
-//
-// This is also the guard rail for the deferred accuracy work: if plan4's addSpanned() is added as a
-// method on AirTime rather than on the lock-free core, logAirtime() calls it while already holding
-// the lock, and this fails immediately instead of watchdog-rebooting a device.
+// re-entry assert, which is the only nesting check that works natively: Portduino compiles
+// Lock::lock() to an empty body, so a nested take succeeds silently and would only deadlock on
+// hardware.
 void test_no_public_method_reenters_the_lock()
 {
     Time::setTestMillis(0);

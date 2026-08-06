@@ -425,8 +425,7 @@ void tearDown(void)
 
     // Restore globals here, not at the end of a test body: an assertion aborts the body, and these
     // would otherwise leak into every later case. The injected clock is the one the N8-N11
-    // suppression-window cases drive; the region is C14's duty-cycle setup. C14's saturated
-    // airTime needs no reset here - it is a scoped instance that restores the global itself.
+    // suppression-window cases drive; the region is C14's duty-cycle setup.
     Time::useRealClock();
     Time::resetMonotonicForTests();
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_US;
@@ -1499,9 +1498,9 @@ void test_C13_failed_initial_reliable_send_does_not_retry(void)
                                      "failed interface enqueue must not leave a retransmission pending");
 }
 
-// C14 needs a node that has already used its whole hourly duty-cycle allowance. Install a local
-// AirTime for the scope rather than poking the global's buckets: they are private, and a scoped
-// instance also restores the global on the way out even if an assertion aborts the test body.
+// C14 needs a node that has used its whole hourly duty-cycle allowance. A scoped local AirTime
+// rather than the global's buckets: those are private, and this restores the global even if an
+// assertion aborts the body.
 class ScopedDutyCycleSaturatedAirTime
 {
   public:

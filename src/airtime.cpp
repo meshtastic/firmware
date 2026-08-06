@@ -10,8 +10,7 @@ AirTime *airTime = NULL;
 AirTime *AirTime::Held::armReentryCheck(AirTime *a)
 {
 #ifdef PIO_UNIT_TESTING
-    // Before the lock, not after: on hardware a nested take blocks forever, so an assert placed
-    // after it would never be reached.
+    // Before the lock: a nested take blocks forever, so a later check would never run.
     assert(!a->reentryFlag);
     a->reentryFlag = true;
 #endif
@@ -28,8 +27,8 @@ AirTime::Held::~Held()
 }
 
 // --- the lock-free core -------------------------------------------------------------------------
-// Every method here assumes the lock is held, and says so in its signature. None of them can take
-// it: Windows has no lock to reach.
+// Every method here requires the lock, and says so in its signature. None can take it: Windows has
+// no lock to reach.
 
 void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, const Held &held)
 {
@@ -97,8 +96,8 @@ void AirTime::Windows::syncNow(const Held &)
         memset(this->airtimes.periodRX, 0, sizeof(this->airtimes.periodRX));
         memset(this->airtimes.periodRX_ALL, 0, sizeof(this->airtimes.periodRX_ALL));
     } else {
-        // Counter is the loop variable rather than a separate tally: LOG_DEBUG compiles to nothing
-        // under DEBUG_MUTE, which would leave a tally write-only.
+        // Counter is the loop variable: LOG_DEBUG compiles away under DEBUG_MUTE, which would
+        // leave a separate tally write-only.
         for (uint32_t h = 1; h <= elapsedAirtimePeriods; h++) {
             LOG_DEBUG("Rotate airtimes, crossed hour %u", h);
             for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
@@ -184,9 +183,8 @@ float AirTime::Windows::utilizationTXPercent(const Held &held)
     return (float(sum) / float(MS_IN_HOUR)) * 100;
 }
 
-// Get the amount of minutes we have to be silent before we can send again.
-// Deliberately does NOT sync, matching the behaviour its characterisation tests pin. Both that and
-// the ring traversal below are wrong; see the accuracy TODO at the top of airtime.h.
+// Minutes we must be silent before sending again. Does not sync, and walks the ring as if the index
+// were an age; both are wrong and both are pinned by characterisation tests. See airtime.h's TODO.
 uint8_t AirTime::Windows::getSilentMinutes(float txPercent, float dutyCycle, const Held &)
 {
     float newTxPercent = txPercent;
@@ -200,8 +198,7 @@ uint8_t AirTime::Windows::getSilentMinutes(float txPercent, float dutyCycle, con
 }
 
 // --- the locking shell --------------------------------------------------------------------------
-// Every one of these takes the lock exactly once and delegates. Nothing below calls anything else
-// on `this`, which is what keeps the "locks exactly once" rule checkable by reading.
+// Each takes the lock exactly once and delegates. Nothing below calls another method on `this`.
 
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
@@ -252,8 +249,7 @@ float AirTime::utilizationTXPercent()
     return w.utilizationTXPercent(held);
 }
 
-// Locks like everything else. Before the core split these could not, because they called the
-// public accessors and the lock is not recursive - the one asymmetry a reader had to remember.
+// These lock like everything else, because they call the core rather than the public accessors.
 bool AirTime::isTxAllowedChannelUtil(bool polite)
 {
     uint8_t percentage = (polite ? polite_channel_util_percent : max_channel_util_percent);

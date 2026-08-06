@@ -37,18 +37,11 @@ constexpr NodeNum kTargetNode = 0x33333333;
 // a fresh requester for their "served again" step to avoid the per-requester window masking them.
 constexpr NodeNum kRemoteNode2 = 0x44444444;
 
-// INERT - commented out, not deleted. Two independent reasons it does nothing:
-//
-//   1. TrafficManagementModule contains no reference to airTime at all. The gating this fixture
-//      describes was removed with exhaust_hop_telemetry / exhaust_hop_position ("shelved until the
-//      right heuristics are clearer", alterReceived()); shouldExhaustHops() is now a pure compare
-//      of three members that nothing sets, so its test passes with no airTime installed.
-//   2. Even when it was consulted, it never worked: writing channelUtilization[] on a freshly
-//      constructed AirTime is undone by the first accessor call, which takes the firstTime branch
-//      and memsets every window. It reported 0%, not the 100% the comment claimed.
-//
-// Kept, commented, in case hop exhaustion is un-shelved - but note the buckets are private now, so
-// a revived version must fill them via logAirtime() as below rather than by writing the array.
+// INERT - commented out, not deleted. TrafficManagementModule holds no reference to airTime:
+// the gating this described went with exhaust_hop_telemetry / exhaust_hop_position, and
+// shouldExhaustHops() is now a compare of three members nothing sets. Writing the buckets did not
+// work either - the first accessor call takes AirTime's firstTime branch and memsets them, so this
+// reported 0%, not 100%. A revived version must fill them via logAirtime(); they are private now.
 //
 // class ScopedBusyAirTime
 // {
@@ -63,7 +56,7 @@ constexpr NodeNum kRemoteNode2 = 0x44444444;
 //   private:
 //     AirTime busy;
 //     AirTime *previous;
-// };
+// };;
 class MockNodeDB : public NodeDB
 {
   public:
@@ -2315,7 +2308,7 @@ static void test_tm_nodeinfo_directResponse_fallbackUnsignedNotServed(void)
  */
 static void test_tm_alterReceived_telemetryBroadcast_hopLimitUnchanged(void)
 {
-    // ScopedBusyAirTime busyChannel; // INERT: the module never reads airTime - see the note above
+    // ScopedBusyAirTime busyChannel; // INERT: the module never reads airTime
     TrafficManagementModuleTestShim module;
     meshtastic_MeshPacket packet = makeDecodedPacket(meshtastic_PortNum_TELEMETRY_APP, kRemoteNode, NODENUM_BROADCAST);
     packet.hop_start = 5;
