@@ -1,16 +1,6 @@
 #pragma once
 
-/**
- * SenseCAP MeshPager X2 - ESP32-S3 LoRa/GNSS/Audio Pager
- *
- * Target: ESP32-S3
- * Display: ST7789P3 LCD 240×320 RGB565 (SPI)
- * Radio: LR20xx wideband (LR1120/LR1121)
- * Audio: ES8311 DAC + ES7243E ADC
- * GNSS:  AG3335MV/B UART
- * Storage: SD card (1-bit SDIO mode)
- * IO Expander: TCA6424
- */
+// SenseCAP MeshPager X2
 
 // Buttons - via IO Expander (TCA6424)
 #define BUTTON_UP GPIO_NUM_NC      // EXP pin 0, active low
@@ -19,7 +9,10 @@
 #define BUTTON_RIGHT GPIO_NUM_NC   // EXP pin 3, active low
 #define BUTTON_CONFIRM GPIO_NUM_NC // EXP pin 4, active low
 #define BUTTON_RETURN GPIO_NUM_NC  // EXP pin 5, active low
-#define BUTTON_PIN 9               // Power/wake button (GPIO 9), active high
+
+#define BUTTON_PIN 9 // Power/wake button (GPIO 9), active high
+#define BUTTON_ACTIVE_LOW false
+#define BUTTON_ACTIVE_PULLUP false
 
 // I2C Buses
 #define I2C_SDA 17 // I2C0: SDA (IO Expander, RTC)
