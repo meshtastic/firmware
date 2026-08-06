@@ -26,6 +26,9 @@
 #include "power/PowerHAL.h"
 #include "power/SGM41562.h"
 #include "sleep.h"
+#if HAS_USB_NET
+#include "mesh/usbnet/USBNet.h"
+#endif
 #ifdef ARCH_ESP32
 // #include <driver/adc.h>
 #include <esp_adc/adc_cali.h>
@@ -913,6 +916,11 @@ void Power::shutdown()
     nodeDB->saveToDisk();
 #if HAS_SCREEN
     messageStore.saveToFlash();
+#endif
+#if HAS_USB_NET
+    // Drop off the USB bus before the rails go down, so the host sees a clean
+    // disconnect rather than a stalled network interface.
+    deInitUsbNet();
 #endif
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
 #ifdef PIN_LED1
