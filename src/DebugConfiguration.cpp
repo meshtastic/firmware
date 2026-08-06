@@ -42,7 +42,7 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...)
     va_end(args);
 }
 
-#if HAS_NETWORKING
+#if HAS_SYSLOG
 namespace meshtastic
 {
 Syslog::Syslog(UDP &client)

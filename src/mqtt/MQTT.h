@@ -15,6 +15,9 @@
 #if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
 #include <EthernetClient.h>
 #endif
+#if HAS_CELLULAR
+#include "mesh/cell/CellClient.h"
+#endif
 
 #if HAS_NETWORKING
 #include <PubSubClient.h>
@@ -77,6 +80,8 @@ class MQTT : private concurrency::OSThread
 #ifndef PIO_UNIT_TESTING
   private:
 #endif
+// The primary transport's client type. Boards carrying a second link keep an
+// extra client below and choose between them at connect time.
 #if HAS_WIFI
     using MQTTClient = WiFiClient;
 #if __has_include(<WiFiClientSecure.h>)
@@ -85,17 +90,29 @@ class MQTT : private concurrency::OSThread
 #endif
 #elif HAS_ETHERNET
     using MQTTClient = EthernetClient;
+#elif HAS_CELLULAR
+    using MQTTClient = CellClient;
 #else
     using MQTTClient = void;
 #endif
+
+// Cellular coexists with WiFi/Ethernet instead of replacing them, so it needs
+// its own client whenever one of those is the primary transport.
+#define MQTT_HAS_SECONDARY_CELL (HAS_CELLULAR && (HAS_WIFI || HAS_ETHERNET))
 
 #if HAS_NETWORKING
     std::unique_ptr<MQTTClient> mqttClient;
 #if MQTT_SUPPORTS_TLS
     MQTTClientTLS mqttClientTLS;
 #endif
+#if MQTT_HAS_SECONDARY_CELL
+    CellClient mqttClientCell;
+#endif
     PubSubClient pubSub;
     explicit MQTT(std::unique_ptr<MQTTClient> mqttClient);
+
+    /// Client for whichever transport is up, or nullptr when none is.
+    Client *activeClient();
 #endif
 
     std::string cryptTopic = "/2/e/"; // msh/2/e/CHANNELID/NODEID

@@ -26,6 +26,9 @@
 #if HAS_ETHERNET && defined(USE_CH390D)
 #include "ESP32_CH390.h"
 #endif // USE_CH390D
+#if HAS_CELLULAR
+#include "mesh/cell/cellBearer.h"
+#endif // HAS_CELLULAR
 #include "Default.h"
 #include <Throttle.h>
 #include <assert.h>
@@ -308,15 +311,22 @@ inline bool isConnectedToNetwork()
         return true;
 #endif
 
+    // Transports coexist rather than exclude each other, so test each one that
+    // is compiled in - a board can have cellular up while WiFi is down.
+    bool connected = false;
 #if HAS_WIFI
-    return WiFi.isConnected();
-#elif HAS_ETHERNET
-    return Ethernet.linkStatus() == LinkON;
-#elif defined(ARCH_PORTDUINO)
-    return true;
-#else
-    return false;
+    connected = connected || WiFi.isConnected();
 #endif
+#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
+    connected = connected || (Ethernet.linkStatus() == LinkON);
+#endif
+#if HAS_CELLULAR
+    connected = connected || isCellularAvailable();
+#endif
+#if defined(ARCH_PORTDUINO)
+    connected = true;
+#endif
+    return connected;
 }
 
 /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
@@ -436,6 +446,42 @@ bool MQTT::isConnectedDirectly()
 #endif
 }
 
+#if HAS_NETWORKING
+Client *MQTT::activeClient()
+{
+#if defined(ARCH_PORTDUINO)
+    return mqttClient.get();
+#else
+    // Ordered by preference: the IP-stack transports are cheaper and faster
+    // than the modem's AT socket, so cellular is the fallback.
+#ifdef USE_WS5500
+    if (ETH.connected())
+        return mqttClient.get();
+#elif defined(USE_CH390D)
+    if (CH390.isConnected())
+        return mqttClient.get();
+#endif
+#if HAS_WIFI
+    if (WiFi.isConnected())
+        return mqttClient.get();
+#elif HAS_ETHERNET
+    if (Ethernet.linkStatus() == LinkON)
+        return mqttClient.get();
+#endif
+#if HAS_CELLULAR
+    if (isCellularAvailable()) {
+#if MQTT_HAS_SECONDARY_CELL
+        return &mqttClientCell;
+#else
+        return mqttClient.get();
+#endif
+    }
+#endif
+    return nullptr;
+#endif // ARCH_PORTDUINO
+}
+#endif // HAS_NETWORKING
+
 bool MQTT::publish(const char *topic, const char *payload, bool retained)
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
@@ -499,9 +545,22 @@ void MQTT::reconnect()
         }
 #if HAS_NETWORKING
         const PubSubConfig ps_config(moduleConfig.mqtt);
-        MQTTClient *clientConnection = mqttClient.get();
+        Client *clientConnection = activeClient();
+        if (!clientConnection) {
+            LOG_WARN("No network transport is up for MQTT");
+            return;
+        }
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        // Captured before the TLS swap below moves clientConnection.
+        const bool usedWiFi = clientConnection == mqttClient.get();
+#endif
 #if MQTT_SUPPORTS_TLS
         if (moduleConfig.mqtt.tls_enabled) {
+            // Only the IP-stack clients can do TLS; the AT socket API cannot.
+            if (clientConnection != mqttClient.get()) {
+                LOG_ERROR("TLS is not supported on the active transport");
+                return;
+            }
             mqttClientTLS.setInsecure();
             LOG_INFO("Use TLS-encrypted session");
             clientConnection = &mqttClientTLS;
@@ -513,7 +572,16 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-            isMqttServerAddressPrivate = isPrivateIpAddress(clientConnection->remoteIP());
+#if HAS_WIFI || HAS_ETHERNET
+            // remoteIP() is not part of the Arduino Client interface, so only
+            // the IP-stack transports can refine what the address parse found.
+            if (clientConnection == mqttClient.get())
+                isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient->remoteIP());
+#if MQTT_SUPPORTS_TLS
+            else if (clientConnection == &mqttClientTLS)
+                isMqttServerAddressPrivate = isPrivateIpAddress(mqttClientTLS.remoteIP());
+#endif
+#endif
             isConnected = true;
             publishNodeInfo();
             sendSubscriptions();
@@ -525,11 +593,14 @@ void MQTT::reconnect()
 #if defined(USE_WS5500) || defined(USE_CH390D)
                 LOG_WARN("MQTT connect failed repeatedly; waiting for Ethernet reconnect");
 #else
-                needReconnect = true;
-                if (wifiReconnect) {
-                    wifiReconnect->setIntervalFromNow(0);
-                } else {
-                    LOG_WARN("MQTT connect failed repeatedly, but WiFi reconnect is unavailable");
+                // Only bounce WiFi when WiFi is what carried the failed attempt.
+                if (usedWiFi) {
+                    needReconnect = true;
+                    if (wifiReconnect) {
+                        wifiReconnect->setIntervalFromNow(0);
+                    } else {
+                        LOG_WARN("MQTT connect failed repeatedly, but WiFi reconnect is unavailable");
+                    }
                 }
 #endif
                 reconnectCount = 0;
@@ -623,6 +694,9 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         // which mutates the module's isConnected state. This only checks if the server
         // is reachable - it does not establish an MQTT session.
         // Settings are always saved regardless of the result.
+        // Skipped on cellular: the AT socket API gives one socket, so a probe
+        // would tear down the live MQTT connection.
+#if !HAS_CELLULAR
         if (isConnectedToNetwork()) {
             MQTTClient testClient;
             if (!testClient.connect(parsed.serverAddr.c_str(), parsed.serverPort)) {
@@ -642,6 +716,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             }
             testClient.stop();
         }
+#endif
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);

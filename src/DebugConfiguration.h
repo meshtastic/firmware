@@ -168,7 +168,7 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 #include <WiFi.h>
 #endif // HAS_WIFI
 
-#if HAS_NETWORKING
+#if HAS_SYSLOG
 
 namespace meshtastic
 {
@@ -207,4 +207,4 @@ class Syslog
 
 }; // namespace meshtastic
 
-#endif // HAS_NETWORKING
+#endif // HAS_SYSLOG
