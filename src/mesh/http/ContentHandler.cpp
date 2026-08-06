@@ -628,12 +628,13 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         return s;
     };
 
-    const uint8_t periods = airTime->getPeriodsToLog();
-    // Buffer is per call, so a report that fails emits zeros rather than the previous type's data.
+    // One constant sizes the buffer and the count, so they cannot drift. Buffer is per call, so a
+    // report that fails emits zeros rather than the previous type's data.
+    constexpr size_t periods = AirTime::getPeriodsToLog();
     auto reportFor = [&](reportTypes reportType) {
-        uint32_t logArray[PERIODS_TO_LOG] = {0};
+        uint32_t logArray[periods] = {0};
         (void)airTime->airtimeReport(reportType, logArray, periods);
-        return arrayFromLog(logArray, periods);
+        return arrayFromLog(logArray, (int)periods);
     };
 
     std::string txLog = reportFor(TX_LOG);

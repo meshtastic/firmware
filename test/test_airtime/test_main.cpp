@@ -15,15 +15,29 @@
 #include <cstdio>
 #include <unity.h>
 
+static meshtastic_Config_LoRaConfig_RegionCode savedRegion;
+static meshtastic_Config_DeviceConfig_Role savedRole;
+static bool savedOverrideDutyCycle;
+
 void setUp(void)
 {
     // Absolute uptime assertions (e.g. getSecondsSinceBoot()) must not inherit wraps counted by
     // an earlier case that moved the test clock backwards via setTestMillis().
     Time::resetMonotonicForTests();
+    savedRegion = config.lora.region;
+    savedRole = config.device.role;
+    savedOverrideDutyCycle = config.lora.override_duty_cycle;
 }
 void tearDown(void)
 {
     Time::useRealClock(); // don't leak the fake clock into other suites
+    // Restore the duty-cycle globals here, not at the end of a test body: an assertion aborts the
+    // body via longjmp and would leak the region into every later case. initRegion() on the way
+    // out, because getEffectiveDutyCycle() dereferences myRegion.
+    config.lora.region = savedRegion;
+    config.device.role = savedRole;
+    config.lora.override_duty_cycle = savedOverrideDutyCycle;
+    initRegion();
 }
 
 // --- first sync / immediate writes ---
@@ -1037,14 +1051,15 @@ void test_getSilentMinutes_counts_minutes_until_enough_ages_out()
 {
     Time::setTestMillis(0);
     AirTime a;
-    // One burst in the oldest minute, at the ring phase where the implementation
-    // happens to be right.
-    a.logAirtime(TX_LOG, 120000);
+    a.logAirtime(TX_LOG, 120000); // two minutes of TX, all of it in minute-bucket 0
     const float pct = a.utilizationTXPercent();
-    TEST_ASSERT_TRUE(pct > 2.5f);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.3333f, pct);
 
+    // Fully determined: the walk subtracts nothing for i in 59..1, then the whole 3.3333% at i == 0,
+    // returning MINUTES_IN_HOUR - 1 - 0. That answer is one minute short of the truth - syncNow()
+    // clears bucket 0 at minute 60, not 59 - which test_getSilentMinutes_depends_on_ring_phase pins.
     const uint8_t mins = a.getSilentMinutes(pct, 2.5f);
-    TEST_ASSERT_TRUE_MESSAGE(mins <= 60, "the answer is bounded by the window");
+    TEST_ASSERT_EQUAL_UINT8(59, mins);
 }
 
 // CHARACTERISATION. getSilentMinutes() walks utilizationTX from index 59 down
@@ -1124,27 +1139,44 @@ void test_multi_day_sleep_clears_every_window()
 // fails loudly rather than corrupting buckets.
 void test_backwards_uptime_degrades_safely()
 {
-    Time::setTestMillis(600u * 1000u);
+    // Step by the wrap, which is the size the regression would actually produce: uptime falls from
+    // 4294967s to 0. A smaller backwards step leaves elapsedAirtimePeriods at 0, so the hourly
+    // report below is never reached - which is what this case used to miss.
+    Time::setTestMillis(UINT32_MAX);
     AirTime a;
-    a.logAirtime(RX_LOG, 6000);
+    a.logAirtime(TX_LOG, 6000);
     TEST_ASSERT_TRUE(a.channelUtilizationPercent() > 0.0f);
 
-    Time::setTestMillis(60u * 1000u); // the clock goes backwards
+    Time::setTestMillis(0); // the wrap, as a naive millis() clock would present it
 
     const float pct = a.channelUtilizationPercent();
-    snprintf(g_msg, sizeof(g_msg), "reading after the clock went backwards: %.4f%%", pct);
-    TEST_ASSERT_TRUE_MESSAGE(pct >= 0.0f && pct <= 100.0f, g_msg);
+    snprintf(g_msg, sizeof(g_msg), "channel utilisation after the wrap: %.4f%%", pct);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0001f, 0.0f, pct, g_msg);
+
+    uint32_t report[PERIODS_TO_LOG] = {0};
+    TEST_ASSERT_TRUE(a.airtimeReport(TX_LOG, report, PERIODS_TO_LOG));
+    for (uint32_t i = 0; i < PERIODS_TO_LOG; i++)
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, report[i], "every hourly bucket clears across the wrap");
 }
 
 // --- the lock ----------------------------------------------------------------------------------
 
-// Every public method must take the lock exactly once. A second Held on the same instance trips the
-// re-entry assert, which is the only nesting check that works natively: Portduino compiles
-// Lock::lock() to an empty body, so a nested take succeeds silently and would only deadlock on
-// hardware.
-void test_no_public_method_reenters_the_lock()
+// No single public method may take the lock twice: a second Held on the same instance trips the
+// re-entry assert. The calls below are sequential and each Held is destroyed before the next, so
+// this catches a method re-entering itself, not two methods nesting. That is the regression guard
+// for isTxAllowedChannelUtil() regaining its pre-split shape. Two of the methods called take no
+// lock at all. Portduino compiles Lock::lock() to an empty body, so the assert is the only check
+// that works natively; on hardware the same bug is a deadlock.
+void test_no_public_method_takes_the_lock_twice()
 {
     Time::setTestMillis(0);
+    // EU_868 explicitly, not inherited: isTxAllowedAirUtil() constructs a Held only inside its
+    // duty-cycle branch, so under the default US region (100%) it would return before locking and
+    // this test would not cover it at all.
+    config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_EU_868;
+    config.lora.override_duty_cycle = false;
+    initRegion();
+
     AirTime a;
     uint32_t report[PERIODS_TO_LOG] = {0};
 
@@ -1242,7 +1274,7 @@ void setup()
     RUN_TEST(test_survives_heavy_sleep_across_the_wrap);
     RUN_TEST(test_multi_day_sleep_clears_every_window);
     RUN_TEST(test_backwards_uptime_degrades_safely);
-    RUN_TEST(test_no_public_method_reenters_the_lock);
+    RUN_TEST(test_no_public_method_takes_the_lock_twice);
     exit(UNITY_END());
 }
 

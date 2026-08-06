@@ -228,16 +228,6 @@ bool AirTime::airtimeReport(reportTypes reportType, uint32_t *out, size_t count)
     return w.airtimeReport(reportType, out, count, held);
 }
 
-uint8_t AirTime::getPeriodsToLog()
-{
-    return PERIODS_TO_LOG; // a constant: touches no state, so takes no lock
-}
-
-uint32_t AirTime::getSecondsPerPeriod()
-{
-    return SECONDS_PER_PERIOD; // likewise
-}
-
 uint32_t AirTime::getSecondsSinceBoot()
 {
     // Keep HTTP/debug reporting aligned with the same monotonic clock used by the buckets.

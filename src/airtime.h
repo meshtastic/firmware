@@ -24,9 +24,12 @@
                                 every public entry point. The only input that
                                 removes airtime.
 
-  RX_LOG and RX_ALL_LOG are DISJOINT: both radio drivers pick exactly one per
-  packet. RX_ALL_LOG is unparseable airtime, not a superset of RX_LOG, and the
-  total is TX + RX + RX_ALL.
+  RX_LOG and RX_ALL_LOG are DISJOINT, and a reception logs AT MOST one of them.
+  RX_ALL_LOG is unparseable airtime, not a superset of RX_LOG, so the total is
+  TX + RX + RX_ALL - but it under-counts: five drop paths log neither. A packet
+  with from == 0 returns unlogged from handleReceiveInterrupt(), unlike every
+  neighbouring drop, and SimRadio drops a collision during transmission plus
+  three allocation failures. Pre-existing; see the TODO below.
 
   OUTPUTS:
 
@@ -95,16 +98,27 @@ enum reportTypes { TX_LOG, RX_LOG, RX_ALL_LOG };
 #define AIRTIME_REENTRY_CHECK
 #endif
 
-// Serialised behind `lock`, by two mechanisms:
+// Serialised behind `lock` because two FreeRTOS tasks genuinely reach this class at once on nRF52.
+// NRF52Bluetooth registers its ToRadio write callback with defer == false, so a phone's packet runs
+// PhoneAPI::handleToRadio -> MeshService::sendToMesh -> Router::send on the Bluefruit BLE task,
+// which reads utilizationTXPercent() and getSilentMinutes() while loopTask may be inside
+// logAirtime() from a reception. That is an unsynchronised read-modify-write of utilizationTX[] and
+// secSinceBoot against a summing read. ESP32 hands BLE work to the main task and does not have it.
 //
-//   - a lock-free inner core (Windows) holds all state and all logic. It has no lock and no way to
-//     reach one, so nesting is impossible by construction. concurrency::Lock is a non-recursive
-//     binary semaphore taken with portMAX_DELAY, so a nested take blocks forever.
+// Two mechanisms keep it serialised:
+//
+//   - a lock-free inner core (Windows) holds all state and all logic. It has no lock member, and
+//     must never reach one through the global `airTime` - `airTime->anyPublicMethod()` from inside
+//     a Windows method would take a second Held and hang, because concurrency::Lock is a
+//     non-recursive binary semaphore taken with portMAX_DELAY. Nothing does this today; the
+//     AIRTIME_REENTRY_CHECK assert is the backstop, and it only builds on host test builds.
 //   - a private Held token takes the lock in its constructor and is the only thing that satisfies a
 //     core method's `const Held &`, so the lock cannot be forgotten.
 //
-// Every public method takes the lock exactly once and delegates; nothing inside locks. That
-// includes isTxAllowed*(), which call the core rather than the public accessors.
+// Every public method takes the lock exactly once and delegates, with two exceptions: the two
+// constexpr accessors below touch no state and take none, and isTxAllowedAirUtil() takes it zero or
+// one times, depending on whether the duty-cycle branch is entered at all. Nothing inside locks -
+// that includes isTxAllowed*(), which call the core rather than the public accessors.
 //
 // A new write-path helper belongs to Windows or is a free function, never a method on AirTime: an
 // AirTime method locks, and logAirtime() would call it while already holding the lock.
@@ -120,8 +134,10 @@ class AirTime : private concurrency::OSThread
 
     /// Compatibility shim: no caller in the tree, kept for out-of-tree ones.
     void airtimeRotatePeriod();
-    uint8_t getPeriodsToLog();
-    uint32_t getSecondsPerPeriod();
+    /// Constants, not state: no lock, and usable where a constant expression is required so a
+    /// caller's buffer and the count it passes to airtimeReport() cannot drift apart.
+    static constexpr uint8_t getPeriodsToLog() { return PERIODS_TO_LOG; }
+    static constexpr uint32_t getSecondsPerPeriod() { return SECONDS_PER_PERIOD; }
     uint32_t getSecondsSinceBoot();
     /// Copies `count` buckets into `out`, newest first. Copies rather than returning the array so a
     /// caller cannot hold a handle to buckets that every other entry point rotates underneath it.
