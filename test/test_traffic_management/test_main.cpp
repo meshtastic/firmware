@@ -56,7 +56,8 @@ constexpr NodeNum kRemoteNode2 = 0x44444444;
 //   private:
 //     AirTime busy;
 //     AirTime *previous;
-// };;
+// };
+
 class MockNodeDB : public NodeDB
 {
   public:
