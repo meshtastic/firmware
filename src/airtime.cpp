@@ -36,21 +36,18 @@ void AirTime::Windows::logAirtime(reportTypes reportType, uint32_t airtime_ms, c
     // the packet is counted in the current wall-time bucket, not a stale awake-time bucket.
     syncNow(held);
 
+    // The caller logs, once the lock is released.
     if (reportType == TX_LOG) {
-        LOG_DEBUG("Packet TX: %ums", airtime_ms);
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
-
-        this->utilizationTX[this->getPeriodUtilHour(held)] = this->utilizationTX[this->getPeriodUtilHour(held)] + airtime_ms;
+        this->utilizationTX[this->getPeriodUtilHour(held)] += airtime_ms;
     } else if (reportType == RX_LOG) {
-        LOG_DEBUG("Packet RX: %ums", airtime_ms);
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
-        LOG_DEBUG("Packet RX (noise?) : %ums", airtime_ms);
         this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
     }
 
     // Log all airtime type for channel utilization
-    this->channelUtilization[this->getPeriodUtilMinute(held)] = channelUtilization[this->getPeriodUtilMinute(held)] + airtime_ms;
+    this->channelUtilization[this->getPeriodUtilMinute(held)] += airtime_ms;
 }
 
 uint8_t AirTime::Windows::getPeriodUtilMinute(const Held &)
@@ -202,8 +199,20 @@ uint8_t AirTime::Windows::getSilentMinutes(float txPercent, float dutyCycle, con
 
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
-    Held held(this);
-    w.logAirtime(reportType, airtime_ms, held);
+    {
+        Held held(this);
+        w.logAirtime(reportType, airtime_ms, held);
+    }
+
+    // Outside the lock: DEBUG_PORT.log() blocks on a UART write, and `lock` is a plain binary
+    // semaphore with no priority inheritance, so holding it here would stall the radio thread.
+    if (reportType == TX_LOG) {
+        LOG_DEBUG("Packet TX: %ums", airtime_ms);
+    } else if (reportType == RX_LOG) {
+        LOG_DEBUG("Packet RX: %ums", airtime_ms);
+    } else if (reportType == RX_ALL_LOG) {
+        LOG_DEBUG("Packet RX (noise?) : %ums", airtime_ms);
+    }
 }
 
 void AirTime::airtimeRotatePeriod()
@@ -250,29 +259,37 @@ float AirTime::utilizationTXPercent()
 }
 
 // These lock like everything else, because they call the core rather than the public accessors.
+// Both read under the lock and warn after it, for the reason logAirtime() does.
 bool AirTime::isTxAllowedChannelUtil(bool polite)
 {
     uint8_t percentage = (polite ? polite_channel_util_percent : max_channel_util_percent);
-    Held held(this);
-    if (w.channelUtilizationPercent(held) < percentage) {
-        return true;
-    } else {
-        LOG_WARN("Ch. util >%d%%. Skip send", percentage);
-        return false;
+    float utilization;
+    {
+        Held held(this);
+        utilization = w.channelUtilizationPercent(held);
     }
+
+    if (utilization < percentage)
+        return true;
+    LOG_WARN("Ch. util >%d%%. Skip send", percentage);
+    return false;
 }
 
 bool AirTime::isTxAllowedAirUtil()
 {
     float effectiveDutyCycle = getEffectiveDutyCycle();
     if (!config.lora.override_duty_cycle && effectiveDutyCycle < 100) {
-        Held held(this);
-        if (w.utilizationTXPercent(held) < effectiveDutyCycle * polite_duty_cycle_percent / 100) {
-            return true;
-        } else {
-            LOG_WARN("TX air util. >%f%%. Skip send", effectiveDutyCycle * polite_duty_cycle_percent / 100);
-            return false;
+        float limit = effectiveDutyCycle * polite_duty_cycle_percent / 100;
+        float utilization;
+        {
+            Held held(this);
+            utilization = w.utilizationTXPercent(held);
         }
+
+        if (utilization < limit)
+            return true;
+        LOG_WARN("TX air util. >%f%%. Skip send", limit);
+        return false;
     }
     return true;
 }
