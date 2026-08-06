@@ -10,73 +10,79 @@ USB _serial_ is permanently closed on iPadOS: Apple's own dexts win IOKit matchi
 
 ## Status
 
-**The transport works. The phone API over it does not, yet.**
+**The transport works AND the phone API over it works.**
 
 Verified on hardware:
 
-| Check                                              | Result                                          |
-| -------------------------------------------------- | ----------------------------------------------- |
-| iPadOS 26 enumerates the gadget, joins the network | ✅                                              |
-| macOS DHCP lease                                   | ✅ `192.168.7.2/24`                             |
-| Lease has **no** router option, **no** DNS option  | ✅ `perform_router_discovery: FALSE`            |
-| Default route not hijacked                         | ✅ still `en0`                                  |
-| ICMP                                               | ✅ ~1.3 ms, 0% loss sustained                   |
-| Port 4403 accepting; 4404 and 80 refuse            | ✅ real listener, `begin()` succeeded           |
-| Interface MAC = `deriveUsbMac()` of chip base      | ✅ `a2:f2:62:e0:e8:91` from `a0:f2:62:e0:e8:90` |
-| Board stays flashable                              | ✅ ~10 flash cycles                             |
+| Check                                              | Result                                                               |
+| -------------------------------------------------- | -------------------------------------------------------------------- |
+| iPadOS 26 enumerates the gadget, joins the network | ✅                                                                   |
+| macOS DHCP lease                                   | ✅ `192.168.7.2/24`                                                  |
+| Lease has **no** router option, **no** DNS option  | ✅ `perform_router_discovery: FALSE`                                 |
+| Default route not hijacked                         | ✅ still `en0`                                                       |
+| ICMP                                               | ✅ ~1.3 ms, 0% loss sustained                                        |
+| Port 4403 accepting; 4404 and 80 refuse            | ✅ real listener, `begin()` succeeded                                |
+| Interface MAC = `deriveUsbMac()` of chip base      | ✅ `a2:f2:62:e0:e8:91` from `a0:f2:62:e0:e8:90`                      |
+| Board stays flashable                              | ✅ many flash cycles                                                 |
+| **Real API session completes**                     | ✅ `TCPInterface` + `getMyNodeInfo()`, twice in a row, node stays up |
 
-**Open bug: the node reboots when a client opens a real session on 4403.**
+## The crash that blocked this branch - root cause and fix
 
-- It is firmware, not the app - reproduces from macOS with no Meshtastic app involved.
-- It needs a _real_ TCP session. Connecting to `192.168.7.99` (nothing there) does not trigger it.
-- The reboot is fast (seconds), not a 90 s watchdog timeout.
+**Symptom:** the node rebooted within seconds whenever a client opened a real
+session on 4403. Bare TCP connects and garbage bytes were harmless; a valid
+`want_config` was the trigger.
 
-## Next step: get the actual panic
+**Coredump verdict** (loopTask, core 1):
 
-Stop theorising - three theories have already died to measurement (see "Ruled out"). Get the coredump.
-
-1. Build and confirm the coredump config actually applied:
-
-```bash
-pio run -e meshnology_w12_usbnet
-grep ESP_COREDUMP_ENABLE sdkconfig.meshnology_w12_usbnet
+```
+operator new (sz=14848) → std::bad_alloc → std::terminate → abort()
+  std::vector<meshtastic_FileInfo>::reserve(64)
+  getFiles()                    src/FSCommon.cpp:275
+  PhoneAPI::handleStartConfig   src/mesh/PhoneAPI.cpp:325
+  ← handleToRadio ← readStream ← ServerAPI::runOnce ← loopTask
 ```
 
-You want `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y`. If it says `..._TO_NONE=y`, the IDF libs were reused from cache - force a real rebuild:
+**Root cause chain:**
 
-```bash
-rm -f sdkconfig.meshnology_w12_usbnet
-rm -f ~/.platformio/packages/framework-arduinoespressif32-libs/sdkconfig
-pio run -e meshnology_w12_usbnet
-```
+1. The W12 variant never passed `-D BOARD_HAS_PSRAM`. The framework compiles
+   everything with `-DESP32_ARDUINO_LIB_BUILDER`, and `esp32-hal-psram.h` then
+   **undefines `CONFIG_SPIRAM`** for the Arduino core - `psramInit()` becomes a
+   `return false` stub and `psramAddToHeap()` is never called, no matter what
+   the sdkconfig says. The chip's 8 MB embedded PSRAM (esptool reports
+   `Embedded PSRAM 8MB (AP_3v3)`) never joined the heap. **Stock W12 has the
+   same defect** - it just never allocates hard enough to notice.
+2. The usbnet build adds TinyUSB + NCM NTBs + esp_netif + DHCP server + API
+   server on top, all in internal SRAM, consuming the remaining margin.
+3. First `want_config` → files-manifest walk reserves 64 × 232 B = 14 848 B
+   contiguous → allocation fails → `std::bad_alloc`.
+4. The OOM guard upstream added around exactly this `reserve` (FSCommon.cpp
+   271-293) is **dead code on ESP32**: the build is `-fno-exceptions`, so
+   `__cpp_exceptions`/`__EXCEPTIONS` are undefined and the try/catch compiles
+   out - while toolchain libstdc++'s `operator new` still throws. Uncaught →
+   `std::terminate` → `abort()`.
 
-(Removing the package-level `sdkconfig` makes `flag_any_custom_sdkconfig` false in the platform's `arduino.py`, so `call_compile_libs()` fires unconditionally. This is the reliable lever.)
-
-2. BOOT+RST, flash, plain RST, reproduce the crash, BOOT+RST, then read the dump:
-
-```bash
-python3 -m esptool --chip esp32s3 --port /dev/cu.usbmodem101 read_flash 0xFF0000 0x10000 core.bin
-python3 -m esp_coredump info_corefile -c core.bin -t raw \
-  .pio/build/meshnology_w12_usbnet/firmware-meshnology_w12_usbnet-*.elf
-```
-
-`default_16MB.csv` already carries a 64 KB coredump partition at `0xFF0000`, so no partition-table change is needed.
+**Fix:** `-D BOARD_HAS_PSRAM` in `[env:meshnology_w12]` build_flags (one line
+plus comment). Verified: the exact repro that reliably rebooted the node now
+completes `getMyNodeInfo()` and the node survives back-to-back sessions.
 
 ## Build, flash, test
 
+Use the penv PlatformIO core - the Homebrew one is 6.1.18 and **uninstalls the
+platform** on sight (needs >= 6.1.19):
+
 ```bash
 # build
-pio run -e meshnology_w12_usbnet
+~/.platformio/penv/bin/pio run -e meshnology_w12_usbnet
 
 # flash - ALWAYS pass --upload-port (see traps)
-pio run -e meshnology_w12_usbnet -t upload --upload-port /dev/cu.usbmodem101
+~/.platformio/penv/bin/pio run -e meshnology_w12_usbnet -t upload --upload-port /dev/cu.usbmodem101
 
-# or flash the prebuilt image directly (~20 s, beats the 30 s gadget window)
-python3 -m esptool --chip esp32s3 --port /dev/cu.usbmodem101 --baud 921600 \
+# or flash the prebuilt app directly (~25 s)
+~/.platformio/penv/bin/python -m esptool --chip esp32s3 --port /dev/cu.usbmodem101 --baud 921600 \
   write_flash 0x10000 .pio/build/meshnology_w12_usbnet/firmware-*.bin
 ```
 
-Then plain RST, wait ~30 s for the gadget, and run the gate:
+Then reset, wait ~30 s for the gadget, and run the gate:
 
 ```bash
 ifconfig | grep -B5 192.168.7.          # expect 192.168.7.2 on a new enN
@@ -86,17 +92,42 @@ ping -c3 192.168.7.1
 python3 -c "import meshtastic.tcp_interface,time; i=meshtastic.tcp_interface.TCPInterface('192.168.7.1'); time.sleep(3); print(i.getMyNodeInfo()); i.close()"
 ```
 
-The last line is the one that currently reboots the node.
+(The `meshtastic` python package lives in `~/.local/pipx/venvs/meshtastic/bin/python`.)
+
+## Reading a coredump (the recipe that actually worked)
+
+`default_16MB.csv` carries a 64 KB coredump partition at `0xFF0000`. The env
+sets `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y` (see the trap about `TO_NONE`).
+
+1. Reproduce the crash. The node panics, writes the dump, and reboots.
+2. Get a serial port: **replug the cable** (power-on reset) or BOOT+RST. A
+   panic reboot alone gives NO serial window - see traps.
+3. Read and decode:
+
+```bash
+~/.platformio/penv/bin/python -m esptool --chip esp32s3 --port /dev/cu.usbmodem101 --baud 921600 \
+  read_flash 0xFF0000 0x10000 core.bin
+~/.platformio/penv/bin/python -m esp_coredump info_corefile -c core.bin -t raw \
+  --gdb ~/.platformio/packages/tool-xtensa-esp-elf-gdb/bin/xtensa-esp32s3-elf-gdb \
+  .pio/build/meshnology_w12_usbnet/firmware-meshnology_w12_usbnet-*.elf
+```
+
+The dump survives reboots and reflashes (app partition only), so there is no
+race: park the chip whenever convenient and read at leisure.
 
 ## Traps that will cost you hours
 
 1. **`pio run -t upload` without `--upload-port` crashes** on a pre-existing repo issue: `AssertionError: Missing target configuration for t-impulse-plus` in the raspberrypi platform's `get_boards()`. Always pass the port.
 2. **Do not run `bin/restore-idf-component-yml.sh` before building the usbnet env.** It strips `esp_tinyusb` from the shared framework `idf_component.yml` and the link fails with `cannot find -lespressif__esp_tinyusb`. The platform auto-restores it after a build anyway; the script is belt-and-braces for switching back to other envs.
 3. **An existing `sdkconfig.<env>` is authoritative over `custom_sdkconfig`.** Setting `CONFIG_X=n` silently does nothing until you delete that file. This burned two build cycles.
-4. **HybridCompile silently reuses cached IDF libs**, so a green build can contain none of your config changes. Symptom: byte-identical flash size and zero relevant symbols. See the force-rebuild recipe above.
-5. **The gadget owns the USB pads once it starts**, so the serial console dies and esptool has no RTS line to auto-reset with. `USB_NET_START_DELAY_MS` is 30 s to keep a reflash window. **BOOT+RST parks the chip in ROM download mode with no time limit** - use that, not a race.
-6. **esptool's RTS "hard reset" does not reliably boot the app on this board.** Press RST physically after flashing.
-7. **W12 emits no plain-text serial log over USB-Serial-JTAG**, even with stock firmware - but it does speak protobuf. `tio /dev/tty.usbmodem101` works and shows the boot log; raw pyserial reads returned 0 bytes.
+4. **HybridCompile silently reuses cached IDF libs**, so a green build can contain none of your config changes. Symptom: byte-identical flash size and zero relevant symbols. Force a real rebuild: `rm -f sdkconfig.<env> sdkconfig.defaults ~/.platformio/packages/framework-arduinoespressif32-libs/sdkconfig`, then build.
+5. **Kconfig _choice_ symbols need their old value explicitly negated.** The platform's sdkconfig merge only rewrites template lines whose flag name appears in `custom_sdkconfig`. Setting `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y` alone leaves the template's `CONFIG_ESP_COREDUMP_ENABLE_TO_NONE=y` in place, both members of the choice are `=y`, and the later line (TO_NONE) wins - the build silently comes out with no coredump. `CONFIG_ESP_COREDUMP_ENABLE_TO_NONE=n` in the env is load-bearing. (`variants/esp32/esp32-common.ini:169-172` also disables coredump globally; the env-level lines override it because later duplicate flag names win.)
+6. **A panic reboot gives NO serial window.** After a software/panic reset the USB pads stay with the OTG controller: the bus is silent for the 30 s start delay and then the NCM gadget re-enumerates directly - USB-Serial-JTAG never appears. Only a power-on reset (replug) or BOOT+RST restores it. Do not try to "race the 30 s window" after a crash; there is nothing to race.
+7. **The gadget owns the USB pads once it starts** (normal boots): `USB_NET_START_DELAY_MS` = 30 s keeps a reflash window after power-on/RTS resets. **BOOT+RST parks the chip in ROM download mode with no time limit** - use that when in doubt.
+8. **esptool's RTS "hard reset" does not always boot the app** on this board. It worked most of this session, but keep a physical RST press in reserve.
+9. **W12 emits no plain-text serial log over USB-Serial-JTAG via raw pyserial** (reads return 0 bytes, reproduced). `tio /dev/tty.usbmodem101` reportedly works; untested this session.
+10. **Homebrew's `pio` (6.1.18) is obsolete and destructive** - on first contact it _removed_ the espressif32 platform, which requires core >= 6.1.19. Use `~/.platformio/penv/bin/pio`.
+11. **`-D BOARD_HAS_PSRAM` is mandatory on PSRAM boards** - see the crash root cause above. sdkconfig `CONFIG_SPIRAM=y` alone does nothing for Arduino-core builds.
 
 ## Load-bearing design decisions - do not "simplify" these
 
@@ -105,15 +136,21 @@ The last line is the one that currently reboots the node.
 - **`tud_network_default_link_state_cb()` is overridden to start the link DOWN**, for the same reason.
 - **TinyUSB must resolve to ≥ 0.21.0** (pinned explicitly in the env). PR #3630 is what makes NCM work on iOS/iPadOS 26; without it DHCP succeeds only ~30% of the time. `esp_tinyusb` alone only requires `>= 0.17.0~2`, so the good resolve was luck.
 - **The USB task is pinned to core 0** via `TINYUSB_TASK_CUSTOM(6144, 5, 0)`. esp_tinyusb 2.x moved task config out of Kconfig - `CONFIG_TINYUSB_TASK_STACK_SIZE` and `CONFIG_TINYUSB_TASK_AFFINITY_CPU0` **do not exist** and are silently ignored. Default is core 1 at priority 5, the same core as the Arduino loop task at priority 1.
-- **`usbNetTransmit` refuses early and waits only 20 ms.** With `CONFIG_LWIP_TCPIP_CORE_LOCKING=y` it runs inline on the caller under the lwIP core lock, and `tinyusb_net_send_sync` enqueues with an infinite wait. Dropping a frame is free (TCP retransmits); blocking the loop task is not.
+- **`usbNetTransmit` refuses early and waits only 20 ms.** With `CONFIG_LWIP_TCPIP_CORE_LOCKING=y` it runs inline on the caller under the lwIP core lock, and `tinyusb_net_send_sync` enqueues with an infinite wait. Dropping a frame is free (TCP retransmits); blocking the loop task is not. _But see the backlog item about `tud_network_can_xmit()` below._
 - **Never route USB bring-up through `onNetworkConnected()`** - its `displaymode != COLOR` guard would silently kill the feature on exactly the colour-TFT boards someone cables to an iPad.
 
 ## Ruled out - don't re-litigate
 
-- **Thread-table exhaustion.** Boot logs `20/40 threads used`. `ServerAPI` is an `OSThread` created per connection and `OSThread`'s ctor does `assert(controller->add(this))`, so this was a real candidate - but there is plenty of headroom.
-- **HWCDC console blocking the loop task.** The OLED keeps cycling after the gadget starts, so the loop task is alive. (`Serial.setTxTimeoutMs(0)` was kept anyway; it is defensible on its own merits.)
-- **iOS app bug / manual-connect path.** Connecting to `192.168.7.99` does not crash anything, and the reboot reproduces from macOS with no app.
-- **Socket layer / `NetworkServer::begin()` failing.** 4403 accepts while 4404 and 80 refuse, so a real listener exists.
+- **Thread-table exhaustion.** Boot logs `20/40 threads used`; plenty of headroom.
+- **HWCDC console blocking the loop task.** The OLED keeps cycling after the gadget starts.
+- **iOS app bug / manual-connect path.** Reproduced from macOS with no app.
+- **Socket layer / `NetworkServer::begin()` failing.** 4403 accepts while 4404 and 80 refuse.
+- **Cross-core NCM TX race as the crash cause.** This was the leading theory
+  (three independent code readers converged on it) and the coredump disproved
+  it: the panic is a heap-exhaustion abort, not corruption. The underlying
+  contract violation is real though - see backlog.
+- **tiT/loopTask/TinyUSB-task stack overflows.** Coredump shows a clean
+  loopTask abort with healthy stacks, not a canary panic.
 
 ## Bugs already found and fixed (all hardware-only, invisible to the build)
 
@@ -122,15 +159,27 @@ The last line is the one that currently reboots the node.
 3. `action_start` does **not** auto-start dhcps after an explicit `dhcps_stop()` - the explicit fallback is load-bearing (contradicts warthog's comment).
 4. `initApiServer()` before any netif exists → null deref on a WiFi-less build (`Not using WIFI` then `LoadProhibited` at `EXCVADDR 0x4c`).
 5. The esp_tinyusb Kconfig names above being silently ignored.
+6. **Missing `-D BOARD_HAS_PSRAM`** → PSRAM never in heap → `bad_alloc` abort on the first real API session (the crash that blocked this branch).
 
-## Board eligibility
+## Backlog
 
-Needs native USB on the connector (ESP32-S2/S3/P4). C3/C6/H2 have USB-Serial-JTAG only and physically cannot do this. Proxy check: `ARDUINO_USB_CDC_ON_BOOT=1` in the board JSON or variant ini. Definitive: `ioreg -p IOUSB` shows _"Espressif USB JTAG/serial debug unit"_ (native) vs a CP2102/CH9102 bridge. **Heltec V3 is disqualified** - its USB-C is a UART bridge.
-
-## Backlog once the crash is fixed
-
-- Native unit tests for `USBNetPolicy` (it is deliberately free of Arduino/IDF deps so the DHCP-option policy and MAC derivation are testable). Assert options 3 and 6 absent and `gw == 0` - that is the Apple-guidance regression test.
+- **`usbNetTransmit`'s `tud_network_can_xmit()` gate violates TinyUSB's
+  threading contract.** In TinyUSB 0.21's NCM driver that call is _not_
+  read-only: it rotates NTB ownership (`xmit_setup_next_glue_ntb`), writes NTB
+  headers, and can submit `usbd_edpt_xfer` - unlocked, single-context-by-design
+  code. esp_tinyusb itself defers its own `can_xmit` into the USB task via
+  `usbd_defer_func` (`tinyusb_net.c: do_send_sync`); our gate runs it on the
+  lwIP caller (loopTask core 1 / tiT core 0) truly parallel with the TinyUSB
+  task (core 0), with `XMIT_NTB_N=1`. Not the crash we chased, but a latent
+  corruption risk under sustained TX. Proposed fix: drop the `can_xmit` half of
+  the gate (keep `tud_mounted()`, which is a read-only check - exactly what
+  esp_tinyusb's own senders do); the bounded 20 ms `send_sync` already provides
+  the fail-fast property, from the correct context. Also latent in esp_tinyusb:
+  a timed-out `do_send_sync` is never cancelled and services the _next_ packet
+  one-behind (dup/drop, not crash).
+- Native unit tests for `USBNetPolicy` (deliberately free of Arduino/IDF deps). Assert options 3 and 6 absent and `gw == 0` - the Apple-guidance regression test.
 - mDNS on the USB netif. It does **not** auto-join new netifs (predefined set is `WIFI_STA_DEF`/`WIFI_AP_DEF`/`ETH_DEF`); needs `mdns_register_netif()` + `mdns_netif_action(ENABLE_IP4|ANNOUNCE_IP4)`, and there is exactly one free slot at `CONFIG_MDNS_MAX_INTERFACES=3`. Publish TXT `shortname` and `id` or the iOS app renders a blank row.
 - Self-powered descriptor at ≤ 50 mA (stock esp_tinyusb descriptor declares bus-powered 100 mA - inside Apple's safe zone, so a refinement not a blocker).
-- iPad end-to-end: 20/20 replug lease acquisition, airplane-mode soak, sleep/wake resume.
+- iPad end-to-end: 20/20 replug lease acquisition, airplane-mode soak, sleep/wake resume, **and a session soak now that sessions work**.
 - Decide whether USB should preempt the single TCP session slot (`ServerAPI.h:43-48`).
+- Consider whether `MESHNOLOGY_W12` (non-usbnet) users deserve a changelog note: `-D BOARD_HAS_PSRAM` changes stock behavior too (allocations > 4 KB now prefer PSRAM, `psramFound()` becomes true, NodeDB sizing changes).
