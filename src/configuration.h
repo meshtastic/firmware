@@ -418,6 +418,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_ETHERNET
 #define HAS_ETHERNET 0
 #endif
+// USB-Ethernet (CDC-NCM) gadget: present the node to an attached USB host as a
+// network adaptor and serve the phone API over it. Opt-in per variant, and only
+// meaningful on parts with a real USB-OTG device controller (ESP32-S2/S3/P4);
+// the C3/C6/H2 have USB-Serial-JTAG only and cannot do this.
+// Deliberately NOT folded into HAS_NETWORKING below - that means "has internet"
+// and gates NTP/syslog/MQTT, none of which this link can reach.
+#ifndef HAS_USB_NET
+#define HAS_USB_NET 0
+#endif
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
