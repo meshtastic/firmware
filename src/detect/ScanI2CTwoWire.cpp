@@ -165,6 +165,20 @@ bool probeSEN5X(TwoWire *i2cBus, uint8_t address, ScanI2C::I2CPort port)
     SEN5XSensor sen5xsensor;
     return sen5xsensor.probe(i2cBus, address, port);
 }
+
+bool probeHM330x(TwoWire *i2cBus, uint8_t address)
+{
+
+    i2cBus->beginTransmission(address);
+    i2cBus->write(0X88);
+    byte ret = i2cBus->endTransmission();
+
+    if (ret == 0) {
+        return true;
+    }
+
+    return false;
+}
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -497,7 +511,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 #endif
 #if !defined(M5STACK_UNITC6L)
-            case INA_ADDR: // Same as SHT2X
+            case INA_ADDR: // same as HM330X, ES7210 and SHT2X
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS: {
                 uint16_t mfg = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
@@ -514,39 +528,51 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     if (mfg == 0x5449 && die == 0x2260) {
                         logFoundDevice("INA226", (uint8_t)addr.address);
                         type = INA226;
+                        break;
                     }
                     // Silergy SQ52201 (INA226-compatible with different IDs)
                     else if (mfg == 0x190F && die == 0x0000) {
                         logFoundDevice("INA226 (SQ52201)", (uint8_t)addr.address);
                         type = INA226;
+                        break;
                     }
                     // TI INA260
                     else if (mfg == 0x5449) {
                         logFoundDevice("INA260", (uint8_t)addr.address);
                         type = INA260;
+                        break;
                     }
                 }
 
                 // The ES7210 audio ADC shares this address on some boards (T-Deck). It answers
                 // none of the checks above, so identify it here and leave the type unset - driving
                 // an audio codec as if it were a power monitor crashes the device. See #11115.
-                if (type == NONE && detectES7210(i2cBus, (uint8_t)addr.address)) {
+                if (detectES7210(i2cBus, (uint8_t)addr.address)) {
                     LOG_INFO("ES7210 audio codec at 0x%x, not a power sensor", (uint8_t)addr.address);
                     break;
                 }
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-                if (type == NONE && detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_TELEMETRY
+                if (detectSHT21SerialNumber(i2cBus, (uint8_t)addr.address)) {
                     logFoundDevice("SHTXX (SHT2X)", (uint8_t)addr.address);
                     type = SHTXX;
+                    break;
                 }
 #endif
-                // Guarded on the type rather than chained to the SHT2X check above, so that a
-                // positively identified INA226/INA260 isn't overwritten right after being found.
-                if (type == NONE) { // Assume INA219 if none of the above ones are found
+                // Get INA219 configuration register 0x00 expecting 0x399F after power-on reset
+                uint16_t registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
+                if (registerValue == 0x399F) {
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
+                    break;
                 }
-                break;
+#if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && HAS_TELEMETRY
+                // Assume HM330x as the weakest detection method if none of the above ones are found
+                if (probeHM330x(i2cBus, addr.address)) {
+                    logFoundDevice("HM330X", (uint8_t)addr.address);
+                    type = HM330X;
+                    break;
+                }
+#endif
             }
             case INA3221_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
