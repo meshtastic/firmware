@@ -97,9 +97,10 @@ void AirTime::Windows::syncNow(const Held &)
         memset(this->airtimes.periodRX, 0, sizeof(this->airtimes.periodRX));
         memset(this->airtimes.periodRX_ALL, 0, sizeof(this->airtimes.periodRX_ALL));
     } else {
-        uint32_t rotation = 0;
-        while (elapsedAirtimePeriods-- > 0) {
-            LOG_DEBUG("Rotate airtimes, crossed hour %u", ++rotation);
+        // Counter is the loop variable rather than a separate tally: LOG_DEBUG compiles to nothing
+        // under DEBUG_MUTE, which would leave a tally write-only.
+        for (uint32_t h = 1; h <= elapsedAirtimePeriods; h++) {
+            LOG_DEBUG("Rotate airtimes, crossed hour %u", h);
             for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
                 this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
                 this->airtimes.periodRX[i + 1] = this->airtimes.periodRX[i];
