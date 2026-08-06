@@ -4,7 +4,7 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.10.2
+      ref: v1.11.0
       uri: https://github.com/trunk-io/plugins
 lint:
   # Custom file set + formatter that rewrites Unicode em-dash (U+2014, UTF-8
@@ -69,28 +69,28 @@ lint:
   enabled:
     - ascii-dash@SYSTEM
     - too-many-defined@SYSTEM
-    - checkov@3.3.8
-    - renovate@44.2.3
+    - checkov@3.3.9
+    - renovate@44.14.1
     - prettier@3.9.6
     - trufflehog@3.96.0
     - yamllint@1.38.0
     - bandit@1.9.4
-    - trivy@0.72.0
+    - trivy@0.73.0
     - taplo@0.10.0
-    - ruff@0.16.0
+    - ruff@0.16.1
     - isort@8.0.1
     - markdownlint@0.49.1
     - oxipng@10.1.1
     - svgo@4.0.2
     - actionlint@1.7.12
     - flake8@7.3.0
-    - hadolint@2.14.0
-    - shfmt@3.6.0
+    - hadolint@2.15.1
+    - shfmt@3.13.1
     - shellcheck@0.11.0
     - black@26.5.1
     - git-diff-check
     - gitleaks@8.30.1
-    - clang-format@16.0.3
+    - clang-format@20.1.0
   ignore:
     - linters: [ALL]
       paths:
