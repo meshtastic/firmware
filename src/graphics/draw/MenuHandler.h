@@ -121,6 +121,10 @@ class menuHandler
     static void hamModeConfirmMenu();
     static void licensedToNormalConfirmMenu();
 
+    // Lifted out of its banner-callback lambda so it is reachable without a Screen. The lambda only
+    // ever runs via screen->showOverlayBanner(), which is why nothing here was unit-testable.
+    static void toggleNodeMuted(uint32_t nodeNum); // uint32_t, matching pickedNodeNum above
+
   private:
     static void saveUIConfig();
     static void keyVerificationInitMenu();

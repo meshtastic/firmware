@@ -66,9 +66,37 @@ lint:
           run: ${workspace}/bin/lint-ifdef-complexity.sh ${target}
           success_codes: [0]
           read_output_from: stdout
+    # Flags node/packet IDs logged as bare %08x instead of the 0x%08x convention in
+    # src/mesh/RadioInterface.cpp. Emits "note", trunk's only non-blocking level, so it
+    # advises without gating - including on the known pre-existing sites, which are left
+    # unlisted so they get cleaned up by whoever next edits those files.
+    - name: node-id-format
+      files: [cpp-sources]
+      commands:
+        - name: lint
+          output: regex
+          parse_regex: (?P<path>.+):(?P<line>\d+):(?P<col>\d+):(?P<severity>\w+):(?P<message>.+):(?P<code>[a-z-]+)
+          run: ${workspace}/bin/lint-node-id-format.sh ${target}
+          success_codes: [0]
+          read_output_from: stdout
+    # Flags a UNITY_END() not wrapped in exit(). A bare one ends the reporting, not the suite:
+    # the runtime keeps calling loop(), so the process never exits, its sandbox is deleted
+    # underneath it, and its .gcda and LeakSanitizer report never flush. Emits "note" because the
+    # enforcing half is bin/pio-test-isolate.sh, which catches an actual survivor at run time.
+    - name: unity-exit
+      files: [cpp-sources]
+      commands:
+        - name: lint
+          output: regex
+          parse_regex: (?P<path>.+):(?P<line>\d+):(?P<col>\d+):(?P<severity>\w+):(?P<message>.+):(?P<code>[a-z-]+)
+          run: ${workspace}/bin/lint-unity-exit.sh ${target}
+          success_codes: [0]
+          read_output_from: stdout
   enabled:
     - ascii-dash@SYSTEM
     - too-many-defined@SYSTEM
+    - node-id-format@SYSTEM
+    - unity-exit@SYSTEM
     - checkov@3.3.8
     - renovate@44.2.3
     - prettier@3.9.6
