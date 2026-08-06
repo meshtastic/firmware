@@ -1030,7 +1030,7 @@ void menuHandler::messageViewModeMenu()
             name = sanitizeString(node->long_name).substr(0, 15);
         else {
             char buf[20];
-            snprintf(buf, sizeof(buf), "Node %08X", peer);
+            snprintf(buf, sizeof(buf), "Node !%08x", (unsigned int)peer);
             name = buf;
         }
         labels.push_back("@" + name);
@@ -1651,7 +1651,7 @@ void menuHandler::manageNodeMenu()
         title += sanitizeString(node->long_name).substr(0, 15);
     } else {
         char buf[20];
-        snprintf(buf, sizeof(buf), "%08X", (unsigned int)node->num);
+        snprintf(buf, sizeof(buf), "!%08x", (unsigned int)node->num);
         title += buf;
     }
     bannerOptions.message = title.c_str();
@@ -1671,10 +1671,10 @@ void menuHandler::manageNodeMenu()
                 return;
             }
             if (nodeInfoLiteIsFavorite(n)) {
-                LOG_INFO("Removing node %08X from favorites", menuHandler::pickedNodeNum);
+                LOG_INFO("Removing node 0x%08x from favorites", menuHandler::pickedNodeNum);
                 nodeDB->set_favorite(false, menuHandler::pickedNodeNum);
             } else {
-                LOG_INFO("Adding node %08X to favorites", menuHandler::pickedNodeNum);
+                LOG_INFO("Adding node 0x%08x to favorites", menuHandler::pickedNodeNum);
                 // set_favorite() already logs PROTECTED_CAP_WARN_FMT on a cap refusal; don't double-log here.
                 nodeDB->set_favorite(true, menuHandler::pickedNodeNum);
             }
@@ -1683,22 +1683,15 @@ void menuHandler::manageNodeMenu()
         }
 
         if (selected == Mute) {
-            auto n = nodeDB->getMeshNode(menuHandler::pickedNodeNum);
-            if (!n) {
-                return;
-            }
-
-            const bool wasMuted = nodeInfoLiteIsMuted(n);
-            nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
-            LOG_INFO(wasMuted ? "Unmuted node %08X" : "Muted node %08X", menuHandler::pickedNodeNum);
-            nodeDB->notifyObservers(true);
-            nodeDB->saveToDisk();
+            // No lookup or null check here: toggleNodeMuted() resolves the node itself and returns
+            // without writing if it is unknown.
+            menuHandler::toggleNodeMuted(menuHandler::pickedNodeNum);
             screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             return;
         }
 
         if (selected == TraceRoute) {
-            LOG_INFO("Starting traceroute to %08X", menuHandler::pickedNodeNum);
+            LOG_INFO("Starting traceroute to 0x%08x", menuHandler::pickedNodeNum);
             if (traceRouteModule) {
                 traceRouteModule->startTraceRoute(menuHandler::pickedNodeNum);
             }
@@ -1706,7 +1699,7 @@ void menuHandler::manageNodeMenu()
         }
 
         if (selected == KeyVerification) {
-            LOG_INFO("Initiating key verification with %08X", menuHandler::pickedNodeNum);
+            LOG_INFO("Initiating key verification with 0x%08x", menuHandler::pickedNodeNum);
             if (keyVerificationModule) {
                 keyVerificationModule->sendInitialRequest(menuHandler::pickedNodeNum);
             }
@@ -1722,10 +1715,10 @@ void menuHandler::manageNodeMenu()
             bool changed = false;
             if (nodeInfoLiteIsIgnored(n)) {
                 nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, false);
-                LOG_INFO("Unignoring node %08X", menuHandler::pickedNodeNum);
+                LOG_INFO("Unignoring node 0x%08x", menuHandler::pickedNodeNum);
                 changed = true;
             } else if (nodeDB->setProtectedFlag(n, NODEINFO_BITFIELD_IS_IGNORED_MASK, true)) {
-                LOG_INFO("Ignoring node %08X", menuHandler::pickedNodeNum);
+                LOG_INFO("Ignoring node 0x%08x", menuHandler::pickedNodeNum);
                 changed = true;
             } else {
                 LOG_WARN(NodeDB::PROTECTED_CAP_WARN_FMT, "ignore", menuHandler::pickedNodeNum, MAX_NUM_NODES - 2);
@@ -3022,6 +3015,21 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     }
     menuQueue = MenuNone;
+}
+
+// Flips the mute bit on a node and persists. Returns without writing if the node is unknown, so a
+// stale pickedNodeNum can't cause a pointless flash write.
+void menuHandler::toggleNodeMuted(uint32_t nodeNum)
+{
+    meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(nodeNum);
+    if (!n)
+        return;
+
+    const bool wasMuted = nodeInfoLiteIsMuted(n);
+    nodeInfoLiteSetBit(n, NODEINFO_BITFIELD_IS_MUTED_MASK, !wasMuted);
+    LOG_INFO(wasMuted ? "Unmuted node 0x%08x" : "Muted node 0x%08x", nodeNum);
+    nodeDB->notifyObservers(true);
+    nodeDB->saveToDisk();
 }
 
 void menuHandler::saveUIConfig()

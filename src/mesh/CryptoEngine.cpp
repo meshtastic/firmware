@@ -302,8 +302,8 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 {
     SHA256 hash;
     size_t posn;
-    uint8_t size = numBytes;
-    uint8_t inc = 16;
+    size_t size = numBytes;
+    constexpr size_t inc = 16;
     hash.reset();
     for (posn = 0; posn < size; posn += inc) {
         size_t len = size - posn;

@@ -59,16 +59,32 @@ part is deliberately class-deviant and the reason is given under the table.
     warm-evicted signer be impersonated with unsigned frames.
   - `getNodeRole(n)` - hot store, then the role cached in the warm tier, else `CLIENT`.
 
-**Capacity** - `MAX_NUM_NODES` (`mesh-pb-constants.h`):
+**Capacity** - `MAX_NUM_NODES`:
 
-| ESP32-S3        | Native | nRF52840, generic ESP32 | STM32WL |
-| --------------- | ------ | ----------------------- | ------- |
-| 250 / 200 / 100 | 250    | 120                     | 10      |
+| ESP32-S3        | Native (portduino) | nRF52840, generic ESP32 | STM32WL |
+| --------------- | ------------------ | ----------------------- | ------- |
+| 250 / 200 / 100 | 200, configurable  | 120                     | 10      |
 
 This one is flash-shaped rather than heap-shaped, so it is unclassed: `nodes.proto` has to fit the
-filesystem. ESP32-S3 is the only runtime tier, picked at boot from the flash chip (>=15 MB />=7 MB
-/ smaller); the 120 covers nRF52840 plus generic ESP32 including C3, and is what keeps `nodes.proto`
-inside the stock 28 KB LittleFS.
+filesystem. The fixed-cap platforms get their value from `mesh-pb-constants.h`; the 120 covers
+nRF52840 plus generic ESP32 including C3, and is what keeps `nodes.proto` inside the stock 28 KB
+LittleFS.
+
+**Two platforms do not take their cap from that header, and neither is a compile-time constant:**
+
+- **ESP32-S3** picks a tier at boot from the flash chip size (>=15 MB / >=7 MB / smaller).
+- **Native/portduino** resolves it from _runtime_ config:
+  `variants/native/portduino{,-buildroot}/variant.h` define `MAX_NUM_NODES portduino_config.MaxNodes`,
+  default **200** (`PortduinoGlue.h`), overridable per-host with `General: MaxNodes` in the YAML.
+  Because `variant.h` is reached first, the `ARCH_PORTDUINO` branch of `mesh-pb-constants.h` never
+  fires - it is `#error`-guarded so it can no longer be misread as the native cap.
+
+Do not grep `mesh-pb-constants.h` for the native number: the protected-node cap derives from
+`MAX_NUM_NODES` (`numProtectedNodes() < MAX_NUM_NODES - 2`), so a wrong reading gives a wrong cap
+(248 instead of 198) and makes a genuinely saturated database look impossible.
+
+The separate `250` in `NodeDB::getMaxNodesAllocatedSize()` is `NODEDB_MIGRATION_LOAD_CEILING`, a
+decode allowance for files written by larger-cap firmware. It is not a cap on this build.
 
 ## 2. Warm tier - `WarmNodeStore` (NodeDB-owned)
 
@@ -257,26 +273,30 @@ behaviour - is documented with the module in
 Side-by-side view of what each store actually holds ("-" = not held). Details and
 rationale live in the per-store sections above.
 
-| Property                   | 1. Hot store                   | 2. Warm tier                   | 3. NodeInfo cache                  | 4. Unified cache                |
-| -------------------------- | ------------------------------ | ------------------------------ | ---------------------------------- | ------------------------------- |
-| Struct                     | `NodeInfoLite`                 | `WarmNodeEntry`                | `NodeInfoPayloadEntry`             | `UnifiedCacheEntry`             |
-| Node number                | yes                            | yes                            | yes (0 = free)                     | yes (0 = free)                  |
-| Names + user id            | yes (flattened)                | -                              | yes (full `User`)                  | -                               |
-| Public key (32 B)          | yes (authoritative)            | yes (keyed entries)            | yes (TOFU/proven; pinned)          | -                               |
-| Key source - XEdDSA signed | `HAS_XEDDSA_SIGNED` bit        | 1 bit (in `last_heard`)        | `keyXeddsaSigned`                  | -                               |
-| Key source - manual scan   | `IS_KEY_MANUALLY_VERIFIED` bit | - (not carried)                | `keyManuallyVerified`              | -                               |
-| Device role                | `role` field                   | 4-bit role (metadata steal)    | in cached `User`                   | 4-bit role (final fallback)     |
-| Recency                    | `last_heard` (unix s)          | `last_heard` (128 s quant.)    | `obsTick` (3 min) + `hasObserved`  | modular ticks                   |
-| Position / telemetry       | satellite accessors            | -                              | -                                  | 8-bit pos fingerprint (dedup)   |
-| Protected / favorite       | bitfield flags                 | 2-bit protected category       | - (`isMember` instead)             | -                               |
-| Routing hint (`next_hop`)  | yes (persisted)                | -                              | -                                  | ACK-confirmed relay byte        |
-| Direct-reply metadata      | -                              | -                              | `sourceChannel`, `decodedBitfield` | -                               |
-| Traffic-shaping counters   | -                              | -                              | -                                  | rate + unknown counts, pos fp   |
-| Entry size                 | largest (full struct)          | 40 B exact                     | ~`sizeof(User)`+8 (padded)         | 10 B exact                      |
-| Capacity (symbol)          | `MAX_NUM_NODES`                | `WARM_NODE_COUNT`              | `kNodeInfoCacheEntries`            | `TRAFFIC_MANAGEMENT_CACHE_SIZE` |
-| Capacity (entries)         | 250/120/10                     | ~100                           | 2000                               | 2048/500/400/250/0              |
-| Persistence (durable)      | LittleFS (node DB)             | flash ring (nRF52840)/LittleFS | none (rebuilt)                     | none                            |
-| Storage (runtime)          | heap                           | heap / PSRAM (ESP32)           | PSRAM (hw) / heap (test)           | PSRAM / heap                    |
+| Property                   | 1. Hot store                       | 2. Warm tier                   | 3. NodeInfo cache                  | 4. Unified cache                |
+| -------------------------- | ---------------------------------- | ------------------------------ | ---------------------------------- | ------------------------------- |
+| Struct                     | `NodeInfoLite`                     | `WarmNodeEntry`                | `NodeInfoPayloadEntry`             | `UnifiedCacheEntry`             |
+| Node number                | yes                                | yes                            | yes (0 = free)                     | yes (0 = free)                  |
+| Names + user id            | yes (flattened)                    | -                              | yes (full `User`)                  | -                               |
+| Public key (32 B)          | yes (authoritative)                | yes (keyed entries)            | yes (TOFU/proven; pinned)          | -                               |
+| Key source - XEdDSA signed | `HAS_XEDDSA_SIGNED` bit            | 1 bit (in `last_heard`)        | `keyXeddsaSigned`                  | -                               |
+| Key source - manual scan   | `IS_KEY_MANUALLY_VERIFIED` bit     | - (not carried)                | `keyManuallyVerified`              | -                               |
+| Device role                | `role` field                       | 4-bit role (metadata steal)    | in cached `User`                   | 4-bit role (final fallback)     |
+| Recency                    | `last_heard` (unix s)              | `last_heard` (128 s quant.)    | `obsTick` (3 min) + `hasObserved`  | modular ticks                   |
+| Position / telemetry       | satellite accessors                | -                              | -                                  | 8-bit pos fingerprint (dedup)   |
+| Protected / favorite       | bitfield flags                     | 2-bit protected category       | - (`isMember` instead)             | -                               |
+| Routing hint (`next_hop`)  | yes (persisted)                    | -                              | -                                  | ACK-confirmed relay byte        |
+| Direct-reply metadata      | -                                  | -                              | `sourceChannel`, `decodedBitfield` | -                               |
+| Traffic-shaping counters   | -                                  | -                              | -                                  | rate + unknown counts, pos fp   |
+| Entry size                 | largest (full struct)              | 40 B exact                     | ~`sizeof(User)`+8 (padded)         | 10 B exact                      |
+| Capacity (symbol)          | `MAX_NUM_NODES`                    | `WARM_NODE_COUNT`              | `kNodeInfoCacheEntries`            | `TRAFFIC_MANAGEMENT_CACHE_SIZE` |
+| Capacity (entries)         | 250/200/120/100/10 (native: 200\*) | ~100                           | 2000                               | 2048/500/400/250/0              |
+| Persistence (durable)      | LittleFS (node DB)                 | flash ring (nRF52840)/LittleFS | none (rebuilt)                     | none                            |
+| Storage (runtime)          | heap                               | heap / PSRAM (ESP32)           | PSRAM (hw) / heap (test)           | PSRAM / heap                    |
+
+\* Native/portduino is not a compile-time value: it is `portduino_config.MaxNodes`; the host default
+is 200, settable per-host via `General: MaxNodes`, and the WASM build overrides it to 80
+(`wasm_config_apply()`). See the hot-store capacity section above.
 
 ## How a lookup falls through the tiers
 
