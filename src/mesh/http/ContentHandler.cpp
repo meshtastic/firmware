@@ -629,13 +629,16 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     };
 
     const uint8_t periods = airTime->getPeriodsToLog();
-    uint32_t logArray[PERIODS_TO_LOG] = {0};
-    airTime->airtimeReport(TX_LOG, logArray, periods);
-    std::string txLog = arrayFromLog(logArray, periods);
-    airTime->airtimeReport(RX_LOG, logArray, periods);
-    std::string rxLog = arrayFromLog(logArray, periods);
-    airTime->airtimeReport(RX_ALL_LOG, logArray, periods);
-    std::string rxAllLog = arrayFromLog(logArray, periods);
+    // Buffer is per call, so a report that fails emits zeros rather than the previous type's data.
+    auto reportFor = [&](reportTypes reportType) {
+        uint32_t logArray[PERIODS_TO_LOG] = {0};
+        (void)airTime->airtimeReport(reportType, logArray, periods);
+        return arrayFromLog(logArray, periods);
+    };
+
+    std::string txLog = reportFor(TX_LOG);
+    std::string rxLog = reportFor(RX_LOG);
+    std::string rxAllLog = reportFor(RX_ALL_LOG);
 
     String wifiIPString = WiFi.localIP().toString();
     std::string wifiIP = wifiIPString.c_str();
