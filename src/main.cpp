@@ -103,6 +103,10 @@ NRF54L15Bluetooth *nrf54l15Bluetooth = nullptr;
 #include "mesh/eth/ethClient.h"
 #endif
 
+#if HAS_CELLULAR
+#include "mesh/cell/cellBearer.h"
+#endif
+
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -1185,6 +1189,10 @@ void setup()
 #if HAS_ETHERNET
     // Initialize Ethernet
     initEthernet();
+#endif
+
+#if HAS_CELLULAR
+    initCellular();
 #endif
 #endif
 

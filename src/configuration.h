@@ -376,7 +376,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MODEM_EN_VALUE HIGH
 #endif
 
-#if defined(MODEM_PWRKEY) && !defined(MODEM_PWRKEY_VALUE)
+#if defined(PIN_MODEM_PWRKEY) && !defined(MODEM_PWRKEY_VALUE)
 // GPIO level that asserts PWRKEY; its inverse releases it. Defaults to LOW for
 // an active-low PWRKEY wired straight to the pin.
 #define MODEM_PWRKEY_VALUE LOW
@@ -438,6 +438,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_ETHERNET
 #define HAS_ETHERNET 0
+#endif
+#ifndef HAS_CELLULAR
+#define HAS_CELLULAR 0
 #endif
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
