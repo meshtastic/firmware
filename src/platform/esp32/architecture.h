@@ -212,6 +212,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CARDPUTER_ADV
 #elif defined(MESHNOLOGY_W10)
 #define HW_VENDOR meshtastic_HardwareModel_MESHNOLOGY_W10
+#elif defined(T5_S3_EPAPER_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_T5_S3_EPAPER_PRO
 #else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
