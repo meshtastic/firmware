@@ -290,10 +290,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_11_16
 
-// No Ethernet on the general-purpose rak4631 image. The RAK13800 W5100S module is served by
-// the dedicated env:rak4631_eth_gw build (its own variant.h sets HAS_ETHERNET 1), so carrying
-// the stack here cost every rak4631 user flash for hardware almost none of them have -- and
-// this image was down to ~14 KB clear of the 0xEA000 warm-store cap.
+// General-purpose RAK4631 builds disable Ethernet; use env:rak4631_eth_gw for RAK13800 W5100S.
 #define HAS_ETHERNET 0
 
 #define RAK_4631 1
