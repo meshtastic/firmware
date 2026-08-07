@@ -476,14 +476,14 @@ void setup()
 
     initDeepSleep();
 
-#if defined(MODEM_POWER_EN)
-    pinMode(MODEM_POWER_EN, OUTPUT);
-    digitalWrite(MODEM_POWER_EN, LOW);
+#if defined(PIN_MODEM_EN)
+    pinMode(PIN_MODEM_EN, OUTPUT);
+    digitalWrite(PIN_MODEM_EN, !MODEM_EN_VALUE); // leave the modem rail off
 #endif
 
-#if defined(MODEM_PWRKEY)
-    pinMode(MODEM_PWRKEY, OUTPUT);
-    digitalWrite(MODEM_PWRKEY, LOW);
+#if defined(PIN_MODEM_PWRKEY)
+    pinMode(PIN_MODEM_PWRKEY, OUTPUT);
+    digitalWrite(PIN_MODEM_PWRKEY, !MODEM_PWRKEY_VALUE); // leave PWRKEY released so the modem stays off
 #endif
 
 #if defined(LORA_TCXO_GPIO)

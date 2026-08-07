@@ -305,7 +305,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DS248X_ADDR_ALT7 0x1F // same as BBQ10_KB_ADDR
 #define HM330X_ADDR 0x40
 
-
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
 // -----------------------------------------------------------------------------
@@ -370,6 +369,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if defined(VEXT_ENABLE) && !defined(VEXT_ON_VALUE)
 // Older variant.h files might not be defining this value, so stay with the old default
 #define VEXT_ON_VALUE LOW
+#endif
+
+#if defined(PIN_MODEM_EN) && !defined(MODEM_EN_VALUE)
+// Level that enables the modem's supply rail; its inverse cuts it.
+#define MODEM_EN_VALUE HIGH
+#endif
+
+#if defined(MODEM_PWRKEY) && !defined(MODEM_PWRKEY_VALUE)
+// GPIO level that asserts PWRKEY; its inverse releases it. Defaults to LOW for
+// an active-low PWRKEY wired straight to the pin.
+#define MODEM_PWRKEY_VALUE LOW
 #endif
 
 // -----------------------------------------------------------------------------
