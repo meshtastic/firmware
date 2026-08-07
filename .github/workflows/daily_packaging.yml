@@ -35,8 +35,8 @@ jobs:
         series:
           - jammy # 22.04 LTS
           - noble # 24.04 LTS
-          - questing # 25.10
           - resolute # 26.04 LTS
+          - stonking # 26.10
     uses: ./.github/workflows/package_ppa.yml
     with:
       ppa_repo: ppa:meshtastic/daily

@@ -4,6 +4,8 @@
 
 #include <Arduino.h>
 
+#include "Throttle.h"
+
 SGM41562 *sgm41562 = nullptr;
 
 bool initSGM41562(TwoWire &wire)
@@ -52,34 +54,119 @@ bool SGM41562::begin(TwoWire &wire, uint8_t address)
 {
     wire_ = &wire;
     address_ = address;
+    chipType_ = ChipType::Unknown;
 
     uint8_t id;
     if (!readReg(REG_DEVICE_ID, id)) {
         LOG_WARN("SGM41562: I2C read failed at 0x%02X", address_);
         return false;
     }
-    if (id != DEVICE_ID_EXPECTED) {
-        LOG_WARN("SGM41562: unexpected device ID 0x%02X (expected 0x%02X)", id, DEVICE_ID_EXPECTED);
+
+    if (!resetRegisters()) {
+        LOG_WARN("SGM41562: register reset failed");
         return false;
     }
-    LOG_INFO("SGM41562: detected at 0x%02X (id 0x%02X)", address_, id);
 
-    // Mirror the vendor reference init sequence: PCB OTP off, NTC off,
-    // watchdog off, charger enabled. These match LilyGo's stock firmware
-    // for the T-Impulse Plus.
-    delay(120);
-    writeReg(REG_SYS_VOLTAGE_REG, 0xB7);
-    writeReg(REG_MISC_OP_CONTROL, 0x40);
-    writeReg(REG_CHARGE_TERM_TIMER, 0x1A);
-    writeReg(REG_POWER_ON_CFG, 0xA4);
+    chipType_ = detectChipType(id);
+    if (chipType_ == ChipType::Unknown) {
+        LOG_WARN("SGM41562: unsupported device ID 0x%02X", id);
+        return false;
+    }
 
+    if (!applyInitSequence()) {
+        LOG_WARN("SGM41562: %s initialization failed", chipTypeName(chipType_));
+        chipType_ = ChipType::Unknown;
+        return false;
+    }
+
+    LOG_INFO("SGM41562: detected %s at 0x%02X (id 0x%02X)", chipTypeName(chipType_), address_, id);
+    lastRefreshMs_ = 0;
     return refresh();
+}
+
+const char *SGM41562::chipTypeName(ChipType type)
+{
+    switch (type) {
+    case ChipType::SGM41562:
+        return "SGM41562";
+    case ChipType::SGM41562A:
+        return "SGM41562A";
+    case ChipType::SGM41562B:
+        return "SGM41562B";
+    case ChipType::SGM41562S:
+        return "SGM41562S";
+    case ChipType::SGM41562SA:
+        return "SGM41562SA";
+    case ChipType::Unknown:
+    default:
+        return "unknown";
+    }
+}
+
+bool SGM41562::resetRegisters()
+{
+    uint8_t value;
+    if (!readReg(REG_CHARGE_CURRENT, value))
+        return false;
+    if (!writeReg(REG_CHARGE_CURRENT, value | 0x80))
+        return false;
+    delay(10);
+    return true;
+}
+
+SGM41562::ChipType SGM41562::detectChipType(uint8_t deviceId)
+{
+    switch (deviceId) {
+    case DEVICE_ID_SGM41562:
+        return ChipType::SGM41562;
+    case DEVICE_ID_SGM41562_A:
+        return ChipType::SGM41562A;
+    case DEVICE_ID_SGM41562_S:
+        return ChipType::SGM41562S;
+    case DEVICE_ID_SGM41562_B_SA:
+        return detectIdZeroChipType();
+    default:
+        return ChipType::Unknown;
+    }
+}
+
+SGM41562::ChipType SGM41562::detectIdZeroChipType()
+{
+    uint8_t chargeVoltage;
+    uint8_t systemVoltage;
+    if (!readReg(REG_CHARGE_VOLTAGE, chargeVoltage) || !readReg(REG_SYS_VOLTAGE_REG, systemVoltage))
+        return ChipType::Unknown;
+
+    if (chargeVoltage == 0xA3 && systemVoltage == 0x37)
+        return ChipType::SGM41562B;
+    if (chargeVoltage == 0x8D && systemVoltage == 0x73)
+        return ChipType::SGM41562SA;
+
+    LOG_WARN("SGM41562: unknown ID 0x00 reset values (REG04=0x%02X, REG07=0x%02X)", chargeVoltage, systemVoltage);
+    return ChipType::Unknown;
+}
+
+bool SGM41562::applyInitSequence()
+{
+    if (hasExtendedRegisterMap()) {
+        return writeReg(REG_SYS_VOLTAGE_REG, 0x73) && writeReg(REG_MISC_OP_CONTROL, 0x40) &&
+               writeReg(REG_CHARGE_TERM_TIMER, 0x1A) && writeReg(REG_SYSTEM_STATUS, 0x40) &&
+               writeReg(REG_EXT_INPUT_CURRENT, 0xCA) && writeReg(REG_POWER_ON_CFG, 0xA4);
+    }
+
+    return writeReg(REG_SYS_VOLTAGE_REG, 0xB7) && writeReg(REG_MISC_OP_CONTROL, 0x40) && writeReg(REG_CHARGE_TERM_TIMER, 0x1A) &&
+           writeReg(REG_SYSTEM_STATUS, 0x40) && writeReg(REG_POWER_ON_CFG, 0xA4);
+}
+
+bool SGM41562::hasExtendedRegisterMap() const
+{
+    return chipType_ == ChipType::SGM41562S || chipType_ == ChipType::SGM41562SA;
 }
 
 bool SGM41562::refresh()
 {
     uint32_t now = millis();
-    if (lastRefreshMs_ != 0 && (now - lastRefreshMs_) < 250)
+    if (lastRefreshMs_ != 0 && Throttle::isWithinTimespanMs(lastRefreshMs_, 250))
         return true; // cached
     lastRefreshMs_ = now == 0 ? 1 : now;
 

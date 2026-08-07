@@ -34,7 +34,9 @@ extern MessageStore messageStore;
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
-#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+#if defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+#include "graphics/BaseUIEInkDisplay.h" // NicheGraphics-backed BaseUI e-ink adapter
+#elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
 #include "graphics/EInkDynamicDisplay.h" // To select between full and fast refresh on E-Ink displays
 #endif
 
@@ -1905,7 +1907,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     // Free Text Input Screen
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus();
-#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+#if defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
+        static_cast<NicheGraphics::BaseUIEInkDisplay *>(display)->enableUnlimitedFastMode();
+#elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
         EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
         einkDisplay->enableUnlimitedFastMode();
 #endif
@@ -2229,19 +2233,19 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                         snprintf(buf, sizeof(buf), "Message sent to\n#%s\n\nSignal: %s",
                                  (channelName && channelName[0]) ? channelName : "unknown", qualityLabel);
                     } else {
-                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s",
-                                 (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                        snprintf(buf, sizeof(buf), "DM sent to\n@%s\n\nSignal: %s", nodeName[0] ? nodeName : "unknown",
+                                 qualityLabel);
                     }
                 } else if (isAck && !isFromDest) {
                     // Relay ACK banner
                     snprintf(buf, sizeof(buf), "DM Relayed\n(Status Unknown)\n%s\n\nSignal: %s",
-                             (nodeName && nodeName[0]) ? nodeName : "unknown", qualityLabel);
+                             nodeName[0] ? nodeName : "unknown", qualityLabel);
                 } else {
                     if (this->lastSentNode == NODENUM_BROADCAST) {
                         snprintf(buf, sizeof(buf), "Message failed to\n#%s",
                                  (channelName && channelName[0]) ? channelName : "unknown");
                     } else {
-                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", (nodeName && nodeName[0]) ? nodeName : "unknown");
+                        snprintf(buf, sizeof(buf), "DM failed to\n@%s", nodeName[0] ? nodeName : "unknown");
                     }
                 }
 
