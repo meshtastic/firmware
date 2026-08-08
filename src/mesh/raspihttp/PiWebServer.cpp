@@ -51,9 +51,13 @@ mail:   marchammermann@googlemail.com
 // translation unit only compiles when the headers are present.
 #ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
-#include "PiWebServer.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "NodeDB.h"
 #include "PhoneAPI.h"
+#include "PiWebServer.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "airtime.h"

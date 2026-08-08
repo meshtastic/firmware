@@ -59,6 +59,18 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 // Shared battery/time/mail header
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y);
 
+// Inline so non-compact boards fold this to a constant false at every call site, cost-free.
+static inline bool isCompactPanel(OLEDDisplay *display)
+{
+#if defined(OLED_COMPACT_UI)
+    // Covers both known compact panels (72x40 and 64x48).
+    return display->getWidth() <= 80 && display->getHeight() <= 48;
+#else
+    (void)display;
+    return false;
+#endif
+}
+
 const int *getTextPositions(OLEDDisplay *display);
 
 bool isAllowedPunctuation(char c);

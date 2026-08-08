@@ -420,13 +420,16 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     }
 
     jsonObj["id"] = (Json::UInt)mp->id;
-    jsonObj["timestamp"] = (Json::UInt)mp->rx_time;
+    // Emit 0 rather than leak a millis() placeholder when has_rx_time is false.
+    jsonObj["timestamp"] = mp->has_rx_time ? (Json::UInt)mp->rx_time : 0;
     jsonObj["to"] = (Json::UInt)mp->to;
     jsonObj["from"] = (Json::UInt)mp->from;
     jsonObj["channel"] = (Json::UInt)mp->channel;
     jsonObj["type"] = msgType;
     jsonObj["sender"] = nodeDB->getNodeId();
-    if (mp->rx_rssi != 0)
+    // rx_rssi has explicit presence on the wire (unlike rx_snr): trust has_rx_rssi rather than a
+    // != 0 heuristic, since 0 dBm is a legitimate reading on some radios.
+    if (mp->has_rx_rssi)
         jsonObj["rssi"] = (int)mp->rx_rssi;
     if (mp->rx_snr != 0)
         jsonObj["snr"] = (float)mp->rx_snr;
@@ -450,13 +453,16 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
 
     jsonObj["id"] = (Json::UInt)mp->id;
     jsonObj["time_ms"] = (double)millis();
-    jsonObj["timestamp"] = (Json::UInt)mp->rx_time;
+    // Emit 0 rather than leak a millis() placeholder when has_rx_time is false.
+    jsonObj["timestamp"] = mp->has_rx_time ? (Json::UInt)mp->rx_time : 0;
     jsonObj["to"] = (Json::UInt)mp->to;
     jsonObj["from"] = (Json::UInt)mp->from;
     jsonObj["channel"] = (Json::UInt)mp->channel;
     jsonObj["want_ack"] = mp->want_ack;
 
-    if (mp->rx_rssi != 0)
+    // rx_rssi has explicit presence on the wire (unlike rx_snr): trust has_rx_rssi rather than a
+    // != 0 heuristic, since 0 dBm is a legitimate reading on some radios.
+    if (mp->has_rx_rssi)
         jsonObj["rssi"] = (int)mp->rx_rssi;
     if (mp->rx_snr != 0)
         jsonObj["snr"] = (float)mp->rx_snr;

@@ -1079,7 +1079,14 @@ typedef struct _meshtastic_MeshPacket {
     /* The time this message was received by the esp32 (secs since 1970).
  Note: this field is _never_ sent on the radio link itself (to save space) Times
  are typically not sent over the mesh, but they will be added to any Packet
- (chain of SubPacket) sent to the phone (so the phone can know exact time of reception) */
+ (chain of SubPacket) sent to the phone (so the phone can know exact time of reception)
+ Explicit presence: firmware cannot always attach a trustworthy wall-clock timestamp at the
+ moment of reception - a node with no GPS and no phone connected yet has no time source at
+ all. has_rx_time disambiguates that state from a genuine (if coincidental) 1970-01-01
+ reading. A packet delivered with this field absent may still be re-timestamped once a valid
+ clock becomes available, before the phone ever sees it - "absent" is not guaranteed
+ permanent, only "not yet known at last observation". */
+    bool has_rx_time;
     uint32_t rx_time;
     /* *Never* sent over the radio links.
  Set during reception to indicate the SNR of this packet.
@@ -1103,14 +1110,24 @@ typedef struct _meshtastic_MeshPacket {
     /* The priority of this message for sending.
  See MeshPacket.Priority description for more details. */
     meshtastic_MeshPacket_Priority priority;
-    /* rssi of received packet. Only sent to phone for dispay purposes. */
+    /* rssi of received packet. Only sent to phone for dispay purposes.
+ Explicit presence: rssi 0 is a legitimate reading on some radios (SX126x can report exactly
+ 0 dBm; SX127x's formula can even go positive), so implicit-presence proto3 made an unset
+ value indistinguishable from a measured one. has_rx_rssi disambiguates; a replayed packet
+ built from history the device never restored an RSSI for should leave this field absent
+ rather than emitting 0. */
+    bool has_rx_rssi;
     int32_t rx_rssi;
     /* Describe if this message is delayed */
     meshtastic_MeshPacket_Delayed delayed;
     /* Describes whether this packet passed via MQTT somewhere along the path it currently took. */
     bool via_mqtt;
     /* Hop limit with which the original packet started. Sent via LoRa using three bits in the unencrypted header.
- When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled. */
+ When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled.
+ hop_start == 0 does not necessarily mean a direct (0-hop) neighbor: firmware prior to 2.3.0
+ never populated this field, so a receiver can only trust hop_start == 0 as genuine once it has
+ decoded the packet and confirmed the sender's bitfield is present (added in 2.5.0). Until then,
+ or for a sender that never sets that bitfield, treat hop_start == 0 as unknown, not direct. */
     uint8_t hop_start;
     /* Records the public key the packet was encrypted with, if applicable. */
     meshtastic_MeshPacket_public_key_t public_key;
@@ -1730,7 +1747,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_default, 0, 0, 0}
 #define meshtastic_StatusMessage_init_default    {""}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1769,7 +1786,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0, 0, false, meshtastic_BoundingBox_init_zero, 0, 0, 0}
 #define meshtastic_StatusMessage_init_zero       {""}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, false, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, false, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -2189,12 +2206,12 @@ X(a, STATIC,   SINGULAR, UINT32,   channel,           3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,decoded,decoded),   4) \
 X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,encrypted,encrypted),   5) \
 X(a, STATIC,   SINGULAR, FIXED32,  id,                6) \
-X(a, STATIC,   SINGULAR, FIXED32,  rx_time,           7) \
+X(a, STATIC,   OPTIONAL, FIXED32,  rx_time,           7) \
 X(a, STATIC,   SINGULAR, FLOAT,    rx_snr,            8) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
-X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
+X(a, STATIC,   OPTIONAL, INT32,    rx_rssi,          12) \
 X(a, STATIC,   SINGULAR, UENUM,    delayed,          13) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,         14) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_start,        15) \

@@ -4,7 +4,7 @@ This directory contains C++ unit tests that run on the host machine via Platform
 
 ## Running Tests
 
-**Preferred: use `bin/run-tests.sh`** - it runs the `coverage` env (ASan/LSan sanitizers), cross-checks the number of suites that actually ran, and emits an unambiguous RED/AMBER/GREEN verdict:
+**Preferred: use `bin/run-tests.sh`** - it defaults to the `coverage` env, cross-checks the number of suites that actually ran, and emits an unambiguous RED/AMBER/GREEN verdict:
 
 ```bash
 ./bin/run-tests.sh                          # all suites
@@ -12,7 +12,24 @@ This directory contains C++ unit tests that run on the host machine via Platform
 ./bin/run-tests.sh -f test_traffic_management > /tmp/test_out.txt 2>&1; tail -5 /tmp/test_out.txt
 ```
 
-Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER.
+Exit codes: 0 = GREEN, 1 = RED, 2 = AMBER, 3 = FILTERED.
+
+**The harness is Linux-only, by choice.** `bin/run-tests.sh` and the per-suite isolation it drives need bash 4+ and GNU coreutils/find (`find -printf`, `md5sum`), and the script refuses to start anywhere else rather than degrade quietly - a shared-state check that silently mis-hashes a sandbox still prints a verdict, and that verdict would be worthless. The `native-macos` PlatformIO env is a **build** target for `meshtasticd`, not a test host; the isolation wrapper is registered for `env:native` and `env:coverage` only. On macOS or Windows, run the suite in a container: `./bin/test-native-docker.sh`.
+
+**`-f` is not a gate.** A filtered run can pass while a full run fails, because filtering removes the suites that _create_ the state a later suite trips over. Iterate with `-f`; gate on a full run.
+
+**Sanitizers are per env.** `coverage` (the default) has ASan/LSan; **`native` has none**, verified. `-e native` runs are not sanitized.
+
+**A signal name in the output is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal number (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting the suite `[ERRORED]`. Match it against the failure count before assuming a fault.
+
+**Suite order is randomisable, and reproducible.** `--shuffle` runs the suites in a seeded random order; `--seed <n>` replays an exact one. The seed defaults to the commit SHA - one order per commit, so a red is replayable and attributable rather than flaky - and is printed at the start of the run and on the `RESULT:` line. On failure the full order is printed, because for an order-dependent failure the order _is_ the diagnostic. **A single green seed is not evidence of order independence**; vary it.
+
+```bash
+./bin/run-tests.sh --shuffle              # seed from HEAD, printed
+./bin/run-tests.sh --seed 2855893161      # replay that exact order
+```
+
+Randomisation costs one `pio` invocation per suite (about 4.7s each), because PlatformIO orders suites by its own directory walk and `-f` only selects.
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
 
@@ -165,7 +182,7 @@ void setup()
     printf("\n=== Example group ===\n");           // header line to help find tests
 
     RUN_TEST(test_example);
-    exit(UNITY_END());             // exit() required - Unity runner expects it
+    exit(UNITY_END());             // REQUIRED - a bare UNITY_END() leaves the process running
 }
 
 void loop() {}
@@ -187,7 +204,19 @@ void loop() {}
 #endif
 ```
 
-### 3. Feature Guard
+### 3. Terminate with `exit(UNITY_END())`, on every branch
+
+**A bare `UNITY_END()` does not end the suite - it ends the _reporting_.** `setup()` returns, the runtime goes on calling `loop()`, and the process runs forever. PlatformIO does not notice: it reads the Unity summary off stdout, reports the suite `PASSED` and moves to the next one, so the run is green while the binary is still resident. Nothing surfaces it, and the leak is one process per suite per run.
+
+The consequences are worse than an idle process:
+
+- The per-suite sandbox is **deleted underneath a live process**, so its CLEAN/DIRTY verdict says what the suite had written by the time the harness stopped looking, not what it left behind.
+- `.gcda` coverage data and LeakSanitizer's report are both flushed by `atexit` handlers, so a suite that never exits contributes **no coverage and gets no leak check** - silently.
+- Each survivor pins its own deleted binary on disk (~94 MB), which `du` cannot see.
+
+So: `exit(UNITY_END())` in **every** `setup()` branch, including the `#else` of a feature or architecture guard where the suite does nothing. The empty-suite branch is the easiest one to get wrong, because it looks like there is nothing to clean up.
+
+### 4. Feature Guard
 
 Wrap the entire test body in the same `#if` guard the module uses (e.g. `#if HAS_VARIABLE_HOPS`, `#if !MESHTASTIC_EXCLUDE_GPS`). When the feature is disabled, the `#else` branch produces an empty passing suite.
 
@@ -292,11 +321,36 @@ void test_something() {
 
 ## Pitfalls and How to Avoid Them
 
-### 1. Persisted Filesystem State Leaks Between Tests
+### 1. Persisted Filesystem State
 
-Modules that save state to `/prefs/*.bin` will have that state loaded by the next test's constructor via `loadState()`. This causes values from one test (e.g. rolling averages from a megamesh scenario) to bleed into unrelated tests.
+**You are handed a clean sandbox. Declare what you write.**
 
-**Fix:** Delete state files at the start of `setUp()`:
+Each suite runs inside its own scratch `$HOME` (`bin/pio-test-isolate.sh`), so state cannot reach the next suite. The files in play are wider than module state, and all but the last live under `~/.portduino/default/prefs/`:
+
+| File                                                             | Written by                                                                                                                                                     |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nodes.proto`                                                    | any `NodeDB` save - including incidental ones from `removeNodeByNum()`, `resetNodes()`, `nodeDBSelfCare()`, and the constructor itself when the file is absent |
+| `config.proto`, `module.proto`, `channels.proto`, `device.proto` | config/channel saves, admin handlers                                                                                                                           |
+| `warm.dat`                                                       | `WarmNodeStore::saveIfDirty()`, on the node-DB save cadence                                                                                                    |
+| `transmit_history.dat`                                           | retransmission tracking                                                                                                                                        |
+| `/prefs/<module>.bin`                                            | per-module `saveState()`                                                                                                                                       |
+
+`NodeDB`'s constructor calls `loadFromDisk()`, so **any** suite that constructs one inherits whatever is there.
+
+**What you have to do:**
+
+- Nothing, if your suite is self-contained. That is the default and what almost every suite wants.
+- If your suite mutates persisted state on purpose, add a line to **`test/state-manifest.tsv`** with a reason:
+
+  ```text
+  test_nodedb_blocked	state=per-suite writes=nodes.proto,warm.dat	saturates the DB to test the protected-node cap
+  ```
+
+  An undeclared write is reported as **DIRTY** and grades the run AMBER. A declared write that never happens is reported as **MISSING** - a warning, and a useful one: it catches persistence that silently stopped working.
+
+- Use `state=per-suite` only if a test genuinely needs to observe the previous test's write (persistence round-trips, migration ladders). It relaxes per-test checking to the suite boundary, so make it a deliberate choice rather than an accident of `setUp()`.
+
+Deleting your own state in `setUp()` is still fine and still a good habit for intra-suite isolation - it is just no longer what stands between you and the next suite:
 
 ```cpp
 void setUp(void) {
@@ -307,13 +361,32 @@ void setUp(void) {
 }
 ```
 
-### 2. File-Scope Mutable Globals Persist Across Tests
+### 2. A Shared Fixture Is Not a Fixture
+
+If your suite touches globals the code under test writes - `nodeDB`, `config`, `owner`, `devicestate`, `channelFile` - build and restore them in `setUp`/`tearDown` for **every** test, not just the ones that seem to need it. An opt-in fixture that only some tests arm leaves the rest sharing one never-reset object, and "the other tests set their own state and are unaffected" is a claim that quietly stops being true as tests are added.
+
+`test/test_admin_radio/test_main.cpp` is the worked example:
+
+```cpp
+void setUp(void) {
+    // ...
+    replaceAdminRadioGlobals();   // saves the globals, installs a fresh NodeDB
+}
+void tearDown(void) {
+    restoreAdminRadioGlobals();   // restores them, deletes the NodeDB, re-runs initRegion()
+    // ...
+}
+```
+
+A fresh `NodeDB` per test costs real time (`loadFromDisk()` plus, when the region is set, key generation) - in that suite roughly 7% of a ~7½-minute run. Pay it. If a test genuinely needs to observe the previous test's state, that is what `state=per-suite` in `test/state-manifest.tsv` is for; say so there rather than achieving it by omission.
+
+### 3. File-Scope Mutable Globals Persist Across Tests
 
 Variables like `static uint8_t someDenominator = 8;` in the module `.cpp` file retain mutations from previous tests. This is distinct from member variables - it affects all instances.
 
 **Fix:** Add a `static void resetGlobal()` method to the module and call it in `setUp()`.
 
-### 3. Randomness Breaks Determinism
+### 4. Randomness Breaks Determinism
 
 If the module uses `rand()` for jitter or similar, test results become non-reproducible.
 
@@ -330,7 +403,7 @@ YourModule::setJitter(false);
 YourModule::setJitter(true);
 ```
 
-### 4. Time-Dependent Logic Produces Zeros
+### 5. Time-Dependent Logic Produces Zeros
 
 Rolling averages weighted by `elapsedMs / ONE_HOUR_MS` collapse to zero when tests complete in microseconds. Sample windows, EMA alphas, and interval-based accumulators all suffer from this.
 
@@ -344,13 +417,13 @@ void setWindowStartMs(uint32_t ms) { windowStartMs = ms; }
 shim.setWindowStartMs(millis() - 3600000UL);  // pretend 1 hour elapsed
 ```
 
-### 5. Capacity Limits Cause Cascading Failures
+### 6. Capacity Limits Cause Cascading Failures
 
 Fixed-size data structures (hash sets, ring buffers) overflow when tests inject more data than fits. This triggers early flushes with near-zero time fractions, compounding the time-dependent-zeros problem.
 
 **Fix:** Simulate multiple realistic time windows rather than one massive burst. Let adaptive mechanisms (if any) self-tune over several rolls.
 
-### 6. Granting test access to private/protected members
+### 7. Granting test access to private/protected members
 
 PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several production headers (`TransmitHistory.h`, `CryptoEngine.h`, `MQTT.h`, `RTC.h`) use this to gate test-only visibility changes. PlatformIO also defines `UNIT_TEST` in the same builds for backward compatibility, but that spelling is deprecated - always use `PIO_UNIT_TESTING` in new code. The established pattern for exposing a private method to a test shim **without widening production visibility**:
 
@@ -370,7 +443,8 @@ PlatformIO defines `PIO_UNIT_TESTING` during `pio test` builds. Several producti
 - [ ] Create and clear MockNodeDB (if needed)
 - [ ] Zero global configs: `config`, `moduleConfig`, `myNodeInfo`
 - [ ] Set `nodeDB = mockNodeDB`
-- [ ] Delete persisted state files (`FSCom.remove(...)`)
+- [ ] Delete your own persisted state files (`FSCom.remove(...)`) for intra-suite isolation - cross-suite isolation is already guaranteed, see Pitfall 1
+- [ ] Declare deliberate writes to shared state in `test/state-manifest.tsv`, with a reason
 - [ ] Reset file-scope mutable globals
 - [ ] Reset mock clock to a safe base value (e.g. `mockTime = ONE_HOUR_MS`) - prevents unsigned subtraction underflow in time-dependent logic
 - [ ] Disable randomness/jitter flags
@@ -386,11 +460,31 @@ A well-structured test suite follows this pattern:
 4. **Lifecycle tests** - state persistence, startup from blank, restart recovery
 5. **Summary test** (optional) - emits a scenario table into the log for quick CI review
 
+## Not a Unity suite: `bin/test-config-check.sh`
+
+Portduino YAML validation is tested by driving a built `meshtasticd` rather than by a
+Unity suite, because what it asserts - the exit status and printed report of
+`meshtasticd --check`, and the fact that a normal run still refuses a bad config - are
+properties of the process, not of a linkable function. Fixtures live in
+`test/fixtures/portduino-config/` (see the README there); CI runs it in
+`test_native.yml`. It is not counted in `native-suite-count`, which only tracks `test_*`
+directories.
+
+```bash
+pio run -e native && ./bin/test-config-check.sh
+```
+
 ## Existing Test Suites
+
+**This table is a description, not an inventory.** The canonical suite total lives in
+`test/native-suite-count`, is machine-checked against `test/test_*` on every full run and in CI
+(`test_native.yml`), and is the only number that should be trusted or quoted. Entries below carry
+per-suite descriptions the count cannot; do not infer completeness from the row count.
 
 | Suite                        | Module Under Test             |
 | ---------------------------- | ----------------------------- |
 | `test_admin_radio`           | Admin + LoRa region config    |
+| `test_fscommon_getfiles`     | Bounded file-manifest walk    |
 | `test_atak`                  | ATAK integration              |
 | `test_crypto`                | CryptoEngine                  |
 | `test_default`               | Default configuration helpers |
@@ -404,6 +498,8 @@ A well-structured test suite follows this pattern:
 | `test_position_precision`    | Position precision helpers    |
 | `test_radio`                 | Radio interface               |
 | `test_serial`                | Serial communication          |
+| `test_module_config`         | AdminModule module config     |
+| `test_tak_config`            | TAK (ATAK) team/role values   |
 | `test_traffic_management`    | Traffic management            |
 | `test_transmit_history`      | Retransmission tracking       |
 | `test_type_conversions`      | NodeDB v25 type conversions   |
