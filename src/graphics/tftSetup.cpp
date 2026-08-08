@@ -407,7 +407,7 @@ void tftSetup(void)
         PacketAPI::create(PacketServer::init());
         deviceScreen->init(new PacketClient);
     } else {
-        LOG_INFO("Running without TFT display!");
+        LOG_INFO("Running without TFT display");
     }
 #endif
 

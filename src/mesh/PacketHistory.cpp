@@ -64,7 +64,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                                     bool *wasUpgraded)
 {
     if (!initOk()) {
-        LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED!");
+        LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED");
         return false;
     }
 
@@ -358,7 +358,7 @@ void PacketHistory::insert(const PacketRecord &r)
         } else {
             if (it->rxTimeMsec == 0) {
                 LOG_WARN("Packet History - insert: Found packet s=0x%08x id=0x%08x with rxTimeMsec = 0, slot %d/%d. Should never "
-                         "happen!",
+                         "happen",
                          it->sender, it->id, it - base, recentPacketsCapacity);
             }
             if ((now_millis - it->rxTimeMsec) > OldtrxTimeMsec) { // 49.7 days rollover friendly
@@ -373,7 +373,7 @@ void PacketHistory::insert(const PacketRecord &r)
     }
 
     if (tu == NULL) {
-        LOG_ERROR("Packet History - insert: No free slot, no matched packet, no oldest to reuse. Something leaked."); // mx
+        LOG_ERROR("Packet History - insert: No free slot, no matched packet, no oldest to reuse. Something leaked"); // mx
         // assert(false); // This should never happen, we should always have at least one packet to clear
         return; // Return early if we can't update the history
     }
@@ -424,7 +424,7 @@ void PacketHistory::insert(const PacketRecord &r)
 
     if (r.rxTimeMsec == 0) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_WARN("Packet History - insert: I will not store packet with rxTimeMsec = 0.");
+        LOG_WARN("Packet History - insert: I will not store packet with rxTimeMsec = 0");
 #endif
         return; // Return early if we can't update the history
     }
@@ -457,7 +457,7 @@ void PacketHistory::insert(const PacketRecord &r)
 bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole)
 {
     if (!initOk()) {
-        LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED!");
+        LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED");
         return false;
     }
 
@@ -527,7 +527,7 @@ void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t i
         *r2WasSole = false;
 
     if (!initOk()) {
-        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED!");
+        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED");
         return;
     }
 
@@ -545,7 +545,7 @@ void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t i
 void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {
     if (!initOk()) {
-        LOG_ERROR("Packet History - remove Relayer: NOT INITIALIZED!");
+        LOG_ERROR("Packet History - remove Relayer: NOT INITIALIZED");
         return;
     }
 

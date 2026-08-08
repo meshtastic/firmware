@@ -186,11 +186,11 @@ bool SCD30Sensor::performFRC(uint16_t targetCO2)
     error = scd30.forceRecalibration((uint16_t)targetCO2);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Unable to perform forced recalibration.", sensorName);
+        LOG_ERROR("%s: Unable to perform forced recalibration", sensorName);
         return false;
     }
 
-    LOG_INFO("%s: FRC Correction successful.", sensorName);
+    LOG_INFO("%s: FRC Correction successful", sensorName);
 
     return true;
 }
@@ -204,7 +204,7 @@ bool SCD30Sensor::setASC(bool ascEnabled)
     error = scd30.activateAutoCalibration((uint16_t)ascEnabled);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Unable to send command", sensorName);
         return false;
     }
 
@@ -224,7 +224,7 @@ bool SCD30Sensor::getASC(uint16_t &_ascActive)
     error = scd30.getAutoCalibrationStatus(_ascActive);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Unable to send command", sensorName);
         return false;
     }
 

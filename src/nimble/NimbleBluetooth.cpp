@@ -1063,7 +1063,7 @@ void updateBatteryLevel(uint8_t level)
 
 void NimbleBluetooth::clearBonds()
 {
-    LOG_INFO("Clearing bluetooth bonds!");
+    LOG_INFO("Clearing bluetooth bonds");
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_OUR_SEC, nullptr);
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_PEER_SEC, nullptr);
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_CCCD, nullptr);

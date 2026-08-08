@@ -223,7 +223,7 @@ int32_t Router::runOnce()
         perhapsHandleReceived(mp);
     }
 
-    // LOG_DEBUG("Sleep forever!");
+    // LOG_DEBUG("Sleep forever");
     return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
@@ -336,7 +336,7 @@ meshtastic_QueueStatus Router::getQueueStatus()
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
     if (p->to == 0) {
-        LOG_ERROR("Packet received with to: of 0!");
+        LOG_ERROR("Packet received with to: of 0");
     }
     // No need to deliver externally if the destination is the local node
     if (isToUs(p)) {
@@ -385,7 +385,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 ErrorCode Router::send(meshtastic_MeshPacket *p)
 {
     if (isToUs(p)) {
-        LOG_ERROR("BUG! send() called with packet destined for local node!");
+        LOG_ERROR("BUG! send() called with packet destined for local node");
         packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
@@ -874,7 +874,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 adminKeyFallbackRefund();
         }
         if (decrypted) {
-            LOG_INFO("PKI Decryption worked!");
+            LOG_INFO("PKI Decryption worked");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
@@ -888,7 +888,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 }
                 decrypted = true;
                 rawSize = payloadSize; // commit the overhead subtraction only on full success
-                LOG_INFO("Packet decrypted using PKI!");
+                LOG_INFO("Packet decrypted using PKI");
                 p->pki_encrypted = true;
                 memcpy(p->public_key.bytes, remotePublic.bytes, 32);
                 p->public_key.size = 32;
@@ -906,7 +906,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             } else {
                 // AEAD already authenticated this ciphertext, so no other candidate could decode it -
                 // the payload is simply malformed.
-                LOG_ERROR("PKC Decrypted, but pb_decode failed!");
+                LOG_ERROR("PKC Decrypted, but pb_decode failed");
                 return DecodeState::DECODE_FAILURE;
             }
         }
@@ -1014,7 +1014,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #endif
         return DecodeState::DECODE_SUCCESS;
     } else {
-        LOG_WARN("No suitable channel found for decoding, hash was 0x%x!", p->channel);
+        LOG_WARN("No suitable channel found for decoding, hash was 0x%x", p->channel);
         return (matchedChannel || pkiAttempted || licensedPkiCandidate) ? DecodeState::DECODE_FAILURE
                                                                         : DecodeState::DECODE_OPAQUE;
     }
@@ -1156,7 +1156,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         if (wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
-            LOG_DEBUG("Use PKI!");
+            LOG_DEBUG("Use PKI");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a usable public key for the destination (NodeDB or a pending key-verification key)

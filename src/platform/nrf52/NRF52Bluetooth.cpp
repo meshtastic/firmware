@@ -399,7 +399,7 @@ void updateBatteryLevel(uint8_t level)
 }
 void NRF52Bluetooth::clearBonds()
 {
-    LOG_INFO("Clear bluetooth bonds!");
+    LOG_INFO("Clear bluetooth bonds");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();

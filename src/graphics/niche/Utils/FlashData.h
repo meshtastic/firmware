@@ -135,10 +135,10 @@ template <typename T> class FlashData
         bool writeSucceeded = f.close();
 
         if (!writeSucceeded) {
-            LOG_ERROR("Can't write data!");
+            LOG_ERROR("Can't write data");
         }
 #else
-        LOG_ERROR("ERROR: Filesystem not implemented\n");
+        LOG_ERROR("Filesystem not implemented");
 #endif
     }
 };
@@ -165,7 +165,7 @@ inline void clearFlashData()
         file = dir.openNextFile();
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented\n");
+    LOG_ERROR("Filesystem not implemented");
 #endif
 }
 

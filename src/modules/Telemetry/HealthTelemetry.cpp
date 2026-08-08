@@ -223,7 +223,7 @@ meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding HealthTelemetry module!");
+            LOG_ERROR("Error decoding HealthTelemetry module");
             return NULL;
         }
         // Check for a request for health metrics

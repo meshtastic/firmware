@@ -257,7 +257,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
         return;
     }
-    LOG_INFO("Environment Telemetry adding I2C devices...");
+    LOG_INFO("Environment Telemetry adding I2C devices");
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -735,7 +735,7 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding EnvironmentTelemetry module!");
+            LOG_ERROR("Error decoding EnvironmentTelemetry module");
             return NULL;
         }
         // Check for a request for environment metrics

@@ -155,7 +155,7 @@ static void onNetworkConnected()
 
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
-            LOG_ERROR("Error setting up mDNS responder!");
+            LOG_ERROR("Error setting up mDNS responder");
         } else {
             LOG_INFO("mDNS Host: Meshtastic.local");
             MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);

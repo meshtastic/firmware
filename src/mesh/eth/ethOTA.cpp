@@ -260,7 +260,7 @@ static void handleOTAClient(EthernetClient &client)
         return;
     }
 
-    LOG_INFO("ETH OTA: Update staged successfully (%u bytes). Rebooting...", hdr.firmwareSize);
+    LOG_INFO("ETH OTA: Update staged (%u bytes). Rebooting", hdr.firmwareSize);
     client.write(OTA_OK);
     client.flush();
     delay(500);

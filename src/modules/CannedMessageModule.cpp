@@ -294,7 +294,7 @@ void CannedMessageModule::updateDestinationSelectionList()
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
     if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-        LOG_INFO("Nodes changed, forcing UI refresh.");
+        LOG_INFO("Nodes changed, forcing UI refresh");
         screen->forceDisplay();
     }
 }

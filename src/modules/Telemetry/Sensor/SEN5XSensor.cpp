@@ -259,7 +259,7 @@ bool SEN5XSensor::idle(bool checkState)
             }
 
             if (!(vocStateStable() && vocValid)) {
-                LOG_INFO("%s: Not stopping measurement, vocState is not stable yet!", sensorName);
+                LOG_INFO("%s: Not stopping measurement, vocState is not stable yet", sensorName);
                 return true;
             }
         }
@@ -268,7 +268,7 @@ bool SEN5XSensor::idle(bool checkState)
     }
 
     if (!oneShotMode) {
-        LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
+        LOG_INFO("%s: Not stopping measurement, continuous mode", sensorName);
         return true;
     } else {
         LOG_INFO("%s: One shot mode enabled", sensorName);
@@ -537,7 +537,7 @@ bool SEN5XSensor::startCleaning()
     delay(20); // From Sensirion Datasheet
 
     // This message will be always printed so the user knows the device it's not hung
-    LOG_INFO("%s: Started fan cleaning it will take 10 seconds...", sensorName);
+    LOG_INFO("%s: Started fan cleaning it will take 10 seconds", sensorName);
 
     uint16_t started = millis();
     while (millis() - started < 10500) {
@@ -611,7 +611,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
             if (passed > ONE_WEEK_IN_SECONDS && (now > SEN5X_VOC_VALID_DATE)) {
                 // If current date greater than 01/01/2018 (validity check)
-                LOG_INFO("%s: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", sensorName,
+                LOG_INFO("%s: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning", sensorName,
                          passed, lastCleaning);
                 startCleaning();
             } else {

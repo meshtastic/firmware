@@ -136,7 +136,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     if (error != SCD4X_NO_ERROR) {
         LOG_DEBUG("%s: Error while getting measurements: %u", sensorName, error);
         if (co2 == 0) {
-            LOG_ERROR("%s: Skipping invalid measurement.", sensorName);
+            LOG_ERROR("%s: Skipping invalid measurement", sensorName);
         }
         return false;
     } else {
@@ -180,12 +180,12 @@ bool SCD4XSensor::performFRC(uint32_t targetCO2)
     delay(400);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to perform forced recalibration.", sensorName);
+        LOG_ERROR("%s: Unable to perform forced recalibration", sensorName);
         return false;
     }
 
     if (frcCorr == 0xFFFF) {
-        LOG_ERROR("%s: Error while performing forced recalibration.", sensorName);
+        LOG_ERROR("%s: Error while performing forced recalibration", sensorName);
         return false;
     }
 
@@ -239,7 +239,7 @@ bool SCD4XSensor::stopMeasurement()
 
     error = scd4x.stopPeriodicMeasurement();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to stop measurement.", sensorName);
+        LOG_ERROR("%s: Unable to stop measurement", sensorName);
         return false;
     }
 
@@ -286,7 +286,7 @@ bool SCD4XSensor::getASC(uint16_t &_ascActive)
     error = scd4x.getAutomaticSelfCalibrationEnabled(_ascActive);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Unable to send command", sensorName);
         return false;
     }
 
@@ -317,13 +317,13 @@ bool SCD4XSensor::setASC(bool ascEnabled)
     error = scd4x.setAutomaticSelfCalibrationEnabled((uint16_t)ascEnabled);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Unable to send command", sensorName);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to make settings persistent.", sensorName);
+        LOG_ERROR("%s: Unable to make settings persistent", sensorName);
         return false;
     }
 
@@ -367,13 +367,13 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2)
     error = scd4x.setAutomaticSelfCalibrationTarget((uint16_t)targetCO2);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Unable to send command", sensorName);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to make settings persistent.", sensorName);
+        LOG_ERROR("%s: Unable to make settings persistent", sensorName);
         return false;
     }
 

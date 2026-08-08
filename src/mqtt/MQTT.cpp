@@ -89,7 +89,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
     if (!e.validDecode || e.channel_id == NULL || e.gateway_id == NULL || e.packet == NULL) {
-        LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
+        LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u", topic, length);
         return;
     }
 
@@ -355,7 +355,7 @@ void MQTT::onClientProxyReceive(meshtastic_MqttClientProxyMessage msg)
 void MQTT::onReceive(char *topic, byte *payload, size_t length)
 {
     if (length == 0) {
-        LOG_WARN("Empty MQTT payload received, topic %s!", topic);
+        LOG_WARN("Empty MQTT payload received, topic %s", topic);
         return;
     }
 
@@ -769,7 +769,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         entry->topic = std::move(topic);
         entry->envBytes.assign(bytes, numBytes);
         if (mqttQueue.enqueue(entry, 0) == false) {
-            LOG_CRIT("Failed to add a message to mqttQueue!");
+            LOG_CRIT("Failed to add a message to mqttQueue");
             abort();
         }
     }

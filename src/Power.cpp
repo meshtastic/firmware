@@ -879,7 +879,7 @@ void Power::reboot()
     if (screen) {
         screen = nullptr;
     }
-    LOG_DEBUG("final reboot!");
+    LOG_DEBUG("final reboot");
     ::reboot();
 #elif defined(ARCH_STM32)
     HAL_NVIC_SystemReset();

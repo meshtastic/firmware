@@ -295,7 +295,7 @@ void SimRadio::unpackAndReceive(meshtastic_MeshPacket &p)
                 p.decoded.portnum = scratch.portnum;
             }
         } else
-            LOG_ERROR("Error decoding proto for simulator message!");
+            LOG_ERROR("Error decoding proto for simulator message");
     }
     // Let SimRadio receive as if it did via its LoRa chip
     startReceive(&p);
@@ -305,7 +305,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
 {
 #ifdef USERPREFS_SIMRADIO_EMULATE_COLLISIONS
     if (isActivelyReceiving()) {
-        LOG_WARN("Collision detected, dropping current and previous packet!");
+        LOG_WARN("Collision detected, dropping current and previous packet");
         rxBad++;
         airTime->logAirtime(RX_ALL_LOG, getPacketTime(receivingPacket, true));
         packetPool.release(receivingPacket);
@@ -319,7 +319,7 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
         } else if ((interval - airtimeLeft) > preambleTimeMsec) {
             // Only if transmitting for longer than preamble there is a collision
             // (channel should actually be detected as active otherwise)
-            LOG_WARN("Collision detected during transmission!");
+            LOG_WARN("Collision detected during transmission");
             return;
         }
     }

@@ -437,7 +437,7 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         route[*route_count] = myNodeInfo.my_node_num;
         *route_count += 1;
     } else {
-        LOG_WARN("Route exceeded maximum hop limit!"); // Are you bridging networks?
+        LOG_WARN("Route exceeded maximum hop limit"); // Are you bridging networks?
     }
 }
 
@@ -587,7 +587,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         notifyObservers(&e);
-        LOG_INFO("Cooldown active, please wait %lu seconds before starting a new trace route.", wait);
+        LOG_INFO("Cooldown active, please wait %lu seconds before starting a new trace route", wait);
         return false;
     }
 
@@ -610,7 +610,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     setIntervalFromNow(1000); // 每秒检查一次状态
 
     meshtastic_RouteDiscovery req = meshtastic_RouteDiscovery_init_zero;
-    LOG_INFO("Creating RouteDiscovery protobuf...");
+    LOG_INFO("Creating RouteDiscovery protobuf");
 
     // Allocate a packet directly from router like the reference code
     meshtastic_MeshPacket *p = router->allocForSending();
@@ -627,16 +627,16 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
 
-        LOG_INFO("Packet allocated successfully: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
+        LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
                  p->decoded.portnum, p->decoded.want_response, p->decoded.payload.size);
-        LOG_INFO("About to call service->sendToMesh...");
+        LOG_INFO("About to call service->sendToMesh");
 
         if (service) {
-            LOG_INFO("MeshService is available, sending packet...");
+            LOG_INFO("MeshService is available, sending packet");
             service->sendToMesh(p, RX_SRC_USER);
-            LOG_INFO("sendToMesh called successfully for trace route to node 0x%08x", node);
+            LOG_INFO("sendToMesh called for trace route to node 0x%08x", node);
         } else {
-            LOG_ERROR("MeshService is NULL!");
+            LOG_ERROR("MeshService is NULL");
             runState = TRACEROUTE_STATE_RESULT;
             setResultText("Service unavailable");
             resultShowTime = millis();
@@ -712,7 +712,7 @@ void TraceRouteModule::launch(NodeNum node)
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         notifyObservers(&e);
-        LOG_INFO("Cooldown active, please wait %lu seconds before starting a new trace route.", wait);
+        LOG_INFO("Cooldown active, please wait %lu seconds before starting a new trace route", wait);
         return;
     }
 
@@ -732,7 +732,7 @@ void TraceRouteModule::launch(NodeNum node)
     setIntervalFromNow(1000);
 
     meshtastic_RouteDiscovery req = meshtastic_RouteDiscovery_init_zero;
-    LOG_INFO("Creating RouteDiscovery protobuf...");
+    LOG_INFO("Creating RouteDiscovery protobuf");
 
     meshtastic_MeshPacket *p = router->allocForSending();
     if (p) {
@@ -746,14 +746,14 @@ void TraceRouteModule::launch(NodeNum node)
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
 
-        LOG_INFO("Packet allocated successfully: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
+        LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
                  p->decoded.portnum, p->decoded.want_response, p->decoded.payload.size);
 
         if (service) {
             service->sendToMesh(p, RX_SRC_USER);
-            LOG_INFO("sendToMesh called successfully for trace route to node 0x%08x", node);
+            LOG_INFO("sendToMesh called for trace route to node 0x%08x", node);
         } else {
-            LOG_ERROR("MeshService is NULL!");
+            LOG_ERROR("MeshService is NULL");
             runState = TRACEROUTE_STATE_RESULT;
             setResultText("Service unavailable");
             resultShowTime = millis();

@@ -279,7 +279,7 @@ bool ensureCertForIp(IPAddress ip, EthCertMaterial &out)
         }
     }
 
-    LOG_INFO("ETH CERT: generating ECDSA P-256 self-signed cert for IP %s...", ipStr.c_str());
+    LOG_INFO("ETH CERT: generating ECDSA P-256 self-signed cert for IP %s", ipStr.c_str());
     uint32_t t0 = millis();
     if (!generateCert(ip, out)) {
         LOG_ERROR("ETH CERT: generation failed");

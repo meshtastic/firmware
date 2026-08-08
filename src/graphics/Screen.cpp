@@ -581,7 +581,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SPISSD1306)
     dispdev = new SSD1306Spi(SSD1306_RESET, SSD1306_RS, SSD1306_NSS, GEOMETRY_64_48);
     if (!dispdev->init()) {
-        LOG_DEBUG("Error: SSD1306 not detected!");
+        LOG_DEBUG("SSD1306 not detected");
     } else {
         static_cast<SSD1306Spi *>(dispdev)->setHorizontalOffset(32);
         LOG_INFO("SSD1306 init success");
@@ -592,14 +592,14 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     // runtime via config.yaml Display: Panel: HUB75.
     if (portduino_config.displayPanel == hub75) {
 #if defined(HAS_HUB75_NATIVE)
-        LOG_DEBUG("Make HUB75Native!");
+        LOG_DEBUG("Make HUB75Native");
         dispdev = new HUB75Native(address.address, -1, -1, GEOMETRY_RAWMODE, HW_I2C::I2C_ONE);
 #else
-        LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in!");
+        LOG_ERROR("HUB75 panel requested but rpi-rgb-led-matrix not compiled in");
 #endif
     } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         if (portduino_config.displayPanel != no_screen) {
-            LOG_DEBUG("Make TFTDisplay!");
+            LOG_DEBUG("Make TFTDisplay");
             dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
         } else {
@@ -610,7 +610,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
         }
     }
 #elif USE_TFTDISPLAY
-    LOG_DEBUG("Make TFTDisplay!");
+    LOG_DEBUG("Make TFTDisplay");
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS) && !defined(MESHTASTIC_INCLUDE_INKHUD)
@@ -1121,7 +1121,7 @@ int32_t Screen::runOnce()
 #ifdef USERPREFS_OEM_TEXT
     static bool showingOEMBootScreen = true;
     if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
-        LOG_INFO("Switch to OEM screen...");
+        LOG_INFO("Switch to OEM screen");
         // Change frames.
         static FrameCallback bootOEMFrames[] = {graphics::UIRenderer::drawOEMBootScreen};
         static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);

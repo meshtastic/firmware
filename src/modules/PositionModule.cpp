@@ -170,7 +170,7 @@ bool PositionModule::hasGPS()
 meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
 {
     if (atPrecision == 0) {
-        LOG_DEBUG("Skip location send because precision is set to 0!");
+        LOG_DEBUG("Skip location send because precision is set to 0");
         return nullptr;
     }
 
@@ -191,7 +191,7 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket(uint32_t atPrecision)
     localPosition.seq_number++;
 
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        LOG_WARN("Skip position send because lat/lon are zero!");
+        LOG_WARN("Skip position send because lat/lon are zero");
         return nullptr;
     }
 

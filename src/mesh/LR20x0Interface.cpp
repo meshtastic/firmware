@@ -119,7 +119,7 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     // Retry if we get SPI command failed - some units need extra TCXO stabilization time
     if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
-        LOG_WARN("LR20x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", res);
+        LOG_WARN("LR20x0 init failed with %d (SPI_CMD_FAILED), retrying after delay", res);
         delay(100);
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     }
@@ -220,7 +220,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
         int res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
-            LOG_WARN("LR20x0 band-hop begin SPI_CMD_FAILED, retrying...");
+            LOG_WARN("LR20x0 band-hop begin SPI_CMD_FAILED, retrying");
             delay(100);
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }

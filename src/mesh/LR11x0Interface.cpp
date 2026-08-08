@@ -167,7 +167,7 @@ template <typename T> bool LR11x0Interface<T>::init()
     // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry.
     //    After a step 2 fallback that is a second TCXO attempt, which is where settling actually matters.
     if (lr11x0SpiFailed(res)) {
-        LOG_WARN("LR11x0 init failed with %d (SPI command failure), retrying after delay...", res);
+        LOG_WARN("LR11x0 init failed with %d (SPI command failure), retrying after delay", res);
         delay(100);
         res = tryBegin(3, attemptVoltage);
     }
@@ -203,7 +203,7 @@ template <typename T> bool LR11x0Interface<T>::init()
     // older firmware than the baked-in image, so once it has succeeded it is a no-op on subsequent boots.
     if (transceiverDevice == RADIOLIB_LR11X0_DEVICE_LR1110 && transceiverFw != 0 && transceiverFw < LR11X0_UPDATE_FIRMWARE_TO) {
         LOG_WARN("LR1110 transceiver FW %d.%d is older than %d.%d - updating now. DO NOT POWER OFF: this "
-                 "erases and rewrites the radio's own flash.",
+                 "erases and rewrites the radio's own flash",
                  transceiverFw >> 8, transceiverFw & 0xFF, LR11X0_UPDATE_FIRMWARE_TO >> 8, LR11X0_UPDATE_FIRMWARE_TO & 0xFF);
 
         int upd = lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true);

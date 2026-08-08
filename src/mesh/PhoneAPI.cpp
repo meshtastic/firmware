@@ -524,7 +524,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
         }
     } else {
-        LOG_ERROR("Error: ignore malformed toradio");
+        LOG_ERROR("Ignore malformed toradio");
     }
 
     return false;

@@ -738,7 +738,7 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
     }
 
     if (channelFile.channels_count != MAX_NUM_CHANNELS) {
-        LOG_INFO("Set default channel and radio preferences!");
+        LOG_INFO("Set default channel and radio preferences");
 
         channels.initDefaults();
         // Defaults ship the public PSK, so strip it again before onConfigChanged() publishes hashes;
@@ -755,7 +755,7 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
-    LOG_INFO("Perform factory reset!");
+    LOG_INFO("Perform factory reset");
     // first, remove the "/prefs" (this removes most prefs)
     spiLock->lock();
     rmDir("/prefs"); // this uses spilock internally...
@@ -806,7 +806,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #endif
 
 #ifdef ARCH_NRF52
-        LOG_INFO("Clear bluetooth bonds!");
+        LOG_INFO("Clear bluetooth bonds");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
         Bluefruit.Periph.clearBonds();
@@ -2072,11 +2072,11 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             if (fields != &meshtastic_NodeDatabase_msg)
                 memset(dest_struct, 0, objSize);
             if (!pb_decode(&stream, fields, dest_struct)) {
-                LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+                LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
                 state = LoadFileResult::DECODE_FAILED;
                 storageCorruptThisLoad = true;
             } else {
-                LOG_INFO("Loaded encrypted %s successfully", filename);
+                LOG_INFO("Loaded encrypted %s", filename);
                 state = LoadFileResult::LOAD_SUCCESS;
             }
         } else {
@@ -2100,10 +2100,10 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             fields != &meshtastic_NodeDatabase_Legacy_msg) // both NodeDatabase descriptors contain std::vector members
             memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+            LOG_ERROR("Can't decode protobuf %s", PB_GET_ERROR(&stream));
             state = LoadFileResult::DECODE_FAILED;
         } else {
-            LOG_INFO("Loaded %s successfully", filename);
+            LOG_INFO("Loaded %s", filename);
             state = LoadFileResult::LOAD_SUCCESS;
         }
         f.close();
@@ -2111,7 +2111,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
         LOG_ERROR("Could not open / read %s", filename);
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
     state = LoadFileResult::NO_FILESYSTEM;
 #endif
     return state;
@@ -2268,7 +2268,7 @@ void NodeDB::loadFromDisk()
         const size_t usedBytes = fsUsedBytes();
         eventProfileStorageUnavailable = !hasEventProfileStorageSpace(totalBytes, usedBytes);
         if (eventProfileStorageUnavailable) {
-            LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist.",
+            LOG_ERROR("Event profile requires %u bytes free; only %u bytes available. Profile changes will not persist",
                       static_cast<unsigned>(EVENT_PROFILE_STORAGE_RESERVATION_BYTES),
                       static_cast<unsigned>(totalBytes >= usedBytes ? totalBytes - usedBytes : 0));
         }
@@ -2292,7 +2292,7 @@ void NodeDB::loadFromDisk()
 #if defined(FACTORY_INSTALL) && !defined(ARCH_PORTDUINO)
     spiLock->lock();
     if (!FSCom.exists("/prefs/" xstr(BUILD_EPOCH))) {
-        LOG_WARN("Factory Install Reset!");
+        LOG_WARN("Factory Install Reset");
         rmDir("/prefs");
         FSCom.mkdir("/prefs");
         File f2 = FSCom.open("/prefs/" xstr(BUILD_EPOCH), FILE_O_WRITE);
@@ -2582,7 +2582,7 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.");
+        LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences");
         memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
         config.security.admin_key[0].size = 32;
     }
@@ -2595,7 +2595,7 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.");
+        LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences");
         memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
         config.security.admin_key[1].size = 32;
     }
@@ -2608,14 +2608,14 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.");
+        LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences");
         memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
         config.security.admin_key[2].size = 32;
     }
 #endif
 
     if (numAdminKeys > 0) {
-        LOG_INFO("Saving %d hard coded admin keys.", numAdminKeys);
+        LOG_INFO("Saving %d hard coded admin keys", numAdminKeys);
         config.security.admin_key_count = numAdminKeys;
         saveToDisk(SEGMENT_CONFIG);
     }
@@ -2903,7 +2903,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveProto() on unsafe device power level.");
+        LOG_ERROR("Trying to saveProto() on unsafe device power level");
         return false;
     }
 
@@ -2925,7 +2925,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
         pb_ostream_t stream = pb_ostream_from_buffer(pbBuf.get(), protoSize);
         if (!pb_encode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+            LOG_ERROR("Can't encode protobuf %s", PB_GET_ERROR(&stream));
             return false;
         }
 
@@ -2947,7 +2947,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
 
     if (!pb_encode(&stream, fields, dest_struct)) {
-        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+        LOG_ERROR("Can't encode protobuf %s", PB_GET_ERROR(&stream));
     } else {
         okay = true;
     }
@@ -2955,10 +2955,10 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     bool writeSucceeded = f.close();
 
     if (!okay || !writeSucceeded) {
-        LOG_ERROR("Can't write prefs!");
+        LOG_ERROR("Can't write prefs");
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
     return okay;
 }
@@ -2969,7 +2969,7 @@ bool NodeDB::saveChannelsToDisk()
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveChannelsToDisk() on unsafe device power level.");
+        LOG_ERROR("Trying to saveChannelsToDisk() on unsafe device power level");
         return false;
     }
 
@@ -2988,7 +2988,7 @@ bool NodeDB::saveDeviceStateToDisk()
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveDeviceStateToDisk() on unsafe device power level.");
+        LOG_ERROR("Trying to saveDeviceStateToDisk() on unsafe device power level");
         return false;
     }
 
@@ -3016,7 +3016,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveNodeDatabaseToDisk() on unsafe device power level.");
+        LOG_ERROR("Trying to saveNodeDatabaseToDisk() on unsafe device power level");
         return false;
     }
 
@@ -3125,7 +3125,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveToDiskNoRetry() on unsafe device power level.");
+        LOG_ERROR("Trying to saveToDiskNoRetry() on unsafe device power level");
         return false;
     }
 
@@ -3223,7 +3223,7 @@ bool NodeDB::saveToDisk(int saveWhat)
     // do not try to save anything if power level is not safe. In many cases flash will be lock-protected
     // and all writes will fail anyway. Device should be sleeping at this point anyway.
     if (!powerHAL_isPowerLevelSafe()) {
-        LOG_ERROR("Error: trying to saveToDisk() on unsafe device power level.");
+        LOG_ERROR("Trying to saveToDisk() on unsafe device power level");
         return false;
     }
 
@@ -3580,9 +3580,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             LOG_WARN("Public Key mismatch, dropping NodeInfo");
             return false;
         }
-        LOG_INFO("Public Key set for node, not updating!");
+        LOG_INFO("Public Key set for node, not updating");
     } else if (p.public_key.size == 32) {
-        LOG_INFO("Update Node Pubkey!");
+        LOG_INFO("Update Node Pubkey");
     }
 #endif
 
@@ -4187,7 +4187,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             }
         }
 #endif
-        LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
+        LOG_INFO("Adding node to database with %i nodes and %u bytes free", numMeshNodes, memGet.getFreeHeap());
     }
 
     return lite;

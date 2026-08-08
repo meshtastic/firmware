@@ -121,7 +121,7 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)", printableEpoch, BUILD_EPOCH);
             }
             return RTCSetResultInvalidTime;
         }
@@ -166,7 +166,7 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)", printableEpoch, BUILD_EPOCH);
                 lastTimeValidationWarning = millis();
             }
             return RTCSetResultInvalidTime;
@@ -205,7 +205,7 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
             if (tv.tv_sec < BUILD_EPOCH) {
                 if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                    LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                    LOG_WARN("Ignore time (%ld) before build epoch (%ld)", printableEpoch, BUILD_EPOCH);
                     lastTimeValidationWarning = millis();
                 }
                 return RTCSetResultInvalidTime;
@@ -230,7 +230,7 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("Ignore time (%ld) before build epoch (%ld)", printableEpoch, BUILD_EPOCH);
                 lastTimeValidationWarning = millis();
             }
             return RTCSetResultInvalidTime;
@@ -268,7 +268,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
         if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            LOG_WARN("Ignore time (%ld) before build epoch (%ld)", printableEpoch, BUILD_EPOCH);
             lastTimeValidationWarning = millis();
         }
         return RTCSetResultInvalidTime;
@@ -277,7 +277,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // Calculate max allowed time safely to avoid overflow in logging
             uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
             uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
-            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch,
+            LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)", printableEpoch,
                      (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
             lastTimeValidationWarning = millis();
         }
@@ -435,7 +435,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
         if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-            LOG_WARN("Ignore time (%lu) before build epoch (%lu)!", printableEpoch, BUILD_EPOCH);
+            LOG_WARN("Ignore time (%lu) before build epoch (%lu)", printableEpoch, BUILD_EPOCH);
             lastTimeValidationWarning = millis();
         }
         return RTCSetResultInvalidTime;
@@ -444,7 +444,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
             // Calculate max allowed time safely to avoid overflow in logging
             uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
             uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
-            LOG_WARN("Ignore time (%lu) too far in the future (build epoch: %lu, max allowed: %lu)!", printableEpoch,
+            LOG_WARN("Ignore time (%lu) too far in the future (build epoch: %lu, max allowed: %lu)", printableEpoch,
                      (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
             lastTimeValidationWarning = millis();
         }

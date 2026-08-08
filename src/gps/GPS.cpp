@@ -1011,7 +1011,7 @@ bool GPS::setup()
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module config");
             } else {
-                LOG_INFO("GNSS module config saved!");
+                LOG_INFO("GNSS module config saved");
             }
         } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9)) {
             if (gnssModel == GNSS_MODEL_UBLOX7) {
@@ -1080,7 +1080,7 @@ bool GPS::setup()
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module config");
             } else {
-                LOG_INFO("GNSS module configuration saved!");
+                LOG_INFO("GNSS module configuration saved");
             }
         } else if (gnssModel == GNSS_MODEL_UBLOX10) {
             delay(1000);
@@ -1128,7 +1128,7 @@ bool GPS::setup()
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module config");
             } else {
-                LOG_INFO("GNSS module configuration saved!");
+                LOG_INFO("GNSS module configuration saved");
             }
         } else if (gnssModel == GNSS_MODEL_CM121) {
             // only ask for RMC and GGA
@@ -1623,7 +1623,7 @@ void GPS::clearBuffer()
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareDeepSleep(void *unused)
 {
-    LOG_INFO("GPS deep sleep!");
+    LOG_INFO("GPS deep sleep");
     disable();
     return 0;
 }

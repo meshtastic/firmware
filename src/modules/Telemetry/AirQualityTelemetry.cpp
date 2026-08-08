@@ -46,7 +46,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
         return;
     }
 
-    LOG_INFO("Air Quality Telemetry adding I2C devices...");
+    LOG_INFO("Air Quality Telemetry adding I2C devices");
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -81,7 +81,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 
     if (!firstTime) {
         // Re-scan for late comming sensors
-        LOG_INFO("Re-scanning supported sensors...");
+        LOG_INFO("Re-scanning supported sensors");
 
         for (const auto &[address, type] : supportedSensors) {
 
@@ -130,7 +130,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again", nightyNightMs);
         doDeepSleep(nightyNightMs, true, false);
     }
 
@@ -187,7 +187,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         // - We can publish the data on the mesh shortly
         // - Or we can send it to the phone
         // TODO: This will need to be refurbished once we implement separate intervals
-        LOG_INFO("Waking up sensors...");
+        LOG_INFO("Waking up sensors");
         for (TelemetrySensor *sensor : sensors) {
             if (!sensor->canSleep()) {
                 LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
@@ -429,7 +429,7 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding AirQualityTelemetry module!");
+            LOG_ERROR("Error decoding AirQualityTelemetry module");
             return NULL;
         }
         // Check for a request for air quality metrics

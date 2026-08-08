@@ -217,7 +217,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             }
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
-            LOG_INFO("Received PKC admin payload, but the sender public key does not match the admin authorized key!");
+            LOG_INFO("Received PKC admin payload, but the sender public key does not match the admin authorized key");
             return handled;
         }
     } else {
@@ -232,7 +232,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // any message that changes state, we want to check the passkey for
     if (mp.from != 0 && !messageIsRequest(r) && !messageIsResponse(r)) {
         if (!checkPassKey(r)) {
-            LOG_WARN("Admin message without session_key!");
+            LOG_WARN("Admin message without session_key");
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, &mp);
             return handled;
         }
@@ -638,7 +638,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #ifdef FSCom
         spiLock->lock();
         if (FSCom.remove(r->delete_file_request)) {
-            LOG_DEBUG("Successfully deleted file");
+            LOG_DEBUG("Deleted file");
         } else {
             LOG_DEBUG("Failed to delete file");
         }

@@ -454,7 +454,7 @@ void setup()
     powerMonInit();
     serialSinceMsec = millis();
 
-    LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
+    LOG_INFO("\n\n//\\ E S H T /\\ S T / C");
 
 #if defined(ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
 #ifndef SENSECAP_INDICATOR
