@@ -931,8 +931,7 @@ static bool readAndConsumeToken()
     if (validUntilEpoch != 0) {
         uint32_t now = getValidTime(RTCQualityDevice);
         if (now == 0) {
-            LOG_WARN("EncryptedStorage: Token wall-clock TTL unverifiable (no RTC), using boot count (%u left)",
-                     bootsRemaining);
+            LOG_WARN("EncryptedStorage: Token wall-clock TTL unverifiable (no RTC), using boot count (%u left)", bootsRemaining);
         } else if (now > validUntilEpoch) {
             LOG_WARN("EncryptedStorage: Token expired (now=%u, until=%u), deleting", now, validUntilEpoch);
             concurrency::LockGuard g(spiLock);
@@ -1433,8 +1432,7 @@ bool readAndDecrypt(const char *filename, uint8_t *outBuf, size_t outBufSize, si
         // MAX_NUM_NODES pushes the serialised protobuf past that limit.
         const size_t maxAcceptedFileSize = outBufSize + OVERHEAD;
         if (fileSize > maxAcceptedFileSize) {
-            LOG_ERROR("EncryptedStorage: File %s too large (%d bytes, max %d)", filename, fileSize,
-                      maxAcceptedFileSize);
+            LOG_ERROR("EncryptedStorage: File %s too large (%d bytes, max %d)", filename, fileSize, maxAcceptedFileSize);
             f.close();
             meshtastic_security::secure_zero(dekSnapshot, sizeof(dekSnapshot));
             return false;

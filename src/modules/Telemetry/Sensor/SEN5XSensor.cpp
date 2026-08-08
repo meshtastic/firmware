@@ -378,8 +378,8 @@ bool SEN5XSensor::vocStateFromSensor()
     }
 
     // Print the state (if debug is on)
-    LOG_DEBUG("%s: VOC state from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1],
-              vocState[2], vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
+    LOG_DEBUG("%s: VOC state from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1], vocState[2],
+              vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
 
     return true;
 }
@@ -611,12 +611,10 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
             if (passed > ONE_WEEK_IN_SECONDS && (now > SEN5X_VOC_VALID_DATE)) {
                 // If current date greater than 01/01/2018 (validity check)
-                LOG_INFO("%s: Over a week (%us) since last cleaning (%us), trigger cleaning", sensorName,
-                         passed, lastCleaning);
+                LOG_INFO("%s: Over a week (%us) since last cleaning (%us), trigger cleaning", sensorName, passed, lastCleaning);
                 startCleaning();
             } else {
-                LOG_INFO("%s: Cleaning not needed (%ds passed), last cleaning: %us", sensorName, passed,
-                         lastCleaning);
+                LOG_INFO("%s: Cleaning not needed (%ds passed), last cleaning: %us", sensorName, passed, lastCleaning);
             }
         } else {
             // We assume the device has just been updated or it is new,

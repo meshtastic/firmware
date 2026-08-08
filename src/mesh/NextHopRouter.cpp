@@ -409,8 +409,8 @@ int32_t NextHopRouter::doRetransmissions()
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
                 if (isFromUs(p.packet)) {
-                    LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from,
-                              p.packet->to, p.packet->id);
+                    LOG_DEBUG("Reliable send failed, return nak fr=0x%08x,to=0x%08x,id=0x%08x", p.packet->from, p.packet->to,
+                              p.packet->id);
                     sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 }
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived

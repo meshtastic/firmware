@@ -429,8 +429,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             tgt.slot = config.lora.channel_num;
             if (bt.has_channel_index) {
                 if (bt.channel_index >= (uint32_t)channels.getNumChannels()) {
-                    LOG_WARN("Beacon: target %d channel_index %u out of range, use preset default", ti,
-                             bt.channel_index);
+                    LOG_WARN("Beacon: target %d channel_index %u out of range, use preset default", ti, bt.channel_index);
                 } else {
                     const meshtastic_ChannelSettings &cs = channels.getByIndex(bt.channel_index).settings;
                     if (cs.name[0] != '\0' || cs.psk.size > 0) {
@@ -438,8 +437,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
                         tgt.channel = cs;
                         tgt.slot = cs.channel_num;
                     } else {
-                        LOG_DEBUG("Beacon: target %d channel_index %u blank, use preset default", ti,
-                                  bt.channel_index);
+                        LOG_DEBUG("Beacon: target %d channel_index %u blank, use preset default", ti, bt.channel_index);
                     }
                 }
             }

@@ -567,8 +567,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             // These fields only have informational purpose on a client. Fill them to consume later.
             if (p->which_variant == meshtastic_StoreAndForward_history_tag) {
                 this->historyReturnWindow = p->variant.history.window / 60000;
-                LOG_INFO("HISTORY response: %d msgs from last %d min",
-                         p->variant.history.history_messages, this->historyReturnWindow);
+                LOG_INFO("HISTORY response: %d msgs from last %d min", p->variant.history.history_messages,
+                         this->historyReturnWindow);
             }
         }
         break;

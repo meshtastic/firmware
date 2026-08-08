@@ -347,8 +347,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                         toPhoneQueueSize++;
                     }
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
-                    LOG_DEBUG("BLE getFromRadio numBytes=%u, toPhoneQueueSize=%u", numBytes,
-                              toPhoneQueueSize.load());
+                    LOG_DEBUG("BLE getFromRadio numBytes=%u, toPhoneQueueSize=%u", numBytes, toPhoneQueueSize.load());
 #endif
                 } else {
                     // Shouldn't happen because the onRead callback shouldn't be waiting if the queue is full!
@@ -580,9 +579,8 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
                 tries++;
 
                 if (tries == 4000) {
-                    LOG_WARN(
-                        "BLE onRead(%d): data timeout after %u ms, %d tries, returning 0-size response",
-                        currentReadCount, millis() - startMillis, tries);
+                    LOG_WARN("BLE onRead(%d): data timeout after %u ms, %d tries, returning 0-size response", currentReadCount,
+                             millis() - startMillis, tries);
                 }
             }
         }

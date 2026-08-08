@@ -127,8 +127,8 @@ RTCSetResult readFromRTC()
         }
 #endif
 
-        LOG_DEBUG("RTC time from RV3028 getTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
-                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+        LOG_DEBUG("RTC time from RV3028 getTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                  t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
@@ -200,8 +200,8 @@ RTCSetResult readFromRTC()
             tv.tv_usec = 0;
 
             uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
-            LOG_DEBUG("RTC time from RX8130CE getDateTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900,
-                      t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+            LOG_DEBUG("RTC time from RX8130CE getDateTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
+                      t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
 #ifdef BUILD_EPOCH
             if (tv.tv_sec < BUILD_EPOCH) {
                 if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
@@ -277,8 +277,8 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // Calculate max allowed time safely to avoid overflow in logging
             uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
             uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
-            LOG_WARN("Ignore time (%ld) too far in future (build epoch: %ld, max: %ld)", printableEpoch,
-                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
+            LOG_WARN("Ignore time (%ld) too far in future (build epoch: %ld, max: %ld)", printableEpoch, (uint32_t)BUILD_EPOCH,
+                     maxAllowedPrintable);
             lastTimeValidationWarning = millis();
         }
         return RTCSetResultInvalidTime;
@@ -288,8 +288,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     bool shouldSet;
     if (forceUpdate) {
         shouldSet = true;
-        LOG_DEBUG("Override RTC quality (%s) with incoming quality %s", RtcName(currentQuality),
-                  RtcName(q));
+        LOG_DEBUG("Override RTC quality (%s) with incoming quality %s", RtcName(currentQuality), RtcName(q));
     } else if (q > currentQuality) {
         shouldSet = true;
         LOG_DEBUG("Upgrade time to quality %s", RtcName(q));
@@ -444,8 +443,8 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct tm &t)
             // Calculate max allowed time safely to avoid overflow in logging
             uint64_t maxAllowedTime = (uint64_t)BUILD_EPOCH + FORTY_YEARS;
             uint32_t maxAllowedPrintable = (maxAllowedTime > UINT32_MAX) ? UINT32_MAX : (uint32_t)maxAllowedTime;
-            LOG_WARN("Ignore time (%lu) too far in future (build epoch: %lu, max: %lu)", printableEpoch,
-                     (uint32_t)BUILD_EPOCH, maxAllowedPrintable);
+            LOG_WARN("Ignore time (%lu) too far in future (build epoch: %lu, max: %lu)", printableEpoch, (uint32_t)BUILD_EPOCH,
+                     maxAllowedPrintable);
             lastTimeValidationWarning = millis();
         }
         return RTCSetResultInvalidTime;

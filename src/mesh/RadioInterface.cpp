@@ -1276,8 +1276,7 @@ void RadioInterface::applyModemConfig()
     } else { // if not using preset, then just use the custom settings
         if (validateConfigLora(loraConfig)) {
         } else {
-            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults",
-                     newRegion->name);
+            LOG_WARN("Invalid LoRa config, can't apply modem config - fall back to %s defaults", newRegion->name);
             clampConfigLora(loraConfig);
         }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)

@@ -672,8 +672,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // senders emit only those two sizes (perhapsEncode sets 0 or XEDDSA_SIGNATURE_SIZE). Drop
         // it: a crafted partial signature would otherwise land in the unsigned branch below while
         // its bytes inflated the size estimate, letting a forged broadcast dodge the downgrade drop.
-        LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, drop", (unsigned)p->decoded.xeddsa_signature.size,
-                 p->from);
+        LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, drop", (unsigned)p->decoded.xeddsa_signature.size, p->from);
         return false;
     } else {
         if (p->pki_encrypted)
@@ -1161,8 +1160,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a usable public key for the destination (NodeDB or a pending key-verification key)
             if (!haveDestKey) {
-                LOG_WARN("Unknown public key for 0x%08x (portnum %d), refuse legacy DM", p->to,
-                         p->decoded.portnum);
+                LOG_WARN("Unknown public key for 0x%08x (portnum %d), refuse legacy DM", p->to, p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) && memcmp(p->public_key.bytes, destKey.bytes, 32) != 0) {

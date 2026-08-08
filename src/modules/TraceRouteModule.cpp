@@ -627,8 +627,8 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
 
-        LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
-                 p->decoded.portnum, p->decoded.want_response, p->decoded.payload.size);
+        LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to, p->decoded.portnum,
+                 p->decoded.want_response, p->decoded.payload.size);
         LOG_INFO("Calling service->sendToMesh");
 
         if (service) {
@@ -746,8 +746,8 @@ void TraceRouteModule::launch(NodeNum node)
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, &req);
 
-        LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to,
-                 p->decoded.portnum, p->decoded.want_response, p->decoded.payload.size);
+        LOG_INFO("Packet allocated: to=0x%08x, portnum=%d, want_response=%d, payload_size=%d", p->to, p->decoded.portnum,
+                 p->decoded.want_response, p->decoded.payload.size);
 
         if (service) {
             service->sendToMesh(p, RX_SRC_USER);

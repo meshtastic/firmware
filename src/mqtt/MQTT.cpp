@@ -281,8 +281,8 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
     pubSub.setClient(client);
     pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
 
-    LOG_INFO("Direct MQTT connect %s, port %d, user %s, password ***", config.serverAddr.c_str(),
-             config.serverPort, config.mqttUsername);
+    LOG_INFO("Direct MQTT connect %s, port %d, user %s, password ***", config.serverAddr.c_str(), config.serverPort,
+             config.mqttUsername);
 
     // Generate node ID from nodenum for client identification
     std::string nodeId = nodeDB->getNodeId();
