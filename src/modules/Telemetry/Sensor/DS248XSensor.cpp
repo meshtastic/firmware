@@ -162,12 +162,15 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         }
 
         if (!initError) {
-            LOG_INFO("%s: Started one-wire (%u/%u)", sensorName, retry, numRetries);
+
             status = true;
             // We want to keep searching for ROMs on the DS248X_DS2482_800
             // and always do the three passes
             if (_variant == ds248x_variant_t::DS248X_DS2484) {
+                LOG_INFO("%s: Started one-wire (%u/%u)", sensorName, retry, numRetries);
                 break;
+            } else {
+                LOG_INFO("%s: One-wire startup cycle (%u/%u)", sensorName, retry, numRetries);
             }
         }
         // TODO Potentially not needed, but taken from Adafruit's library example
@@ -293,6 +296,11 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
             if (readTemperatureChannel(channel)) {
                 channelCount += 1;
 
+                if (channel == mainTemperatureChannel) {
+                    measurement->variant.environment_metrics.has_temperature = true;
+                    measurement->variant.environment_metrics.temperature = ds2482800Data.ds248xData[channel].temperature;
+                }
+
                 switch (channel) {
                 case 0:
                     measurement->variant.environment_metrics.has_one_wire_temperature_ch0 = true;
@@ -343,6 +351,45 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
         return channelCount > 0;
     }
     return false;
+}
+
+void DS248XSensor::setMainTemperature(uint8_t channel) {
+    if (channel > 7) {
+        LOG_ERROR("%s: Requested channel (%u) not available", sensorName, channel);
+        return;
+    }
+
+    LOG_INFO("%s: Setting requested channel (%u) as main temperature", sensorName, channel);
+    mainTemperatureChannel = channel;
+    return;
+}
+
+AdminMessageHandleResult DS248XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                         meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+    result = AdminMessageHandleResult::NOT_HANDLED;
+
+    switch (request->which_payload_variant) {
+    case meshtastic_AdminMessage_sensor_config_tag:
+        if (!request->sensor_config.has_ds248x_config) {
+            result = AdminMessageHandleResult::NOT_HANDLED;
+            break;
+        }
+
+        // Check for main temperature channel request
+        if (request->sensor_config.ds248x_config.has_main_temperature_channel) {
+            this->setMainTemperature(request->sensor_config.ds248x_config.main_temperature_channel);
+        }
+
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
 }
 
 #endif
