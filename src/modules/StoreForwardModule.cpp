@@ -630,7 +630,7 @@ StoreForwardModule::StoreForwardModule()
                     this->populatePSRAM();
                     is_server = true;
                 } else {
-                    LOG_INFO("");
+                    LOG_INFO(".");
                     LOG_INFO("S&F: not enough PSRAM free, Disable");
                 }
             } else {

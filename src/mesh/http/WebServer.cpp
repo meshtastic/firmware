@@ -164,7 +164,7 @@ void createSSLCert()
         while (!isCertReady) {
             if ((millis() / 500) % 2) {
                 if (runLoop) {
-                    LOG_DEBUG("");
+                    LOG_DEBUG(".");
 
                     yield();
                     esp_task_wdt_reset();

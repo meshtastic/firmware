@@ -303,7 +303,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
             ulfius_set_string_body_response(res, 200, tmpa);
             // LOG_DEBUG("\n----webAPI response all:----");
             // LOG_DEBUG(tmpa);
-            // LOG_DEBUG("");
+            // LOG_DEBUG(".");
         }
         // Otherwise, just return one protobuf
     } else {
@@ -312,7 +312,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
         ulfius_set_binary_body_response(res, 200, tmpa, len);
         // LOG_DEBUG("\n----webAPI response:");
         // LOG_DEBUG(tmpa);
-        // LOG_DEBUG("");
+        // LOG_DEBUG(".");
     }
 
     // LOG_DEBUG("end radio->web", len);

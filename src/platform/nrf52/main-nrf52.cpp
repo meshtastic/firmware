@@ -534,7 +534,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     // The following code should not be run, because we are off
     while (1) {
         delay(5000);
-        LOG_DEBUG("");
+        LOG_DEBUG(".");
     }
 }
 
