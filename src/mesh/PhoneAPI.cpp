@@ -325,10 +325,10 @@ void PhoneAPI::handleStartConfig()
             filesManifest = getFiles("/", FILES_MANIFEST_LEVELS, FILES_MANIFEST_MAX_COUNT, &filesManifestLimited);
         }
         if (filesManifestLimited) {
-            LOG_WARN("Got %zu files in manifest (limited to %zu entries/depth %u)", filesManifest.size(),
-                     FILES_MANIFEST_MAX_COUNT, static_cast<unsigned>(FILES_MANIFEST_LEVELS));
+            LOG_WARN("Got %u files in manifest (limited to %u entries/depth %u)", static_cast<unsigned>(filesManifest.size()),
+                     static_cast<unsigned>(FILES_MANIFEST_MAX_COUNT), static_cast<unsigned>(FILES_MANIFEST_LEVELS));
         } else {
-            LOG_DEBUG("Got %zu files in manifest", filesManifest.size());
+            LOG_DEBUG("Got %u files in manifest", static_cast<unsigned>(filesManifest.size()));
         }
     } else {
         releaseFilesManifest(filesManifest);

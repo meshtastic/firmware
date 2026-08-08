@@ -165,12 +165,12 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
 
         size_t index = offset / sizeof(T);
         if (!used[index]) {
-            LOG_WARN("Double free detected for pool item %zu at %p", index, static_cast<void *>(p));
+            LOG_WARN("Double free detected for pool item %u at %p", (unsigned int)index, static_cast<void *>(p));
             return;
         }
         used[index] = false;
         this->auditAdd(-(int32_t)sizeof(T));
-        LOG_HEAP("Released static pool item %zu at %p", index, static_cast<void *>(p));
+        LOG_HEAP("Released static pool item %u at %p", (unsigned int)index, static_cast<void *>(p));
     }
 
   protected:
