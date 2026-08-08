@@ -130,7 +130,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again", nightyNightMs);
+        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
         doDeepSleep(nightyNightMs, true, false);
     }
 
@@ -190,7 +190,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         LOG_INFO("Waking up sensors");
         for (TelemetrySensor *sensor : sensors) {
             if (!sensor->canSleep()) {
-                LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
+                LOG_DEBUG("%s: no sleep support, skip", sensor->sensorName);
                 continue;
             }
 
@@ -529,7 +529,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     // until the next telemetry interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)
-            LOG_WARN("Air quality telemetry unavailable this cycle, sleep without sending");
+            LOG_WARN("AQ telemetry unavailable, sleep without send");
         sleepOnNextExecution = true;
         preflightSleepDeferrals = 0;
         LOG_DEBUG("Start next execution in 5s, then sleep");

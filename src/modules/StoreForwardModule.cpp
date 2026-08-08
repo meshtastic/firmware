@@ -421,7 +421,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 }
             } else {
                 storeForwardModule->historyAdd(mp);
-                LOG_INFO("S&F stored. Message history contains %u records now", this->packetHistoryTotalCount);
+                LOG_INFO("S&F stored, history has %u records", this->packetHistoryTotalCount);
             }
         } else if (!isFromUs(&mp) && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
             auto &p = mp.decoded;
@@ -567,7 +567,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             // These fields only have informational purpose on a client. Fill them to consume later.
             if (p->which_variant == meshtastic_StoreAndForward_history_tag) {
                 this->historyReturnWindow = p->variant.history.window / 60000;
-                LOG_INFO("Router Response HISTORY - Sending %d messages from last %d minutes",
+                LOG_INFO("HISTORY response: %d msgs from last %d min",
                          p->variant.history.history_messages, this->historyReturnWindow);
             }
         }

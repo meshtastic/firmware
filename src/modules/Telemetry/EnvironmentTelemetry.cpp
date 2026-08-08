@@ -366,7 +366,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
+        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
         doDeepSleep(nightyNightMs, true, false);
     }
 
@@ -813,7 +813,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     // otherwise it stays awake until the next telemetry interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)
-            LOG_WARN("Environment telemetry unavailable this cycle, sleep without sending");
+            LOG_WARN("Env telemetry unavailable, sleep without send");
         sleepOnNextExecution = true;
         preflightSleepDeferrals = 0;
         LOG_DEBUG("Start next execution in 5s, then sleep");

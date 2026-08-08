@@ -255,7 +255,7 @@ void NRF52Bluetooth::startDisabled()
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
-    LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
+    LOG_INFO("Disable NRF52 BT (tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
 {
@@ -283,7 +283,7 @@ void NRF52Bluetooth::setup()
         // current Bluefruit config. Without this check the node would silently run without BLE.
         // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
         // raise the ORIGIN accordingly.
-        LOG_ERROR("Bluefruit.begin failed - SoftDevice RAM reservation too small for this config");
+        LOG_ERROR("Bluefruit.begin failed: SoftDevice RAM too small");
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
         return;
     }
@@ -481,7 +481,7 @@ void NRF52Bluetooth::disconnect()
             delay(1);
 
         if (Bluefruit.connected())
-            LOG_WARN("BLE disconnect unconfirmed after %ums, continuing shutdown", millis() - start);
+            LOG_WARN("BLE disconnect unconfirmed after %ums, shutdown anyway", millis() - start);
         else
             LOG_INFO("Ended BLE connection");
     }

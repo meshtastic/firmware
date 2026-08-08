@@ -238,7 +238,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
             memcpy(&c.data.bytes, p->encrypted.bytes, p->encrypted.size);
             c.data.size = p->encrypted.size;
         } else {
-            LOG_WARN("Encrypted payload (%u) exceeds sim loopback capacity (%u)! Send empty payload", (unsigned)p->encrypted.size,
+            LOG_WARN("Encrypted payload (%u) > sim loopback capacity (%u), send empty", (unsigned)p->encrypted.size,
                      (unsigned)loopbackCapacity);
         }
     } else {
@@ -248,7 +248,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
             memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
             c.data.size = p->decoded.payload.size;
         } else {
-            LOG_WARN("Payload size larger than compressed message allows! Send empty payload");
+            LOG_WARN("Payload > compressed max, send empty");
         }
     }
 
@@ -359,7 +359,7 @@ void SimRadio::handleReceiveInterrupt()
     }
 
     if (!isReceiving) {
-        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode");
+        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt outside receive mode");
         return;
     }
 

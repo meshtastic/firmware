@@ -430,7 +430,7 @@ void Screen::showAlphanumericPicker(const char *message, const char *initialText
 void Screen::showTextInput(const char *header, const char *initialText, uint32_t durationMs,
                            std::function<void(const std::string &)> textCallback)
 {
-    LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
+    LOG_INFO("showTextInput header='%s', durationMs=%d", header ? header : "NULL", durationMs);
 
     // Start OnScreenKeyboardModule session (non-touch variant)
     OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
@@ -1271,7 +1271,7 @@ int32_t Screen::runOnce()
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
 
-            LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums, next frame", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }

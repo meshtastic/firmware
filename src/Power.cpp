@@ -171,7 +171,7 @@ static bool initAdcCalibration()
     }
 #endif
 
-    LOG_INFO("ADC calibration not supported; using approximate scaling");
+    LOG_INFO("ADC calibration unsupported; use approx scaling");
     return false;
 }
 
@@ -885,8 +885,8 @@ void Power::reboot()
     HAL_NVIC_SystemReset();
 #else
     rebootAtMsec = -1;
-    LOG_WARN("FIXME implement reboot for this platform. Note that some settings "
-             "require a restart to be applied");
+    LOG_WARN("FIXME implement reboot for this platform; some settings "
+             "need restart to apply");
 #endif
 }
 
@@ -1926,7 +1926,7 @@ meshSolarBatteryLevel meshSolarLevel;
 bool Power::meshSolarInit()
 {
     bool result = meshSolarLevel.runOnce();
-    LOG_DEBUG("Power::meshSolarInit mesh solar sensor is %s", result ? "ready" : "not ready yet");
+    LOG_DEBUG("Power::meshSolarInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
         return false;
     batteryLevel = &meshSolarLevel;
@@ -2059,7 +2059,7 @@ bool Power::serialBatteryInit()
 #endif
 
     bool result = serialBatteryLevel.runOnce();
-    LOG_DEBUG("Power::serialBatteryInit serial battery sensor is %s", result ? "ready" : "not ready yet");
+    LOG_DEBUG("Power::serialBatteryInit sensor is %s", result ? "ready" : "not ready yet");
     if (!result)
         return false;
     batteryLevel = &serialBatteryLevel;
