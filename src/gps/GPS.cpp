@@ -1183,6 +1183,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                         // Power (EN pin): on
         setPowerPMU(true);                                        // Power (PMU): on
+        writePinRFEN(true);                                       // External RF front-end: on
         writePinStandby(false);                                   // Standby (pin): awake (not standby)
         setPowerUBLOX(true);                                      // Standby (UBLOX): awake
         break;
@@ -1191,15 +1192,17 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
         writePinEN(true);                                           // Power (EN pin): on
         setPowerPMU(true);                                          // Power (PMU): on
+        writePinRFEN(false);                                        // External RF front-end: off
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_HARDSLEEP:
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinRFEN(false);                                        // External RF front-end: off
+        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         writePinEN(false);                                          // Power (EN pin): off
         setPowerPMU(false);                                         // Power (PMU): off
-        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
 #ifdef GNSS_AIROHA
         digitalWrite(PIN_GPS_EN, LOW);
@@ -1209,9 +1212,10 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     case GPS_OFF:
         assert(sleepTime == 0);                                     // This is an indefinite sleep
         powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinRFEN(false);                                        // External RF front-end: off
+        writePinStandby(true);                                      // Standby (pin): asleep
         writePinEN(false);                                          // Power (EN pin): off
         setPowerPMU(false);                                         // Power (PMU): off
-        writePinStandby(true);                                      // Standby (pin): asleep
         setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
 #ifdef GNSS_AIROHA
         digitalWrite(PIN_GPS_EN, LOW);
@@ -1258,6 +1262,21 @@ void GPS::writePinStandby(bool standby)
 #ifdef GPS_DEBUG
     LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
+#endif
+}
+
+// Set the external RF front-end enable pin, if relevant
+void GPS::writePinRFEN(bool on)
+{
+#ifdef PIN_GPS_RF_EN
+    bool val = on ? GPS_RF_EN_ACTIVE : !GPS_RF_EN_ACTIVE;
+    pinMode(PIN_GPS_RF_EN, OUTPUT);
+    digitalWrite(PIN_GPS_RF_EN, val);
+#ifdef GPS_DEBUG
+    LOG_DEBUG("Pin RF EN %s", val == HIGH ? "HI" : "LOW");
+#endif
+#else
+    (void)on;
 #endif
 }
 
@@ -1389,6 +1408,13 @@ void GPS::down()
         // U-blox is supported via PMREQ
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
             softsleepSupported = true;
+
+#ifdef GPS_FORCE_SOFT_SLEEP
+        if (softsleepSupported) {
+            setPowerState(GPS_SOFTSLEEP, sleepTime);
+            return;
+        }
+#endif
 
         if (softsleepSupported) {
             // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than

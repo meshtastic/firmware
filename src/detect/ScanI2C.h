@@ -106,7 +106,8 @@ class ScanI2C
         SPA06,
         STC8HKB, // STC8H companion-MCU keypad (ThinkNode-M9)
         DS248X,
-    } DeviceType;
+        HM330X
+   } DeviceType;
 
     // typedef uint8_t DeviceAddress;
     typedef enum I2CPort {
