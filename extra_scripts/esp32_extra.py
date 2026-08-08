@@ -70,17 +70,6 @@ def esp32_create_combined_bin(source, target, env):
 
 env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
-esp32_kind = env.GetProjectOption("custom_esp32_kind")
-if esp32_kind == "esp32":
-    # Free up some IRAM by removing auxiliary SPI flash chip drivers.
-    # Wrapped stub symbols are defined in src/platform/esp32/iram-quirk.c.
-    env.Append(
-        LINKFLAGS=[
-            "-Wl,--wrap=esp_flash_chip_gd",
-            "-Wl,--wrap=esp_flash_chip_issi",
-            "-Wl,--wrap=esp_flash_chip_winbond",
-        ]
-    )
-else:
-    # For newer ESP32 targets, using newlib nano works better.
-    env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
+# Enable Newlib Nano formatting to save space
+# ...but allow printf float support (compromise)
+env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])

@@ -1,0 +1,9 @@
+# FAULT: loadConfig() only adopts APIPort when it is inside 1024-65535 and otherwise
+# keeps the default without a word, so this is silently ignored. Webserver.Port has no
+# such guard at all, so an unusable port there is an error rather than a warning.
+Lora:
+  Module: sx1262
+General:
+  APIPort: 80
+Webserver:
+  Port: 99999

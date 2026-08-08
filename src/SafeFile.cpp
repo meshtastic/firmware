@@ -7,10 +7,6 @@ static File openFile(const char *filename, bool fullAtomic)
 {
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
-#ifdef ARCH_NRF52
-    FSCom.remove(filename);
-    return FSCom.open(filename, FILE_O_WRITE);
-#endif
     if (!fullAtomic) {
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
     }
@@ -67,9 +63,6 @@ bool SafeFile::close()
     f.close();
     spiLock->unlock();
 
-#ifdef ARCH_NRF52
-    return true;
-#endif
     if (!testReadback())
         return false;
 

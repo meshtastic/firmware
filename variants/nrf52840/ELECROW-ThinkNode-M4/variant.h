@@ -41,7 +41,8 @@ extern "C" {
 
 // LEDs
 #define LED_BLUE -1
-#define LED_NOTIFICATION (32 + 9)
+// #define LED_NOTIFICATION (32 + 9)
+#define LED_HEARTBEAT (32 + 9)
 #define LED_PAIRING (13)
 
 #define Battery_LED_1 (15)
@@ -85,7 +86,6 @@ static const uint8_t A0 = PIN_A0;
 
 // charger status
 #define EXT_CHRG_DETECT (32 + 6)
-#define EXT_CHRG_DETECT_VALUE HIGH
 
 // SPI
 #define SPI_INTERFACES_COUNT 1

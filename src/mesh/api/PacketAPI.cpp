@@ -1,10 +1,20 @@
 #ifdef USE_PACKET_API
 
-#include "api/PacketAPI.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "MeshService.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "api/PacketAPI.h"
 #include "modules/NodeInfoModule.h"
+
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+// receivePacket() dispatches ToRadio straight to MeshService, bypassing handleToRadioPacket and so
+// the lockdown admin gate. Fail the build rather than silently ship an admin-auth bypass.
+#error "USE_PACKET_API is incompatible with MESHTASTIC_PHONEAPI_ACCESS_CONTROL (PacketAPI bypasses the lockdown admin gate)"
+#endif
 
 PacketAPI *packetAPI = nullptr;
 
@@ -48,7 +58,7 @@ bool PacketAPI::receivePacket(void)
         isConnected = true;
         data_received = true;
 
-        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+        powerFSM.trigger(EVENT_INPUT);
         lastContactMsec = millis();
 
         meshtastic_ToRadio *mr;

@@ -37,6 +37,13 @@ template <class T> class LR11x0Interface : public RadioLibInterface
      */
     T lora;
 
+    int16_t getCurrentRSSI() override;
+
+    /// Transceiver firmware version as (major << 8 | minor), and which LR11x0 part this is. Captured at
+    /// init() from getVersionInfo(); 0 if the query failed.
+    uint16_t transceiverFw = 0;
+    uint8_t transceiverDevice = 0;
+
     /**
      * Glue functions called from ISR land
      */

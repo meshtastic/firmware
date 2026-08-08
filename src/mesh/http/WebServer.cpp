@@ -13,9 +13,8 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET && defined(ARCH_ESP32)
+#include <ETH.h>
 #endif // HAS_ETHERNET
 
 #ifdef ARCH_ESP32
@@ -96,14 +95,6 @@ static void handleWebResponse()
 static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
-
-#if 0
-    // Delete the saved certs (used in debugging)
-    LOG_DEBUG("Delete any saved SSL keys");
-    // prefs.clear();
-    prefs.remove("PK");
-    prefs.remove("cert");
-#endif
 
     LOG_INFO("Checking if we have a saved SSL Certificate");
 

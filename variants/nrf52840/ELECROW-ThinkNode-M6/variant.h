@@ -138,7 +138,7 @@ static const uint8_t A0 = PIN_A0;
 
 #define HAS_SOLAR
 
-#define OCV_ARRAY 4080, 3990, 3935, 3880, 3825, 3770, 3715, 3660, 3605, 3550, 3450
+#define OCV_ARRAY 4080, 3990, 3935, 3880, 3825, 3770, 3715, 3660, 3605, 3550, 3490
 
 #ifdef __cplusplus
 }

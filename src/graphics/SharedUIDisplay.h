@@ -1,6 +1,7 @@
 #pragma once
 
 #include <OLEDDisplay.h>
+#include <stdint.h>
 #include <string>
 
 namespace graphics
@@ -52,10 +53,23 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 
 // Shared battery/time/mail header
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr = "", bool force_no_invert = false,
-                      bool show_date = false);
+                      bool show_date = false, bool transparent_background = false, bool use_title_color_override = false,
+                      uint16_t title_color_override = 0);
 
 // Shared battery/time/mail header
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y);
+
+// Inline so non-compact boards fold this to a constant false at every call site, cost-free.
+static inline bool isCompactPanel(OLEDDisplay *display)
+{
+#if defined(OLED_COMPACT_UI)
+    // Covers both known compact panels (72x40 and 64x48).
+    return display->getWidth() <= 80 && display->getHeight() <= 48;
+#else
+    (void)display;
+    return false;
+#endif
+}
 
 const int *getTextPositions(OLEDDisplay *display);
 

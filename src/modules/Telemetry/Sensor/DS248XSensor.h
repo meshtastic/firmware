@@ -2,6 +2,7 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_DS248x.h>)
 
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_DS248x.h>
@@ -42,6 +43,11 @@
 #define DS248X_CH0 0xF0
 #endif
 
+// Returned by readTemperatureROM when the transaction fails or the scratchpad CRC mismatches
+#ifndef DS248X_INVALID_TEMPERATURE
+#define DS248X_INVALID_TEMPERATURE -1000.0f
+#endif
+
 typedef enum { DS248X_UNKNOWN = 0, DS248X_DS2484, DS248X_DS2482_800 } ds248x_variant_t;
 
 struct _DS248XData {
@@ -57,11 +63,12 @@ class DS248XSensor : public TelemetrySensor
 {
   private:
     Adafruit_DS248x ds248x;
-    TwoWire *_bus{};
-    uint8_t _address{};
     ds248x_variant_t _variant = DS248X_UNKNOWN;
     _DS248XData ds248xData{};
     _DS2482800Data ds2482800Data{};
+#ifdef DS248X_I2C_CLOCK_SPEED
+    ReClockI2C reClockI2C;
+#endif
     void printROM(const uint8_t *rom);
     bool isValidROM(const uint8_t *rom);
     float readTemperatureROM(const uint8_t *rom);
