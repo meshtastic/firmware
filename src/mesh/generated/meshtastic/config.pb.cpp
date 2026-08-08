@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_Config, meshtastic_Config, AUTO)
+PB_BIND(meshtastic_Config, meshtastic_Config, 2)
 
 
 PB_BIND(meshtastic_Config_DeviceConfig, meshtastic_Config_DeviceConfig, AUTO)
@@ -18,7 +18,7 @@ PB_BIND(meshtastic_Config_PositionConfig, meshtastic_Config_PositionConfig, AUTO
 PB_BIND(meshtastic_Config_PowerConfig, meshtastic_Config_PowerConfig, AUTO)
 
 
-PB_BIND(meshtastic_Config_NetworkConfig, meshtastic_Config_NetworkConfig, AUTO)
+PB_BIND(meshtastic_Config_NetworkConfig, meshtastic_Config_NetworkConfig, 2)
 
 
 PB_BIND(meshtastic_Config_NetworkConfig_IpV4Config, meshtastic_Config_NetworkConfig_IpV4Config, AUTO)

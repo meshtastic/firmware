@@ -406,6 +406,11 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     bool device_telemetry_enabled;
     /* Enable/Disable the air quality telemetry measurement module on-device display */
     bool air_quality_screen_enabled;
+    /* Enable/disable Cellular (modem) diagnostic metrics */
+    bool cellular_measurement_enabled;
+    /* Interval in seconds of how often we should try to send our
+ cellular diagnostic metrics to the mesh */
+    uint32_t cellular_update_interval;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
 /* Canned Messages Module Config */
@@ -497,7 +502,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
     /* Single-target TX channel: channel settings (name + PSK) to send beacons on.
  If unset, beacons go out on the primary channel. Used only when broadcast_targets is empty.
  NOTE: the single-target path embeds the ChannelSettings inline here, whereas a
- broadcast_targets entry references a channel-table slot by channel_index instead - see
+ broadcast_targets entry references a channel-table slot by channel_index instead — see
  BroadcastTarget. The two paths are equal, first-class options; only this representation differs. */
     bool has_broadcast_on_channel;
     meshtastic_ChannelSettings broadcast_on_channel;
@@ -514,7 +519,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
  each temporarily switching the radio to that entry's preset/region/channel.
  When empty, the broadcaster uses the scalar broadcast_on_preset / broadcast_on_region /
  broadcast_on_channel fields instead (the single-target path).
- Single- and multi-target are equal, first-class options - neither is preferred or
+ Single- and multi-target are equal, first-class options — neither is preferred or
  deprecated. They differ only in how the TX channel is named: broadcast_on_channel embeds a
  ChannelSettings inline, while a target references an existing channel-table slot by
  channel_index (see BroadcastTarget). */
@@ -680,7 +685,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_default {""}
@@ -701,7 +706,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StatusMessageConfig_init_zero {""}
@@ -800,6 +805,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_TelemetryConfig_health_screen_enabled_tag 13
 #define meshtastic_ModuleConfig_TelemetryConfig_device_telemetry_enabled_tag 14
 #define meshtastic_ModuleConfig_TelemetryConfig_air_quality_screen_enabled_tag 15
+#define meshtastic_ModuleConfig_TelemetryConfig_cellular_measurement_enabled_tag 16
+#define meshtastic_ModuleConfig_TelemetryConfig_cellular_update_interval_tag 17
 #define meshtastic_ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -1038,7 +1045,9 @@ X(a, STATIC,   SINGULAR, BOOL,     health_measurement_enabled,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   health_update_interval,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     health_screen_enabled,  13) \
 X(a, STATIC,   SINGULAR, BOOL,     device_telemetry_enabled,  14) \
-X(a, STATIC,   SINGULAR, BOOL,     air_quality_screen_enabled,  15)
+X(a, STATIC,   SINGULAR, BOOL,     air_quality_screen_enabled,  15) \
+X(a, STATIC,   SINGULAR, BOOL,     cellular_measurement_enabled,  16) \
+X(a, STATIC,   SINGULAR, UINT32,   cellular_update_interval,  17)
 #define meshtastic_ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TelemetryConfig_DEFAULT NULL
 
@@ -1173,7 +1182,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_StatusMessageConfig_size 81
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TAKConfig_size   4
-#define meshtastic_ModuleConfig_TelemetryConfig_size 50
+#define meshtastic_ModuleConfig_TelemetryConfig_size 60
 #define meshtastic_ModuleConfig_TrafficManagementConfig_size 30
 #define meshtastic_ModuleConfig_size             328
 #define meshtastic_RemoteHardwarePin_size        21
