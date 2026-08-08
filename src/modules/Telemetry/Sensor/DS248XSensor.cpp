@@ -353,7 +353,8 @@ bool DS248XSensor::getMetrics(meshtastic_Telemetry *measurement)
     return false;
 }
 
-void DS248XSensor::setMainTemperature(uint8_t channel) {
+void DS248XSensor::setMainTemperature(uint8_t channel)
+{
     if (channel > 7) {
         LOG_ERROR("%s: Requested channel (%u) not available", sensorName, channel);
         return;
@@ -365,7 +366,7 @@ void DS248XSensor::setMainTemperature(uint8_t channel) {
 }
 
 AdminMessageHandleResult DS248XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
-                                                         meshtastic_AdminMessage *response)
+                                                          meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result;
     result = AdminMessageHandleResult::NOT_HANDLED;

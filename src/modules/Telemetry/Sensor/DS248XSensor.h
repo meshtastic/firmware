@@ -84,7 +84,6 @@ class DS248XSensor : public TelemetrySensor
 
     AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                 meshtastic_AdminMessage *response) override;
-
 };
 
 #endif
