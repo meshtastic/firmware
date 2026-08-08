@@ -2479,16 +2479,19 @@ void menuHandler::wifiToggleMenu()
 #if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
 void menuHandler::cellularBaseMenu()
 {
-    enum optionsNumbers { Back, Cellular_toggle };
+    enum optionsNumbers { Back, Cellular_toggle, Cellular_roaming };
 
-    static const char *optionsArray[] = {"Back", "Cellular Toggle"};
+    static const char *optionsArray[] = {"Back", "Cellular Toggle", "Cellular Roaming"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Cellular Menu";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Cellular_toggle) {
             menuQueue = CellularToggleMenu;
+            screen->runNow();
+        } else if (selected == Cellular_roaming) {
+            menuQueue = CellularRoamingMenu;
             screen->runNow();
         }
     };
@@ -2505,7 +2508,7 @@ void menuHandler::cellularToggleMenu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     // The modem state machine handles power-down and power-up, so unlike WiFi
-    // this takes effect without a reboot - and is not persisted across one.
+    // this takes effect without a reboot. Still persisted to config.network.cell_enabled.
     if (isCellularEnabled())
         bannerOptions.InitialSelected = 2;
     else
@@ -2515,6 +2518,33 @@ void menuHandler::cellularToggleMenu()
             setCellularEnabled(false);
         else if (selected == Cell_enable)
             setCellularEnabled(true);
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::cellularRoamingMenu()
+{
+    enum optionsNumbers { Back, Roaming_disable, Roaming_enable };
+
+    static const char *optionsArray[] = {"Back", "Roaming Disabled", "Roaming Enabled"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Cellular Roaming";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    if (config.network.cell_roaming_enabled)
+        bannerOptions.InitialSelected = 2;
+    else
+        bannerOptions.InitialSelected = 1;
+    // AT^SYSCONFIG is only written at modem session init, so this takes effect at the
+    // next modem restart rather than immediately, unlike the power toggle above.
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Roaming_disable) {
+            config.network.cell_roaming_enabled = false;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == Roaming_enable) {
+            config.network.cell_roaming_enabled = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+        }
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -3024,6 +3054,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 #if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
     case CellularToggleMenu:
         cellularToggleMenu();
+        break;
+    case CellularRoamingMenu:
+        cellularRoamingMenu();
         break;
 #endif
     case KeyVerificationInit:

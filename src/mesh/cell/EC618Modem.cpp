@@ -2,6 +2,7 @@
 
 #if HAS_CELLULAR && defined(USE_EC618)
 
+#include "NodeDB.h"
 #include "mesh/cell/cellBearer.h"
 #include "mesh/cell/cellDiagParse.h"
 
@@ -30,7 +31,8 @@ void EC618Modem::sessionInit()
             LOG_WARN("Reading ^SYSCONFIG for roaming preference failed: %s", resp.c_str());
             return;
         }
-        String cmd = String("AT^SYSCONFIG=") + mode + "," + acqorder + "," + CELL_ROAMING_ENABLED + "," + srvdomain;
+        String cmd = String("AT^SYSCONFIG=") + mode + "," + acqorder + "," + (config.network.cell_roaming_enabled ? 1 : 0) + "," +
+                     srvdomain;
         submit(cmd.c_str(), 5000, [](ATResult r2, const String &resp2) {
             if (r2 != ATResult::Ok)
                 LOG_WARN("Setting roaming preference rejected: %s", resp2.c_str());
@@ -109,11 +111,8 @@ void EC618Modem::bringUpBearer(BearerStep step, ATCallback cb)
     case BEARER_CSTT: {
         // CSTT is not optional even with no APN: it moves the module from IP INITIAL to
         // IP START, and CIICR is only valid from IP START. An empty APN asks for the subscription default.
-#ifdef CELL_APN
-        String cmd = String("AT+CSTT=\"") + CELL_APN + "\",\"" + CELL_APN_USER + "\",\"" + CELL_APN_PASS + "\"";
-#else
-        String cmd = "AT+CSTT=\"\"";
-#endif
+        String cmd = String("AT+CSTT=\"") + config.network.cell_apn + "\",\"" + config.network.cell_apn_user + "\",\"" +
+                     config.network.cell_apn_pass + "\"";
         submit(cmd.c_str(), 10000, cb);
         break;
     }

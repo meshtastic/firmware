@@ -1291,6 +1291,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
+    deviceMetadata.hasCellular = HAS_CELLULAR;
     deviceMetadata.role = config.device.role;
     deviceMetadata.position_flags = config.position.position_flags;
     deviceMetadata.hw_model = HW_VENDOR;

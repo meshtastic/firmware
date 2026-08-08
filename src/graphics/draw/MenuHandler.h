@@ -43,6 +43,7 @@ class menuHandler
         WifiToggleMenu,
 #if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
         CellularToggleMenu,
+        CellularRoamingMenu,
 #endif
         BluetoothToggleMenu,
         ScreenOptionsMenu,
@@ -116,6 +117,7 @@ class menuHandler
 #if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
     static void cellularBaseMenu();
     static void cellularToggleMenu();
+    static void cellularRoamingMenu();
 #endif
     static void screenOptionsMenu();
     static void powerMenu();

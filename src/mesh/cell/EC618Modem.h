@@ -20,12 +20,6 @@
 #define MODEM_SIM_HOTPLUG_EDGE 1
 #endif
 
-// AT^SYSCONFIG <roam>: 0 disabled, 1 enabled. Written at session init, mode/acqorder/srvdomain
-// left as queried - this only ever touches roaming, not RAT selection or CS/PS domain.
-#ifndef CELL_ROAMING_ENABLED
-#define CELL_ROAMING_ENABLED 0
-#endif
-
 class EC618Modem : public ATModem
 {
   public:

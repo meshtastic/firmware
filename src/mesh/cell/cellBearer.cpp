@@ -2,8 +2,10 @@
 
 #if HAS_CELLULAR
 
+#include "NodeDB.h"
 #include "concurrency/Periodic.h"
 #include "gps/RTC.h"
+#include "mesh/MeshService.h"
 #include "mesh/cell/cellDiag.h"
 #include "mesh/cell/cellDiagParse.h"
 #include "mesh/cell/cellModem.h"
@@ -27,7 +29,7 @@ static CellState cellState = CELL_OFF;
 static String cellLocalIP;
 static bool cellBusy = false;      // a bring-up command is in flight
 static bool cellRtcSeeded = false; // AT+CCLK? has set the RTC this session
-static bool cellEnabled = true;    // cleared by the UI toggle, not persisted
+static bool cellEnabled = false;   // seeded from config.network.cell_enabled in initCellular()
 static uint8_t cellFailCount = 0;
 static uint32_t cellLastResponse = 0;
 
@@ -319,22 +321,24 @@ void setCellularEnabled(bool enabled)
     if (enabled == cellEnabled)
         return;
     cellEnabled = enabled;
-
-    if (!cellModem) // toggled before initCellular(), nothing to power
-        return;
+    config.network.cell_enabled = enabled;
+    service->reloadConfig(SEGMENT_CONFIG);
 
     cellLocalIP = "";
     cellRtcSeeded = false;
     cellBusy = false;
 
     if (enabled) {
-        cellModem->powerUp();
+        if (cellModem) // already started once, resume from OFF
+            cellModem->powerUp();
+        else // never started - cell_enabled was false at boot
+            initCellModem();
         cellLastResponse = millis();
         cellFailCount = 0;
         simAbsentLogged = false;
         simResetCount = 0;
         setCellState(CELL_BOOTING);
-    } else {
+    } else if (cellModem) {
         cellModem->powerOff();
         setCellState(CELL_OFF);
     }
@@ -452,9 +456,12 @@ bool initCellular()
     if (cellEvent)
         return true;
 
-    initCellModem();
-    cellLastResponse = millis();
-    setCellState(CELL_BOOTING);
+    cellEnabled = config.network.cell_enabled;
+    if (cellEnabled) {
+        initCellModem();
+        cellLastResponse = millis();
+        setCellState(CELL_BOOTING);
+    }
     cellEvent = new Periodic("cellConnect", reconnectCell);
     return true;
 }
