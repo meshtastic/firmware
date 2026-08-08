@@ -726,6 +726,7 @@ class Screen : public concurrency::OSThread
             uint8_t log = 255;
             uint8_t settings = 255;
             uint8_t wifi = 255;
+            uint8_t cellular = 255;
             uint8_t deviceFocused = 255;
             uint8_t system = 255;
             uint8_t gps = 255;
@@ -752,6 +753,7 @@ class Screen : public concurrency::OSThread
         bool textMessage = false;
         bool waypoint = false;
         bool wifi = false;
+        bool cellular = false;
         bool system = false;
         bool home = false;
         bool clock = false;

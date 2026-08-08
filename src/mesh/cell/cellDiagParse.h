@@ -19,9 +19,12 @@ bool parseBandInd(const char *resp, uint8_t *band, uint8_t *act);
 // +CBC: <bcs>,<bcl>,<mV> - modem VBAT, not the host battery.
 bool parseCbcMillivolts(const char *resp, uint16_t *mv);
 
+// +COPS: <mode>,<format>,"<oper>"[,<AcT>]. Accepts format 0 or 1, the long or short PLMN
+// name; false when the format is numeric or the name is absent (no entry in the modem's PLMN table).
+bool parseCopsName(const char *resp, char *out, size_t outLen);
+
 // +COPS: <mode>,<format>,"<oper>"[,<AcT>]. Only accepts format 2, the numeric
-// MCC/MNC; the test unit's PLMN name table is incomplete, so a name is refused
-// rather than shown.
+// MCC/MNC. Fallback for when parseCopsName finds no name.
 bool parseCopsNumeric(const char *resp, char *out, size_t outLen);
 
 // ^SYSCONFIG: <mode>,<acqorder>,<roam>,<srvdomain>. Deliberately does not report <roam> - callers

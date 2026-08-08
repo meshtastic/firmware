@@ -20,6 +20,9 @@ namespace DebugRenderer
 // WiFi status display
 void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
+// Cellular modem status display
+void drawFrameCellular(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
 // LoRa information display
 void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 

@@ -4,7 +4,7 @@
 
 #include "concurrency/Periodic.h"
 #include "gps/RTC.h"
-#include "mesh/cell/ATModem.h"
+#include "mesh/cell/cellDiag.h"
 #include "mesh/cell/cellDiagParse.h"
 #include "mesh/cell/cellModem.h"
 #if HAS_SCREEN
@@ -88,6 +88,11 @@ static void setCellState(CellState next)
         simAbsent = false; // until the next CPIN? says otherwise
     }
 
+    // No sweep runs below REG_WAIT, so the readings would otherwise keep
+    // rendering as though current after a SIM pull or a modem power-cycle.
+    if (next != CELL_REG_WAIT && next != CELL_BEARER_UP && next != CELL_IP_UP)
+        cellDiagInvalidate();
+
 #if HAS_SCREEN
     // The Cellular frame redraws on the UI's own cadence, so without this a transition sits
     // unrendered - most visibly the toggle, where the frame keeps claiming BEARER_UP after power-down.
@@ -96,8 +101,9 @@ static void setCellState(CellState next)
 #endif
 }
 
-// Common tail for every bring-up callback: note liveness and clear the in-flight flag.
-static void cellCommandDone(ATResult r)
+// Common tail for every bring-up callback: note liveness and clear the in-flight
+// flag. Shared with the diagnostic sweep, which takes part in both.
+void cellCommandDone(ATResult r)
 {
     cellBusy = false;
     if (r != ATResult::Timeout)
@@ -392,7 +398,14 @@ static int32_t reconnectCell()
         break;
 
     case CELL_REG_WAIT:
-        stepRegWait();
+        // Signal readings matter most while registration is not happening, so the sweep
+        // gets a tick here too - at the cost of noticing registration one poll later.
+        if (cellDiagDue()) {
+            cellBusy = true;
+            serviceCellDiag();
+        } else {
+            stepRegWait();
+        }
         break;
 
     case CELL_BEARER_UP:
@@ -409,6 +422,10 @@ static int32_t reconnectCell()
                 if (r == ATResult::Ok && setRtcFromCclk(resp))
                     cellRtcSeeded = true;
             });
+        } else if (cellDiagDue()) {
+            // One diagnostic command per tick, so only ever one is in flight.
+            cellBusy = true;
+            serviceCellDiag();
         } else {
             // Liveness plus registration drop detection.
             cellBusy = true;

@@ -41,6 +41,9 @@ class menuHandler
         EnvironmentTelemetryMenu,
         EnvironmentTelemetrySourceMenu,
         WifiToggleMenu,
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+        CellularToggleMenu,
+#endif
         BluetoothToggleMenu,
         ScreenOptionsMenu,
         PowerMenu,
@@ -110,6 +113,10 @@ class menuHandler
     static void environmentTelemetrySourceMenu();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+    static void cellularBaseMenu();
+    static void cellularToggleMenu();
+#endif
     static void screenOptionsMenu();
     static void powerMenu();
     static void nodeNameLengthMenu();

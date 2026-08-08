@@ -1526,6 +1526,17 @@ void Screen::setFrames(FrameFocus focus)
     }
 #endif
 
+#if HAS_CELLULAR
+    // Shown whenever the modem is built in, not only once the bearer is up - a
+    // modem stuck in REG_WAIT or FAILED is when the screen is worth having.
+    if (!hiddenFrames.cellular) {
+        fsi.positions.cellular = numframes;
+        normalFrames[numframes++] = graphics::DebugRenderer::drawFrameCellular;
+        indicatorIcons.push_back(icon_cellular);
+        PUSH_FRAME_TITLE("Cellular");
+    }
+#endif
+
     // Beware of what changes you make in this code!
     // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
     // Inside of that callback, goes over to MeshModule.cpp and we run
@@ -1768,6 +1779,7 @@ enum FrameVisBit : uint8_t {
     FVBIT_LORA = 13,
     FVBIT_SHOW_FAVORITES = 14,
     FVBIT_CHIRPY = 15,
+    FVBIT_CELLULAR = 16,
 };
 
 struct __attribute__((packed)) FrameVisFile {
@@ -1817,6 +1829,7 @@ uint32_t Screen::packHiddenFrames() const
     setBit(mask, FVBIT_LORA, hiddenFrames.lora);
     setBit(mask, FVBIT_SHOW_FAVORITES, hiddenFrames.show_favorites);
     setBit(mask, FVBIT_CHIRPY, hiddenFrames.chirpy);
+    setBit(mask, FVBIT_CELLULAR, hiddenFrames.cellular);
     return mask;
 }
 
@@ -1825,6 +1838,7 @@ void Screen::applyHiddenFramesMask(uint32_t mask)
     hiddenFrames.textMessage = getBit(mask, FVBIT_TEXT_MESSAGE);
     hiddenFrames.waypoint = getBit(mask, FVBIT_WAYPOINT);
     hiddenFrames.wifi = getBit(mask, FVBIT_WIFI);
+    hiddenFrames.cellular = getBit(mask, FVBIT_CELLULAR);
     hiddenFrames.system = getBit(mask, FVBIT_SYSTEM);
     hiddenFrames.home = getBit(mask, FVBIT_HOME);
     hiddenFrames.clock = getBit(mask, FVBIT_CLOCK);
@@ -2360,6 +2374,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::nodeListMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.cellular) {
+                    menuHandler::cellularBaseMenu();
+#endif
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showFrame(FrameDirection::PREVIOUS);

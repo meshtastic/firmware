@@ -125,6 +125,9 @@ const uint8_t icon_system[] PROGMEM = {
 const uint8_t icon_wifi[] PROGMEM = {0b00000000, 0b00011000, 0b00111100, 0b01111110,
                                      0b11011011, 0b00011000, 0b00011000, 0b00000000};
 
+// 📶 Cellular - four bars of increasing height, drawn LSB first.
+const uint8_t icon_cellular[] PROGMEM = {0x80, 0x80, 0xA0, 0xA0, 0xA8, 0xA8, 0xAA, 0xAA};
+
 const uint8_t icon_nodes[] PROGMEM = {
     0xF9, // Row 0  #..#######
     0x00, // Row 1

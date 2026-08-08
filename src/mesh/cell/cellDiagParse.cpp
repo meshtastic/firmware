@@ -150,6 +150,19 @@ bool parseCbcMillivolts(const char *resp, uint16_t *mv)
     return true;
 }
 
+bool parseCopsName(const char *resp, char *out, size_t outLen)
+{
+    const char *line = findLine(resp, "+COPS");
+    if (!line || !out || outLen == 0)
+        return false;
+
+    long format = intField(line, 1);
+    if (format != 0 && format != 1) // only the alphanumeric formats carry a name
+        return false;
+
+    return field(line, 2, out, outLen);
+}
+
 bool parseCopsNumeric(const char *resp, char *out, size_t outLen)
 {
     const char *line = findLine(resp, "+COPS");

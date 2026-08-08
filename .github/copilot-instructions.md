@@ -668,6 +668,7 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 - `test_admin_radio/` - LoRa region/config validation, AdminModule dispatch, node-DB metadata saves
 - `test_fscommon_getfiles/` - bounded file-manifest walk (cap, depth, truncation reporting)
 - `test_atak/` - ATAK integration
+- `test_cell_diag/` - Cellular modem diagnostic response parsers (CESQ, CEREG, BANDIND, CBC, COPS)
 - `test_crypto/` - Cryptography
 - `test_default/` - Default configuration
 - `test_hop_scaling/` - Hop scaling histogram and required-hop logic

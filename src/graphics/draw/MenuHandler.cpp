@@ -22,6 +22,9 @@
 #include "mesh/Default.h"
 #include "mesh/MeshTypes.h"
 #include "mesh/RadioLibInterface.h"
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+#include "mesh/cell/cellBearer.h"
+#endif
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
@@ -1221,7 +1224,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, CellularToggle, PowerMenu, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1241,6 +1244,10 @@ void menuHandler::systemBaseMenu()
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     optionsArray[options] = "WiFi Toggle";
     optionsEnumArray[options++] = WiFiToggle;
+#endif
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+    optionsArray[options] = "Cellular Toggle";
+    optionsEnumArray[options++] = CellularToggle;
 #endif
 
     if (currentResolution == ScreenResolution::UltraLow) {
@@ -1282,6 +1289,11 @@ void menuHandler::systemBaseMenu()
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
         } else if (selected == WiFiToggle) {
             menuQueue = WifiToggleMenu;
+            screen->runNow();
+#endif
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+        } else if (selected == CellularToggle) {
+            menuQueue = CellularToggleMenu;
             screen->runNow();
 #endif
         } else if (selected == Back && !test_enabled) {
@@ -2464,6 +2476,50 @@ void menuHandler::wifiToggleMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+void menuHandler::cellularBaseMenu()
+{
+    enum optionsNumbers { Back, Cellular_toggle };
+
+    static const char *optionsArray[] = {"Back", "Cellular Toggle"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Cellular Menu";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Cellular_toggle) {
+            menuQueue = CellularToggleMenu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::cellularToggleMenu()
+{
+    enum optionsNumbers { Back, Cell_disable, Cell_enable };
+
+    static const char *optionsArray[] = {"Back", "Cellular Disabled", "Cellular Enabled"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Cellular Actions";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    // The modem state machine handles power-down and power-up, so unlike WiFi
+    // this takes effect without a reboot - and is not persisted across one.
+    if (isCellularEnabled())
+        bannerOptions.InitialSelected = 2;
+    else
+        bannerOptions.InitialSelected = 1;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Cell_disable)
+            setCellularEnabled(false);
+        else if (selected == Cell_enable)
+            setCellularEnabled(true);
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+#endif
+
 void menuHandler::screenOptionsMenu()
 {
     // Check if brightness is supported
@@ -2965,6 +3021,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case WifiToggleMenu:
         wifiToggleMenu();
         break;
+#if HAS_CELLULAR && (defined(PIN_MODEM_PWRKEY) || defined(PIN_MODEM_EN))
+    case CellularToggleMenu:
+        cellularToggleMenu();
+        break;
+#endif
     case KeyVerificationInit:
         keyVerificationInitMenu();
         break;

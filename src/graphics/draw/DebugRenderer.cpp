@@ -24,6 +24,11 @@
 #endif
 #endif
 
+#if HAS_CELLULAR
+#include "mesh/cell/cellBearer.h"
+#include "mesh/cell/cellDiag.h"
+#endif
+
 #include <DisplayFormatters.h>
 #include <RadioLibInterface.h>
 #include <target_specific.h>
@@ -117,6 +122,67 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     display->drawString(x, getTextPositions(display)[line++], ssidStr);
 
     display->drawString(x, getTextPositions(display)[line++], "URL: http://meshtastic.local");
+
+    graphics::drawCommonFooter(display, x, y);
+
+    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
+#ifdef SHOW_REDRAWS
+    if (heartbeat)
+        display->setPixel(0, 0);
+    heartbeat = !heartbeat;
+#endif
+#endif
+}
+
+// ****************************
+// * Cellular Screen          *
+// ****************************
+void drawFrameCellular(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+#if HAS_CELLULAR
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 1;
+
+    graphics::drawCommonHeader(display, x, y, "Cellular");
+
+    char buf[64];
+
+    // Bearer state first: this frame is most useful when the link is down.
+    snprintf(buf, sizeof(buf), "State: %s", getCellStateName(getCellState()));
+    display->drawString(x, getTextPositions(display)[line++], buf);
+
+    const CellDiag &diag = getCellDiag();
+
+    if (diag.rsrpValid)
+        snprintf(buf, sizeof(buf), "RSRP: %d dBm", diag.rsrp);
+    else
+        snprintf(buf, sizeof(buf), "Signal: n/a");
+    display->drawString(x, getTextPositions(display)[line++], buf);
+
+    const String &ip = getCellLocalIP();
+    if (ip.length())
+        snprintf(buf, sizeof(buf), "IP: %s", ip.c_str());
+    else
+        snprintf(buf, sizeof(buf), "No IP");
+    display->drawString(x, getTextPositions(display)[line++], buf);
+
+    // No URL row: the socket API and web server cannot run over an outbound-only
+    // NAT'd socket API, so there is nothing to reach the node on.
+    if (!graphics::isCompactPanel(display)) {
+        snprintf(buf, sizeof(buf), "Net: %s", diag.operatorName[0] ? diag.operatorName : "unknown");
+        if (diag.bandValid) {
+            size_t used = strlen(buf);
+            snprintf(buf + used, sizeof(buf) - used, " B%u%s", (unsigned)diag.band, diag.act == 7 ? "/LTE" : "");
+        }
+        display->drawString(x, getTextPositions(display)[line++], buf);
+
+        if (diag.vbatValid) {
+            snprintf(buf, sizeof(buf), "Modem: %u.%uV", diag.vbatMv / 1000, (diag.vbatMv % 1000) / 100);
+            display->drawString(x, getTextPositions(display)[line++], buf);
+        }
+    }
 
     graphics::drawCommonFooter(display, x, y);
 
