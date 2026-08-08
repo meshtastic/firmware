@@ -551,7 +551,7 @@ bool TraceRouteModule::startTraceRoute(NodeNum node)
     }
 
     if (node == nodeDB->getNodeNum()) {
-        LOG_ERROR("Cannot trace route to self: 0x%08x", node);
+        LOG_ERROR("Can't trace route to self: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Cannot trace self");
         resultShowTime = millis();
@@ -681,7 +681,7 @@ void TraceRouteModule::launch(NodeNum node)
     }
 
     if (node == nodeDB->getNodeNum()) {
-        LOG_ERROR("Cannot trace route to self: 0x%08x", node);
+        LOG_ERROR("Can't trace route to self: 0x%08x", node);
         runState = TRACEROUTE_STATE_RESULT;
         setResultText("Cannot trace self");
         resultShowTime = millis();

@@ -1733,7 +1733,7 @@ bool migrateFileToPlaintext(const char *filename)
         return true;
     }
     if (!dekLoaded) {
-        LOG_ERROR("EncryptedStorage: cannot revert %s - not unlocked", filename);
+        LOG_ERROR("EncryptedStorage: can't revert %s - not unlocked", filename);
         return false;
     }
 

@@ -545,7 +545,7 @@ bool SCD4XSensor::setAltitude(uint32_t altitude)
     // doesn't indicate it's needed.
     // error = scd4x.persistSettings();
     // if (error != SCD4X_NO_ERROR) {
-    //     LOG_ERROR("%s: Unable to make settings persistent. Error code: %u", sensorName, error);
+    //     LOG_ERROR("%s: Can't make settings persistent. Error code: %u", sensorName, error);
     //     return false;
     // }
 
