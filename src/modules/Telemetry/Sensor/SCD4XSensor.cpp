@@ -44,7 +44,7 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (sensorVariant == SCD4X_SENSOR_VARIANT_SCD41) {
         LOG_INFO("%s: Found SCD41", sensorName);
         if (!powerUp()) {
-            LOG_ERROR("%s: Error executing powerUp()", sensorName);
+            LOG_ERROR("%s: powerUp() failed", sensorName);
 #ifdef SCD4X_I2C_CLOCK_SPEED
             LOG_INFO("%s: restoring clock speed", sensorName);
             reClockI2C.restoreClock();
@@ -185,7 +185,7 @@ bool SCD4XSensor::performFRC(uint32_t targetCO2)
     }
 
     if (frcCorr == 0xFFFF) {
-        LOG_ERROR("%s: Error performing FRC", sensorName);
+        LOG_ERROR("%s: FRC failed", sensorName);
         return false;
     }
 
@@ -424,7 +424,7 @@ bool SCD4XSensor::setTemperature(float tempReference)
 
     error = scd4x.readMeasurement(co2, temperature, humidity);
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't read current temp. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't read current temp, rc=%u", sensorName, error);
         return false;
     }
 
@@ -437,7 +437,7 @@ bool SCD4XSensor::setTemperature(float tempReference)
     error = scd4x.getTemperatureOffset(prevTempOffset);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't get temp offset. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get temp offset, rc=%u", sensorName, error);
         return false;
     }
     LOG_INFO("%s: Current sensor temp offset: %.2f", sensorName, prevTempOffset);
@@ -447,13 +447,13 @@ bool SCD4XSensor::setTemperature(float tempReference)
     LOG_INFO("%s: Setting temp offset: %.2f", sensorName, tempOffset);
     error = scd4x.setTemperatureOffset(tempOffset);
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't set temp offset. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set temp offset, rc=%u", sensorName, error);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't persist settings. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't persist settings, rc=%u", sensorName, error);
         return false;
     }
 
@@ -484,7 +484,7 @@ bool SCD4XSensor::getAltitude(uint16_t &altitude)
     error = scd4x.getSensorAltitude(altitude);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't get altitude. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get altitude, rc=%u", sensorName, error);
         return false;
     }
     LOG_INFO("%s: Sensor altitude: %u", sensorName, altitude);
@@ -508,7 +508,7 @@ bool SCD4XSensor::getAmbientPressure(uint32_t &ambientPressure)
     error = scd4x.getAmbientPressure(ambientPressure);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't get altitude. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get ambient pressure, rc=%u", sensorName, error);
         return false;
     }
     LOG_INFO("%s: Sensor ambient pressure: %u", sensorName, ambientPressure);
@@ -537,7 +537,7 @@ bool SCD4XSensor::setAltitude(uint32_t altitude)
     error = scd4x.setSensorAltitude(altitude);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't set altitude. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set altitude, rc=%u", sensorName, error);
         return false;
     }
 
@@ -577,14 +577,14 @@ bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure)
     error = scd4x.setAmbientPressure(ambientPressure);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't set altitude. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set ambient pressure, rc=%u", sensorName, error);
         return false;
     }
 
     // Sensirion doesn't indicate if this is necessary. We send it anyway
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't persist settings. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't persist settings, rc=%u", sensorName, error);
         return false;
     }
 
@@ -615,7 +615,7 @@ bool SCD4XSensor::factoryReset()
     error = scd4x.performFactoryReset();
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Can't factory reset. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't factory reset, rc=%u", sensorName, error);
         return false;
     }
 
@@ -657,7 +657,7 @@ bool SCD4XSensor::powerDown()
     }
 
     if (scd4x.powerDown() != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Error executing sleep()", sensorName);
+        LOG_ERROR("%s: sleep() failed", sensorName);
 #ifdef SCD4X_I2C_CLOCK_SPEED
         LOG_INFO("%s: restoring clock speed", sensorName);
         reClockI2C.restoreClock();
@@ -690,7 +690,7 @@ bool SCD4XSensor::powerUp()
     LOG_INFO("%s: Waking up", sensorName);
 
     if (scd4x.wakeUp() != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Error executing wakeUp()", sensorName);
+        LOG_ERROR("%s: wakeUp() failed", sensorName);
         return false;
     }
 

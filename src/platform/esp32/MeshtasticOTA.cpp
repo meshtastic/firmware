@@ -109,7 +109,7 @@ bool trySwitchToOTA()
     uint8_t result = esp_ota_set_boot_partition(part);
     // Partition and app checks should now be done in the AdminModule before this is called
     if (result != ESP_OK) {
-        LOG_WARN("Can't switch to OTA partiton.  (Reason %d)", result);
+        LOG_WARN("Can't switch to OTA partition (reason %d)", result);
         return false;
     }
 

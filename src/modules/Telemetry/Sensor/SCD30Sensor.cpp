@@ -102,7 +102,7 @@ bool SCD30Sensor::setMeasurementInterval(uint16_t measInterval)
     error = scd30.setMeasurementInterval(measInterval);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Can't set measurement interval. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set measurement interval, rc=%u", sensorName, error);
         return false;
     }
 
@@ -123,7 +123,7 @@ bool SCD30Sensor::getMeasurementInterval(uint16_t &measInterval)
     error = scd30.getMeasurementInterval(measInterval);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Can't get measurement interval. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get measurement interval, rc=%u", sensorName, error);
         return false;
     }
 
@@ -224,7 +224,7 @@ bool SCD30Sensor::getASC(uint16_t &_ascActive)
     error = scd30.getAutoCalibrationStatus(_ascActive);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Can't send command", sensorName);
+        LOG_ERROR("%s: Can't get ASC status", sensorName);
         return false;
     }
 
@@ -268,7 +268,7 @@ bool SCD30Sensor::setTemperature(float tempReference)
 
         error = scd30.readMeasurementData(co2, temperature, humidity);
         if (error != SCD30_NO_ERROR) {
-            LOG_ERROR("%s: Can't read current temp. Error: %u", sensorName, error);
+            LOG_ERROR("%s: Can't read current temp, rc=%u", sensorName, error);
             return false;
         }
 
@@ -288,7 +288,7 @@ bool SCD30Sensor::setTemperature(float tempReference)
 
     error = scd30.setTemperatureOffset(_tempOffset);
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Can't set temp offset. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set temp offset, rc=%u", sensorName, error);
         return false;
     }
 
@@ -307,7 +307,7 @@ bool SCD30Sensor::setAltitude(uint16_t altitude)
     error = scd30.setAltitudeCompensation(altitude);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Can't set altitude. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set altitude, rc=%u", sensorName, error);
         return false;
     }
 
@@ -325,7 +325,7 @@ bool SCD30Sensor::getAltitude(uint16_t &altitude)
     error = scd30.getAltitudeCompensation(altitude);
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Can't get altitude. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get altitude, rc=%u", sensorName, error);
         return false;
     }
     LOG_INFO("%s: Sensor altitude: %u", sensorName, altitude);
@@ -342,7 +342,7 @@ bool SCD30Sensor::softReset()
     error = scd30.softReset();
 
     if (error != SCD30_NO_ERROR) {
-        LOG_ERROR("%s: Can't soft reset. Error: %u", sensorName, error);
+        LOG_ERROR("%s: Can't soft reset, rc=%u", sensorName, error);
         return false;
     }
 

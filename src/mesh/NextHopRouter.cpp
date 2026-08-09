@@ -67,7 +67,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
     p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
-    LOG_DEBUG("Set next hop for dest %x to %x", p->to, p->next_hop);
+    LOG_DEBUG("Set next hop for dest 0x%08x to 0x%x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
@@ -503,7 +503,7 @@ void NextHopRouter::setNextTx(PendingPacket *pending)
     assert(iface);
     auto d = iface->getRetransmissionMsec(pending->packet);
     pending->nextTxMsec = millis() + d;
-    LOG_DEBUG("Next retransmission in %u msecs: ", d);
+    LOG_DEBUG("Next retransmission in %u msecs", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
 }

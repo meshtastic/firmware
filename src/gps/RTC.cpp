@@ -138,7 +138,7 @@ RTCSetResult readFromRTC()
         }
         return RTCSetResultSuccess;
     } else {
-        LOG_WARN("RTC not found (addr 0x%02X)", rtc_found.address);
+        LOG_WARN("RTC read: not found (addr 0x%02X)", rtc_found.address);
     }
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
@@ -184,7 +184,7 @@ RTCSetResult readFromRTC()
         }
         return RTCSetResultSuccess;
     } else {
-        LOG_WARN("RTC not found (addr 0x%02X)", rtc_found.address);
+        LOG_WARN("RTC read: not found (addr 0x%02X)", rtc_found.address);
     }
 #elif defined(RX8130CE_RTC)
     if (rtc_found.address == RX8130CE_RTC) {
@@ -332,7 +332,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
         } else {
-            LOG_WARN("RTC not found (addr 0x%02X)", rtc_found.address);
+            LOG_WARN("RTC set: not found (addr 0x%02X)", rtc_found.address);
         }
 #elif defined(PCF8563_RTC) || defined(PCF85063_RTC)
 #if defined(PCF8563_RTC)
@@ -357,7 +357,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             LOG_DEBUG("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900, t->tm_mon + 1,
                       t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
         } else {
-            LOG_WARN("RTC not found (addr 0x%02X)", rtc_found.address);
+            LOG_WARN("RTC set: not found (addr 0x%02X)", rtc_found.address);
         }
 #elif defined(RX8130CE_RTC)
         if (rtc_found.address == RX8130CE_RTC) {

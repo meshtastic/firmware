@@ -4330,7 +4330,7 @@ bool NodeDB::createNewIdentity()
     // still streamed to clients, and made any DM/admin aimed at it fail forever with PKI_SEND_FAIL_PUBLIC_KEY.
     // removeNodeByNum() drops the lite entry, its satellite stores, and the warm-tier copy.
     if (getMeshNode(oldNodeNum) != NULL) {
-        LOG_DEBUG("Old node num %u now %u, remove stale identity", oldNodeNum, newNodeNum);
+        LOG_DEBUG("Old node num 0x%08x now 0x%08x, remove stale identity", oldNodeNum, newNodeNum);
         removeNodeByNum(oldNodeNum);
     } else {
         // Lite entry already absent: drop any orphaned satellite-store entries directly.
