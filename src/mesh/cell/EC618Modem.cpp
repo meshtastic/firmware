@@ -216,6 +216,12 @@ void EC618Modem::socketRxMode(ATCallback cb)
     submit("AT+CIPRXGET=1", 5000, cb);
 }
 
+void EC618Modem::socketSetTls(bool enabled, ATCallback cb)
+{
+    String cmd = String("AT+CIPSSL=") + (enabled ? 1 : 0);
+    submit(cmd.c_str(), 5000, cb);
+}
+
 void EC618Modem::socketOpen(const char *host, uint16_t port, ATCallback cb)
 {
     String cmd = String("AT+CIPSTART=\"TCP\",\"") + sanitizeAtArg(host) + "\"," + port;

@@ -34,6 +34,7 @@ class EC618Modem : public ATModem
 
     void socketAttach(const ATSocketEvents &events) override;
     void socketRxMode(ATCallback cb) override;
+    void socketSetTls(bool enabled, ATCallback cb) override;
     void socketOpen(const char *host, uint16_t port, ATCallback cb) override;
     void socketSend(const uint8_t *buf, size_t len, ATCallback cb) override;
     void socketRecv(size_t want, uint32_t timeoutMs, ATCallback cb) override;
