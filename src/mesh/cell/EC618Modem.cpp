@@ -6,6 +6,22 @@
 #include "mesh/cell/cellBearer.h"
 #include "mesh/cell/cellDiagParse.h"
 
+// Strips characters that could break out of a double-quoted AT command argument -
+// a '"' closes the argument early and changes the parameter list, and a '\r' or
+// '\n' terminates the command line so the remainder is issued as a second command.
+static String sanitizeAtArg(const char *in)
+{
+    String out;
+    if (!in)
+        return out;
+    for (const char *p = in; *p; p++) {
+        if (*p == '"' || *p == '\r' || *p == '\n')
+            continue;
+        out += *p;
+    }
+    return out;
+}
+
 void EC618Modem::sessionInit()
 {
     ATModem::sessionInit();
@@ -111,8 +127,8 @@ void EC618Modem::bringUpBearer(BearerStep step, ATCallback cb)
     case BEARER_CSTT: {
         // CSTT is not optional even with no APN: it moves the module from IP INITIAL to
         // IP START, and CIICR is only valid from IP START. An empty APN asks for the subscription default.
-        String cmd = String("AT+CSTT=\"") + config.network.cell_apn + "\",\"" + config.network.cell_apn_user + "\",\"" +
-                     config.network.cell_apn_pass + "\"";
+        String cmd = String("AT+CSTT=\"") + sanitizeAtArg(config.network.cell_apn) + "\",\"" +
+                     sanitizeAtArg(config.network.cell_apn_user) + "\",\"" + sanitizeAtArg(config.network.cell_apn_pass) + "\"";
         submit(cmd.c_str(), 10000, cb);
         break;
     }
@@ -154,8 +170,13 @@ void EC618Modem::onCipRxGet(const String &line)
     socketEvents.onRxPending(remaining > 0);
 
     if (len > 0) {
+        if ((size_t)len > socketRecvMax()) {
+            LOG_WARN("CIPRXGET len %d exceeds %u, ignoring", len, (unsigned)socketRecvMax());
+            return;
+        }
         auto onData = socketEvents.onData;
-        captureBinary(len, [onData](const uint8_t *data, size_t n) { onData(data, n); });
+        if (!captureBinary(len, [onData](const uint8_t *data, size_t n) { onData(data, n); }))
+            LOG_ERROR("CIPRXGET capture rejected, %d payload bytes will desync framing", len);
     }
 }
 
@@ -166,7 +187,9 @@ void EC618Modem::onCipRxGet(const String &line)
 void EC618Modem::onUnexpectedReboot()
 {
     LOG_WARN("Modem rebooted unexpectedly mid-command");
-    cancelActive();
+    // Session state (ATE0, roaming config, CIPRXGET mode, ...) is gone with the
+    // reboot; re-probe so sessionInit() runs again once AT answers.
+    expectReboot();
 }
 
 void EC618Modem::socketAttach(const ATSocketEvents &events)
@@ -189,7 +212,7 @@ void EC618Modem::socketRxMode(ATCallback cb)
 
 void EC618Modem::socketOpen(const char *host, uint16_t port, ATCallback cb)
 {
-    String cmd = String("AT+CIPSTART=\"TCP\",\"") + host + "\"," + port;
+    String cmd = String("AT+CIPSTART=\"TCP\",\"") + sanitizeAtArg(host) + "\"," + port;
     // OK from CIPSTART is acceptance only; the outcome arrives as a later URC.
     submit(cmd.c_str(), socketConnectTimeoutMs(), cb, "CONNECT OK");
 }
