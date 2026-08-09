@@ -1,10 +1,13 @@
-#include "SerialConsole.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "Default.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "SerialConsole.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #include "main.h"
 #include "time.h"
 

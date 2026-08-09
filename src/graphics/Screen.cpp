@@ -2336,7 +2336,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                             menuHandler::textMessageBaseMenu();
                         }
                     }
-                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size()) {
+                    // moduleFrames.size() bounds the module-frame region, before favorites are appended; its leading
+                    // slots are nullptr padding for the built-in frames, so only a non-null entry is a real module frame.
+                } else if (this->ui->getUiState()->currentFrame < moduleFrames.size() &&
+                           moduleFrames.at(this->ui->getUiState()->currentFrame) != nullptr) {
 #if HAS_TELEMETRY && HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
                     const MeshModule *currentModule = moduleFrames.at(this->ui->getUiState()->currentFrame);
                     if (environmentTelemetryModule != nullptr && environmentTelemetryModule->ownsFrame(currentModule)) {

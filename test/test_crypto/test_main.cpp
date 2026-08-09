@@ -47,6 +47,17 @@ void test_SHA256(void)
     crypto->hash(hash, 2);
     TEST_ASSERT_EQUAL_MEMORY(hash, expected, 32);
 }
+
+void test_SHA256_large_input(void)
+{
+    uint8_t hash[300] = {0};
+    uint8_t expected[32];
+
+    HexToBytes(expected, "d13d4a8b3b8add19b5970157f09d00c12cbda4fed4d74d8493156523f7069b66");
+    crypto->hash(hash, sizeof(hash));
+    TEST_ASSERT_EQUAL_MEMORY(hash, expected, sizeof(expected));
+}
+
 void test_ECB_AES256(void)
 {
     // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_ECB.pdf
@@ -357,6 +368,7 @@ void setup()
     initializeTestEnvironment();
     UNITY_BEGIN(); // IMPORTANT LINE!
     RUN_TEST(test_SHA256);
+    RUN_TEST(test_SHA256_large_input);
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
