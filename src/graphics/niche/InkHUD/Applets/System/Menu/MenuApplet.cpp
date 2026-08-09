@@ -823,6 +823,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_NZ_865);
         break;
 
+    case SET_REGION_NZ_915:
+        applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_NZ_915);
+        break;
+
     case SET_REGION_TH:
         applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode_TH);
         break;
@@ -1728,6 +1732,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("RU", MenuAction::SET_REGION_RU, MenuPage::EXIT));
         items.push_back(MenuItem("IN", MenuAction::SET_REGION_IN, MenuPage::EXIT));
         items.push_back(MenuItem("NZ 865", MenuAction::SET_REGION_NZ_865, MenuPage::EXIT));
+        items.push_back(MenuItem("NZ 915", MenuAction::SET_REGION_NZ_915, MenuPage::EXIT));
         items.push_back(MenuItem("TH", MenuAction::SET_REGION_TH, MenuPage::EXIT));
         items.push_back(MenuItem("LoRa 2.4", MenuAction::SET_REGION_LORA_24, MenuPage::EXIT));
         items.push_back(MenuItem("UA 433", MenuAction::SET_REGION_UA_433, MenuPage::EXIT));
