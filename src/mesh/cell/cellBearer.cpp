@@ -6,6 +6,7 @@
 #include "concurrency/Periodic.h"
 #include "gps/RTC.h"
 #include "mesh/MeshService.h"
+#include "mesh/Throttle.h"
 #include "mesh/cell/cellDiag.h"
 #include "mesh/cell/cellDiagParse.h"
 #include "mesh/cell/cellModem.h"
@@ -80,6 +81,11 @@ bool isCellularAvailable()
 
 static void setCellState(CellState next)
 {
+    // A bring-up command queued before setCellularEnabled(false) can still complete
+    // and reach here; do not let a stale callback revive the state machine after
+    // the modem has been told to power off.
+    if (!cellEnabled && next != CELL_OFF)
+        return;
     if (next == cellState)
         return;
     LOG_INFO("Cell state %s -> %s", getCellStateName(cellState), getCellStateName(next));
@@ -359,7 +365,7 @@ static int32_t reconnectCell()
     // pulse is also mandatory after powerOff(), which leaves the module off.
     bool silent =
         (cellState == CELL_SIM_WAIT || cellState == CELL_REG_WAIT || cellState == CELL_BEARER_UP || cellState == CELL_IP_UP) &&
-        (int32_t)(now - cellLastResponse) > (int32_t)CELL_SILENCE_MS;
+        !Throttle::isWithinTimespanMs(cellLastResponse, CELL_SILENCE_MS);
     if (cellModem->getState() == ATModem::FAILED || silent) {
         cellModem->restart();
         cellLocalIP = "";
@@ -395,7 +401,7 @@ static int32_t reconnectCell()
     case CELL_SIM_WAIT:
         // With USIM_CD wired the module reports insertion itself, so waiting
         // costs nothing and a reset would only throw away a working session.
-        if (!cellModem->hasSimHotplug() && simAbsent && (uint32_t)(now - simWaitSince) >= simResetBackoff())
+        if (!cellModem->hasSimHotplug() && simAbsent && !Throttle::isWithinTimespanMs(simWaitSince, simResetBackoff()))
             stepSimReset();
         else
             stepSimWait();
