@@ -133,6 +133,11 @@ class ATModem : public concurrency::OSThread
     // from a URC handler whose header line is immediately followed by binary payload.
     bool captureBinary(size_t n, ATBinarySink sink);
 
+    // Divert and drop the next n bytes off the UART without buffering them - for a payload
+    // the driver has decided not to keep (oversized), so line framing still resyncs after it
+    // without the unbounded allocation captureBinary() would need to hold all of it at once.
+    bool discardBinary(size_t n);
+
     // Abandon the command in flight so the queue moves on - for a deferred-result command
     // whose outcome arrived as a URC the caller recognised but the registered final URC did not.
     void cancelActive();
@@ -256,6 +261,7 @@ class ATModem : public concurrency::OSThread
     std::vector<uint8_t> binaryBuf;
     size_t binaryRemaining = 0;
     uint32_t binaryDeadline = 0;
+    bool binaryDiscard = false; // true: drop the diverted bytes instead of buffering them
 
     String rxLine;
     uint32_t stateDeadline = 0; // pulse/boot timeout, per state

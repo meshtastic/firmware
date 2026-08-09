@@ -82,6 +82,7 @@ void ATModem::clearSession()
     response = "";
     rxLine = "";
     binaryRemaining = 0;
+    binaryDiscard = false;
     binarySink = nullptr;
     binaryBuf.clear();
     model = "";
@@ -213,6 +214,18 @@ bool ATModem::captureBinary(size_t n, ATBinarySink sink)
     binarySink = sink;
     binaryBuf.clear();
     binaryBuf.reserve(n);
+    binaryRemaining = n;
+    binaryDeadline = millis() + AT_BINARY_TIMEOUT_MS;
+    return true;
+}
+
+bool ATModem::discardBinary(size_t n)
+{
+    if (binaryRemaining || !n)
+        return false;
+
+    binarySink = nullptr;
+    binaryDiscard = true;
     binaryRemaining = n;
     binaryDeadline = millis() + AT_BINARY_TIMEOUT_MS;
     return true;
@@ -376,8 +389,10 @@ void ATModem::pumpSerial()
         // A binary capture owns the stream until it is satisfied - payload
         // bytes are not lines and must not touch the line buffer.
         if (binaryRemaining) {
-            binaryBuf.push_back((uint8_t)c);
+            if (!binaryDiscard)
+                binaryBuf.push_back((uint8_t)c);
             if (--binaryRemaining == 0) {
+                binaryDiscard = false;
                 ATBinarySink sink = binarySink;
                 binarySink = nullptr;
                 if (sink)
@@ -494,6 +509,7 @@ void ATModem::service()
     if (binaryRemaining && (int32_t)(now - binaryDeadline) >= 0) {
         LOG_WARN("AT binary capture short by %u bytes", (unsigned)binaryRemaining);
         binaryRemaining = 0;
+        binaryDiscard = false;
         ATBinarySink sink = binarySink;
         binarySink = nullptr;
         if (sink)

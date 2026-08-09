@@ -6,9 +6,7 @@
 #include "mesh/cell/cellBearer.h"
 #include "mesh/cell/cellDiagParse.h"
 
-// Strips characters that could break out of a double-quoted AT command argument -
-// a '"' closes the argument early and changes the parameter list, and a '\r' or
-// '\n' terminates the command line so the remainder is issued as a second command.
+// Strip quotes and line terminators before embedding values in AT arguments.
 static String sanitizeAtArg(const char *in)
 {
     String out;
@@ -171,12 +169,20 @@ void EC618Modem::onCipRxGet(const String &line)
 
     if (len > 0) {
         if ((size_t)len > socketRecvMax()) {
-            LOG_WARN("CIPRXGET len %d exceeds %u, ignoring", len, (unsigned)socketRecvMax());
+            // Still divert the announced bytes - just without buffering them - so line
+            // framing resyncs afterward instead of parsing raw payload as AT text.
+            LOG_WARN("CIPRXGET len %d exceeds %u, discarding", len, (unsigned)socketRecvMax());
+            discardBinary(len);
             return;
         }
         auto onData = socketEvents.onData;
-        if (!captureBinary(len, [onData](const uint8_t *data, size_t n) { onData(data, n); }))
-            LOG_ERROR("CIPRXGET capture rejected, %d payload bytes will desync framing", len);
+        if (!captureBinary(len, [onData](const uint8_t *data, size_t n) { onData(data, n); })) {
+            // A capture is already occupying the only diversion slot ATModem tracks, so these
+            // bytes cannot be diverted either; line framing will desync no matter what happens
+            // next. Resync by re-probing the session rather than let corrupt AT text propagate.
+            LOG_ERROR("CIPRXGET capture rejected, %d payload bytes will desync framing - resyncing", len);
+            expectReboot();
+        }
     }
 }
 
