@@ -22,6 +22,7 @@ struct CellDiag {
     uint32_t lastUpdatedMs = 0;
 };
 
+// Latest readings, whatever the sweep has gathered so far.
 const CellDiag &getCellDiag();
 
 // Advance the diagnostic sweep by one command. Called from reconnectCell() where a bring-up

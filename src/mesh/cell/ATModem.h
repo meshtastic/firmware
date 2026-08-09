@@ -96,6 +96,7 @@ class ATModem : public concurrency::OSThread
     ATModem();
     virtual ~ATModem() {}
 
+    // Open the UART and begin the power-on sequence. Call once from setup().
     void start();
 
     // Drop any queued work and re-run the power-on sequence. Used when the
@@ -127,6 +128,8 @@ class ATModem : public concurrency::OSThread
     bool submitWithPayload(const char *cmd, const uint8_t *payload, size_t len, uint32_t timeoutMs = 20000,
                            ATCallback cb = nullptr);
 
+    // Register a handler invoked whenever a line arrives whose prefix matches, outside
+    // normal command/response framing (e.g. +CIPRXGET, +CREG).
     void registerUrc(const char *prefix, ATUrcHandler handler);
 
     // Divert the next n bytes off the UART straight to sink, bypassing line framing. Call

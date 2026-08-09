@@ -9,6 +9,8 @@
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 
+// Sends the cellDiag sweep (RSRP/RSRQ/band/operator/modem VBAT) as Telemetry.cellular_metrics,
+// on the mesh at the configured interval and to the phone whenever there's nothing else to send.
 class CellularTelemetryModule : private concurrency::OSThread,
                                 public BaseTelemetryModule,
                                 public ProtobufModule<meshtastic_Telemetry>
