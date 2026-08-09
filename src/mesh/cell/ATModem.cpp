@@ -67,9 +67,13 @@ void ATModem::enqueue(const char *cmd, uint32_t timeoutMs, ATCallback cb)
 // Shared teardown for restart() and expectReboot().
 void ATModem::clearSession()
 {
-    // A command genuinely in flight has its callback invoked with Error rather than
-    // dropped silently, so every submitted command's "called exactly once" contract
-    // holds even across a restart/power cycle.
+    // Every submitted command's callback runs exactly once, even across a restart:
+    // drain the queue first so each of its callbacks still gets notified below,
+    // rather than being silently dropped by the queue.clear() that follows
+    // cancelActive() - which stays, to discard anything submit() adds from the
+    // active callback, since the module hasn't finished restarting.
+    std::vector<Command> dropped;
+    dropped.swap(queue);
     cancelActive();
     queue.clear();
     commandActive = false;
@@ -77,9 +81,16 @@ void ATModem::clearSession()
     active = Command();
     response = "";
     rxLine = "";
+    binaryRemaining = 0;
+    binarySink = nullptr;
+    binaryBuf.clear();
     model = "";
     version = "";
     pulseToOff = false;
+
+    for (auto &c : dropped)
+        if (c.cb)
+            c.cb(ATResult::Error, "");
 }
 
 void ATModem::restart()
@@ -250,15 +261,33 @@ void ATModem::finish(ATResult result)
         cb(result, r);
 }
 
-void ATModem::dispatchUrc(const String &line)
+// Looks up and runs the handler for line's prefix. Returns false, without
+// logging, when nothing matches - the mid-command caller in handleLine() uses
+// that to fall through to response accumulation rather than treat every
+// non-URC response line as an unrecognized URC.
+bool ATModem::tryDispatchUrc(const String &line)
 {
     for (auto &h : urcHandlers) {
         if (line.startsWith(h.first)) {
             h.second(line);
-            return;
+            return true;
         }
     }
-    LOG_DEBUG("AT urc: %s", line.c_str());
+    return false;
+}
+
+void ATModem::dispatchUrc(const String &line)
+{
+    if (!tryDispatchUrc(line))
+        LOG_DEBUG("AT urc: %s", line.c_str());
+}
+
+// 3GPP TS 27.007 final result codes that report failure; +CME/+CMS ERROR both
+// carry a diagnostic code after the colon that response accumulation would
+// otherwise capture as an ordinary line.
+bool ATModem::isErrorLine(const String &line)
+{
+    return line == "ERROR" || line.startsWith("+CME ERROR:") || line.startsWith("+CMS ERROR:");
 }
 
 void ATModem::handleLine(const String &line)
@@ -292,7 +321,7 @@ void ATModem::handleLine(const String &line)
     // Some commands answer with one line and no OK/ERROR at all.
     if (active.bareResponse && line != "OK") {
         response = line;
-        finish(line.startsWith("ERROR") || line.startsWith("+CME ERROR:") ? ATResult::Error : ATResult::Ok);
+        finish(isErrorLine(line) ? ATResult::Error : ATResult::Ok);
         return;
     }
 
@@ -323,7 +352,7 @@ void ATModem::handleLine(const String &line)
         return;
     }
 
-    if (line == "ERROR" || line.startsWith("+CME ERROR:") || line.startsWith("+CMS ERROR:")) {
+    if (isErrorLine(line)) {
         response = line;
         finish(ATResult::Error);
         return;
@@ -331,12 +360,8 @@ void ATModem::handleLine(const String &line)
 
     // A URC can arrive in the middle of a command; route it rather than let it
     // corrupt the response.
-    for (auto &h : urcHandlers) {
-        if (line.startsWith(h.first)) {
-            h.second(line);
-            return;
-        }
-    }
+    if (tryDispatchUrc(line))
+        return;
 
     if (response.length())
         response += "\n";

@@ -234,6 +234,8 @@ class ATModem : public concurrency::OSThread
     void pumpSerial();
     void handleLine(const String &line);
     void dispatchUrc(const String &line);
+    bool tryDispatchUrc(const String &line);
+    static bool isErrorLine(const String &line);
     void finish(ATResult result);
     void startNextCommand();
 
