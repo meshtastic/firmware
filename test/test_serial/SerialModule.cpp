@@ -124,7 +124,6 @@ void test_serialConfigVariousModesWithoutOverrideAreValid(void)
 
 // --- TEXTMSG payload sanitizing ---
 
-// Test that a bare carriage return / newline yields nothing to send.
 void test_textMsgCrLfOnlyIsNotSent(void)
 {
     char buf[8] = "\r\n";
@@ -132,7 +131,6 @@ void test_textMsgCrLfOnlyIsNotSent(void)
     TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 2));
 }
 
-// Test that a payload of only spaces and tabs yields nothing to send.
 void test_textMsgWhitespaceOnlyIsNotSent(void)
 {
     char buf[16] = "  \t \r\n";
@@ -140,7 +138,7 @@ void test_textMsgWhitespaceOnlyIsNotSent(void)
     TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 6));
 }
 
-// Test that a single line-noise byte, as seen on a floating RX pin at boot, yields nothing to send.
+// The floating RX pin at boot: one noise byte must not become a message.
 void test_textMsgLoneNoiseByteIsNotSent(void)
 {
     char buf[8] = "\xFF";
@@ -148,7 +146,6 @@ void test_textMsgLoneNoiseByteIsNotSent(void)
     TEST_ASSERT_EQUAL_size_t(0, sanitizeTextMessagePayload(buf, 1));
 }
 
-// Test that ordinary text passes through untouched.
 void test_textMsgPlainTextUnchanged(void)
 {
     char buf[16] = "hello";
@@ -157,7 +154,7 @@ void test_textMsgPlainTextUnchanged(void)
     TEST_ASSERT_EQUAL_MEMORY("hello", buf, 5);
 }
 
-// Test that surrounding whitespace is trimmed, including the trailing newline the terminal sends.
+// The CR/LF a terminal appends to the line goes with the surrounding whitespace.
 void test_textMsgSurroundingWhitespaceTrimmed(void)
 {
     char buf[16] = "  hello \r\n";
@@ -166,7 +163,6 @@ void test_textMsgSurroundingWhitespaceTrimmed(void)
     TEST_ASSERT_EQUAL_MEMORY("hello", buf, 5);
 }
 
-// Test that control characters are dropped from the middle of a message.
 void test_textMsgControlCharsStripped(void)
 {
     char buf[16] = "a\x01"
@@ -177,7 +173,7 @@ void test_textMsgControlCharsStripped(void)
     TEST_ASSERT_EQUAL_MEMORY("abc", buf, 3);
 }
 
-// Test that an embedded newline or tab survives, so multi-line input stays readable.
+// Interior newline and tab survive, so pasted multi-line input stays readable.
 void test_textMsgInteriorNewlineAndTabKept(void)
 {
     char buf[16] = "a\n\tb";
@@ -186,7 +182,7 @@ void test_textMsgInteriorNewlineAndTabKept(void)
     TEST_ASSERT_EQUAL_MEMORY("a\n\tb", buf, 4);
 }
 
-// Test that valid multi-byte UTF-8 is preserved, so non-ASCII text still sends.
+// Text in someone's own language must still send, so valid multi-byte UTF-8 survives.
 void test_textMsgValidUtf8Preserved(void)
 {
     // "café 🌍" - é is C3 A9, the globe is F0 9F 8C 8D
@@ -196,7 +192,6 @@ void test_textMsgValidUtf8Preserved(void)
     TEST_ASSERT_EQUAL_MEMORY("caf\xC3\xA9 \xF0\x9F\x8C\x8D", buf, 10);
 }
 
-// Test that invalid UTF-8 bytes are dropped while the surrounding text survives.
 void test_textMsgInvalidUtf8BytesDropped(void)
 {
     // 0xC3 without its continuation byte, then a bare continuation byte.
@@ -208,7 +203,6 @@ void test_textMsgInvalidUtf8BytesDropped(void)
     TEST_ASSERT_EQUAL_MEMORY("abc", buf, 3);
 }
 
-// Test that an empty read yields nothing to send.
 void test_textMsgEmptyPayloadIsNotSent(void)
 {
     char buf[8] = "";
