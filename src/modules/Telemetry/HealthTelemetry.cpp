@@ -132,8 +132,13 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     }
 
     // Display "Health From: ..." on its own
+    char agoStr[16];
+    if (agoSecs == SINCE_UNKNOWN)
+        snprintf(agoStr, sizeof(agoStr), "?"); // no trustworthy arrival time to age against
+    else
+        snprintf(agoStr, sizeof(agoStr), "%us", (unsigned)agoSecs);
     char headerStr[64];
-    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%ds)", lastSender, (int)agoSecs);
+    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%s)", lastSender, agoStr);
     display->drawString(x, y, headerStr);
 
     char last_temp[16];

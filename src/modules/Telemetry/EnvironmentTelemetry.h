@@ -17,6 +17,9 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
+class EnvironmentTelemetryModule;
+extern EnvironmentTelemetryModule *environmentTelemetryModule;
+
 class EnvironmentTelemetryModule : private concurrency::OSThread,
                                    public ScanI2CConsumer,
                                    public BaseTelemetryModule,
@@ -27,15 +30,26 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
                                                                                  &EnvironmentTelemetryModule::handleStatusUpdate);
 
   public:
+    enum class DisplaySource : uint8_t {
+        LocalSensor = 0,
+        Mesh = 1,
+        FavoriteNodesOnly = 2,
+    };
+
     EnvironmentTelemetryModule()
         : concurrency::OSThread("EnvironmentTelemetry"), ScanI2CConsumer(),
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        environmentTelemetryModule = this;
+        (void)getDisplaySource();
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() override;
+    static DisplaySource getDisplaySource();
+    static void setDisplaySource(DisplaySource source);
+    bool ownsFrame(const MeshModule *module) const { return module == this; }
 #if !HAS_SCREEN
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #else
@@ -65,8 +79,16 @@ class EnvironmentTelemetryModule : private concurrency::OSThread,
     void i2cScanFinished(ScanI2C *i2cScanner);
 
   private:
+    void clearMeasurementPacket();
+    bool refreshLocalMeasurementPacket();
+    void refreshDisplayedMeasurement();
+    bool shouldDisplayLocalMeasurement() const;
+    bool shouldKeepCurrentRemoteDisplay() const;
+    bool shouldDisplayRemoteNode(NodeNum nodeNum) const;
+
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
+    uint32_t lastLocalDisplayRefreshMs = 0;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToPhone = 0;
 };

@@ -37,9 +37,11 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     packet.want_ack = false;
     packet.priority = meshtastic_MeshPacket_Priority_UNSET;
     packet.rx_time = 1609459200;
+    packet.has_rx_time = true; // rx_time has explicit presence; mark this synthetic reading as measured
     packet.rx_snr = 10.5f;
     packet.hop_start = 3;
     packet.rx_rssi = -85;
+    packet.has_rx_rssi = true; // rx_rssi has explicit presence; mark this synthetic reading as measured
     packet.delayed = meshtastic_MeshPacket_Delayed_NO_DELAY;
 
     // Set decoded variant
@@ -59,5 +61,16 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     packet.decoded.reply_id = 0;
     packet.decoded.emoji = 0;
 
+    return packet;
+}
+
+// Same as create_test_packet(), but with rx_time absent (has_rx_time = false) and a nonzero
+// millis()-style placeholder in rx_time, to verify serializers treat it as unknown, not a reading.
+static meshtastic_MeshPacket create_test_packet_no_rx_time(meshtastic_PortNum port, const uint8_t *payload, size_t payload_size,
+                                                           int payload_variant = meshtastic_MeshPacket_decoded_tag)
+{
+    meshtastic_MeshPacket packet = create_test_packet(port, payload, payload_size, payload_variant);
+    packet.rx_time = 123456; // a plausible millis() placeholder, not a real epoch
+    packet.has_rx_time = false;
     return packet;
 }

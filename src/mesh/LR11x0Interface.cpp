@@ -4,6 +4,25 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
+
+// A variant may define LR11X0_UPDATE_FIRMWARE_TO to a Semtech transceiver firmware version (e.g. 0x0402) to
+// bake that image in and update the radio on first boot. Every supported image is 61320 words, so this costs
+// ~240 kB of flash regardless of the version chosen - only enable it on a variant with the headroom, and
+// only for as long as it takes to update the affected units.
+#ifdef LR11X0_UPDATE_FIRMWARE_TO
+#if LR11X0_UPDATE_FIRMWARE_TO == 0x0402
+#define RADIOLIB_LR1110_FIRMWARE_0402
+#elif LR11X0_UPDATE_FIRMWARE_TO == 0x0401
+#define RADIOLIB_LR1110_FIRMWARE_0401
+#elif LR11X0_UPDATE_FIRMWARE_TO == 0x0307
+#define RADIOLIB_LR1110_FIRMWARE_0307
+#else
+// Note: RadioLib ships lr1110_transceiver_0308.h but has no selector for it in LR11x0_firmware.h.
+#error "LR11X0_UPDATE_FIRMWARE_TO must be one of 0x0307, 0x0401, 0x0402"
+#endif
+#include <modules/LR11x0/LR11x0_firmware.h>
+#endif
+
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
@@ -28,13 +47,29 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 #endif
 
 // the 2.4G part maxes at 13dBm
-
 #if ARCH_PORTDUINO
 #define LR1120_MAX_POWER portduino_config.lr1120_max_power
 #endif
 #ifndef LR1120_MAX_POWER
 #define LR1120_MAX_POWER 13
 #endif
+
+// Vref to assume for a board that declares a TCXO may be fitted without saying at what voltage.
+// "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
+// https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
+#if defined(TCXO_OPTIONAL)
+#define LR11X0_TCXO_DEFAULT_VOLTAGE 1.6f
+#else
+#define LR11X0_TCXO_DEFAULT_VOLTAGE 0
+#endif
+
+// A chip that never answers can surface either way depending on where RadioLib gave up: a bounded
+// per-command BUSY wait in Module::SPItransferStream() reports SPI_CMD_TIMEOUT rather than
+// SPI_CMD_FAILED, so both have to count as "the chip did not talk to us"
+static inline bool lr11x0SpiFailed(int res)
+{
+    return res == RADIOLIB_ERR_SPI_CMD_FAILED || res == RADIOLIB_ERR_SPI_CMD_TIMEOUT;
+}
 
 template <typename T>
 LR11x0Interface<T>::LR11x0Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -54,22 +89,26 @@ template <typename T> bool LR11x0Interface<T>::init()
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
 
+    // An explicit Vref always wins; TCXO_OPTIONAL only supplies a default for boards that declare a
+    // TCXO may be fitted without saying at what voltage. Both may appear in the same variant file.
 #if ARCH_PORTDUINO
-    float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
-// FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
+    // Portduino leaves dio3_tcxo_voltage at 0 whenever the YAML omits DIO3_TCXO_VOLTAGE, which is the
+    // "no explicit Vref" case, so the TCXO_OPTIONAL default still has to apply there
+    float tcxoVoltage =
+        portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000 : LR11X0_TCXO_DEFAULT_VOLTAGE;
 #elif defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR11X0_DIO3_TCXO_VOLTAGE;
-    LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", LR11X0_DIO3_TCXO_VOLTAGE);
-    // (DIO3 is not free to be used as an IRQ)
-#elif defined(TCXO_OPTIONAL)
-    float tcxoVoltage = 1.6f; // TCXO_OPTIONAL: try default 1.6 V first, fall back to XTAL on failure
-    LOG_DEBUG("TCXO_OPTIONAL: no LR11X0_DIO3_TCXO_VOLTAGE defined, trying default TCXO Vref 1.6 V first");
 #else
-    float tcxoVoltage =
-        0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
-           // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
-    // (DIO3 is free to be used as an IRQ)
-    LOG_DEBUG("LR11X0_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
+    float tcxoVoltage = LR11X0_TCXO_DEFAULT_VOLTAGE;
+#endif
+
+    // DIO3 is free to be used as an IRQ only while no TCXO Vref is driven on it
+    if (tcxoVoltage > 0)
+        LOG_DEBUG("LR11x0 TCXO Vref %f V on DIO3 (DIO3 unavailable as an IRQ)", tcxoVoltage);
+    else
+        LOG_DEBUG("LR11x0 no TCXO Vref, XTAL only (DIO3 free as an IRQ)");
+#if defined(TCXO_OPTIONAL)
+    LOG_DEBUG("TCXO_OPTIONAL: oscillator type unknown, probing XTAL first and using any TCXO Vref only as fallback");
 #endif
 
     RadioLibInterface::init();
@@ -95,36 +134,100 @@ template <typename T> bool LR11x0Interface<T>::init()
     // Allow extra time for TCXO to stabilize after power-on
     delay(10);
 
-    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
-
-    // Retry if we get SPI command failed - some units need extra TCXO stabilization time
-    if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
-        LOG_WARN("LR11x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", res);
-        delay(100);
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
-    }
+    // Timestamped brackets so a hang inside RadioLib leaves a dangling "attempt" line in the boot log
+    auto tryBegin = [&](int attempt, float vref) {
+        uint32_t attemptStart = millis();
+        LOG_INFO("LR11x0 begin() attempt %d: tcxoVoltage=%.3fV at t=%ums", attempt, vref, attemptStart);
+        int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, vref);
+        LOG_INFO("LR11x0 begin() attempt %d returned %d after %ums", attempt, res, millis() - attemptStart);
+        return res;
+    };
 
 #if defined(TCXO_OPTIONAL)
-    // If init failed for any reason other than chip not found, retry without TCXO (XTAL mode)
+    // 1. XTAL, because a TCXO-first attempt hangs RadioLib's unbounded calibration wait on a module
+    //    with no TCXO fitted, whereas XTAL fails fast and cleanly on a module that does have one
+    float attemptVoltage = 0;
+#else
+    // 1. Whatever Vref the variant configured, which it declared unconditionally
+    float attemptVoltage = tcxoVoltage;
+#endif
+    int res = tryBegin(1, attemptVoltage);
+
+#if defined(TCXO_OPTIONAL)
+    // 2. XTAL failed with the chip present, so fall back to the TCXO if the variant configured one
     if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
-        LOG_WARN("LR11x0 init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);
-        tcxoVoltage = 0;
-        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        LOG_WARN("LR11x0 XTAL init failed (err %d), retrying with TCXO Vref %f V", res, tcxoVoltage);
+        attemptVoltage = tcxoVoltage;
+        res = tryBegin(2, attemptVoltage);
         if (res == RADIOLIB_ERR_NONE)
-            LOG_INFO("LR11x0 init success without TCXO (XTAL mode)");
+            LOG_INFO("LR11x0 init success with TCXO Vref %f V", tcxoVoltage);
     }
 #endif
 
+    // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry.
+    //    After a step 2 fallback that is a second TCXO attempt, which is where settling actually matters.
+    if (lr11x0SpiFailed(res)) {
+        LOG_WARN("LR11x0 init failed with %d (SPI command failure), retrying after delay...", res);
+        delay(100);
+        res = tryBegin(3, attemptVoltage);
+    }
+
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
-        return false;
+
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || lr11x0SpiFailed(res)) {
+#ifdef LR11X0_UPDATE_FIRMWARE_TO
+        // An interrupted update leaves the radio sitting in bootloader mode, where begin() fails. Retry the
+        // flash from here rather than giving up, otherwise the device could never recover on its own.
+        LOG_WARN("LR11x0 did not start; attempting firmware recovery in case an update was interrupted");
+        if (lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true) == RADIOLIB_ERR_NONE) {
+            LOG_INFO("LR1110 firmware recovery succeeded, re-initializing radio");
+            res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        }
+#endif
+        if (res != RADIOLIB_ERR_NONE)
+            return false;
+    }
 
     LR11x0VersionInfo_t version;
     res = lora.getVersionInfo(&version);
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
         LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d", version.device, version.hardware, version.fwMajor,
                   version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS, version.almanacGNSS);
+        transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
+        transceiverDevice = version.device;
+    }
+
+#ifdef LR11X0_UPDATE_FIRMWARE_TO
+    // One-shot transceiver firmware update, opt-in per variant. Only runs when the part is an LR1110 running
+    // older firmware than the baked-in image, so once it has succeeded it is a no-op on subsequent boots.
+    if (transceiverDevice == RADIOLIB_LR11X0_DEVICE_LR1110 && transceiverFw != 0 && transceiverFw < LR11X0_UPDATE_FIRMWARE_TO) {
+        LOG_WARN("LR1110 transceiver FW %d.%d is older than %d.%d - updating now. DO NOT POWER OFF: this "
+                 "erases and rewrites the radio's own flash.",
+                 transceiverFw >> 8, transceiverFw & 0xFF, LR11X0_UPDATE_FIRMWARE_TO >> 8, LR11X0_UPDATE_FIRMWARE_TO & 0xFF);
+
+        int upd = lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true);
+        if (upd != RADIOLIB_ERR_NONE) {
+            // The radio is likely sitting in bootloader mode. It is not bricked - the update is retried on
+            // the next boot because the version check above will still see old (or unreadable) firmware.
+            LOG_ERROR("LR1110 firmware update FAILED %s%d - power-cycle to retry", radioLibErr, upd);
+            return false;
+        }
+
+        LOG_INFO("LR1110 firmware update complete, re-initializing radio");
+        res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+        if (res != RADIOLIB_ERR_NONE) {
+            LOG_ERROR("LR11x0 re-init after firmware update failed %s%d", radioLibErr, res);
+            return false;
+        }
+
+        if (lora.getVersionInfo(&version) == RADIOLIB_ERR_NONE) {
+            transceiverFw = ((uint16_t)version.fwMajor << 8) | version.fwMinor;
+            transceiverDevice = version.device;
+            LOG_INFO("LR1110 now running transceiver FW %d.%d", version.fwMajor, version.fwMinor);
+        }
+    }
+#endif
 
     LOG_INFO("Frequency set to %f", getFreq());
     LOG_INFO("Bandwidth set to %f", bw);
@@ -247,6 +350,7 @@ template <typename T> void LR11x0Interface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
@@ -378,4 +482,8 @@ template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
 #endif
     return (int16_t)round(rssi);
 }
+
+// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
+#undef rfswitch_dio_pins
+#undef rfswitch_table
 #endif

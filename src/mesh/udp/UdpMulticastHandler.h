@@ -79,6 +79,11 @@ class UdpMulticastHandler final
                 LOG_WARN("UDP packet with spoofed local from=0x%08x, dropping", mp.from);
                 return;
             }
+            // Same clamp the MQTT ingress applies: an out-of-range hop count is not relayable.
+            if (mp.hop_limit > HOP_MAX || mp.hop_start > HOP_MAX) {
+                LOG_WARN("UDP packet with invalid hop_limit(%u) or hop_start(%u), dropping", mp.hop_limit, mp.hop_start);
+                return;
+            }
             mp.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP;
             // Authentication metadata is local-only; Router re-establishes it after successful PKI decryption.
             mp.pki_encrypted = false;
@@ -86,9 +91,13 @@ class UdpMulticastHandler final
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             if (!p)
                 return;
-            // Unset received SNR/RSSI
+            // Unset received SNR/RSSI - no local RF measurement exists for a UDP arrival. rx_rssi
+            // has explicit presence, so also clear has_rx_rssi: `mp` may have arrived already
+            // carrying a real measurement from whichever node forwarded it onto UDP, and leaving
+            // the presence bit set would misrepresent that stale value as "0 dBm over UDP".
             p->rx_snr = 0;
             p->rx_rssi = 0;
+            p->has_rx_rssi = false;
             router->enqueueReceivedMessage(p.release());
         }
     }
