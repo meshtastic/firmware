@@ -78,7 +78,6 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     // Try to init One-Wire with 3 retries. This detects ROMs consistently
     // on the second one.
     uint8_t numRetries = 3;
-    uint8_t rom[8]{};
 
     for (uint8_t retry = 1; retry <= numRetries; retry++) {
         bool initError = false;
@@ -162,7 +161,6 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         }
 
         if (!initError) {
-
             status = true;
             // We want to keep searching for ROMs on the DS248X_DS2482_800
             // and always do the three passes
