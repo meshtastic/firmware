@@ -487,6 +487,13 @@ bool ATModem::queryBatteryMv(ATBatteryCallback cb)
     return false;
 }
 
+void ATModem::socketSetTls(bool enabled, ATCallback cb)
+{
+    (void)enabled;
+    if (cb)
+        cb(ATResult::Error, "");
+}
+
 void ATModem::onReady()
 {
     LOG_INFO("Cell modem ready - model '%s' version '%s'", model.c_str(), version.c_str());

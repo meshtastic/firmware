@@ -187,6 +187,10 @@ class ATModem : public concurrency::OSThread
     // interleaved with command responses.
     virtual void socketRxMode(ATCallback cb) = 0;
 
+    // Ask the module to enable/disable TLS on the next socket it opens. Base default
+    // fails closed for dialects that don't implement it - see EC618Modem for the real one.
+    virtual void socketSetTls(bool enabled, ATCallback cb);
+
     // Open a TCP connection. OK from the callback means connected; drivers whose
     // command only acknowledges must defer the callback to the outcome URC.
     virtual void socketOpen(const char *host, uint16_t port, ATCallback cb) = 0;
