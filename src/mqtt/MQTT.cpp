@@ -310,23 +310,22 @@ inline bool isConnectedToNetwork()
     if (CH390.isConnected())
         return true;
 #endif
-
-    // Transports coexist rather than exclude each other, so test each one that
-    // is compiled in - a board can have cellular up while WiFi is down.
-    bool connected = false;
-#if HAS_WIFI
-    connected = connected || WiFi.isConnected();
-#endif
-#if HAS_ETHERNET && !defined(USE_WS5500) && !defined(USE_CH390D)
-    connected = connected || (Ethernet.linkStatus() == LinkON);
-#endif
 #if HAS_CELLULAR
-    connected = connected || isCellularAvailable();
+    // Cellular coexists with WiFi/Ethernet rather than excluding them, so check
+    // it independently before falling through to the primary transport below.
+    if (isCellularAvailable())
+        return true;
 #endif
-#if defined(ARCH_PORTDUINO)
-    connected = true;
+
+#if HAS_WIFI
+    return WiFi.isConnected();
+#elif HAS_ETHERNET
+    return Ethernet.linkStatus() == LinkON;
+#elif defined(ARCH_PORTDUINO)
+    return true;
+#else
+    return false;
 #endif
-    return connected;
 }
 
 /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
