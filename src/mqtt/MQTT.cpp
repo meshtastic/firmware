@@ -553,20 +553,48 @@ void MQTT::reconnect()
         // Captured before the TLS swap below moves clientConnection.
         const bool usedWiFi = clientConnection == mqttClient.get();
 #endif
-#if MQTT_SUPPORTS_TLS
+#if MQTT_TLS_POSSIBLE
+#if HAS_CELLULAR
+#if MQTT_HAS_SECONDARY_CELL
+        CellClient *cellClientPtr = &mqttClientCell;
+#else
+        CellClient *cellClientPtr = mqttClient.get(); // MQTTClient IS CellClient here
+#endif
+        const bool usedCell = (clientConnection == static_cast<Client *>(cellClientPtr));
+#endif
         if (moduleConfig.mqtt.tls_enabled) {
-            // Only the IP-stack clients can do TLS; the AT socket API cannot.
-            if (clientConnection != mqttClient.get()) {
+            bool handled = false;
+#if HAS_CELLULAR
+            // Cellular negotiates TLS in-place via AT+CIPSSL - no separate secure client
+            // type like WiFiClientSecure is needed, so clientConnection stays as-is.
+            if (usedCell) {
+                cellClientPtr->setTlsEnabled(true);
+                LOG_INFO("Use TLS-encrypted cellular session");
+                handled = true;
+            }
+#endif
+#if MQTT_SUPPORTS_TLS
+            // WiFiClientSecure needs the WiFi/netif stack initialized, so this must
+            // never run while cellular (handled above) is what's actually active.
+            if (!handled && clientConnection == mqttClient.get()) {
+                mqttClientTLS.setInsecure();
+                LOG_INFO("Use TLS-encrypted session");
+                clientConnection = &mqttClientTLS;
+                handled = true;
+            }
+#endif
+            if (!handled) {
                 LOG_ERROR("TLS is not supported on the active transport");
                 return;
             }
-            mqttClientTLS.setInsecure();
-            LOG_INFO("Use TLS-encrypted session");
-            clientConnection = &mqttClientTLS;
         } else {
             LOG_INFO("Use non-TLS-encrypted session");
-        }
+#if HAS_CELLULAR
+            if (usedCell)
+                cellClientPtr->setTlsEnabled(false);
 #endif
+        }
+#endif // MQTT_TLS_POSSIBLE
         if (connectPubSub(ps_config, pubSub, *clientConnection)) {
             enabled = true; // Start running background process again
             runASAP = true;
@@ -684,7 +712,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
     if (config.enabled && !config.proxy_to_client_enabled) {
 #if HAS_NETWORKING
         if (config.tls_enabled) {
-#if !MQTT_SUPPORTS_TLS
+#if !MQTT_TLS_POSSIBLE
             LOG_ERROR("Invalid MQTT config: tls_enabled is not supported on this node");
             return false;
 #endif

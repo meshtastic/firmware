@@ -100,6 +100,10 @@ class MQTT : private concurrency::OSThread
 // its own client whenever one of those is the primary transport.
 #define MQTT_HAS_SECONDARY_CELL (HAS_CELLULAR && (HAS_WIFI || HAS_ETHERNET))
 
+// Whether tls_enabled could be honored on some transport - WiFi's WiFiClientSecure,
+// or cellular's AT+CIPSSL, checked live per connection rather than by this macro.
+#define MQTT_TLS_POSSIBLE (MQTT_SUPPORTS_TLS || HAS_CELLULAR)
+
 #if HAS_NETWORKING
     std::unique_ptr<MQTTClient> mqttClient;
 #if MQTT_SUPPORTS_TLS
