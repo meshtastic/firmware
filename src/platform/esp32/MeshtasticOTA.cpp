@@ -1,5 +1,8 @@
-#include "MeshtasticOTA.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
 #include "configuration.h"
+
+#include "MeshtasticOTA.h"
 #ifdef ESP_PLATFORM
 #include <Preferences.h>
 #include <esp_ota_ops.h>

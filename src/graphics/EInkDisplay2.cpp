@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "graphics/Backlight.h"
 
 #if defined(USE_EINK) && !defined(USE_EINK_PARALLELDISPLAY)
 #include "EInkDisplay2.h"
@@ -158,13 +159,14 @@ bool EInkDisplay::connect()
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(TTGO_T_ECHO_PLUS) ||                \
+    defined(ELECROW_ThinkNode_M8)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
-#if defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
+#if defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE) || defined(ELECROW_ThinkNode_M8)
         adafruitDisplay->setRotation(4);
 #else
         adafruitDisplay->setRotation(3);
