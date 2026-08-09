@@ -132,6 +132,7 @@ int CellClient::connect(const char *host, uint16_t port)
     cellModem->socketRxMode([rxModeDone](ATResult, const String &) { *rxModeDone = true; });
     if (!waitFor([rxModeDone] { return *rxModeDone; }, 5000)) {
         LOG_ERROR("Cell modem did not accept manual receive mode");
+        cellModem->cancelActive();
         return 0;
     }
 
@@ -195,6 +196,8 @@ size_t CellClient::write(const uint8_t *buf, size_t size)
         waitFor([finished] { return *finished; }, 20000);
         if (!*finished || *result != ATResult::Ok) {
             LOG_WARN("Cell send of %u bytes failed after %u sent", (unsigned)chunk, (unsigned)sent);
+            if (!*finished)
+                cellModem->cancelActive();
             socketClosed("send failed");
             return sent;
         }

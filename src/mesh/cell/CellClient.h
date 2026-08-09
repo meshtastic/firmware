@@ -6,6 +6,7 @@
 
 #include <Arduino.h>
 #include <Client.h>
+#include <functional>
 #include <vector>
 
 // Arduino Client over the modem's AT socket API, so PubSubClient and anything else written
