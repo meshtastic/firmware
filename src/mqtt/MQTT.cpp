@@ -694,10 +694,16 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         // which mutates the module's isConnected state. This only checks if the server
         // is reachable - it does not establish an MQTT session.
         // Settings are always saved regardless of the result.
-        // Skipped on cellular: the AT socket API gives one socket, so a probe
-        // would tear down the live MQTT connection.
-#if !HAS_CELLULAR
-        if (isConnectedToNetwork()) {
+        // Skipped while cellular is the active transport: the AT socket API gives
+        // one socket, so a probe would tear down the live MQTT connection. Most
+        // cellular-capable boards also compile WiFi/Ethernet, so this is a runtime
+        // check rather than a compile-time one - the probe still runs there when
+        // cellular isn't what the node is actually connected over.
+        bool cellIsActive = false;
+#if HAS_CELLULAR
+        cellIsActive = isCellularAvailable();
+#endif
+        if (!cellIsActive && isConnectedToNetwork()) {
             MQTTClient testClient;
             if (!testClient.connect(parsed.serverAddr.c_str(), parsed.serverPort)) {
                 const char *warning = "Could not reach the MQTT server. Settings will be saved, but please verify the server "
@@ -716,7 +722,6 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             }
             testClient.stop();
         }
-#endif
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);
