@@ -347,7 +347,7 @@ void configureCoordinatePolicyChannels(bool eventChannelIsPrimary = true)
     auto &eventChannel = channelFile.channels[0];
     eventChannel.index = 0;
     eventChannel.has_settings = true;
-    strcpy(eventChannel.settings.name, "everyone");
+    strncpy(eventChannel.settings.name, "everyone", sizeof(eventChannel.settings.name) - 1);
     eventChannel.settings.uplink_enabled = true;
     eventChannel.settings.downlink_enabled = true;
     eventChannel.role = eventChannelIsPrimary ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
@@ -360,7 +360,7 @@ void configureCoordinatePolicyChannels(bool eventChannelIsPrimary = true)
     auto &privateChannel = channelFile.channels[1];
     privateChannel.index = 1;
     privateChannel.has_settings = true;
-    strcpy(privateChannel.settings.name, "private");
+    strncpy(privateChannel.settings.name, "private", sizeof(privateChannel.settings.name) - 1);
     privateChannel.settings.psk.size = 32;
     memset(privateChannel.settings.psk.bytes, 0xab, privateChannel.settings.psk.size);
     privateChannel.settings.uplink_enabled = true;

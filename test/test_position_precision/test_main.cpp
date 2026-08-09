@@ -250,7 +250,7 @@ static void configureEventChannels(bool eventAtIndexOne, bool inheritEventKeyOnS
 
     meshtastic_Channel eventChannel = makeChannel(meshtastic_Channel_Role_PRIMARY, true, 16);
     meshtastic_Channel otherChannel = makeChannel(meshtastic_Channel_Role_SECONDARY, true, 16);
-    strcpy(eventChannel.settings.name, "everyone");
+    strncpy(eventChannel.settings.name, "everyone", sizeof(eventChannel.settings.name) - 1);
 #ifdef USERPREFS_CHANNEL_0_PSK
     static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
     eventChannel.settings.psk.size = sizeof(configuredEventPsk);
@@ -259,7 +259,7 @@ static void configureEventChannels(bool eventAtIndexOne, bool inheritEventKeyOnS
     if (!inheritEventKeyOnSecondary) {
         otherChannel.settings.psk.size = 32;
         memset(otherChannel.settings.psk.bytes, 0xAB, 32);
-        strcpy(otherChannel.settings.name, "private");
+        strncpy(otherChannel.settings.name, "private", sizeof(otherChannel.settings.name) - 1);
     }
 
     eventChannel.index = eventAtIndexOne ? 1 : 0;

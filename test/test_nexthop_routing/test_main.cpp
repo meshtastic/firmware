@@ -306,7 +306,7 @@ static meshtastic_Channel makeBehaviorChannel(meshtastic_Channel_Role role, cons
     channel.role = role;
     channel.settings.has_module_settings = true;
     channel.settings.module_settings.position_precision = 16;
-    strcpy(channel.settings.name, name);
+    strncpy(channel.settings.name, name, sizeof(channel.settings.name) - 1);
     return channel;
 }
 

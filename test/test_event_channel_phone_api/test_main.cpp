@@ -90,6 +90,10 @@ struct GlobalState {
     MeshService *service;
     Router *router;
     NodeDB *nodeDB;
+    // Router's ctor asserts !cryptLock and allocates one; ~MockRouter() deletes it. Save the
+    // incoming lock so the restored router keeps the one it was built with.
+    concurrency::Lock *cryptLock;
+    meshtastic_MyNodeInfo myNodeInfo;
     Channels channels;
     meshtastic_ChannelFile channelFile;
     meshtastic_LocalConfig config;
@@ -113,7 +117,7 @@ void configureChannels()
     eventChannel.index = EVENT_CHANNEL;
     eventChannel.has_settings = true;
     eventChannel.role = meshtastic_Channel_Role_PRIMARY;
-    strcpy(eventChannel.settings.name, "everyone");
+    strncpy(eventChannel.settings.name, "everyone", sizeof(eventChannel.settings.name) - 1);
 #ifdef USERPREFS_CHANNEL_0_PSK
     static const uint8_t eventPsk[] = USERPREFS_CHANNEL_0_PSK;
     eventChannel.settings.psk.size = sizeof(eventPsk);
@@ -124,7 +128,7 @@ void configureChannels()
     privateChannel.index = PRIVATE_CHANNEL;
     privateChannel.has_settings = true;
     privateChannel.role = meshtastic_Channel_Role_SECONDARY;
-    strcpy(privateChannel.settings.name, "private");
+    strncpy(privateChannel.settings.name, "private", sizeof(privateChannel.settings.name) - 1);
     privateChannel.settings.psk.size = 32;
     memset(privateChannel.settings.psk.bytes, 0xab, privateChannel.settings.psk.size);
 
@@ -168,12 +172,14 @@ void assertSentPacket(size_t index, PacketId id, ChannelIndex channel)
 
 void setUp(void)
 {
-    savedState = new GlobalState{service, router, nodeDB, channels, channelFile, config, moduleConfig, devicestate};
+    savedState =
+        new GlobalState{service, router, nodeDB, cryptLock, myNodeInfo, channels, channelFile, config, moduleConfig, devicestate};
 
     service = mockService = new MockMeshService();
     nodeDB = mockNodeDB = new NodeDB();
     myNodeInfo.my_node_num = 0x87654321;
     configureChannels();
+    cryptLock = nullptr; // Router's ctor asserts this is unset before allocating its own.
     router = mockRouter = new MockRouter();
     streamAPI = new TestStreamAPI();
     testDelay(1);
@@ -193,6 +199,8 @@ void tearDown(void)
     service = savedState->service;
     router = savedState->router;
     nodeDB = savedState->nodeDB;
+    cryptLock = savedState->cryptLock; // ~MockRouter() nulled it; hand the saved router its own back.
+    myNodeInfo = savedState->myNodeInfo;
     channels = savedState->channels;
     channelFile = savedState->channelFile;
     config = savedState->config;
