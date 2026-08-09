@@ -2708,6 +2708,9 @@ void menuHandler::frameTogglesMenu()
         show_env_telemetry,
         show_aq_telemetry,
         show_power,
+#if HAS_CELLULAR
+        show_cellular,
+#endif
         enumEnd
     };
     static const char *optionsArray[enumEnd] = {"Finish"};
@@ -2759,6 +2762,11 @@ void menuHandler::frameTogglesMenu()
 
     optionsArray[options] = moduleConfig.telemetry.power_screen_enabled ? "Hide Power" : "Show Power";
     optionsEnumArray[options++] = show_power;
+
+#if HAS_CELLULAR
+    optionsArray[options] = screen->isFrameHidden("cellular") ? "Show Cellular" : "Hide Cellular";
+    optionsEnumArray[options++] = show_cellular;
+#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Show/Hide Frames";
@@ -2830,6 +2838,12 @@ void menuHandler::frameTogglesMenu()
             moduleConfig.telemetry.power_screen_enabled = !moduleConfig.telemetry.power_screen_enabled;
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
+#if HAS_CELLULAR
+        } else if (selected == show_cellular) {
+            screen->toggleFrameVisibility("cellular");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+#endif
         }
     };
     screen->showOverlayBanner(bannerOptions);

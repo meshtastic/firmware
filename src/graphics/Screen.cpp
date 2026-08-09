@@ -1706,6 +1706,11 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     if (frameName == "chirpy") {
         hiddenFrames.chirpy = !hiddenFrames.chirpy;
     }
+#if HAS_CELLULAR
+    if (frameName == "cellular") {
+        hiddenFrames.cellular = !hiddenFrames.cellular;
+    }
+#endif
 
     // Save the new visibility state so it survives a reboot.
     saveFrameVisibility();
@@ -1743,6 +1748,10 @@ bool Screen::isFrameHidden(const std::string &frameName) const
         return hiddenFrames.show_favorites;
     if (frameName == "chirpy")
         return hiddenFrames.chirpy;
+#if HAS_CELLULAR
+    if (frameName == "cellular")
+        return hiddenFrames.cellular;
+#endif
 
     return false;
 }
