@@ -66,7 +66,7 @@
 #if HAS_TELEMETRY
 #include "modules/Telemetry/DeviceTelemetry.h"
 #endif
-#if HAS_TELEMETRY && HAS_CELLULAR
+#if HAS_TELEMETRY && HAS_CELLULAR && !MESHTASTIC_EXCLUDE_CELLULAR_TELEMETRY
 #include "modules/Telemetry/CellularTelemetry.h"
 #endif
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -223,7 +223,7 @@ void setupModules()
 #if HAS_TELEMETRY
     new DeviceTelemetryModule();
 #endif
-#if HAS_TELEMETRY && HAS_CELLULAR
+#if HAS_TELEMETRY && HAS_CELLULAR && !MESHTASTIC_EXCLUDE_CELLULAR_TELEMETRY
     if (moduleConfig.has_telemetry && moduleConfig.telemetry.cellular_measurement_enabled) {
         new CellularTelemetryModule();
     }

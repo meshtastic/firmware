@@ -93,7 +93,9 @@ bool CellularTelemetryModule::getCellularTelemetry(meshtastic_Telemetry *m)
         m->variant.cellular_metrics.has_access_tech = true;
         m->variant.cellular_metrics.access_tech = diag.act;
         m->variant.cellular_metrics.has_operator_name = true;
-        strncpy(m->variant.cellular_metrics.operator_name, diag.operatorName, sizeof(m->variant.cellular_metrics.operator_name));
+        strncpy(m->variant.cellular_metrics.operator_name, diag.operatorName,
+                sizeof(m->variant.cellular_metrics.operator_name) - 1);
+        m->variant.cellular_metrics.operator_name[sizeof(m->variant.cellular_metrics.operator_name) - 1] = '\0';
     }
     if (diag.vbatValid) {
         m->variant.cellular_metrics.has_modem_voltage_mv = true;
