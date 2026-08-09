@@ -54,7 +54,7 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #include "Sensor/LTR390UVSensor.h"
 #endif
 
-#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
+#if __has_include(<Adafruit_BME680.h>)
 #include "Sensor/BME680Sensor.h"
 #endif
 
@@ -302,7 +302,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 #if __has_include(<Adafruit_LTR390.h>)
     addSensor<LTR390UVSensor>(i2cScanner, ScanI2C::DeviceType::LTR390UV);
 #endif
-#if __has_include(<bsec2.h>) || __has_include(<Adafruit_BME680.h>)
+#if __has_include(<Adafruit_BME680.h>)
     addSensor<BME680Sensor>(i2cScanner, ScanI2C::DeviceType::BME_680);
 #endif
 #if __has_include(<Adafruit_BMP280.h>)
@@ -449,7 +449,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
     if (sleepOnNextExecution) {
         // Honor the pre-sleep grace period armed in sendTelemetry(): OSThread reschedules with
         // this return value, which would otherwise override setIntervalFromNow() with the sensor
-        // polling interval (35 ms for BSEC2) and trigger deep sleep while the TX is still on air
+        // polling interval (sub-second while a BME680 reading is in flight) and trigger deep sleep
+        // while the TX is still on air
         return FIVE_SECONDS_MS;
     }
     return min(sendToPhoneIntervalMs, result);
@@ -512,7 +513,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     const auto &m = telemetry.variant.environment_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.iaq != 0 || m.voltage != 0 ||
+    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.has_iaq || m.voltage != 0 ||
                   m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
 
     if (!hasAny) {
@@ -547,7 +548,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Hum: " + String(m.relative_humidity, 0) + "%");
     if (m.barometric_pressure != 0)
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
-    if (m.iaq != 0) {
+    if (m.has_iaq) {
         String aqi = "IAQ: " + String(m.iaq);
         const char *bannerMsg = nullptr; // Default: no banner
 
@@ -809,7 +810,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
 
     // Arm the pre-sleep sequence even when no valid reading was available this cycle (e.g. a
-    // BSEC2 call timing violation): a power-saving SENSOR node must still return to deep sleep,
+    // failed sensor read): a power-saving SENSOR node must still return to deep sleep,
     // otherwise it stays awake until the next telemetry interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)

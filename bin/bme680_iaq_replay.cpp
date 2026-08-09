@@ -1,0 +1,107 @@
+// Host-side replay harness for tuning BME680IaqEstimator against recorded
+// Bosch BSEC output. The estimator is pure math with no platform
+// dependencies, so a captured trace replays in milliseconds on any dev
+// machine -- edit the constants in BME680IaqEstimator.h, recompile, rerun.
+//
+// Build (from the repo root):
+//   c++ -std=c++17 -O2 -I src -o /tmp/iaq_replay \
+//       bin/bme680_iaq_replay.cpp src/modules/Telemetry/Sensor/BME680IaqEstimator.cpp
+//
+// Input: CSV on stdin or a file argument, one sample per line:
+//   gas_ohms,relative_humidity[,bsec_iaq]
+// Lines starting with '#' and non-numeric header lines are skipped.
+//
+// Capturing a trace: on a firmware build that still links BSEC (any release
+// tag before the BSEC removal), add one log line to BME680Sensor::getMetrics
+// in the BSEC branch:
+//   LOG_INFO("IAQCSV,%.0f,%.2f,%.0f", bme680.getData(BSEC_OUTPUT_RAW_GAS).signal,
+//            bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal,
+//            bme680.getData(BSEC_OUTPUT_IAQ).signal);
+// then: grep -o 'IAQCSV,.*' serial.log | cut -d, -f2- > trace.csv
+//
+// Output: per-sample "n,gas_ohms,rh,est_iaq,bsec_iaq" plus a summary with
+// mean absolute error and UI-band agreement against the BSEC column.
+
+#include "modules/Telemetry/Sensor/BME680IaqEstimator.h"
+
+#include <cmath>
+#include <cstdio>
+
+namespace
+{
+// Same buckets the device UI uses (EnvironmentTelemetry drawFrame)
+int band(int iaq)
+{
+    if (iaq <= 25)
+        return 0; // Excellent
+    if (iaq <= 50)
+        return 1; // Good
+    if (iaq <= 100)
+        return 2; // Moderate
+    if (iaq <= 150)
+        return 3; // Poor
+    if (iaq <= 200)
+        return 4; // Unhealthy
+    if (iaq <= 300)
+        return 5; // Very Unhealthy
+    return 6;     // Hazardous
+}
+} // namespace
+
+int main(int argc, char **argv)
+{
+    FILE *in = stdin;
+    if (argc > 1) {
+        in = fopen(argv[1], "r");
+        if (!in) {
+            fprintf(stderr, "cannot open %s\n", argv[1]);
+            return 1;
+        }
+    }
+
+    BME680IaqEstimator est;
+    char line[256];
+    long n = 0, produced = 0, compared = 0, bandHits = 0;
+    double absErrSum = 0;
+
+    printf("n,gas_ohms,rh,est_iaq,bsec_iaq\n");
+    while (fgets(line, sizeof(line), in)) {
+        if (line[0] == '#')
+            continue;
+        float gas, rh, bsec = NAN;
+        int fields = sscanf(line, "%f,%f,%f", &gas, &rh, &bsec);
+        if (fields < 2)
+            continue; // header or malformed line
+        n++;
+        uint16_t iaq;
+        bool got = est.update(gas, rh, &iaq);
+        bool haveBsec = fields >= 3 && std::isfinite(bsec);
+
+        printf("%ld,%.0f,%.2f,", n, gas, rh);
+        if (got)
+            printf("%u", iaq);
+        if (haveBsec)
+            printf(",%.0f\n", bsec);
+        else
+            printf(",\n");
+
+        if (got) {
+            produced++;
+            if (haveBsec) {
+                compared++;
+                absErrSum += std::fabs((double)iaq - (double)bsec);
+                if (band(iaq) == band((int)std::lround(bsec)))
+                    bandHits++;
+            }
+        }
+    }
+
+    fprintf(stderr, "samples: %ld, estimator outputs: %ld\n", n, produced);
+    if (compared) {
+        fprintf(stderr, "vs BSEC (%ld comparable): mean abs error %.1f IAQ points, band agreement %.1f%%\n", compared,
+                absErrSum / compared, 100.0 * bandHits / compared);
+    }
+    if (in != stdin)
+        fclose(in);
+    return 0;
+}
