@@ -13,6 +13,12 @@
 // SerialModule itself does not exist. Logs and notifies the client on rejection.
 bool serialConfigIsValid(const meshtastic_ModuleConfig_SerialConfig &config);
 
+// Compact a TEXTMSG payload in place to what is worth putting on the mesh, returning the length to
+// send, 0 meaning "send nothing" - so a bare ENTER or line noise on a floating RX pin sends no
+// message. Outside the architecture guard for the same reason as above: no serial hardware, so it
+// can be tested natively.
+size_t sanitizeTextMessagePayload(char *buf, size_t size);
+
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
     !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
