@@ -27,6 +27,9 @@ class CellClient : public Client
     int connect(IPAddress ip, uint16_t port) override;
     int connect(const char *host, uint16_t port) override;
 
+    // Whether to negotiate TLS (AT+CIPSSL); set fresh by the caller before each connect().
+    void setTlsEnabled(bool enabled) { tlsRequested = enabled; }
+
     size_t write(uint8_t b) override;
     size_t write(const uint8_t *buf, size_t size) override;
 
@@ -51,6 +54,7 @@ class CellClient : public Client
     void fetchPending(uint32_t timeoutMs);
 
     bool opened = false;
+    bool tlsRequested = false;
 };
 
 #endif

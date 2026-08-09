@@ -136,6 +136,13 @@ int CellClient::connect(const char *host, uint16_t port)
         return 0;
     }
 
+    // Queued ahead of socketOpen() below - the AT queue is sequential, so this always
+    // completes first. TLS support is assumed here; a rejection only warns, not refuses.
+    cellModem->socketSetTls(tlsRequested, [](ATResult r, const String &resp) {
+        if (r != ATResult::Ok)
+            LOG_WARN("AT+CIPSSL rejected: %s", resp.c_str());
+    });
+
     uint32_t connectTimeout = cellModem->socketConnectTimeoutMs();
     auto result = std::make_shared<ATResult>(ATResult::Timeout);
     auto finished = std::make_shared<bool>(false);
@@ -154,7 +161,7 @@ int CellClient::connect(const char *host, uint16_t port)
 
     bool ok = sockConnected || (*finished && *result == ATResult::Ok);
     if (!ok || sockConnectFail) {
-        LOG_WARN("Cell connect to %s:%u %s", host, port, settled ? "failed" : "timed out");
+        LOG_WARN("Cell %sconnect to %s:%u %s", tlsRequested ? "TLS " : "", host, port, settled ? "failed" : "timed out");
         sockConnectFail = false;
         sockConnected = false;
         opened = true; // so stop() closes the socket and clears any half-open state
@@ -164,7 +171,7 @@ int CellClient::connect(const char *host, uint16_t port)
 
     sockConnected = true;
     opened = true;
-    LOG_INFO("Cell socket connected to %s:%u", host, port);
+    LOG_INFO("Cell %ssocket connected to %s:%u", tlsRequested ? "TLS " : "", host, port);
     return 1;
 }
 
