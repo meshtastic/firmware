@@ -2,6 +2,7 @@
 
 #if HAS_CELLULAR
 
+#include "mesh/Throttle.h"
 #include "mesh/cell/cellDiagParse.h"
 #include <string.h>
 
@@ -26,7 +27,7 @@ enum {
     STEP_VBAT,
 };
 static uint8_t sweepStep = 0;
-static uint32_t nextSweepMs = 0;
+static uint32_t lastSweepMs = 0; // 0 means "never swept", which is always due
 
 const CellDiag &getCellDiag()
 {
@@ -35,14 +36,14 @@ const CellDiag &getCellDiag()
 
 bool cellDiagDue()
 {
-    return sweepStep != 0 || (int32_t)(millis() - nextSweepMs) >= 0;
+    return sweepStep != 0 || lastSweepMs == 0 || !Throttle::isWithinTimespanMs(lastSweepMs, CELL_DIAG_INTERVAL_MS);
 }
 
 void cellDiagInvalidate()
 {
     diag = CellDiag();
     sweepStep = 0;
-    nextSweepMs = millis(); // sweep as soon as a state that polls is reached
+    lastSweepMs = 0; // sweep as soon as a state that polls is reached
 }
 
 static bool worthLogging()
@@ -62,7 +63,7 @@ static void finishSweep()
 {
     diag.lastUpdatedMs = millis();
     sweepStep = 0;
-    nextSweepMs = diag.lastUpdatedMs + CELL_DIAG_INTERVAL_MS;
+    lastSweepMs = diag.lastUpdatedMs;
 
     if (!worthLogging())
         return;

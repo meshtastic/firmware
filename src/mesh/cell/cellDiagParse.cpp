@@ -92,7 +92,9 @@ bool parseCesq(const char *resp, int16_t *rsrpDbm, float *rsrqDb)
 
     long rsrq = intField(line, 4);
     long rsrp = intField(line, 5);
-    if (rsrq < 0 || rsrp < 0 || rsrq == 255 || rsrp == 255)
+    // 3GPP TS 27.007: <rsrq> is 0-34, <rsrp> is 0-97; 255 means not known or not
+    // detectable, and anything else outside range is not valid signal data either.
+    if (rsrq < 0 || rsrq > 34 || rsrp < 0 || rsrp > 97)
         return false;
 
     if (rsrpDbm)

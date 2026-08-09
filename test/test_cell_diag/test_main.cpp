@@ -55,6 +55,16 @@ void test_cesq_boundaries()
     TEST_ASSERT_FLOAT_WITHIN(0.01f, -3.0f, rsrq);
 }
 
+void test_cesq_out_of_range()
+{
+    // <rsrq> is valid 0-34 and <rsrp> is valid 0-97; anything above that is not
+    // the 255 "not known" sentinel either, and must not be reported as a reading.
+    int16_t rsrp = 0;
+    float rsrq = 0;
+    TEST_ASSERT_FALSE(parseCesq("+CESQ: 99,99,255,255,35,45", &rsrp, &rsrq));
+    TEST_ASSERT_FALSE(parseCesq("+CESQ: 99,99,255,255,20,98", &rsrp, &rsrq));
+}
+
 void test_cesq_multiline_response()
 {
     // The parser is handed a whole response, which may carry other lines.
@@ -222,6 +232,7 @@ void setup()
     RUN_TEST(test_cesq_typical);
     RUN_TEST(test_cesq_not_available);
     RUN_TEST(test_cesq_boundaries);
+    RUN_TEST(test_cesq_out_of_range);
     RUN_TEST(test_cesq_multiline_response);
     RUN_TEST(test_cesq_malformed);
     RUN_TEST(test_cereg_states);
