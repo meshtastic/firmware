@@ -301,31 +301,40 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
 }
 #endif
 
-inline bool isConnectedToNetwork()
+enum class NetTransport { NONE, PRIMARY, CELLULAR };
+
+/// Which transport (if any) is currently reachable, in preference order: the IP-stack
+/// transports are cheaper/faster than the modem's AT socket, so cellular is the fallback.
+inline NetTransport activeTransport()
 {
+#if defined(ARCH_PORTDUINO)
+    return NetTransport::PRIMARY;
+#else
 #ifdef USE_WS5500
     if (ETH.connected())
-        return true;
+        return NetTransport::PRIMARY;
 #elif defined(USE_CH390D)
     if (CH390.isConnected())
-        return true;
+        return NetTransport::PRIMARY;
+#endif
+#if HAS_WIFI
+    if (WiFi.isConnected())
+        return NetTransport::PRIMARY;
+#elif HAS_ETHERNET
+    if (Ethernet.linkStatus() == LinkON)
+        return NetTransport::PRIMARY;
 #endif
 #if HAS_CELLULAR
-    // Cellular coexists with WiFi/Ethernet rather than excluding them, so check
-    // it independently before falling through to the primary transport below.
     if (isCellularAvailable())
-        return true;
+        return NetTransport::CELLULAR;
 #endif
+    return NetTransport::NONE;
+#endif // ARCH_PORTDUINO
+}
 
-#if HAS_WIFI
-    return WiFi.isConnected();
-#elif HAS_ETHERNET
-    return Ethernet.linkStatus() == LinkON;
-#elif defined(ARCH_PORTDUINO)
-    return true;
-#else
-    return false;
-#endif
+inline bool isConnectedToNetwork()
+{
+    return activeTransport() != NetTransport::NONE;
 }
 
 /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
@@ -445,39 +454,32 @@ bool MQTT::isConnectedDirectly()
 #endif
 }
 
+#if HAS_CELLULAR
+CellClient *MQTT::cellClient()
+{
+#if MQTT_HAS_SECONDARY_CELL
+    return &mqttClientCell;
+#else
+    return mqttClient.get(); // MQTTClient IS CellClient here
+#endif
+}
+#endif
+
 #if HAS_NETWORKING
 Client *MQTT::activeClient()
 {
-#if defined(ARCH_PORTDUINO)
-    return mqttClient.get();
-#else
-    // Ordered by preference: the IP-stack transports are cheaper and faster
-    // than the modem's AT socket, so cellular is the fallback.
-#ifdef USE_WS5500
-    if (ETH.connected())
+    switch (activeTransport()) {
+    case NetTransport::PRIMARY:
         return mqttClient.get();
-#elif defined(USE_CH390D)
-    if (CH390.isConnected())
-        return mqttClient.get();
-#endif
-#if HAS_WIFI
-    if (WiFi.isConnected())
-        return mqttClient.get();
-#elif HAS_ETHERNET
-    if (Ethernet.linkStatus() == LinkON)
-        return mqttClient.get();
-#endif
+    case NetTransport::CELLULAR:
 #if HAS_CELLULAR
-    if (isCellularAvailable()) {
-#if MQTT_HAS_SECONDARY_CELL
-        return &mqttClientCell;
+        return cellClient();
 #else
-        return mqttClient.get();
+        return nullptr;
 #endif
+    default:
+        return nullptr;
     }
-#endif
-    return nullptr;
-#endif // ARCH_PORTDUINO
 }
 #endif // HAS_NETWORKING
 
@@ -555,23 +557,18 @@ void MQTT::reconnect()
 #endif
 #if MQTT_TLS_POSSIBLE
 #if HAS_CELLULAR
-#if MQTT_HAS_SECONDARY_CELL
-        CellClient *cellClientPtr = &mqttClientCell;
-#else
-        CellClient *cellClientPtr = mqttClient.get(); // MQTTClient IS CellClient here
-#endif
-        const bool usedCell = (clientConnection == static_cast<Client *>(cellClientPtr));
+        // Cellular negotiates TLS in-place via AT+CIPSSL - no separate secure client
+        // type like WiFiClientSecure is needed, so clientConnection stays as-is.
+        if (clientConnection == static_cast<Client *>(cellClient()))
+            cellClient()->setTlsEnabled(moduleConfig.mqtt.tls_enabled);
 #endif
         if (moduleConfig.mqtt.tls_enabled) {
-            bool handled = false;
 #if HAS_CELLULAR
-            // Cellular negotiates TLS in-place via AT+CIPSSL - no separate secure client
-            // type like WiFiClientSecure is needed, so clientConnection stays as-is.
-            if (usedCell) {
-                cellClientPtr->setTlsEnabled(true);
+            bool handled = (clientConnection == static_cast<Client *>(cellClient()));
+            if (handled)
                 LOG_INFO("Use TLS-encrypted cellular session");
-                handled = true;
-            }
+#else
+            bool handled = false;
 #endif
 #if MQTT_SUPPORTS_TLS
             // WiFiClientSecure needs the WiFi/netif stack initialized, so this must
@@ -589,10 +586,6 @@ void MQTT::reconnect()
             }
         } else {
             LOG_INFO("Use non-TLS-encrypted session");
-#if HAS_CELLULAR
-            if (usedCell)
-                cellClientPtr->setTlsEnabled(false);
-#endif
         }
 #endif // MQTT_TLS_POSSIBLE
         if (connectPubSub(ps_config, pubSub, *clientConnection)) {

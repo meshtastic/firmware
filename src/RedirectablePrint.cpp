@@ -17,7 +17,7 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-#if HAS_SYSLOG
+#if HAS_NETWORKING_UDP
 extern meshtastic::Syslog syslog;
 #endif
 void RedirectablePrint::rpInit()
@@ -193,7 +193,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 
 void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, va_list arg)
 {
-#if HAS_SYSLOG && !defined(ARCH_PORTDUINO)
+#if HAS_NETWORKING_UDP && !defined(ARCH_PORTDUINO)
     // if syslog is in use, collect the log messages and send them to syslog
     if (syslog.isEnabled()) {
         int ll = 0;

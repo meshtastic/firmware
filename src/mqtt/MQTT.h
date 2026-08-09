@@ -117,6 +117,10 @@ class MQTT : private concurrency::OSThread
 
     /// Client for whichever transport is up, or nullptr when none is.
     Client *activeClient();
+#if HAS_CELLULAR
+    /// The single cellular Client, whether it's the primary transport or a secondary alongside WiFi/Ethernet.
+    CellClient *cellClient();
+#endif
 #endif
 
     std::string cryptTopic = "/2/e/"; // msh/2/e/CHANNELID/NODEID
