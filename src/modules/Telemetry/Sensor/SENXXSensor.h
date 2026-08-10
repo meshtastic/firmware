@@ -212,6 +212,7 @@ class SENXXSensor : public TelemetrySensor, public CO2CalibrationSensor
     };
     SENXXState state = SENXX_OFF;
     // Flag to work on one-shot (read and sleep), or continuous mode
+    // Recommendation: if it has VOC / NOx, suggest NOT to use oneShot mode
     bool oneShotMode = true;
     void setMode(bool setOneShot);
     bool vocStateValid();

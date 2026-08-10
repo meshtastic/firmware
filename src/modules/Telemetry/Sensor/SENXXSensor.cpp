@@ -361,6 +361,10 @@ bool SENXXSensor::idle(bool checkState)
     // SEN6X has no low-power "RHT/Gas only" mode - it must always fully stop.
     // Within SEN5X, models without gas sensing (SEN50) also fully stop; SEN54/SEN55
     // instead switch to the RHT/Gas-only mode to keep the VOC engine warm.
+    // TODO - Decide if for variants with VOC/NOx sensor, the device will be kept on to avoid messing
+    // up with the engine. In principle, since we are giving the VOC state, the algorithm should work fine,
+    // however, from tests, we don't see the same.
+    // Recommendation: if it has VOC / NOx, suggest NOT to use oneShot mode
     if (isSen6xFamily() || !hasVOC) {
         if (!sendCommand(SENXX_STOP_MEASUREMENT)) {
             LOG_ERROR("%s: Error stopping measurement", sensorName);
