@@ -108,9 +108,11 @@ CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
 @REM %VAR% not !VAR!: cmd will not split a delayed-expanded command token that
 @REM carries a path, so the "python -m esptool" form never starts.
 %ESPTOOL_CMD% >nul 2>&1
-CALL :LOG_MESSAGE DEBUG "esptool exit code: %ERRORLEVEL%"
-IF %ERRORLEVEL% EQU 9009 (
-    @REM 9009 = command not found on Windows
+SET "ESPTOOL_EXIT=!ERRORLEVEL!"
+CALL :LOG_MESSAGE DEBUG "esptool exit code: !ESPTOOL_EXIT!"
+@REM 9009 = command not found, 3 = bad path from -P. Both mean unusable.
+IF !ESPTOOL_EXIT! EQU 3 SET "ESPTOOL_EXIT=9009"
+IF !ESPTOOL_EXIT! EQU 9009 (
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
 )
