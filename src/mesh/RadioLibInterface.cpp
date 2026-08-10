@@ -539,7 +539,7 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
         p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
-            LOG_TRACE("Move queued packet to late rebroadcast window %ums from now", p->tx_after - millis());
+            LOG_TRACE("Move queued packet to late rebroadcast window %ums from now", (uint32_t)(p->tx_after - millis()));
         } else {
             packetPool.release(p);
         }
