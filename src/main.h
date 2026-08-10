@@ -24,6 +24,12 @@ extern NRF52Bluetooth *nrf52Bluetooth;
 #include "NRF54L15Bluetooth.h"
 extern NRF54L15Bluetooth *nrf54l15Bluetooth;
 #endif
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/LinuxBluetooth.h" // self-guards; defines MESHTASTIC_LINUX_BLE when BLE is compiled in
+#ifdef MESHTASTIC_LINUX_BLE
+extern LinuxBluetooth *linuxBluetooth;
+#endif
+#endif
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
 #endif

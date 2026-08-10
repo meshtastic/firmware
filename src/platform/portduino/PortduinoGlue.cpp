@@ -35,6 +35,12 @@
 #include <bluetooth/hci.h>
 #endif
 
+#include "LinuxBluetooth.h"
+#ifdef MESHTASTIC_LINUX_BLE
+#include "mesh/NodeDB.h"               // config.bluetooth.enabled
+extern LinuxBluetooth *linuxBluetooth; // defined in main.cpp
+#endif
+
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
 #endif
@@ -78,7 +84,26 @@ char stdoutBuffer[512];
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
-    // not needed
+#ifdef MESHTASTIC_LINUX_BLE
+    // Opt-in twice: the config.yaml Bluetooth section must enable BLE on this
+    // host, and the regular device config (like every other platform) must have
+    // Bluetooth on.
+    if (!portduino_config.bluetooth_enabled || !config.bluetooth.enabled)
+        return;
+    if (enable) {
+        if (!linuxBluetooth) {
+            LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+            linuxBluetooth = new LinuxBluetooth();
+            linuxBluetooth->setup();
+        } else {
+            linuxBluetooth->resumeAdvertising();
+        }
+    } else if (linuxBluetooth) {
+        // Stop advertising only; a live phone connection survives PowerFSM state
+        // dips.
+        linuxBluetooth->shutdown();
+    }
+#endif
 }
 
 void cpuDeepSleep(uint32_t msecs)
@@ -1238,6 +1263,11 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLKey"]).as<std::string>("/etc/meshtasticd/ssl/private_key.pem");
             portduino_config.webserver_ssl_cert_path =
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
+        }
+
+        if (yamlConfig["Bluetooth"]) {
+            portduino_config.bluetooth_enabled = (yamlConfig["Bluetooth"]["Enabled"]).as<bool>(false);
+            portduino_config.bluetooth_adapter = (yamlConfig["Bluetooth"]["AdapterId"]).as<std::string>("hci0");
         }
 
         if (yamlConfig["HostMetrics"]) {

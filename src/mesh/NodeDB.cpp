@@ -812,6 +812,12 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         Bluefruit.Periph.clearBonds();
         Bluefruit.Central.clearBonds();
 #endif
+#ifdef MESHTASTIC_LINUX_BLE
+        if (linuxBluetooth) {
+            LOG_INFO("Clear bluetooth bonds");
+            linuxBluetooth->clearBonds();
+        }
+#endif
     }
     return true;
 }

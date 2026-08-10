@@ -37,6 +37,7 @@ BuildRequires: pkgconfig(yaml-cpp)
 BuildRequires: pkgconfig(jsoncpp)
 BuildRequires: pkgconfig(libgpiod)
 BuildRequires: pkgconfig(bluez)
+BuildRequires: pkgconfig(sdbus-c++)
 BuildRequires: pkgconfig(libusb-1.0)
 BuildRequires: libi2c-devel
 BuildRequires: pkgconfig(libuv)
@@ -108,6 +109,9 @@ install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.s
 # Install meshtasticd start wrapper
 install -D -m 0755 bin/meshtasticd-start.sh %{buildroot}%{_bindir}/meshtasticd-start.sh
 
+# Install D-Bus policy (lets the meshtasticd user talk to bluetoothd for BLE)
+install -D -m 0644 bin/dbus-1/meshtasticd.conf %{buildroot}%{_datadir}/dbus-1/system.d/meshtasticd.conf
+
 # Install the web files under /usr/share/meshtasticd/web
 mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
 cp -r web/* %{buildroot}%{_datadir}/meshtasticd/web
@@ -130,6 +134,7 @@ getent group i2c > /dev/null && usermod -a -G i2c %{meshtasticd_user} > /dev/nul
 getent group video > /dev/null && usermod -a -G video %{meshtasticd_user} > /dev/null
 getent group audio > /dev/null && usermod -a -G audio %{meshtasticd_user} > /dev/null
 getent group input > /dev/null && usermod -a -G input %{meshtasticd_user} > /dev/null
+getent group bluetooth > /dev/null && usermod -a -G bluetooth %{meshtasticd_user} > /dev/null
 exit 0
 
 %triggerin -- meshtasticd < 2.6.9
@@ -169,6 +174,7 @@ fi
 %config(noreplace) %{_sysconfdir}/meshtasticd/config.yaml
 %config %{_sysconfdir}/meshtasticd/available.d/*
 %{_unitdir}/meshtasticd.service
+%attr(0644,root,root) %{_datadir}/dbus-1/system.d/meshtasticd.conf
 %dir %{_datadir}/meshtasticd
 %dir %{_datadir}/meshtasticd/web
 %{_datadir}/meshtasticd/web/*

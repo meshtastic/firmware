@@ -140,6 +140,13 @@ assert "empty sections are not a fault" 0 empty-sections.yaml check \
 assert "warnings alone do not fail the run" 0 unknown-key.yaml check \
 	"unknown key 'Lora.Frequency'" \
 	"Result: 0 errors, 1 warning"
+# On a build without BLE support the same file additionally reports the build-time
+# gap as a warning, so only the error count is asserted here.
+assert "bluetooth section parses" 0 bluetooth.yaml check \
+	"Result: 0 errors,"
+assert "bluetooth bad Enabled is silently defaulted" 0 bluetooth-bad-enabled.yaml check \
+	"Bluetooth.Enabled is not a true/false value" \
+	"Result: 0 errors, 1 warning"
 
 echo
 echo "module names are matched exactly:"

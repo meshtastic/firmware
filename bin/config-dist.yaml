@@ -232,6 +232,10 @@ Webserver:
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
 
+Bluetooth:
+#  Enabled: true # Advertise a BLE peripheral via BlueZ, like other Meshtastic devices (Linux only)
+#  AdapterId: hci0 # BlueZ adapter to use
+
 HostMetrics:
 #  ReportInterval: 30 # Interval in minutes between HostMetrics report packets, or 0 for disabled
 #  Channel: 0 # channel to send Host Metrics over. Defaults to the primary channel.

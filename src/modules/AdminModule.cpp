@@ -1814,6 +1814,11 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (config.bluetooth.enabled && nrf54l15Bluetooth) {
         conn.bluetooth.is_connected = nrf54l15Bluetooth->isConnected();
     }
+#elif defined(MESHTASTIC_LINUX_BLE)
+    if (config.bluetooth.enabled && linuxBluetooth) {
+        conn.bluetooth.is_connected = linuxBluetooth->isConnected();
+        conn.bluetooth.rssi = linuxBluetooth->getRssi();
+    }
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
@@ -2495,6 +2500,9 @@ void disableBluetooth()
 #elif defined(ARCH_NRF54L15)
     if (nrf54l15Bluetooth)
         nrf54l15Bluetooth->shutdown();
+#elif defined(MESHTASTIC_LINUX_BLE)
+    if (linuxBluetooth)
+        linuxBluetooth->deinit();
 #endif
 #endif
 }

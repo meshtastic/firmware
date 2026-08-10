@@ -92,6 +92,17 @@ is `uint16_t[22]`, so extra points are dropped and out-of-range values wrap.
 | `statusmessage-long.yaml` | Copied into a `char[80]`, so it is safe but silently shortened to 79 characters.                                                                        |
 | `configdir-missing.yaml`  | **Crash regression guard** - an unreadable `ConfigDirectory` used to abort meshtasticd (and `--check`) with SIGABRT via an uncaught `filesystem_error`. |
 
+## Bluetooth
+
+BLE support is compiled in only when sdbus-c++ is present, so a valid `Bluetooth:`
+section is clean on a BLE build and reports the build-time gap as a warning on a
+non-BLE build. The assertions only test what holds either way.
+
+| File                         | Expected                                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `bluetooth.yaml`             | The section parses, both keys are known, and no error is invented.                             |
+| `bluetooth-bad-enabled.yaml` | `Enabled: maybe` is read with a fallback: silently replaced by `false`, so BLE never turns on. |
+
 ## MAC address
 
 The MAC no longer determines NodeNum - that comes from the public key - but a MAC

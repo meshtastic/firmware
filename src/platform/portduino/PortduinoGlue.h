@@ -216,6 +216,11 @@ extern struct portduino_config_struct {
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
     int webserverport = -1;
 
+    // Bluetooth (BLE peripheral via BlueZ; Linux only, and only when built with
+    // sdbus-c++)
+    bool bluetooth_enabled = false;
+    std::string bluetooth_adapter = "hci0";
+
     // HostMetrics
     std::string hostMetrics_user_command = "";
     int hostMetrics_interval = 0;
@@ -601,6 +606,14 @@ extern struct portduino_config_struct {
             out << YAML::Key << "SSLCert" << YAML::Value << webserver_ssl_cert_path;
             out << YAML::Key << "Port" << YAML::Value << webserverport;
             out << YAML::EndMap; // Webserver
+        }
+
+        // Bluetooth
+        if (bluetooth_enabled) {
+            out << YAML::Key << "Bluetooth" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "Enabled" << YAML::Value << bluetooth_enabled;
+            out << YAML::Key << "AdapterId" << YAML::Value << bluetooth_adapter;
+            out << YAML::EndMap; // Bluetooth
         }
 
         // HostMetrics

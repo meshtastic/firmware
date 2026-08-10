@@ -1,6 +1,6 @@
 [Unit]
 Description=Meshtastic %i Daemon
-After=network-online.target
+After=network-online.target bluetooth.service
 StartLimitInterval=200
 StartLimitBurst=5
 
