@@ -53,6 +53,7 @@ class NotificationRenderer
     static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static bool isOverlayBannerShowing();
+    static bool isMenuShowing();
 
     static graphics::notificationTypeEnum current_notification_type;
 };

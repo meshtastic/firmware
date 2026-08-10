@@ -64,13 +64,13 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                                     bool *wasUpgraded)
 {
     if (!initOk()) {
-        LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED!");
+        LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED");
         return false;
     }
 
     if (p->id == 0) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_DEBUG("Packet History - Was Seen Recently: ID is 0, not a floodable message");
+        LOG_DEBUG("Packet History - Was Seen Recently: ID 0, not floodable");
 #endif
         return false; // Not a floodable message ID, so we don't care
     }
@@ -107,8 +107,8 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     // Check for hop_limit upgrade scenario
     if (seenRecently && wasUpgraded && getHighestHopLimit(*found) < p->hop_limit) {
-        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id,
-                  getHighestHopLimit(*found), p->hop_limit);
+        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x hop_limit=%d -> %d", p->id, getHighestHopLimit(*found),
+                  p->hop_limit);
         *wasUpgraded = true;
     } else if (wasUpgraded) {
         *wasUpgraded = false; // Initialize to false if not an upgrade
@@ -234,7 +234,7 @@ void PacketHistory::hashInsert(NodeNum sender, PacketId id, uint16_t slotIdx)
         }
         bucket = (bucket + 1) & hashMask;
     }
-    LOG_ERROR("Packet History - hashInsert: table full or corrupted, rebuilding");
+    LOG_ERROR("Packet History - hashInsert: table full or corrupt, rebuild");
     hashRebuild();
 }
 
@@ -357,8 +357,7 @@ void PacketHistory::insert(const PacketRecord &r)
             it = (base + recentPacketsCapacity);
         } else {
             if (it->rxTimeMsec == 0) {
-                LOG_WARN("Packet History - insert: Found packet s=0x%08x id=0x%08x with rxTimeMsec = 0, slot %d/%d. Should never "
-                         "happen!",
+                LOG_WARN("Packet History - insert: Found s=0x%08x id=0x%08x rxTimeMsec = 0, slot %d/%d. Should never happen",
                          it->sender, it->id, it - base, recentPacketsCapacity);
             }
             if ((now_millis - it->rxTimeMsec) > OldtrxTimeMsec) { // 49.7 days rollover friendly
@@ -373,7 +372,7 @@ void PacketHistory::insert(const PacketRecord &r)
     }
 
     if (tu == NULL) {
-        LOG_ERROR("Packet History - insert: No free slot, no matched packet, no oldest to reuse. Something leaked."); // mx
+        LOG_ERROR("Packet History - insert: No free/matched/oldest slot. Something leaked"); // mx
         // assert(false); // This should never happen, we should always have at least one packet to clear
         return; // Return early if we can't update the history
     }
@@ -399,7 +398,7 @@ void PacketHistory::insert(const PacketRecord &r)
         } else {
             // debug only
 #if VERBOSE_PACKET_HISTORY
-            LOG_WARN("Packet History - insert: Reusing slot aged %.3fs < %ds with MATCHED PACKET - this is normal",
+            LOG_WARN("Packet History - insert: Reusing slot aged %.3fs < %ds with MATCHED PACKET - normal",
                      OldtrxTimeMsec / 1000., RECENT_WARN_AGE / 1000);
 #endif
         }
@@ -424,7 +423,7 @@ void PacketHistory::insert(const PacketRecord &r)
 
     if (r.rxTimeMsec == 0) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_WARN("Packet History - insert: I will not store packet with rxTimeMsec = 0.");
+        LOG_WARN("Packet History - insert: Won't store packet with rxTimeMsec = 0");
 #endif
         return; // Return early if we can't update the history
     }
@@ -457,7 +456,7 @@ void PacketHistory::insert(const PacketRecord &r)
 bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole)
 {
     if (!initOk()) {
-        LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED!");
+        LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED");
         return false;
     }
 
@@ -527,7 +526,7 @@ void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t i
         *r2WasSole = false;
 
     if (!initOk()) {
-        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED!");
+        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED");
         return;
     }
 
@@ -545,7 +544,7 @@ void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t i
 void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {
     if (!initOk()) {
-        LOG_ERROR("Packet History - remove Relayer: NOT INITIALIZED!");
+        LOG_ERROR("Packet History - remove Relayer: NOT INITIALIZED");
         return;
     }
 

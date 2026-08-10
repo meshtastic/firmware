@@ -88,17 +88,17 @@ template <typename T> bool LR20x0Interface<T>::init()
         LOG_DEBUG("TCXO_OPTIONAL: no Lora.DIO3_TCXO_VOLTAGE set, trying default TCXO Vref %f V first", tcxoVoltage);
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
-    LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", LR2021_DIO3_TCXO_VOLTAGE);
+    LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", LR2021_DIO3_TCXO_VOLTAGE);
     // (DIO3 is not free to be used as an IRQ)
 #elif defined(TCXO_OPTIONAL)
     float tcxoVoltage = 1.6f; // TCXO_OPTIONAL: try default 1.6 V first, fall back to XTAL on failure
-    LOG_DEBUG("TCXO_OPTIONAL: no LR2021_DIO3_TCXO_VOLTAGE defined, trying default TCXO Vref 1.6 V first");
+    LOG_DEBUG("TCXO_OPTIONAL: no LR2021_DIO3_TCXO_VOLTAGE, try default TCXO Vref 1.6 V first");
 #else
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
     // (DIO3 is free to be used as an IRQ)
-    LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
+    LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
 #endif
 
     RadioLibInterface::init();
@@ -146,14 +146,14 @@ template <typename T> bool LR20x0Interface<T>::init()
 
     // Retry if we get SPI command failed - some units need extra TCXO stabilization time
     if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
-        LOG_WARN("LR20x0 init failed with %d (SPI_CMD_FAILED), retrying after delay...", res);
+        LOG_WARN("LR20x0 init failed with %d (SPI_CMD_FAILED), retry after delay", res);
         delay(100);
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     }
 
     // If init failed for any reason other than chip not found, retry without TCXO (XTAL mode)
     if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
-        LOG_WARN("LR20x0 init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);
+        LOG_WARN("LR20x0 init failed with TCXO Vref %f V (err %d), retry without TCXO", tcxoVoltage, res);
         tcxoVoltage = 0;
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_NONE)
@@ -195,7 +195,7 @@ template <typename T> bool LR20x0Interface<T>::init()
             LOG_INFO("Set RX gain to boosted mode; result: %d", res);
         } else {
             res = lora.setRxBoostedGainMode(false);
-            LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", res);
+            LOG_INFO("Set RX gain to power saving mode; result: %d", res);
         }
     }
 
@@ -250,7 +250,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 
         int res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_SPI_CMD_FAILED) {
-            LOG_WARN("LR20x0 band-hop begin SPI_CMD_FAILED, retrying...");
+            LOG_WARN("LR20x0 band-hop begin SPI_CMD_FAILED, retrying");
             delay(100);
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
@@ -363,7 +363,7 @@ template <typename T> void LR20x0Interface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("LR20x0 standby failed with error %d", err);
+        LOG_DEBUG("LR20x0 standby failed, err %d", err);
     }
 
     assert(err == RADIOLIB_ERR_NONE);

@@ -17,6 +17,7 @@ class GPSStatus : public Status
 
     bool hasLock = false;     // default to false, until we complete our first read
     bool isConnected = false; // Do we have a GPS we are talking to
+    bool hasTime = false;     // GPS has decoded a valid time this acquisition, even without a position fix
 
     bool isPowerSaving = false; // Are we in power saving state
 
@@ -29,11 +30,12 @@ class GPSStatus : public Status
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
     // preferred method
-    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const meshtastic_Position &pos) : Status()
+    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const meshtastic_Position &pos, bool hasTime = false) : Status()
     {
         this->hasLock = hasLock;
         this->isConnected = isConnected;
         this->isPowerSaving = isPowerSaving;
+        this->hasTime = hasTime;
 
         // all-in-one struct copy
         this->p = pos;
@@ -49,6 +51,8 @@ class GPSStatus : public Status
     bool getIsConnected() const { return isConnected; }
 
     bool getIsPowerSaving() const { return isPowerSaving; }
+
+    bool getHasTime() const { return hasTime; }
 
     int32_t getLatitude() const
     {
@@ -91,7 +95,7 @@ class GPSStatus : public Status
 #ifdef GPS_DEBUG
         LOG_DEBUG("GPSStatus.match() new pos@%x to old pos@%x", newStatus->p.timestamp, p.timestamp);
 #endif
-        return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected ||
+        return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected || newStatus->hasTime != hasTime ||
                 newStatus->isPowerSaving != isPowerSaving || newStatus->p.latitude_i != p.latitude_i ||
                 newStatus->p.longitude_i != p.longitude_i || newStatus->p.altitude != p.altitude ||
                 newStatus->p.altitude_hae != p.altitude_hae || newStatus->p.PDOP != p.PDOP ||
@@ -112,6 +116,7 @@ class GPSStatus : public Status
         initialized = true;
         hasLock = newStatus->hasLock;
         isConnected = newStatus->isConnected;
+        hasTime = newStatus->hasTime;
 
         p = newStatus->p;
 
