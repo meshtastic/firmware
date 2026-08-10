@@ -1087,7 +1087,7 @@ uint8_t SENXXSensor::getMeasurements()
     bool dataReady = dataReadyBuffer[1];
     uint32_t sinceLastDataPollMs = now - lastDataPoll;
     // Check if data is ready, and if since last time we requested is less than SENXX_POLL_INTERVAL
-    if (!dataReady && (sinceLastDataPollMs > SENXX_POLL_INTERVAL)) {
+    if (!dataReady && (sinceLastDataPollMs < SENXX_POLL_INTERVAL)) {
         LOG_INFO("%s: Data is not ready", sensorName);
         return 1;
     }
