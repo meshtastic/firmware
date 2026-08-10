@@ -402,12 +402,12 @@ assert "config.d overrides are reported" 0 configd-conflict/config.yaml check \
 	"files define a 'Lora:' section" \
 	"The file loaded last wins" \
 	"Result: 0 errors,"
-# Switch tables are the one place "last wins" is false: the loader only ever writes
-# HIGH, so the effective table is the OR of every file. Proven with --output-yaml.
-assert "switch tables across files do not override" 1 rfswitch-sticky/config.yaml check \
-	"These do NOT override each other" \
-	"a HIGH from an earlier file survives a later file that sets LOW" \
-	"Enable exactly one"
+# rfswitch_table follows "last file wins" like every other Lora: key: no special-cased
+# error, just the standard cross-file-overlap info.
+assert "rfswitch tables across files: last one wins" 0 rfswitch-last-wins/config.yaml check \
+	"'Lora.rfswitch_table' is set in 2 files" \
+	"The file loaded last wins" \
+	"Result: 0 errors,"
 
 echo
 echo "--check takes precedence over --output-yaml:"

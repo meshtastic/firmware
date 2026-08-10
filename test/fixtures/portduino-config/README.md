@@ -182,13 +182,11 @@ the last-loaded file is reset to its default - here `config.yaml` sets
 The load order within `config.d/` comes from the filesystem, so the report warns
 rather than assuming alphabetical order.
 
-`rfswitch-sticky/` covers the one place where "the file loaded last wins" is false,
-and it documents a firmware bug rather than a configuration mistake. Its `config.d/`
-holds two switch tables; the last one loaded sets `MODE_RX` LOW on both pins, but the
-loader only ever writes HIGH and never writes LOW back, so the HIGH from the earlier
-file survives and the effective table is the OR of both. Verified with
-`meshtasticd --output-yaml`. Until the loader is fixed, `--check` reports this as an
-error and tells you to enable exactly one.
+`rfswitch-last-wins/` covers `Lora.rfswitch_table` across two `config.d/` files. It
+follows the same "last file loaded wins" rule as every other `Lora:` key - the loader
+resets a table's pins and mode rows before applying a replacement, so an earlier
+file's `MODE_RX` setting cannot leak through a later file that omits it. `--check`
+reports this as the standard cross-file-overlap info, not a special-cased error.
 
 ## Running these as a normal boot
 
