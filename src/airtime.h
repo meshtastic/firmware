@@ -184,6 +184,11 @@ class AirTime : private concurrency::OSThread
         uint32_t channelUtilization[CHANNEL_UTILIZATION_PERIODS] = {0}; // 6 x 10s
         uint32_t utilizationTX[MINUTES_IN_HOUR] = {0};                  // 60 x 60s, our TX only
 
+        // Hour crossings rotated but not yet traced. The core cannot log its own rotations: it
+        // only ever runs under the lock, and DEBUG_PORT.log() blocks on a UART write. runOnce()
+        // drains this and logs after releasing, so the trace costs the lock nothing.
+        uint32_t rotationsPendingLog = 0;
+
         // Shift-ordered, unlike the rings above: slot 0 is the newest hour and the index is age.
         struct airtimeStruct {
             uint32_t periodTX[PERIODS_TO_LOG] = {0};     // AirTime transmitted

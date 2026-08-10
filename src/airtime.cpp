@@ -93,10 +93,10 @@ void AirTime::Windows::syncNow(const Held &)
         memset(this->airtimes.periodRX, 0, sizeof(this->airtimes.periodRX));
         memset(this->airtimes.periodRX_ALL, 0, sizeof(this->airtimes.periodRX_ALL));
     } else {
-        // Counter is the loop variable: LOG_DEBUG compiles away under DEBUG_MUTE, which would
-        // leave a separate tally write-only.
-        for (uint32_t h = 1; h <= elapsedAirtimePeriods; h++) {
-            LOG_DEBUG("Rotate airtimes, crossed hour %u", h);
+        // Hand the count to runOnce() rather than tracing each crossing here: this runs under
+        // the lock, and a UART write would stall every other caller waiting on it.
+        this->rotationsPendingLog += elapsedAirtimePeriods;
+        for (uint32_t h = 0; h < elapsedAirtimePeriods; h++) {
             for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
                 this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
                 this->airtimes.periodRX[i + 1] = this->airtimes.periodRX[i];
@@ -294,7 +294,19 @@ AirTime::AirTime() : concurrency::OSThread("AirTime") {}
 
 int32_t AirTime::runOnce()
 {
-    Held held(this);
-    w.syncNow(held);
+    uint32_t rotations;
+    {
+        Held held(this);
+        w.syncNow(held);
+        rotations = w.rotationsPendingLog;
+        w.rotationsPendingLog = 0;
+    }
+
+    // Outside the lock, for the reason logAirtime() gives. Any caller can cross an hour, but only
+    // this thread reports it, so a crossing raised elsewhere is traced at most one tick late.
+    if (rotations > 0) {
+        LOG_DEBUG("Rotate airtimes, crossed %u hour(s)", rotations);
+    }
+
     return (1000 * 1);
 }
