@@ -104,14 +104,11 @@ const std::set<std::string> kHub75Keys = {
     "ShowRefreshRate",   "InverseColors", "RGBSequence", "PixelMapper",    "PanelType",    "LimitRefreshRateHz",
     "GPIOSlowdown"};
 
-// Defined with the merged-configuration checks below; the switch table checks need it to
-// name the radio a finding is judged against.
+// Names the radio a finding is judged against; defined with the merged-config checks.
 std::string moduleName();
 
-// Every mode name any supported radio understands. No single part has all of them -- an
-// LR11xx has no MODE_RX_HF and an LR20x0 no MODE_TX_HP/MODE_GNSS/MODE_WIFI -- so a name
-// in this set is spelled correctly, and whether this radio can act on it is a separate,
-// module-aware question answered by checkRfSwitchTable() below.
+// Union of every family's mode names: membership means the name is spelled correctly.
+// Whether this radio can act on it is a separate, module-aware question - see modesFor().
 const std::set<std::string> kRfSwitchModes = [] {
     std::set<std::string> s;
     for (int m = 0; m < RFSW_MODE_COUNT; m++)
@@ -122,14 +119,12 @@ const std::set<std::string> kRfSwitchModes = [] {
 // Likewise the union of both families' switch-capable DIOs.
 const std::set<std::string> kRfSwitchPins = {"DIO5", "DIO6", "DIO7", "DIO8", "DIO9", "DIO10", "DIO11"};
 
-// RadioLib's own default when nothing sets LR2021::irqDioNum (LR2021.h: `uint32_t
-// irqDioNum = 5`). Mirrored rather than included so this file does not pull in the radio
-// headers; the collision check below is the only thing that needs it.
+// RadioLib's default when nothing sets LR2021::irqDioNum. Mirrored rather than included, to
+// keep the radio headers out of this file.
 const int kLr20x0DefaultIrqDio = 5;
 
-// The mode names this module can actually apply. Only the LR20x0 differs from the
-// historical LR11xx set, so every other module -- including an unresolved "auto" and the
-// non-LR radios that never receive a table at all -- keeps reporting against that set.
+// Mode names this module can apply. Only the LR20x0 differs from the LR11xx set, which every
+// other module - including an unresolved "auto" - is reported against.
 std::set<std::string> modesFor(lora_module_enum module)
 {
     std::set<std::string> s;
@@ -155,9 +150,8 @@ std::set<std::string> pinsFor(lora_module_enum module)
     return s;
 }
 
-// Families whose driver can be told to probe for a TCXO and fall back to the XTAL. RF95
-// and SX128x have no DIO3 TCXO control at all, and the simulated radio has no oscillator,
-// so Lora.TCXO_OPTIONAL is inert on those rather than merely unnecessary.
+// Families whose driver can probe for a TCXO. RF95, SX128x and the simulated radio have no
+// TCXO reference, so Lora.TCXO_OPTIONAL is inert on those rather than merely unnecessary.
 bool moduleSupportsTcxoProbe(lora_module_enum module)
 {
     switch (module) {
@@ -380,8 +374,8 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
                                         "Lora.rfswitch_table.pins: '" + name + "' is not a recognised pin. Valid values are " +
                                             joinNames(kRfSwitchPins)});
                 } else if (!valid.empty() && !valid.count(name)) {
-                    // Spelled correctly, but not a switch control on this part -- the slot
-                    // is left unconnected and every level written in its column is dropped.
+                    // Spelled correctly, but not a switch control here: the slot is left
+                    // unconnected and every level in its column dropped.
                     findings.push_back({kError, file, lineOf(pin),
                                         "Lora.rfswitch_table.pins: '" + name + "' is not an RF switch pin on " + moduleName() +
                                             ", so that column is never driven. It has " + joinNames(valid)});
@@ -404,8 +398,7 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
             findings.push_back({kError, file, lineOf(entry.first), "unknown key 'Lora.rfswitch_table." + key + "'"});
             continue;
         }
-        // A real mode name, but not one this part has. Previously the only mode set was
-        // the LR11xx's, so a correct LR20x0 table was rejected outright as an unknown key.
+        // A real mode name, but not one this part has, so the row is never applied.
         if (!modesFor(portduino_config.lora_module).count(key))
             findings.push_back({kWarn, file, lineOf(entry.first),
                                 "Lora.rfswitch_table." + key + " is not a mode " + moduleName() + " has, so the row is ignored"});
@@ -429,8 +422,8 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
 
     // Every mode absent from the table defaults to all-LOW, which for most modules is
     // the shutdown state. Worth saying out loud rather than leaving to be discovered.
-    // Only the modes this part actually has: naming an LR20x0's MODE_TX_HP as "omitted"
-    // would be advice to add a row it cannot use.
+    // Only the modes this part has: naming an LR20x0's MODE_TX_HP would advise adding a row
+    // it cannot use.
     std::set<std::string> missing;
     for (const auto &mode : modesFor(portduino_config.lora_module))
         if (!table[mode])
@@ -1004,9 +997,8 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                                     ignored + " are read but never used"});
     }
 
-    // Applies to every radio that is handed a table -- LR11xx and, since #11252, LR20x0.
-    // "auto" is excluded by moduleUsesRfSwitchTable() returning false for it: the module
-    // has not been probed yet, so there is nothing to judge the absence against.
+    // "auto" is excluded by moduleUsesRfSwitchTable(): the module has not been probed yet, so
+    // there is nothing to judge the absence against.
     if (moduleUsesRfSwitchTable(portduino_config.lora_module) && !portduino_config.has_rfswitch_table)
         findings.push_back({kWarn, merged, 0,
                             "Module is " + moduleName() +
@@ -1019,10 +1011,8 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                             "a Lora.rfswitch_table is set but Module is " + moduleName() +
                                 ", and the table is only applied to LR11xx and LR20x0 radios"});
 
-    // One pin cannot be both the interrupt output and a switch control. The collision is
-    // easiest to miss when IRQ_DIO_NUM is absent, because RadioLib's default (DIO5) is the
-    // first pin of the usual table -- and begin() only exercises SPI and BUSY, so the
-    // radio reports init success and then never receives anything.
+    // One pin cannot be both the interrupt output and a switch control. begin() exercises only
+    // SPI and BUSY, so the radio reports init success and then never receives anything.
     if (portduino_config.lora_module == use_lr2021 && portduino_config.has_rfswitch_table) {
         const int irqDio = portduino_config.irq_dio_num >= 0 ? portduino_config.irq_dio_num : kLr20x0DefaultIrqDio;
         for (int i = 0; i < 5; i++) {
@@ -1044,8 +1034,8 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         }
     }
 
-    // The probe is a property of the radio driver, so asking for it on a part with no TCXO
-    // control does nothing at all -- worth saying, because the key looks like it took.
+    // The probe belongs to the radio driver, so on a part with no TCXO reference the key is
+    // read, stored and inert.
     if (portduino_config.tcxo_optional && portduino_config.lora_module != use_autoconf &&
         !moduleSupportsTcxoProbe(portduino_config.lora_module))
         findings.push_back({kWarn, merged, 0,
@@ -1129,17 +1119,16 @@ void printSummary()
     if (portduino_config.dio3_tcxo_voltage)
         std::cout << "  DIO3 TCXO voltage : " << portduino_config.dio3_tcxo_voltage << " mV\n";
     if (portduino_config.tcxo_optional) {
-        // Name the Vref that will actually be tried: with no explicit voltage the driver
-        // falls back to RadioLib's own default rather than skipping the TCXO attempt.
+        // Name the Vref actually tried: with no explicit voltage the driver uses the radio
+        // default rather than skipping the TCXO attempt.
         std::cout << "  TCXO probe        : yes, "
                   << (portduino_config.dio3_tcxo_voltage ? std::to_string(portduino_config.dio3_tcxo_voltage) + " mV"
                                                          : std::string("1600 mV (radio default)"))
                   << " and XTAL\n";
     }
 
-    // setRfSwitchTable() is called for an LR11xx and, since #11252, an LR20x0 -- so "not
-    // set" is no gap on any other radio; "auto" has not resolved to a module yet, so
-    // absence cannot be called either way.
+    // setRfSwitchTable() is called for an LR11xx and an LR20x0, so "not set" is no gap on any
+    // other radio; "auto" has not resolved yet, so absence cannot be called either way.
     const char *rfSwitch = "not needed for this module";
     if (portduino_config.has_rfswitch_table)
         rfSwitch = "set";

@@ -16,9 +16,7 @@
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 
-// The LR2021's own switch-capable DIOs, in RadioLib slot order, paired with its own
-// constants. PortduinoGlue stores what the YAML said; this is what turns it into a table
-// for this part, so nothing depends on the LR11xx and LR2021 constants coinciding.
+// Switch-capable DIOs in slot order with this part's constants.
 static const int8_t lr20x0_switch_dio_nums[] = {5, 6, 7, 8, 9, 10, 11};
 static const uint32_t lr20x0_switch_dio_consts[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
                                                     RADIOLIB_LR2021_DIO8, RADIOLIB_LR2021_DIO9, RADIOLIB_LR2021_DIO10,
@@ -27,8 +25,7 @@ static_assert(sizeof(lr20x0_switch_dio_nums) / sizeof(lr20x0_switch_dio_nums[0])
                   sizeof(lr20x0_switch_dio_consts) / sizeof(lr20x0_switch_dio_consts[0]),
               "LR20x0 switch DIO numbers and constants must describe the same slots");
 
-// This part has no MODE_TX_HP, MODE_GNSS or MODE_WIFI. Naming them unsupported is what
-// lets --check say so rather than silently accepting a row that can never be applied.
+// This part has MODE_RX_HF and no MODE_TX_HP/MODE_GNSS/MODE_WIFI.
 static const int32_t lr20x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
     LR20x0::MODE_STBY,  LR20x0::MODE_RX,    LR20x0::MODE_TX,       RFSW_MODE_UNSUPPORTED,
     LR20x0::MODE_TX_HF, LR20x0::MODE_RX_HF, RFSW_MODE_UNSUPPORTED, RFSW_MODE_UNSUPPORTED,
@@ -84,9 +81,7 @@ template <typename T> bool LR20x0Interface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    // An explicit Vref always wins. With no voltage given, an unset DIO3_TCXO_VOLTAGE means
-    // "no TCXO" as before -- unless the probe was asked for, in which case RadioLib's own
-    // default is tried first and the XTAL fallback below catches a board without one.
+    // An explicit Vref wins; probing with none given tries the radio default first.
     float tcxoVoltage = portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000
                                                                : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
     if (portduino_config.dio3_tcxo_voltage <= 0 && TCXO_OPTIONAL_ENABLED)
@@ -115,9 +110,7 @@ template <typename T> bool LR20x0Interface<T>::init()
     lora.irqDioNum = IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
 #elif defined(ARCH_PORTDUINO)
-    // A variant says this with a #define; a Portduino carrier has only the YAML. Left
-    // unset, RadioLib keeps DIO5, which is also the first RF switch line on carriers
-    // using the DIO5-DIO8 table -- begin() still succeeds, and nothing is ever received.
+    // Unset keeps RadioLib's default of DIO5, which many carriers also drive as a switch line.
     if (portduino_config.irq_dio_num >= 0) {
         lora.irqDioNum = portduino_config.irq_dio_num;
         LOG_DEBUG("Set irqDioNum %d from config", lora.irqDioNum);

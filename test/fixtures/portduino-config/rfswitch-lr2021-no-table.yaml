@@ -1,11 +1,6 @@
-# FAULT: an LR20x0 with no rfswitch_table. setRfSwitchTable() is never called, and most
-# modules of this family cannot transmit or receive without one -- the same gap as
-# module-mismatch-lr11xx.yaml, on the other radio family. Expect a WARNING from the
-# merged-configuration checks rather than from any single file.
-#
-# DIO5 is left as the interrupt here on purpose: the IRQ/switch-pin collision check is
-# gated on there being a table, so it must stay silent and only the missing table is
-# reported.
+# FAULT: an LR20x0 with no rfswitch_table, so setRfSwitchTable() is never called. Expect a
+# WARNING from the merged-configuration checks. DIO5 is left as the interrupt to show the
+# collision check stays silent when there is no table.
 Lora:
   Module: lr2021
   spidev: spidev0.0

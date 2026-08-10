@@ -1,10 +1,6 @@
-# CLEAN. The carrier ships populated either way, so the driver is told to probe: try the
-# TCXO, fall back to the XTAL. A variant says this with the TCXO_OPTIONAL define; a
-# Portduino build has to be told in YAML, because the same binary runs on both.
-#
-# No DIO3_TCXO_VOLTAGE here on purpose: with the probe asked for and no voltage given, the
-# driver tries RadioLib's own default (1.6 V) rather than skipping the TCXO attempt, so
-# there is something to fall back FROM. The report must say which Vref that is.
+# CLEAN. The carrier ships populated either way, so the driver probes: try the TCXO, fall
+# back to the XTAL. No DIO3_TCXO_VOLTAGE, so the TCXO attempt uses the radio default of
+# 1.6 V rather than being skipped, and the report must name that Vref.
 Lora:
   Module: lr2021
   spidev: spidev0.0

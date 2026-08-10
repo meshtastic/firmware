@@ -202,15 +202,13 @@ assert "table on a radio that never applies one" 0 module-mismatch-sx126x.yaml c
 
 echo
 echo "LR20x0 switch table and interrupt DIO:"
-# The table is applied to an LR20x0 too (since #11252), and this part's mode set is not
-# the LR11xx's -- MODE_RX_HF is real here and must not be rejected as an unknown key.
+# MODE_RX_HF is a real mode on this part, so it must not be rejected as an unknown key.
 assert "a correct LR20x0 table is accepted" 0 rfswitch-lr2021.yaml check \
 	"Module            : lr2021" \
 	"RF switch table   : set" \
 	"IRQ DIO           : DIO9" \
 	"Result: 0 errors, 0 warnings"
-# One pin cannot be both the interrupt output and a switch control. Stated outright,
-# because begin() needs only SPI and BUSY: the radio reports init success either way.
+# begin() needs only SPI and BUSY, so the radio reports init success either way.
 assert "IRQ DIO collides with a switch pin" 1 rfswitch-lr2021-irq-collision.yaml check \
 	"Lora.IRQ_DIO_NUM is DIO5, which Lora.rfswitch_table.pins also drives" \
 	"Result: 1 error, 0 warnings"
@@ -220,26 +218,23 @@ assert "default IRQ DIO collides with a switch pin" 1 rfswitch-lr2021-irq-defaul
 	"raises its interrupt on DIO5 by default" \
 	"IRQ DIO           : DIO5 (radio default)" \
 	"Result: 1 error, 0 warnings"
-# DIO5 as the interrupt is normal - it is the radio's own default - so the check must key
-# on the pins list, not on the DIO number. Without this guard the collision check would
-# fire on most working LR20x0 configs.
+# DIO5 is the radio's own default, so a check keyed on the DIO number rather than the pins
+# list would fire on most working configs.
 assert "IRQ on DIO5 with the table elsewhere is clean" 0 rfswitch-lr2021-irq-clear.yaml check \
 	"IRQ DIO           : DIO5" \
 	"RF switch table   : set" \
 	"Result: 0 errors, 0 warnings"
-# Listing the IRQ pin is what breaks it, not driving it: setRfSwitchTable() reassigns the
-# DIO function for every pin in the list whatever the levels say.
+# Listing the pin is what breaks it, not driving it: setRfSwitchTable() reassigns the DIO
+# function for every pin in the list whatever the levels say.
 assert "IRQ pin listed but never driven HIGH" 1 rfswitch-lr2021-irq-all-low.yaml check \
 	"Lora.IRQ_DIO_NUM is DIO5, which Lora.rfswitch_table.pins also drives" \
 	"Result: 1 error, 0 warnings"
-# An LR20x0 needs a table for the same reason an LR11xx does. The collision check is gated
-# on there being a table, so only the missing table is reported here.
+# The collision check is gated on there being a table, so only the missing table is reported.
 assert "LR20x0 without a table cannot transmit" 0 rfswitch-lr2021-no-table.yaml check \
 	"Module is lr2021 but no Lora.rfswitch_table is set" \
 	"RF switch table   : not set" \
 	"Result: 0 errors, 1 warning"
-# A mode that belongs to the other family is a dropped row, not a typo, so it is named
-# as such rather than reported as an unknown key.
+# A mode belonging to the other family is a dropped row, not a typo.
 assert "modes the LR20x0 does not have" 0 rfswitch-lr2021-wrong-mode.yaml check \
 	"Lora.rfswitch_table.MODE_TX_HP is not a mode lr2021 has" \
 	"Lora.rfswitch_table.MODE_GNSS is not a mode lr2021 has" \
@@ -247,9 +242,8 @@ assert "modes the LR20x0 does not have" 0 rfswitch-lr2021-wrong-mode.yaml check 
 
 echo
 echo "TCXO probing (Lora.TCXO_OPTIONAL):"
-# A carrier ships populated either way, so the driver is told to try both oscillators.
-# With no explicit Vref the TCXO attempt uses RadioLib's own default rather than being
-# skipped -- otherwise there would be nothing to fall back from.
+# With no explicit Vref the TCXO attempt uses the radio default rather than being skipped,
+# otherwise there would be nothing to fall back from.
 assert "probe with no Vref names the radio default" 0 tcxo-optional.yaml check \
 	"TCXO probe        : yes, 1600 mV (radio default) and XTAL" \
 	"Result: 0 errors, 0 warnings"
@@ -258,8 +252,7 @@ assert "probe on an SX126x uses the given Vref" 0 tcxo-optional-sx1262.yaml chec
 	"Module            : sx1262" \
 	"TCXO probe        : yes, 1800 mV and XTAL" \
 	"Result: 0 errors, 0 warnings"
-# The probe belongs to the driver, so asking for it on a part with no TCXO reference is
-# read, stored and inert.
+# On a part with no TCXO reference the key is read, stored and inert.
 assert "probe on a radio with no TCXO does nothing" 0 tcxo-optional-unsupported.yaml check \
 	"Lora.TCXO_OPTIONAL is set but Module is sx1280" \
 	"no TCXO reference to probe for" \

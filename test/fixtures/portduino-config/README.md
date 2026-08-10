@@ -69,9 +69,8 @@ the module/table disagreement in both directions.
 
 ## LR20x0 rfswitch table and interrupt DIO
 
-The table is handed to an LR20x0 as well as an LR11xx, and the two parts do not have
-the same modes or the same switch pins - so which findings are correct depends on the
-module, not on a fixed list.
+The table is handed to an LR20x0 as well as an LR11xx, and the two parts have neither the
+same modes nor the same switch pins, so which findings are correct depends on the module.
 
 | File                                 | Expected                                                                        |
 | ------------------------------------ | ------------------------------------------------------------------------------- |
@@ -83,30 +82,22 @@ module, not on a fixed list.
 | `rfswitch-lr2021-no-table.yaml`      | An LR20x0 with no table cannot transmit, same as an LR11xx without one.         |
 | `rfswitch-lr2021-wrong-mode.yaml`    | `MODE_TX_HP` and `MODE_GNSS` are LR11xx modes an LR20x0 does not have.          |
 
-The IRQ cases are the point of the group: `begin()` needs only SPI and BUSY, so a radio
-whose interrupt lands on a switch pin still reports init success and then never receives
-a packet. The absent-key case is the harder one, because nothing in the file is wrong to
-look at.
+`begin()` needs only SPI and BUSY, so a radio whose interrupt lands on a switch pin still
+reports init success and then never receives a packet.
 
-The mechanism is last-writer-wins inside RadioLib, which is why `-irq-all-low` is a fault
-and `-irq-clear` is not. `LR2021::config()` (from `begin()`) points the IRQ DIO at
-`FUNCTION_IRQ`; `setRfSwitchTable()` runs afterwards and calls `setDioFunction(...,
-FUNCTION_RF_SWITCH)` for **every** non-NC pin in the list, whatever the levels are, and
-discards the result. So listing the pin is what breaks it, driving it is irrelevant, and
-nothing re-asserts the IRQ function afterwards.
+Why `-irq-all-low` is a fault and `-irq-clear` is not: `LR2021::config()` (from `begin()`)
+points the IRQ DIO at `FUNCTION_IRQ`, then `setRfSwitchTable()` calls `setDioFunction(...,
+FUNCTION_RF_SWITCH)` for every non-NC pin in the list whatever the levels are, and nothing
+re-asserts the IRQ function afterwards. Listing the pin is what breaks it, not driving it.
 
-`rfswitch-lr2021.yaml` also carries `LR2021_MAX_POWER` and `LR2021_MAX_POWER_HF`. Both are
-read by `loadConfig()` but were once missing from the checker's schema, which reported them
-as unknown keys - so they sit in a case that must stay at zero warnings, where dropping
-either from the schema again fails the assertion. LR20x0 is the only module with two power
-ceilings, one per band, which is how the pair came to be missed.
+`rfswitch-lr2021.yaml` also carries `LR2021_MAX_POWER` and `LR2021_MAX_POWER_HF` in a case
+that must stay at zero warnings, so dropping either from the checker's schema fails it.
 
 ## TCXO probing (`Lora.TCXO_OPTIONAL`)
 
-A variant declares "a TCXO may or may not be fitted" at compile time with `TCXO_OPTIONAL`,
-because the board is known when the image is built. A Portduino carrier cannot: the same
-`meshtasticd` binary runs on hardware populated either way, so the statement arrives as
-YAML and is answered at runtime.
+A variant declares "a TCXO may or may not be fitted" at compile time with `TCXO_OPTIONAL`.
+A Portduino carrier cannot: the same `meshtasticd` binary runs on hardware populated either
+way, so the statement arrives as YAML and is answered at runtime.
 
 | File                             | Expected                                                                |
 | -------------------------------- | ----------------------------------------------------------------------- |
@@ -114,9 +105,8 @@ YAML and is answered at runtime.
 | `tcxo-optional-sx1262.yaml`      | Clean. Another family, explicit Vref, which is the one reported.        |
 | `tcxo-optional-unsupported.yaml` | An SX128x has no TCXO reference to probe for, so the key is inert.      |
 
-The no-Vref case is the one worth having: with the probe asked for and no voltage given,
-the driver tries RadioLib's own default rather than skipping the TCXO attempt, because
-otherwise there is nothing to fall back _from_ and the flag would silently do nothing.
+With the probe asked for and no voltage given, the driver tries the radio default rather
+than skipping the TCXO attempt - otherwise there is nothing to fall back _from_.
 
 ## PA gain table (`TX_GAIN_LORA`)
 

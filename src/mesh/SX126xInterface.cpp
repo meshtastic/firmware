@@ -70,10 +70,7 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    // An explicit Vref always wins; with the probe asked for and none given, try RadioLib's
-    // own default so there is something to fall back from. On an embedded target this is
-    // instead a second interface instance in initLoRa()'s detection ladder, which a
-    // Portduino build cannot use: the module is named in YAML, so there is nothing to detect.
+    // An explicit Vref wins; probing with none given tries the radio default first.
     tcxoVoltage = portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000
                                                          : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
@@ -98,15 +95,9 @@ template <typename T> bool SX126xInterface<T>::init()
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
 
-    // The chip answered but would not start on the TCXO, so the board most likely has none
-    // fitted. Retry on the XTAL rather than reporting no radio. CHIP_NOT_FOUND is excluded:
-    // that is a wiring or SPI fault, and a second attempt only hides it.
-    //
-    // Portduino only, deliberately. An embedded TCXO_OPTIONAL board already gets this from
-    // initLoRa(), which constructs a second SX126x interface with no Vref when the first
-    // fails; retrying here as well would leave that ladder step unreachable and change how
-    // every existing t-echo-class board reports its oscillator. A Portduino build has no
-    // ladder to fall back through, because the module is named in YAML rather than probed.
+    // Chip answered but would not start on the TCXO: retry on the XTAL. CHIP_NOT_FOUND is a
+    // wiring or SPI fault, where a second attempt only hides it. Portduino only - an embedded
+    // board gets this from the second interface instance in initLoRa()'s ladder.
 #if ARCH_PORTDUINO
     if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("SX126x init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);

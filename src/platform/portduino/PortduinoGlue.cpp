@@ -83,9 +83,6 @@ const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT] = {
     {"MODE_TX_HF", RFSW_TX_HF}, {"MODE_RX_HF", RFSW_RX_HF}, {"MODE_GNSS", RFSW_GNSS}, {"MODE_WIFI", RFSW_WIFI},
 };
 
-// RadioLib addresses switch pins by slot, not by DIO number, and the two families lay the
-// slots out differently -- an LR11xx has no DIO9, so its fifth slot is DIO10, while an
-// LR20x0's fifth slot is DIO9 and DIO10 is its sixth.
 const int8_t kLr11x0SwitchDios[5] = {5, 6, 7, 8, 10};
 const int8_t kLr20x0SwitchDios[7] = {5, 6, 7, 8, 9, 10, 11};
 
@@ -118,9 +115,7 @@ size_t buildRfSwitchTable(uint32_t (&pins)[Module::RFSWITCH_MAX_PINS], Module::R
     for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++)
         pins[i] = RADIOLIB_NC;
 
-    // Slot i of the YAML pins list is slot i of RadioLib's pin array; the DIO number only
-    // decides which constant goes there. A DIO this part cannot use as a switch control
-    // leaves the slot at RADIOLIB_NC, so the mode rows still line up column for column.
+    // A DIO this part cannot use leaves the slot at RADIOLIB_NC, so mode rows still line up.
     uint8_t usableSlots = 0;
     for (size_t i = 0; i < Module::RFSWITCH_MAX_PINS; i++) {
         const int8_t dio = portduino_config.rfswitch_dio_num[i];
@@ -1055,8 +1050,7 @@ bool loadConfig(const char *configPath)
                 if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
                     portduino_config.dio3_tcxo_voltage = 1800; // default millivolts for "true"
                 }
-                // Carrier may be populated either way: try both oscillators rather than
-                // requiring the user to know which one is fitted.
+                // Try both oscillators rather than requiring the user to know which is fitted.
                 portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 
                 // backwards API compatibility and to globally set gpiochip once
@@ -1103,10 +1097,8 @@ bool loadConfig(const char *configPath)
                 portduino_config.has_rfswitch_table = true;
                 const YAML::Node table = yamlConfig["Lora"]["rfswitch_table"];
 
-                // Store the DIO number the user wrote rather than a RADIOLIB_LR11X0_*
-                // constant: which slot it belongs in is a property of the radio, resolved
-                // later by buildRfSwitchTable(). Anything not spelled "DIO<n>" leaves the
-                // slot unused, exactly as an unrecognised name did before.
+                // Store the DIO number as written; the slot it maps to is per-radio. Anything
+                // not spelled "DIO<n>" leaves the slot unused.
                 for (int i = 0; i < 5; i++) {
                     const std::string name = table["pins"][i].as<std::string>("");
                     int dioNum = 0;
@@ -1124,9 +1116,7 @@ bool loadConfig(const char *configPath)
                             portduino_config.rfswitch_mode_high[m] |= (uint8_t)(1u << i);
                 }
             }
-            // Which DIO the radio raises its interrupt on. Only the LR20x0 driver reads
-            // this; left unset, RadioLib keeps its own default of DIO5, which is an RF
-            // switch line on carriers that use the full DIO5-DIO8 table.
+            // IRQ DIO for the LR20x0 driver; unset leaves RadioLib's default of DIO5.
             if (yamlConfig["Lora"]["IRQ_DIO_NUM"])
                 portduino_config.irq_dio_num = yamlConfig["Lora"]["IRQ_DIO_NUM"].as<int>(-1);
         }

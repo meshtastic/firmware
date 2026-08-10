@@ -1,7 +1,6 @@
-# FAULT: MODE_GNSS and MODE_TX_HP are real mode names, but an LR20x0 has neither -- they
-# belong to the LR11xx. Both rows are dropped rather than applied, so expect a WARNING
-# naming the module rather than the "unknown key" a misspelling gets. DIO10 is a switch
-# pin on this part (it is the sixth slot), so it is not what is being tested here.
+# FAULT: MODE_GNSS and MODE_TX_HP are LR11xx modes an LR20x0 does not have, so both rows are
+# dropped. Expect a WARNING naming the module rather than the "unknown key" a misspelling
+# gets.
 Lora:
   Module: lr2021
   CS: 21

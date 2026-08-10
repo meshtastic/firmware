@@ -1,6 +1,6 @@
-# FAULT: IRQ_DIO_NUM names DIO5, which the switch table also drives. One pin cannot be
-# both the interrupt output and an RF switch control. begin() only exercises SPI and
-# BUSY, so the radio reports init success and then never receives a packet.
+# FAULT: IRQ_DIO_NUM names DIO5, which the switch table also drives. One pin cannot be both
+# the interrupt output and an RF switch control. begin() exercises only SPI and BUSY, so the
+# radio reports init success and then never receives a packet.
 Lora:
   Module: lr2021
   CS: 21
