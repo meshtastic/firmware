@@ -70,10 +70,10 @@ static void purgeIncompatibleBleBonds()
 
     bool wiped = false;
     if (mismatch) {
-        LOG_WARN("Wiping incompatible NimBLE bonds (on-disk format changed)");
+        LOG_WARN("Wiping incompatible NimBLE bonds (format changed)");
         wiped = nvs_erase_all(handle) == ESP_OK && nvs_commit(handle) == ESP_OK;
         if (!wiped) {
-            LOG_ERROR("Failed to erase nimble_bond namespace");
+            LOG_ERROR("nimble_bond namespace erase failed");
         }
     }
 
@@ -347,8 +347,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
                         toPhoneQueueSize++;
                     }
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
-                    LOG_DEBUG("BLE getFromRadio returned numBytes=%u, pushed toPhoneQueueSize=%u", numBytes,
-                              toPhoneQueueSize.load());
+                    LOG_DEBUG("BLE getFromRadio numBytes=%u, toPhoneQueueSize=%u", numBytes, toPhoneQueueSize.load());
 #endif
                 } else {
                     // Shouldn't happen because the onRead callback shouldn't be waiting if the queue is full!
@@ -370,7 +369,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             // Note: the comparison above is safe without a mutex because we are the only method that *decreases*
             // fromPhoneQueueSize. (It's okay if fromPhoneQueueSize *increases* in the NimBLE task meanwhile.)
 
-            LOG_DEBUG("NimbleBluetooth: handling ToRadio packet, fromPhoneQueueSize=%u", fromPhoneQueueSize.load());
+            LOG_DEBUG("NimbleBluetooth: ToRadio packet, fromPhoneQueueSize=%u", fromPhoneQueueSize.load());
 
             // Pop the front of fromPhoneQueue, holding the mutex only briefly while we pop.
             BLEValue val;
@@ -546,7 +545,7 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
 
             // There's already a packet queued. Great! We don't need to wait for onReadCallbackIsWaitingForData.
 #ifdef DEBUG_NIMBLE_ON_READ_TIMING
-            LOG_DEBUG("BLE onRead(%d): packet already waiting, no need to set onReadCallbackIsWaitingForData", currentReadCount);
+            LOG_DEBUG("BLE onRead(%d): packet already waiting, skip onReadCallbackIsWaitingForData", currentReadCount);
 #endif
         } else if (!bleDraining) {
             // (If deinit() is tearing the stack down, skip the wait entirely and just return a 0-size
@@ -580,9 +579,8 @@ class NimbleBluetoothFromRadioCallback : public BLECharacteristicCallbacks
                 tries++;
 
                 if (tries == 4000) {
-                    LOG_WARN(
-                        "BLE onRead(%d): timeout waiting for data after %u ms, %d tries, giving up and returning 0-size response",
-                        currentReadCount, millis() - startMillis, tries);
+                    LOG_WARN("BLE onRead(%d): data timeout after %u ms, %d tries, returning 0-size response", currentReadCount,
+                             millis() - startMillis, tries);
                 }
             }
         }
@@ -697,7 +695,7 @@ class NimbleBluetoothSecurityCallback : public BLESecurityCallbacks
         // yields a *failed* encryption change here -- don't latch a connected/authenticated state
         // on a link that is actually being torn down.
         if (desc == nullptr || !desc->sec_state.encrypted) {
-            LOG_WARN("BLE encryption change without an encrypted link; ignoring");
+            LOG_WARN("BLE encryption change without encrypted link; ignoring");
             return;
         }
 
@@ -764,7 +762,7 @@ class NimbleBluetoothServerCallback : public BLEServerCallbacks
         if (dataLenResult == 0) {
             LOG_INFO("BLE conn %u requested data length %u bytes", connHandle, kPreferredBleTxOctets);
         } else {
-            LOG_WARN("Failed to raise data length for conn %u, rc=%d", connHandle, dataLenResult);
+            LOG_WARN("Can't raise data length for conn %u, rc=%d", connHandle, dataLenResult);
         }
 #endif
 
@@ -812,7 +810,7 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->setMaxPreferred(0x12);
 
     if (!pAdvertising->start(0)) {
-        LOG_ERROR("BLE failed to start advertising");
+        LOG_ERROR("BLE advertising start failed");
     } else {
         LOG_DEBUG("BLE Advertising started");
     }
@@ -908,7 +906,7 @@ void NimbleBluetooth::setup()
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
 
-    LOG_INFO("Init the NimBLE bluetooth module");
+    LOG_INFO("Init NimBLE bluetooth");
 
     // deinit() latches these teardown guards; clear them so a re-init on the same boot (e.g. an
     // admin disable-bluetooth followed by re-enable) doesn't leave onRead stuck draining or
@@ -929,7 +927,7 @@ void NimbleBluetooth::setup()
     if (mtuResult == 0) {
         LOG_INFO("BLE MTU request set to %u", kPreferredBleMtu);
     } else {
-        LOG_WARN("Unable to request MTU %u, rc=%d", kPreferredBleMtu, mtuResult);
+        LOG_WARN("Can't request MTU %u, rc=%d", kPreferredBleMtu, mtuResult);
     }
 
     // BLESecurity only forwards to static NimBLEDevice setters; a stack instance suffices.
@@ -1063,7 +1061,7 @@ void updateBatteryLevel(uint8_t level)
 
 void NimbleBluetooth::clearBonds()
 {
-    LOG_INFO("Clearing bluetooth bonds!");
+    LOG_INFO("Clearing bluetooth bonds");
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_OUR_SEC, nullptr);
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_PEER_SEC, nullptr);
     ble_store_util_delete_all(BLE_STORE_OBJ_TYPE_CCCD, nullptr);

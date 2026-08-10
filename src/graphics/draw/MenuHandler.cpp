@@ -194,7 +194,7 @@ static void applyLoraRegion(meshtastic_Config_LoRaConfig_RegionCode region, bool
     // flip the region right back. The user picked the region, so the preset follows it.
     const RegionInfo *newRegion = getRegion(region);
     if (config.lora.use_preset && !newRegion->supportsPreset(config.lora.modem_preset)) {
-        LOG_INFO("Preset %s not available in %s, using default %s",
+        LOG_INFO("Preset %s unavailable in %s, use default %s",
                  DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true), newRegion->name,
                  DisplayFormatters::getModemPresetDisplayName(newRegion->getDefaultPreset(), false, true));
         config.lora.modem_preset = newRegion->getDefaultPreset();
@@ -320,7 +320,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                 menuQueue = HamModeConfirm;
                 screen->runNow();
             } else if (owner.is_licensed) {
-                LOG_INFO("Licensed user chose a non-ham region; prompting to revert licensed mode");
+                LOG_INFO("Licensed user chose non-ham region; prompt to revert licensed mode");
                 pendingRegion = selectedRegion;
                 menuQueue = LicensedToNormalConfirm;
                 screen->runNow();
@@ -440,10 +440,10 @@ void menuHandler::FrequencySlotPicker()
         if (denominator > 0.0) {
             numChannels = static_cast<uint32_t>(round(numerator / denominator));
         } else {
-            LOG_WARN("Invalid region configuration: non-positive channel spacing/width");
+            LOG_WARN("Invalid region config: non-positive channel spacing/width");
         }
     } else {
-        LOG_WARN("Region not set, cannot calculate number of channels");
+        LOG_WARN("Region not set, can't calc channel count");
         return;
     }
 
@@ -996,7 +996,7 @@ void menuHandler::deleteMessagesMenu()
 
         // This only appears in non-ALL modes
         if (selected == DeleteThis) {
-            LOG_INFO("Deleting all messages in this thread");
+            LOG_INFO("Deleting all messages in thread");
 
             if (mode == graphics::MessageRenderer::ThreadMode::CHANNEL) {
                 messageStore.deleteAllMessagesInChannel(ch);
@@ -1904,7 +1904,7 @@ void menuHandler::resetNodeDBMenu()
             disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 2) {
-            LOG_INFO("Initiate node-db reset but keeping favorites");
+            LOG_INFO("Initiate node-db reset, keep favorites");
             nodeDB->resetNodes(1);
             disableBluetooth();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
@@ -2471,7 +2471,7 @@ void menuHandler::removeFavoriteMenu()
 void menuHandler::traceRouteMenu()
 {
     screen->showNodePicker("Node to Trace", 30000, [](uint32_t nodenum) -> void {
-        LOG_INFO("Menu: Node picker selected node 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
+        LOG_INFO("Menu: Node picker selected 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
         if (traceRouteModule) {
             traceRouteModule->startTraceRoute(nodenum);
         }
