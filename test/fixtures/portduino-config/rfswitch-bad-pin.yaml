@@ -1,4 +1,6 @@
-# FAULT: DIO9 is not a switch pin. Only DIO5, DIO6, DIO7, DIO8 and DIO10 exist.
+# FAULT: DIO9 is not a switch pin on an LR11xx, whose five slots are DIO5, DIO6, DIO7,
+# DIO8 and DIO10. It is a valid name -- an LR20x0 does have DIO9 -- so the finding has to
+# be judged against the module, not against a fixed list.
 Lora:
   Module: lr1121
   rfswitch_table:

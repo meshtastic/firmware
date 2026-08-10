@@ -1,0 +1,17 @@
+# FAULT: the same collision as rfswitch-lr2021-irq-collision.yaml, but arrived at by
+# saying nothing. With no IRQ_DIO_NUM the radio keeps RadioLib's default of DIO5, which
+# this table drives as a switch line -- so the collision exists precisely because the key
+# is absent, which is the harder half of the fault to see.
+Lora:
+  Module: lr2021
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, LOW, LOW]
+    MODE_TX: [HIGH, HIGH, LOW, LOW]
+    MODE_RX_HF: [LOW, LOW, HIGH, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW, HIGH]

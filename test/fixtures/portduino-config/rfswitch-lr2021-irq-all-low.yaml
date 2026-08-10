@@ -1,0 +1,17 @@
+# FAULT, and the non-obvious half of it: DIO5 is listed in pins but driven LOW in every
+# single mode, which looks harmless and is not. RadioLib's setRfSwitchTable() calls
+# setDioFunction(..., FUNCTION_RF_SWITCH) for every non-NC pin in the list regardless of
+# the levels, so merely listing DIO5 reassigns it away from FUNCTION_IRQ. The levels have
+# nothing to do with the collision, so this must be reported exactly like the HIGH case.
+Lora:
+  Module: lr2021
+  CS: 21
+  IRQ: 16
+  IRQ_DIO_NUM: 5
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_STBY: [LOW, LOW]
+    MODE_RX: [LOW, HIGH]
+    MODE_TX: [LOW, HIGH]
+    MODE_RX_HF: [LOW, LOW]
+    MODE_TX_HF: [LOW, LOW]

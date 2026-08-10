@@ -1,0 +1,24 @@
+# CLEAN. A correct LR20x0 table -- must report no findings. Two things here were
+# impossible before the table stopped being parsed as LR11xx-only: MODE_RX_HF is a mode
+# this part really has (it was rejected as an unknown key), and IRQ_DIO_NUM moves the
+# interrupt off DIO5 so it does not collide with the switch line on that pin.
+Lora:
+  Module: lr2021
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IRQ_DIO_NUM: 9
+  # Both power ceilings are read by loadConfig(); they are here so that dropping either
+  # from the checker's schema shows up as an "unknown key" warning and fails this case.
+  # LR20x0 is the only module with two, one per band.
+  LR2021_MAX_POWER: 20
+  LR2021_MAX_POWER_HF: 10
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, LOW, LOW]
+    MODE_TX: [HIGH, HIGH, LOW, LOW]
+    MODE_RX_HF: [LOW, LOW, HIGH, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW, HIGH]

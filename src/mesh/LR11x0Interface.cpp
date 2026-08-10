@@ -27,8 +27,26 @@
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
-#define rfswitch_dio_pins portduino_config.rfswitch_dio_pins
-#define rfswitch_table portduino_config.rfswitch_table
+
+// This part's switch-capable DIOs in RadioLib slot order, with its own constants. Note
+// there is no DIO9: the fifth slot is DIO10, which is why the slot cannot be worked out
+// in the YAML layer without knowing the radio.
+static const int8_t lr11x0_switch_dio_nums[] = {5, 6, 7, 8, 10};
+static const uint32_t lr11x0_switch_dio_consts[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7,
+                                                    RADIOLIB_LR11X0_DIO8, RADIOLIB_LR11X0_DIO10};
+static_assert(sizeof(lr11x0_switch_dio_nums) / sizeof(lr11x0_switch_dio_nums[0]) ==
+                  sizeof(lr11x0_switch_dio_consts) / sizeof(lr11x0_switch_dio_consts[0]),
+              "LR11x0 switch DIO numbers and constants must describe the same slots");
+
+// The mirror of the LR20x0 map: this part has MODE_TX_HP, MODE_GNSS and MODE_WIFI, and
+// no MODE_RX_HF.
+static const int32_t lr11x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
+    LR11x0::MODE_STBY,  LR11x0::MODE_RX,       LR11x0::MODE_TX,   LR11x0::MODE_TX_HP,
+    LR11x0::MODE_TX_HF, RFSW_MODE_UNSUPPORTED, LR11x0::MODE_GNSS, LR11x0::MODE_WIFI,
+};
+
+static uint32_t rfswitch_dio_pins[Module::RFSWITCH_MAX_PINS];
+static Module::RfSwitchMode_t rfswitch_table[RFSW_MODE_COUNT + 1];
 #else
 static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 static const Module::RfSwitchMode_t rfswitch_table[] = {
@@ -244,6 +262,10 @@ template <typename T> bool LR11x0Interface<T>::init()
     bool dioAsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
     bool dioAsRfSwitch = portduino_config.has_rfswitch_table;
+    if (dioAsRfSwitch)
+        buildRfSwitchTable(rfswitch_dio_pins, rfswitch_table, RFSW_MODE_COUNT + 1, lr11x0_switch_dio_nums,
+                           lr11x0_switch_dio_consts, sizeof(lr11x0_switch_dio_nums) / sizeof(lr11x0_switch_dio_nums[0]),
+                           lr11x0_rfswitch_mode_map);
 #else
     bool dioAsRfSwitch = false;
 #endif
@@ -483,7 +505,4 @@ template <typename T> int16_t LR11x0Interface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
-#undef rfswitch_dio_pins
-#undef rfswitch_table
 #endif

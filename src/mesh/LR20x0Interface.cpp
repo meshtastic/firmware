@@ -15,8 +15,27 @@
 #include "rfswitch.h"
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
-#define lr20x0_rfswitch_dio_pins portduino_config.rfswitch_dio_pins
-#define lr20x0_rfswitch_table portduino_config.rfswitch_table
+
+// The LR2021's own switch-capable DIOs, in RadioLib slot order, paired with its own
+// constants. PortduinoGlue stores what the YAML said; this is what turns it into a table
+// for this part, so nothing depends on the LR11xx and LR2021 constants coinciding.
+static const int8_t lr20x0_switch_dio_nums[] = {5, 6, 7, 8, 9, 10, 11};
+static const uint32_t lr20x0_switch_dio_consts[] = {RADIOLIB_LR2021_DIO5, RADIOLIB_LR2021_DIO6, RADIOLIB_LR2021_DIO7,
+                                                    RADIOLIB_LR2021_DIO8, RADIOLIB_LR2021_DIO9, RADIOLIB_LR2021_DIO10,
+                                                    RADIOLIB_LR2021_DIO11};
+static_assert(sizeof(lr20x0_switch_dio_nums) / sizeof(lr20x0_switch_dio_nums[0]) ==
+                  sizeof(lr20x0_switch_dio_consts) / sizeof(lr20x0_switch_dio_consts[0]),
+              "LR20x0 switch DIO numbers and constants must describe the same slots");
+
+// This part has no MODE_TX_HP, MODE_GNSS or MODE_WIFI. Naming them unsupported is what
+// lets --check say so rather than silently accepting a row that can never be applied.
+static const int32_t lr20x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
+    LR20x0::MODE_STBY,  LR20x0::MODE_RX,    LR20x0::MODE_TX,       RFSW_MODE_UNSUPPORTED,
+    LR20x0::MODE_TX_HF, LR20x0::MODE_RX_HF, RFSW_MODE_UNSUPPORTED, RFSW_MODE_UNSUPPORTED,
+};
+
+static uint32_t lr20x0_rfswitch_dio_pins[Module::RFSWITCH_MAX_PINS];
+static Module::RfSwitchMode_t lr20x0_rfswitch_table[RFSW_MODE_COUNT + 1];
 #else
 static const uint32_t lr20x0_rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 static const Module::RfSwitchMode_t lr20x0_rfswitch_table[] = {
@@ -90,6 +109,16 @@ template <typename T> bool LR20x0Interface<T>::init()
 #elif defined(IRQ_DIO_NUM)
     lora.irqDioNum = IRQ_DIO_NUM;
     LOG_DEBUG("Set irqDioNum %d", lora.irqDioNum);
+#elif defined(ARCH_PORTDUINO)
+    // A variant says this with a #define; a Portduino carrier has only the YAML. Left
+    // unset, RadioLib keeps DIO5, which is also the first RF switch line on carriers
+    // using the DIO5-DIO8 table -- begin() still succeeds, and nothing is ever received.
+    if (portduino_config.irq_dio_num >= 0) {
+        lora.irqDioNum = portduino_config.irq_dio_num;
+        LOG_DEBUG("Set irqDioNum %d from config", lora.irqDioNum);
+    } else {
+        LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
+    }
 #else
     LOG_DEBUG("Use default irqDioNum %d", lora.irqDioNum);
 #endif
@@ -151,6 +180,10 @@ template <typename T> bool LR20x0Interface<T>::init()
     bool dioAsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
     bool dioAsRfSwitch = portduino_config.has_rfswitch_table;
+    if (dioAsRfSwitch)
+        buildRfSwitchTable(lr20x0_rfswitch_dio_pins, lr20x0_rfswitch_table, RFSW_MODE_COUNT + 1, lr20x0_switch_dio_nums,
+                           lr20x0_switch_dio_consts, sizeof(lr20x0_switch_dio_nums) / sizeof(lr20x0_switch_dio_nums[0]),
+                           lr20x0_rfswitch_mode_map);
 #else
     bool dioAsRfSwitch = false;
 #endif
@@ -484,8 +517,6 @@ template <typename T> int16_t LR20x0Interface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-// Don't leak the aliases into the files InterfacesTemplates.cpp includes after this one.
-#undef lr20x0_rfswitch_dio_pins
-#undef lr20x0_rfswitch_table
+// Don't leak the alias into the files InterfacesTemplates.cpp includes after this one.
 #undef LR20x0
 #endif
