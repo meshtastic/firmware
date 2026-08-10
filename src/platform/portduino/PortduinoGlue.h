@@ -162,6 +162,11 @@ extern struct portduino_config_struct {
     int rf95_max_power = 20;
     bool dio2_as_rf_switch = false;
     int dio3_tcxo_voltage = 0;
+    // "A TCXO may or may not be fitted -- probe for it." The runtime twin of the
+    // TCXO_OPTIONAL define a variant sets, for carriers that ship populated either way.
+    // Each radio family keeps its own probe order; see TCXO_OPTIONAL_ENABLED in
+    // src/mesh/RadioLibInterface.h.
+    bool tcxo_optional = false;
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
@@ -367,6 +372,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << YAML::Precision(3) << (float)dio3_tcxo_voltage / 1000;
+        if (tcxo_optional)
+            out << YAML::Key << "TCXO_OPTIONAL" << YAML::Value << tcxo_optional;
         if (lora_usb_pid != 0x5512)
             out << YAML::Key << "USB_PID" << YAML::Value << YAML::Hex << lora_usb_pid;
         if (lora_usb_vid != 0x1A86)

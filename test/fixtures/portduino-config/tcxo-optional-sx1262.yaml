@@ -1,0 +1,15 @@
+# CLEAN. The same flag on a different radio family, with an explicit Vref. An SX126x gets
+# the probe too: an embedded board reaches it through initLoRa()'s detection ladder, which
+# a Portduino build has no equivalent of, so the retry lives in the driver instead.
+#
+# The explicit voltage is what gets tried first here, and the report must name it rather
+# than the 1.6 V default.
+Lora:
+  Module: sx1262
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  DIO3_TCXO_VOLTAGE: 1.8
+  TCXO_OPTIONAL: true

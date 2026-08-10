@@ -81,6 +81,11 @@ Lora:
 
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
 
+#  TCXO_OPTIONAL: true  # try the TCXO, then fall back to the crystal, for a carrier that
+#                       # ships populated either way. Without DIO3_TCXO_VOLTAGE the TCXO
+#                       # attempt uses the radio default of 1.6 V. SX126x, LR11xx and
+#                       # LR20x0 only; other radios have no TCXO reference to probe for.
+
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
 

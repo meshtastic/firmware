@@ -75,11 +75,9 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 // Vref to assume for a board that declares a TCXO may be fitted without saying at what voltage.
 // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
 // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
-#if defined(TCXO_OPTIONAL)
-#define LR11X0_TCXO_DEFAULT_VOLTAGE 1.6f
-#else
-#define LR11X0_TCXO_DEFAULT_VOLTAGE 0
-#endif
+// Now a runtime question on Portduino, where the probe is asked for in YAML rather than by
+// the variant, so this cannot be resolved by the preprocessor there.
+#define LR11X0_TCXO_DEFAULT_VOLTAGE (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0)
 
 // A chip that never answers can surface either way depending on where RadioLib gave up: a bounded
 // per-command BUSY wait in Module::SPItransferStream() reports SPI_CMD_TIMEOUT rather than
@@ -125,9 +123,8 @@ template <typename T> bool LR11x0Interface<T>::init()
         LOG_DEBUG("LR11x0 TCXO Vref %f V on DIO3 (DIO3 unavailable as an IRQ)", tcxoVoltage);
     else
         LOG_DEBUG("LR11x0 no TCXO Vref, XTAL only (DIO3 free as an IRQ)");
-#if defined(TCXO_OPTIONAL)
-    LOG_DEBUG("TCXO_OPTIONAL: oscillator type unknown, probing XTAL first and using any TCXO Vref only as fallback");
-#endif
+    if (TCXO_OPTIONAL_ENABLED)
+        LOG_DEBUG("TCXO_OPTIONAL: oscillator type unknown, probing XTAL first and using any TCXO Vref only as fallback");
 
     RadioLibInterface::init();
 
@@ -161,26 +158,20 @@ template <typename T> bool LR11x0Interface<T>::init()
         return res;
     };
 
-#if defined(TCXO_OPTIONAL)
-    // 1. XTAL, because a TCXO-first attempt hangs RadioLib's unbounded calibration wait on a module
-    //    with no TCXO fitted, whereas XTAL fails fast and cleanly on a module that does have one
-    float attemptVoltage = 0;
-#else
-    // 1. Whatever Vref the variant configured, which it declared unconditionally
-    float attemptVoltage = tcxoVoltage;
-#endif
+    // 1. With the probe asked for: XTAL, because a TCXO-first attempt hangs RadioLib's unbounded
+    //    calibration wait on a module with no TCXO fitted, whereas XTAL fails fast and cleanly on
+    //    a module that does have one. Otherwise whatever Vref was configured unconditionally.
+    float attemptVoltage = TCXO_OPTIONAL_ENABLED ? 0 : tcxoVoltage;
     int res = tryBegin(1, attemptVoltage);
 
-#if defined(TCXO_OPTIONAL)
-    // 2. XTAL failed with the chip present, so fall back to the TCXO if the variant configured one
-    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+    // 2. XTAL failed with the chip present, so fall back to the TCXO if one was configured
+    if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("LR11x0 XTAL init failed (err %d), retrying with TCXO Vref %f V", res, tcxoVoltage);
         attemptVoltage = tcxoVoltage;
         res = tryBegin(2, attemptVoltage);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("LR11x0 init success with TCXO Vref %f V", tcxoVoltage);
     }
-#endif
 
     // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry.
     //    After a step 2 fallback that is a second TCXO attempt, which is where settling actually matters.

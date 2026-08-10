@@ -1,0 +1,23 @@
+# CLEAN. The carrier ships populated either way, so the driver is told to probe: try the
+# TCXO, fall back to the XTAL. A variant says this with the TCXO_OPTIONAL define; a
+# Portduino build has to be told in YAML, because the same binary runs on both.
+#
+# No DIO3_TCXO_VOLTAGE here on purpose: with the probe asked for and no voltage given, the
+# driver tries RadioLib's own default (1.6 V) rather than skipping the TCXO attempt, so
+# there is something to fall back FROM. The report must say which Vref that is.
+Lora:
+  Module: lr2021
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IRQ_DIO_NUM: 9
+  TCXO_OPTIONAL: true
+  rfswitch_table:
+    pins: [DIO5, DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, LOW, LOW]
+    MODE_TX: [HIGH, HIGH, LOW, LOW]
+    MODE_RX_HF: [LOW, LOW, HIGH, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW, HIGH]

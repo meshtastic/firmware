@@ -84,8 +84,13 @@ template <typename T> bool LR20x0Interface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
-// FIXME: correct logic to default to not using TCXO if no voltage is specified for LR20x0_DIO3_TCXO_VOLTAGE
+    // An explicit Vref always wins. With no voltage given, an unset DIO3_TCXO_VOLTAGE means
+    // "no TCXO" as before -- unless the probe was asked for, in which case RadioLib's own
+    // default is tried first and the XTAL fallback below catches a board without one.
+    float tcxoVoltage = portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000
+                                                               : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
+    if (portduino_config.dio3_tcxo_voltage <= 0 && TCXO_OPTIONAL_ENABLED)
+        LOG_DEBUG("TCXO_OPTIONAL: no Lora.DIO3_TCXO_VOLTAGE set, trying default TCXO Vref %f V first", tcxoVoltage);
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
     LOG_DEBUG("LR2021_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", LR2021_DIO3_TCXO_VOLTAGE);
@@ -153,16 +158,14 @@ template <typename T> bool LR20x0Interface<T>::init()
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     }
 
-#if defined(TCXO_OPTIONAL)
     // If init failed for any reason other than chip not found, retry without TCXO (XTAL mode)
-    if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+    if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
         LOG_WARN("LR20x0 init failed with TCXO Vref %f V (err %d), retrying without TCXO", tcxoVoltage, res);
         tcxoVoltage = 0;
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res == RADIOLIB_ERR_NONE)
             LOG_INFO("LR20x0 init success without TCXO (XTAL mode)");
     }
-#endif
 
     // \todo Display actual typename of the adapter, not just `LR20x0`
     LOG_INFO("LR20x0 init result %d", res);
@@ -240,11 +243,12 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 #endif
 
 #if ARCH_PORTDUINO
-        float tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+        float tcxoVoltage = portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000
+                                                                   : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
         float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
 #elif defined(TCXO_OPTIONAL)
-        float tcxoVoltage = 1.6f;
+        float tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
 #else
         float tcxoVoltage = 0;
 #endif
@@ -257,13 +261,11 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
             delay(100);
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
-#if defined(TCXO_OPTIONAL)
-        if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
+        if (TCXO_OPTIONAL_ENABLED && res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
             LOG_WARN("LR20x0 band-hop begin TCXO failed (%s%d), retry without TCXO", radioLibErr, res);
             tcxoVoltage = 0;
             res = lora.begin(freq, bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
-#endif
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR20x0 band-hop begin %s%d", radioLibErr, res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);

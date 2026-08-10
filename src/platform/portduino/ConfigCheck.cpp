@@ -47,6 +47,7 @@ const std::map<std::string, std::set<std::string>> &schema()
           "spiSpeed",
           "DIO2_AS_RF_SWITCH",
           "DIO3_TCXO_VOLTAGE",
+          "TCXO_OPTIONAL",
           "Enable_Pins",
           "rfswitch_table",
           "IRQ_DIO_NUM",
@@ -152,6 +153,25 @@ std::set<std::string> pinsFor(lora_module_enum module)
     for (size_t i = 0; i < count; i++)
         s.insert("DIO" + std::to_string(dios[i]));
     return s;
+}
+
+// Families whose driver can be told to probe for a TCXO and fall back to the XTAL. RF95
+// and SX128x have no DIO3 TCXO control at all, and the simulated radio has no oscillator,
+// so Lora.TCXO_OPTIONAL is inert on those rather than merely unnecessary.
+bool moduleSupportsTcxoProbe(lora_module_enum module)
+{
+    switch (module) {
+    case use_sx1262:
+    case use_sx1268:
+    case use_llcc68:
+    case use_lr1110:
+    case use_lr1120:
+    case use_lr1121:
+    case use_lr2021:
+        return true;
+    default:
+        return false;
+    }
 }
 
 std::string joinNames(const std::set<std::string> &names)
@@ -443,6 +463,7 @@ const std::map<std::string, ValueSpec> &valueSpecs()
         {"Lora.DIO2_AS_RF_SWITCH", {kBool, false}},
         // Accepts a float (volts) or `true` (meaning 1.8V), so both are allowed here.
         {"Lora.DIO3_TCXO_VOLTAGE", {kBoolOrFloat, false}},
+        {"Lora.TCXO_OPTIONAL", {kBool, false}},
         {"Lora.LR1110_MAX_POWER", {kInt, false}},
         {"Lora.LR1120_MAX_POWER", {kInt, false}},
         {"Lora.LR2021_MAX_POWER", {kInt, false}},
@@ -1023,6 +1044,14 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
         }
     }
 
+    // The probe is a property of the radio driver, so asking for it on a part with no TCXO
+    // control does nothing at all -- worth saying, because the key looks like it took.
+    if (portduino_config.tcxo_optional && portduino_config.lora_module != use_autoconf &&
+        !moduleSupportsTcxoProbe(portduino_config.lora_module))
+        findings.push_back({kWarn, merged, 0,
+                            "Lora.TCXO_OPTIONAL is set but Module is " + moduleName() +
+                                ", which has no TCXO reference to probe for, so the setting does nothing"});
+
     // Either way -- the old uncaught filesystem_error abort or today's clean exit -- the files
     // meant to configure the radio are not being loaded.
     if (!portduino_config.config_directory.empty()) {
@@ -1099,6 +1128,14 @@ void printSummary()
     std::cout << "  SPI speed         : " << portduino_config.spiSpeed << "\n";
     if (portduino_config.dio3_tcxo_voltage)
         std::cout << "  DIO3 TCXO voltage : " << portduino_config.dio3_tcxo_voltage << " mV\n";
+    if (portduino_config.tcxo_optional) {
+        // Name the Vref that will actually be tried: with no explicit voltage the driver
+        // falls back to RadioLib's own default rather than skipping the TCXO attempt.
+        std::cout << "  TCXO probe        : yes, "
+                  << (portduino_config.dio3_tcxo_voltage ? std::to_string(portduino_config.dio3_tcxo_voltage) + " mV"
+                                                         : std::string("1600 mV (radio default)"))
+                  << " and XTAL\n";
+    }
 
     // setRfSwitchTable() is called for an LR11xx and, since #11252, an LR20x0 -- so "not
     // set" is no gap on any other radio; "auto" has not resolved to a module yet, so

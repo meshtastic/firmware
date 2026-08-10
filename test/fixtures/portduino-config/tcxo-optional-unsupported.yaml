@@ -1,0 +1,10 @@
+# FAULT: TCXO_OPTIONAL on an SX128x. The probe is a property of the radio driver, and this
+# part has no DIO3 TCXO reference to probe for -- so the key is read, stored, and then does
+# nothing at all. It looks like it took, which is the reason to say so.
+Lora:
+  Module: sx1280
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  TCXO_OPTIONAL: true

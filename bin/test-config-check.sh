@@ -246,6 +246,26 @@ assert "modes the LR20x0 does not have" 0 rfswitch-lr2021-wrong-mode.yaml check 
 	"Result: 0 errors, 2 warnings"
 
 echo
+echo "TCXO probing (Lora.TCXO_OPTIONAL):"
+# A carrier ships populated either way, so the driver is told to try both oscillators.
+# With no explicit Vref the TCXO attempt uses RadioLib's own default rather than being
+# skipped -- otherwise there would be nothing to fall back from.
+assert "probe with no Vref names the radio default" 0 tcxo-optional.yaml check \
+	"TCXO probe        : yes, 1600 mV (radio default) and XTAL" \
+	"Result: 0 errors, 0 warnings"
+# The same flag on another family, with an explicit Vref that must be the one reported.
+assert "probe on an SX126x uses the given Vref" 0 tcxo-optional-sx1262.yaml check \
+	"Module            : sx1262" \
+	"TCXO probe        : yes, 1800 mV and XTAL" \
+	"Result: 0 errors, 0 warnings"
+# The probe belongs to the driver, so asking for it on a part with no TCXO reference is
+# read, stored and inert.
+assert "probe on a radio with no TCXO does nothing" 0 tcxo-optional-unsupported.yaml check \
+	"Lora.TCXO_OPTIONAL is set but Module is sx1280" \
+	"no TCXO reference to probe for" \
+	"Result: 0 errors, 1 warning"
+
+echo
 echo "PA gain table (TX_GAIN_LORA):"
 # Both shapes are legal and they fail differently. The scalar case is a regression
 # guard: an earlier version of the checker called this working config a fatal error.
