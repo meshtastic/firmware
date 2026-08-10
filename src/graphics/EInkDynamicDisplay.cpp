@@ -119,7 +119,7 @@ void EInkDynamicDisplay::endOrDetach()
             awaitRefresh();
         else {
             // Async begins
-            LOG_TRACE("Async full-refresh begins (drop frames)");
+            LOG_DEBUG("Async full-refresh begins (drop frames)");
             notifyLater(intervalPollAsyncRefresh, DUE_POLL_ASYNCREFRESH, true); // Hand-off to NotifiedWorkerThread
         }
     }
@@ -511,7 +511,7 @@ void EInkDynamicDisplay::pollAsyncRefresh()
     adafruitDisplay->endAsyncFull(); // Run the end of nextPage() code
     EInkDisplay::endUpdate();        // Run base-class code to finish off update (NOT our derived class override)
     asyncRefreshRunning = false;     // Unset the flag
-    LOG_TRACE("Async full-refresh complete");
+    LOG_DEBUG("Async full-refresh complete");
 
     // Note: this code only works because of a modification to meshtastic/GxEPD2.
     // It is only equipped to intercept calls to nextPage()

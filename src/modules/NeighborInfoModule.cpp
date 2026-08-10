@@ -28,9 +28,9 @@ NOTE: for debugging only
 */
 void NeighborInfoModule::printNodeDBNeighbors()
 {
-    LOG_TRACE("Our NodeDB contains %d neighbors", neighbors.size());
+    LOG_TRACE("Our NodeDB contains %u neighbors", (unsigned)neighbors.size());
     for (size_t i = 0; i < neighbors.size(); i++) {
-        LOG_TRACE("Node %d: node_id=0x%08x, snr=%.2f", i, neighbors[i].node_id, neighbors[i].snr);
+        LOG_TRACE("Node %u: node_id=0x%08x, snr=%.2f", (unsigned)i, neighbors[i].node_id, neighbors[i].snr);
     }
 }
 
@@ -173,7 +173,7 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             LOG_DEBUG("  Ignoring dummy neighbor info packet (single neighbor with nodeId 0, snr 0)");
         }
     } else if (getHopsAway(mp) == 0) {
-        LOG_TRACE("Get or create neighbor: %u with snr %f", mp.from, mp.rx_snr);
+        LOG_TRACE("Get or create neighbor: 0x%08x with snr %f", mp.from, mp.rx_snr);
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0,
                             mp.rx_snr); // Set the broadcast interval to 0, as we don't know it

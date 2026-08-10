@@ -364,7 +364,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
 #ifdef GPS_DEBUG
-                LOG_TRACE(debugmsg.c_str());
+                LOG_TRACE("%s", debugmsg.c_str());
 #endif
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
@@ -479,7 +479,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
                 if (sCounter == 26) {
 #ifdef GPS_DEBUG
 
-                    LOG_TRACE(debugmsg.c_str());
+                    LOG_TRACE("%s", debugmsg.c_str());
 #endif
                     return GNSS_RESPONSE_FRAME_ERRORS;
                 }
@@ -494,7 +494,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
             } else {
                 if (ack == 3 && b == 0x00) { // UBX-ACK-NAK message
 #ifdef GPS_DEBUG
-                    LOG_TRACE(debugmsg.c_str());
+                    LOG_TRACE("%s", debugmsg.c_str());
 #endif
                     LOG_WARN("Got NAK for class %02X msg %02X", class_id, msg_id);
                     return GNSS_RESPONSE_NAK; // NAK received
@@ -504,7 +504,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
         }
     }
 #ifdef GPS_DEBUG
-    LOG_TRACE(debugmsg.c_str());
+    LOG_TRACE("%s", debugmsg.c_str());
     LOG_WARN("No response for class %02X msg %02X", class_id, msg_id);
 #endif
     return GNSS_RESPONSE_NONE; // No response received within timeout
@@ -1904,7 +1904,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
                 for (const auto &chipInfo : responseMap) {
                     if (strstr(response.get(), chipInfo.detectionString.c_str()) != nullptr) {
 #ifdef GPS_DEBUG
-                        LOG_TRACE(response.get());
+                        LOG_TRACE("%s", response.get());
 #endif
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
                         return chipInfo.driver;
@@ -1913,7 +1913,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
 #ifdef GPS_DEBUG
-                LOG_TRACE(response.get());
+                LOG_TRACE("%s", response.get());
 #endif
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
@@ -1922,7 +1922,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         }
     }
 #ifdef GPS_DEBUG
-    LOG_TRACE(response.get());
+    LOG_TRACE("%s", response.get());
 #endif
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
@@ -2297,7 +2297,7 @@ bool GPS::whileActive()
     }
 #ifdef GPS_DEBUG
     if (debugmsg != "") {
-        LOG_TRACE(debugmsg.c_str());
+        LOG_TRACE("%s", debugmsg.c_str());
     }
 #endif
     return isValid;

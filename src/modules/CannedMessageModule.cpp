@@ -891,7 +891,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Confirm select (Enter)
     bool isSelect = isSelectEvent(event);
     if (isSelect) {
-        LOG_TRACE("[SELECT] handleFreeTextInput: runState=%d, dest=%u, channel=%d, freetext='%s'", (int)runState, dest, channel,
+        LOG_TRACE("[SELECT] handleFreeTextInput: runState=%d, dest=0x%08x, channel=%d, freetext='%s'", (int)runState, dest, channel,
                   freetext.c_str());
         if (dest == 0)
             dest = NODENUM_BROADCAST;
