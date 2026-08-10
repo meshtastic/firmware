@@ -19,6 +19,9 @@ class AHT10Sensor : public TelemetrySensor
   private:
     Adafruit_AHTX0 aht10;
 
+    void powerOn();
+    void powerOff();
+
   public:
     AHT10Sensor();
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;

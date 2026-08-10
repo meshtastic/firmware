@@ -8,6 +8,7 @@
 // power is hard-wired to 3V3 on this board, so toggling VEXT does not affect the display.
 
 // Buttons
+#define _VARIANT_nm_epd_420
 #define BUTTON_PIN 0               // BOOT — RTC GPIO, wakes from deep sleep
 #define PIN_BUTTON2 45             // USER button
 #define ALT_BUTTON_PIN PIN_BUTTON2 // Auxiliary input
@@ -32,10 +33,9 @@
 #define PIN_SPI_MOSI 10
 #define PIN_SPI_SCK 9
 
-// AHT20 temperature/humidity sensor power gate. Driving HIGH energises the sensor
-// rail; the EPD does not share this rail, so it stays available continuously.
-#define VEXT_ENABLE 40
-#define VEXT_ON_VALUE HIGH
+// AHT20 temperature/humidity sensor power gate. Driving HIGH energises the sensor rail.
+#define AHTX0_POWER_PIN 40
+#define AHTX0_POWER_WARMUP_MS 50
 #define PERIPHERAL_WARMUP_MS 50 // AHT20 needs ~20 ms after power-up before first I²C transaction
 
 // External audio amp shutdown — keep the Class-D PA disabled so we don't draw ~3 mA idle.
@@ -43,6 +43,7 @@
 // the ESP32-S3 boot ROM has already left floating; the codec itself is suspended through
 // I²C by other code paths if/when audio support is added.
 #define PIN_AMP_ENABLE 41
+#define PIN_ES8311_POWER 44
 
 // Battery monitoring: GPIO43 enables the divider, GPIO3 reads battery voltage.
 #define ADC_CTRL 43
