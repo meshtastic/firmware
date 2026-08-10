@@ -1142,7 +1142,7 @@ int32_t SENXXSensor::pendingForReadyMs()
             return SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted;
         }
         // CO2 sensor has an additional warmup time
-        if (hasCO2) {
+        if (hasCO2 && sincePmMeasureStarted < SEN6X_CO2_WARMUP_MS) {
             return SEN6X_CO2_WARMUP_MS - sincePmMeasureStarted;
         }
         return 0;
