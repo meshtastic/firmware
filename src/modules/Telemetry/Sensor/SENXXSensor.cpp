@@ -1121,13 +1121,13 @@ int32_t SENXXSensor::pendingForReadyMs()
     switch (state) {
     case SENXX_MEASUREMENT: {
 
+        if (!pmMeasureStarted) {
+            pmMeasureStarted = now;
+        }
+
         if (sincePmMeasureStarted < SENXX_PM_WARMUP_MS_1) {
             LOG_INFO("%s: not enough time passed since starting measurement", sensorName);
             return SENXX_PM_WARMUP_MS_1 - sincePmMeasureStarted;
-        }
-
-        if (!pmMeasureStarted) {
-            pmMeasureStarted = now;
         }
 
         // Get PN values to check if we are above or below threshold
