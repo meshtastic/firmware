@@ -250,7 +250,7 @@ template <typename T> int16_t SX126xInterface<T>::getCurrentRSSI()
     return (int16_t)round(rssi);
 }
 
-template <typename T> void SX126xInterface<T>::enableInterrupt(void (*callback)())
+template <typename T> void SX126xInterface<T>::setRadioIsr(void (*callback)())
 {
 #ifdef LORA_DIO1_SOFTWARE_POLL
     irqPollingActive = true;
@@ -261,7 +261,7 @@ template <typename T> void SX126xInterface<T>::enableInterrupt(void (*callback)(
 #endif
 }
 
-template <typename T> void SX126xInterface<T>::disableInterrupt()
+template <typename T> void SX126xInterface<T>::clearRadioIsr()
 {
 #ifdef LORA_DIO1_SOFTWARE_POLL
     irqPollingActive = false;
