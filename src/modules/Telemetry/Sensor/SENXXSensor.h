@@ -216,6 +216,14 @@ class SENXXSensor : public TelemetrySensor, public CO2CalibrationSensor
     void setMode(bool setOneShot);
     bool vocStateValid();
 
+    // Tracks getRTCQuality() across calls so we can notice the moment a real clock
+    // becomes available (e.g. the phone/WiFi/GPS sets it well after boot), rather than
+    // only checking once in initDevice(). See checkRTCQualityImproved()/
+    // reconcileTimeDependentState() for how this is used.
+    RTCQuality lastRTCQuality = RTCQualityNone;
+    bool checkRTCQualityImproved();
+    void reconcileTimeDependentState(uint32_t now);
+
     bool sendCommand(uint16_t command);
     /**
      * @brief Send a command word followed by a data payload; a CRC byte is
@@ -240,6 +248,10 @@ class SENXXSensor : public TelemetrySensor, public CO2CalibrationSensor
     bool readPNValues(bool cumulative);
     bool readValues();
 
+    // Monotonic (millis()) timers for warmup/poll intervals. Deliberately not
+    // wall-clock (getTime()) based: getTime() can jump discontinuously the moment the RTC
+    // quality improves mid-session (see checkRTCQualityImproved()), which would corrupt
+    // these short elapsed-time computations. millis() is immune to that and wraps only every ~49 days.
     uint32_t pmMeasureStarted = 0;
     uint32_t rhtGasMeasureStarted = 0;
     uint32_t lastDataPoll = 0;

@@ -620,10 +620,77 @@ bool SENXXSensor::isActive()
     return state == SENXX_MEASUREMENT || state == SENXX_MEASUREMENT_2;
 }
 
+bool SENXXSensor::checkRTCQualityImproved()
+{
+    RTCQuality currentQuality = getRTCQuality();
+    if (currentQuality == lastRTCQuality) {
+        return false;
+    }
+    LOG_DEBUG("%s: RTC quality changed: %s -> %s", sensorName, RtcName(lastRTCQuality), RtcName(currentQuality));
+    bool gainedUsableClock = lastRTCQuality < RTCQuality::RTCQualityDevice && currentQuality >= RTCQuality::RTCQualityDevice;
+    lastRTCQuality = currentQuality;
+    return gainedUsableClock;
+}
+
+void SENXXSensor::reconcileTimeDependentState(uint32_t now)
+{
+    if (lastCleaningValid) {
+        int32_t passed = now - lastCleaning; // in seconds
+
+        if (passed > ONE_WEEK_IN_SECONDS && (now > SENXX_VOC_VALID_DATE)) {
+            // If current date greater than 01/01/2018 (validity check)
+            LOG_INFO("%s: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", sensorName, passed,
+                     lastCleaning);
+            startCleaning();
+        } else {
+            LOG_INFO("%s: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", sensorName, passed,
+                     lastCleaning);
+        }
+    } else {
+        // We assume the device has just been updated or it is new,
+        // so no need to trigger a cleaning.
+        // Just save the timestamp to do a cleaning one week from now.
+        // Otherwise, we will never trigger cleaning in some cases
+        lastCleaning = now;
+        lastCleaningValid = true;
+        LOG_INFO("%s: No valid last cleaning date found, saving it now: %us", sensorName, lastCleaning);
+        saveState();
+    }
+
+    if (hasVOC) {
+        if (!vocValid) {
+            LOG_INFO("%s: No valid VOC's state found", sensorName);
+        } else {
+            // Check if state is recent
+            if (vocStateRecent(now)) {
+                // If current date greater than 01/01/2018 (validity check)
+                // Send it to the sensor
+                LOG_INFO("%s: VOC state is valid and recent", sensorName);
+                vocStateToSensor();
+            } else {
+                LOG_INFO("%s: VOC state is too old or date is invalid", sensorName);
+                LOG_DEBUG("%s: vocTime %u, and now %u", sensorName, vocTime, now);
+            }
+        }
+    }
+}
+
 uint32_t SENXXSensor::wakeUp()
 {
 
     LOG_DEBUG("%s: Waking up sensor", sensorName);
+
+    // The RTC may not have had a valid time when we last checked (e.g. right after boot,
+    // before a WiFi/GPS/phone time source connected). Each wake is a natural, frequent point
+    // to notice that it has since become valid and reconcile the saved cleaning/VOC state
+    // against real elapsed time, instead of only ever checking once in initDevice().
+    if (checkRTCQualityImproved()) {
+        uint32_t now = getValidTime(RTCQuality::RTCQualityDevice);
+        if (now) {
+            LOG_INFO("%s: RTC became available (%s), reconciling saved cleaning/VOC state", sensorName, RtcName(lastRTCQuality));
+            reconcileTimeDependentState(now);
+        }
+    }
 
     if (!sendCommand(SENXX_START_MEASUREMENT)) {
         LOG_ERROR("%s: Error starting measurement", sensorName);
@@ -632,10 +699,7 @@ uint32_t SENXXSensor::wakeUp()
     }
     delay(50); // From Sensirion Datasheet
 
-    // TODO - This is currently "problematic"
-    // If time is updated in between reads, there is no way to
-    // keep track of how long it has passed
-    pmMeasureStarted = getTime();
+    pmMeasureStarted = millis();
     state = SENXX_MEASUREMENT;
     LOG_INFO("%s: Started measurement mode", sensorName);
     return SENXX_PM_WARMUP_MS_1;
@@ -643,9 +707,7 @@ uint32_t SENXXSensor::wakeUp()
 
 bool SENXXSensor::vocStateStable()
 {
-    uint32_t now;
-    now = getTime();
-    uint32_t sinceFirstMeasureStarted = (now - rhtGasMeasureStarted);
+    uint32_t sinceFirstMeasureStarted = (millis() - rhtGasMeasureStarted) / 1000;
     LOG_DEBUG("%s: sinceFirstMeasureStarted: %us", sensorName, sinceFirstMeasureStarted);
     return sinceFirstMeasureStarted > SENXX_VOC_STATE_WARMUP_S;
 }
@@ -731,60 +793,21 @@ bool SENXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     // Load state
     loadState();
 
-    // Check if it is time to do a cleaning
-    uint32_t now;
-    int32_t passed = 0;
-    now = getValidTime(RTCQuality::RTCQualityDevice);
-
-    // If time is not RTCQualityNone, it will return non-zero
+    // Check if it is time to do a cleaning / whether the saved VOC state is still usable.
+    // This needs a real clock; if we don't have one yet (typical right after boot, before
+    // any time source has connected), don't lose the saved state - just defer the check.
+    // wakeUp() re-checks getRTCQuality() on every wake via checkRTCQualityImproved() and
+    // will run this same reconciliation the moment a valid time becomes available.
+    lastRTCQuality = getRTCQuality();
+    uint32_t now = getValidTime(RTCQuality::RTCQualityDevice);
     if (now) {
-        if (lastCleaningValid) {
-
-            passed = now - lastCleaning; // in seconds
-
-            if (passed > ONE_WEEK_IN_SECONDS && (now > SENXX_VOC_VALID_DATE)) {
-                // If current date greater than 01/01/2018 (validity check)
-                LOG_INFO("%s: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", sensorName,
-                         passed, lastCleaning);
-                startCleaning();
-            } else {
-                LOG_INFO("%s: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", sensorName, passed,
-                         lastCleaning);
-            }
-        } else {
-            // We assume the device has just been updated or it is new,
-            // so no need to trigger a cleaning.
-            // Just save the timestamp to do a cleaning one week from now.
-            // Otherwise, we will never trigger cleaning in some cases
-            lastCleaning = now;
-            lastCleaningValid = true;
-            LOG_INFO("%s: No valid last cleaning date found, saving it now: %us", sensorName, lastCleaning);
-            saveState();
-        }
-
-        if (hasVOC) {
-            if (!vocValid) {
-                LOG_INFO("%s: No valid VOC's state found", sensorName);
-            } else {
-                // Check if state is recent
-                if (vocStateRecent(now)) {
-                    // If current date greater than 01/01/2018 (validity check)
-                    // Send it to the sensor
-                    LOG_INFO("%s: VOC state is valid and recent", sensorName);
-                    vocStateToSensor();
-                } else {
-                    LOG_INFO("%s: VOC state is too old or date is invalid", sensorName);
-                    LOG_DEBUG("%s: vocTime %u, Passed %u, and now %u", sensorName, vocTime, passed, now);
-                }
-            }
-        }
+        reconcileTimeDependentState(now);
     } else {
-        // TODO - Should this actually ignore? We could end up never cleaning...
-        LOG_INFO("%s: Not enough RTCQuality, ignoring saved cleaning and VOC state", sensorName);
+        LOG_INFO("%s: Not enough RTCQuality yet, deferring saved cleaning/VOC state check until it improves", sensorName);
     }
 
     idle(false);
-    rhtGasMeasureStarted = now;
+    rhtGasMeasureStarted = millis();
 
     initI2CSensor();
     return true;
@@ -845,7 +868,7 @@ bool SENXXSensor::readValues()
             int16_t int_temperature = nextWord();
             senxxmeasurement.humidity = (int_humidity != SENXX_INT_INVALID) ? (int_humidity / 100.0f) : FLT_MAX;
             senxxmeasurement.temperature = (int_temperature != SENXX_INT_INVALID) ? (int_temperature / 200.0f) : FLT_MAX;
-            LOG_DEBUG("%s: Got readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, senxxmeasurement.humidity,
+            LOG_DEBUG("%s: Got readings: humidity=%.2f, temperature=%.2f", sensorName, senxxmeasurement.humidity,
                       senxxmeasurement.temperature);
         }
         if (hasVOC) {
@@ -866,7 +889,7 @@ bool SENXXSensor::readValues()
         if (hasCO2) {
             uint16_t uint_co2 = static_cast<uint16_t>(nextWord());
             senxxmeasurement.co2 = (uint_co2 != SENXX_UINT_INVALID) ? uint_co2 : FLT_MAX;
-            LOG_DEBUG("%s: Got readings: CO2=%u", sensorName, senxxmeasurement.co2);
+            LOG_DEBUG("%s: Got readings: CO2=%.2f", sensorName, senxxmeasurement.co2);
         }
 
         return true;
@@ -1040,8 +1063,7 @@ bool SENXXSensor::readPNValues(bool cumulative)
 
 uint8_t SENXXSensor::getMeasurements()
 {
-    uint32_t now;
-    now = getTime();
+    uint32_t now = millis();
 
     // Try to get new data
     if (!sendCommand(SENXX_READ_DATA_READY)) {
@@ -1058,7 +1080,7 @@ uint8_t SENXXSensor::getMeasurements()
     }
 
     bool dataReady = dataReadyBuffer[1];
-    uint32_t sinceLastDataPollMs = (now - lastDataPoll) * 1000;
+    uint32_t sinceLastDataPollMs = now - lastDataPoll;
     // Check if data is ready, and if since last time we requested is less than SENXX_POLL_INTERVAL
     if (!dataReady && (sinceLastDataPollMs > SENXX_POLL_INTERVAL)) {
         LOG_INFO("%s: Data is not ready", sensorName);
@@ -1087,9 +1109,8 @@ int32_t SENXXSensor::wakeUpTimeMs()
 
 int32_t SENXXSensor::pendingForReadyMs()
 {
-    uint32_t now;
-    now = getTime();
-    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted) * 1000;
+    uint32_t now = millis();
+    uint32_t sincePmMeasureStarted = now - pmMeasureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
 
     switch (state) {
