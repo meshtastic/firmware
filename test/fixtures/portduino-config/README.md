@@ -53,7 +53,7 @@ are upper, `sx1262` and `lr1121` lower.
 | ------------------------------ | ----------------------------------------------------------------- |
 | `rfswitch-valid.yaml`          | A full seven-mode table on an `lr1121` is clean.                  |
 | `rfswitch-partial.yaml`        | Legal, but the omitted modes are named - they are driven all-LOW. |
-| `rfswitch-bad-pin.yaml`        | `DIO9` is not one of DIO5/6/7/8/10.                               |
+| `rfswitch-bad-pin.yaml`        | `DIO9` is a real pin name but not a switch pin on an `lr1121`.    |
 | `rfswitch-row-length.yaml`     | Rows shorter and longer than the declared pin count.              |
 | `rfswitch-bad-level.yaml`      | `high` and `On`: anything not exactly `HIGH` is silently LOW.     |
 | `rfswitch-no-pins.yaml`        | No `pins` list, so no switch pin is ever driven.                  |
@@ -66,6 +66,40 @@ are upper, `sx1262` and `lr1121` lower.
 `module-mismatch-lr11xx.yaml` (LR11xx with no table - cannot transmit) and
 `module-mismatch-sx126x.yaml` (a table on a radio that never applies one) cover
 the module/table disagreement in both directions.
+
+## LR20x0 rfswitch table and interrupt DIO
+
+The table is handed to an LR20x0 as well as an LR11xx, and the two parts do not have
+the same modes or the same switch pins - so which findings are correct depends on the
+module, not on a fixed list.
+
+| File                                 | Expected                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| `rfswitch-lr2021.yaml`               | Clean. `MODE_RX_HF` is a real mode here, and `IRQ_DIO_NUM` keeps the IRQ clear. |
+| `rfswitch-lr2021-irq-collision.yaml` | `IRQ_DIO_NUM: 5` names a pin the table also drives as a switch line.            |
+| `rfswitch-lr2021-irq-default.yaml`   | The same collision reached by omitting the key: the radio default is DIO5.      |
+| `rfswitch-lr2021-irq-clear.yaml`     | **False-positive guard** - DIO5 as the IRQ, table on DIO6/7/8, is clean.        |
+| `rfswitch-lr2021-irq-all-low.yaml`   | DIO5 listed in `pins` but driven LOW everywhere: still a collision.             |
+| `rfswitch-lr2021-no-table.yaml`      | An LR20x0 with no table cannot transmit, same as an LR11xx without one.         |
+| `rfswitch-lr2021-wrong-mode.yaml`    | `MODE_TX_HP` and `MODE_GNSS` are LR11xx modes an LR20x0 does not have.          |
+
+The IRQ cases are the point of the group: `begin()` needs only SPI and BUSY, so a radio
+whose interrupt lands on a switch pin still reports init success and then never receives
+a packet. The absent-key case is the harder one, because nothing in the file is wrong to
+look at.
+
+The mechanism is last-writer-wins inside RadioLib, which is why `-irq-all-low` is a fault
+and `-irq-clear` is not. `LR2021::config()` (from `begin()`) points the IRQ DIO at
+`FUNCTION_IRQ`; `setRfSwitchTable()` runs afterwards and calls `setDioFunction(...,
+FUNCTION_RF_SWITCH)` for **every** non-NC pin in the list, whatever the levels are, and
+discards the result. So listing the pin is what breaks it, driving it is irrelevant, and
+nothing re-asserts the IRQ function afterwards.
+
+`rfswitch-lr2021.yaml` also carries `LR2021_MAX_POWER` and `LR2021_MAX_POWER_HF`. Both are
+read by `loadConfig()` but were once missing from the checker's schema, which reported them
+as unknown keys - so they sit in a case that must stay at zero warnings, where dropping
+either from the schema again fails the assertion. LR20x0 is the only module with two power
+ceilings, one per band, which is how the pair came to be missed.
 
 ## PA gain table (`TX_GAIN_LORA`)
 

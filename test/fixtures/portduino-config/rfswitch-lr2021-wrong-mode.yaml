@@ -1,0 +1,18 @@
+# FAULT: MODE_GNSS and MODE_TX_HP are real mode names, but an LR20x0 has neither -- they
+# belong to the LR11xx. Both rows are dropped rather than applied, so expect a WARNING
+# naming the module rather than the "unknown key" a misspelling gets. DIO10 is a switch
+# pin on this part (it is the sixth slot), so it is not what is being tested here.
+Lora:
+  Module: lr2021
+  CS: 21
+  IRQ: 16
+  IRQ_DIO_NUM: 11
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_STBY: [LOW, LOW]
+    MODE_RX: [HIGH, LOW]
+    MODE_TX: [HIGH, HIGH]
+    MODE_RX_HF: [LOW, HIGH]
+    MODE_TX_HF: [HIGH, LOW]
+    MODE_TX_HP: [LOW, HIGH]
+    MODE_GNSS: [HIGH, HIGH]

@@ -1,0 +1,19 @@
+# CLEAN, and the false-positive guard for the IRQ/switch-pin collision check. DIO5 is the
+# interrupt here -- which is also the radio's default -- and the table drives DIO6, DIO7
+# and DIO8, so nothing collides. Using DIO5 as an interrupt is normal and must not be
+# reported; the check keys on the pins list, not on the DIO number.
+Lora:
+  Module: lr2021
+  spidev: spidev0.0
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  IRQ_DIO_NUM: 5
+  rfswitch_table:
+    pins: [DIO6, DIO7, DIO8]
+    MODE_STBY: [LOW, LOW, LOW]
+    MODE_RX: [HIGH, LOW, HIGH]
+    MODE_TX: [HIGH, HIGH, HIGH]
+    MODE_RX_HF: [LOW, LOW, LOW]
+    MODE_TX_HF: [LOW, LOW, LOW]
