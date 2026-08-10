@@ -1,26 +1,5 @@
-// Host-side replay harness for tuning BME680IaqEstimator against recorded
-// Bosch BSEC output. The estimator is pure math with no platform
-// dependencies, so a captured trace replays in milliseconds on any dev
-// machine -- edit the constants in BME680IaqEstimator.h, recompile, rerun.
-//
-// Build (from the repo root):
-//   c++ -std=c++17 -O2 -I src -o /tmp/iaq_replay \
-//       bin/bme680_iaq_replay.cpp src/modules/Telemetry/Sensor/BME680IaqEstimator.cpp
-//
-// Input: CSV on stdin or a file argument, one sample per line:
-//   gas_ohms,relative_humidity[,bsec_iaq]
-// Lines starting with '#' and non-numeric header lines are skipped.
-//
-// Capturing a trace: on a firmware build that still links BSEC (any release
-// tag before the BSEC removal), add one log line to BME680Sensor::getMetrics
-// in the BSEC branch:
-//   LOG_INFO("IAQCSV,%.0f,%.2f,%.0f", bme680.getData(BSEC_OUTPUT_RAW_GAS).signal,
-//            bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal,
-//            bme680.getData(BSEC_OUTPUT_IAQ).signal);
-// then: grep -o 'IAQCSV,.*' serial.log | cut -d, -f2- > trace.csv
-//
-// Output: per-sample "n,gas_ohms,rh,est_iaq,bsec_iaq" plus a summary with
-// mean absolute error and UI-band agreement against the BSEC column.
+// Replays a captured BME680 CSV trace (gas_ohms,rh[,bsec_iaq]) through
+// BME680IaqEstimator for offline tuning. See docs/bme680_iaq_replay.md.
 
 #include "modules/Telemetry/Sensor/BME680IaqEstimator.h"
 

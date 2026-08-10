@@ -1,12 +1,11 @@
 #include "BME680IaqEstimator.h"
 
+// std::clamp rather than meshUtils.h's clamp: that header drags in Arduino.h,
+// and this file must stay compilable standalone on a dev host (see the replay
+// harness in bin/bme680_iaq_replay.cpp)
+#include <algorithm>
 #include <math.h>
 #include <string.h>
-
-static float clampf(float v, float lo, float hi)
-{
-    return v < lo ? lo : (v > hi ? hi : v);
-}
 
 bool BME680IaqEstimator::update(float gasOhms, float relativeHumidity, uint16_t *iaqOut)
 {
@@ -15,7 +14,7 @@ bool BME680IaqEstimator::update(float gasOhms, float relativeHumidity, uint16_t 
 
     // A failed humidity read must not poison the baseline: fall back to the
     // reference, which makes both compensation terms no-ops
-    float rh = isfinite(relativeHumidity) ? clampf(relativeHumidity, 0.0f, 100.0f) : RH_REF;
+    float rh = isfinite(relativeHumidity) ? std::clamp(relativeHumidity, 0.0f, 100.0f) : RH_REF;
 
     if (warmupRemaining > 0) {
         warmupRemaining--;
@@ -23,14 +22,14 @@ bool BME680IaqEstimator::update(float gasOhms, float relativeHumidity, uint16_t 
     }
 
     float x = logf(gasOhms) + KH * (rh - RH_REF);
-    x = clampf(x, LN_FLOOR - LN_RANGE, LN_CEIL_MAX);
+    x = std::clamp(x, LN_FLOOR - LN_RANGE, LN_CEIL_MAX);
 
     if (!seeded) {
-        lnCeiling = clampf(x, LN_FLOOR, LN_CEIL_MAX);
+        lnCeiling = std::clamp(x, LN_FLOOR, LN_CEIL_MAX);
         seeded = true;
     } else {
         float alpha = (x > lnCeiling) ? ALPHA_UP : ALPHA_DOWN;
-        lnCeiling = clampf(lnCeiling + alpha * (x - lnCeiling), LN_FLOOR, LN_CEIL_MAX);
+        lnCeiling = std::clamp(lnCeiling + alpha * (x - lnCeiling), LN_FLOOR, LN_CEIL_MAX);
     }
 
     if (sampleCount < UINT32_MAX)
@@ -41,14 +40,14 @@ bool BME680IaqEstimator::update(float gasOhms, float relativeHumidity, uint16_t 
     float below = lnCeiling - x;
     if (below < 0.0f)
         below = 0.0f;
-    float gasScore = clampf(below / LN_RANGE, 0.0f, 1.0f) * 500.0f;
+    float gasScore = std::clamp(below / LN_RANGE, 0.0f, 1.0f) * 500.0f;
 
     // Comfort-band penalty: only outside the band, so ordinary indoor humidity
     // can't keep IAQ away from the "Excellent" band
     float humDeviation = rh < RH_COMFORT_MIN ? RH_COMFORT_MIN - rh : (rh > RH_COMFORT_MAX ? rh - RH_COMFORT_MAX : 0.0f);
-    float humScore = clampf(humDeviation / RH_DEV_NORM, 0.0f, 1.0f) * 500.0f;
+    float humScore = std::clamp(humDeviation / RH_DEV_NORM, 0.0f, 1.0f) * 500.0f;
 
-    *iaqOut = (uint16_t)lroundf(clampf(gasScore + HUM_WEIGHT * humScore, 0.0f, 500.0f));
+    *iaqOut = (uint16_t)lroundf(std::clamp(gasScore + HUM_WEIGHT * humScore, 0.0f, 500.0f));
     return true;
 }
 
