@@ -323,7 +323,7 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
     return success;
 }
 
-template <typename T> void LR20x0Interface<T>::disableInterrupt()
+template <typename T> void LR20x0Interface<T>::clearRadioIsr()
 {
     lora.clearIrqAction();
 }
