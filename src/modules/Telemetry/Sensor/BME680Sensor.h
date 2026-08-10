@@ -30,8 +30,8 @@ class BME680Sensor : public TelemetrySensor
     static constexpr uint32_t STATE_SAVE_PERIOD_MS = 6 * 60 * 60 * 1000;
     static constexpr uint32_t STATE_SAVE_PERIOD_SECS = STATE_SAVE_PERIOD_MS / 1000;
 
-    const char *stateFileName = "/prefs/bme680.dat";
-    const char *legacyBsecStateFileName = "/prefs/bsec.dat"; // left behind by pre-open-IAQ firmware
+    static constexpr const char *stateFileName = "/prefs/bme680.dat";
+    static constexpr const char *legacyBsecStateFileName = "/prefs/bsec.dat"; // left behind by pre-open-IAQ firmware
 
     // Async sampling state (driven from runOnce)
     bool readingInFlight = false;

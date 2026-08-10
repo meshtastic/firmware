@@ -8,6 +8,7 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
+#include "Throttle.h"
 #include "gps/RTC.h"
 
 #include <math.h>
@@ -53,7 +54,7 @@ int32_t BME680Sensor::runOnce()
         return SAMPLE_INTERVAL_MS;
     }
 
-    if (haveSample && (now - lastSampleMs) < SAMPLE_INTERVAL_MS)
+    if (haveSample && Throttle::isWithinTimespanMs(lastSampleMs, SAMPLE_INTERVAL_MS))
         return SAMPLE_INTERVAL_MS - (now - lastSampleMs);
 
     uint32_t doneAt = bme680->beginReading();
@@ -96,7 +97,7 @@ void BME680Sensor::captureSample()
     } else if (isfinite(lastGasOhms) && lastGasOhms > 0.0f) {
         // Valid gas sample but the estimator has no output yet (warm-up/burn-in)
         lastIaqValid = false;
-    } else if (lastIaqValid && (lastSampleMs - lastIaqMs) >= IAQ_CARRY_MS) {
+    } else if (lastIaqValid && !Throttle::isWithinTimespanMs(lastIaqMs, IAQ_CARRY_MS)) {
         // Heater-unstable cycles (gas reported as 0) may ride on the previous
         // IAQ briefly, but a persistently gasless sensor stops reporting IAQ
         lastIaqValid = false;
@@ -107,11 +108,11 @@ void BME680Sensor::captureSample()
 
 bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    if (!haveSample || (millis() - lastSampleMs) >= SAMPLE_FRESH_MS)
+    if (!haveSample || !Throttle::isWithinTimespanMs(lastSampleMs, SAMPLE_FRESH_MS))
         captureSample();
     // A failed refresh must not freeze the last reading on the wire: publish
     // only while the cache is genuinely fresh
-    if (!haveSample || (millis() - lastSampleMs) >= SAMPLE_FRESH_MS)
+    if (!haveSample || !Throttle::isWithinTimespanMs(lastSampleMs, SAMPLE_FRESH_MS))
         return false;
 
     measurement->variant.environment_metrics.has_temperature = true;
@@ -194,7 +195,7 @@ void BME680Sensor::maybeSaveState()
         // ~STATE_SAVE_PERIOD_MS worth of samples) with an uptime cadence as a
         // secondary trigger for always-on nodes
         if (iaqEstimator.samplesFed() - lastPersistedSampleCount < STATE_SAVE_PERIOD_MS / SAMPLE_INTERVAL_MS &&
-            (millis() - lastStateSaveMs) < STATE_SAVE_PERIOD_MS)
+            Throttle::isWithinTimespanMs(lastStateSaveMs, STATE_SAVE_PERIOD_MS))
             return;
     }
     saveState();

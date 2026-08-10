@@ -61,17 +61,25 @@ int main(int argc, char **argv)
 
     BME680IaqEstimator est;
     char line[256];
-    long n = 0, produced = 0, compared = 0, bandHits = 0;
+    long lineNo = 0, n = 0, skipped = 0, produced = 0, compared = 0, bandHits = 0;
     double absErrSum = 0;
 
     printf("n,gas_ohms,rh,est_iaq,bsec_iaq\n");
     while (fgets(line, sizeof(line), in)) {
-        if (line[0] == '#')
+        lineNo++;
+        if (line[0] == '#' || line[0] == '\n')
             continue;
         float gas, rh, bsec = NAN;
         int fields = sscanf(line, "%f,%f,%f", &gas, &rh, &bsec);
-        if (fields < 2)
-            continue; // header or malformed line
+        if (fields < 2) {
+            // Tolerate one header row silently; anything else malformed is
+            // reported so a damaged trace can't produce a quiet, biased summary
+            if (lineNo > 1) {
+                skipped++;
+                fprintf(stderr, "skipping malformed line %ld: %s", lineNo, line);
+            }
+            continue;
+        }
         n++;
         uint16_t iaq;
         bool got = est.update(gas, rh, &iaq);
@@ -79,7 +87,7 @@ int main(int argc, char **argv)
 
         printf("%ld,%.0f,%.2f,", n, gas, rh);
         if (got)
-            printf("%u", iaq);
+            printf("%u", (unsigned)iaq);
         if (haveBsec)
             printf(",%.0f\n", bsec);
         else
@@ -95,8 +103,14 @@ int main(int argc, char **argv)
             }
         }
     }
+    if (ferror(in)) {
+        fprintf(stderr, "input read error at line %ld\n", lineNo);
+        if (in != stdin)
+            fclose(in);
+        return 1;
+    }
 
-    fprintf(stderr, "samples: %ld, estimator outputs: %ld\n", n, produced);
+    fprintf(stderr, "samples: %ld, estimator outputs: %ld, malformed lines skipped: %ld\n", n, produced, skipped);
     if (compared) {
         fprintf(stderr, "vs BSEC (%ld comparable): mean abs error %.1f IAQ points, band agreement %.1f%%\n", compared,
                 absErrSum / compared, 100.0 * bandHits / compared);
