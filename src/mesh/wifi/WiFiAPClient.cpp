@@ -155,7 +155,7 @@ static void onNetworkConnected()
 
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
-            LOG_ERROR("Error setting up mDNS responder!");
+            LOG_ERROR("mDNS setup failed");
         } else {
             LOG_INFO("mDNS Host: Meshtastic.local");
             MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
@@ -270,7 +270,7 @@ static int32_t reconnectWiFi()
     if (WiFi.isConnected() && (!Throttle::isWithinTimespanMs(lastrun_ntp, 43200000) || (lastrun_ntp == 0))) { // every 12 hours
         LOG_DEBUG("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
-            LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed");
+            LOG_DEBUG("NTP success - set RTCQualityNTP if needed");
 
             struct timeval tv;
             tv.tv_sec = timeClient.getEpochTime();
@@ -477,7 +477,7 @@ static void WiFiEvent(WiFiEvent_t event)
         }
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
-        LOG_INFO("Authentication mode of access point has changed");
+        LOG_INFO("AP auth mode changed");
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
         LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
@@ -493,7 +493,7 @@ static void WiFiEvent(WiFiEvent_t event)
 #endif
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
-        LOG_INFO("Lost IP address and IP address is reset to 0");
+        LOG_INFO("Lost IP address, reset to 0");
 #if HAS_UDP_MULTICAST
         if (udpHandler) {
             udpHandler->stop();
@@ -507,19 +507,19 @@ static void WiFiEvent(WiFiEvent_t event)
         }
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
-        LOG_INFO("WiFi Protected Setup (WPS): succeeded in enrollee mode");
+        LOG_INFO("WPS: succeeded in enrollee mode");
         break;
     case ARDUINO_EVENT_WPS_ER_FAILED:
-        LOG_INFO("WiFi Protected Setup (WPS): failed in enrollee mode");
+        LOG_INFO("WPS: failed in enrollee mode");
         break;
     case ARDUINO_EVENT_WPS_ER_TIMEOUT:
-        LOG_INFO("WiFi Protected Setup (WPS): timeout in enrollee mode");
+        LOG_INFO("WPS: timeout in enrollee mode");
         break;
     case ARDUINO_EVENT_WPS_ER_PIN:
-        LOG_INFO("WiFi Protected Setup (WPS): pin code in enrollee mode");
+        LOG_INFO("WPS: pin code in enrollee mode");
         break;
     case ARDUINO_EVENT_WPS_ER_PBC_OVERLAP:
-        LOG_INFO("WiFi Protected Setup (WPS): push button overlap in enrollee mode");
+        LOG_INFO("WPS: push button overlap in enrollee mode");
         break;
     case ARDUINO_EVENT_WIFI_AP_START:
         LOG_INFO("WiFi access point started");

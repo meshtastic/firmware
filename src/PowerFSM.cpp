@@ -165,7 +165,7 @@ static void lsIdle()
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
-                // LOG_INFO("Sleep, flash led!");
+                // LOG_INFO("Sleep, flash led");
                 break;
 
             case ESP_SLEEP_WAKEUP_UART:

@@ -696,7 +696,7 @@ void lateInitVariant()
 #endif
     } else {
         touchControllerReady = false;
-        LOG_ERROR("Failed to find touch controller!");
+        LOG_ERROR("Failed to find touch controller");
     }
 
 #if defined(BOARD_PCA9535_ADDR) && defined(BOARD_PCA9535_BUTTON_MASK)

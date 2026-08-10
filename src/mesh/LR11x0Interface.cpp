@@ -104,11 +104,11 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     // DIO3 is free to be used as an IRQ only while no TCXO Vref is driven on it
     if (tcxoVoltage > 0)
-        LOG_DEBUG("LR11x0 TCXO Vref %f V on DIO3 (DIO3 unavailable as an IRQ)", tcxoVoltage);
+        LOG_DEBUG("LR11x0 TCXO Vref %f V on DIO3 (DIO3 unavailable as IRQ)", tcxoVoltage);
     else
-        LOG_DEBUG("LR11x0 no TCXO Vref, XTAL only (DIO3 free as an IRQ)");
+        LOG_DEBUG("LR11x0 no TCXO Vref, XTAL only (DIO3 free as IRQ)");
 #if defined(TCXO_OPTIONAL)
-    LOG_DEBUG("TCXO_OPTIONAL: oscillator type unknown, probing XTAL first and using any TCXO Vref only as fallback");
+    LOG_DEBUG("TCXO_OPTIONAL: osc type unknown, probe XTAL first, TCXO Vref as fallback");
 #endif
 
     RadioLibInterface::init();
@@ -156,7 +156,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 #if defined(TCXO_OPTIONAL)
     // 2. XTAL failed with the chip present, so fall back to the TCXO if the variant configured one
     if (res != RADIOLIB_ERR_NONE && res != RADIOLIB_ERR_CHIP_NOT_FOUND && tcxoVoltage > 0) {
-        LOG_WARN("LR11x0 XTAL init failed (err %d), retrying with TCXO Vref %f V", res, tcxoVoltage);
+        LOG_WARN("LR11x0 XTAL init failed (err %d), retry with TCXO Vref %f V", res, tcxoVoltage);
         attemptVoltage = tcxoVoltage;
         res = tryBegin(2, attemptVoltage);
         if (res == RADIOLIB_ERR_NONE)
@@ -167,7 +167,7 @@ template <typename T> bool LR11x0Interface<T>::init()
     // 3. Some units need extra settling time, so give whichever oscillator we settled on one retry.
     //    After a step 2 fallback that is a second TCXO attempt, which is where settling actually matters.
     if (lr11x0SpiFailed(res)) {
-        LOG_WARN("LR11x0 init failed with %d (SPI command failure), retrying after delay...", res);
+        LOG_WARN("LR11x0 init failed with %d (SPI cmd failure), retry after delay", res);
         delay(100);
         res = tryBegin(3, attemptVoltage);
     }
@@ -179,9 +179,9 @@ template <typename T> bool LR11x0Interface<T>::init()
 #ifdef LR11X0_UPDATE_FIRMWARE_TO
         // An interrupted update leaves the radio sitting in bootloader mode, where begin() fails. Retry the
         // flash from here rather than giving up, otherwise the device could never recover on its own.
-        LOG_WARN("LR11x0 did not start; attempting firmware recovery in case an update was interrupted");
+        LOG_WARN("LR11x0 did not start; firmware recovery in case update was interrupted");
         if (lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true) == RADIOLIB_ERR_NONE) {
-            LOG_INFO("LR1110 firmware recovery succeeded, re-initializing radio");
+            LOG_INFO("LR1110 firmware recovery OK, re-init radio");
             res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         }
 #endif
@@ -202,8 +202,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     // One-shot transceiver firmware update, opt-in per variant. Only runs when the part is an LR1110 running
     // older firmware than the baked-in image, so once it has succeeded it is a no-op on subsequent boots.
     if (transceiverDevice == RADIOLIB_LR11X0_DEVICE_LR1110 && transceiverFw != 0 && transceiverFw < LR11X0_UPDATE_FIRMWARE_TO) {
-        LOG_WARN("LR1110 transceiver FW %d.%d is older than %d.%d - updating now. DO NOT POWER OFF: this "
-                 "erases and rewrites the radio's own flash.",
+        LOG_WARN("LR1110 transceiver FW %d.%d older than %d.%d - updating. DO NOT POWER OFF: "
+                 "rewrites radio's own flash",
                  transceiverFw >> 8, transceiverFw & 0xFF, LR11X0_UPDATE_FIRMWARE_TO >> 8, LR11X0_UPDATE_FIRMWARE_TO & 0xFF);
 
         int upd = lora.updateFirmware(lr11xx_firmware_image, LR11XX_FIRMWARE_IMAGE_SIZE, true);
@@ -214,7 +214,7 @@ template <typename T> bool LR11x0Interface<T>::init()
             return false;
         }
 
-        LOG_INFO("LR1110 firmware update complete, re-initializing radio");
+        LOG_INFO("LR1110 firmware update complete, re-init radio");
         res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("LR11x0 re-init after firmware update failed %s%d", radioLibErr, res);
@@ -259,7 +259,7 @@ template <typename T> bool LR11x0Interface<T>::init()
             LOG_INFO("Set RX gain to boosted mode; result: %d", res);
         } else {
             res = lora.setRxBoostedGainMode(false);
-            LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", res);
+            LOG_INFO("Set RX gain to power saving mode; result: %d", res);
         }
     }
 
@@ -330,7 +330,7 @@ template <typename T> void LR11x0Interface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("LR11x0 standby failed with error %d", err);
+        LOG_DEBUG("LR11x0 standby failed, err %d", err);
     }
 
     assert(err == RADIOLIB_ERR_NONE);

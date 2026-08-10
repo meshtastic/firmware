@@ -71,7 +71,7 @@ CannedMessageModule::CannedMessageModule()
 {
     this->loadProtoForModule();
     if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE) {
-        LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
+        LOG_INFO("CannedMessage: none configured, disabled");
         this->updateState(CANNED_MESSAGE_RUN_STATE_DISABLED);
         disable();
     } else {
@@ -294,7 +294,7 @@ void CannedMessageModule::updateDestinationSelectionList()
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
     if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-        LOG_INFO("Nodes changed, forcing UI refresh.");
+        LOG_INFO("Nodes changed, forcing UI refresh");
         screen->forceDisplay();
     }
 }
@@ -1108,10 +1108,10 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
-            LOG_INFO("Proactively adding %x as favorite node", dest);
+            LOG_INFO("Proactively adding 0x%08x as favorite node", dest);
             nodeDB->set_favorite(true, dest);
         } else {
-            LOG_DEBUG("Not favoriting node %x because role is router-like", dest);
+            LOG_DEBUG("Not favoriting node 0x%08x: router-like role", dest);
         }
     }
     sm.ackStatus = AckStatus::NONE;
@@ -1163,12 +1163,12 @@ int32_t CannedMessageModule::runOnce()
     if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE && this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         // Virtual keyboard message sending case - text was not empty
         if (this->freetext.length() > 0) {
-            LOG_INFO("Processing delayed virtual keyboard send: '%s'", this->freetext.c_str());
+            LOG_INFO("Delayed vkbd send: '%s'", this->freetext.c_str());
             sendText(this->dest, this->channel, this->freetext.c_str(), true);
 
             // Clean up virtual keyboard after sending
             if (graphics::NotificationRenderer::virtualKeyboard) {
-                LOG_INFO("Cleaning up virtual keyboard after message send");
+                LOG_INFO("Vkbd cleanup after send");
                 graphics::OnScreenKeyboardModule::instance().stop(false);
                 graphics::NotificationRenderer::resetBanner();
             }
@@ -1178,7 +1178,7 @@ int32_t CannedMessageModule::runOnce()
             this->payload = 0;
         } else {
             // Empty message, just go inactive
-            LOG_INFO("Empty freetext detected in delayed processing, returning to inactive state");
+            LOG_INFO("Empty freetext, back to inactive");
             this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
         }
 
@@ -1221,7 +1221,7 @@ int32_t CannedMessageModule::runOnce()
 
         // Clean up virtual keyboard if it exists during timeout
         if (graphics::NotificationRenderer::virtualKeyboard) {
-            LOG_INFO("Cleaning up virtual keyboard due to module timeout");
+            LOG_INFO("Vkbd cleanup on timeout");
             graphics::OnScreenKeyboardModule::instance().stop(false);
             graphics::NotificationRenderer::resetBanner();
         }
@@ -1230,7 +1230,7 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
         if (this->payload == 0) {
             // [Exit] button pressed - return to inactive state
-            LOG_INFO("Processing [Exit] action - returning to inactive state");
+            LOG_INFO("Exit action, back to inactive");
             this->updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
         } else if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
