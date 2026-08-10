@@ -90,7 +90,7 @@ IF NOT "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
-    SET "ESPTOOL_CMD=""!PYTHON!"" -m esptool"
+    SET "ESPTOOL_CMD="!PYTHON!" -m esptool"
     CALL :LOG_MESSAGE DEBUG "Python interpreter supplied."
 ) ELSE (
     CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool..."
@@ -105,7 +105,9 @@ IF NOT "__%PYTHON%__"=="____" (
 )
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
-!ESPTOOL_CMD! >nul 2>&1
+@REM %VAR% not !VAR!: cmd will not split a delayed-expanded command token that
+@REM carries a path, so the "python -m esptool" form never starts.
+%ESPTOOL_CMD% >nul 2>&1
 CALL :LOG_MESSAGE DEBUG "esptool exit code: %ERRORLEVEL%"
 IF %ERRORLEVEL% EQU 9009 (
     @REM 9009 = command not found on Windows
@@ -166,7 +168,7 @@ EXIT /B %ERRORLEVEL%
 @REM Example:: CALL :RUN_ESPTOOL 115200 write-flash 0x10000 "firmwarefile.bin"
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
-!ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4
+%ESPTOOL_CMD% --baud %~1 %~2 %~3 %~4
 IF %CHANGE_MODE% EQU 1 GOTO :eof
 IF %ERRORLEVEL% NEQ 0 (
     CALL :LOG_MESSAGE ERROR "Error running command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
