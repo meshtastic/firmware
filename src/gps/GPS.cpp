@@ -1446,7 +1446,7 @@ void GPS::publishUpdate()
         LOG_DEBUG("Publish pos@%x:2, hasVal=%d, Sats=%d, GPSlock=%d", p.timestamp, hasValidLocation, p.sats_in_view, hasLock());
 
         // Notify any status instances that are observing us
-        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
+        const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p, gotTime);
         newStatus.notifyObservers(&status);
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             positionModule->handleNewPosition();
@@ -1502,7 +1502,7 @@ int32_t GPS::runOnce()
     // gps_update_interval is faster than the position broadcast interval so there's a
     // fresh position ready when the device wants to broadcast one on the mesh.
     //
-    // 1. Got a time for the first time --> set the time, don't publish.
+    // 1. Got a time for the first time --> set the time, publish so the UI can show the time-only state.
     // 2. Got a lock for the first time
     //   --> If gps_update_interval is <= 10s --> publishUpdate
     //   --> Otherwise, hold for MIN(gps_update_interval - GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS, 20s)
@@ -1536,6 +1536,11 @@ int32_t GPS::runOnce()
         // 1. Got a time for the first time this cycle
         if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
             gotTime = true;
+            // Publish immediately (rather than via the block below, which would clear fixHoldEnds) so the
+            // time-only state reaches the UI without waiting for a location. Safe without a valid location:
+            // PositionModule::handleNewPosition ignores invalid positions.
+            shouldPublish = true;
+            publishUpdate();
         }
 
         // 2. Got a lock for the first time, or 3. Got a lock after turning back on
