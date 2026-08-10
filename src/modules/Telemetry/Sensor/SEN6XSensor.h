@@ -1,3 +1,4 @@
+#pragma once
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR

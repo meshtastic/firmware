@@ -1,3 +1,4 @@
+#pragma once
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
@@ -8,8 +9,6 @@
 #include "TelemetrySensor.h"
 #include "Wire.h"
 #include "gps/RTC.h"
-
-#pragma once
 
 /*
 Shared driver for Sensirion's SEN5X and SEN6X particulate-matter sensor families
