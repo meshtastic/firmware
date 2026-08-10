@@ -86,6 +86,7 @@ class CO2CalibrationSensor
                 if (!co2SetASC(true)) {
                     return false;
                 }
+                // ASC with target CO2 is only available in SCD4X
                 if (cfg.hasTargetCo2) {
                     co2SetASCBaseline(cfg.targetCo2);
                 }
