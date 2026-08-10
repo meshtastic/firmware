@@ -99,6 +99,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
+    /// is the radio IRQ handler currently armed? (cleared from ISR context, hence volatile)
+    volatile bool isrAttached = false;
+
   protected:
     // Noise floor tracking - rolling window of samples.
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
@@ -144,13 +147,27 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /**
      * Glue functions called from ISR land
+     *
+     * Skip the detach if nothing is attached: the first setStandby() runs before any
+     * enableInterrupt(), and ESP-IDF logs "GPIO isr service is not installed" for that call.
      */
-    virtual void disableInterrupt() = 0;
+    void disableInterrupt()
+    {
+        if (!isrAttached)
+            return;
+        isrAttached = false;
+        clearRadioIsr();
+    }
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*)()) = 0;
+    void enableInterrupt(void (*callback)())
+    {
+        // Mark attached before arming, so an ISR firing right away still detaches.
+        isrAttached = true;
+        setRadioIsr(callback);
+    }
 
     /**
      * Poll as a backup to catch missed edge-triggered interrupts.
@@ -299,6 +316,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Add SNR data to received messages
      */
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
+
+    /** Chip specific arm/disarm of the radio IRQ; call enableInterrupt()/disableInterrupt() instead */
+    virtual void setRadioIsr(void (*callback)()) = 0;
+    virtual void clearRadioIsr() = 0;
 
     /**
      * Subclasses must override, implement and then call into this base class implementation

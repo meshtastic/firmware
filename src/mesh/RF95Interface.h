@@ -35,14 +35,14 @@ class RF95Interface : public RadioLibInterface
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     int16_t getCurrentRSSI() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora->setDio0Action(callback, RISING); }
+    virtual void setRadioIsr(void (*callback)()) override { lora->setDio0Action(callback, RISING); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
