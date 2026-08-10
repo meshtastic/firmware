@@ -188,6 +188,14 @@ resets a table's pins and mode rows before applying a replacement, so an earlier
 file's `MODE_RX` setting cannot leak through a later file that omits it. `--check`
 reports this as the standard cross-file-overlap info, not a special-cased error.
 
+`rfswitch-replace/` pins the replacement itself rather than the diagnostic. Which of
+two `config.d/` files wins is up to the filesystem, so the fixture above cannot assert
+the effective table by value; here the losing table sits in `config.yaml`, which is
+always loaded before `config.d/`, and the winner is therefore deterministic. The loser
+is the wider of the two - four pins and three mode rows, all `HIGH` - so any carryover
+appears as a surviving pin, a surviving mode row, or a `HIGH` that should be `LOW`.
+`--output-yaml` is what reports it: the `--check` report says no more than `set`.
+
 ## Running these as a normal boot
 
 `malformed-indent.yaml`, `nonmap-section.yaml`, `module-unknown.yaml`,
