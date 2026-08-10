@@ -28,9 +28,7 @@
 #elif ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 
-// This part's switch-capable DIOs in RadioLib slot order, with its own constants. Note
-// there is no DIO9: the fifth slot is DIO10, which is why the slot cannot be worked out
-// in the YAML layer without knowing the radio.
+// Switch-capable DIOs in slot order with this part's constants; no DIO9, so slot 4 is DIO10.
 static const int8_t lr11x0_switch_dio_nums[] = {5, 6, 7, 8, 10};
 static const uint32_t lr11x0_switch_dio_consts[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7,
                                                     RADIOLIB_LR11X0_DIO8, RADIOLIB_LR11X0_DIO10};
@@ -38,8 +36,7 @@ static_assert(sizeof(lr11x0_switch_dio_nums) / sizeof(lr11x0_switch_dio_nums[0])
                   sizeof(lr11x0_switch_dio_consts) / sizeof(lr11x0_switch_dio_consts[0]),
               "LR11x0 switch DIO numbers and constants must describe the same slots");
 
-// The mirror of the LR20x0 map: this part has MODE_TX_HP, MODE_GNSS and MODE_WIFI, and
-// no MODE_RX_HF.
+// This part has MODE_TX_HP/MODE_GNSS/MODE_WIFI and no MODE_RX_HF.
 static const int32_t lr11x0_rfswitch_mode_map[RFSW_MODE_COUNT] = {
     LR11x0::MODE_STBY,  LR11x0::MODE_RX,       LR11x0::MODE_TX,   LR11x0::MODE_TX_HP,
     LR11x0::MODE_TX_HF, RFSW_MODE_UNSUPPORTED, LR11x0::MODE_GNSS, LR11x0::MODE_WIFI,
@@ -75,8 +72,6 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 // Vref to assume for a board that declares a TCXO may be fitted without saying at what voltage.
 // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
 // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
-// Now a runtime question on Portduino, where the probe is asked for in YAML rather than by
-// the variant, so this cannot be resolved by the preprocessor there.
 #define LR11X0_TCXO_DEFAULT_VOLTAGE (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0)
 
 // A chip that never answers can surface either way depending on where RadioLib gave up: a bounded
@@ -158,9 +153,7 @@ template <typename T> bool LR11x0Interface<T>::init()
         return res;
     };
 
-    // 1. With the probe asked for: XTAL, because a TCXO-first attempt hangs RadioLib's unbounded
-    //    calibration wait on a module with no TCXO fitted, whereas XTAL fails fast and cleanly on
-    //    a module that does have one. Otherwise whatever Vref was configured unconditionally.
+    // 1. XTAL first when probing (see TCXO_OPTIONAL_ENABLED), else the configured Vref
     float attemptVoltage = TCXO_OPTIONAL_ENABLED ? 0 : tcxoVoltage;
     int res = tryBegin(1, attemptVoltage);
 

@@ -37,32 +37,9 @@ class LockingArduinoHal : public ArduinoHal
 #endif
 };
 
-// "A TCXO may or may not be fitted -- probe for it, do not assume."
-//
-// A variant declares this at compile time with TCXO_OPTIONAL, because the board is known
-// when the image is built. A Portduino carrier cannot: the same meshtasticd binary runs on
-// hardware populated either way, so the statement arrives as YAML (Lora.TCXO_OPTIONAL) and
-// has to be answered at runtime. This unifies the two, so each driver asks the question
-// once rather than growing a second, Portduino-shaped code path.
-//
-// On an embedded target it stays a compile-time constant, so `if (TCXO_OPTIONAL_ENABLED)`
-// folds away exactly as the old `#if` did and a board that never asked for the probe pays
-// nothing for it. Expansion happens inside the interface .cpp files, each of which already
-// includes PortduinoGlue.h under ARCH_PORTDUINO -- this header does not pull it in, because
-// PortduinoGlue.h includes LR11x0Interface.h and would cycle.
-//
-// The families do not probe in the same order, deliberately:
-//
-//   LR11x0  XTAL first, TCXO second. A TCXO-first attempt hangs RadioLib's unbounded
-//           calibration wait on a module with no TCXO fitted, whereas XTAL fails fast and
-//           cleanly on a module that has one.
-//   LR20x0  TCXO first, XTAL second.
-//   SX126x  TCXO first, XTAL second -- and only on Portduino, since an embedded board gets
-//           this from the second interface instance in initLoRa()'s detection ladder.
-//
-// Each family keeps on Portduino whatever order it already uses on an embedded target, so a
-// carrier behaves the same in both builds. Changing an order is a hardware-behaviour
-// decision, not a tidying-up one.
+// TCXO_OPTIONAL (variant define) or Lora.TCXO_OPTIONAL (Portduino YAML): probe for a TCXO
+// and fall back to the XTAL. Probe order is per-family - LR11x0 tries XTAL first, because a
+// TCXO-first attempt hangs RadioLib's calibration wait on a module with none fitted.
 #if ARCH_PORTDUINO
 #define TCXO_OPTIONAL_ENABLED (portduino_config.tcxo_optional)
 #elif defined(TCXO_OPTIONAL)
@@ -71,9 +48,7 @@ class LockingArduinoHal : public ArduinoHal
 #define TCXO_OPTIONAL_ENABLED false
 #endif
 
-// Vref to try when the probe is asked for but no explicit voltage is configured. 1.6 V is
-// RadioLib's own default for all three families (SX126x.h, LR11x0.h and LR2021.h each
-// declare `float tcxoVoltage = 1.6`), so it is what the driver would have used anyway.
+// RadioLib's own default Vref, for a probe with no explicit voltage configured.
 #define TCXO_OPTIONAL_DEFAULT_VOLTAGE 1.6f
 
 #if defined(USE_STM32WLx)

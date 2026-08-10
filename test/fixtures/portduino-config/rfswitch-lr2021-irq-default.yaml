@@ -1,7 +1,6 @@
-# FAULT: the same collision as rfswitch-lr2021-irq-collision.yaml, but arrived at by
-# saying nothing. With no IRQ_DIO_NUM the radio keeps RadioLib's default of DIO5, which
-# this table drives as a switch line -- so the collision exists precisely because the key
-# is absent, which is the harder half of the fault to see.
+# FAULT: the same collision, with no IRQ_DIO_NUM set. The radio keeps RadioLib's default of
+# DIO5, which this table drives as a switch line, so the collision exists because the key is
+# absent rather than because of anything written here.
 Lora:
   Module: lr2021
   CS: 21

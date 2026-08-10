@@ -1,7 +1,6 @@
-# CLEAN, and the false-positive guard for the IRQ/switch-pin collision check. DIO5 is the
-# interrupt here -- which is also the radio's default -- and the table drives DIO6, DIO7
-# and DIO8, so nothing collides. Using DIO5 as an interrupt is normal and must not be
-# reported; the check keys on the pins list, not on the DIO number.
+# CLEAN, and the false-positive guard for the collision check. DIO5 is the interrupt and also
+# the radio default, but the table drives DIO6/DIO7/DIO8, so nothing collides. The check keys
+# on the pins list, not on the DIO number.
 Lora:
   Module: lr2021
   spidev: spidev0.0
