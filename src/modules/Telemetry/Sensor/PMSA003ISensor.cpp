@@ -157,9 +157,7 @@ int32_t PMSA003ISensor::wakeUpTimeMs()
 int32_t PMSA003ISensor::pendingForReadyMs()
 {
 #ifdef PMSA003I_ENABLE_PIN
-    uint32_t now;
-    now = getTime();
-    uint32_t sincePmMeasureStarted = (now - pmMeasureStarted) * 1000;
+    uint32_t sincePmMeasureStarted = millis() - pmMeasureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
 
     if (sincePmMeasureStarted < PMSA003I_WARMUP_MS) {
@@ -195,7 +193,7 @@ uint32_t PMSA003ISensor::wakeUp()
     LOG_INFO("%s Waking", sensorName);
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
     state = PMSA003I_ACTIVE;
-    pmMeasureStarted = getTime();
+    pmMeasureStarted = millis();
 
     return PMSA003I_WARMUP_MS;
 #endif

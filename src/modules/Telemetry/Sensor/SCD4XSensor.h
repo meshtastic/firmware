@@ -57,6 +57,8 @@ class SCD4XSensor : public TelemetrySensor, public CO2CalibrationSensor
     // low power measurement mode (on sensirion side). Disables sleep mode
     // Improvement and testing needed for timings
     bool lowPower = true;
+    // millis()-based, not wall-clock: this only measures in-session warmup elapsed time,
+    // and getTime() can jump discontinuously when RTC quality improves mid-session.
     uint32_t co2MeasureStarted = 0;
 
   public:

@@ -42,7 +42,7 @@ bool HM330XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 uint32_t HM330XSensor::wakeUp()
 {
     state = State::ACTIVE;
-    measureStarted = getTime();
+    measureStarted = millis();
     return HM330X_WARMUP_MS;
 }
 
@@ -64,9 +64,7 @@ bool HM330XSensor::isActive()
 
 int32_t HM330XSensor::pendingForReadyMs()
 {
-    uint32_t now;
-    now = getTime();
-    uint32_t sincePMMeasureStarted = (now - measureStarted) * 1000;
+    uint32_t sincePMMeasureStarted = millis() - measureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePMMeasureStarted);
 
     if (sincePMMeasureStarted < HM330X_WARMUP_MS) {

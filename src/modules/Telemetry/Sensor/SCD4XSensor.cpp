@@ -705,7 +705,7 @@ uint32_t SCD4XSensor::wakeUp()
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (startMeasurement()) {
-        co2MeasureStarted = getTime();
+        co2MeasureStarted = millis();
 #ifdef SCD4X_I2C_CLOCK_SPEED
         reClockI2C.restoreClock();
 #endif /* SCD4X_I2C_CLOCK_SPEED */
@@ -755,9 +755,7 @@ int32_t SCD4XSensor::wakeUpTimeMs()
 
 int32_t SCD4XSensor::pendingForReadyMs()
 {
-    uint32_t now;
-    now = getTime();
-    uint32_t sinceCO2MeasureStarted = (now - co2MeasureStarted) * 1000;
+    uint32_t sinceCO2MeasureStarted = millis() - co2MeasureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sinceCO2MeasureStarted);
 
     if (sinceCO2MeasureStarted < SCD4X_WARMUP_MS) {
