@@ -84,7 +84,7 @@ static inline graphics::NotificationRenderer::BannerFont parseFontTagPrefix(cons
 {
     // Tags must be at the start of the line:
     // [S] small, [M] medium, [L] large
-    if (p && p[0] == '[' && p[2] == ']' && p[1] != '\0') {
+    if (p && p[0] == '[' && p[1] != '\0' && p[2] == ']') {
         char t = p[1];
         if (t == 'S') {
             p += 3;
@@ -134,6 +134,26 @@ static inline uint8_t effectiveLineHeightForBannerLine(graphics::NotificationRen
         break;
     }
     return (height > 3) ? (height - 3) : height;
+}
+
+const char *graphics::NotificationRenderer::resolveBannerLine(uint16_t lineIndex, const char *rawLine, BannerFont &lineFont)
+{
+    lineFont = BANNER_FONT_DEFAULT;
+    bool tagAware = (current_notification_type == notificationTypeEnum::text_banner ||
+                     current_notification_type == notificationTypeEnum::pairing_pin) &&
+                    alertBannerOptions == 0;
+    if (!tagAware)
+        return rawLine;
+    if (lineIndex < alertBannerLineCount) {
+        lineFont = alertBannerLineFonts[lineIndex];
+        return alertBannerLines[lineIndex];
+    }
+    // The parsed-line cache doesn't cover this line (the banner text was stored without a
+    // re-parse, or a draw raced the parse from another task): strip the tag here too, so it
+    // acts as a font change and never renders as literal text - the BLE pair PIN banner
+    // prefixes its PIN line with [M].
+    lineFont = parseFontTagPrefix(rawLine);
+    return rawLine;
 }
 
 void graphics::NotificationRenderer::parseBannerMessageWithFonts(const char *message)
@@ -845,9 +865,6 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     BannerFont lineFonts[totalLines] = {};
     uint8_t lineEffectiveHeights[totalLines] = {0};
     const char *renderLines[totalLines] = {0};
-    bool useTaggedBannerFonts = (current_notification_type == notificationTypeEnum::text_banner ||
-                                 current_notification_type == notificationTypeEnum::pairing_pin) &&
-                                alertBannerOptions == 0;
 
     if (maxWidth != 0)
         is_picker = true;
@@ -860,12 +877,8 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     uint16_t widestLineWithBars = 0;
 
     while (lines[lineCount] != nullptr) {
-        const char *renderText = lines[lineCount];
         BannerFont lineFont = BANNER_FONT_DEFAULT;
-        if (useTaggedBannerFonts && lineCount < alertBannerLineCount) {
-            renderText = alertBannerLines[lineCount];
-            lineFont = alertBannerLineFonts[lineCount];
-        }
+        const char *renderText = resolveBannerLine(lineCount, lines[lineCount], lineFont);
         renderLines[lineCount] = renderText;
         lineFonts[lineCount] = lineFont;
         lineEffectiveHeights[lineCount] = effectiveLineHeightForBannerLine(lineFont);
@@ -879,10 +892,10 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
         if (current_notification_type == notificationTypeEnum::node_picker) {
             char measureBuffer[64] = {0};
-            strncpy(measureBuffer, lines[lineCount], std::min<size_t>(lineLengths[lineCount], sizeof(measureBuffer) - 1));
+            strncpy(measureBuffer, renderText, std::min<size_t>(lineLengths[lineCount], sizeof(measureBuffer) - 1));
             lineWidths[lineCount] = UIRenderer::measureStringWithEmotes(display, measureBuffer);
         } else {
-            lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+            lineWidths[lineCount] = display->getStringWidth(renderText, lineLengths[lineCount], true);
         }
 
         // Consider extra width for signal bars on lines that contain "Signal:"
