@@ -60,7 +60,9 @@ void setup()
     RUN_TEST(test_timestamp_zeroed_when_rx_time_absent);
     RUN_TEST(test_encrypted_timestamp_zeroed_when_rx_time_absent);
 
-    UNITY_END();
+    // exit(), not a bare UNITY_END(): without it setup() returns and the runtime spins loop()
+    // forever, so the process never terminates even though the suite is finished.
+    exit(UNITY_END());
 }
 
 void loop()

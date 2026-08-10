@@ -133,7 +133,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
     }
 
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Attempting to reclock speed to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: Reclock to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SEN5X_I2C_CLOCK_SPEED);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
@@ -165,7 +165,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Attempting to reclock speed to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: Reclock to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SEN5X_I2C_CLOCK_SPEED);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
@@ -187,7 +187,7 @@ uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
         uint8_t recvCRC = _bus->read();
         uint8_t calcCRC = sen5xCRC(&buffer[i - 2]);
         if (recvCRC != calcCRC) {
-            LOG_ERROR("%s: Checksum error while receiving msg", sensorName);
+            LOG_ERROR("%s: Checksum error receiving msg", sensorName);
 #ifdef SEN5X_I2C_CLOCK_SPEED
             LOG_DEBUG("%s: restoring clock speed", sensorName);
             reClockI2C.restoreClock();
@@ -260,7 +260,7 @@ bool SEN5XSensor::idle(bool checkState)
             }
 
             if (!(vocStateStable() && vocValid)) {
-                LOG_INFO("%s: Not stopping measurement, vocState is not stable yet!", sensorName);
+                LOG_INFO("%s: Not stopping measurement, vocState not stable yet", sensorName);
                 return true;
             }
         }
@@ -269,7 +269,7 @@ bool SEN5XSensor::idle(bool checkState)
     }
 
     if (!oneShotMode) {
-        LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
+        LOG_INFO("%s: Not stopping measurement, continuous mode", sensorName);
         return true;
     } else {
         LOG_INFO("%s: One shot mode enabled", sensorName);
@@ -382,8 +382,8 @@ bool SEN5XSensor::vocStateFromSensor()
     memcpy(vocState, stateBuffer, SEN5X_VOC_STATE_BUFFER_SIZE);
 
     // Print the state (if debug is on)
-    LOG_DEBUG("%s: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1],
-              vocState[2], vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
+    LOG_DEBUG("%s: VOC state from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1], vocState[2],
+              vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
 
     return true;
 }
@@ -478,7 +478,7 @@ bool SEN5XSensor::saveState()
     okay &= file.close();
 
     if (okay)
-        LOG_INFO("%s: state write to %s successful", sensorName, sen5XStateFileName);
+        LOG_INFO("%s: state write to %s OK", sensorName, sen5XStateFileName);
 
     return okay;
 #else
@@ -542,7 +542,7 @@ bool SEN5XSensor::startCleaning()
     delay(20); // From Sensirion Datasheet
 
     // This message will be always printed so the user knows the device it's not hung
-    LOG_INFO("%s: Started fan cleaning it will take 10 seconds...", sensorName);
+    LOG_INFO("%s: Started fan cleaning (10 sec)", sensorName);
 
     uint32_t started = millis();
     while (millis() - started < 10500) {
@@ -591,7 +591,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (!getVersion())
         return false;
     if (firmwareVer < 2) {
-        LOG_ERROR("%s: firmware is too old and will not work with this implementation", sensorName);
+        LOG_ERROR("%s: firmware too old, unsupported", sensorName);
         return false;
     }
     delay(200); // From Sensirion Datasheet
@@ -616,12 +616,10 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
             if (passed > ONE_WEEK_IN_SECONDS && (now > SEN5X_VOC_VALID_DATE)) {
                 // If current date greater than 01/01/2018 (validity check)
-                LOG_INFO("%s: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", sensorName,
-                         passed, lastCleaning);
+                LOG_INFO("%s: Over a week (%us) since last cleaning (%us), trigger cleaning", sensorName, passed, lastCleaning);
                 startCleaning();
             } else {
-                LOG_INFO("%s: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", sensorName, passed,
-                         lastCleaning);
+                LOG_INFO("%s: Cleaning not needed (%ds passed), last cleaning: %us", sensorName, passed, lastCleaning);
             }
         } else {
             // We assume the device has just been updated or it is new,
@@ -630,7 +628,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
             // Otherwise, we will never trigger cleaning in some cases
             lastCleaning = now;
             lastCleaningValid = true;
-            LOG_INFO("%s: No valid last cleaning date found, saving it now: %us", sensorName, lastCleaning);
+            LOG_INFO("%s: No valid last cleaning date, saving now: %us", sensorName, lastCleaning);
             saveState();
         }
 
@@ -645,7 +643,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
                     LOG_INFO("%s: VOC state is valid and recent", sensorName);
                     vocStateToSensor();
                 } else {
-                    LOG_INFO("%s: VOC state is too old or date is invalid", sensorName);
+                    LOG_INFO("%s: VOC state too old or date invalid", sensorName);
                     LOG_DEBUG("%s: vocTime %u, Passed %u, and now %u", sensorName, vocTime, passed, now);
                 }
             }
@@ -835,7 +833,7 @@ int32_t SEN5XSensor::pendingForReadyMs()
     case SEN5X_MEASUREMENT: {
 
         if (sincePmMeasureStarted < SEN5X_WARMUP_MS_1) {
-            LOG_INFO("%s: not enough time passed since starting measurement", sensorName);
+            LOG_INFO("%s: not enough time since measurement start", sensorName);
             return SEN5X_WARMUP_MS_1 - sincePmMeasureStarted;
         }
 
@@ -849,7 +847,7 @@ int32_t SEN5XSensor::pendingForReadyMs()
 
         // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
         if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
-            LOG_INFO("%s: Concentration is low, we will ask again in the second warm up period", sensorName);
+            LOG_INFO("%s: Concentration low, will ask again in second warm up period", sensorName);
             state = SEN5X_MEASUREMENT_2;
             // Report how many seconds are pending to cover the first warm up period
             return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
@@ -871,7 +869,7 @@ int32_t SEN5XSensor::pendingForReadyMs()
 
 bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_INFO("%s: Attempting to get metrics", sensorName);
+    LOG_INFO("%s: Get metrics", sensorName);
     if (!isActive()) {
         LOG_INFO("%s: not in measurement mode", sensorName);
         return false;
@@ -963,9 +961,9 @@ void SEN5XSensor::setMode(bool setOneShot)
 {
     oneShotMode = setOneShot;
     if (oneShotMode) {
-        LOG_INFO("%s: setting mode to one shot mode", sensorName);
+        LOG_INFO("%s: set one shot mode", sensorName);
     } else {
-        LOG_INFO("%s: setting mode to continuous mode", sensorName);
+        LOG_INFO("%s: set continuous mode", sensorName);
     }
 }
 
