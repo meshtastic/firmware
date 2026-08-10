@@ -915,18 +915,6 @@ void checkCrossFileOverlap(const PathIndex &paths, const std::map<std::string, s
         if (coveredByAncestor)
             continue;
 
-        // The one place "last wins" is untrue: the loader only ever writes HIGH, so the effective
-        // table is the OR of every table loaded -- a switch state belonging to none of them.
-        if (entry.first == "Lora.rfswitch_table") {
-            findings.push_back({kError, across, 0,
-                                "'Lora.rfswitch_table' is set in " + std::to_string(entry.second.size()) + " files (" +
-                                    describeOwners(entry.second) +
-                                    "). These do NOT override each other: the loader only ever writes HIGH, so a HIGH "
-                                    "from an earlier file survives a later file that sets LOW there, and the radio ends "
-                                    "up driving the OR of every table. Enable exactly one"});
-            continue;
-        }
-
         findings.push_back({kInfo, across, 0,
                             "'" + entry.first + "' is set in " + std::to_string(entry.second.size()) + " files (" +
                                 describeOwners(entry.second) + "). The file loaded last wins"});

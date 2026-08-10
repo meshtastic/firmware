@@ -1095,14 +1095,23 @@ bool loadConfig(const char *configPath)
             }
             if (yamlConfig["Lora"]["rfswitch_table"]) {
                 portduino_config.has_rfswitch_table = true;
+                // A later file's table fully replaces an earlier one, matching "last file wins"
+                // for every other Lora: key, rather than leaving omitted pins/modes as carryover.
+                for (int i = 0; i < 5; i++)
+                    portduino_config.rfswitch_dio_num[i] = -1;
+                for (int m = 0; m < RFSW_MODE_COUNT; m++) {
+                    portduino_config.rfswitch_mode_present[m] = false;
+                    portduino_config.rfswitch_mode_high[m] = 0;
+                }
                 const YAML::Node table = yamlConfig["Lora"]["rfswitch_table"];
 
                 // Store the DIO number as written; the slot it maps to is per-radio. Anything
-                // not spelled "DIO<n>" leaves the slot unused.
+                // not spelled exactly "DIO<n>" (trailing junk included) leaves the slot unused.
                 for (int i = 0; i < 5; i++) {
                     const std::string name = table["pins"][i].as<std::string>("");
                     int dioNum = 0;
-                    if (sscanf(name.c_str(), "DIO%d", &dioNum) == 1 && dioNum >= 0 && dioNum <= INT8_MAX)
+                    if (sscanf(name.c_str(), "DIO%d", &dioNum) == 1 && dioNum >= 0 && dioNum <= INT8_MAX &&
+                        name == "DIO" + std::to_string(dioNum))
                         portduino_config.rfswitch_dio_num[i] = (int8_t)dioNum;
                 }
 

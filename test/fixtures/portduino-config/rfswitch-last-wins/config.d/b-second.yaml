@@ -1,0 +1,7 @@
+# Sets MODE_RX LOW on both pins. Whichever of this file and a-first.yaml the filesystem
+# returns last should fully replace the other's table, per "last file wins".
+Lora:
+  Module: lr1121
+  rfswitch_table:
+    pins: [DIO5, DIO6]
+    MODE_RX: [LOW, LOW]
