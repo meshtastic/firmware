@@ -70,7 +70,10 @@ IF "__!FILENAME!__"=="____" (
         CALL :LOG_MESSAGE ERROR "Filename containing spaces are not supported."
         GOTO help
     )
-    IF NOT "__!FILENAME:.factory.bin=!__"=="__!FILENAME!__" (
+    FOR %%F IN ("!FILENAME!") DO SET "BASENAME=%%~nxF"
+    SET "VALID_NAME="
+    IF "__!BASENAME:~0,9!__"=="__firmware-__" IF "__!BASENAME:~-12!__"=="__.factory.bin__" SET "VALID_NAME=1"
+    IF NOT DEFINED VALID_NAME (
         CALL :LOG_MESSAGE ERROR "Filename must be a firmware-*.factory.bin file."
         GOTO help
     )
