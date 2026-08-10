@@ -99,8 +99,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
-    /// is the radio IRQ handler currently armed? (cleared from ISR context, hence volatile)
-    volatile bool isrAttached = false;
+    /// has the radio IRQ ever been armed? latches true and is never cleared, so ISR context only reads it
+    volatile bool isrEverArmed = false;
 
   protected:
     // Noise floor tracking - rolling window of samples.
@@ -148,14 +148,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * Glue functions called from ISR land
      *
-     * Skip the detach if nothing is attached: the first setStandby() runs before any
+     * Skip the detach until the IRQ has been armed once: the first setStandby() runs before any
      * enableInterrupt(), and ESP-IDF logs "GPIO isr service is not installed" for that call.
      */
     void disableInterrupt()
     {
-        if (!isrAttached)
+        if (!isrEverArmed)
             return;
-        isrAttached = false;
         clearRadioIsr();
     }
 
@@ -164,8 +163,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     void enableInterrupt(void (*callback)())
     {
-        // Mark attached before arming, so an ISR firing right away still detaches.
-        isrAttached = true;
+        // Latch before arming: the ISR can fire the moment the handler is installed.
+        isrEverArmed = true;
         setRadioIsr(callback);
     }
 
