@@ -48,6 +48,13 @@ extern MemGet memGet;
 
 #define DEBUG_PORT (*console) // Serial debug port
 
+// LOG_TRACE compiles out by default so chatty diagnostics cost no flash on device
+// builds; enable with -DMESHTASTIC_TRACE_LOGGING. Always on for portduino, whose
+// traceFilename packet-trace feature and logoutputlevel=trace config consume it.
+#if defined(ARCH_PORTDUINO) && !defined(MESHTASTIC_TRACE_LOGGING)
+#define MESHTASTIC_TRACE_LOGGING 1
+#endif
+
 #ifdef USE_SEGGER
 // #undef DEBUG_PORT
 #define LOG_DEBUG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
@@ -55,7 +62,11 @@ extern MemGet memGet;
 #define LOG_WARN(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #define LOG_ERROR(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #define LOG_CRIT(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#ifdef MESHTASTIC_TRACE_LOGGING
 #define LOG_TRACE(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#else
+#define LOG_TRACE(...)
+#endif
 #else
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
 #define LOG_DEBUG(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__)
@@ -63,7 +74,11 @@ extern MemGet memGet;
 #define LOG_WARN(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_WARN, __VA_ARGS__)
 #define LOG_ERROR(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_ERROR, __VA_ARGS__)
 #define LOG_CRIT(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_CRIT, __VA_ARGS__)
+#ifdef MESHTASTIC_TRACE_LOGGING
 #define LOG_TRACE(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_TRACE, __VA_ARGS__)
+#else
+#define LOG_TRACE(...)
+#endif
 #else
 #define LOG_DEBUG(...)
 #define LOG_INFO(...)

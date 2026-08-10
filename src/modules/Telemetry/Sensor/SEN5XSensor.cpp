@@ -132,7 +132,6 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
     }
 
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Reclock to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SEN5X_I2C_CLOCK_SPEED);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
@@ -145,7 +144,6 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
     uint8_t i2c_error = _bus->endTransmission();
 
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
@@ -164,7 +162,6 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Reclock to %uHz", sensorName, SEN5X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(SEN5X_I2C_CLOCK_SPEED);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
@@ -172,7 +169,6 @@ uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
     if (readBytes != byteNumber) {
         LOG_ERROR("%s: Error reading I2C bus", sensorName);
 #ifdef SEN5X_I2C_CLOCK_SPEED
-        LOG_DEBUG("%s: restoring clock speed", sensorName);
         reClockI2C.restoreClock();
 #endif /* SEN5X_I2C_CLOCK_SPEED */
         return 0;
@@ -188,7 +184,6 @@ uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
         if (recvCRC != calcCRC) {
             LOG_ERROR("%s: Checksum error receiving msg", sensorName);
 #ifdef SEN5X_I2C_CLOCK_SPEED
-            LOG_DEBUG("%s: restoring clock speed", sensorName);
             reClockI2C.restoreClock();
 #endif /* SEN5X_I2C_CLOCK_SPEED */
             return 0;
@@ -198,7 +193,6 @@ uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
     }
 
 #ifdef SEN5X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
@@ -857,7 +851,7 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     LOG_INFO("%s: Get metrics", sensorName);
     if (!isActive()) {
-        LOG_INFO("%s: not in measurement mode", sensorName);
+        LOG_INFO("%s: Not in measurement mode", sensorName);
         return false;
     }
 

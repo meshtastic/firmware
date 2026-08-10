@@ -207,7 +207,7 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
 
             if (!sensor->isActive()) {
-                LOG_DEBUG("Waking up: %s", sensor->sensorName);
+                LOG_DEBUG("Waking up %s", sensor->sensorName);
                 return sensor->wakeUp();
             }
 

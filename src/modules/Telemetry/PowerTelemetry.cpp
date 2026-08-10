@@ -312,7 +312,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             LOG_WARN("Power telemetry unavailable this cycle, sleep without sending");
         sleepOnNextExecution = true;
         preflightSleepDeferrals = 0;
-        LOG_DEBUG("Start next execution in 5s then sleep");
+        LOG_DEBUG("Start next execution in 5s, then sleep");
         setIntervalFromNow(FIVE_SECONDS_MS);
     }
     return validTelemetry;
