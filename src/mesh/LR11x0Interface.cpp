@@ -153,8 +153,12 @@ template <typename T> bool LR11x0Interface<T>::init()
         return res;
     };
 
-    // 1. XTAL first when probing (see TCXO_OPTIONAL_ENABLED), else the configured Vref
-    float attemptVoltage = TCXO_OPTIONAL_ENABLED ? 0 : tcxoVoltage;
+    // 1. XTAL first when probing (see TCXO_OPTIONAL_ENABLED), else the configured Vref. Not a
+    // ternary: when TCXO_OPTIONAL_ENABLED is false, tcxoVoltage above already folds to 0 on a
+    // board with no explicit Vref, which reads to cppcheck as both branches yielding 0.
+    float attemptVoltage = tcxoVoltage;
+    if (TCXO_OPTIONAL_ENABLED)
+        attemptVoltage = 0;
     int res = tryBegin(1, attemptVoltage);
 
     // 2. XTAL failed with the chip present, so fall back to the TCXO if one was configured

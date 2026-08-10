@@ -109,12 +109,20 @@ std::string moduleName();
 
 // Union of every family's mode names: membership means the name is spelled correctly.
 // Whether this radio can act on it is a separate, module-aware question - see modesFor().
-const std::set<std::string> kRfSwitchModes = [] {
-    std::set<std::string> s;
-    for (int m = 0; m < RFSW_MODE_COUNT; m++)
-        s.insert(kRfSwitchModeNames[m].name);
+// Function-local static rather than a namespace-scope global: it reads kRfSwitchModeNames, which
+// is defined in a different translation unit (PortduinoGlue.cpp), and lazy first-use init sidesteps
+// any cross-TU static-initialization-order question rather than relying on that array staying
+// constant-initializable.
+const std::set<std::string> &kRfSwitchModes()
+{
+    static const std::set<std::string> s = [] {
+        std::set<std::string> s;
+        for (int m = 0; m < RFSW_MODE_COUNT; m++)
+            s.insert(kRfSwitchModeNames[m].name);
+        return s;
+    }();
     return s;
-}();
+}
 
 // Likewise the union of both families' switch-capable DIOs.
 const std::set<std::string> kRfSwitchPins = {"DIO5", "DIO6", "DIO7", "DIO8", "DIO9", "DIO10", "DIO11"};
@@ -129,7 +137,7 @@ const int kLr20x0DefaultIrqDio = 5;
 std::set<std::string> modesFor(lora_module_enum module)
 {
     if (module == use_autoconf)
-        return kRfSwitchModes;
+        return kRfSwitchModes();
     std::set<std::string> s;
     if (module == use_lr2021) {
         for (int m = 0; m < RFSW_MODE_COUNT; m++)
@@ -190,7 +198,7 @@ const std::map<std::string, std::set<std::string>> &keyOwners()
                 m[key].insert(section.first);
         // rfswitch_table's sub-keys are worth hinting on too: a table indented one
         // level too far leaves MODE_* rows stranded directly under Lora.
-        for (const auto &mode : kRfSwitchModes)
+        for (const auto &mode : kRfSwitchModes())
             m[mode].insert("Lora.rfswitch_table");
         m["pins"].insert("Lora.rfswitch_table");
         return m;
@@ -397,7 +405,7 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
         const std::string key = entry.first.as<std::string>("");
         if (key == "pins")
             continue;
-        if (!kRfSwitchModes.count(key)) {
+        if (!kRfSwitchModes().count(key)) {
             findings.push_back({kError, file, lineOf(entry.first), "unknown key 'Lora.rfswitch_table." + key + "'"});
             continue;
         }
