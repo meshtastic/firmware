@@ -138,7 +138,7 @@ int32_t NeighborInfoModule::runOnce()
 
 meshtastic_MeshPacket *NeighborInfoModule::allocReply()
 {
-    LOG_INFO("NeighborInfoRequested.");
+    LOG_INFO("NeighborInfoRequested");
     if (lastSentReply && Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
         LOG_DEBUG("Skip Neighbors reply since we sent a reply <3min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule

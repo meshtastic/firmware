@@ -146,7 +146,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     if (!stm32wlRtcAvailable()) {
         // Hardware can't shutdown, but firmware has already prepared itself for shutdown
         // Do not leave the device unresponsive, reset instead
-        LOG_WARN("STM32WL: hardware RTC failed, cannot deep sleep/shutdown");
+        LOG_WARN("STM32WL: hardware RTC failed, can't deep sleep/shutdown");
         if (Serial) {
             Serial.flush();
             Serial.end();
