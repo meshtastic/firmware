@@ -59,8 +59,8 @@ PASS=0
 FAIL=0
 
 # assert <description> <expected-exit> <fixture> <mode> [expected-substring...]
-#   mode:    "check" adds --check, "check-yaml" adds --check --output-yaml,
-#            "normal" runs with neither.
+#   mode:    "check" adds --check, "yaml" adds --output-yaml, "check-yaml" adds both
+#            (to assert that --check wins), "normal" runs with neither.
 #   fixture: a bare name runs from a scratch directory. A name containing a slash
 #            (configd-conflict/config.yaml) runs from that fixture's own directory,
 #            so a relative ConfigDirectory in it resolves the way it would in situ.
@@ -77,6 +77,7 @@ assert() {
 	local args=(--config "$config" -d "$WORKDIR/fs")
 	case $mode in
 	check) args+=(--check) ;;
+	yaml) args+=(--output-yaml) ;;
 	check-yaml) args+=(--check --output-yaml) ;;
 	esac
 
@@ -408,6 +409,14 @@ assert "rfswitch tables across files: last one wins" 0 rfswitch-last-wins/config
 	"'Lora.rfswitch_table' is set in 2 files" \
 	"The file loaded last wins" \
 	"Result: 0 errors,"
+# The case above proves the diagnostic fires; it cannot prove the table was replaced rather than
+# merged, because which of two config.d/ files wins is up to the filesystem. This fixture puts the
+# loser in config.yaml, which is always loaded first, so the effective table is deterministic and
+# can be asserted by value. --output-yaml is the only output that reports it: the check report
+# says no more than "set".
+assert "a later rfswitch table replaces the earlier one" 0 rfswitch-replace/config.yaml yaml \
+	"pins: [DIO5, DIO6]" \
+	"MODE_RX: [LOW, LOW]"
 
 echo
 echo "--check takes precedence over --output-yaml:"
