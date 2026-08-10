@@ -82,8 +82,13 @@ template <typename T> bool LR20x0Interface<T>::init()
 
 #if ARCH_PORTDUINO
     // An explicit Vref wins; probing with none given tries the radio default first.
-    float tcxoVoltage = portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000
-                                                               : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
+    float tcxoVoltage;
+    if (portduino_config.dio3_tcxo_voltage > 0)
+        tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    else if (TCXO_OPTIONAL_ENABLED)
+        tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    else
+        tcxoVoltage = 0;
     if (portduino_config.dio3_tcxo_voltage <= 0 && TCXO_OPTIONAL_ENABLED)
         LOG_DEBUG("TCXO_OPTIONAL: no Lora.DIO3_TCXO_VOLTAGE set, trying default TCXO Vref %f V first", tcxoVoltage);
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
@@ -236,8 +241,13 @@ template <typename T> bool LR20x0Interface<T>::reconfigure()
 #endif
 
 #if ARCH_PORTDUINO
-        float tcxoVoltage = portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000
-                                                                   : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
+        float tcxoVoltage;
+        if (portduino_config.dio3_tcxo_voltage > 0)
+            tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+        else if (TCXO_OPTIONAL_ENABLED)
+            tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+        else
+            tcxoVoltage = 0;
 #elif defined(LR2021_DIO3_TCXO_VOLTAGE)
         float tcxoVoltage = LR2021_DIO3_TCXO_VOLTAGE;
 #elif defined(TCXO_OPTIONAL)

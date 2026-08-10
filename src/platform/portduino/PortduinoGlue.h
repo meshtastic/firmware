@@ -370,10 +370,8 @@ extern struct portduino_config_struct {
         if (has_rfswitch_table) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
-            // DIO numbers as written: the slot a RADIOLIB_* constant belongs to cannot be
-            // decoded without knowing the part. A slot can be absent (sparse config), so
-            // remember which original slot each emitted pin came from - the row values below
-            // read rfswitch_mode_high by that original slot, not by position in this sequence.
+            // DIO numbers as written; a slot can be absent (sparse config), so remember its
+            // original index - row values below key off that, not position in this sequence.
             out << YAML::Key << "pins";
             out << YAML::Value << YAML::Flow << YAML::BeginSeq;
             int emittedSlots[5];
