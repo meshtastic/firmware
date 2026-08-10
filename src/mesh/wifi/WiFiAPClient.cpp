@@ -98,12 +98,25 @@ static int32_t ethNetworkConnectedPoll()
 }
 #endif
 
+#if defined(USE_WS5500) || defined(USE_CH390D)
+// Needs the netif, so only valid after ETH.begin()
+static void applyEthStaticIp()
+{
+    if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC && config.network.ipv4_config.ip != 0) {
+        if (!ETH.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
+                        config.network.ipv4_config.dns))
+            LOG_ERROR("Failed to apply static IP to Ethernet");
+    }
+}
+#endif
+
 #ifdef USE_WS5500
 // Startup Ethernet
 bool initEthernet()
 {
     if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
                                                    ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
+        applyEthStaticIp();
         WiFi.onEvent(WiFiEvent);
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
@@ -135,6 +148,7 @@ bool initEthernet()
 #endif
     ch390_conf.spi_clock_mhz = 20;
     if ((config.network.eth_enabled) && (ETH.begin(ch390_conf))) {
+        applyEthStaticIp();
         WiFi.onEvent(WiFiEvent);
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
