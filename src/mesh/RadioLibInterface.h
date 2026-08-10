@@ -37,9 +37,8 @@ class LockingArduinoHal : public ArduinoHal
 #endif
 };
 
-// TCXO_OPTIONAL (variant define) or Lora.TCXO_OPTIONAL (Portduino YAML): probe for a TCXO
-// and fall back to the XTAL. Probe order is per-family - LR11x0 tries XTAL first, because a
-// TCXO-first attempt hangs RadioLib's calibration wait on a module with none fitted.
+// TCXO_OPTIONAL (variant define) or Lora.TCXO_OPTIONAL (Portduino YAML): probe for a TCXO and
+// fall back to the XTAL. LR11x0 tries XTAL first - TCXO-first hangs RadioLib's calibration wait.
 #if ARCH_PORTDUINO
 #define TCXO_OPTIONAL_ENABLED (portduino_config.tcxo_optional)
 #elif defined(TCXO_OPTIONAL)
