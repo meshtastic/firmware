@@ -101,6 +101,23 @@ as unknown keys - so they sit in a case that must stay at zero warnings, where d
 either from the schema again fails the assertion. LR20x0 is the only module with two power
 ceilings, one per band, which is how the pair came to be missed.
 
+## TCXO probing (`Lora.TCXO_OPTIONAL`)
+
+A variant declares "a TCXO may or may not be fitted" at compile time with `TCXO_OPTIONAL`,
+because the board is known when the image is built. A Portduino carrier cannot: the same
+`meshtasticd` binary runs on hardware populated either way, so the statement arrives as
+YAML and is answered at runtime.
+
+| File                             | Expected                                                                |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| `tcxo-optional.yaml`             | Clean. No Vref given, so the TCXO attempt uses the 1.6 V radio default. |
+| `tcxo-optional-sx1262.yaml`      | Clean. Another family, explicit Vref, which is the one reported.        |
+| `tcxo-optional-unsupported.yaml` | An SX128x has no TCXO reference to probe for, so the key is inert.      |
+
+The no-Vref case is the one worth having: with the probe asked for and no voltage given,
+the driver tries RadioLib's own default rather than skipping the TCXO attempt, because
+otherwise there is nothing to fall back _from_ and the flag would silently do nothing.
+
 ## PA gain table (`TX_GAIN_LORA`)
 
 Two shapes are accepted and they fail differently. A list is read element-by-element
