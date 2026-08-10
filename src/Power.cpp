@@ -606,7 +606,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             // get current flow from INA sensor - negative value means power flowing
             // into the battery default assuming  BATTERY+  <--> INA_VIN+ <--> SHUNT
             // RESISTOR <--> INA_VIN- <--> LOAD
-            LOG_DEBUG("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
+            LOG_TRACE("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
 #if defined(INA_CHARGING_DETECTION_INVERT)
             return getINACurrent() > 0;
 #else
@@ -1838,10 +1838,10 @@ class LipoCharger : public HasBatteryLevel
     {
         bool isCharging = PPM->isCharging();
         if (isCharging) {
-            LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
+            LOG_TRACE("BQ27220 time to full charge: %d min", bq->getTimeToFull());
         } else {
             if (!PPM->isVbusIn()) {
-                LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
+                LOG_TRACE("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
             }
         }
         return isCharging;

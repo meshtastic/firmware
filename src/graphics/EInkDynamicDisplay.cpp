@@ -119,7 +119,7 @@ void EInkDynamicDisplay::endOrDetach()
             awaitRefresh();
         else {
             // Async begins
-            LOG_DEBUG("Async full-refresh begins (drop frames)");
+            LOG_TRACE("Async full-refresh begins (drop frames)");
             notifyLater(intervalPollAsyncRefresh, DUE_POLL_ASYNCREFRESH, true); // Hand-off to NotifiedWorkerThread
         }
     }
@@ -157,7 +157,7 @@ bool EInkDynamicDisplay::determineMode()
 
     resetRateLimiting(); // Once determineMode() ends, will have to wait again
     hashImage();         // Generate here, so we can still copy it to previousImageHash, even if we skip the comparison check
-    LOG_DEBUG("determineMode(): "); // Begin log entry
+    LOG_TRACE("determineMode(): "); // Begin log entry
 
     // Once mode determined, any remaining checks will bypass
     checkCosmetic();
@@ -254,7 +254,7 @@ void EInkDynamicDisplay::checkRateLimiting()
         if (Throttle::isWithinTimespanMs(previousRunMs, 1000)) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FAST;
-            LOG_DEBUG("refresh=SKIPPED, reason=EXCEEDED_RATELIMIT_FAST, frameFlags=0x%x", frameFlags);
+            LOG_TRACE("refresh=SKIPPED, reason=EXCEEDED_RATELIMIT_FAST, frameFlags=0x%x", frameFlags);
             return;
         }
     }
@@ -271,7 +271,7 @@ void EInkDynamicDisplay::checkCosmetic()
     if (frameFlags & COSMETIC) {
         refresh = FULL;
         reason = FLAGGED_COSMETIC;
-        LOG_DEBUG("refresh=FULL, reason=FLAGGED_COSMETIC, frameFlags=0x%x", frameFlags);
+        LOG_TRACE("refresh=FULL, reason=FLAGGED_COSMETIC, frameFlags=0x%x", frameFlags);
     }
 }
 
@@ -286,7 +286,7 @@ void EInkDynamicDisplay::checkDemandingFast()
     if (frameFlags & DEMAND_FAST) {
         refresh = FAST;
         reason = FLAGGED_DEMAND_FAST;
-        LOG_DEBUG("refresh=FAST, reason=FLAGGED_DEMAND_FAST, frameFlags=0x%x", frameFlags);
+        LOG_TRACE("refresh=FAST, reason=FLAGGED_DEMAND_FAST, frameFlags=0x%x", frameFlags);
     }
 }
 
@@ -306,7 +306,7 @@ void EInkDynamicDisplay::checkFrameMatchesPrevious()
     if (frameFlags == BACKGROUND && fastRefreshCount > 0) {
         refresh = FULL;
         reason = REDRAW_WITH_FULL;
-        LOG_DEBUG("refresh=FULL, reason=REDRAW_WITH_FULL, frameFlags=0x%x", frameFlags);
+        LOG_TRACE("refresh=FULL, reason=REDRAW_WITH_FULL, frameFlags=0x%x", frameFlags);
         return;
     }
 #endif
@@ -314,7 +314,7 @@ void EInkDynamicDisplay::checkFrameMatchesPrevious()
     // Not redrawn, not COSMETIC, not DEMAND_FAST
     refresh = SKIPPED;
     reason = FRAME_MATCHED_PREVIOUS;
-    LOG_DEBUG("refresh=SKIPPED, reason=FRAME_MATCHED_PREVIOUS, frameFlags=0x%x", frameFlags);
+    LOG_TRACE("refresh=SKIPPED, reason=FRAME_MATCHED_PREVIOUS, frameFlags=0x%x", frameFlags);
 }
 
 // Have too many fast-refreshes occurred consecutively, since last full refresh?
@@ -328,7 +328,7 @@ void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
     if (frameFlags & UNLIMITED_FAST) {
         refresh = FAST;
         reason = NO_OBJECTIONS;
-        LOG_DEBUG("refresh=FAST, reason=UNLIMITED_FAST_MODE_ACTIVE, frameFlags=0x%x", frameFlags);
+        LOG_TRACE("refresh=FAST, reason=UNLIMITED_FAST_MODE_ACTIVE, frameFlags=0x%x", frameFlags);
         return;
     }
 
@@ -336,7 +336,7 @@ void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
     if (fastRefreshCount >= EINK_LIMIT_FASTREFRESH) {
         refresh = FULL;
         reason = EXCEEDED_LIMIT_FASTREFRESH;
-        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_LIMIT_FASTREFRESH, frameFlags=0x%x", frameFlags);
+        LOG_TRACE("refresh=FULL, reason=EXCEEDED_LIMIT_FASTREFRESH, frameFlags=0x%x", frameFlags);
     }
 }
 
@@ -351,13 +351,13 @@ void EInkDynamicDisplay::checkFastRequested()
         // If we want BACKGROUND to use fast. (FULL only when a limit is hit)
         refresh = FAST;
         reason = BACKGROUND_USES_FAST;
-        LOG_DEBUG("refresh=FAST, reason=BACKGROUND_USES_FAST, fastRefreshCount=%lu, frameFlags=0x%x", fastRefreshCount,
+        LOG_TRACE("refresh=FAST, reason=BACKGROUND_USES_FAST, fastRefreshCount=%lu, frameFlags=0x%x", fastRefreshCount,
                   frameFlags);
 #else
         // If we do want to use FULL for BACKGROUND updates
         refresh = FULL;
         reason = FLAGGED_BACKGROUND;
-        LOG_DEBUG("refresh=FULL, reason=FLAGGED_BACKGROUND");
+        LOG_TRACE("refresh=FULL, reason=FLAGGED_BACKGROUND");
 #endif
     }
 
@@ -365,7 +365,7 @@ void EInkDynamicDisplay::checkFastRequested()
     if (frameFlags & RESPONSIVE) {
         refresh = FAST;
         reason = NO_OBJECTIONS;
-        LOG_DEBUG("refresh=FAST, reason=NO_OBJECTIONS, fastRefreshCount=%lu, frameFlags=0x%x", fastRefreshCount, frameFlags);
+        LOG_TRACE("refresh=FAST, reason=NO_OBJECTIONS, fastRefreshCount=%lu, frameFlags=0x%x", fastRefreshCount, frameFlags);
     }
 }
 
@@ -430,7 +430,7 @@ void EInkDynamicDisplay::countGhostPixels()
         }
     }
 
-    LOG_DEBUG("ghostPixels=%hu, ", ghostPixelCount);
+    LOG_TRACE("ghostPixels=%hu, ", ghostPixelCount);
 }
 
 // Check if ghost pixel count exceeds the defined limit
@@ -446,7 +446,7 @@ void EInkDynamicDisplay::checkExcessiveGhosting()
     if (ghostPixelCount > EINK_LIMIT_GHOSTING_PX) {
         refresh = FULL;
         reason = EXCEEDED_GHOSTINGLIMIT;
-        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_GHOSTINGLIMIT, frameFlags=0x%x", frameFlags);
+        LOG_TRACE("refresh=FULL, reason=EXCEEDED_GHOSTINGLIMIT, frameFlags=0x%x", frameFlags);
     }
 }
 
@@ -511,7 +511,7 @@ void EInkDynamicDisplay::pollAsyncRefresh()
     adafruitDisplay->endAsyncFull(); // Run the end of nextPage() code
     EInkDisplay::endUpdate();        // Run base-class code to finish off update (NOT our derived class override)
     asyncRefreshRunning = false;     // Unset the flag
-    LOG_DEBUG("Async full-refresh complete");
+    LOG_TRACE("Async full-refresh complete");
 
     // Note: this code only works because of a modification to meshtastic/GxEPD2.
     // It is only equipped to intercept calls to nextPage()

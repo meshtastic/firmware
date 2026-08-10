@@ -67,7 +67,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
     p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
-    LOG_DEBUG("Set next hop for dest 0x%08x to 0x%x", p->to, p->next_hop);
+    LOG_TRACE("Set next hop for dest 0x%08x to 0x%x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
@@ -305,7 +305,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
             }
             ResolvedNode r = nodeDB->resolveLastByte(hint, /*requireDirectNeighbor=*/true);
             if (r.status == LastByteResolution::Unique) {
-                LOG_DEBUG("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
+                LOG_TRACE("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
                 return hint;
             }
             LOG_WARN("TMM next hop 0x%x for 0x%08x %s; set no pref", hint, to,
@@ -503,7 +503,7 @@ void NextHopRouter::setNextTx(PendingPacket *pending)
     assert(iface);
     auto d = iface->getRetransmissionMsec(pending->packet);
     pending->nextTxMsec = millis() + d;
-    LOG_DEBUG("Next retransmission in %u msecs", d);
+    LOG_TRACE("Next retransmission in %u msecs", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
 }

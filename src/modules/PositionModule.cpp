@@ -81,13 +81,13 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
             nodeDB->setLocalPosition(p, true);
             return false;
         } else {
-            LOG_DEBUG("Incoming update from MYSELF");
+            LOG_TRACE("Incoming update from MYSELF");
             nodeDB->setLocalPosition(p);
         }
     }
 
     // Log packet size and data fields
-    LOG_DEBUG("POSITION node=0x%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
+    LOG_TRACE("POSITION node=0x%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
               "time=%d",
               getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
               p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
@@ -363,7 +363,7 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     memcpy(mp->decoded.payload.bytes + 1, protobuf_bytes, proto_size);
     mp->decoded.payload.size = proto_size + 1;
 
-    LOG_DEBUG("TAK V2 PLI payload: %zu bytes (1 flags + %zu protobuf)", mp->decoded.payload.size, proto_size);
+    LOG_TRACE("TAK V2 PLI payload: %zu bytes (1 flags + %zu protobuf)", mp->decoded.payload.size, proto_size);
     return mp;
 }
 

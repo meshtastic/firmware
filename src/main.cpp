@@ -1530,7 +1530,7 @@ void loop()
     // We want to sleep as long as possible here - because it saves power
     if (!runASAP && loopCanSleep()) {
 #ifdef DEBUG_LOOP_TIMING
-        LOG_DEBUG("main loop delay: %d", delayMsec);
+        LOG_TRACE("main loop delay: %d", delayMsec);
 #endif
 #ifdef ARCH_PORTDUINO_WASM
         // Single-threaded wasm: mainDelay's InterruptableDelay is a pthread

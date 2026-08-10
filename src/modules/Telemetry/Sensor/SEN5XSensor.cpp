@@ -483,7 +483,7 @@ bool SEN5XSensor::isActive()
 uint32_t SEN5XSensor::wakeUp()
 {
 
-    LOG_DEBUG("%s: Waking up sensor", sensorName);
+    LOG_TRACE("%s: Waking up sensor", sensorName);
 
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
         LOG_ERROR("%s: Error starting measurement", sensorName);
@@ -507,7 +507,7 @@ bool SEN5XSensor::vocStateStable()
     uint32_t now;
     now = getTime();
     uint32_t sinceFirstMeasureStarted = (now - rhtGasMeasureStarted);
-    LOG_DEBUG("%s: sinceFirstMeasureStarted: %us", sensorName, sinceFirstMeasureStarted);
+    LOG_TRACE("%s: sinceFirstMeasureStarted: %us", sensorName, sinceFirstMeasureStarted);
     return sinceFirstMeasureStarted > SEN5X_VOC_STATE_WARMUP_S;
 }
 
@@ -655,7 +655,7 @@ bool SEN5XSensor::readValues()
         LOG_ERROR("%s: Error sending read command", sensorName);
         return false;
     }
-    LOG_DEBUG("%s: Reading PM Values", sensorName);
+    LOG_TRACE("%s: Reading PM Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
     uint8_t dataBuffer[16]{};
@@ -686,16 +686,16 @@ bool SEN5XSensor::readValues()
     sen5xmeasurement.vocIndex = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
     sen5xmeasurement.noxIndex = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
 
-    LOG_DEBUG("%s: Got readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
+    LOG_TRACE("%s: Got readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
               sen5xmeasurement.pM2p5, sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
     if (model != SEN50) {
-        LOG_DEBUG("%s: Got readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, sen5xmeasurement.humidity,
+        LOG_TRACE("%s: Got readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, sen5xmeasurement.humidity,
                   sen5xmeasurement.temperature, sen5xmeasurement.vocIndex);
     }
 
     if (model == SEN55) {
-        LOG_DEBUG("%s: Got readings: noxIndex=%.2f", sensorName, sen5xmeasurement.noxIndex);
+        LOG_TRACE("%s: Got readings: noxIndex=%.2f", sensorName, sen5xmeasurement.noxIndex);
     }
 
     return true;
@@ -708,7 +708,7 @@ bool SEN5XSensor::readPNValues(bool cumulative)
         return false;
     }
 
-    LOG_DEBUG("%s: Reading PN Values", sensorName);
+    LOG_TRACE("%s: Reading PN Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
     uint8_t dataBuffer[20]{};
@@ -748,7 +748,7 @@ bool SEN5XSensor::readPNValues(bool cumulative)
         sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
     }
 
-    LOG_DEBUG("%s: Got readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
+    LOG_TRACE("%s: Got readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
               sen5xmeasurement.pN0p5, sen5xmeasurement.pN1p0, sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0,
               sen5xmeasurement.pN10p0, sen5xmeasurement.tSize);
 
@@ -807,7 +807,7 @@ int32_t SEN5XSensor::pendingForReadyMs()
     uint32_t now;
     now = getTime();
     uint32_t sincePmMeasureStarted = (now - pmMeasureStarted) * 1000;
-    LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
+    LOG_TRACE("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
 
     switch (state) {
     case SEN5X_MEASUREMENT: {

@@ -266,7 +266,7 @@ PacketId generatePacketId()
 
     rollingPacketId &= ID_COUNTER_MASK;                                    // Mask out the top 22 bits
     PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
-    LOG_DEBUG("Partially randomized packet id %u", id);
+    LOG_TRACE("Partially randomized packet id %u", id);
     return id;
 }
 
@@ -363,7 +363,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
             meshtastic_NodeInfoLite const *node = nodeDB->getMeshNode(p->to);
             if (node) {
                 p->channel = node->channel;
-                LOG_DEBUG("localSend to channel %d", p->channel);
+                LOG_TRACE("localSend to channel %d", p->channel);
             }
         }
 
@@ -650,7 +650,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
                 if (!node)
                     return false;
                 nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
-                LOG_DEBUG("Verified XEdDSA signature from 0x%08x", p->from);
+                LOG_TRACE("Verified XEdDSA signature from 0x%08x", p->from);
             } else {
                 LOG_WARN("XEdDSA signature verify failed from 0x%08x, drop", p->from);
                 return false;
@@ -833,7 +833,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
         licensedPkiCandidate = true;
     } else if (pkiCandidate) {
         pkiAttempted = true;
-        LOG_DEBUG("Attempt PKI decryption");
+        LOG_TRACE("Attempt PKI decryption");
         // Resolve the sender's key only for actual PKI-decrypt candidates, not every encrypted channel
         // packet: copyPublicKeyForDecrypt() can fall through to a linear scan of TrafficManagement's large
         // NodeInfo cache. It returns authoritative keys (hot/warm), or a cold-tier cache key only when it is
@@ -1090,7 +1090,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.payload.bytes, p->decoded.payload.size,
                                         p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
-                    LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
+                    LOG_TRACE("XEdDSA signed packet 0x%08x", p->id);
                 }
             }
 #endif

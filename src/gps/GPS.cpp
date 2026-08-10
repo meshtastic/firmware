@@ -364,11 +364,11 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
 #ifdef GPS_DEBUG
-                LOG_DEBUG(debugmsg.c_str());
+                LOG_TRACE(debugmsg.c_str());
 #endif
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
-                    LOG_DEBUG("Found: %s", message); // Log the found message
+                    LOG_TRACE("Found: %s", message); // Log the found message
 #endif
                     return GNSS_RESPONSE_OK;
                 } else {
@@ -479,7 +479,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
                 if (sCounter == 26) {
 #ifdef GPS_DEBUG
 
-                    LOG_DEBUG(debugmsg.c_str());
+                    LOG_TRACE(debugmsg.c_str());
 #endif
                     return GNSS_RESPONSE_FRAME_ERRORS;
                 }
@@ -494,7 +494,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
             } else {
                 if (ack == 3 && b == 0x00) { // UBX-ACK-NAK message
 #ifdef GPS_DEBUG
-                    LOG_DEBUG(debugmsg.c_str());
+                    LOG_TRACE(debugmsg.c_str());
 #endif
                     LOG_WARN("Got NAK for class %02X msg %02X", class_id, msg_id);
                     return GNSS_RESPONSE_NAK; // NAK received
@@ -504,7 +504,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(debugmsg.c_str());
+    LOG_TRACE(debugmsg.c_str());
     LOG_WARN("No response for class %02X msg %02X", class_id, msg_id);
 #endif
     return GNSS_RESPONSE_NONE; // No response received within timeout
@@ -1235,7 +1235,7 @@ void GPS::writePinEN(bool on)
     // Write and log
     enablePin->set(on);
 #ifdef GPS_DEBUG
-    LOG_DEBUG("Pin EN %s", on == HIGH ? "HI" : "LOW");
+    LOG_TRACE("Pin EN %s", on == HIGH ? "HI" : "LOW");
 #endif
 }
 
@@ -1260,7 +1260,7 @@ void GPS::writePinStandby(bool standby)
     }
 
 #ifdef GPS_DEBUG
-    LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
+    LOG_TRACE("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
 #endif
 }
@@ -1273,7 +1273,7 @@ void GPS::writePinRFEN(bool on)
     pinMode(PIN_GPS_RF_EN, OUTPUT);
     digitalWrite(PIN_GPS_RF_EN, val);
 #ifdef GPS_DEBUG
-    LOG_DEBUG("Pin RF EN %s", val == HIGH ? "HI" : "LOW");
+    LOG_TRACE("Pin RF EN %s", val == HIGH ? "HI" : "LOW");
 #endif
 #else
     (void)on;
@@ -1311,7 +1311,7 @@ void GPS::setPowerPMU(bool on)
         on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG("PMU %s", on ? "on" : "off");
+    LOG_TRACE("PMU %s", on ? "on" : "off");
 #endif
 #endif
 }
@@ -1359,7 +1359,7 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
         // Send the UBX packet
         gps->_serial_gps->write(gps->UBXscratch, msglen);
 #ifdef GPS_DEBUG
-        LOG_DEBUG("UBLOX: sleep for %dmS", sleepMs);
+        LOG_TRACE("UBLOX: sleep for %dmS", sleepMs);
 #endif
     }
 }
@@ -1548,7 +1548,7 @@ int32_t GPS::runOnce()
         if (gotLoc) {
 #ifdef GPS_DEBUG
             if (!hasValidLocation) { // declare that we have location ASAP
-                LOG_DEBUG("hasValidLocation RISING EDGE");
+                LOG_TRACE("hasValidLocation RISING EDGE");
             }
 #endif
             if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
@@ -1576,7 +1576,7 @@ int32_t GPS::runOnce()
                 hasValidLocation = false;
                 shouldPublish = true;
 #ifdef GPS_DEBUG
-                LOG_DEBUG("hasValidLocation FALLING EDGE");
+                LOG_TRACE("hasValidLocation FALLING EDGE");
 #endif
             }
         }
@@ -1599,7 +1599,7 @@ int32_t GPS::runOnce()
 
 #ifdef GPS_DEBUG
         } else if (fixHoldEnds != 0) {
-            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
+            LOG_TRACE("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
 #endif
         }
     }
@@ -1824,7 +1824,6 @@ GnssModel_t GPS::probe(int serialSpeed)
                     break;
             }
 
-            LOG_DEBUG("Module Info : ");
             LOG_DEBUG("Soft version: %s", ublox_info.swVersion);
             LOG_DEBUG("Hard version: %s", ublox_info.hwVersion);
             LOG_DEBUG("Extensions:%d", ublox_info.extensionNo);
@@ -1905,7 +1904,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
                 for (const auto &chipInfo : responseMap) {
                     if (strstr(response.get(), chipInfo.detectionString.c_str()) != nullptr) {
 #ifdef GPS_DEBUG
-                        LOG_DEBUG(response.get());
+                        LOG_TRACE(response.get());
 #endif
                         LOG_INFO("%s detected", chipInfo.chipName.c_str());
                         return chipInfo.driver;
@@ -1914,7 +1913,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             }
             if (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n') {
 #ifdef GPS_DEBUG
-                LOG_DEBUG(response.get());
+                LOG_TRACE(response.get());
 #endif
                 // Reset the response buffer for the next potential message
                 responseLen = 0;
@@ -1923,7 +1922,7 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(response.get());
+    LOG_TRACE(response.get());
 #endif
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
 }
@@ -2143,7 +2142,7 @@ bool GPS::lookForLocation()
         return false;
 
 #ifdef GPS_DEBUG
-    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
+    LOG_TRACE("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
               gsafixtype.age(),
 #else
@@ -2298,7 +2297,7 @@ bool GPS::whileActive()
     }
 #ifdef GPS_DEBUG
     if (debugmsg != "") {
-        LOG_DEBUG(debugmsg.c_str());
+        LOG_TRACE(debugmsg.c_str());
     }
 #endif
     return isValid;
