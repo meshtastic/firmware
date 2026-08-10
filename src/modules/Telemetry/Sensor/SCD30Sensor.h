@@ -34,7 +34,10 @@ class SCD30Sensor : public TelemetrySensor, public CO2CalibrationSensor
     // the CO2-capable SEN6X variants via CO2CalibrationSensor::handleCo2AdminRequest().
     // SCD30 has no ambient-pressure command or calibration-history factory reset, so
     // those two are left at CO2CalibrationSensor's default (unsupported) implementation.
-    bool co2PerformFRC(uint32_t targetCO2ppm) override { return performFRC((uint16_t)targetCO2ppm); }
+    bool co2PerformFRC(uint32_t targetCO2ppm) override
+    {
+        return targetCO2ppm <= UINT16_MAX && performFRC(static_cast<uint16_t>(targetCO2ppm));
+    }
     bool co2GetASC(bool &ascEnabled) override
     {
         uint16_t v = 0;
@@ -43,7 +46,10 @@ class SCD30Sensor : public TelemetrySensor, public CO2CalibrationSensor
         return ok;
     }
     bool co2SetASC(bool ascEnabled) override { return setASC(ascEnabled); }
-    bool co2SetAltitude(uint32_t altitude) override { return setAltitude((uint16_t)altitude); }
+    bool co2SetAltitude(uint32_t altitude) override
+    {
+        return altitude <= UINT16_MAX && setAltitude(static_cast<uint16_t>(altitude));
+    }
 
     // Parameters
     uint16_t ascActive = 1;
