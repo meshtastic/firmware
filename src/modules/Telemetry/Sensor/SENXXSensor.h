@@ -30,6 +30,9 @@ subclasses that only supply the sensorType/sensorName identity.
 #define SENXX_PM_WARMUP_MS_2 30000
 #define SENXX_POLL_INTERVAL 1000
 #define SENXX_I2C_CLOCK_SPEED 100000
+// How long a fan-cleaning cycle takes once started; polled via pendingForReadyMs()
+// rather than blocked on, see SENXX_CLEANING in SENXXState.
+#define SENXX_CLEANING_DURATION_MS 10500
 
 /*
 Time after which the co2 sensor in some SEN6X variants give stable data
@@ -243,7 +246,11 @@ class SENXXSensor : public TelemetrySensor, public CO2CalibrationSensor
      */
     uint8_t readBuffer(uint8_t *buffer, uint8_t byteNumber);
     uint8_t senxxCRC(const uint8_t *buffer);
+    // Starts a fan-cleaning cycle and returns immediately (does not block for the
+    // ~10.5s the cycle takes); pendingForReadyMs() polls SENXX_CLEANING to completion
+    // and calls finishCleaning() once done.
     bool startCleaning();
+    void finishCleaning();
     uint8_t getMeasurements();
     bool readPNValues(bool cumulative);
     bool readValues();
@@ -255,6 +262,7 @@ class SENXXSensor : public TelemetrySensor, public CO2CalibrationSensor
     uint32_t pmMeasureStarted = 0;
     uint32_t rhtGasMeasureStarted = 0;
     uint32_t lastDataPoll = 0;
+    uint32_t cleaningStarted = 0;
     _SENXXMeasurements senxxmeasurement{};
 
     bool idle(bool checkState = true);

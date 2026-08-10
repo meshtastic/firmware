@@ -312,6 +312,14 @@ uint8_t SENXXSensor::senxxCRC(const uint8_t *buffer)
 
 void SENXXSensor::sleep()
 {
+    if (state == SENXX_CLEANING) {
+        // The scheduler's periodic "put idle-able sensors to sleep" housekeeping can reach
+        // here while a cleaning cycle is still running (isActive() reports SENXX_CLEANING as
+        // active). Don't let it interrupt the cycle - pendingForReadyMs()/finishCleaning()
+        // owns the transition out of SENXX_CLEANING.
+        LOG_INFO("%s: Not going to sleep, fan cleaning is in progress", sensorName);
+        return;
+    }
     idle(true);
 }
 
@@ -621,7 +629,9 @@ bool SENXXSensor::saveState()
 
 bool SENXXSensor::isActive()
 {
-    return state == SENXX_MEASUREMENT || state == SENXX_MEASUREMENT_2;
+    // SENXX_CLEANING counts as active so the scheduler polls pendingForReadyMs()
+    // (which drives the cleaning cycle to completion) instead of calling wakeUp() again.
+    return state == SENXX_MEASUREMENT || state == SENXX_MEASUREMENT_2 || state == SENXX_CLEANING;
 }
 
 bool SENXXSensor::checkRTCQualityImproved()
@@ -693,6 +703,12 @@ uint32_t SENXXSensor::wakeUp()
         if (now) {
             LOG_INFO("%s: RTC became available (%s), reconciling saved cleaning/VOC state", sensorName, RtcName(lastRTCQuality));
             reconcileTimeDependentState(now);
+            if (state == SENXX_CLEANING) {
+                // A cleaning cycle was just started; let it run its course via
+                // pendingForReadyMs() instead of overwriting state with the
+                // measurement-start logic below.
+                return SENXX_CLEANING_DURATION_MS;
+            }
         }
     }
 
@@ -738,10 +754,14 @@ bool SENXXSensor::startCleaning()
     // This message will be always printed so the user knows the device it's not hung
     LOG_INFO("%s: Started fan cleaning it will take 10 seconds...", sensorName);
 
-    uint32_t started = millis();
-    while (millis() - started < 10500) {
-        delay(500);
-    }
+    // Don't block the caller for the ~10.5s the cycle takes - pendingForReadyMs()
+    // polls SENXX_CLEANING and calls finishCleaning() once it's done.
+    cleaningStarted = millis();
+    return true;
+}
+
+void SENXXSensor::finishCleaning()
+{
     LOG_INFO("%s: Cleaning done", sensorName);
 
     // Save timestamp in flash so we know when a week has passed
@@ -754,7 +774,6 @@ bool SENXXSensor::startCleaning()
     }
 
     idle();
-    return true;
 }
 
 bool SENXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
@@ -811,8 +830,13 @@ bool SENXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
         LOG_INFO("%s: Not enough RTCQuality yet, deferring saved cleaning/VOC state check until it improves", sensorName);
     }
 
-    idle(false);
+    // If reconcileTimeDependentState() just started a cleaning cycle, leave state as
+    // SENXX_CLEANING - idle(false) would send SENXX_STOP_MEASUREMENT and clobber it
+    // mid-cycle. pendingForReadyMs() will poll it to completion once the scheduler starts.
     rhtGasMeasureStarted = millis();
+    if (state != SENXX_CLEANING) {
+        idle(false);
+    }
 
     initI2CSensor();
     return true;
@@ -1152,6 +1176,14 @@ int32_t SENXXSensor::pendingForReadyMs()
             // Report how many seconds are pending to cover the first warm up period
             return SENXX_PM_WARMUP_MS_2 - sincePmMeasureStarted;
         }
+        return 0;
+    }
+    case SENXX_CLEANING: {
+        uint32_t sinceCleaningStarted = now - cleaningStarted;
+        if (sinceCleaningStarted < SENXX_CLEANING_DURATION_MS) {
+            return SENXX_CLEANING_DURATION_MS - sinceCleaningStarted;
+        }
+        finishCleaning();
         return 0;
     }
     default: {
@@ -1513,7 +1545,13 @@ AdminMessageHandleResult SENXXSensor::handleAdminMessage(const meshtastic_MeshPa
             // once, run every requested calibration step, then resume if we were active.
             bool needsCalibration = cfg.has_set_temperature || cfg.has_set_asc || cfg.has_set_altitude ||
                                     cfg.has_set_ambient_pressure || cfg.has_factory_reset;
-            if (needsCalibration) {
+            if (needsCalibration && state == SENXX_CLEANING) {
+                // A fan cleaning was just started above (non-blocking) - stopping measurement
+                // now would interrupt it. Calibration and cleaning can't be requested together;
+                // ask the caller to retry once the cleaning cycle completes.
+                LOG_WARN("%s: Skipping calibration request - fan cleaning in progress, retry once it completes", sensorName);
+                ok = false;
+            } else if (needsCalibration) {
                 if (wasActive) {
                     sendCommand(SENXX_STOP_MEASUREMENT);
                     delay(1400); // From Sensirion Datasheet
