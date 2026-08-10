@@ -72,7 +72,12 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 // Vref to assume for a board that declares a TCXO may be fitted without saying at what voltage.
 // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
 // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
-#define LR11X0_TCXO_DEFAULT_VOLTAGE (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0)
+static inline float lr11x0TcxoDefaultVoltage()
+{
+    if (TCXO_OPTIONAL_ENABLED)
+        return TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    return 0;
+}
 
 // A chip that never answers can surface either way depending on where RadioLib gave up: a bounded
 // per-command BUSY wait in Module::SPItransferStream() reports SPI_CMD_TIMEOUT rather than
@@ -106,11 +111,11 @@ template <typename T> bool LR11x0Interface<T>::init()
     // Portduino leaves dio3_tcxo_voltage at 0 whenever the YAML omits DIO3_TCXO_VOLTAGE, which is the
     // "no explicit Vref" case, so the TCXO_OPTIONAL default still has to apply there
     float tcxoVoltage =
-        portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000 : LR11X0_TCXO_DEFAULT_VOLTAGE;
+        portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000 : lr11x0TcxoDefaultVoltage();
 #elif defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage = LR11X0_DIO3_TCXO_VOLTAGE;
 #else
-    float tcxoVoltage = LR11X0_TCXO_DEFAULT_VOLTAGE;
+    float tcxoVoltage = lr11x0TcxoDefaultVoltage();
 #endif
 
     // DIO3 is free to be used as an IRQ only while no TCXO Vref is driven on it
@@ -154,8 +159,7 @@ template <typename T> bool LR11x0Interface<T>::init()
     };
 
     // 1. XTAL first when probing (see TCXO_OPTIONAL_ENABLED), else the configured Vref. Not a
-    // ternary: when TCXO_OPTIONAL_ENABLED is false, tcxoVoltage above already folds to 0 on a
-    // board with no explicit Vref, which reads to cppcheck as both branches yielding 0.
+    // ternary: cppcheck sees both branches as 0 when tcxoVoltage above already folded to it.
     float attemptVoltage = tcxoVoltage;
     if (TCXO_OPTIONAL_ENABLED)
         attemptVoltage = 0;

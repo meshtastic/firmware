@@ -109,10 +109,8 @@ std::string moduleName();
 
 // Union of every family's mode names: membership means the name is spelled correctly.
 // Whether this radio can act on it is a separate, module-aware question - see modesFor().
-// Function-local static rather than a namespace-scope global: it reads kRfSwitchModeNames, which
-// is defined in a different translation unit (PortduinoGlue.cpp), and lazy first-use init sidesteps
-// any cross-TU static-initialization-order question rather than relying on that array staying
-// constant-initializable.
+// Function-local static, not a namespace-scope global: kRfSwitchModeNames lives in another TU,
+// and lazy first-use init sidesteps any cross-TU static-initialization-order question.
 const std::set<std::string> &kRfSwitchModes()
 {
     static const std::set<std::string> s = [] {
@@ -131,9 +129,8 @@ const std::set<std::string> kRfSwitchPins = {"DIO5", "DIO6", "DIO7", "DIO8", "DI
 // keep the radio headers out of this file.
 const int kLr20x0DefaultIrqDio = 5;
 
-// Mode names this module can apply. Only the LR20x0 differs from the LR11xx set. An unresolved
-// "auto" hasn't picked a family yet, so it is reported against the union of both - narrowing to
-// either family's subset would flag the other family's valid modes as unsupported.
+// Mode names this module can apply. An unresolved "auto" is reported against the union of both
+// families' modes, since narrowing to either subset would flag the other's valid modes.
 std::set<std::string> modesFor(lora_module_enum module)
 {
     if (module == use_autoconf)

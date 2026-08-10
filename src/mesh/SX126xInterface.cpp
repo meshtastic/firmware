@@ -72,8 +72,12 @@ template <typename T> bool SX126xInterface<T>::init()
 #if ARCH_PORTDUINO
     // An explicit Vref wins; probing with none given tries the radio default first.
     bool tcxoVoltageExplicit = portduino_config.dio3_tcxo_voltage > 0;
-    tcxoVoltage = tcxoVoltageExplicit ? (float)portduino_config.dio3_tcxo_voltage / 1000
-                                      : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
+    if (tcxoVoltageExplicit)
+        tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
+    else if (TCXO_OPTIONAL_ENABLED)
+        tcxoVoltage = TCXO_OPTIONAL_DEFAULT_VOLTAGE;
+    else
+        tcxoVoltage = 0;
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
         pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
