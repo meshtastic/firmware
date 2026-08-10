@@ -14,6 +14,7 @@
 #include "graphics/TFTColorRegions.h"
 #include "graphics/TFTPalette.h"
 #include "graphics/TimeFormatters.h"
+#include "graphics/draw/NotificationRenderer.h"
 #include "graphics/emotes.h"
 #include "main.h"
 #include "meshUtils.h"
@@ -1128,6 +1129,9 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
     if (packet.from != 0) {
         hasUnreadMessage = true;
         const bool suppressBanner = cannedMessageModule && cannedMessageModule->isFreeTextActive();
+        // Don't let the pop-up clobber a menu/picker the user is interacting with; the wake below
+        // still happens so a message can light the screen back up.
+        const bool menuShowing = NotificationRenderer::isMenuShowing();
 
         // Determine if message belongs to a muted channel
         bool isChannelMuted = false;
@@ -1222,7 +1226,7 @@ void handleNewMessage(OLEDDisplay *display, const StoredMessage &sm, const mesht
             screen->setOn(true);
         }
 
-        if (!suppressBanner) {
+        if (!suppressBanner && !menuShowing) {
             screen->showSimpleBanner(banner, inThread ? 1000 : 3000);
         }
     }

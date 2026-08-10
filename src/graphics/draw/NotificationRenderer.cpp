@@ -1216,5 +1216,13 @@ bool NotificationRenderer::isOverlayBannerShowing()
     return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
 }
 
+bool NotificationRenderer::isMenuShowing()
+{
+    // A menu, picker, keyboard, or pairing-PIN overlay - anything interactive, as opposed to a plain
+    // informational text banner (which has no options and type text_banner). Menus don't set a
+    // notificationType of their own, so options are the only thing distinguishing them.
+    return isOverlayBannerShowing() && (alertBannerOptions > 0 || current_notification_type != notificationTypeEnum::text_banner);
+}
+
 } // namespace graphics
 #endif
