@@ -71,17 +71,25 @@ template <typename T> bool SX126xInterface<T>::init()
 
 #if ARCH_PORTDUINO
     // An explicit Vref wins; probing with none given tries the radio default first.
-    tcxoVoltage = portduino_config.dio3_tcxo_voltage > 0 ? (float)portduino_config.dio3_tcxo_voltage / 1000
-                                                         : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
+    bool tcxoVoltageExplicit = portduino_config.dio3_tcxo_voltage > 0;
+    tcxoVoltage = tcxoVoltageExplicit ? (float)portduino_config.dio3_tcxo_voltage / 1000
+                                      : (TCXO_OPTIONAL_ENABLED ? TCXO_OPTIONAL_DEFAULT_VOLTAGE : 0);
     if (portduino_config.lora_sx126x_ant_sw_pin.pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.lora_sx126x_ant_sw_pin.pin, HIGH);
         pinMode(portduino_config.lora_sx126x_ant_sw_pin.pin, OUTPUT);
     }
-#endif
+    if (tcxoVoltage == 0.0)
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
+    else if (!tcxoVoltageExplicit)
+        LOG_DEBUG("TCXO_OPTIONAL: no Vref configured, probing default TCXO Vref %f V on DIO3", tcxoVoltage);
+    else
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", tcxoVoltage);
+#else
     if (tcxoVoltage == 0.0)
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, DIO3 not used as TCXO Vref");
     else
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, DIO3 as TCXO Vref %f V", tcxoVoltage);
+#endif
     setTransmitEnable(false);
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?

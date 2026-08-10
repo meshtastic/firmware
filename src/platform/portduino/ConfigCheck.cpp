@@ -123,10 +123,13 @@ const std::set<std::string> kRfSwitchPins = {"DIO5", "DIO6", "DIO7", "DIO8", "DI
 // keep the radio headers out of this file.
 const int kLr20x0DefaultIrqDio = 5;
 
-// Mode names this module can apply. Only the LR20x0 differs from the LR11xx set, which every
-// other module - including an unresolved "auto" - is reported against.
+// Mode names this module can apply. Only the LR20x0 differs from the LR11xx set. An unresolved
+// "auto" hasn't picked a family yet, so it is reported against the union of both - narrowing to
+// either family's subset would flag the other family's valid modes as unsupported.
 std::set<std::string> modesFor(lora_module_enum module)
 {
+    if (module == use_autoconf)
+        return kRfSwitchModes;
     std::set<std::string> s;
     if (module == use_lr2021) {
         for (int m = 0; m < RFSW_MODE_COUNT; m++)

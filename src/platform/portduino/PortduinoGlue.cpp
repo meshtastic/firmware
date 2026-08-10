@@ -1111,9 +1111,13 @@ bool loadConfig(const char *configPath)
                     if (!row)
                         continue;
                     portduino_config.rfswitch_mode_present[m] = true;
+                    // Fresh mask per row, not OR'd onto whatever was there - a re-parse must be able
+                    // to clear a slot back to LOW, not just add HIGH bits.
+                    uint8_t high = 0;
                     for (int i = 0; i < 5; i++)
                         if (row[i].as<std::string>("") == "HIGH")
-                            portduino_config.rfswitch_mode_high[m] |= (uint8_t)(1u << i);
+                            high |= (uint8_t)(1u << i);
+                    portduino_config.rfswitch_mode_high[m] = high;
                 }
             }
             // IRQ DIO for the LR20x0 driver; unset leaves RadioLib's default of DIO5.

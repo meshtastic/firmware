@@ -51,9 +51,8 @@ enum lora_module_enum {
     use_lr2021
 };
 
-// RF switch modes as the YAML names them. Each family supports a subset: an LR11xx has no
-// MODE_RX_HF, an LR20x0 no MODE_TX_HP/MODE_GNSS/MODE_WIFI. Storing the neutral id lets one
-// parser serve both, each interface translating to its own OpMode_t.
+// RF switch modes as the YAML names them; each family supports a different subset. The neutral
+// id lets one parser serve both, each interface translating to its own OpMode_t.
 enum RfSwitchModeId { RFSW_STBY, RFSW_RX, RFSW_TX, RFSW_TX_HP, RFSW_TX_HF, RFSW_RX_HF, RFSW_GNSS, RFSW_WIFI, RFSW_MODE_COUNT };
 
 // A mode the part does not have, for buildRfSwitchTable()'s modeMap.
@@ -67,9 +66,8 @@ struct RfSwitchModeName {
 // YAML spelling of every mode, in RfSwitchModeId order.
 extern const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT];
 
-// Switch-capable DIO numbers in RadioLib slot order: slot i is pins[i] of
-// Lora.rfswitch_table. The families differ - an LR11xx has no DIO9, so its fifth slot is
-// DIO10 where an LR20x0's is DIO9 - so a slot cannot be resolved without knowing the radio.
+// Switch-capable DIO numbers in RadioLib slot order (slot i is pins[i] of Lora.rfswitch_table).
+// The families differ per slot, so a slot cannot be resolved without knowing the radio.
 extern const int8_t kLr11x0SwitchDios[5];
 extern const int8_t kLr20x0SwitchDios[7];
 
@@ -79,9 +77,8 @@ const int8_t *rfSwitchDiosFor(lora_module_enum module, size_t *count);
 // True if this module is handed the parsed table via setRfSwitchTable().
 bool moduleUsesRfSwitchTable(lora_module_enum module);
 
-// Build RadioLib's pin array and mode table from the parsed YAML. dioNumbers/pinConsts give
-// the part's switch DIOs and matching RADIOLIB_<part>_DIOn constants, slot-ordered; modeMap[i]
-// its OpMode_t for RfSwitchModeId i, or RFSW_MODE_UNSUPPORTED. Returns rows written.
+// Build RadioLib's pin array and mode table from the parsed YAML, using dioNumbers/pinConsts
+// (slot-ordered) and modeMap[i]'s OpMode_t for RfSwitchModeId i. Returns rows written.
 size_t buildRfSwitchTable(uint32_t (&pins)[Module::RFSWITCH_MAX_PINS], Module::RfSwitchMode_t *table, size_t tableCapacity,
                           const int8_t *dioNumbers, const uint32_t *pinConsts, size_t dioCount, const int32_t *modeMap);
 
@@ -370,19 +367,22 @@ extern struct portduino_config_struct {
             out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
         if (irq_dio_num >= 0)
             out << YAML::Key << "IRQ_DIO_NUM" << YAML::Value << irq_dio_num;
-        if (rfswitch_dio_num[0] >= 0) {
+        if (has_rfswitch_table) {
             out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
             // DIO numbers as written: the slot a RADIOLIB_* constant belongs to cannot be
-            // decoded without knowing the part.
+            // decoded without knowing the part. A slot can be absent (sparse config), so
+            // remember which original slot each emitted pin came from - the row values below
+            // read rfswitch_mode_high by that original slot, not by position in this sequence.
             out << YAML::Key << "pins";
             out << YAML::Value << YAML::Flow << YAML::BeginSeq;
+            int emittedSlots[5];
             size_t pinCount = 0;
             for (int i = 0; i < 5; i++) {
                 if (rfswitch_dio_num[i] < 0)
                     continue;
                 out << ("DIO" + std::to_string(rfswitch_dio_num[i]));
-                pinCount = i + 1;
+                emittedSlots[pinCount++] = i;
             }
             out << YAML::EndSeq;
 
@@ -393,7 +393,7 @@ extern struct portduino_config_struct {
                 out << YAML::Key << kRfSwitchModeNames[m].name;
                 out << YAML::Value << YAML::Flow << YAML::BeginSeq;
                 for (size_t j = 0; j < pinCount; j++)
-                    out << ((rfswitch_mode_high[m] & (1u << j)) ? "HIGH" : "LOW");
+                    out << ((rfswitch_mode_high[m] & (1u << emittedSlots[j])) ? "HIGH" : "LOW");
                 out << YAML::EndSeq;
             }
             out << YAML::EndMap; // rfswitch_table
