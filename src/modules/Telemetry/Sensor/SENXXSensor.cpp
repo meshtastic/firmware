@@ -747,10 +747,11 @@ bool SENXXSensor::startCleaning()
     // Save timestamp in flash so we know when a week has passed
     uint32_t now;
     now = getValidTime(RTCQuality::RTCQualityDevice);
-    // If time is not RTCQualityNone, it will return non-zero
-    lastCleaning = now;
-    lastCleaningValid = true;
-    saveState();
+    if (now) {
+        lastCleaning = now;
+        lastCleaningValid = true;
+        saveState();
+    }
 
     idle();
     return true;
