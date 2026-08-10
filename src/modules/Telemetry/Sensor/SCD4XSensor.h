@@ -4,6 +4,7 @@
 
 #include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "CO2Sensor.h"
 #include "TelemetrySensor.h"
 #include "gps/RTC.h"
 #include <SensirionI2cScd4x.h>
@@ -13,7 +14,7 @@
 #define SCD4X_WARMUP_MS 5000
 #define SCD4X_MAX_RETRIES 3
 
-class SCD4XSensor : public TelemetrySensor
+class SCD4XSensor : public TelemetrySensor, public CO2CalibrationSensor
 {
   private:
     SensirionI2cScd4x scd4x;
@@ -34,6 +35,23 @@ class SCD4XSensor : public TelemetrySensor
     bool setPowerMode(bool _lowPower);
     bool startMeasurement();
     bool stopMeasurement();
+
+    // CO2CalibrationSensor overrides - thin wrappers around the methods above,
+    // shared with SCD30Sensor and the CO2-capable SEN6X variants via
+    // CO2CalibrationSensor::handleCo2AdminRequest().
+    bool co2PerformFRC(uint32_t targetCO2ppm) override { return performFRC(targetCO2ppm); }
+    bool co2GetASC(bool &ascEnabled) override
+    {
+        uint16_t v = 0;
+        bool ok = getASC(v);
+        ascEnabled = v != 0;
+        return ok;
+    }
+    bool co2SetASC(bool ascEnabled) override { return setASC(ascEnabled); }
+    bool co2SetASCBaseline(uint32_t targetCO2ppm) override { return setASCBaseline(targetCO2ppm); }
+    bool co2SetAltitude(uint32_t altitude) override { return setAltitude(altitude); }
+    bool co2SetAmbientPressure(uint32_t ambientPressurePa) override { return setAmbientPressure(ambientPressurePa); }
+    bool co2FactoryReset() override { return factoryReset(); }
 
     uint16_t ascActive = 1;
     // low power measurement mode (on sensirion side). Disables sleep mode
