@@ -25,7 +25,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     suppressReplyForCurrentRequest = false;
 
     if (mp.from == nodeDB->getNodeNum()) {
-        LOG_WARN("Ignoring packet supposed to be from our own node: %08x", mp.from);
+        LOG_WARN("Ignoring packet supposed to be from our own node: 0x%08x", mp.from);
         return false;
     }
 
@@ -46,7 +46,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     if (p.is_licensed != owner.is_licensed) {
-        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
+        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch");
         return true;
     }
     NodeNum sourceNum = getFrom(&mp);

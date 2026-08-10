@@ -481,7 +481,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (buzzerShouldAlert) {
                 LOG_INFO("externalNotificationModule - Buzzer alert");
                 if (buzzerModeIsDirectOnly && !isDmToUs && !containsBell) {
-                    LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
+                    LOG_INFO("Buzzer suppressed: mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {

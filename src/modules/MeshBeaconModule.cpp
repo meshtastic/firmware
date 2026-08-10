@@ -198,7 +198,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
         // transmit on it; the radio driver drops the packet outright (see RadioLibInterface,
         // beaconTxConfigInvalid) rather than letting it fall through onto the current config.
         if (beaconTxConfigInvalid(p)) {
-            LOG_DEBUG("Beacon: target preset %d/region %d invalid (or ham mismatch), not switching", targetPreset, targetRegion);
+            LOG_DEBUG("Beacon: target preset %d/region %d invalid (or ham mismatch), skip", targetPreset, targetRegion);
             return false;
         }
 
@@ -228,7 +228,7 @@ bool MeshBeaconModule::reconfigureForBeaconTX(RadioInterface *iface, meshtastic_
 
     } else if ((!p || !getTargetRadioSettings(p, nullptr, nullptr)) && radioSwitched) {
 
-        LOG_INFO("Beacon: restoring radio config after beacon TX");
+        LOG_INFO("Beacon: restore radio config after TX");
         config.lora.modem_preset = originalModemPreset;
         config.lora.channel_num = originalLoraChannel;
         config.lora.region = originalRegion;
@@ -315,7 +315,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
                                  (bcfg.broadcast_offer_region != meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     if (!hasText && !hasRadioContent) {
-        LOG_DEBUG("Beacon: nothing to send (empty message, no offer), skipping");
+        LOG_DEBUG("Beacon: empty msg, no offer, skip");
         return;
     }
 
@@ -375,7 +375,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         offerOnly.offer_region = bcfg.broadcast_offer_region;
         offerSize = (pb_size_t)pb_encode_to_bytes(offerBuf, sizeof(offerBuf), &meshtastic_MeshBeacon_msg, &offerOnly);
         if (offerSize == 0)
-            LOG_WARN("Beacon: offer encode failed, skipping offer packet(s)");
+            LOG_WARN("Beacon: offer encode failed, skip");
     }
     if (sendCombined && payloadCacheDirty)
         rebuildCache();
@@ -429,8 +429,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             tgt.slot = config.lora.channel_num;
             if (bt.has_channel_index) {
                 if (bt.channel_index >= (uint32_t)channels.getNumChannels()) {
-                    LOG_WARN("Beacon: target %d channel_index %u out of range, using default channel for preset", ti,
-                             bt.channel_index);
+                    LOG_WARN("Beacon: target %d channel_index %u out of range, use preset default", ti, bt.channel_index);
                 } else {
                     const meshtastic_ChannelSettings &cs = channels.getByIndex(bt.channel_index).settings;
                     if (cs.name[0] != '\0' || cs.psk.size > 0) {
@@ -438,8 +437,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
                         tgt.channel = cs;
                         tgt.slot = cs.channel_num;
                     } else {
-                        LOG_DEBUG("Beacon: target %d channel_index %u is a blank slot, using default channel for preset", ti,
-                                  bt.channel_index);
+                        LOG_DEBUG("Beacon: target %d channel_index %u blank, use preset default", ti, bt.channel_index);
                     }
                 }
             }
@@ -463,7 +461,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
             }
         }
         if (duplicate) {
-            LOG_DEBUG("Beacon: target %d duplicates an earlier target's radio config, skipping", ti);
+            LOG_DEBUG("Beacon: target %d dup radio config, skip", ti);
             continue;
         }
         sent[sentCount] = tgt;
@@ -487,7 +485,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         if (sendOfferOnly && offerSize > 0) {
             meshtastic_MeshPacket *pA = allocDataPacket();
             if (!pA) {
-                LOG_WARN("Beacon: failed to allocate split-A packet (target %d)", ti);
+                LOG_WARN("Beacon: split-A alloc failed (target %d)", ti);
                 return;
             }
             memcpy(pA->decoded.payload.bytes, offerBuf, offerSize);
@@ -501,7 +499,7 @@ void MeshBeaconBroadcastModule::sendBeacon()
         if (sendTextOnly) {
             meshtastic_MeshPacket *pB = allocDataPacket();
             if (!pB) {
-                LOG_WARN("Beacon: failed to allocate split-B packet (target %d)", ti);
+                LOG_WARN("Beacon: split-B alloc failed (target %d)", ti);
                 return;
             }
             pb_size_t msgLen = (pb_size_t)strnlen(bcfg.broadcast_message, sizeof(bcfg.broadcast_message) - 1);

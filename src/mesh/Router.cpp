@@ -202,7 +202,7 @@ bool Router::shouldDecrementHopLimit(const meshtastic_MeshPacket *p)
         if (node && nodeInfoLiteIsFavorite(node) && nodeInfoLiteHasUser(node) &&
             IS_ONE_OF(node->role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_ROUTER_LATE,
                       meshtastic_Config_DeviceConfig_Role_CLIENT_BASE)) {
-            LOG_DEBUG("Identified unique favorite relay router 0x%08x from last byte 0x%x", resolved, p->relay_node);
+            LOG_DEBUG("Unique favorite relay router 0x%08x from last byte 0x%x", resolved, p->relay_node);
             return false; // Don't decrement hop_limit
         }
     }
@@ -223,7 +223,7 @@ int32_t Router::runOnce()
         perhapsHandleReceived(mp);
     }
 
-    // LOG_DEBUG("Sleep forever!");
+    // LOG_DEBUG("Sleep forever");
     return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
@@ -336,7 +336,7 @@ meshtastic_QueueStatus Router::getQueueStatus()
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
     if (p->to == 0) {
-        LOG_ERROR("Packet received with to: of 0!");
+        LOG_ERROR("Packet received with to=0");
     }
     // No need to deliver externally if the destination is the local node
     if (isToUs(p)) {
@@ -385,7 +385,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 ErrorCode Router::send(meshtastic_MeshPacket *p)
 {
     if (isToUs(p)) {
-        LOG_ERROR("BUG! send() called with packet destined for local node!");
+        LOG_ERROR("BUG! send() with packet for local node");
         packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
     } // should have already been handled by sendLocal
@@ -397,7 +397,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         if (hourlyTxPercent > effectiveDutyCycle) {
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, effectiveDutyCycle);
 
-            LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
+            LOG_WARN("Duty cycle limit exceeded, abort send, retry in %d mins", silentMinutes);
 
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             if (cn) {
@@ -475,7 +475,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // p->from as the original sender, so do not rewrite their POSITION_APP payload.
     if (isFromUs(p)) {
         if (!applyPositionPrecisionForChannel(*p, p->channel)) {
-            LOG_ERROR("Dropping malformed position packet before send");
+            LOG_ERROR("Drop malformed position packet before send");
             packetPool.release(p);
             return meshtastic_Routing_Error_BAD_REQUEST;
         }
@@ -652,18 +652,18 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
                 nodeInfoLiteSetBit(node, NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK, true);
                 LOG_DEBUG("Verified XEdDSA signature from 0x%08x", p->from);
             } else {
-                LOG_WARN("XEdDSA signature verification failed from 0x%08x, dropping", p->from);
+                LOG_WARN("XEdDSA signature verify failed from 0x%08x, drop", p->from);
                 return false;
             }
         } else {
             const auto bootstrap = verifyFirstContactNodeInfo(p);
             if (bootstrap == NodeInfoBootstrapResult::INVALID) {
-                LOG_WARN("Invalid first-contact XEdDSA NodeInfo from 0x%08x, dropping", p->from);
+                LOG_WARN("Invalid first-contact XEdDSA NodeInfo from 0x%08x, drop", p->from);
                 return false;
             }
             if (bootstrap == NodeInfoBootstrapResult::VERIFIED)
                 return true;
-            LOG_DEBUG("No public key for 0x%08x, cannot verify XEdDSA signature", p->from);
+            LOG_DEBUG("No public key for 0x%08x, can't verify XEdDSA signature", p->from);
             if (strict)
                 return false;
         }
@@ -672,14 +672,13 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // senders emit only those two sizes (perhapsEncode sets 0 or XEDDSA_SIGNATURE_SIZE). Drop
         // it: a crafted partial signature would otherwise land in the unsigned branch below while
         // its bytes inflated the size estimate, letting a forged broadcast dodge the downgrade drop.
-        LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, dropping", (unsigned)p->decoded.xeddsa_signature.size,
-                 p->from);
+        LOG_WARN("Malformed XEdDSA signature (%u bytes) from 0x%08x, drop", (unsigned)p->decoded.xeddsa_signature.size, p->from);
         return false;
     } else {
         if (p->pki_encrypted)
             return true;
         if (strict) {
-            LOG_WARN("Dropping unsigned packet from 0x%08x in Strict signature mode", p->from);
+            LOG_WARN("Drop unsigned packet from 0x%08x in Strict signature mode", p->from);
             return false;
         }
         if (compatible)
@@ -692,7 +691,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
             if (!canonicalSignableSize(&p->decoded, &canonicalSize))
                 return true; // can't size it; never drop on a sizing failure
             if (canonicalSize + XEDDSA_SIGNATURE_FIELD_BYTES + MESHTASTIC_HEADER_LENGTH <= MAX_LORA_PAYLOAD_LEN) {
-                LOG_WARN("Dropping unsigned packet from 0x%08x that previously signed", p->from);
+                LOG_WARN("Drop unsigned packet from 0x%08x that previously signed", p->from);
                 return false;
             }
         }
@@ -735,11 +734,11 @@ RoutingAuthVerdict passesRoutingAuthGate(meshtastic_MeshPacket *p)
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FATAL) {
-        LOG_WARN("Fatal decode error, dropping packet");
+        LOG_WARN("Fatal decode error, drop packet");
         return RoutingAuthVerdict::REJECT;
     }
     if (state == DecodeState::DECODE_FAILURE) {
-        LOG_WARN("Decryptable packet failed decoding, dropping packet");
+        LOG_WARN("Decryptable packet failed decoding, drop");
         return RoutingAuthVerdict::REJECT;
     }
 
@@ -804,7 +803,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         !nodeInfoLiteHasUser(nodeDB->getMeshNode(p->from))) {
-        LOG_DEBUG("Node 0x%08x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
+        LOG_DEBUG("Node 0x%08x not in nodeDB, Rebroadcast KNOWN_ONLY ignores packet", p->from);
         return DecodeState::DECODE_FAILURE;
     }
 
@@ -817,7 +816,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 
     size_t rawSize = p->encrypted.size;
     if (rawSize > sizeof(bytes)) {
-        LOG_ERROR("Packet too large to attempt decryption! (rawSize=%d > 256)", rawSize);
+        LOG_ERROR("Packet too large to decrypt (rawSize=%d > 256)", rawSize);
         return DecodeState::DECODE_FATAL;
     }
     bool decrypted = false;
@@ -874,7 +873,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 adminKeyFallbackRefund();
         }
         if (decrypted) {
-            LOG_INFO("PKI Decryption worked!");
+            LOG_INFO("PKI Decryption worked");
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
             size_t payloadSize = rawSize - MESHTASTIC_PKC_OVERHEAD;
@@ -888,7 +887,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 }
                 decrypted = true;
                 rawSize = payloadSize; // commit the overhead subtraction only on full success
-                LOG_INFO("Packet decrypted using PKI!");
+                LOG_INFO("Packet decrypted using PKI");
                 p->pki_encrypted = true;
                 memcpy(p->public_key.bytes, remotePublic.bytes, 32);
                 p->public_key.size = 32;
@@ -906,7 +905,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             } else {
                 // AEAD already authenticated this ciphertext, so no other candidate could decode it -
                 // the payload is simply malformed.
-                LOG_ERROR("PKC Decrypted, but pb_decode failed!");
+                LOG_ERROR("PKC Decrypted, but pb_decode failed");
                 return DecodeState::DECODE_FAILURE;
             }
         }
@@ -1014,7 +1013,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #endif
         return DecodeState::DECODE_SUCCESS;
     } else {
-        LOG_WARN("No suitable channel found for decoding, hash was 0x%x!", p->channel);
+        LOG_WARN("No channel found for decoding, hash 0x%x", p->channel);
         return (matchedChannel || pkiAttempted || licensedPkiCandidate) ? DecodeState::DECODE_FAILURE
                                                                         : DecodeState::DECODE_OPAQUE;
     }
@@ -1118,7 +1117,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // If the compressed length is greater than or equal to the original size, don't use the compressed form
             if (compressed_len >= p->decoded.payload.size) {
 
-                LOG_DEBUG("Not using compressing message");
+                LOG_DEBUG("Not compressing");
                 // Set the uncompressed payload variant anyway. Shouldn't hurt?
                 // p->decoded.which_payloadVariant = Data_payload_tag;
 
@@ -1156,13 +1155,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
         // is not in the local nodedb
         if (wouldEncryptWithPKC(p, chIndex, haveDestKey)) {
-            LOG_DEBUG("Use PKI!");
+            LOG_DEBUG("Use PKI");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             // Check for a usable public key for the destination (NodeDB or a pending key-verification key)
             if (!haveDestKey) {
-                LOG_WARN("Unknown public key for destination node 0x%08x (portnum %d), refusing to send legacy DM", p->to,
-                         p->decoded.portnum);
+                LOG_WARN("Unknown public key for 0x%08x (portnum %d), refuse legacy DM", p->to, p->decoded.portnum);
                 return meshtastic_Routing_Error_PKI_SEND_FAIL_PUBLIC_KEY;
             }
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) && memcmp(p->public_key.bytes, destKey.bytes, 32) != 0) {
@@ -1173,7 +1171,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // On failure encrypted.bytes holds no ciphertext, so continuing would put the plaintext
             // on the air labelled pki_encrypted.
             if (!crypto->encryptCurve25519(p->to, getFrom(p), destKey, p->id, numbytes, bytes, p->encrypted.bytes)) {
-                LOG_WARN("PKI encryption failed for destination node 0x%08x", p->to);
+                LOG_WARN("PKI encryption failed for 0x%08x", p->to);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
             numbytes += MESHTASTIC_PKC_OVERHEAD;
@@ -1289,7 +1287,7 @@ void Router::deliverLocal(meshtastic_MeshPacket *p, RxSource src)
     // broadcast). Mirrors sendToPhone()'s degrade-on-exhaustion behavior.
     if (copy)
         packetPool.release(copy);
-    LOG_WARN("Deferred local queue full/alloc failed, dropping loopback of 0x%08x", p->id);
+    LOG_WARN("Deferred local queue full/alloc failed, drop loopback of 0x%08x", p->id);
 #ifdef PIO_UNIT_TESTING
     deferredLocalDropped++;
 #endif
@@ -1372,8 +1370,8 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         // Fatal decoding error, we can't do anything with this packet
         LOG_WARN(decodedState == DecodeState::DECODE_POLICY_REJECT
                      ? "Packet rejected by signature policy"
-                     : (decodedState == DecodeState::DECODE_FATAL ? "Fatal decode error, dropping packet"
-                                                                  : "Decryptable packet failed decoding, dropping packet"));
+                     : (decodedState == DecodeState::DECODE_FATAL ? "Fatal decode error, drop packet"
+                                                                  : "Decryptable packet failed decoding, drop"));
         // A policy rejection is attacker-controlled input and must not cancel a valid pending
         // transmission with the same (from, id). Preserve the pre-existing fatal-decode behavior.
         if (decodedState == DecodeState::DECODE_FATAL)
@@ -1404,7 +1402,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP &&
             (!moduleConfig.has_neighbor_info || !moduleConfig.neighbor_info.enabled)) {
-            LOG_DEBUG("Neighbor info module is disabled, ignore neighbor packet");
+            LOG_DEBUG("Neighbor info module disabled, ignore packet");
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
@@ -1416,7 +1414,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             p->decoded.portnum == meshtastic_PortNum_MESH_BEACON_APP &&
             (!moduleConfig.has_mesh_beacon ||
              !(moduleConfig.mesh_beacon.flags & meshtastic_ModuleConfig_MeshBeaconConfig_Flags_FLAG_LISTEN_ENABLED))) {
-            LOG_DEBUG("Beacon listening is disabled, ignore beacon packet");
+            LOG_DEBUG("Beacon listening disabled, ignore packet");
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
@@ -1449,7 +1447,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         if (p_encrypted == nullptr) {
-            LOG_WARN("p_encrypted is null, skipping MQTT publish");
+            LOG_WARN("p_encrypted null, skip MQTT publish");
         } else {
             // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not
             // to us (because we would be able to decrypt it)
@@ -1469,7 +1467,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
                         if (encodeResult != meshtastic_Routing_Error_NONE) {
                             // Encryption failed, release the new packet and fall back to sending the original encrypted packet to
                             // MQTT
-                            LOG_WARN("Encryption of new TR packet failed, sending original TR to MQTT");
+                            LOG_WARN("New TR packet encrypt failed, send original TR to MQTT");
                             packetPool.release(p_encrypted_new);
                             p_encrypted_new = nullptr;
                         } else {
@@ -1479,7 +1477,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
                         }
                     } else {
                         // Allocation failed, log a warning and fall back to sending the original encrypted packet to MQTT
-                        LOG_WARN("Failed to allocate new encrypted packet for TR, sending original TR to MQTT");
+                        LOG_WARN("Alloc encrypted TR packet failed, send original TR to MQTT");
                     }
                 }
                 mqtt->onSend(*p_encrypted, *p, p->channel);
@@ -1504,7 +1502,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         clearRoutingAuthCache();
-        LOG_DEBUG("Ignore msg, 0x%08x is in our ignore list", p->from);
+        LOG_DEBUG("Ignore msg, 0x%08x in ignore list", p->from);
         packetPool.release(p);
         return;
     }
@@ -1554,7 +1552,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 
     if (shouldFilterReceived(p)) {
         clearRoutingAuthCache();
-        LOG_DEBUG("Incoming msg was filtered from 0x%08x", p->from);
+        LOG_DEBUG("Incoming msg filtered from 0x%08x", p->from);
         packetPool.release(p);
         return;
     }

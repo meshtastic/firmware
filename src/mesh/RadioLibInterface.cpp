@@ -107,7 +107,7 @@ bool RadioLibInterface::canSendImmediately()
         // If we've been trying to send the same packet more than one minute and we haven't gotten a
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && !Throttle::isWithinTimespanMs(lastTxStart, 60000)) {
-            LOG_ERROR("Hardware Failure! busyTx for more than 60s");
+            LOG_ERROR("Hardware Failure! busyTx >60s");
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
             // reboot in 5 seconds when this condition occurs.
             rebootAtMsec = lastTxStart + 65000;
@@ -339,7 +339,7 @@ void RadioLibInterface::resetNoiseFloor()
     currentSampleIndex = 0;
     isNoiseFloorBufferFull = false;
     currentNoiseFloor = NOISE_FLOOR_DEFAULT;
-    LOG_INFO("Noise floor reset - rolling window collection will restart");
+    LOG_INFO("Noise floor reset - rolling window will restart");
 }
 
 bool RadioLibInterface::randomBytes(uint8_t *buffer, size_t length)
@@ -445,7 +445,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // The beacon's target radio config is invalid (bad preset/region, or an
                     // unlicensed node keying up on a ham-only region). Drop the packet - never
                     // transmit it on the current (home) config - and move on to the next queued packet.
-                    LOG_DEBUG("Beacon: invalid TX radio config, dropping packet 0x%08x", txp->id);
+                    LOG_DEBUG("Beacon: invalid TX radio config, drop packet 0x%08x", txp->id);
                     meshtastic_MeshPacket *bad = txQueue.dequeue();
                     MeshBeaconModule::clearTargetRadioSettings(bad);
                     packetPool.release(bad);
@@ -468,7 +468,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
-                        LOG_DEBUG("%d packets remain in the TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                        LOG_DEBUG("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }
             }
@@ -539,7 +539,7 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
         p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
-            LOG_DEBUG("Move existing queued packet to the late rebroadcast window %dms from now", p->tx_after - millis());
+            LOG_DEBUG("Move queued packet to late rebroadcast window %dms from now", p->tx_after - millis());
         } else {
             packetPool.release(p);
         }
@@ -557,7 +557,7 @@ bool RadioLibInterface::removePendingTXPacket(NodeNum from, PacketId id, uint32_
 {
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, true, hop_limit_lt);
     if (p) {
-        LOG_DEBUG("Dropping pending-TX packet 0x%08x with hop limit %d", p->id, p->hop_limit);
+        LOG_DEBUG("Drop pending-TX packet 0x%08x, hop limit %d", p->id, p->hop_limit);
         packetPool.release(p);
         return true;
     }
@@ -607,7 +607,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
     if (!isReceiving) {
-        LOG_ERROR("handleReceiveInterrupt called when not in rx mode, which shouldn't happen");
+        LOG_ERROR("handleReceiveInterrupt called while not in rx mode");
         return;
     }
 
@@ -634,7 +634,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 #endif
     if (state != RADIOLIB_ERR_NONE) {
         // Log PacketHeader similar to RadioInterface::printPacket so we can try to match RX errors to other packets in the logs.
-        LOG_ERROR("Ignore received packet due to error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
+        LOG_ERROR("Ignore rx packet, error=%d (maybe id=0x%08x fr=0x%08x to=0x%08x flags=0x%02x rxSNR=%g rxRSSI=%i "
                   "nextHop=0x%x relay=0x%x)",
                   state, radioBuffer.header.id, radioBuffer.header.from, radioBuffer.header.to, radioBuffer.header.flags,
                   iface->getSNR(), lround(iface->getRSSI()), radioBuffer.header.next_hop, radioBuffer.header.relay_node);
@@ -759,7 +759,7 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
     /* NOTE: Minimize the actions before startTransmit() to keep the time between
              channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
-        LOG_WARN("Drop Tx packet because LoRa Tx disabled");
+        LOG_WARN("Drop Tx packet: LoRa Tx disabled");
 #if !MESHTASTIC_EXCLUDE_BEACON
         // This packet may have already triggered a beacon radio switch in TRANSMIT_DELAY_COMPLETED;
         // since it never reaches completeSending() here, restore the radio so it isn't left on the

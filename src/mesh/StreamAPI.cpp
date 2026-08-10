@@ -1,8 +1,11 @@
-#include "StreamAPI.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "PowerFSM.h"
+#include "StreamAPI.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #include "gps/RTC.h"
 
 #define START1 0x94
