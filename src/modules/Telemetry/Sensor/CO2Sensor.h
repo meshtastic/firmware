@@ -63,10 +63,11 @@ class CO2CalibrationSensor
         }
 
         if (cfg.hasSetAsc) {
-            bool currentASC = false;
-            co2GetASC(currentASC);
-
             if (!cfg.setAsc) {
+                bool currentASC = false;
+                if (!co2GetASC(currentASC)) {
+                    return false;
+                }
                 // Disabling ASC is how you request a forced recalibration (FRC).
                 if (!cfg.hasTargetCo2) {
                     LOG_ERROR("%s: target CO2 not provided for FRC", sensorName);
@@ -88,7 +89,9 @@ class CO2CalibrationSensor
                 }
                 // ASC with target CO2 is only available in SCD4X
                 if (cfg.hasTargetCo2) {
-                    co2SetASCBaseline(cfg.targetCo2);
+                    if (!co2SetASCBaseline(cfg.targetCo2)) {
+                        return false;
+                    }
                 }
             }
         }
