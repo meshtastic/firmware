@@ -208,9 +208,9 @@ int32_t AirQualityTelemetryModule::runOnce()
 
             if (!sensor->isActive()) {
                 LOG_DEBUG("Waking up: %s", sensor->sensorName);
+                if (awakeAheadOfTimeMs == 0)
+                    startAirQualityTelemetryCycle = millis();
                 awakeAheadOfTimeMs = max(awakeAheadOfTimeMs, sensor->wakeUpTimeMs());
-                // LOG_DEBUG("Woke up ahead of time %d for %s", awakeAheadOfTimeMs, sensor->sensorName);
-                startAirQualityTelemetryCycle = millis();
                 // TODO multiple sensors with different wake up times collide
                 return sensor->wakeUp();
             }
