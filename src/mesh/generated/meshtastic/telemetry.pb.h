@@ -123,7 +123,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* SPA06 pressure and temperature */
     meshtastic_TelemetrySensorType_SPA06 = 54,
     /* HM330X PM SENSOR */
-    meshtastic_TelemetrySensorType_HM330X = 55
+    meshtastic_TelemetrySensorType_HM330X = 55,
+    /* Sensirion SEN6X PM/RHT/VOC/NOx/CO2/HCHO sensor family (SEN62, SEN63C, SEN65, SEN66, SEN68, SEN69C) */
+    meshtastic_TelemetrySensorType_SEN6X = 56
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -216,9 +218,54 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Soil temperature measured (*C) */
     bool has_soil_temperature;
     float soil_temperature;
-    /* One-wire temperature (*C) */
-    pb_size_t one_wire_temperature_count;
-    float one_wire_temperature[8];
+    /* Multi-channel ADC Voltage Channel 0 (V) */
+    bool has_adc_voltage_ch0;
+    float adc_voltage_ch0;
+    /* Multi-channel ADC Voltage Channel 1 (V) */
+    bool has_adc_voltage_ch1;
+    float adc_voltage_ch1;
+    /* Multi-channel ADC Voltage Channel 2 (V) */
+    bool has_adc_voltage_ch2;
+    float adc_voltage_ch2;
+    /* Multi-channel ADC Voltage Channel 3 (V) */
+    bool has_adc_voltage_ch3;
+    float adc_voltage_ch3;
+    /* Multi-channel ADC Voltage Channel 4 (V) */
+    bool has_adc_voltage_ch4;
+    float adc_voltage_ch4;
+    /* Multi-channel ADC Voltage Channel 5 (V) */
+    bool has_adc_voltage_ch5;
+    float adc_voltage_ch5;
+    /* Multi-channel ADC Voltage Channel 6 (V) */
+    bool has_adc_voltage_ch6;
+    float adc_voltage_ch6;
+    /* Multi-channel ADC Voltage Channel 7 (V) */
+    bool has_adc_voltage_ch7;
+    float adc_voltage_ch7;
+    /* Multi-channel One-Wire Temperature Channel 0 (*C) */
+    bool has_one_wire_temperature_ch0;
+    float one_wire_temperature_ch0;
+    /* Multi-channel One-Wire Temperature Channel 1 (*C) */
+    bool has_one_wire_temperature_ch1;
+    float one_wire_temperature_ch1;
+    /* Multi-channel One-Wire Temperature Channel 2 (*C) */
+    bool has_one_wire_temperature_ch2;
+    float one_wire_temperature_ch2;
+    /* Multi-channel One-Wire Temperature Channel 3 (*C) */
+    bool has_one_wire_temperature_ch3;
+    float one_wire_temperature_ch3;
+    /* Multi-channel One-Wire Temperature Channel 4 (*C) */
+    bool has_one_wire_temperature_ch4;
+    float one_wire_temperature_ch4;
+    /* Multi-channel One-Wire Temperature Channel 5 (*C) */
+    bool has_one_wire_temperature_ch5;
+    float one_wire_temperature_ch5;
+    /* Multi-channel One-Wire Temperature Channel 6 (*C) */
+    bool has_one_wire_temperature_ch6;
+    float one_wire_temperature_ch6;
+    /* Multi-channel One-Wire Temperature Channel 7 (*C) */
+    bool has_one_wire_temperature_ch7;
+    float one_wire_temperature_ch7;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -241,34 +288,34 @@ typedef struct _meshtastic_PowerMetrics {
     /* Current (Ch3) */
     bool has_ch3_current;
     float ch3_current;
-    /* Voltage (Ch4) */
+    /* Voltage (Ch4) - TODO Remove */
     bool has_ch4_voltage;
     float ch4_voltage;
-    /* Current (Ch4) */
+    /* Current (Ch4) - TODO Remove */
     bool has_ch4_current;
     float ch4_current;
-    /* Voltage (Ch5) */
+    /* Voltage (Ch5) - TODO Remove */
     bool has_ch5_voltage;
     float ch5_voltage;
-    /* Current (Ch5) */
+    /* Current (Ch5) - TODO Remove */
     bool has_ch5_current;
     float ch5_current;
-    /* Voltage (Ch6) */
+    /* Voltage (Ch6) - TODO Remove */
     bool has_ch6_voltage;
     float ch6_voltage;
-    /* Current (Ch6) */
+    /* Current (Ch6) - TODO Remove */
     bool has_ch6_current;
     float ch6_current;
-    /* Voltage (Ch7) */
+    /* Voltage (Ch7) - TODO Remove */
     bool has_ch7_voltage;
     float ch7_voltage;
-    /* Current (Ch7) */
+    /* Current (Ch7) - TODO Remove */
     bool has_ch7_current;
     float ch7_current;
-    /* Voltage (Ch8) */
+    /* Voltage (Ch8) - TODO Remove */
     bool has_ch8_voltage;
     float ch8_voltage;
-    /* Current (Ch8) */
+    /* Current (Ch8) - TODO Remove */
     bool has_ch8_current;
     float ch8_current;
 } meshtastic_PowerMetrics;
@@ -350,6 +397,12 @@ typedef struct _meshtastic_AirQualityMetrics {
     /* Typical Particle Size in um */
     bool has_particles_tps;
     float particles_tps;
+    /* Raw PM sensor device status/error register bitmask, as defined by the sensor's own datasheet
+ (currently populated by the SEN6X family: bit 4 fan error, bit 6 RH&T error, bit 7 gas/VOC-NOx
+ error, bit 9 CO2 error (SEN66), bit 10 HCHO error, bit 11 PM error, bit 12 CO2 error (SEN63C/SEN69C),
+ bit 21 fan speed warning) */
+    bool has_pm_status_flags;
+    uint32_t pm_status_flags;
 } meshtastic_AirQualityMetrics;
 
 /* Local device mesh statistics */
@@ -478,7 +531,7 @@ typedef struct _meshtastic_Nau7802Config {
     float calibrationFactor;
 } meshtastic_Nau7802Config;
 
-/* SEN5X State, for saving to flash */
+/* SEN5X State, for saving to flash (to be merged with SEN6XState) */
 typedef struct _meshtastic_SEN5XState {
     /* Last cleaning time for SEN5X */
     uint32_t last_cleaning_time;
@@ -497,6 +550,25 @@ typedef struct _meshtastic_SEN5XState {
     uint64_t voc_state_array;
 } meshtastic_SEN5XState;
 
+/* SEN6X State, for saving to flash */
+typedef struct _meshtastic_SEN6XState {
+    /* Last cleaning time for SEN6X */
+    uint32_t last_cleaning_time;
+    /* Last cleaning time for SEN6X - valid flag */
+    bool last_cleaning_valid;
+    /* Config flag for one-shot mode (see admin.proto) */
+    bool one_shot_mode;
+    /* Last VOC state time, for models with a VOC sensor (SEN65, SEN66, SEN68, SEN69C) */
+    bool has_voc_state_time;
+    uint32_t voc_state_time;
+    /* Last VOC state validity flag, for models with a VOC sensor (SEN65, SEN66, SEN68, SEN69C) */
+    bool has_voc_state_valid;
+    bool voc_state_valid;
+    /* VOC state array (8x uint8t), for models with a VOC sensor (SEN65, SEN66, SEN68, SEN69C) */
+    bool has_voc_state_array;
+    uint64_t voc_state_array;
+} meshtastic_SEN6XState;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -504,8 +576,9 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_HM330X
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_HM330X+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SEN6X
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SEN6X+1))
+
 
 
 
@@ -521,9 +594,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_TrafficManagementStats_init_default {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_default    {false, 0, false, 0, false, 0}
@@ -531,10 +604,11 @@ extern "C" {
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_SEN5XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
+#define meshtastic_SEN6XState_init_default       {0, 0, 0, false, 0, false, 0, false, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_TrafficManagementStats_init_zero {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_zero       {false, 0, false, 0, false, 0}
@@ -542,6 +616,7 @@ extern "C" {
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
 #define meshtastic_SEN5XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
+#define meshtastic_SEN6XState_init_zero          {0, 0, 0, false, 0, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceMetrics_battery_level_tag 1
@@ -571,7 +646,22 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_rainfall_24h_tag 20
 #define meshtastic_EnvironmentMetrics_soil_moisture_tag 21
 #define meshtastic_EnvironmentMetrics_soil_temperature_tag 22
-#define meshtastic_EnvironmentMetrics_one_wire_temperature_tag 23
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch0_tag 24
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch1_tag 25
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch2_tag 26
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch3_tag 27
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch4_tag 28
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch5_tag 29
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch6_tag 30
+#define meshtastic_EnvironmentMetrics_adc_voltage_ch7_tag 31
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch0_tag 32
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch1_tag 33
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch2_tag 34
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch3_tag 35
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch4_tag 36
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch5_tag 37
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch6_tag 38
+#define meshtastic_EnvironmentMetrics_one_wire_temperature_ch7_tag 39
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -613,6 +703,7 @@ extern "C" {
 #define meshtastic_AirQualityMetrics_pm_voc_idx_tag 23
 #define meshtastic_AirQualityMetrics_pm_nox_idx_tag 24
 #define meshtastic_AirQualityMetrics_particles_tps_tag 25
+#define meshtastic_AirQualityMetrics_pm_status_flags_tag 26
 #define meshtastic_LocalStats_uptime_seconds_tag 1
 #define meshtastic_LocalStats_channel_utilization_tag 2
 #define meshtastic_LocalStats_air_util_tx_tag    3
@@ -664,6 +755,12 @@ extern "C" {
 #define meshtastic_SEN5XState_voc_state_time_tag 4
 #define meshtastic_SEN5XState_voc_state_valid_tag 5
 #define meshtastic_SEN5XState_voc_state_array_tag 6
+#define meshtastic_SEN6XState_last_cleaning_time_tag 1
+#define meshtastic_SEN6XState_last_cleaning_valid_tag 2
+#define meshtastic_SEN6XState_one_shot_mode_tag  3
+#define meshtastic_SEN6XState_voc_state_time_tag 4
+#define meshtastic_SEN6XState_voc_state_valid_tag 5
+#define meshtastic_SEN6XState_voc_state_array_tag 6
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
@@ -698,7 +795,22 @@ X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_1h,      19) \
 X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_24h,     20) \
 X(a, STATIC,   OPTIONAL, UINT32,   soil_moisture,    21) \
 X(a, STATIC,   OPTIONAL, FLOAT,    soil_temperature,  22) \
-X(a, STATIC,   REPEATED, FLOAT,    one_wire_temperature,  23)
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch0,  24) \
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch1,  25) \
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch2,  26) \
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch3,  27) \
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch4,  28) \
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch5,  29) \
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch6,  30) \
+X(a, STATIC,   OPTIONAL, FLOAT,    adc_voltage_ch7,  31) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch0,  32) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch1,  33) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch2,  34) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch3,  35) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch4,  36) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch5,  37) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch6,  38) \
+X(a, STATIC,   OPTIONAL, FLOAT,    one_wire_temperature_ch7,  39)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -747,7 +859,8 @@ X(a, STATIC,   OPTIONAL, FLOAT,    pm_temperature,   21) \
 X(a, STATIC,   OPTIONAL, FLOAT,    pm_humidity,      22) \
 X(a, STATIC,   OPTIONAL, FLOAT,    pm_voc_idx,       23) \
 X(a, STATIC,   OPTIONAL, FLOAT,    pm_nox_idx,       24) \
-X(a, STATIC,   OPTIONAL, FLOAT,    particles_tps,    25)
+X(a, STATIC,   OPTIONAL, FLOAT,    particles_tps,    25) \
+X(a, STATIC,   OPTIONAL, UINT32,   pm_status_flags,  26)
 #define meshtastic_AirQualityMetrics_CALLBACK NULL
 #define meshtastic_AirQualityMetrics_DEFAULT NULL
 
@@ -838,6 +951,16 @@ X(a, STATIC,   OPTIONAL, FIXED64,  voc_state_array,   6)
 #define meshtastic_SEN5XState_CALLBACK NULL
 #define meshtastic_SEN5XState_DEFAULT NULL
 
+#define meshtastic_SEN6XState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   last_cleaning_time,   1) \
+X(a, STATIC,   SINGULAR, BOOL,     last_cleaning_valid,   2) \
+X(a, STATIC,   SINGULAR, BOOL,     one_shot_mode,     3) \
+X(a, STATIC,   OPTIONAL, UINT32,   voc_state_time,    4) \
+X(a, STATIC,   OPTIONAL, BOOL,     voc_state_valid,   5) \
+X(a, STATIC,   OPTIONAL, FIXED64,  voc_state_array,   6)
+#define meshtastic_SEN6XState_CALLBACK NULL
+#define meshtastic_SEN6XState_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
@@ -849,6 +972,7 @@ extern const pb_msgdesc_t meshtastic_HostMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
+extern const pb_msgdesc_t meshtastic_SEN6XState_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
@@ -862,18 +986,20 @@ extern const pb_msgdesc_t meshtastic_SEN5XState_msg;
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
 #define meshtastic_SEN5XState_fields &meshtastic_SEN5XState_msg
+#define meshtastic_SEN6XState_fields &meshtastic_SEN6XState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
-#define meshtastic_AirQualityMetrics_size        150
+#define meshtastic_AirQualityMetrics_size        157
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       161
+#define meshtastic_EnvironmentMetrics_size       209
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_HostMetrics_size              264
 #define meshtastic_LocalStats_size               87
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             81
 #define meshtastic_SEN5XState_size               27
+#define meshtastic_SEN6XState_size               27
 #define meshtastic_Telemetry_size                272
 #define meshtastic_TrafficManagementStats_size   42
 

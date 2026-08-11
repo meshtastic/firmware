@@ -616,6 +616,13 @@ void RadioLibInterface::handleReceiveInterrupt()
     // read the number of actually received bytes
     size_t length = iface->getPacketLength();
 
+    // Some drivers report this as a 16 bit value, so a bad readback can overrun radioBuffer in readData()
+    if (length > sizeof(radioBuffer)) {
+        LOG_ERROR("Ignore rx packet, bad length %u", (unsigned int)length);
+        rxBad++;
+        return;
+    }
+
     uint32_t rxMsec = getPacketTime(length, true);
 
 #ifndef DISABLE_WELCOME_UNSET
