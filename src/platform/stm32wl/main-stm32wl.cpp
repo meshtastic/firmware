@@ -58,8 +58,10 @@ __attribute__((constructor(101), used)) static void earlyBootCheck(void)
     SCB->VTOR = SYS_MEM_BASE;
     __set_MSP(*(volatile uint32_t *)SYS_MEM_BASE);
     ((void (*)(void))(*(volatile uint32_t *)(SYS_MEM_BASE + 4)))();
-    while (1)
-        ;
+    // Should never be reached: the bootloader ROM does not return. A bare reset
+    // (rather than returning normally) avoids unwinding through this function's
+    // epilogue, which would restore registers relative to the now-repointed MSP.
+    NVIC_SystemReset();
 }
 
 void enterDfuMode()
@@ -171,12 +173,14 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 // Hacks to force more code and data out.
 
+// Forward declaration; defined below alongside the other fault-reporting helpers.
+static void debug_printf(const char *format, ...);
+
 // By default __assert_func uses fiprintf which pulls in stdio.
-extern "C" void __wrap___assert_func(const char *, int, const char *, const char *)
+extern "C" void __wrap___assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
-    while (true)
-        ;
-    return;
+    debug_printf("assert: %s:%d in %s: %s\r\n", file, line, func, failedexpr);
+    HAL_NVIC_SystemReset();
 }
 
 // By default strerror has a lot of strings we probably don't use. Make it return an empty string instead.
@@ -233,34 +237,6 @@ static void debug_printf(const char *format, ...)
     uart_debug_write((uint8_t *)hardfault_message_buffer, min((unsigned int)length, sizeof(hardfault_message_buffer) - 1));
 }
 
-// N picked by guessing
-#define DOT_TIME 1200000
-static void dot()
-{
-    digitalWrite(LED_POWER, LED_STATE_ON);
-    for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
-    }
-    digitalWrite(LED_POWER, LED_STATE_OFF);
-    for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
-    }
-}
-
-static void dash()
-{
-    digitalWrite(LED_POWER, LED_STATE_ON);
-    for (volatile int i = 0; i < (DOT_TIME * 3); i++) { /* busy wait */
-    }
-    digitalWrite(LED_POWER, LED_STATE_OFF);
-    for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
-    }
-}
-
-static void space()
-{
-    for (volatile int i = 0; i < (DOT_TIME * 3); i++) { /* busy wait */
-    }
-}
-
 // Disable optimizations for this function so "frame" argument
 // does not get optimized away
 extern "C" __attribute__((optimize("O0"))) void HardFault_Handler_C(sContextStateFrame *frame)
@@ -277,17 +253,5 @@ extern "C" __attribute__((optimize("O0"))) void HardFault_Handler_C(sContextStat
 
     HALT_IF_DEBUGGING();
 
-    // blink SOS forever
-    while (1) {
-        dot();
-        dot();
-        dot();
-        dash();
-        dash();
-        dash();
-        dot();
-        dot();
-        dot();
-        space();
-    }
+    HAL_NVIC_SystemReset();
 }
