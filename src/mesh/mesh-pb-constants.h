@@ -26,7 +26,7 @@
 // FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #ifndef MAX_RX_TOPHONE
-#if defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#if defined(ARCH_STM32WL) || (defined(ARCH_ESP32) && !(defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)))
 #define MAX_RX_TOPHONE 8
 #elif defined(NRF52840_XXAA)
 // Each slot is a ~340 B MeshPacket in the static pool (Router.cpp MAX_PACKETS_STATIC), so 32 slots
@@ -34,8 +34,6 @@
 // the 8 classic ESP32 has shipped with for years; drops start when a stalled phone/serial client has
 // 16 packets queued.
 #define MAX_RX_TOPHONE 16
-#elif defined(ARCH_STM32WL)
-#define MAX_RX_TOPHONE 8
 #elif MESHTASTIC_MEM_CLASS >= MEM_CLASS_MEDIUM || defined(ARCH_RP2040) || defined(CONFIG_IDF_TARGET_ESP32C3)
 // RP2040/RP2350 and ESP32-C3 keep their historical 32.
 #define MAX_RX_TOPHONE 32
