@@ -102,7 +102,7 @@ static void taskCreateCert(void *parameter)
     size_t certLen = prefs.getBytesLength("cert");
 
     if (pkLen && certLen) {
-        LOG_INFO("Existing SSL Certificate found!");
+        LOG_INFO("Existing SSL Certificate found");
 
         uint8_t *pkBuffer = new uint8_t[pkLen];
         prefs.getBytes("PK", pkBuffer, pkLen);
@@ -180,7 +180,7 @@ void createSSLCert()
                 runLoop = true;
             }
         }
-        LOG_INFO("SSL Cert Ready!");
+        LOG_INFO("SSL Cert Ready");
     }
 }
 

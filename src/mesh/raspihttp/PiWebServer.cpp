@@ -198,7 +198,7 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
                     content_type = u_map_get_case(&configWeb.mime_types, get_filename_ext(file_requested));
                     if (content_type == NULL) {
                         content_type = u_map_get(&configWeb.mime_types, "*");
-                        LOG_DEBUG("Static File Server - Unknown mime type for extension %s ", get_filename_ext(file_requested));
+                        LOG_DEBUG("Static File Server - Unknown mime type for ext %s ", get_filename_ext(file_requested));
                     }
                     u_map_put(response->map_header, "Content-Type", content_type);
                     u_map_copy_into(response->map_header, &configWeb.map_header);
@@ -230,7 +230,7 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
         free(real_path); // realpath uses malloc
         return U_CALLBACK_CONTINUE;
     } else {
-        LOG_DEBUG("Static File Server - Error, user_data is NULL or inconsistent");
+        LOG_DEBUG("Static File Server - user_data NULL or inconsistent");
         return U_CALLBACK_ERROR;
     }
 }
@@ -303,7 +303,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
             ulfius_set_string_body_response(res, 200, tmpa);
             // LOG_DEBUG("\n----webAPI response all:----");
             // LOG_DEBUG(tmpa);
-            // LOG_DEBUG("");
+            // LOG_DEBUG(".");
         }
         // Otherwise, just return one protobuf
     } else {
@@ -312,7 +312,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
         ulfius_set_binary_body_response(res, 200, tmpa, len);
         // LOG_DEBUG("\n----webAPI response:");
         // LOG_DEBUG(tmpa);
-        // LOG_DEBUG("");
+        // LOG_DEBUG(".");
     }
 
     // LOG_DEBUG("end radio->web", len);
@@ -381,7 +381,7 @@ char *read_file_into_string(const char *filename)
     // reserve mem for file + 1 byte
     char *buffer = (char *)malloc(filesize + 1);
     if (buffer == NULL) {
-        LOG_ERROR("Malloc of mem failed for file : %s ", filename);
+        LOG_ERROR("Malloc failed for file : %s ", filename);
         fclose(file);
         return NULL;
     }
@@ -406,13 +406,13 @@ int PiWebServerThread::CheckSSLandLoad()
     // read certificate
     cert_pem = read_file_into_string(CERT_PATH);
     if (cert_pem == NULL) {
-        LOG_ERROR("ERROR SSL Certificate File can't be loaded or is missing");
+        LOG_ERROR("SSL Certificate File can't be loaded or missing");
         return 1;
     }
     // read private key
     key_pem = read_file_into_string(KEY_PATH);
     if (key_pem == NULL) {
-        LOG_ERROR("ERROR file private_key can't be loaded or is missing");
+        LOG_ERROR("File private_key can't be loaded or missing");
         return 2;
     }
 
@@ -479,13 +479,13 @@ PiWebServerThread::PiWebServerThread()
         webservport = portduino_config.webserverport;
         LOG_INFO("Use webserver port from yaml config %i ", webservport);
     } else {
-        LOG_INFO("Webserver port in yaml config set to 0, defaulting to port 9443");
+        LOG_INFO("Webserver port in yaml config 0, default to 9443");
         webservport = 9443;
     }
 
     // Web Content Service Instance
     if (ulfius_init_instance(&instanceWeb, webservport, NULL, DEFAULT_REALM) != U_OK) {
-        LOG_ERROR("Webserver couldn't be started, abort execution");
+        LOG_ERROR("Webserver start failed, abort");
     } else {
 
         LOG_INFO("Webserver started");
@@ -534,7 +534,7 @@ PiWebServerThread::PiWebServerThread()
             LOG_INFO("Web Server framework started on port: %i ", webservport);
             LOG_INFO("Web Server root %s", (char *)webrootpath.c_str());
         } else {
-            LOG_ERROR("Error starting Web Server framework, error number: %d", retssl);
+            LOG_ERROR("Web Server framework start failed, err: %d", retssl);
         }
     }
 }

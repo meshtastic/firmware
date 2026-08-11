@@ -95,7 +95,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
                   meshtastic_Config_DeviceConfig_Role_CLIENT_BASE);
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
-        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo");
+        LOG_DEBUG("Got telemetry response. Skip our NodeInfo");
         //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
                !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
@@ -103,13 +103,13 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
-                LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+                LOG_DEBUG("Skip send NodeInfo: %d hops too far", hopsUsed);
             } else {
-                LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
+                LOG_INFO("Heard new node on ch. %d, send NodeInfo, ask response", mp->channel);
                 nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
             }
         } else {
-            LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
+            LOG_DEBUG("Skip NodeInfo > 25%% ch. util");
         }
     }
 
@@ -204,7 +204,7 @@ void MeshService::reconcilePendingRxTimes()
             p->has_rx_time = true;
         }
         if (!toPhoneQueue.enqueue(p, 0)) { // mirrors sendToPhone()'s degrade-on-failure path
-            LOG_CRIT("Failed to requeue a packet into toPhoneQueue!");
+            LOG_CRIT("Requeue to toPhoneQueue failed");
             releaseToPool(p);
             fromNum++; // notify observers so the phone can resync
         }
@@ -232,14 +232,14 @@ void MeshService::injectAsReceived(meshtastic_MeshPacket &p)
                 p.decoded.portnum = scratch.portnum;
             }
         } else {
-            LOG_ERROR("inject: could not decode Compressed envelope, dropping");
+            LOG_ERROR("inject: can't decode Compressed envelope, drop");
             return;
         }
     }
     // The real RX path (RadioLibInterface::handleReceiveInterrupt) drops sender==0; mirror it so injection
     // behaves identically to an over-the-air frame.
     if (p.from == 0) {
-        LOG_WARN("inject: dropping frame with from==0 (matches real LoRa RX)");
+        LOG_WARN("inject: drop frame with from==0 (matches real LoRa RX)");
         return;
     }
     meshtastic_MeshPacket *mp = packetPool.allocCopy(p);
@@ -341,7 +341,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     copied->mesh_packet_id = mesh_packet_id;
 
     if (toPhoneQueueStatusQueue.numFree() == 0) {
-        LOG_INFO("tophone queue status queue is full, discard oldest");
+        LOG_INFO("tophone queue status queue full, discard oldest");
         meshtastic_QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
         if (d)
             releaseQueueStatusToPool(d);
@@ -421,9 +421,8 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
                 if (!found) {
                     // No channel with position enabled: fall back to sending nodeinfo, as before.
                     if (nodeInfoModule) {
-                        LOG_INFO(
-                            "No channel with position enabled; sending nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d",
-                            dest, wantReplies, node->channel);
+                        LOG_INFO("No position-enabled channel; send nodeinfo instead to 0x%08x, wantReplies=%d, channel=%d", dest,
+                                 wantReplies, node->channel);
                         nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
                     }
                     return false;
@@ -470,7 +469,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     // Withhold decoded nested payloads a strict phone decoder would reject; still-encrypted packets
     // pass through (the phone may hold the key).
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !phonePayloadIsDecodable(p->decoded)) {
-        LOG_WARN("Dropping undecodable portnum=%d payload from phone delivery (from=0x%08x)", p->decoded.portnum, p->from);
+        LOG_WARN("Drop undecodable portnum=%d payload from phone delivery (from=0x%08x)", p->decoded.portnum, p->from);
         releaseToPool(p);
         fromNum++; // notify observers so the phone can resync
         return;
@@ -490,12 +489,12 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     if (toPhoneQueue.numFree() == 0) {
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
-            LOG_WARN("ToPhone queue is full, discard oldest");
+            LOG_WARN("ToPhone queue full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
                 releaseToPool(d);
         } else {
-            LOG_WARN("ToPhone queue is full, drop packet");
+            LOG_WARN("ToPhone queue full, drop packet");
             releaseToPool(p);
             fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
             return;
@@ -503,7 +502,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     }
 
     if (toPhoneQueue.enqueue(p, 0) == false) {
-        LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
+        LOG_CRIT("Queue to toPhoneQueue failed");
         releaseToPool(p);
         fromNum++; // notify observers so phone can resync
         return;
@@ -513,16 +512,16 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
-    LOG_DEBUG("Send mqtt message on topic '%s' to client for proxy", m->topic);
+    LOG_DEBUG("Send mqtt msg on topic '%s' to proxy client", m->topic);
     if (toPhoneMqttProxyQueue.numFree() == 0) {
-        LOG_WARN("MqttClientProxyMessagePool queue is full, discard oldest");
+        LOG_WARN("MqttClientProxyMessagePool queue full, discard oldest");
         meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
         if (d)
             releaseMqttClientProxyMessageToPool(d);
     }
 
     if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
-        LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
+        LOG_CRIT("Queue to toPhoneMqttProxyQueue failed");
         releaseMqttClientProxyMessageToPool(m);
         return;
     }
@@ -532,7 +531,7 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
 void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp)
 {
     if (!mp) {
-        LOG_WARN("Cannot send routing error response: null packet");
+        LOG_WARN("Can't send routing error response: null packet");
         return;
     }
 
@@ -540,7 +539,7 @@ void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const
     if (routingModule) {
         routingModule->sendAckNak(error, mp->from, mp->id, mp->channel);
     } else {
-        LOG_ERROR("Cannot send routing error response: no routing module");
+        LOG_ERROR("Can't send routing error response: no routing module");
     }
 }
 
@@ -548,14 +547,14 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 {
     LOG_DEBUG("Send client notification to phone");
     if (toPhoneClientNotificationQueue.numFree() == 0) {
-        LOG_WARN("ClientNotification queue is full, discard oldest");
+        LOG_WARN("ClientNotification queue full, discard oldest");
         meshtastic_ClientNotification *d = toPhoneClientNotificationQueue.dequeuePtr(0);
         if (d)
             releaseClientNotificationToPool(d);
     }
 
     if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
-        LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
+        LOG_CRIT("Queue to toPhoneClientNotificationQueue failed");
         releaseClientNotificationToPool(n);
         return;
     }

@@ -486,7 +486,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
             LOG_WARN("Request 0x%08x nacked by the co-processor", expected_id);
             request_nacked = true;
         } else if (message.id == 0) {
-            LOG_WARN("Co-processor could not decode a frame");
+            LOG_WARN("Co-processor can't decode a frame");
         }
         return true;
     case meshtastic_InterdeviceMessage_sd_info_tag:

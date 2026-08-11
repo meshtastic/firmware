@@ -148,7 +148,7 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
                 printROM(ds248xData.rom);
             }
         } else {
-            LOG_WARN("%s: Could not determine variant (%u/%u)", sensorName, retry, numRetries);
+            LOG_WARN("%s: Can't determine variant (%u/%u)", sensorName, retry, numRetries);
             initError = true;
         }
 
