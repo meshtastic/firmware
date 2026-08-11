@@ -616,7 +616,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             info.has_hops_away = false;
             info.is_favorite = true;
             // NodeInfoLite dropped macaddr, so ConvertToUser() zero-fills it.
-            if (info.has_user && info.num == nodeDB->getNodeNum())
+            if (info.has_user)
                 memcpy(info.user.macaddr, owner.macaddr, sizeof(info.user.macaddr));
             {
                 concurrency::LockGuard guard(&nodeInfoMutex);
