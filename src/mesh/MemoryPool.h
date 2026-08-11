@@ -148,10 +148,19 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
             return;
         }
 
-        // Find the index of this pointer in our pool
-        int index = p - pool;
+        // Find byte offset and verify alignment
+        uintptr_t offset = reinterpret_cast<uintptr_t>(p) - reinterpret_cast<uintptr_t>(pool);
+        if (offset % sizeof(T) != 0) {
+            LOG_WARN("Pointer 0x%x is misaligned inside static pool", p);
+            return;
+        }
+
+        int index = offset / sizeof(T);
         if (index >= 0 && index < MaxSize) {
-            assert(used[index]); // Should be marked as used
+            if (!used[index]) {
+                LOG_WARN("Double free detected for pool item %d at 0x%x", index, p);
+                return;
+            }
             used[index] = false;
             this->auditAdd(-(int32_t)sizeof(T));
             LOG_HEAP("Released static pool item %d at 0x%x", index, p);
@@ -179,4 +188,3 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         return nullptr;
     }
 };
-
