@@ -61,11 +61,20 @@ are upper, `sx1262` and `lr1121` lower.
 | `rfswitch-not-a-map.yaml`      | `rfswitch_table` given a scalar.                                  |
 | `rfswitch-unknown-mode.yaml`   | `MODE_TRANSMIT` is not a mode.                                    |
 | `rfswitch-stranded-modes.yaml` | A `MODE_` row one level out, sitting under `Lora:` doing nothing. |
+| `rfswitch-auto-partial.yaml`   | **Silence guard** - under `auto` the omitted modes are not named. |
+| `rfswitch-inert-table.yaml`    | **Silence guard** - an sx1262's rows are not judged individually. |
 
 `rfswitch-partial.yaml` is legal but noted: the omitted modes are driven all-LOW.
 `module-mismatch-lr11xx.yaml` (LR11xx with no table - cannot transmit) and
 `module-mismatch-sx126x.yaml` (a table on a radio that never applies one) cover
 the module/table disagreement in both directions.
+
+Both silence guards exist because a mode list is only meaningful once the radio is known.
+Under `Module: auto` the part has not been probed, so naming the omitted modes against the
+union of both families would advise adding `MODE_TX_HP`, `MODE_GNSS` and `MODE_WIFI` rows to
+what may turn out to be an LR20x0. On a module that applies no table at all, singling out one
+row as ignored would imply the others are used, when the single `module-mismatch-sx126x.yaml`
+warning already says the whole table is inert.
 
 ## LR20x0 rfswitch table and interrupt DIO
 

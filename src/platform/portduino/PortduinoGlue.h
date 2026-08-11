@@ -66,19 +66,21 @@ struct RfSwitchModeName {
 // YAML spelling of every mode, in RfSwitchModeId order.
 extern const RfSwitchModeName kRfSwitchModeNames[RFSW_MODE_COUNT];
 
-// Switch-capable DIO numbers in RadioLib slot order (slot i is pins[i] of Lora.rfswitch_table).
-// The families differ per slot, so a slot cannot be resolved without knowing the radio.
+// The switch-capable DIO numbers of each family, parallel to that interface's pin-constant
+// array: a configured DIO<n> is looked up by value here, and the index found selects the
+// constant. Not a slot mapping - Lora.rfswitch_table has 5 pin slots, the LR20x0 has 7 DIOs.
 extern const int8_t kLr11x0SwitchDios[5];
 extern const int8_t kLr20x0SwitchDios[7];
 
-// Slot-ordered DIO numbers for a module, nullptr if it applies no table; count gets the length.
+// A module's switch-capable DIO numbers, nullptr if it applies no table; count gets the length.
 const int8_t *rfSwitchDiosFor(lora_module_enum module, size_t *count);
 
 // True if this module is handed the parsed table via setRfSwitchTable().
 bool moduleUsesRfSwitchTable(lora_module_enum module);
 
-// Build RadioLib's pin array and mode table from the parsed YAML, using dioNumbers/pinConsts
-// (slot-ordered) and modeMap[i]'s OpMode_t for RfSwitchModeId i. Returns rows written.
+// Build RadioLib's pin array and mode table from the parsed YAML, resolving each configured DIO
+// through the parallel dioNumbers/pinConsts and taking modeMap[i]'s OpMode_t for RfSwitchModeId
+// i. Returns rows written.
 size_t buildRfSwitchTable(uint32_t (&pins)[Module::RFSWITCH_MAX_PINS], Module::RfSwitchMode_t *table, size_t tableCapacity,
                           const int8_t *dioNumbers, const uint32_t *pinConsts, size_t dioCount, const int32_t *modeMap);
 
