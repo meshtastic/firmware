@@ -483,7 +483,7 @@ bool SEN5XSensor::isActive()
 uint32_t SEN5XSensor::wakeUp()
 {
 
-    LOG_TRACE("%s: Waking up sensor", sensorName);
+    LOG_TRACE("%s Waking", sensorName);
 
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
         LOG_ERROR("%s: Error starting measurement", sensorName);

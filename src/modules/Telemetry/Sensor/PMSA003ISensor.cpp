@@ -192,7 +192,7 @@ void PMSA003ISensor::sleep()
 uint32_t PMSA003ISensor::wakeUp()
 {
 #ifdef PMSA003I_ENABLE_PIN
-    LOG_INFO("%s: Waking up", sensorName);
+    LOG_INFO("%s Waking", sensorName);
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
     state = PMSA003I_ACTIVE;
     pmMeasureStarted = getTime();

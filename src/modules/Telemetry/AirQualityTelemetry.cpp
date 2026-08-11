@@ -187,7 +187,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         // - We can publish the data on the mesh shortly
         // - Or we can send it to the phone
         // TODO: This will need to be refurbished once we implement separate intervals
-        LOG_INFO("Waking up sensors");
+        LOG_INFO("Waking sensors");
         for (TelemetrySensor *sensor : sensors) {
             if (!sensor->canSleep()) {
                 LOG_DEBUG("%s: no sleep support, skip", sensor->sensorName);

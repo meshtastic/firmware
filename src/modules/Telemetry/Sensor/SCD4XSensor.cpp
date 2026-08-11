@@ -673,7 +673,7 @@ bool SCD4XSensor::powerDown()
  */
 bool SCD4XSensor::powerUp()
 {
-    LOG_INFO("%s: Waking up", sensorName);
+    LOG_INFO("%s Waking", sensorName);
 
     if (scd4x.wakeUp() != SCD4X_NO_ERROR) {
         LOG_ERROR("%s: wakeUp() failed", sensorName);

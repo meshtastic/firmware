@@ -89,7 +89,7 @@ uint32_t SFA30Sensor::wakeUp()
     reClockI2C.setClock(SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
-    LOG_DEBUG("Waking up %s", sensorName);
+    LOG_DEBUG("Waking %s", sensorName);
     if (this->isError(sfa30.startContinuousMeasurement())) {
 #ifdef SFA30_I2C_CLOCK_SPEED
         reClockI2C.restoreClock();
