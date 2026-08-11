@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "Status.h"
 #include "configuration.h"
+#include "gps/GPSLog.h"
 #include <Arduino.h>
 
 namespace meshtastic
@@ -92,9 +93,7 @@ class GPSStatus : public Status
 
     bool matches(const GPSStatus *newStatus) const
     {
-#ifdef GPS_DEBUG
-        LOG_DEBUG("GPSStatus.match() new pos@%x to old pos@%x", newStatus->p.timestamp, p.timestamp);
-#endif
+        LOG_DEBUG_GPS("GPSStatus.match() new pos@%x to old pos@%x", newStatus->p.timestamp, p.timestamp);
         return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected || newStatus->hasTime != hasTime ||
                 newStatus->isPowerSaving != isPowerSaving || newStatus->p.latitude_i != p.latitude_i ||
                 newStatus->p.longitude_i != p.longitude_i || newStatus->p.altitude != p.altitude ||

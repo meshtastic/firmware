@@ -57,7 +57,7 @@ extern "C" {
 
 #define PIN_GPS_EN (0 + 24)
 #define GPS_UBLOX
-// define GPS_DEBUG
+// #define GPS_DEBUG 1
 
 // UART interfaces
 #define PIN_SERIAL1_TX GPS_TX_PIN

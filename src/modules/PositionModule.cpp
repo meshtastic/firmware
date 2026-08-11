@@ -10,6 +10,7 @@
 #include "TypeConversions.h"
 #include "airtime.h"
 #include "configuration.h"
+#include "gps/GPSLog.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -557,9 +558,7 @@ int32_t PositionModule::runOnce()
 
     if (lastGpsSend == 0 || msSinceLastSend >= effectiveIntervalMs) {
         if (waitingForFreshPosition) {
-#ifdef GPS_DEBUG
-            LOG_DEBUG("Skip initial position send; no fresh position since boot");
-#endif
+            LOG_DEBUG_GPS("Skip initial position send; no fresh position since boot");
         } else if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
@@ -591,11 +590,7 @@ int32_t PositionModule::runOnce()
             if (smartPosition.hasTraveledOverThreshold &&
                 Throttle::execute(
                     &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },
-                    []() {
-#ifdef GPS_DEBUG
-                        LOG_DEBUG("Skip smart broadcast: time throttled");
-#endif
-                    })) {
+                    []() { LOG_DEBUG_GPS("Skip smart broadcast: time throttled"); })) {
 
                 LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
                           "minTimeInterval=%ims)",
@@ -701,11 +696,7 @@ void PositionModule::handleNewPosition()
         if (smartPosition.hasTraveledOverThreshold &&
             Throttle::execute(
                 &lastGpsSend, minimumTimeThreshold, []() { positionModule->sendOurPosition(); },
-                []() {
-#ifdef GPS_DEBUG
-                    LOG_DEBUG("Skip smart broadcast: time throttled");
-#endif
-                })) {
+                []() { LOG_DEBUG_GPS("Skip smart broadcast: time throttled"); })) {
             LOG_DEBUG("Sent smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
                       "minTimeInterval=%ims)",
                       localPosition.timestamp, smartPosition.distanceTraveled, smartPosition.distanceThreshold, msSinceLastSend,
