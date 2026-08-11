@@ -42,7 +42,8 @@ typedef enum {
     GNSS_MODEL_AG3335,
     GNSS_MODEL_AG3352,
     GNSS_MODEL_LS20031,
-    GNSS_MODEL_CM121
+    GNSS_MODEL_CM121,
+    GNSS_MODEL_GENERIC_NMEA
 } GnssModel_t;
 
 typedef enum {
@@ -253,6 +254,9 @@ class GPS : private concurrency::OSThread
 
     // Get GNSS model
     GnssModel_t probe(int serialSpeed);
+
+    // Cheap check for a live, streaming NMEA GNSS at the current baud rate
+    bool probeForNMEA(unsigned long timeout);
 
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;

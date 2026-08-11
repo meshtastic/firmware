@@ -71,6 +71,20 @@ static struct uBloxGnssModelInfo {
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
+// How long to listen for a streaming NMEA GNSS before giving up on the current baud rate
+#define GPS_NMEA_PROBE_TIMEOUT_MS 500
+
+// True if the 5 chars following '$' identify a common NMEA GNSS sentence (e.g. GNGGA, GPRMC, GLGSV).
+// The first char is always 'G' for GNSS talkers (GP, GL, GA, GB, GN, BD, QZ, ...).
+static bool isKnownNMEASentence(const char *id)
+{
+    if (id[0] != 'G')
+        return false;
+    return strncmp(id + 2, "RMC", 3) == 0 || strncmp(id + 2, "GGA", 3) == 0 || strncmp(id + 2, "GSV", 3) == 0 ||
+           strncmp(id + 2, "GSA", 3) == 0 || strncmp(id + 2, "VTG", 3) == 0 || strncmp(id + 2, "GLL", 3) == 0 ||
+           strncmp(id + 2, "ZDA", 3) == 0;
+}
+
 // For logging
 static const char *getGPSPowerStateString(GPSPowerState state)
 {
@@ -814,6 +828,11 @@ bool GPS::setup()
             // enable RMC
             _serial_gps->write("$CFGMSG,0,4,1,1*1F\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_GENERIC_NMEA) {
+            // A module that auto-streams standard NMEA but ignores vendor probe commands (e.g. the GAT562's
+            // L76K in its default 9600 multi-GNSS mode). No chip-specific init is possible or needed: the
+            // streaming sentences are fed straight to the TinyGPS++ parser.
+            LOG_INFO("GNSS: using generic NMEA stream, skipping chip-specific init");
         }
         didSerialInit = true;
     }
@@ -1388,6 +1407,12 @@ GnssModel_t GPS::probe(int serialSpeed)
         // Check that the returned response class and message ID are correct
         GPS_RESPONSE response = getACK(0x06, 0x08, 750);
         if (response == GNSS_RESPONSE_NONE) {
+            if (probeForNMEA(GPS_NMEA_PROBE_TIMEOUT_MS)) {
+                LOG_INFO("GNSS: no probe response, but NMEA stream detected at %d baud - using generic NMEA driver",
+                         serialSpeed);
+                currentStep = 0;
+                return GNSS_MODEL_GENERIC_NMEA;
+            }
             LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
             currentDelay = 2000;
             currentStep = 0;
@@ -1476,6 +1501,11 @@ GnssModel_t GPS::probe(int serialSpeed)
         }
     }
     }
+    if (probeForNMEA(GPS_NMEA_PROBE_TIMEOUT_MS)) {
+        LOG_INFO("GNSS: no probe response, but NMEA stream detected at %d baud - using generic NMEA driver", serialSpeed);
+        currentStep = 0;
+        return GNSS_MODEL_GENERIC_NMEA;
+    }
     LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
     currentDelay = 2000;
     currentStep = 0;
@@ -1532,6 +1562,35 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
     LOG_DEBUG(response.get());
 #endif
     return GNSS_MODEL_UNKNOWN; // Return unknown on timeout
+}
+
+// Cheap listen for a live NMEA GNSS. Some modules (e.g. the GAT562's L76K in default 9600 multi-GNSS mode)
+// auto-stream standard NMEA sentences but never answer vendor probe commands. We look for a known sentence
+// type ($GNGGA, $GPRMC, $GPGSV, ...) within the listen window and treat that as a valid GNSS.
+bool GPS::probeForNMEA(unsigned long timeout)
+{
+    clearBuffer();
+    unsigned long start = millis();
+    char sentence[8] = {0};
+    uint8_t idx = 0;
+    while (millis() - start < timeout) {
+        if (_serial_gps->available()) {
+            char c = _serial_gps->read();
+            if (c == '$') {
+                idx = 0;
+                memset(sentence, 0, sizeof(sentence));
+            } else if (idx < 5) {
+                sentence[idx++] = c;
+                if (idx == 5 && isKnownNMEASentence(sentence)) {
+#ifdef GPS_DEBUG
+                    LOG_DEBUG("NMEA stream detected: %s", sentence);
+#endif
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 std::unique_ptr<GPS> GPS::createGps()
