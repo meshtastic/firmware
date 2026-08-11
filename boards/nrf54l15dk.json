@@ -16,8 +16,8 @@
   "frameworks": ["zephyr"],
   "name": "Nordic nRF54L15-DK (PCA10156)",
   "upload": {
-    "maximum_ram_size": 262144,
-    "maximum_size": 1572864,
+    "maximum_ram_size": 192512,
+    "maximum_size": 1462272,
     "protocol": "jlink",
     "protocols": ["jlink"]
   },
