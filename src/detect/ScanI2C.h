@@ -103,6 +103,8 @@ class ScanI2C
         IIS2MDCTR,
         ISM330DHCX,
         SPA06,
+        DS248X,
+        HM330X,
         ESP32_OTA_COPROCESSOR
     } DeviceType;
 
