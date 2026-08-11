@@ -125,6 +125,10 @@ int32_t SerialConsole::runOnce()
 
     int32_t delay = runOncePart();
 #if defined(SERIAL_HAS_ON_RECEIVE) || defined(CONFIG_IDF_TARGET_ESP32S2)
+    // runOncePart() returns 0 when writeStream() stopped at its slice budget with more queued;
+    // parking on INT32_MAX there strands the dump until the host happens to send a byte.
+    if (delay == 0)
+        return 0;
     return Port.available() ? delay : INT32_MAX;
 #elif defined(IS_USB_SERIAL)
     return HWCDC::isPlugged() ? delay : (1000 * 20);
