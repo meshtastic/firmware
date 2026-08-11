@@ -1,4 +1,5 @@
 #include "GeoCoord.h"
+#include "configuration.h"
 #include <cmath>
 
 // Narrow a UTM meter value to its unsigned field, clamping non-finite/negative/oversized inputs: an
@@ -433,6 +434,7 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
     //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
 
+#if MESHTASTIC_TRIG_APPROX
 // cos(x) minimax approx for x in [-pi/2, pi/2] ("cos_52"): https://www.ganssle.com/approx.htm
 static double cosLatitudeApprox(double latRad)
 {
@@ -468,6 +470,31 @@ float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double 
 
     return (float)(6366000 * tt);
 }
+#else
+/// Ported from my old java code, returns distance in meters along the globe
+/// surface (by Haversine formula)
+float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
+{
+    // Don't do math if the points are the same
+    if (lat_a == lat_b && lng_a == lng_b)
+        return 0.0;
+
+    double a1 = lat_a / DEG_CONVERT;
+    double a2 = lng_a / DEG_CONVERT;
+    double b1 = lat_b / DEG_CONVERT;
+    double b2 = lng_b / DEG_CONVERT;
+    double cos_b1 = cos(b1);
+    double cos_a1 = cos(a1);
+    double t1 = cos_a1 * cos(a2) * cos_b1 * cos(b2);
+    double t2 = cos_a1 * sin(a2) * cos_b1 * sin(b2);
+    double t3 = sin(a1) * sin(b1);
+    double tt = acos(t1 + t2 + t3);
+    if (std::isnan(tt))
+        tt = 0.0; // Must have been the same point?
+
+    return (float)(6366000 * tt);
+}
+#endif
 
 /**
  * Computes the bearing in degrees between two points on Earth.  Ported from my
