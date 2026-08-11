@@ -54,7 +54,7 @@ class MockMeshService : public MeshService
 
 static MockMeshService *mockMeshService;
 
-static void test_request_position_update_admin_message_round_trip()
+static void testRequestPositionUpdateAdminMessageRoundTrip()
 {
     meshtastic_AdminMessage request = meshtastic_AdminMessage_init_zero;
     request.which_payload_variant = meshtastic_AdminMessage_request_position_update_tag;
@@ -1564,6 +1564,17 @@ static void sendAdmin(meshtastic_AdminMessage &m)
     testAdmin->handleReceivedProtobuf(mp, &m);
 }
 
+static void testRequestPositionUpdateRejectsUnavailableGps()
+{
+    meshtastic_AdminMessage request = meshtastic_AdminMessage_init_zero;
+    request.which_payload_variant = meshtastic_AdminMessage_request_position_update_tag;
+    request.request_position_update = true;
+
+    sendAdmin(request);
+    TEST_ASSERT_NOT_NULL(testAdmin->reply());
+    testAdmin->drainReply();
+}
+
 static void sendSetChannel(const meshtastic_Channel &ch)
 {
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
@@ -1900,7 +1911,8 @@ void setup()
 
     UNITY_BEGIN();
 
-    RUN_TEST(test_request_position_update_admin_message_round_trip);
+    RUN_TEST(testRequestPositionUpdateAdminMessageRoundTrip);
+    RUN_TEST(testRequestPositionUpdateRejectsUnavailableGps);
 
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);

@@ -1607,7 +1607,6 @@ int32_t GPS::runOnce()
         bool tooLong = scheduling.searchedTooLong();
         if (tooLong && !gotLoc) {
             LOG_WARN("Can't publish valid location: no GPS lock in time");
-            forwardPositionToPhone = false;
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
                 p = meshtastic_Position_init_default;
@@ -1634,6 +1633,9 @@ int32_t GPS::runOnce()
             if (tooLong || holdExpired) {
                 down();
             }
+
+            if (tooLong && !gotLoc)
+                forwardPositionToPhone = false;
 
 #ifdef GPS_DEBUG
         } else if (fixHoldEnds != 0) {
