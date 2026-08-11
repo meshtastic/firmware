@@ -29,7 +29,9 @@
 #include <unity.h>
 #include <vector>
 
+#include "meshtastic/admin.pb.h"
 #include "meshtastic/config.pb.h"
+#include "meshtastic/routing.pb.h"
 #include "support/AdminModuleTestShim.h"
 
 // hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
@@ -52,6 +54,22 @@ class MockMeshService : public MeshService
 };
 
 static MockMeshService *mockMeshService;
+
+static void testRequestPositionUpdateAdminMessageRoundTrip()
+{
+    meshtastic_AdminMessage request = meshtastic_AdminMessage_init_zero;
+    request.which_payload_variant = meshtastic_AdminMessage_request_position_update_tag;
+    request.request_position_update = true;
+
+    uint8_t bytes[16];
+    size_t size = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_AdminMessage_msg, &request);
+    TEST_ASSERT_GREATER_THAN(0, size);
+
+    meshtastic_AdminMessage decoded = meshtastic_AdminMessage_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(bytes, size, &meshtastic_AdminMessage_msg, &decoded));
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_request_position_update_tag, decoded.which_payload_variant);
+    TEST_ASSERT_TRUE(decoded.request_position_update);
+}
 
 // -----------------------------------------------------------------------
 // getRegion() tests
@@ -1547,6 +1565,25 @@ static void sendAdmin(meshtastic_AdminMessage &m)
     testAdmin->handleReceivedProtobuf(mp, &m);
 }
 
+static void testRequestPositionUpdateRejectsUnavailableGps()
+{
+    meshtastic_AdminMessage request = meshtastic_AdminMessage_init_zero;
+    request.which_payload_variant = meshtastic_AdminMessage_request_position_update_tag;
+    request.request_position_update = true;
+
+    sendAdmin(request);
+    meshtastic_MeshPacket *reply = testAdmin->reply();
+    TEST_ASSERT_NOT_NULL(reply);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, reply->decoded.portnum);
+
+    meshtastic_Routing response = meshtastic_Routing_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_Routing_msg, &response));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_error_reason_tag, response.which_variant);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, response.error_reason);
+    testAdmin->drainReply();
+}
+
 static void sendSetChannel(const meshtastic_Channel &ch)
 {
     meshtastic_AdminMessage m = meshtastic_AdminMessage_init_zero;
@@ -1882,6 +1919,9 @@ void setup()
     initializeTestEnvironment();
 
     UNITY_BEGIN();
+
+    RUN_TEST(testRequestPositionUpdateAdminMessageRoundTrip);
+    RUN_TEST(testRequestPositionUpdateRejectsUnavailableGps);
 
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);

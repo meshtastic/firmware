@@ -76,6 +76,7 @@ static struct uBloxGnssModelInfo {
 
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
+static constexpr uint32_t GPS_POSITION_UPDATE_REQUEST_INTERVAL_MS = 10 * 1000UL;
 
 namespace
 {
@@ -1380,6 +1381,35 @@ void GPS::up()
     setPowerState(GPS_ACTIVE);
 }
 
+bool GPS::requestPositionUpdate()
+{
+    if (!GPSInitFinished || config.position.fixed_position ||
+        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        return false;
+    }
+
+    if (hasPositionUpdateRequest &&
+        Throttle::isWithinTimespanMs(lastPositionUpdateRequest, GPS_POSITION_UPDATE_REQUEST_INTERVAL_MS)) {
+        LOG_DEBUG("GPS request cooldown");
+        if (hasValidLocation && positionModule->sendOurPositionToPhone())
+            forwardPositionToPhone = false;
+        return true;
+    }
+
+    forwardPositionToPhone = true;
+    hasPositionUpdateRequest = true;
+    lastPositionUpdateRequest = millis();
+    if (!enabled) {
+        LOG_INFO("GPS request: enable");
+        enable();
+    } else if (powerState != GPS_ACTIVE) {
+        LOG_INFO("GPS request");
+        up();
+    }
+    setIntervalFromNow(0);
+    return true;
+}
+
 // We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
@@ -1449,7 +1479,12 @@ void GPS::publishUpdate()
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p, gotTime);
         newStatus.notifyObservers(&status);
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-            positionModule->handleNewPosition();
+            if (forwardPositionToPhone && hasValidLocation) {
+                forwardPositionToPhone = false;
+                positionModule->sendOurPositionToPhone();
+            } else if (!forwardPositionToPhone) {
+                positionModule->handleNewPosition();
+            }
         }
     }
 }
@@ -1551,7 +1586,10 @@ int32_t GPS::runOnce()
                 LOG_DEBUG("hasValidLocation RISING EDGE");
             }
 #endif
-            if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
+            if (forwardPositionToPhone) {
+                hasValidLocation = true;
+                shouldPublish = true;
+            } else if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
             } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < millis()) {
@@ -1596,6 +1634,9 @@ int32_t GPS::runOnce()
             if (tooLong || holdExpired) {
                 down();
             }
+
+            if (tooLong && !gotLoc)
+                forwardPositionToPhone = false;
 
 #ifdef GPS_DEBUG
         } else if (fixHoldEnds != 0) {

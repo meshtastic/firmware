@@ -135,6 +135,9 @@ class GPS : private concurrency::OSThread
     // Wake the GPS hardware - ready for an update
     void up();
 
+    // Schedule an immediate GPS sampling cycle without changing configured intervals.
+    bool requestPositionUpdate();
+
     // Let the GPS hardware save power between updates
     void down();
 
@@ -212,6 +215,9 @@ class GPS : private concurrency::OSThread
     bool hasValidLocation = false; // default to false, until we complete our first read
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
+    bool forwardPositionToPhone = false;
+    bool hasPositionUpdateRequest = false;
+    uint32_t lastPositionUpdateRequest = 0;
 
     bool hasGPS = false; // Do we have a GPS we are talking to
 
