@@ -328,7 +328,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // tv_sec is a long, which is not time_t everywhere: on Windows
             // time_t is 64-bit while long is 32-bit. Copy before taking &.
             time_t setSecs = tv->tv_sec;
-            tm *t = gmtime(&setSecs);
+            const tm *t = gmtime(&setSecs);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG_GPS("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                           t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
@@ -353,7 +353,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // tv_sec is a long, which is not time_t everywhere: on Windows
             // time_t is 64-bit while long is 32-bit. Copy before taking &.
             time_t setSecs = tv->tv_sec;
-            tm *t = gmtime(&setSecs);
+            const tm *t = gmtime(&setSecs);
             rtc.setDateTime(*t);
             LOG_DEBUG_GPS("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900,
                           t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
@@ -370,7 +370,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // tv_sec is a long, which is not time_t everywhere: on Windows
             // time_t is 64-bit while long is 32-bit. Copy before taking &.
             time_t setSecs = tv->tv_sec;
-            tm *t = gmtime(&setSecs);
+            const tm *t = gmtime(&setSecs);
             if (rtc.setTime(*t)) {
                 LOG_DEBUG_GPS("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
                               t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
