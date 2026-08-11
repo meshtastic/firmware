@@ -712,12 +712,12 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-| Exit | Verdict    | Meaning                                                                                                                                                                                                                                                                                    |
-| ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                                                                                                |
-| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                                                                                      |
+| Exit | Verdict    | Meaning                                                                                                                                                                                                              |
+| ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                          |
+| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                |
 | 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or a suite left behind shared state it does not declare |
-| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                                                                                         |
+| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                   |
 
 Examples - exact counts will vary by suite count and env:
 
