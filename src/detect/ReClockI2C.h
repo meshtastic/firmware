@@ -95,4 +95,20 @@ class ReClockI2C
     }
 };
 
+/* Helper for ReClockI2C: sets the clock on construction and restores it on
+   destruction, so a caller with multiple early-return paths doesn't need to
+   remember to call restoreClock() on each one.
+ */
+class ReClockI2CGuard
+{
+  public:
+    ReClockI2CGuard(ReClockI2C &reClock, uint32_t desiredClock) : reClock(reClock) { reClock.setClock(desiredClock); }
+    ~ReClockI2CGuard() { reClock.restoreClock(); }
+    ReClockI2CGuard(const ReClockI2CGuard &) = delete;
+    ReClockI2CGuard &operator=(const ReClockI2CGuard &) = delete;
+
+  private:
+    ReClockI2C &reClock;
+};
+
 #endif

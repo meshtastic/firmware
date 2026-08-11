@@ -174,6 +174,7 @@ bool SENXXSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
 #ifdef SENXX_I2C_CLOCK_SPEED
     _port = port;
     reClockI2C.setup(_bus, _port);
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
 #endif /* SENXX_I2C_CLOCK_SPEED */
 
     if (!findModel()) {
@@ -215,22 +216,11 @@ bool SENXXSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
         }
     }
 
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Attempting to reclock speed to %uHz", sensorName, SENXX_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SENXX_I2C_CLOCK_SPEED);
-#endif /* SENXX_I2C_CLOCK_SPEED */
-
-    // Transmit the data
     // Note: this delay is necessary to allow for long-buffers
     delay(20);
     _bus->beginTransmission(_address);
     size_t writtenBytes = _bus->write(toSend, bufferSize);
     uint8_t i2c_error = _bus->endTransmission();
-
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
 
     if (writtenBytes != bufferSize) {
         LOG_ERROR("%s: Error writing on I2C bus", sensorName);
@@ -246,18 +236,9 @@ bool SENXXSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 
 uint8_t SENXXSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: Attempting to reclock speed to %uHz", sensorName, SENXX_I2C_CLOCK_SPEED);
-    reClockI2C.setClock(SENXX_I2C_CLOCK_SPEED);
-#endif /* SENXX_I2C_CLOCK_SPEED */
-
     size_t readBytes = _bus->requestFrom(_address, byteNumber);
     if (readBytes != byteNumber) {
         LOG_ERROR("%s: Error reading I2C bus", sensorName);
-#ifdef SENXX_I2C_CLOCK_SPEED
-        LOG_DEBUG("%s: restoring clock speed", sensorName);
-        reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
         return 0;
     }
 
@@ -270,20 +251,11 @@ uint8_t SENXXSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
         uint8_t calcCRC = senxxCRC(&buffer[i - 2]);
         if (recvCRC != calcCRC) {
             LOG_ERROR("%s: Checksum error while receiving msg", sensorName);
-#ifdef SENXX_I2C_CLOCK_SPEED
-            LOG_DEBUG("%s: restoring clock speed", sensorName);
-            reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
             return 0;
         }
         readBytes -= 3;
         receivedBytes += 2;
     }
-
-#ifdef SENXX_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
-    reClockI2C.restoreClock();
-#endif /* SENXX_I2C_CLOCK_SPEED */
 
     return receivedBytes;
 }
@@ -320,6 +292,9 @@ void SENXXSensor::sleep()
         LOG_INFO("%s: Not going to sleep, fan cleaning is in progress", sensorName);
         return;
     }
+#ifdef SENXX_I2C_CLOCK_SPEED
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
     idle(true);
 }
 
@@ -691,6 +666,14 @@ void SENXXSensor::reconcileTimeDependentState(uint32_t now)
 
 uint32_t SENXXSensor::wakeUp()
 {
+#ifdef SENXX_I2C_CLOCK_SPEED
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
+    return wakeUpInternal();
+}
+
+uint32_t SENXXSensor::wakeUpInternal()
+{
 
     LOG_DEBUG("%s: Waking up sensor", sensorName);
 
@@ -789,6 +772,7 @@ bool SENXXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef SENXX_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
 #endif /* SENXX_I2C_CLOCK_SPEED */
 
     delay(50); // without this there is an error on the deviceReset function
@@ -1141,6 +1125,12 @@ int32_t SENXXSensor::wakeUpTimeMs()
 
 int32_t SENXXSensor::pendingForReadyMs()
 {
+#ifdef SENXX_I2C_CLOCK_SPEED
+    // Only the SENXX_MEASUREMENT/SENXX_CLEANING branches below touch I2C, but this is only
+    // ever called while isActive() (i.e. one of those, or SENXX_MEASUREMENT_2, which doesn't),
+    // so bracketing unconditionally here is simpler than guarding each branch separately.
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
     uint32_t now = millis();
     uint32_t sincePmMeasureStarted = now - pmMeasureStarted;
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
@@ -1202,6 +1192,10 @@ bool SENXXSensor::getMetrics(meshtastic_Telemetry *measurement)
         LOG_INFO("%s: not in measurement mode", sensorName);
         return false;
     }
+
+#ifdef SENXX_I2C_CLOCK_SPEED
+    ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
 
     uint8_t response;
     response = getMeasurements();
@@ -1525,6 +1519,9 @@ AdminMessageHandleResult SENXXSensor::handleAdminMessage(const meshtastic_MeshPa
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_sensor_config_tag: {
+#ifdef SENXX_I2C_CLOCK_SPEED
+        ReClockI2CGuard clockGuard(reClockI2C, SENXX_I2C_CLOCK_SPEED);
+#endif /* SENXX_I2C_CLOCK_SPEED */
         bool ok = true;
         bool wasActive = isActive();
 
@@ -1582,7 +1579,9 @@ AdminMessageHandleResult SENXXSensor::handleAdminMessage(const meshtastic_MeshPa
                 }
 
                 if (wasActive) {
-                    this->wakeUp();
+                    // Not this->wakeUp() - we're already inside this function's own
+                    // ReClockI2CGuard, and that guard isn't reentrant (see its comment).
+                    this->wakeUpInternal();
                 }
             }
         } else {
