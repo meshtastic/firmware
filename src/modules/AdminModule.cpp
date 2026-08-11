@@ -687,6 +687,20 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSendInputEvent(r->send_input_event);
         break;
     }
+    case meshtastic_AdminMessage_request_position_update_tag: {
+#if !MESHTASTIC_EXCLUDE_GPS
+        if (gps && gps->requestPositionUpdate()) {
+            LOG_INFO("GPS update requested");
+        } else {
+            LOG_WARN("GPS update unavailable");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+#else
+        LOG_WARN("GPS unavailable");
+        myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+#endif
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");

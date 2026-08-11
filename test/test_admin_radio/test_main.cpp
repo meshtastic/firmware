@@ -29,6 +29,7 @@
 #include <unity.h>
 #include <vector>
 
+#include "meshtastic/admin.pb.h"
 #include "meshtastic/config.pb.h"
 #include "support/AdminModuleTestShim.h"
 
@@ -52,6 +53,22 @@ class MockMeshService : public MeshService
 };
 
 static MockMeshService *mockMeshService;
+
+static void test_request_position_update_admin_message_round_trip()
+{
+    meshtastic_AdminMessage request = meshtastic_AdminMessage_init_zero;
+    request.which_payload_variant = meshtastic_AdminMessage_request_position_update_tag;
+    request.request_position_update = true;
+
+    uint8_t bytes[16];
+    size_t size = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_AdminMessage_msg, &request);
+    TEST_ASSERT_GREATER_THAN(0, size);
+
+    meshtastic_AdminMessage decoded = meshtastic_AdminMessage_init_zero;
+    TEST_ASSERT_TRUE(pb_decode_from_bytes(bytes, size, &meshtastic_AdminMessage_msg, &decoded));
+    TEST_ASSERT_EQUAL(meshtastic_AdminMessage_request_position_update_tag, decoded.which_payload_variant);
+    TEST_ASSERT_TRUE(decoded.request_position_update);
+}
 
 // -----------------------------------------------------------------------
 // getRegion() tests
@@ -1882,6 +1899,8 @@ void setup()
     initializeTestEnvironment();
 
     UNITY_BEGIN();
+
+    RUN_TEST(test_request_position_update_admin_message_round_trip);
 
     // getRegion()
     RUN_TEST(test_handleSetOwner_persistsLicensedChannelSanitation);

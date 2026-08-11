@@ -76,6 +76,7 @@ static struct uBloxGnssModelInfo {
 
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
+static constexpr uint32_t GPS_POSITION_UPDATE_REQUEST_INTERVAL_MS = 10 * 1000UL;
 
 namespace
 {
@@ -1380,6 +1381,37 @@ void GPS::up()
     setPowerState(GPS_ACTIVE);
 }
 
+bool GPS::requestPositionUpdate()
+{
+    if (!GPSInitFinished || config.position.fixed_position ||
+        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        return false;
+    }
+
+    forwardPositionToPhone = true;
+    if (!enabled) {
+        LOG_INFO("GPS request: enable");
+        lastPositionUpdateRequest = millis();
+        enable();
+    } else if (powerState != GPS_ACTIVE) {
+        if (lastPositionUpdateRequest != 0 &&
+            Throttle::isWithinTimespanMs(lastPositionUpdateRequest, GPS_POSITION_UPDATE_REQUEST_INTERVAL_MS)) {
+            LOG_DEBUG("GPS request cooldown");
+            if (hasValidLocation)
+                positionModule->sendOurPositionToPhone();
+            forwardPositionToPhone = false;
+            return true;
+        }
+        LOG_INFO("GPS request");
+        lastPositionUpdateRequest = millis();
+        up();
+    } else {
+        lastPositionUpdateRequest = millis();
+    }
+    setIntervalFromNow(0);
+    return true;
+}
+
 // We've finished a GPS search cycle (lock or timeout). Enter a low power state, potentially.
 void GPS::down()
 {
@@ -1449,7 +1481,12 @@ void GPS::publishUpdate()
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p, gotTime);
         newStatus.notifyObservers(&status);
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-            positionModule->handleNewPosition();
+            if (forwardPositionToPhone && hasValidLocation) {
+                forwardPositionToPhone = false;
+                positionModule->sendOurPositionToPhone();
+            } else if (!forwardPositionToPhone) {
+                positionModule->handleNewPosition();
+            }
         }
     }
 }
@@ -1570,6 +1607,7 @@ int32_t GPS::runOnce()
         bool tooLong = scheduling.searchedTooLong();
         if (tooLong && !gotLoc) {
             LOG_WARN("Can't publish valid location: no GPS lock in time");
+            forwardPositionToPhone = false;
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
                 p = meshtastic_Position_init_default;
