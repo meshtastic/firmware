@@ -31,6 +31,7 @@
 
 #include "meshtastic/admin.pb.h"
 #include "meshtastic/config.pb.h"
+#include "meshtastic/routing.pb.h"
 #include "support/AdminModuleTestShim.h"
 
 // hash() is a file-scope function in RadioInterface.cpp; link it in for slot-formula tests
@@ -1571,7 +1572,15 @@ static void testRequestPositionUpdateRejectsUnavailableGps()
     request.request_position_update = true;
 
     sendAdmin(request);
-    TEST_ASSERT_NOT_NULL(testAdmin->reply());
+    meshtastic_MeshPacket *reply = testAdmin->reply();
+    TEST_ASSERT_NOT_NULL(reply);
+    TEST_ASSERT_EQUAL(meshtastic_PortNum_ROUTING_APP, reply->decoded.portnum);
+
+    meshtastic_Routing response = meshtastic_Routing_init_zero;
+    TEST_ASSERT_TRUE(
+        pb_decode_from_bytes(reply->decoded.payload.bytes, reply->decoded.payload.size, &meshtastic_Routing_msg, &response));
+    TEST_ASSERT_EQUAL(meshtastic_Routing_error_reason_tag, response.which_variant);
+    TEST_ASSERT_EQUAL(meshtastic_Routing_Error_BAD_REQUEST, response.error_reason);
     testAdmin->drainReply();
 }
 
