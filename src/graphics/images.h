@@ -240,6 +240,11 @@ const unsigned char bell_alert[] PROGMEM = {0b00011000, 0b00100100, 0b00100100, 
 const uint8_t key_symbol[] PROGMEM = {0b00000000, 0b00000000, 0b00000110, 0b11111001,
                                       0b10101001, 0b10000110, 0b00000000, 0b00000000};
 
+#define padlock_symbol_width 8
+#define padlock_symbol_height 8
+const uint8_t padlock_symbol[] PROGMEM = {0b00011100, 0b00100010, 0b00100010, 0b01111110,
+                                          0b01011010, 0b01000010, 0b01111110, 0b00000000};
+
 #define placeholder_width 8
 #define placeholder_height 8
 const uint8_t placeholder[] PROGMEM = {0b11111111, 0b11111111, 0b11111111, 0b11111111,

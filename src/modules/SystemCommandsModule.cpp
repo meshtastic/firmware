@@ -50,6 +50,12 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
                 externalNotificationModule->getMute() ? "Notifications\nDisabled" : "Notifications\nEnabled", 3000);)
         }
         return 0;
+    case INPUT_BROKER_MSG_KEYPAD_LOCK_ON:
+        IF_SCREEN(screen->showSimpleBanner("keypad\nLocked", 3000);)
+        return 0;
+    case INPUT_BROKER_MSG_KEYPAD_LOCK_OFF:
+        IF_SCREEN(screen->showSimpleBanner("keypad\nUnlocked", 1000);)
+        return 0;
     // Bluetooth
     case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE:
         config.bluetooth.enabled = !config.bluetooth.enabled;

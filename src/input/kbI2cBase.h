@@ -8,11 +8,14 @@
 
 class TCA8418KeyboardBase;
 
+bool isKbI2cKeypadLocked();
+
 class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
     explicit KbI2cBase(const char *name);
     void toggleBacklight(bool on);
+    bool isKeypadLocked() const { return isKeypadLockedState; }
 
   protected:
     virtual int32_t runOnce() override;
@@ -26,4 +29,5 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     MPR121Keyboard MPRkeyboard;
     TCA8418KeyboardBase &TCAKeyboard;
     bool is_sym = false;
+    bool isKeypadLockedState = false;
 };
