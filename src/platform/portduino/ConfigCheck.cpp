@@ -1048,6 +1048,16 @@ void checkMergedConfig(const PathIndex &paths, std::vector<Finding> &findings)
                             "Lora.TCXO_OPTIONAL is set but Module is " + moduleName() +
                                 ", which has no TCXO reference to probe for, so the setting does nothing"});
 
+    // Writing the voltage out as false asks for DIO3 to be left alone; the probe drives it
+    // anyway. Both keys are honoured exactly as documented, which is what makes it confusing.
+    if (portduino_config.tcxo_optional && portduino_config.dio3_tcxo_voltage_disabled &&
+        moduleSupportsTcxoProbe(portduino_config.lora_module))
+        findings.push_back({kWarn, merged, 0,
+                            "Lora.DIO3_TCXO_VOLTAGE is off, which asks for DIO3 not to be driven, but "
+                            "Lora.TCXO_OPTIONAL probes DIO3 at the radio default before falling back to the "
+                            "crystal. The probe wins. Drop TCXO_OPTIONAL to keep DIO3 idle, or drop "
+                            "DIO3_TCXO_VOLTAGE to let the probe pick"});
+
     // Either way -- the old uncaught filesystem_error abort or today's clean exit -- the files
     // meant to configure the radio are not being loaded.
     if (!portduino_config.config_directory.empty()) {

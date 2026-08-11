@@ -276,6 +276,12 @@ assert "probe on a radio with no TCXO does nothing" 0 tcxo-optional-unsupported.
 	"Lora.TCXO_OPTIONAL is set but Module is sx1280" \
 	"no TCXO reference to probe for" \
 	"Result: 0 errors, 1 warning"
+# A written-out false stores the same as an absent key, so the probe drives DIO3 regardless
+# of what the user asked for. Both keys behave as documented; only together are they wrong.
+assert "DIO3_TCXO_VOLTAGE off contradicts the probe" 0 tcxo-optional-contradiction.yaml check \
+	"Lora.DIO3_TCXO_VOLTAGE is off, which asks for DIO3 not to be driven" \
+	"The probe wins" \
+	"Result: 0 errors, 1 warning"
 
 echo
 echo "PA gain table (TX_GAIN_LORA):"
