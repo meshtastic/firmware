@@ -18,20 +18,9 @@ static bool stm32wlRtcValid = false;
 #endif
 
 // ─── Bootloader redirect ──────────────────────────────────────────────────────
-//
-// Why .noinit + constructor instead of TAMP backup registers:
-//
-//   The STM32duino startup sequence initialises clocks which may call
-//   __HAL_RCC_BACKUPRESET_FORCE/RELEASE when configuring the LSE oscillator,
-//   wiping the entire backup domain (including TAMP->BKP0R) before setup()
-//   ever runs. The backup-register approach therefore cannot reliably survive
-//   a soft reset in this toolchain.
-//
-//   Solution: store the magic in a .noinit SRAM variable.
-//   - NVIC_SystemReset() does NOT clear SRAM.
-//   - The linker script skips zero-init for .noinit sections.
-//   - __attribute__((constructor)) fires before main()/HAL_Init(), so we can
-//     intercept and jump before anything disturbs peripheral state.
+// Uses .noinit SRAM instead of TAMP backup registers: STM32duino's clock init can wipe the
+// backup domain via __HAL_RCC_BACKUPRESET_FORCE/RELEASE before setup() runs, but .noinit
+// survives NVIC_SystemReset() and this constructor fires before HAL_Init() touches anything.
 
 #define BOOTLOADER_MAGIC 0xD00DB007UL
 #define SYS_MEM_BASE 0x1FFF0000UL
@@ -171,17 +160,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 }
 
-// Hacks to force more code and data out.
-
-// Forward declaration; defined below alongside the other fault-reporting helpers.
-static void debug_printf(const char *format, ...);
-
-// By default __assert_func uses fiprintf which pulls in stdio.
-extern "C" void __wrap___assert_func(const char *file, int line, const char *func, const char *failedexpr)
-{
-    debug_printf("assert: %s:%d in %s: %s\r\n", file, line, func, failedexpr);
-    HAL_NVIC_SystemReset();
-}
+// ─── Linker hacks to reduce code size ─────────────────────────────────────────
 
 // By default strerror has a lot of strings we probably don't use. Make it return an empty string instead.
 char empty = 0;
@@ -200,6 +179,8 @@ extern "C" void __wrap__tzset_unlocked_r(struct _reent *reent_ptr)
     return;
 }
 #endif
+
+// ─── Fault handling & recovery ────────────────────────────────────────────────
 
 // Taken from https://interrupt.memfault.com/blog/cortex-m-hardfault-debug
 typedef struct __attribute__((packed)) ContextStateFrame {
@@ -235,6 +216,13 @@ static void debug_printf(const char *format, ...)
     if (length < 0)
         return;
     uart_debug_write((uint8_t *)hardfault_message_buffer, min((unsigned int)length, sizeof(hardfault_message_buffer) - 1));
+}
+
+// By default __assert_func uses fiprintf which pulls in stdio.
+extern "C" void __wrap___assert_func(const char *file, int line, const char *func, const char *failedexpr)
+{
+    debug_printf("assert: %s:%d in %s: %s\r\n", file, line, func, failedexpr);
+    HAL_NVIC_SystemReset();
 }
 
 // Disable optimizations for this function so "frame" argument
