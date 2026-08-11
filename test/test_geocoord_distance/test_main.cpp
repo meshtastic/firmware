@@ -1,3 +1,4 @@
+#include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <cmath>
 #include <cstdio>
@@ -122,7 +123,7 @@ static void test_no_nan_at_extreme_latitudes(void)
     TEST_ASSERT_TRUE(d1 > 0);
 }
 
-int main(int argc, char **argv)
+void setup()
 {
     UNITY_BEGIN();
     RUN_TEST(test_identical_points_is_zero);
@@ -131,5 +132,7 @@ int main(int argc, char **argv)
     RUN_TEST(test_antimeridian_wraparound);
     RUN_TEST(test_symmetry);
     RUN_TEST(test_no_nan_at_extreme_latitudes);
-    return UNITY_END();
+    UNITY_END();
 }
+
+void loop() {}
