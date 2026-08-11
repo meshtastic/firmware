@@ -88,14 +88,19 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
 
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 /**
- * Build a signing buffer that covers packet metadata and payload:
- *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]
- * This prevents replay, reattribution, and portnum redirection attacks.
+ * Build a signing buffer that covers packet metadata and payload (v2 layout):
+ *   [fromNode(4) | packetId(4) | portnum(4) | request_id(4) | reply_id(4) | payload(N)]
+ * Covering the metadata prevents replay, reattribution, and portnum redirection; binding
+ * request_id/reply_id additionally prevents retargeting a signed ack/reply at a different
+ * outstanding request (or a signed tapback at a different message). Unset protobuf fields
+ * are zero, so callers always pass the decoded field values verbatim.
  */
 static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 const uint8_t *payload, size_t payloadLen)
+                                 uint32_t requestId, uint32_t replyId, const uint8_t *payload, size_t payloadLen)
 {
-    const size_t headerLen = sizeof(uint32_t) * 3;
+    const size_t headerLen = sizeof(uint32_t) * 5;
+    static_assert(sizeof(uint32_t) * 5 + sizeof(meshtastic_Data_payload_t::bytes) <= MAX_BLOCKSIZE,
+                  "signing buffer must hold the header plus a maximum Data payload");
     size_t totalLen = headerLen + payloadLen;
     if (totalLen > bufSize)
         return 0;
@@ -103,17 +108,19 @@ static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode
     memcpy(buf, &fromNode, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t) * 3, &requestId, sizeof(uint32_t));
+    memcpy(buf + sizeof(uint32_t) * 4, &replyId, sizeof(uint32_t));
     memcpy(buf + headerLen, payload, payloadLen);
     return totalLen;
 }
 
-bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, const uint8_t *payload, size_t payloadLen,
-                               uint8_t *signature)
+bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t portnum, uint32_t requestId, uint32_t replyId,
+                               const uint8_t *payload, size_t payloadLen, uint8_t *signature)
 {
     if (memfll(xeddsa_private_key, 0, sizeof(xeddsa_private_key)))
         return false;
     uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
     if (sigLen == 0)
         return false;
     // XEdDSA::sign mixes signature[0..31] into the nonce as the spec's random Z (meshtastic/Crypto#3)
@@ -126,7 +133,8 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
 }
 
 bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
-                                 const uint8_t *payload, size_t payloadLen, const uint8_t *signature)
+                                 uint32_t requestId, uint32_t replyId, const uint8_t *payload, size_t payloadLen,
+                                 const uint8_t *signature)
 {
     // Use cached Ed25519 key if the Curve25519 key matches, avoiding expensive field inversion
     if (memcmp(pubKey, cached_curve_pubkey, 32) != 0) {
@@ -134,7 +142,7 @@ bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint3
         memcpy(cached_curve_pubkey, pubKey, 32);
     }
     uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, payload, payloadLen);
+    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
     if (sigLen == 0)
         return false;
     return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);
