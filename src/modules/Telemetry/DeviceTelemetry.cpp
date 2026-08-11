@@ -76,7 +76,7 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding DeviceTelemetry module!");
+            LOG_ERROR("Error decoding DeviceTelemetry module");
             return NULL;
         }
         // Check for a request for device metrics

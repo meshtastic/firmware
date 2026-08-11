@@ -21,6 +21,13 @@
 #include "PortduinoGlue.h"
 #endif
 
+/// Decode-stream ceiling for a `nodes.proto` written by *other* firmware - a migration allowance,
+/// **not this build's node cap**. That is `MAX_NUM_NODES`, which on portduino is a runtime value
+/// (`portduino_config.MaxNodes`, default 200) rather than a compile-time constant. 250 is the
+/// largest hot cap any shipped firmware has used (ESP32-S3 top flash tier), so a file from any of
+/// them still decodes here; the excess is trimmed after load.
+static constexpr size_t NODEDB_MIGRATION_LOAD_CEILING = 250;
+
 #if !defined(MESHTASTIC_EXCLUDE_PKI)
 // E3B0C442 is the blank hash
 static const uint8_t LOW_ENTROPY_HASHES[][32] = {
@@ -518,10 +525,12 @@ class NodeDB
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
         // Decode-stream size ceiling only - no buffer this big is allocated (load
         // streams from the file). Sized for the largest file any prior firmware
-        // could write (250-node ESP32-S3, satellites uncapped) so capacity
-        // downgrades / peer backups still decode; excess is trimmed after load.
+        // could write, so capacity downgrades / peer backups still decode; excess
+        // is trimmed after load. See NODEDB_MIGRATION_LOAD_CEILING above - it is a
+        // migration allowance, not this build's cap.
         // (not constexpr: portduino resolves MAX_NUM_NODES from runtime config)
-        const size_t loadCeiling = ((size_t)MAX_NUM_NODES > 250) ? (size_t)MAX_NUM_NODES : 250;
+        const size_t loadCeiling =
+            ((size_t)MAX_NUM_NODES > NODEDB_MIGRATION_LOAD_CEILING) ? (size_t)MAX_NUM_NODES : NODEDB_MIGRATION_LOAD_CEILING;
         return nodeDatabaseSize + (loadCeiling * meshtastic_NodeInfoLite_size) +
                (loadCeiling * meshtastic_NodePositionEntry_size) + (loadCeiling * meshtastic_NodeTelemetryEntry_size) +
                (loadCeiling * meshtastic_NodeEnvironmentEntry_size) + (loadCeiling * meshtastic_NodeStatusEntry_size);

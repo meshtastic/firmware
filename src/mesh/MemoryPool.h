@@ -115,7 +115,7 @@ template <class T> class MemoryDynamic : public Allocator<T>
     {
         T *p = (T *)malloc(sizeof(T));
         if (!p) {
-            LOG_WARN("malloc(%u) failed, heap exhausted!", (unsigned)sizeof(T));
+            LOG_WARN("malloc(%u) failed, heap exhausted", (unsigned)sizeof(T));
             return nullptr;
         }
         this->auditAdd((int32_t)sizeof(T));
@@ -148,29 +148,16 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
             return;
         }
 
-        uintptr_t p_addr = reinterpret_cast<uintptr_t>(p);
-        uintptr_t pool_start = reinterpret_cast<uintptr_t>(pool);
-        uintptr_t pool_end = reinterpret_cast<uintptr_t>(pool + MaxSize);
-
-        if (p_addr < pool_start || p_addr >= pool_end) {
-            LOG_WARN("Pointer %p not from our pool!", static_cast<void *>(p));
-            return;
+        // Find the index of this pointer in our pool
+        int index = p - pool;
+        if (index >= 0 && index < MaxSize) {
+            assert(used[index]); // Should be marked as used
+            used[index] = false;
+            this->auditAdd(-(int32_t)sizeof(T));
+            LOG_HEAP("Released static pool item %d at 0x%x", index, p);
+        } else {
+            LOG_WARN("Pointer 0x%x not from our pool", p);
         }
-
-        uintptr_t offset = p_addr - pool_start;
-        if (offset % sizeof(T) != 0) {
-            LOG_WARN("Pointer %p is misaligned inside static pool!", static_cast<void *>(p));
-            return;
-        }
-
-        size_t index = offset / sizeof(T);
-        if (!used[index]) {
-            LOG_WARN("Double free detected for pool item %u at %p", (unsigned int)index, static_cast<void *>(p));
-            return;
-        }
-        used[index] = false;
-        this->auditAdd(-(int32_t)sizeof(T));
-        LOG_HEAP("Released static pool item %u at %p", (unsigned int)index, static_cast<void *>(p));
     }
 
   protected:
@@ -188,7 +175,7 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
         }
 
         // No free slots available - return nullptr instead of asserting
-        LOG_WARN("No free slots available in static memory pool!");
+        LOG_WARN("No free slots available in static memory pool");
         return nullptr;
     }
 };

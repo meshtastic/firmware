@@ -148,7 +148,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
     if (cache) {
         cacheFromPsram = true;
     } else {
-        TM_LOG_WARN("PSRAM allocation failed, falling back to heap");
+        TM_LOG_WARN("PSRAM alloc failed, fall back to heap");
         cache = new UnifiedCacheEntry[allocSize]();
     }
 #else
@@ -171,7 +171,7 @@ TrafficManagementModule::TrafficManagementModule() : MeshModule("TrafficManageme
         nodeInfoPayloadFromPsram = true;
         TM_LOG_INFO("NodeInfo PSRAM cache ready");
     } else {
-        TM_LOG_WARN("NodeInfo PSRAM payload allocation failed; direct responses will fall back to NodeDB");
+        TM_LOG_WARN("NodeInfo PSRAM payload alloc failed; direct responses fall back to NodeDB");
     }
 #else
     // Native unit-test build (see TMM_HAS_NODEINFO_CACHE): plain heap, so the cache paths
@@ -1515,7 +1515,7 @@ bool TrafficManagementModule::shouldRespondToNodeInfo(const meshtastic_MeshPacke
     // request declined above never spends the budget). false forwards the request instead of consuming
     // it. Rationale in docs/traffic_management_module.md "Throttling direct responses".
     if (!directResponseAllowed(getFrom(p), p->to, clockMs())) {
-        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request instead", getFrom(p));
+        TM_LOG_DEBUG("NodeInfo direct response throttled for 0x%08x; forwarding request", getFrom(p));
         return false;
     }
 
