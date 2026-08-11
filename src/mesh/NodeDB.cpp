@@ -98,9 +98,8 @@ static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-// noinline: weak default and call site are both in this file; without it whole-image LTO
-// inlines the empty body and the variant's strong override never links. See the same guard on
-// earlyInitVariant() in main.cpp.
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. Same guard as earlyInitVariant() in main.cpp.
 __attribute__((noinline)) void variantDefaultConfig() __attribute__((weak));
 __attribute__((noinline)) void variantDefaultConfig() {}
 

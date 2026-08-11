@@ -316,11 +316,8 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-// noinline: weak default and call site are both in this file; without it whole-image LTO
-// (nrf52840_base) inlines the empty body into setup() and the strong override in
-// variants/<arch>/<board>/variant.cpp is never linked -- the board's early hardware setup
-// silently never runs. Bit the muzi R1 Neo on 2.8: DCDC_EN_HOLD/NRF_ON were left low, so the
-// IO controller never saw "nRF app is up" and stayed in its DFU (purple) indication.
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. nrf52_lto.py's _VARIANT_OVERRIDES guards this.
 __attribute__((noinline)) void lateInitVariant() __attribute__((weak));
 __attribute__((noinline)) void lateInitVariant() {}
 
