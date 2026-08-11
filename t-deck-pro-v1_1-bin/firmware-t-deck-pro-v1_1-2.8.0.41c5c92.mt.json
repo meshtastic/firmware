@@ -1,0 +1,99 @@
+{
+  "version": "2.8.0.41c5c92",
+  "build_epoch": 1786377600,
+  "platformioTarget": "t-deck-pro-v1_1",
+  "mcu": "esp32s3",
+  "repo": "meshtastic/firmware",
+  "files": [
+    {
+      "name": "firmware-t-deck-pro-v1_1-2.8.0.41c5c92.elf",
+      "md5": "f835dbdb606b0be06a9978684e5a0af8",
+      "bytes": 47011332
+    },
+    {
+      "name": "firmware-t-deck-pro-v1_1-2.8.0.41c5c92.bin",
+      "md5": "18fff50c699a58a599ca2c1b40643a77",
+      "bytes": 2341280,
+      "part_name": "app0"
+    },
+    {
+      "name": "firmware-t-deck-pro-v1_1-2.8.0.41c5c92.factory.bin",
+      "md5": "f71da2e52da450ffe2da9f255252ba3c",
+      "bytes": 2406816
+    },
+    {
+      "name": "littlefs-t-deck-pro-v1_1-2.8.0.41c5c92.bin",
+      "md5": "dc770b3954120bcd60298062bcd9d30e",
+      "bytes": 1048576,
+      "part_name": "spiffs"
+    }
+  ],
+  "has_mui": false,
+  "has_inkhud": false,
+  "ram_bytes": 101548,
+  "flash_bytes": 2366103,
+  "part": [
+    {
+      "name": "nvs",
+      "type": "data",
+      "subtype": "nvs",
+      "offset": "0x9000",
+      "size": "0x5000",
+      "flags": ""
+    },
+    {
+      "name": "otadata",
+      "type": "data",
+      "subtype": "ota",
+      "offset": "0xe000",
+      "size": "0x2000",
+      "flags": ""
+    },
+    {
+      "name": "app0",
+      "type": "app",
+      "subtype": "ota_0",
+      "offset": "0x10000",
+      "size": "0x640000",
+      "flags": ""
+    },
+    {
+      "name": "app1",
+      "type": "app",
+      "subtype": "ota_1",
+      "offset": "0x650000",
+      "size": "0x640000",
+      "flags": ""
+    },
+    {
+      "name": "spiffs",
+      "type": "data",
+      "subtype": "spiffs",
+      "offset": "0xc90000",
+      "size": "0x360000",
+      "flags": ""
+    },
+    {
+      "name": "coredump",
+      "type": "data",
+      "subtype": "coredump",
+      "offset": "0xFF0000",
+      "size": "0x10000",
+      "flags": ""
+    }
+  ],
+  "hwModel": 102,
+  "hwModelSlug": "T_DECK_PRO",
+  "architecture": "esp32-s3",
+  "activelySupported": true,
+  "displayName": "LILYGO T-Deck Pro",
+  "supportLevel": 1,
+  "images": [
+    "tdeck_pro.svg"
+  ],
+  "tags": [
+    "LilyGo"
+  ],
+  "requiresDfu": true,
+  "partitionScheme": "16MB"
+}
