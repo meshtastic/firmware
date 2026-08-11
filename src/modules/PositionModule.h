@@ -36,6 +36,9 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     void sendOurPosition(NodeNum dest, bool wantReplies = false, uint8_t channel = 0);
     void sendOurPosition();
 
+    // Streams our own position to the connected phone/UI without touching the mesh.
+    bool sendOurPositionToPhone();
+
     void handleNewPosition();
 
     // Pure broadcast-policy helpers, split out so they're unit-testable without the module.
@@ -70,10 +73,6 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
   private:
     meshtastic_MeshPacket *allocPositionPacket(uint32_t atPrecision);
-    // Streams our own position to the connected phone/UI at full precision without touching the
-    // mesh. Keeps the local view alive now that mesh position sharing is opt-in. Returns true
-    // only when a packet was handed to the phone queue.
-    bool sendOurPositionToPhone();
     bool hasSentPositionToPhone = false;
     uint32_t lastPhoneSendMs = 0;
     static constexpr uint32_t sendToPhoneIntervalMs = 60 * 1000; // Matches telemetry's local cadence
