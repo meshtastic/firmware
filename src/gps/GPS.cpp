@@ -1388,25 +1388,23 @@ bool GPS::requestPositionUpdate()
         return false;
     }
 
+    if (hasPositionUpdateRequest &&
+        Throttle::isWithinTimespanMs(lastPositionUpdateRequest, GPS_POSITION_UPDATE_REQUEST_INTERVAL_MS)) {
+        LOG_DEBUG("GPS request cooldown");
+        if (hasValidLocation && positionModule->sendOurPositionToPhone())
+            forwardPositionToPhone = false;
+        return true;
+    }
+
     forwardPositionToPhone = true;
+    hasPositionUpdateRequest = true;
+    lastPositionUpdateRequest = millis();
     if (!enabled) {
         LOG_INFO("GPS request: enable");
-        lastPositionUpdateRequest = millis();
         enable();
     } else if (powerState != GPS_ACTIVE) {
-        if (lastPositionUpdateRequest != 0 &&
-            Throttle::isWithinTimespanMs(lastPositionUpdateRequest, GPS_POSITION_UPDATE_REQUEST_INTERVAL_MS)) {
-            LOG_DEBUG("GPS request cooldown");
-            if (hasValidLocation)
-                positionModule->sendOurPositionToPhone();
-            forwardPositionToPhone = false;
-            return true;
-        }
         LOG_INFO("GPS request");
-        lastPositionUpdateRequest = millis();
         up();
-    } else {
-        lastPositionUpdateRequest = millis();
     }
     setIntervalFromNow(0);
     return true;
@@ -1588,7 +1586,10 @@ int32_t GPS::runOnce()
                 LOG_DEBUG("hasValidLocation RISING EDGE");
             }
 #endif
-            if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
+            if (forwardPositionToPhone) {
+                hasValidLocation = true;
+                shouldPublish = true;
+            } else if (updateInterval <= GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) {
                 hasValidLocation = true;
                 shouldPublish = true;
             } else if (!hasValidLocation || prev_fixQual == 0 || (fixHoldEnds + GPS_THREAD_INTERVAL) < millis()) {

@@ -216,6 +216,7 @@ class GPS : private concurrency::OSThread
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
     bool forwardPositionToPhone = false;
+    bool hasPositionUpdateRequest = false;
     uint32_t lastPositionUpdateRequest = 0;
 
     bool hasGPS = false; // Do we have a GPS we are talking to
