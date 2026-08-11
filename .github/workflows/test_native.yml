@@ -23,13 +23,19 @@ env:
   LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
 
 jobs:
-  # Guard the registered native-suite total. `platformio test` discovers and runs whatever
-  # test_* directories exist, so it never notices when test/native-suite-count drifts from the
-  # actual directory count (a suite added without registering it, or the file left stale). That
-  # reconciliation only lives in bin/run-tests.sh, which CI does not invoke - so mirror the exact
-  # check here and fail the PR on a mismatch, keeping the manual count honest.
-  suite-count-check:
-    name: Native Suite Count
+  # Tripwire against the native suite set shrinking by accident. `platformio test` discovers and
+  # runs whatever test_* directories exist, and bin/run-tests.sh derives its expected count from
+  # the same walk - so a suite directory lost in a bad rebase or an overzealous cleanup just means
+  # fewer suites run, and every remaining check stays green. Compare the test_* directory list
+  # against the PR's merge base and fail when a suite vanished without the PR saying so: a removed
+  # suite's name must appear in the PR title, the PR body, or a commit message in the PR's range.
+  # A deliberate removal satisfies that by stating what it removes; an accidental loss cannot.
+  # Only pull_request runs have a base to compare against (and PRs are where accidents arrive);
+  # every other event skips. No job depends on this one: a skipped job would skip its dependents,
+  # and the expensive jobs should not wait on a full-history clone.
+  suite-shrinkage-check:
+    name: Native Suite Shrinkage
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -37,40 +43,45 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # Full history: the merge base must be computed, not guessed from a possibly stale
+          # event payload, and the acknowledgment scan reads every commit message in the range.
+          fetch-depth: 0
 
-      - name: Reconcile native-suite-count with test/ directories
+      - name: Fail if a test_* suite vanished unacknowledged
         shell: bash
+        # PR title/body are attacker-controlled text; they reach the script through env: only,
+        # never spliced into the shell source (same rule as the suite-order seed below).
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
-          count_file="test/native-suite-count"
-          if [[ ! -f $count_file ]]; then
-            echo "::error title=Missing native-suite-count::$count_file not found - it must record the number of test_* suite directories."
-            exit 1
+          git fetch --quiet origin "$BASE_REF"
+          base=$(git merge-base FETCH_HEAD HEAD)
+          # Same canonical set every other consumer derives: directories named test_* directly
+          # under test/, read from the git trees so the comparison is exact at both endpoints.
+          list_suites() { git ls-tree -d --name-only "$1" test/ | sed 's#^test/##' | grep '^test_' | sort; }
+          removed=$(comm -23 <(list_suites "$base") <(list_suites HEAD))
+          if [[ -z $removed ]]; then
+            echo "No suite removed: $(list_suites HEAD | wc -l) test_* directories, none lost since merge base ${base:0:8}."
+            exit 0
           fi
-          # Same canonical set as bin/run-tests.sh: directories named test_* directly under test/.
-          expected_count=$(find test -maxdepth 1 -type d -name 'test_*' -printf '%f\n' | wc -l)
-          canonical_count=$(tr -d '[:space:]' <"$count_file")
-          if ! [[ $canonical_count =~ ^[0-9]+$ ]]; then
-            echo "::error title=Invalid native-suite-count::$count_file must contain a single integer, got '$canonical_count'."
-            exit 1
-          fi
-          echo "test/ directories: $expected_count"
-          echo "native-suite-count: $canonical_count"
-          if [[ $expected_count -ne $canonical_count ]]; then
-            if [[ $expected_count -gt $canonical_count ]]; then
-              hint="a suite was added - bump $count_file to $expected_count"
+          messages=$(git log --format=%B "$base..HEAD")
+          fail=0
+          while IFS= read -r suite; do
+            if printf '%s\n%s\n%s\n' "$PR_TITLE" "$PR_BODY" "$messages" | grep -qF "$suite"; then
+              echo "Removed suite $suite is named in the PR title/body or a commit message - acknowledged."
             else
-              hint="a suite was removed - lower $count_file to $expected_count"
+              echo "::error title=Native suite vanished::test/$suite exists on the merge base but is gone from this PR, and nothing in the PR title, body, or commit messages mentions it. If the removal is deliberate, name $suite in the PR description or a commit message; if not, restore the directory - platformio test would silently run without it."
+              fail=1
             fi
-            echo "::error title=native-suite-count mismatch::test/ has $expected_count suite directories but $count_file says $canonical_count ($hint)."
-            exit 1
-          fi
-          echo "native-suite-count matches the $expected_count suite directories."
+          done <<<"$removed"
+          exit $fail
 
   simulator-tests:
     name: Native Simulator Tests
     runs-on: ubuntu-24.04-arm
-    needs: suite-count-check
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -169,7 +180,6 @@ jobs:
   platformio-tests:
     name: Native PlatformIO Tests
     runs-on: ubuntu-24.04-arm
-    needs: suite-count-check
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

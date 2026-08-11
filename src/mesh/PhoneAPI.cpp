@@ -615,6 +615,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             auto info = TypeConversions::ConvertToNodeInfo(us);
             info.has_hops_away = false;
             info.is_favorite = true;
+            // NodeInfoLite dropped macaddr, so ConvertToUser() zero-fills it.
+            if (info.has_user)
+                memcpy(info.user.macaddr, owner.macaddr, sizeof(info.user.macaddr));
             {
                 concurrency::LockGuard guard(&nodeInfoMutex);
                 nodeInfoForPhone = info;
