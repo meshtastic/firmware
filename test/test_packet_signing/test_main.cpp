@@ -33,6 +33,9 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
 #include "mqtt/MQTT.h"
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 #include <ErriezCRC32.h>
 #include <cstdio>
 #include <cstring>
@@ -397,6 +400,14 @@ void setUp(void)
     // mode opt in explicitly.
     setPolicy(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED);
     myNodeInfo.my_node_num = LOCAL_NODE; // drives isFromUs()/getFrom()/isToUs()
+
+#ifdef ARCH_PORTDUINO
+    // The native test harness boots Portduino in simulated mode (`-s` in test_testing_command), and
+    // wouldEncryptWithPKC() hard-disables PKC whenever force_simradio is set - so B11/B12, which
+    // assert the PKC unicast path, can never pass under it. Model a real (non-sim) device instead,
+    // the same workaround test_admin_session_repro documents in its setUp.
+    portduino_config.force_simradio = false;
+#endif
 
     // Working primary channel with the default PSK so encrypt/decrypt round-trips.
     channels.initDefaults();
