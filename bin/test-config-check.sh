@@ -64,6 +64,8 @@ FAIL=0
 #   fixture: a bare name runs from a scratch directory. A name containing a slash
 #            (configd-conflict/config.yaml) runs from that fixture's own directory,
 #            so a relative ConfigDirectory in it resolves the way it would in situ.
+#   Each expected substring must appear in the output. One prefixed with '!' must not:
+#   an info line that is merely absent today would otherwise be nobody's regression.
 assert() {
 	local desc="$1" want_rc="$2" fixture="$3" mode="$4"
 	shift 4
@@ -91,7 +93,11 @@ assert() {
 	[[ $rc -ne $want_rc ]] && problems+=("exit $rc, wanted $want_rc")
 	local needle
 	for needle in "$@"; do
-		grep -qF -- "$needle" <<<"$out" || problems+=("missing: $needle")
+		if [[ $needle == '!'* ]]; then
+			grep -qF -- "${needle#!}" <<<"$out" && problems+=("unexpected: ${needle#!}")
+		else
+			grep -qF -- "$needle" <<<"$out" || problems+=("missing: $needle")
+		fi
 	done
 
 	if [[ ${#problems[@]} -eq 0 ]]; then
@@ -191,6 +197,11 @@ assert "omitted modes are called out" 0 rfswitch-partial.yaml check \
 	"omits MODE_GNSS, MODE_TX_HF, MODE_TX_HP, MODE_WIFI" \
 	"default to all pins LOW" \
 	"Result: 0 errors, 0 warnings"
+# Under autodetect the part is not known yet, so neither is which modes it has. Naming them
+# against the union of both families would advise adding rows an LR20x0 cannot use.
+assert "omitted modes are not guessed at under auto" 0 rfswitch-auto-partial.yaml check \
+	'!default to all pins LOW' \
+	"Result: 0 errors, 0 warnings"
 
 echo
 echo "radio module and switch table must agree:"
@@ -199,6 +210,13 @@ assert "LR11xx without a table cannot transmit" 0 module-mismatch-lr11xx.yaml ch
 	"Result: 0 errors, 1 warning"
 assert "table on a radio that never applies one" 0 module-mismatch-sx126x.yaml check \
 	"the table is only applied to LR11xx and LR20x0 radios" \
+	"Result: 0 errors, 1 warning"
+# ...and that is the only thing worth saying. Judging the rows against a family's mode list
+# would report MODE_RX_HF as the ignored one, implying the others are applied.
+assert "an inert table is not judged row by row" 0 rfswitch-inert-table.yaml check \
+	"the table is only applied to LR11xx and LR20x0 radios" \
+	'!is not a mode' \
+	'!default to all pins LOW' \
 	"Result: 0 errors, 1 warning"
 
 echo

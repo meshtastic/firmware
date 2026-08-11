@@ -129,13 +129,17 @@ const std::set<std::string> kRfSwitchPins = {"DIO5", "DIO6", "DIO7", "DIO8", "DI
 // keep the radio headers out of this file.
 const int kLr20x0DefaultIrqDio = 5;
 
-// Mode names this module can apply. An unresolved "auto" is reported against the union of both
-// families' modes, since narrowing to either subset would flag the other's valid modes.
+// Mode names this module can apply, empty if it never applies a table at all - there is then
+// nothing module-specific to say about the rows, only that the whole table is inert.
+// An unresolved "auto" is reported against the union of both families' modes, since narrowing
+// to either subset would flag the other's valid modes.
 std::set<std::string> modesFor(lora_module_enum module)
 {
     if (module == use_autoconf)
         return kRfSwitchModes();
     std::set<std::string> s;
+    if (!moduleUsesRfSwitchTable(module))
+        return s;
     if (module == use_lr2021) {
         for (int m = 0; m < RFSW_MODE_COUNT; m++)
             if (m != RFSW_TX_HP && m != RFSW_GNSS && m != RFSW_WIFI)
@@ -398,6 +402,8 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
         findings.push_back({kError, file, lineOf(table), "Lora.rfswitch_table has no 'pins' list, so no switch pins are driven"});
     }
 
+    const std::set<std::string> validModes = modesFor(portduino_config.lora_module);
+
     for (const auto &entry : table) {
         const std::string key = entry.first.as<std::string>("");
         if (key == "pins")
@@ -406,8 +412,9 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
             findings.push_back({kError, file, lineOf(entry.first), "unknown key 'Lora.rfswitch_table." + key + "'"});
             continue;
         }
-        // A real mode name, but not one this part has, so the row is never applied.
-        if (!modesFor(portduino_config.lora_module).count(key))
+        // A real mode name, but not one this part has, so the row is never applied. Empty means
+        // the module applies no table, and singling out one row would imply the rest are used.
+        if (!validModes.empty() && !validModes.count(key))
             findings.push_back({kWarn, file, lineOf(entry.first),
                                 "Lora.rfswitch_table." + key + " is not a mode " + moduleName() + " has, so the row is ignored"});
         const YAML::Node &row = entry.second;
@@ -430,10 +437,13 @@ void checkRfSwitchTable(const std::string &file, const YAML::Node &table, std::v
 
     // Every mode absent from the table defaults to all-LOW, which for most modules is
     // the shutdown state. Worth saying out loud rather than leaving to be discovered.
-    // Only the modes this part has: naming an LR20x0's MODE_TX_HP would advise adding a row
-    // it cannot use.
+    // Only worth saying once the radio is known: under "auto" the union would advise adding
+    // rows for modes the part turns out not to have, and a module that applies no table needs
+    // no rows at all. Either way the advice would be wrong, so say nothing.
+    if (validModes.empty() || portduino_config.lora_module == use_autoconf)
+        return;
     std::set<std::string> missing;
-    for (const auto &mode : modesFor(portduino_config.lora_module))
+    for (const auto &mode : validModes)
         if (!table[mode])
             missing.insert(mode);
     if (!missing.empty())
