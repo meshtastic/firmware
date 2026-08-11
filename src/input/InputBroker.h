@@ -55,6 +55,9 @@ typedef struct _InputEvent {
     unsigned char kbchar;
     uint16_t touchX;
     uint16_t touchY;
+    uint8_t touchTargetKind;
+    uint32_t touchTargetValue;
+    uint8_t touchTargetLongPress;
 } InputEvent;
 
 class InputPollable

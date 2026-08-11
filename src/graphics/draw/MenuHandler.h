@@ -29,6 +29,12 @@ class menuHandler
         CompassPointNorthMenu,
         ResetNodeDbMenu,
         BuzzerModeMenuPicker,
+#if defined(HAS_A7682_AUDIO)
+        A7682AudioVolumeMenu,
+#endif
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+        HapticToggleMenu,
+#endif
         MuiPicker,
         BrightnessPicker,
         RebootMenu,
@@ -91,6 +97,12 @@ class menuHandler
     static void GPSUpdateIntervalMenu();
     static void GPSPositionBroadcastMenu();
     static void BuzzerModeMenu();
+#if defined(HAS_A7682_AUDIO)
+    static void a7682AudioVolumeMenu();
+#endif
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+    static void hapticToggleMenu();
+#endif
     static void switchToMUIMenu();
     static void nodeListMenu();
     static void resetNodeDBMenu();

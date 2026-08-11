@@ -2,6 +2,9 @@
 #include "NodeDB.h"
 #include "buzz.h"
 #include "configuration.h"
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+#include "input/HapticFeedback.h"
+#endif
 
 BuzzerFeedbackThread *buzzerFeedbackThread;
 
@@ -13,6 +16,14 @@ BuzzerFeedbackThread::BuzzerFeedbackThread()
 
 int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
 {
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+    if (event && event->touchX == 0 && event->touchY == 0 && hapticFeedback) {
+        const HapticEffect effect = hapticEffectForInputEvent(static_cast<uint8_t>(event->inputEvent));
+        if (effect != HapticEffect::NONE)
+            hapticFeedback->play(effect);
+    }
+#endif
+
     // Only provide feedback if buzzer is enabled for notifications
     if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED ||
         config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY ||

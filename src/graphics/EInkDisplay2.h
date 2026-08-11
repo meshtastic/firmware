@@ -54,6 +54,11 @@ class EInkDisplay : public OLEDDisplay
     virtual bool forceDisplay(uint32_t msecLimit = EINK_FORCE_DISPLAY_THROTTLE_MS);
 
     /**
+     * Refresh a stable framebuffer snapshot. The caller may run outside the main loop.
+     */
+    bool forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t msecLimit = EINK_FORCE_DISPLAY_THROTTLE_MS);
+
+    /**
      * Run any code needed to complete an update, after the physical refresh has completed.
      * Split from forceDisplay(), to enable async refresh in derived EInkDynamicDisplay class.
      *

@@ -1220,7 +1220,8 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(LED_NOTIFICATION) || defined(PCA_LED_NOTIFICATION) ||               \
+#if defined(PIN_BUZZER) || defined(PIN_VIBRATION) || defined(HAS_DRV2605) || defined(LED_NOTIFICATION) ||                   \
+    defined(PCA_LED_NOTIFICATION) ||                                                                                       \
     defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
     moduleConfig.external_notification.enabled = true;
 #endif
@@ -1237,6 +1238,11 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
 #endif
 
+#if defined(HAS_DRV2605)
+    moduleConfig.external_notification.alert_message_vibra = true;
+    moduleConfig.external_notification.output_ms = 500;
+#endif
+
 #if defined(LED_NOTIFICATION)
     moduleConfig.external_notification.output = LED_NOTIFICATION;
     moduleConfig.external_notification.active = LED_STATE_ON;
@@ -1244,7 +1250,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
 #endif
 
-#if defined(PIN_VIBRATION)
+#if defined(PIN_VIBRATION) || defined(HAS_DRV2605)
     moduleConfig.external_notification.nag_timeout = 2;
 #elif defined(PIN_BUZZER) || defined(LED_NOTIFICATION) || defined(NEOPIXEL_STATUS_NOTIFICATION_PIN)
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
@@ -2758,6 +2764,19 @@ void NodeDB::loadFromDisk()
         moduleConfig.version = POSITION_TELEMETRY_OPTIN_VER;
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+
+#if defined(HAS_DRV2605)
+    // Enable the DRV2605 message alert once on devices that predate this default.
+    static constexpr uint8_t HAPTIC_FEEDBACK_DEFAULT_VER = POSITION_TELEMETRY_OPTIN_VER + 1;
+    if (moduleConfig.version < HAPTIC_FEEDBACK_DEFAULT_VER) {
+        LOG_INFO("Installing DRV2605 haptic notification defaults");
+        moduleConfig.has_external_notification = true;
+        moduleConfig.external_notification.enabled = true;
+        moduleConfig.external_notification.alert_message_vibra = true;
+        moduleConfig.version = HAPTIC_FEEDBACK_DEFAULT_VER;
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
+#endif
 
     if (channels.ensureLicensedOperation()) {
         LOG_WARN("Licensed operation removed persisted channel encryption/admin access");

@@ -146,6 +146,15 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
     e.kbchar = 0;
     e.touchX = event.x;
     e.touchY = event.y;
+    e.touchTargetKind = event.targetKind;
+    e.touchTargetValue = event.targetValue;
+    e.touchTargetLongPress = event.targetLongPress;
+
+    if (event.targetKind != static_cast<uint8_t>(meshtastic::TouchTargetKind::None)) {
+        e.inputEvent = event.targetAction;
+        this->notifyObservers(&e);
+        return;
+    }
 
     switch (event.touchEvent) {
     case TOUCH_ACTION_LEFT: {
@@ -165,7 +174,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_LONG_PRESS: {
-        e.inputEvent = INPUT_BROKER_SELECT;
+        e.inputEvent = event.targetAction != INPUT_BROKER_NONE ? event.targetAction : INPUT_BROKER_SELECT;
         break;
     }
     case TOUCH_ACTION_TAP: {

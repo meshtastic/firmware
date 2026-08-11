@@ -2,11 +2,28 @@
 
 #ifdef T_DECK_PRO
 
+#if defined(HAS_A7682_AUDIO)
+#include "audio/A7682Audio.h"
+#endif
 #include "input/TouchScreenImpl1.h"
 #include <CSE_CST328.h>
 #include <Wire.h>
 
 CSE_CST328 tsPanel = CSE_CST328(EINK_WIDTH, EINK_HEIGHT, &Wire, CST328_PIN_RST, CST328_PIN_INT);
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1)
+void earlyInitVariant()
+{
+    pinMode(LORA_EN, OUTPUT);
+    digitalWrite(LORA_EN, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(PIN_EINK_CS, OUTPUT);
+    digitalWrite(PIN_EINK_CS, HIGH);
+}
+#endif
 
 static bool is_cst3530 = false;
 volatile bool touch_isr = false;
@@ -36,21 +53,42 @@ bool read_cst3530_touch(int16_t *x, int16_t *y)
         return false;
     }
 
-    uint8_t report_typ = buffer[2];
-    if (report_typ != 0xFF) {
-        return false;
-    }
-
-    uint8_t touch_points = buffer[3] & 0x0F;
-    if (touch_points == 0 || touch_points > 1) {
+    bool validReport = buffer[2] == 0xFF;
+    const uint8_t touch_points = buffer[3] & 0x0F;
+    if (validReport && (touch_points == 0 || touch_points > 1)) {
         LOG_DEBUG("CST3530 touch points invalid: %d", touch_points);
-        return false;
+        validReport = false;
     }
 
-    *x = buffer[4] + ((uint16_t)(buffer[7] & 0x0F) << 8);
-    *y = buffer[5] + ((uint16_t)(buffer[7] & 0xF0) << 4);
+    if (validReport) {
+        // CST3530 reports a 16-bit sum (0x55 + the complete point record).
+        uint16_t checksum = 0x55;
+        for (uint8_t index = 4; index < sizeof(buffer); ++index)
+            checksum = static_cast<uint16_t>(checksum + buffer[index]);
+        const uint16_t reportedChecksum = static_cast<uint16_t>(buffer[0]) | (static_cast<uint16_t>(buffer[1]) << 8);
+        if (checksum != reportedChecksum) {
+            LOG_DEBUG("CST3530 report checksum mismatch");
+            validReport = false;
+        }
+    }
 
-    // LOG_DEBUG("CST3530 touch: num:%d x=%d,y=%d", touch_points, *x, *y);
+    if (validReport && (buffer[8] >> 4) == 0) {
+        // A release frame can retain a non-zero finger count. Only a report
+        // with an active event is a pressed sample.
+        validReport = false;
+    }
+
+    if (validReport) {
+        const uint16_t rawX = buffer[4] + ((static_cast<uint16_t>(buffer[7]) & 0x0F) << 8);
+        const uint16_t rawY = buffer[5] + ((static_cast<uint16_t>(buffer[7]) & 0xF0) << 4);
+        if (rawX >= EINK_WIDTH || rawY >= EINK_HEIGHT) {
+            LOG_DEBUG("CST3530 coordinates out of range: %u,%u", rawX, rawY);
+            validReport = false;
+        } else {
+            *x = static_cast<int16_t>(rawX);
+            *y = static_cast<int16_t>(rawY);
+        }
+    }
 
     Wire.beginTransmission(CST3530_ADDR);
     Wire.write(clear_cmd, sizeof(clear_cmd));
@@ -58,24 +96,25 @@ bool read_cst3530_touch(int16_t *x, int16_t *y)
         LOG_DEBUG("CST3530 clear cmd failed");
     }
 
-    return true;
+    return validReport;
 }
 
 bool readTouch(int16_t *x, int16_t *y)
 {
-
     if (is_cst3530) {
+        // CST3530 sleeps between reports; only read after its IRQ. Polling the
+        // custom report register can replay a stale touch frame as a new press.
         if (touch_isr) {
             touch_isr = false;
             return read_cst3530_touch(x, y);
         }
         return false;
-    } else {
-        if (tsPanel.getTouches()) {
-            *x = tsPanel.getPoint(0).x;
-            *y = tsPanel.getPoint(0).y;
-            return true;
-        }
+    }
+
+    if (tsPanel.getTouches()) {
+        *x = tsPanel.getPoint(0).x;
+        *y = tsPanel.getPoint(0).y;
+        return true;
     }
     return false;
 }
@@ -99,7 +138,7 @@ void lateInitVariant()
 
     int retry = 5;
     uint8_t buffer[7];
-    uint8_t r_cmd[] = {0x0d0, 0x03, 0x00, 0x00};
+    uint8_t r_cmd[] = {0xD0, 0x03, 0x00, 0x00};
 
     // Probe touch chip
     while (retry--) {
@@ -114,7 +153,7 @@ void lateInitVariant()
 
                 // The CST3530 will automatically enter sleep mode;
                 // polling should not be used, but rather an interrupt method should be employed.
-                pinMode(CST328_PIN_INT, INPUT);
+                pinMode(CST328_PIN_INT, INPUT_PULLUP);
                 attachInterrupt(digitalPinToInterrupt(CST328_PIN_INT), touchInterruptHandler, FALLING);
 
                 break;
@@ -129,7 +168,18 @@ void lateInitVariant()
         delay(50);
     }
 
+    if (!is_cst3530 && !tsPanel.begin())
+        LOG_WARN("CST328 touch initialization failed");
+
     touchScreenImpl1 = new TouchScreenImpl1(EINK_WIDTH, EINK_HEIGHT, readTouch);
     touchScreenImpl1->init();
 }
+
+#if defined(_VARIANT_T_DECK_PRO_V1_1) && defined(HAS_A7682_AUDIO)
+void variant_shutdown()
+{
+    if (a7682Audio)
+        a7682Audio->shutdown();
+}
+#endif
 #endif

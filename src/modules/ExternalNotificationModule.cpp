@@ -20,6 +20,12 @@
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "gps/RTC.h"
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+#include "input/HapticFeedback.h"
+#endif
+#if defined(HAS_A7682_AUDIO)
+#include "audio/A7682Audio.h"
+#endif
 #include "main.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
@@ -129,7 +135,8 @@ int32_t ExternalNotificationModule::runOnce()
 #ifdef HAS_DRV2605
             // Only trigger DRV2605 if vibration alerts are enabled
             if (moduleConfig.external_notification.alert_message_vibra || moduleConfig.external_notification.alert_bell_vibra) {
-                drv.go();
+                if (hapticFeedback)
+                    hapticFeedback->play(HapticEffect::MESSAGE);
             }
 #endif
         }
@@ -238,9 +245,11 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
     }
 
     if (shouldTriggerDRV) {
-        drv.go();
+        if (hapticFeedback)
+            hapticFeedback->play(HapticEffect::MESSAGE);
     } else if (!on && index == 1) {
-        drv.stop();
+        if (hapticFeedback)
+            hapticFeedback->stop();
     }
 #endif
 }
@@ -273,7 +282,8 @@ void ExternalNotificationModule::stopNow()
     }
     setIntervalFromNow(0);
 #ifdef HAS_DRV2605
-    drv.stop();
+    if (hapticFeedback)
+        hapticFeedback->stop();
 #endif
 
     // Prevent the state machine from immediately re-triggering outputs after a manual stop.
@@ -422,6 +432,15 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 buzzerShouldAlert || (canBuzz() && ((moduleConfig.external_notification.alert_bell_buzzer && containsBell) ||
                                                     (moduleConfig.external_notification.alert_message_buzzer && !is_muted)));
 
+#if defined(HAS_A7682_AUDIO)
+            // A7682E follows the user-facing notification mode and mute policy, while
+            // remaining independent from the legacy GPIO/RTTTL alert flags.
+            const bool a7682MessageShouldAlert = shouldPlayA7682RxCue(
+                !isFromUs(&mp), is_muted, isSilenced, canBuzz(), buzzerModeIsDirectOnly, isDmToUs);
+            if (mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && a7682MessageShouldAlert && a7682Audio)
+                a7682Audio->queueCue(A7682AudioCue::RX_TEXT);
+#endif
+
             if (genericShouldAlert || vibraShouldAlert || buzzerShouldAlert) {
                 nagCycleCutoff = millis() + (moduleConfig.external_notification.nag_timeout
                                                  ? (moduleConfig.external_notification.nag_timeout * 1000)
@@ -437,18 +456,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 
             if (vibraShouldAlert) {
                 LOG_INFO("externalNotificationModule - Vibra alert");
-#ifdef HAS_DRV2605
-                // Set DRV2605 waveform when vibration alert is triggered
-                drv.setWaveform(0, 16); // Long buzzer 100%
-                drv.setWaveform(1, 0);  // Pause
-                drv.setWaveform(2, 16);
-                drv.setWaveform(3, 0);
-                drv.setWaveform(4, 16);
-                drv.setWaveform(5, 0);
-                drv.setWaveform(6, 16);
-                drv.setWaveform(7, 0);
-                drv.go();
-#endif
                 setExternalState(1, true);
             }
 

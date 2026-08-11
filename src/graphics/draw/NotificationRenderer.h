@@ -18,6 +18,7 @@ class NotificationRenderer
     static InputEvent inEvent;
     static char inKeypress;
     static int8_t curSelected;
+    static bool touchSelectionPending;
     static char alertBannerMessage[256];
     static uint32_t alertBannerUntil; // 0 is a special case meaning forever
     static const char **optionsArrayPtr;
@@ -46,6 +47,7 @@ class NotificationRenderer
     static void drawAlphanumericPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static bool handleTouchTarget(uint32_t value);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
                                     uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth = 0);
 

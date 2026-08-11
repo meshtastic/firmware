@@ -17,6 +17,7 @@
 #include "graphics/EmoteRenderer.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
+#include "graphics/TouchLayout.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "graphics/draw/NotificationRenderer.h"
 #include "graphics/draw/UIRenderer.h"
@@ -394,35 +395,65 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         return 0;
     }
 
+    InputEvent coordinateEvent = *event;
+    const InputEvent *dispatchEvent = event;
+    const auto targetKind = static_cast<meshtastic::TouchTargetKind>(event->touchTargetKind);
+    if (event->touchTargetLongPress && targetKind != meshtastic::TouchTargetKind::None &&
+        event->inputEvent == INPUT_BROKER_NONE)
+        return 1;
+
+    if (targetKind == meshtastic::TouchTargetKind::NodeRow &&
+        runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        if (event->touchTargetValue >= static_cast<uint32_t>(activeChannelIndices.size() + filteredNodes.size()))
+            return 1;
+        destIndex = static_cast<int>(event->touchTargetValue);
+        coordinateEvent.inputEvent = INPUT_BROKER_SELECT;
+        dispatchEvent = &coordinateEvent;
+    } else if (targetKind == meshtastic::TouchTargetKind::MessageRow &&
+               runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+        if (event->touchTargetValue >= static_cast<uint32_t>(messagesCount))
+            return 1;
+        currentMessageIndex = static_cast<int>(event->touchTargetValue);
+        coordinateEvent.inputEvent = INPUT_BROKER_SELECT;
+        dispatchEvent = &coordinateEvent;
+    } else if (targetKind == meshtastic::TouchTargetKind::EmoteRow &&
+               runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+        if (event->touchTargetValue >= static_cast<uint32_t>(graphics::numEmotes))
+            return 1;
+        emotePickerIndex = static_cast<int>(event->touchTargetValue);
+        coordinateEvent.inputEvent = INPUT_BROKER_SELECT;
+        dispatchEvent = &coordinateEvent;
+    }
+
     // Tab key: Always allow switching between canned/destination screens
-    if (event->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(event))
+    if (dispatchEvent->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(dispatchEvent))
         return 1;
 
     // Matrix keypad: If matrix key, trigger action select for canned message
-    if (event->inputEvent == INPUT_BROKER_MATRIXKEY) {
+    if (dispatchEvent->inputEvent == INPUT_BROKER_MATRIXKEY) {
         updateState(CANNED_MESSAGE_RUN_STATE_ACTION_SELECT, true);
         payload = INPUT_BROKER_MATRIXKEY;
-        currentMessageIndex = event->kbchar - 1;
+        currentMessageIndex = dispatchEvent->kbchar - 1;
         lastTouchMillis = millis();
         return 1;
     }
 
     // Always normalize navigation/select buttons for further handlers
-    bool isUp = isUpEvent(event);
-    bool isDown = isDownEvent(event);
-    bool isSelect = isSelectEvent(event);
+    bool isUp = isUpEvent(dispatchEvent);
+    bool isDown = isDownEvent(dispatchEvent);
+    bool isSelect = isSelectEvent(dispatchEvent);
 
     // Route event to handler for current UI state (no double-handling)
     switch (runState) {
     // Node/Channel destination selection mode: Handles character search, arrows, select, cancel, backspace
     case CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION:
-        if (handleDestinationSelectionInput(event, isUp, isDown, isSelect))
+        if (handleDestinationSelectionInput(dispatchEvent, isUp, isDown, isSelect))
             return 1;
         return 0; // prevent fall-through to selector input
 
     // Free text input mode: Handles character input, cancel, backspace, select, etc.
     case CANNED_MESSAGE_RUN_STATE_FREETEXT:
-        return handleFreeTextInput(event); // All allowed input for this state
+        return handleFreeTextInput(dispatchEvent); // All allowed input for this state
 
     // Virtual keyboard mode: Show virtual keyboard and handle input
 
@@ -432,7 +463,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     // If sending, block all input except global/system (handled above)
     case CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER:
-        return handleEmotePickerInput(event);
+        return handleEmotePickerInput(dispatchEvent);
 
     case CANNED_MESSAGE_RUN_STATE_INACTIVE:
         if (event->inputEvent == INPUT_BROKER_ALT_LONG) {
@@ -458,7 +489,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     // If no state handler above processed the event, let the message selector try to handle it
     // (Handles up/down/select on canned message list, exit/return)
-    if (handleMessageSelectorInput(event, isUp, isDown, isSelect))
+    if (handleMessageSelectorInput(dispatchEvent, isUp, isDown, isSelect))
         return 1;
 
     // Default: event not handled by canned message system, allow others to process
@@ -806,6 +837,19 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return false;
 
 #if defined(USE_VIRTUAL_KEYBOARD)
+    InputEvent keyboardEvent{};
+    if (event->touchTargetKind == static_cast<uint8_t>(meshtastic::TouchTargetKind::KeyboardKey)) {
+        const uint8_t row = static_cast<uint8_t>((event->touchTargetValue >> 8) & 0xFF);
+        const uint8_t col = static_cast<uint8_t>(event->touchTargetValue & 0xFF);
+        if (row >= 4 || col >= 10)
+            return true;
+        const Letter &key = keyboard[this->charSet][row][col];
+        keyboardEvent = *event;
+        keyboardEvent.touchX = static_cast<uint16_t>(key.rectX + key.rectWidth / 2);
+        keyboardEvent.touchY = static_cast<uint16_t>(key.rectY + key.rectHeight / 2);
+        event = &keyboardEvent;
+    }
+
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_LEFT) {
         updateState(CANNED_MESSAGE_RUN_STATE_INACTIVE);
@@ -1521,6 +1565,15 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 #endif
             this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
 
+            if (screen) {
+                screen->addTouchTarget(graphics::touchExpandedRect(updatedLetter.rectX, updatedLetter.rectY,
+                                                                    updatedLetter.rectWidth, updatedLetter.rectHeight, 2),
+                                       meshtastic::TouchTargetKind::KeyboardKey,
+                                       (static_cast<uint32_t>(static_cast<uint8_t>(outerIndex)) << 8) |
+                                           static_cast<uint32_t>(static_cast<uint8_t>(innerIndex)),
+                                       INPUT_BROKER_NONE);
+            }
+
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));
 
             if (letter.character == "⇧") {
@@ -1755,6 +1808,13 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         graphics::UIRenderer::drawStringWithEmotes(display, xOffset + 2, yOffset, entryText.c_str(), FONT_HEIGHT_SMALL, 1, false);
         display->setColor(WHITE);
 
+        if (screen) {
+            screen->addTouchTarget(
+                graphics::touchExpandedRect(xOffset, yOffset, display->getWidth(), FONT_HEIGHT_SMALL - 4, 3),
+                                   meshtastic::TouchTargetKind::NodeRow, static_cast<uint32_t>(itemIndex),
+                                   INPUT_BROKER_NONE);
+        }
+
         // Draw key icon (after highlight)
         /*
         if (itemIndex >= numActiveChannels) {
@@ -1856,6 +1916,12 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
         if (emoteIdx == emotePickerIndex)
             display->setColor(WHITE);
+
+        if (screen) {
+            screen->addTouchTarget(graphics::touchExpandedRect(x, rowY, display->getWidth() - 8, rowHeight, 3),
+                                   meshtastic::TouchTargetKind::EmoteRow, static_cast<uint32_t>(emoteIdx),
+                                   INPUT_BROKER_NONE);
+        }
     }
 
     // Draw scrollbar if needed
@@ -2073,6 +2139,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             if (_highlight)
                 display->setColor(WHITE);
 #endif
+
+            if (screen) {
+                screen->addTouchTarget(graphics::touchExpandedRect(x, lineY, display->getWidth() - 8, rowHeight, 3),
+                                       meshtastic::TouchTargetKind::MessageRow, static_cast<uint32_t>(msgIdx),
+                                       INPUT_BROKER_NONE);
+            }
 
             yCursor += rowHeight;
         }

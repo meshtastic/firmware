@@ -132,8 +132,261 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 // ****************************
 // * LoRa Focused Screen      *
 // ****************************
+#if defined(T_DECK_PRO) && defined(USE_EINK)
+static void drawTDeckLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    (void)state;
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "LoRa");
+
+    const int screenW = display->getWidth();
+    const int screenH = display->getHeight();
+    const int contentLeft = x + 8;
+    const int contentRight = x + screenW - 8;
+    const int contentWidth = contentRight - contentLeft;
+    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int bodyBottom = y + screenH - footerReserve;
+
+    uint32_t onlineNodes = nodeStatus ? nodeStatus->getNumOnline() : 0;
+    uint32_t totalNodes = nodeStatus ? nodeStatus->getNumTotal() : 0;
+    char nodeSummary[24];
+    snprintf(nodeSummary, sizeof(nodeSummary), "NODES %u/%u", static_cast<unsigned>(onlineNodes),
+             static_cast<unsigned>(totalNodes));
+
+    uint8_t dmac[6] = {0};
+    getMacAddr(dmac);
+    snprintf(screen->ourId, sizeof(screen->ourId), "%02x%02x", dmac[4], dmac[5]);
+    char bleSummary[24];
+    snprintf(bleSummary, sizeof(bleSummary), "BLE %s", screen->ourId);
+
+    const int summaryY = y + FONT_HEIGHT_SMALL + 5;
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft, summaryY, nodeSummary);
+    const int bleWidth = display->getStringWidth(bleSummary);
+    display->drawString(contentRight - bleWidth, summaryY, bleSummary);
+    const int separatorY = summaryY + FONT_HEIGHT_SMALL + 3;
+    display->drawLine(contentLeft, separatorY, contentRight, separatorY);
+
+    char modeStr[24];
+    if (!config.lora.use_preset) {
+        snprintf(modeStr, sizeof(modeStr), "BW%u-SF%u-CR%u", static_cast<unsigned>(config.lora.bandwidth),
+                 static_cast<unsigned>(config.lora.spread_factor), static_cast<unsigned>(config.lora.coding_rate));
+    } else {
+        const char *preset = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, true);
+        snprintf(modeStr, sizeof(modeStr), "%s", preset ? preset : "Custom");
+    }
+
+    char frequencyValue[40];
+    if (RadioLibInterface::instance) {
+        const float frequency = RadioLibInterface::instance->getFreq();
+        if (config.lora.channel_num == 0)
+            snprintf(frequencyValue, sizeof(frequencyValue), "%.3f MHz", frequency);
+        else
+            snprintf(frequencyValue, sizeof(frequencyValue), "%.3f MHz / slot %d", frequency, config.lora.channel_num);
+    } else {
+        snprintf(frequencyValue, sizeof(frequencyValue), "--");
+    }
+
+    const char *region = myRegion ? myRegion->name : "UNSET";
+    const char *role = DisplayFormatters::getDeviceRole(config.device.role);
+    const char *txState = config.lora.tx_enabled ? "ENABLED" : "DISABLED";
+    int channelPercent = airTime ? static_cast<int>(airTime->channelUtilizationPercent() + 0.5f) : 0;
+    if (channelPercent < 0)
+        channelPercent = 0;
+    if (channelPercent > 100)
+        channelPercent = 100;
+
+    const int panelTop = separatorY + 7;
+    const int panelTitleHeight = 22;
+    const int normalRowHeight = 29;
+    const int utilizationRowHeight = 43;
+    const int panelHeight = panelTitleHeight + normalRowHeight * 5 + utilizationRowHeight + 4;
+    display->drawRect(contentLeft, panelTop, contentWidth, panelHeight);
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft + 7, panelTop + 5, "RADIO CONFIG");
+    const char *radioState = config.lora.tx_enabled ? "TX READY" : "TX OFF";
+    const int radioStateWidth = display->getStringWidth(radioState);
+    display->drawString(contentRight - radioStateWidth - 7, panelTop + 5, radioState);
+
+    int rowY = panelTop + panelTitleHeight;
+    auto drawValueRow = [&](const char *label, const char *value) {
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(contentLeft + 9, rowY + 6, label);
+        char clippedValue[64];
+        const int valueMaxWidth = contentWidth - 92;
+        UIRenderer::truncateStringWithEmotes(display, value, clippedValue, sizeof(clippedValue), valueMaxWidth);
+        const int valueWidth = display->getStringWidth(clippedValue);
+        display->drawString(contentRight - valueWidth - 9, rowY + 6, clippedValue);
+        display->drawLine(contentLeft + 7, rowY + normalRowHeight - 1, contentRight - 7, rowY + normalRowHeight - 1);
+        rowY += normalRowHeight;
+    };
+
+    drawValueRow("REGION", region);
+    drawValueRow("PRESET", modeStr);
+    drawValueRow("FREQUENCY", frequencyValue);
+    drawValueRow("ROLE", role ? role : "Unknown");
+    drawValueRow("TX", txState);
+
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft + 9, rowY + 6, "CHANNEL USE");
+    char channelValue[12];
+    snprintf(channelValue, sizeof(channelValue), "%d%%", channelPercent);
+    const int channelValueWidth = display->getStringWidth(channelValue);
+    display->drawString(contentRight - channelValueWidth - 9, rowY + 6, channelValue);
+    const int barX = contentLeft + 9;
+    const int barY = rowY + 27;
+    const int barWidth = contentWidth - 18;
+    const int barHeight = 8;
+    display->drawRect(barX, barY, barWidth, barHeight);
+    const int fillWidth = ((barWidth - 2) * channelPercent) / 100;
+    if (fillWidth > 0)
+        display->fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2);
+
+    if (panelTop + panelHeight <= bodyBottom)
+        display->drawLine(contentLeft, panelTop + panelHeight, contentRight, panelTop + panelHeight);
+    graphics::drawCommonFooter(display, x, y);
+}
+
+struct TDeckUsageRow {
+    const char *label;
+    uint32_t used;
+    uint32_t total;
+};
+
+static void drawTDeckSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    (void)state;
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "System");
+
+    const int screenW = display->getWidth();
+    const int screenH = display->getHeight();
+    const int contentLeft = x + 8;
+    const int contentRight = x + screenW - 8;
+    const int contentWidth = contentRight - contentLeft;
+    const int footerReserve = (currentResolution == ScreenResolution::High) ? 24 : 16;
+    const int bodyBottom = y + screenH - footerReserve;
+
+    char apiState[48];
+    const char *clientWord = currentResolution == ScreenResolution::High ? "Client" : "App";
+    snprintf(apiState, sizeof(apiState), "No %ss", clientWord);
+    if (service->api_state == service->STATE_BLE)
+        snprintf(apiState, sizeof(apiState), "%s / BLE", clientWord);
+    else if (service->api_state == service->STATE_WIFI)
+        snprintf(apiState, sizeof(apiState), "%s / WiFi", clientWord);
+    else if (service->api_state == service->STATE_SERIAL)
+        snprintf(apiState, sizeof(apiState), "%s / Serial", clientWord);
+    else if (service->api_state == service->STATE_PACKET)
+        snprintf(apiState, sizeof(apiState), "%s / Internal", clientWord);
+    else if (service->api_state == service->STATE_HTTP)
+        snprintf(apiState, sizeof(apiState), "%s / HTTP", clientWord);
+    else if (service->api_state == service->STATE_ETH)
+        snprintf(apiState, sizeof(apiState), "%s / Ethernet", clientWord);
+
+    const int summaryY = y + FONT_HEIGHT_SMALL + 5;
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft, summaryY, "RUNTIME");
+    const char *summaryState = isAPIConnected(service->api_state) ? "ACTIVE" : "STANDBY";
+    const int summaryStateWidth = display->getStringWidth(summaryState);
+    display->drawString(contentRight - summaryStateWidth, summaryY, summaryState);
+    const int separatorY = summaryY + FONT_HEIGHT_SMALL + 3;
+    display->drawLine(contentLeft, separatorY, contentRight, separatorY);
+
+    TDeckUsageRow usage[4];
+    int usageCount = 0;
+    const uint32_t heapTotal = static_cast<uint32_t>(memGet.getHeapSize());
+    const uint32_t heapFree = static_cast<uint32_t>(memGet.getFreeHeap());
+    usage[usageCount++] = {"HEAP", heapTotal > heapFree ? heapTotal - heapFree : 0, heapTotal};
+
+#ifdef ESP32
+#ifndef T5_S3_EPAPER_PRO
+    const uint32_t psramTotal = static_cast<uint32_t>(memGet.getPsramSize());
+    const uint32_t psramFree = static_cast<uint32_t>(memGet.getFreePsram());
+    if (psramTotal > 0)
+        usage[usageCount++] = {"PSRAM", psramTotal > psramFree ? psramTotal - psramFree : 0, psramTotal};
+#endif
+    const uint32_t flashTotal = static_cast<uint32_t>(FSCom.totalBytes());
+    const uint32_t flashUsed = static_cast<uint32_t>(FSCom.usedBytes());
+    if (flashTotal > 0)
+        usage[usageCount++] = {"FLASH", flashUsed, flashTotal};
+#endif
+
+    const int usageTop = separatorY + 7;
+    const int usageTitleHeight = 22;
+    const int usageRowHeight = 34;
+    const int usagePanelHeight = usageTitleHeight + usageCount * usageRowHeight + 4;
+    display->drawRect(contentLeft, usageTop, contentWidth, usagePanelHeight);
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft + 7, usageTop + 5, "RESOURCE USAGE");
+    const int usageBottom = usageTop + usagePanelHeight;
+    for (int i = 0; i < usageCount; ++i) {
+        const int rowY = usageTop + usageTitleHeight + i * usageRowHeight;
+        const uint32_t total = usage[i].total;
+        const uint32_t used = usage[i].used > total ? total : usage[i].used;
+        const int percent = total > 0 ? static_cast<int>((static_cast<uint64_t>(used) * 100) / total) : 0;
+        char value[32];
+        snprintf(value, sizeof(value), "%d%%  %u/%uK", percent, static_cast<unsigned>(used / 1024),
+                 static_cast<unsigned>(total / 1024));
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(contentLeft + 9, rowY + 4, usage[i].label);
+        const int valueWidth = display->getStringWidth(value);
+        display->drawString(contentRight - valueWidth - 9, rowY + 4, value);
+
+        const int barX = contentLeft + 9;
+        const int barY = rowY + 21;
+        const int barWidth = contentWidth - 18;
+        const int barHeight = 7;
+        display->drawRect(barX, barY, barWidth, barHeight);
+        const int fillWidth = ((barWidth - 2) * percent) / 100;
+        if (fillWidth > 0)
+            display->fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2);
+        if (i + 1 < usageCount)
+            display->drawLine(contentLeft + 7, rowY + usageRowHeight - 1, contentRight - 7, rowY + usageRowHeight - 1);
+    }
+
+    char versionValue[40];
+    snprintf(versionValue, sizeof(versionValue), "Ver: %s", optstr(APP_VERSION));
+    char uptimeValue[32];
+    getUptimeStr(millis(), "Up: ", uptimeValue, sizeof(uptimeValue));
+
+    const int statusTop = usageBottom + 8;
+    const int statusTitleHeight = 22;
+    const int statusRowHeight = 26;
+    const int statusPanelHeight = statusTitleHeight + statusRowHeight * 3 + 4;
+    display->drawRect(contentLeft, statusTop, contentWidth, statusPanelHeight);
+    display->setFont(FONT_SMALL_LOCAL);
+    display->drawString(contentLeft + 7, statusTop + 5, "RUNTIME STATUS");
+
+    const char *statusLabels[] = {"VERSION", "UPTIME", "API"};
+    const char *statusValues[] = {versionValue, uptimeValue, apiState};
+    for (int i = 0; i < 3; ++i) {
+        const int rowY = statusTop + statusTitleHeight + i * statusRowHeight;
+        display->setFont(FONT_SMALL_LOCAL);
+        display->drawString(contentLeft + 9, rowY + 5, statusLabels[i]);
+        char clippedValue[48];
+        UIRenderer::truncateStringWithEmotes(display, statusValues[i], clippedValue, sizeof(clippedValue), contentWidth - 96);
+        const int valueWidth = display->getStringWidth(clippedValue);
+        display->drawString(contentRight - valueWidth - 9, rowY + 5, clippedValue);
+        if (i < 2)
+            display->drawLine(contentLeft + 7, rowY + statusRowHeight - 1, contentRight - 7, rowY + statusRowHeight - 1);
+    }
+
+    if (statusTop + statusPanelHeight <= bodyBottom)
+        display->drawLine(contentLeft, statusTop + statusPanelHeight, contentRight, statusTop + statusPanelHeight);
+    graphics::drawCommonFooter(display, x, y);
+}
+#endif
+
 void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if defined(T_DECK_PRO) && defined(USE_EINK)
+    drawTDeckLoRaFocused(display, state, x, y);
+    return;
+#endif
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -299,6 +552,10 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 // ****************************
 void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#if defined(T_DECK_PRO) && defined(USE_EINK)
+    drawTDeckSystemScreen(display, state, x, y);
+    return;
+#endif
     display->clear();
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);

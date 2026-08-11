@@ -1,15 +1,20 @@
 #pragma once
 
 #include "InputBroker.h"
+#include "TouchGestureRecognizer.h"
+#include "TouchTargetRegistry.h"
 #include "concurrency/OSThread.h"
 #include "mesh/NodeDB.h"
-#include "time.h"
 
 typedef struct _TouchEvent {
     const char *source;
     char touchEvent;
     uint16_t x;
     uint16_t y;
+    input_broker_event targetAction;
+    uint8_t targetKind;
+    uint32_t targetValue;
+    uint8_t targetLongPress;
 } TouchEvent;
 
 class TouchScreenBase : public Observable<const InputEvent *>, public concurrency::OSThread
@@ -17,6 +22,11 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
   public:
     explicit TouchScreenBase(const char *name, uint16_t width, uint16_t height);
     void init(bool hasTouch);
+    void beginTouchFrame(uint32_t pageGeneration);
+    void markTouchFrameMapped();
+    bool addTouchTarget(meshtastic::TouchRect rect, meshtastic::TouchTargetKind kind, uint32_t value,
+                        input_broker_event tapAction, input_broker_event longPressAction = INPUT_BROKER_NONE);
+    void publishTouchFrame();
 
   protected:
     enum TouchScreenBaseStateType { TOUCH_EVENT_OCCURRED, TOUCH_EVENT_CLEARED };
@@ -47,13 +57,14 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     uint16_t _display_height;
 
   private:
-    bool _touchedOld = false;  // previous touch state
-    int16_t _first_x, _last_x; // horizontal swipe direction
-    int16_t _first_y, _last_y; // vertical swipe direction
-    time_t _start;             // for LONG_PRESS
-    uint32_t _lastTouchSeenMs; // helps suppress brief touch-controller dropouts
-    bool _tapped;              // for DOUBLE_TAP
-    uint32_t _lastRun = 0;     // helps suppress too fast consecutive runOnce() executions
+    bool _touchedOld = false;
+    int16_t _last_x = 0;
+    int16_t _last_y = 0;
+    uint32_t _lastTouchSeenMs = 0;
+    uint32_t _lastRun = 0;
+    meshtastic::TouchGestureRecognizer _recognizer;
+    meshtastic::TouchTargetRegistry _targets;
+    bool _targetCaptureStarted = false;
 
     const char *_originName;
 };

@@ -62,6 +62,7 @@ std::string getSafeNodeName(OLEDDisplay *display, meshtastic_NodeInfoLite *node,
 // Scrolling controls
 void scrollUp();
 void scrollDown();
+bool isTouchRowValid(uint32_t rowIndex);
 
 // Bitmap drawing function
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display);

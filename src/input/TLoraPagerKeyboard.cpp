@@ -1,6 +1,7 @@
 #if defined(T_LORA_PAGER)
 
 #include "TLoraPagerKeyboard.h"
+#include "input/HapticFeedback.h"
 #include "main.h"
 
 #ifndef LEDC_BACKLIGHT_CHANNEL
@@ -190,9 +191,10 @@ void TLoraPagerKeyboard::released()
 
 void TLoraPagerKeyboard::hapticFeedback()
 {
-    drv.setWaveform(0, 14); // strong buzz 100%
-    drv.setWaveform(1, 0);  // end waveform
-    drv.go();
+#if defined(HAPTIC_FEEDBACK_PIN) || defined(HAS_DRV2605)
+    if (::hapticFeedback)
+        ::hapticFeedback->play(HapticEffect::SELECT);
+#endif
 }
 
 // toggle brightness of the backlight in three steps

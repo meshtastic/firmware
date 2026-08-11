@@ -56,16 +56,29 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
  */
 bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 {
-    // No need to grab this lock because we are on our own SPI bus
-    // concurrency::LockGuard g(spiLock);
+    return forceDisplayFromBuffer(buffer, msecLimit);
+}
+
+bool EInkDisplay::forceDisplayFromBuffer(const uint8_t *sourceBuffer, uint32_t msecLimit)
+{
+    const uint8_t *frame = sourceBuffer != nullptr ? sourceBuffer : buffer;
+    if (frame == nullptr || !adafruitDisplay)
+        return false;
 
     uint32_t now = millis();
-    uint32_t sinceLast = now - lastDrawMsec;
-
-    if (adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0))
-        lastDrawMsec = now;
-    else
+    if (msecLimit != 0 && lastDrawMsec != 0 && now - lastDrawMsec <= msecLimit)
         return false;
+
+#if defined(T_DECK_PRO)
+    // T-Deck Pro shares this SPI bus with the LoRa radio. Avoid holding the
+    // lock for frames that the rate limiter will reject.
+    concurrency::LockGuard g(spiLock);
+    now = millis();
+    if (msecLimit != 0 && lastDrawMsec != 0 && now - lastDrawMsec <= msecLimit)
+        return false;
+#endif
+
+    lastDrawMsec = now;
 
     // FIXME - only draw bits have changed (use backbuf similar to the other displays)
     const bool flipped = config.display.flip_screen;
@@ -74,7 +87,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     // For SEEED_WIO_TRACKER_L1_EINK, setRotation(3) is correct but mirrored; flip both axes
     for (uint32_t y = 0; y < displayHeight; y++) {
         for (uint32_t x = 0; x < displayWidth; x++) {
-            auto b = buffer[x + (y / 8) * displayWidth];
+            auto b = frame[x + (y / 8) * displayWidth];
             auto isset = b & (1 << (y & 7));
             adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
         }
@@ -82,7 +95,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 #else
     for (uint32_t y = 0; y < displayHeight; y++) {
         for (uint32_t x = 0; x < displayWidth; x++) {
-            auto b = buffer[x + (y / 8) * displayWidth];
+            auto b = frame[x + (y / 8) * displayWidth];
             auto isset = b & (1 << (y & 7));
             if (flipped)
                 adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
