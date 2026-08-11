@@ -1742,8 +1742,7 @@ bool Power::cw2015Init()
 /**
  * Adapter class for BQ25896/BQ27220 Lipo battery charger.
  *
- * The BQ25896 supplies everything power management needs; the BQ27220 gauge only adds
- * time-to-full/empty, so a gauge failure must not take the whole battery source down.
+ * The gauge only adds time-to-full/empty, so its failure must not take the charger down.
  */
 class LipoCharger : public HasBatteryLevel
 {
@@ -1752,9 +1751,8 @@ class LipoCharger : public HasBatteryLevel
     uint8_t gaugeAttemptsLeft = BQ27220_INIT_ATTEMPTS;
     uint32_t lastGaugeAttemptMs = 0;
 
-    // An aborted transfer leaves the i2c_master driver holding a stale transaction
-    // (ESP_ERR_INVALID_STATE); the next transfer then NULL-derefs inside the I2C ISR.
-    // Deleting the bus frees the interrupt and the stale transaction with it.
+    // An aborted transfer leaves the i2c_master driver holding a stale transaction, which
+    // the next transfer trips over. Deleting the bus frees it along with the interrupt.
     void recoverI2CBus()
     {
 #ifdef ARCH_ESP32
@@ -1813,14 +1811,13 @@ class LipoCharger : public HasBatteryLevel
         return true;
     }
 
-    /**
-     * Bring up the BQ27220 fuel gauge, unless it is already up or out of attempts.
-     */
+    /// Bring up the BQ27220 fuel gauge, unless it is already up or out of attempts
     void gaugeRunOnce()
     {
         if (bq != nullptr || gaugeAttemptsLeft == 0)
             return;
-        if (lastGaugeAttemptMs && Throttle::isWithinTimespanMs(lastGaugeAttemptMs, BQ27220_RETRY_INTERVAL_MS))
+        if (gaugeAttemptsLeft < BQ27220_INIT_ATTEMPTS &&
+            Throttle::isWithinTimespanMs(lastGaugeAttemptMs, BQ27220_RETRY_INTERVAL_MS))
             return;
 
         lastGaugeAttemptMs = millis();
@@ -1830,7 +1827,7 @@ class LipoCharger : public HasBatteryLevel
         // multi-second unseal/reset/provision sequence inside init().
         Wire.beginTransmission(BQ27220_I2C_ADDRESS);
         if (Wire.endTransmission() != 0) {
-            LOG_WARN("BQ27220 not responding at 0x%02x", BQ27220_I2C_ADDRESS);
+            LOG_WARN("BQ27220 not responding at 0x%x", BQ27220_I2C_ADDRESS);
             return;
         }
 
@@ -1848,7 +1845,7 @@ class LipoCharger : public HasBatteryLevel
         bq = nullptr;
         // init() bails out mid-sequence, so hand the next bus user a sane driver state.
         recoverI2CBus();
-        LOG_WARN("BQ27220 init failed (%u retries left), use BQ25896 for battery state", gaugeAttemptsLeft);
+        LOG_WARN("BQ27220 init failed (%d retries left), use BQ25896 for battery state", (int)gaugeAttemptsLeft);
     }
 
     /**
@@ -1910,9 +1907,7 @@ bool Power::lipoChargerInit()
     return true;
 }
 
-/**
- * Retry a fuel gauge that did not come up during setup
- */
+/// Retry a fuel gauge that did not come up during setup
 void Power::lipoChargerRetry()
 {
     lipoCharger.gaugeRunOnce();
