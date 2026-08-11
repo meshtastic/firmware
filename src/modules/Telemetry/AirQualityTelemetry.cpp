@@ -226,23 +226,28 @@ int32_t AirQualityTelemetryModule::runOnce()
         bool phoneDue = (lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs);
 
         if (telemetryDue && telemetryAllowed) {
-            sendTelemetry();
-
-            if (transmitHistory) {
-                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
+            if (sendTelemetry()) {
+                if (transmitHistory) {
+                    transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
+                }
+                // Correct the awake time, trimming to 0
+                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
+                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
+                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
+            } else {
+                awakeAheadOfTimeMs = 0;
             }
-            // Correct the awake time, trimming to 0
-            const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
-            awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
-            // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
         } else if (phoneDue && phoneAllowed) {
             // Mesh transmission isn't due yet, but we can still update the phone.
-            sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
-            // Correct the awake time, trimming to 0
-            const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
-            awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
-            // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
+            if (sendTelemetry(NODENUM_BROADCAST, true)) {
+                lastSentToPhone = millis();
+                // Correct the awake time, trimming to 0
+                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
+                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
+                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
+            } else {
+                awakeAheadOfTimeMs = 0;
+            }
         } else {
             // if for some reason we end up here after waking up, but not able to send, then reset
             // the counter
@@ -268,6 +273,8 @@ int32_t AirQualityTelemetryModule::runOnce()
         // mistime the pending deep sleep
         return FIVE_SECONDS_MS;
     }
+
+    // Update next interval if we were ahead
     uint32_t correctedIntervalMs = sendToPhoneIntervalMs + awakeAheadOfTimeMs;
     awakeAheadOfTimeMs = 0;
     startAirQualityTelemetryCycle = 0;
