@@ -145,6 +145,9 @@ extern struct portduino_config_struct {
     int rf95_max_power = 20;
     bool dio2_as_rf_switch = false;
     int dio3_tcxo_voltage = 0;
+    // DIO3_TCXO_VOLTAGE was written out as false or 0 rather than left absent. Diagnostic only,
+    // and so not serialized - the key it came from round-trips as absent either way.
+    bool dio3_tcxo_voltage_disabled = false;
     // Probe for a TCXO and fall back to the XTAL; runtime twin of the TCXO_OPTIONAL define.
     bool tcxo_optional = false;
     int lora_usb_pid = 0x5512;

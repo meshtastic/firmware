@@ -1050,6 +1050,10 @@ bool loadConfig(const char *configPath)
                 if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
                     portduino_config.dio3_tcxo_voltage = 1800; // default millivolts for "true"
                 }
+                // A written-out false or 0 asks for DIO3 to be left alone, which stores the same as
+                // an absent key. Kept apart so --check can see it contradict TCXO_OPTIONAL.
+                portduino_config.dio3_tcxo_voltage_disabled =
+                    yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"] && portduino_config.dio3_tcxo_voltage == 0;
                 // Try both oscillators rather than requiring the user to know which is fitted.
                 portduino_config.tcxo_optional = yamlConfig["Lora"]["TCXO_OPTIONAL"].as<bool>(false);
 

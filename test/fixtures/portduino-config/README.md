@@ -108,11 +108,12 @@ A variant declares "a TCXO may or may not be fitted" at compile time with `TCXO_
 A Portduino carrier cannot: the same `meshtasticd` binary runs on hardware populated either
 way, so the statement arrives as YAML and is answered at runtime.
 
-| File                             | Expected                                                                |
-| -------------------------------- | ----------------------------------------------------------------------- |
-| `tcxo-optional.yaml`             | Clean. No Vref given, so the TCXO attempt uses the 1.6 V radio default. |
-| `tcxo-optional-sx1262.yaml`      | Clean. Another family, explicit Vref, which is the one reported.        |
-| `tcxo-optional-unsupported.yaml` | An SX128x has no TCXO reference to probe for, so the key is inert.      |
+| File                               | Expected                                                                               |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `tcxo-optional.yaml`               | Clean. No Vref given, so the TCXO attempt uses the 1.6 V radio default.                |
+| `tcxo-optional-sx1262.yaml`        | Clean. Another family, explicit Vref, which is the one reported.                       |
+| `tcxo-optional-unsupported.yaml`   | An SX128x has no TCXO reference to probe for, so the key is inert.                     |
+| `tcxo-optional-contradiction.yaml` | `DIO3_TCXO_VOLTAGE: false` asks for DIO3 to be left alone; the probe drives it anyway. |
 
 With the probe asked for and no voltage given, the driver tries the radio default rather
 than skipping the TCXO attempt - otherwise there is nothing to fall back _from_.
