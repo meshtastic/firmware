@@ -663,7 +663,7 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory. The canonical suite count is detected on the fly: the `test_*` directories under `test/` are the register, and `bin/run-tests.sh` cross-checks the suites that actually ran against them on every full run. **Never state the count as a literal anywhere** - it is whatever `test/test_*` contains right now. The list below is a partial description of what suites cover, not an inventory:
+Unit tests in `test/` directory. The canonical suite count is detected on the fly: the `test_*` directories under `test/` are the register, and `bin/run-tests.sh` cross-checks the suites that actually ran against them on every full run. **Never state the count as a literal anywhere** - it is whatever `test/test_*` contains right now. In CI, the `suite-shrinkage-check` job (`test_native.yml`) fails a PR that loses a `test_*` directory relative to its merge base unless the suite is named in the PR title, body, or a commit message - deleting a suite therefore requires saying so. The list below is a partial description of what suites cover, not an inventory:
 
 - `test_admin_radio/` - LoRa region/config validation, AdminModule dispatch, node-DB metadata saves
 - `test_fscommon_getfiles/` - bounded file-manifest walk (cap, depth, truncation reporting)
