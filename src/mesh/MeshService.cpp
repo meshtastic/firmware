@@ -182,6 +182,7 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
         if (!toPhoneQueue.enqueue(p, 0)) {
             LOG_ERROR("Failed to re-enqueue packet in getNodenumFromRequestId; releasing");
             packetPool.release(p);
+            fromNum++;
         }
     }
     return nodenum;

@@ -5,8 +5,22 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "memory/MemAudit.h"
 #include "meshtastic/config.pb.h"
 #include "support/MockMeshService.h"
+
+#if MESHTASTIC_MEM_AUDIT
+static int32_t getPktpoolLiveBytes()
+{
+    memaudit::Tag rows[memaudit::kMaxTags];
+    size_t count = memaudit::snapshot(rows, memaudit::kMaxTags);
+    for (size_t i = 0; i < count; i++) {
+        if (rows[i].tag && strcmp(rows[i].tag, "pktpool(live)") == 0)
+            return rows[i].bytes;
+    }
+    return 0;
+}
+#endif
 
 static MockMeshService *mockMeshService;
 
@@ -404,6 +418,9 @@ void tearDown(void)
 
 static void test_beginSending_oversizedPayloadAbortsSafely()
 {
+#if MESHTASTIC_MEM_AUDIT
+    int32_t baseline = getPktpoolLiveBytes();
+#endif
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     TEST_ASSERT_NOT_NULL(p);
     p->from = 0x12345678;
@@ -418,10 +435,16 @@ static void test_beginSending_oversizedPayloadAbortsSafely()
 
     TEST_ASSERT_EQUAL_UINT(0, result);
     TEST_ASSERT_NULL(testRadio->getSendingPacket());
+#if MESHTASTIC_MEM_AUDIT
+    TEST_ASSERT_EQUAL_INT32(baseline, getPktpoolLiveBytes());
+#endif
 }
 
 static void test_deliverToReceiver_nullRouterReleasesPacket()
 {
+#if MESHTASTIC_MEM_AUDIT
+    int32_t baseline = getPktpoolLiveBytes();
+#endif
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
     TEST_ASSERT_NOT_NULL(p);
     p->id = 0xabcdef01;
@@ -431,10 +454,16 @@ static void test_deliverToReceiver_nullRouterReleasesPacket()
 
     testRadio->deliverToReceiverPublic(p);
     router = savedRouter;
+#if MESHTASTIC_MEM_AUDIT
+    TEST_ASSERT_EQUAL_INT32(baseline, getPktpoolLiveBytes());
+#endif
 }
 
 static void test_sendQueueStatusToPhone_fullQueueReleasesCopied()
 {
+#if MESHTASTIC_MEM_AUDIT
+    int32_t baseline = getPktpoolLiveBytes();
+#endif
     meshtastic_QueueStatus qs = meshtastic_QueueStatus_init_zero;
     qs.res = ERRNO_OK;
 
@@ -448,6 +477,9 @@ static void test_sendQueueStatusToPhone_fullQueueReleasesCopied()
     while (meshtastic_QueueStatus *d = service->getQueueStatusForPhone()) {
         service->releaseQueueStatusToPool(d);
     }
+#if MESHTASTIC_MEM_AUDIT
+    TEST_ASSERT_EQUAL_INT32(baseline, getPktpoolLiveBytes());
+#endif
 }
 
 void setup()

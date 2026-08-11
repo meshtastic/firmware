@@ -594,12 +594,14 @@ void RadioLibInterface::completeSending()
         printPacket("Completed sending", p);
 #if !MESHTASTIC_EXCLUDE_BEACON
         MeshBeaconModule::clearTargetRadioSettings(p);
-        MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
 #endif
 
         // We are done sending that packet, release it
         packetPool.release(p);
     }
+#if !MESHTASTIC_EXCLUDE_BEACON
+    MeshBeaconModule::reconfigureForBeaconTX(this, nullptr);
+#endif
 }
 
 void RadioLibInterface::handleReceiveInterrupt()
@@ -772,6 +774,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
     } else {
         configHardwareForSend(); // must be after setStandby
 
+#if !MESHTASTIC_EXCLUDE_BEACON
+        MeshBeaconModule::clearTargetRadioSettings(txp);
+#endif
         size_t numbytes = beginSending(txp);
         if (numbytes == 0) {
             if (!sendingPacket) {
