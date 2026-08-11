@@ -341,7 +341,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
                 // Raw 0 is reserved and >7 is either undefined or an LR2021-only convolutional rate no
                 // Meshtastic peer can send. calculateTimeOnAir() would multiply by it unchecked.
                 if (rxCR < 1 || rxCR > 7) {
-                    LOG_WARN("Bogus RX coding rate %u from radio, use configured %u", rxCR, dr.lora.codingRate);
+                    LOG_WARN("Bogus RX coding rate %d from radio, use configured %d", rxCR, dr.lora.codingRate);
                 } else {
                     // Go from raw header value to denominator
                     if (rxCR < 5) {
