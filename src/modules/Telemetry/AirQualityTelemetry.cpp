@@ -271,7 +271,7 @@ int32_t AirQualityTelemetryModule::runOnce()
     uint32_t correctedIntervalMs = sendToPhoneIntervalMs + awakeAheadOfTimeMs;
     awakeAheadOfTimeMs = 0;
     startAirQualityTelemetryCycle = 0;
-    LOG_DEBUG("Correctied interval in ms: %d", correctedIntervalMs);
+    LOG_DEBUG("Corrected interval in ms: %d", correctedIntervalMs);
     return min(correctedIntervalMs, result);
 }
 
