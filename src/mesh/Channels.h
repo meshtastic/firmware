@@ -5,6 +5,14 @@
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 
+#ifndef USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+#define USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL USERPREFS_EVENT_MODE
+#endif
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && !defined(USERPREFS_CHANNEL_0_PSK)
+#error "USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL requires USERPREFS_CHANNEL_0_PSK"
+#endif
+
 /** A channel number (index into the channel table)
  */
 typedef uint8_t ChannelIndex;
@@ -94,6 +102,9 @@ class Channels
     // radio runs MediumFast). Broader than isDefaultChannel, which only
     // matches the current preset's name and PSK byte 1.
     bool isWellKnownChannel(ChannelIndex chIndex);
+
+    // Returns true if this channel's effective key matches USERPREFS_CHANNEL_0_PSK.
+    bool isEventChannel(ChannelIndex chIndex);
 
     // Returns true if we can be reached via a channel with the default settings given a region and modem preset
     bool hasDefaultChannel();
