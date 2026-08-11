@@ -89,7 +89,7 @@ jobs:
           echo "::notice::client PSK injected (32 bytes)"
 
       - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.platformio/packages
@@ -101,7 +101,7 @@ jobs:
             pio-${{ runner.os }}-
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
