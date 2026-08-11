@@ -88,28 +88,39 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
 
 #if !(MESHTASTIC_EXCLUDE_XEDDSA)
 /**
- * Build a signing buffer that covers packet metadata and payload (v2 layout):
- *   [fromNode(4) | packetId(4) | portnum(4) | request_id(4) | reply_id(4) | payload(N)]
- * Covering the metadata prevents replay, reattribution, and portnum redirection; binding
- * request_id/reply_id additionally prevents retargeting a signed ack/reply at a different
- * outstanding request (or a signed tapback at a different message). Unset protobuf fields
- * are zero, so callers always pass the decoded field values verbatim.
+ * Build a signing buffer that covers packet metadata and payload:
+ *   [fromNode(4) | packetId(4) | portnum(4) | payload(N)]                              (base)
+ *   [fromNode(4) | packetId(4) | portnum(4) | request_id(4) | reply_id(4) | payload(N)] (extended)
+ * The extended layout is used exactly when request_id or reply_id is nonzero, binding the
+ * request/reply linkage so a signed ack/reply cannot be retargeted at a different outstanding
+ * request (or a signed tapback re-pointed at a different message). Packets without either field
+ * keep the base layout, byte-identical to the pre-2.8.0 draft format, so their signatures stay
+ * verifiable across that boundary. Both sides derive the layout from the packet's own decoded
+ * fields, so no format flag is transmitted. The conditional layout is theoretically ambiguous (a
+ * base-layout payload could begin with bytes that parse as the extended header), but a forgery
+ * additionally requires identical fromNode/packetId/portnum and an honest signer emitting a
+ * zero-request packet with an attacker-useful payload prefix on the same portnum - signed
+ * ROUTING_APP packets always carry a request_id, so no such packet exists for the ack case.
+ * Covering the metadata prevents replay, reattribution, and portnum redirection attacks.
  */
 static size_t buildSigningBuffer(uint8_t *buf, size_t bufSize, uint32_t fromNode, uint32_t packetId, uint32_t portnum,
                                  uint32_t requestId, uint32_t replyId, const uint8_t *payload, size_t payloadLen)
 {
-    const size_t headerLen = sizeof(uint32_t) * 5;
     static_assert(sizeof(uint32_t) * 5 + sizeof(meshtastic_Data_payload_t::bytes) <= MAX_BLOCKSIZE,
                   "signing buffer must hold the header plus a maximum Data payload");
-    size_t totalLen = headerLen + payloadLen;
+    size_t headerLen = sizeof(uint32_t) * 3;
+    size_t totalLen = headerLen + payloadLen + (requestId != 0 || replyId != 0 ? sizeof(uint32_t) * 2 : 0);
     if (totalLen > bufSize)
         return 0;
     // May need endian conversion for oddball platforms.
     memcpy(buf, &fromNode, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t), &packetId, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t) * 2, &portnum, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t) * 3, &requestId, sizeof(uint32_t));
-    memcpy(buf + sizeof(uint32_t) * 4, &replyId, sizeof(uint32_t));
+    if (requestId != 0 || replyId != 0) {
+        memcpy(buf + sizeof(uint32_t) * 3, &requestId, sizeof(uint32_t));
+        memcpy(buf + sizeof(uint32_t) * 4, &replyId, sizeof(uint32_t));
+        headerLen += sizeof(uint32_t) * 2;
+    }
     memcpy(buf + headerLen, payload, payloadLen);
     return totalLen;
 }

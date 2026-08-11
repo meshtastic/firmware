@@ -312,6 +312,42 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
     TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sig2));
 }
 
+// A packet with no request/reply linkage keeps the base signing layout, byte-identical to the
+// pre-request_id-binding format: a signature built by hand over [from|id|portnum|payload] - what
+// an existing 2.8 draft signer emits - must verify through the current engine with 0/0 fields,
+// and must NOT verify when reinterpreted with nonzero request/reply fields (or vice versa).
+void test_XEdDSA_base_format_backwards_compat(void)
+{
+    uint8_t pub[32], priv[32], ed_priv[32], ed_pub[32];
+    uint8_t message[] = "legacy signer";
+    uint8_t signature[64];
+    uint32_t fromNode = 0x77, packetId = 0x1CEB00DA, portnum = 1;
+
+    crypto->generateKeyPair(pub, priv);
+    XEdDSA::priv_curve_to_ed_keys(priv, ed_priv, ed_pub);
+
+    // Hand-build the base-format buffer exactly as pre-binding firmware does.
+    uint8_t legacyBuf[12 + sizeof(message)];
+    memcpy(legacyBuf, &fromNode, 4);
+    memcpy(legacyBuf + 4, &packetId, 4);
+    memcpy(legacyBuf + 8, &portnum, 4);
+    memcpy(legacyBuf + 12, message, sizeof(message));
+    memset(signature, 0x42, 32); // hedge nonce seed, any value works
+    XEdDSA::sign(signature, ed_priv, ed_pub, legacyBuf, sizeof(legacyBuf));
+
+    // Legacy signature verifies through the new engine when both fields are zero...
+    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0, 0, message, sizeof(message), signature));
+    // ...and cannot be re-framed as a signature over a request/reply-bearing packet.
+    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0xA1, 0, message, sizeof(message), signature));
+    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0, 0xB2, message, sizeof(message), signature));
+
+    // The mirror image: an extended-format signature must not verify with the fields zeroed.
+    uint8_t extSig[64];
+    TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, 0xA1, 0xB2, message, sizeof(message), extSig));
+    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0xA1, 0xB2, message, sizeof(message), extSig));
+    TEST_ASSERT_FALSE(crypto->xeddsa_verify(pub, fromNode, packetId, portnum, 0, 0, message, sizeof(message), extSig));
+}
+
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -396,6 +432,7 @@ void setup()
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
     RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
+    RUN_TEST(test_XEdDSA_base_format_backwards_compat);
     exit(UNITY_END()); // stop unit testing
 }
 
