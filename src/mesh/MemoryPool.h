@@ -148,25 +148,30 @@ template <class T, int MaxSize> class MemoryPool : public Allocator<T>
             return;
         }
 
-        // Find byte offset and verify alignment
-        uintptr_t offset = reinterpret_cast<uintptr_t>(p) - reinterpret_cast<uintptr_t>(pool);
-        if (offset % sizeof(T) != 0) {
-            LOG_WARN("Pointer 0x%x is misaligned inside static pool", p);
+        uintptr_t pAddr = reinterpret_cast<uintptr_t>(p);
+        uintptr_t poolStart = reinterpret_cast<uintptr_t>(pool);
+        uintptr_t poolEnd = poolStart + sizeof(pool);
+
+        if (pAddr < poolStart || pAddr >= poolEnd) {
+            LOG_WARN("Pointer %p not from our pool", static_cast<void *>(p));
             return;
         }
 
-        int index = offset / sizeof(T);
-        if (index >= 0 && index < MaxSize) {
-            if (!used[index]) {
-                LOG_WARN("Double free detected for pool item %d at 0x%x", index, p);
-                return;
-            }
-            used[index] = false;
-            this->auditAdd(-(int32_t)sizeof(T));
-            LOG_HEAP("Released static pool item %d at 0x%x", index, p);
-        } else {
-            LOG_WARN("Pointer 0x%x not from our pool", p);
+        uintptr_t offset = pAddr - poolStart;
+        if (offset % sizeof(T) != 0) {
+            LOG_WARN("Pointer %p is misaligned inside static pool", static_cast<void *>(p));
+            return;
         }
+
+        size_t index = offset / sizeof(T);
+        if (!used[index]) {
+            LOG_WARN("Double free detected for pool item %d at %p", static_cast<int>(index), static_cast<void *>(p));
+            return;
+        }
+
+        used[index] = false;
+        this->auditAdd(-(int32_t)sizeof(T));
+        LOG_HEAP("Released static pool item %d at %p", static_cast<int>(index), static_cast<void *>(p));
     }
 
   protected:
