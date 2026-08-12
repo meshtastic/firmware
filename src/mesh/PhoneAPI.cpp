@@ -615,6 +615,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             auto info = TypeConversions::ConvertToNodeInfo(us);
             info.has_hops_away = false;
             info.is_favorite = true;
+            // NodeInfoLite dropped macaddr, so ConvertToUser() zero-fills it.
+            if (info.has_user)
+                memcpy(info.user.macaddr, owner.macaddr, sizeof(info.user.macaddr));
             {
                 concurrency::LockGuard guard(&nodeInfoMutex);
                 nodeInfoForPhone = info;
@@ -1811,6 +1814,16 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         }
     }
 #endif
+
+    // Reject before recording duplicate or per-port cooldown state, so a blocked
+    // attempt cannot throttle a valid private-channel position retry.
+    if (isBlockedEventCoordinatePacket(&p)) {
+        LOG_DEBUG("Suppress phone coordinate send on event (everyone) channel");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Location sharing is disabled on this channel");
+        return false;
+    }
 
 #if defined(ARCH_PORTDUINO)
     // For use with the simulator, we should not ignore duplicate packets from the phone

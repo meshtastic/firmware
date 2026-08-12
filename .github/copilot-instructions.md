@@ -313,7 +313,7 @@ firmware/
 │   └── native/           # Linux/Portduino variants
 ├── protobufs/            # Protocol buffer definitions
 ├── boards/               # Custom PlatformIO board definitions
-├── test/                 # Native unit-test suites (count: test/native-suite-count)
+├── test/                 # Native unit-test suites (count = the test_* dirs, detected on the fly)
 └── bin/                  # Build and utility scripts
 ```
 
@@ -663,7 +663,7 @@ Most workflows can be triggered manually via `workflow_dispatch` for testing.
 
 ### Native unit tests (C++)
 
-Unit tests in `test/` directory. The canonical suite count is in `test/native-suite-count`, cross-checked against `test/test_*` on every full run and by the `suite-count-check` CI job. **Never state the count as a literal anywhere else** - point at that file. The list below is a partial description of what suites cover, not an inventory:
+Unit tests in `test/` directory. The canonical suite count is detected on the fly: the `test_*` directories under `test/` are the register, and `bin/run-tests.sh` cross-checks the suites that actually ran against them on every full run. **Never state the count as a literal anywhere** - it is whatever `test/test_*` contains right now. In CI, the `suite-shrinkage-check` job (`test_native.yml`) fails a PR that loses a `test_*` directory relative to its merge base unless the suite is named in the PR title, body, or a commit message - deleting a suite therefore requires saying so. The list below is a partial description of what suites cover, not an inventory:
 
 - `test_admin_radio/` - LoRa region/config validation, AdminModule dispatch, node-DB metadata saves
 - `test_fscommon_getfiles/` - bounded file-manifest walk (cap, depth, truncation reporting)
@@ -693,7 +693,7 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 - `test_utf8/` - UTF-8 utilities
 - `test_warm_store/` - Warm-tier node store
 
-**Preferred run command - `bin/run-tests.sh`** (defaults to the `coverage` env; emits a machine-readable verdict on the final line; update `test/native-suite-count` when adding or removing suites):
+**Preferred run command - `bin/run-tests.sh`** (defaults to the `coverage` env; emits a machine-readable verdict on the final line; new `test_*` directories are picked up automatically):
 
 ```bash
 ./bin/run-tests.sh                             # all suites
@@ -712,18 +712,18 @@ Unit tests in `test/` directory. The canonical suite count is in `test/native-su
 
 Exit codes and verdicts (exact counts will vary; examples below are illustrative):
 
-| Exit | Verdict    | Meaning                                                                                                                                                                                                                                                                                    |
-| ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                                                                                                |
-| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                                                                                      |
-| 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), `test/native-suite-count` disagrees with the `test/` directory count, or a suite left behind shared state it does not declare |
-| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                                                                                         |
+| Exit | Verdict    | Meaning                                                                                                                                                                                                              |
+| ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `GREEN`    | All canonical suites ran, all passed, no ignored test cases                                                                                                                                                          |
+| 1    | `RED`      | At least one failure, build error, or sanitizer fault                                                                                                                                                                |
+| 2    | `AMBER`    | All that ran passed, but something was lost or unexplained: a suite silently went missing on a full run, individual test cases were skipped (`TEST_IGNORE`), or a suite left behind shared state it does not declare |
+| 3    | `FILTERED` | A `-f` run completed cleanly; suites outside the filter were intentionally not run                                                                                                                                   |
 
 Examples - exact counts will vary by suite count and env:
 
 ```text
 # GREEN: all suites ran and passed
-RESULT: GREEN N/N suites passed [canonical: N/N]
+RESULT: GREEN N/N suites passed, all CLEAN
 
 # RED: real test failure
 RESULT: RED 1 failed
@@ -731,14 +731,11 @@ RESULT: RED 1 failed
 # RED: sanitizer exit-time abort (all tests passed but process aborted at exit)
 RESULT: RED exit-time abort (tests passed; likely sanitizer - see hint above)
 
-# AMBER: native-suite-count disagrees with test/ directory count (too low)
-RESULT: AMBER test/ has 24 suite directories but native-suite-count says 5 - update test/native-suite-count after registering new suites
-
-# AMBER: native-suite-count disagrees with test/ directory count (too high)
-RESULT: AMBER test/ has 24 suite directories but native-suite-count says 99 - update test/native-suite-count after removing suites
+# AMBER: a suite silently went missing on a full run
+RESULT: AMBER 23/24 suites ran (missing: test_radio) - all that ran passed
 
 # FILTERED: single suite run completed cleanly
-RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) - filtered: test_serial [canonical: 1/24]
+RESULT: FILTERED 1/24 suites ran (not run: test_admin_radio test_atak …) - filtered: test_serial
 ```
 
 > **Copilot interface note:** When running tests via the Copilot chat interface, edits made through the chat may not be reflected in the on-disk files that the test binary reads. If tests pass in chat but fail locally (or vice versa), verify the files on disk match what you expect before trusting the result. Always confirm with a local terminal run.
