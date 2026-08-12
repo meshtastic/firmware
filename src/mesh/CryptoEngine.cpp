@@ -224,10 +224,12 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
                                      uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;
-    long extraNonceTmp = random();
+    // The extra nonce must be unpredictable: use the hardware RNG, falling back to the
+    // seeded CSPRNG only when no hardware source is available.
+    uint32_t extraNonceTmp;
+    if (!HardwareRNG::fill((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp)))
+        CryptRNG.rand((uint8_t *)&extraNonceTmp, sizeof(extraNonceTmp));
     auth = bytesOut + numBytes;
-    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
-           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
@@ -242,8 +244,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempt encrypt with nonce: ", nonce, 13);
     printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
-    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
-               auth); // this can write up to 15 bytes longer than numbytes past bytesOut
+    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     return true;
@@ -301,8 +302,8 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 {
     SHA256 hash;
     size_t posn;
-    uint8_t size = numBytes;
-    uint8_t inc = 16;
+    size_t size = numBytes;
+    constexpr size_t inc = 16;
     hash.reset();
     for (posn = 0; posn < size; posn += inc) {
         size_t len = size - posn;
@@ -335,9 +336,35 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     // Calculate the shared secret with the specified node's public key and our private key
     // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
     if (!Curve25519::dh2(shared_key, local_priv)) {
-        LOG_WARN("Curve25519DH step 2 failed!");
+        LOG_WARN("Curve25519DH step 2 failed");
         return false;
     }
+    return true;
+}
+
+void CryptoEngine::setPendingPublicKey(uint32_t node, const uint8_t *key)
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    pendingKeyVerificationNode = node;
+    memcpy(pendingKeyVerificationPublicKey, key, 32);
+    hasPendingKeyVerificationKey = true;
+}
+
+void CryptoEngine::clearPendingPublicKey()
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    pendingKeyVerificationNode = 0;
+    memset(pendingKeyVerificationPublicKey, 0, 32);
+    hasPendingKeyVerificationKey = false;
+}
+
+bool CryptoEngine::getPendingPublicKey(uint32_t node, meshtastic_NodeInfoLite_public_key_t &out)
+{
+    concurrency::LockGuard g(&pendingKeyLock);
+    if (!hasPendingKeyVerificationKey || node == 0 || node != pendingKeyVerificationNode)
+        return false;
+    out.size = 32;
+    memcpy(out.bytes, pendingKeyVerificationPublicKey, 32);
     return true;
 }
 
@@ -346,7 +373,7 @@ concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {
-    LOG_DEBUG("Use AES%d key!", k.length * 8);
+    LOG_DEBUG("Use AES%d key", k.length * 8);
     key = k;
 }
 
@@ -362,7 +389,7 @@ void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t nu
         if (numBytes <= MAX_BLOCKSIZE) {
             encryptAESCtr(key, nonce, numBytes, bytes);
         } else {
-            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
+            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption", numBytes);
         }
     }
 }

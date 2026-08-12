@@ -1,4 +1,5 @@
 #include "GeoCoord.h"
+#include "configuration.h"
 #include <cmath>
 
 // Narrow a UTM meter value to its unsigned field, clamping non-finite/negative/oversized inputs: an
@@ -36,17 +37,50 @@ GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
     GeoCoord::setCoords();
 }
 
-// Initialize all the coordinate systems
+// Initialize DMS eagerly (cheap, most commonly used); UTM/MGRS/OSGR/OLC are computed lazily on
+// first access via their getters (see ensure*() below), since most callers never touch them.
 void GeoCoord::setCoords()
 {
     double lat = _latitude * 1e-7;
     double lon = _longitude * 1e-7;
     GeoCoord::latLongToDMS(lat, lon, _dms);
-    GeoCoord::latLongToUTM(lat, lon, _utm);
-    GeoCoord::latLongToMGRS(lat, lon, _mgrs);
-    GeoCoord::latLongToOSGR(lat, lon, _osgr);
-    GeoCoord::latLongToOLC(lat, lon, _olc);
+    _utmValid = false;
+    _mgrsValid = false;
+    _osgrValid = false;
+    _olcValid = false;
     _dirty = false;
+}
+
+void GeoCoord::ensureUTM() const
+{
+    if (!_utmValid) {
+        GeoCoord::latLongToUTM(_latitude * 1e-7, _longitude * 1e-7, _utm);
+        _utmValid = true;
+    }
+}
+
+void GeoCoord::ensureMGRS() const
+{
+    if (!_mgrsValid) {
+        GeoCoord::latLongToMGRS(_latitude * 1e-7, _longitude * 1e-7, _mgrs);
+        _mgrsValid = true;
+    }
+}
+
+void GeoCoord::ensureOSGR() const
+{
+    if (!_osgrValid) {
+        GeoCoord::latLongToOSGR(_latitude * 1e-7, _longitude * 1e-7, _osgr);
+        _osgrValid = true;
+    }
+}
+
+void GeoCoord::ensureOLC() const
+{
+    if (!_olcValid) {
+        GeoCoord::latLongToOLC(_latitude * 1e-7, _longitude * 1e-7, _olc);
+        _olcValid = true;
+    }
 }
 
 void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt)
@@ -400,6 +434,43 @@ void GeoCoord::convertWGS84ToOSGB36(const double lat, const double lon, double &
     //(airyA*airyA/(airyA / sqrt(1 - airyEcc*sin(osgb.latitude)*sin(osgb.latitude)))); // Not used, no OSTN data
 }
 
+#if MESHTASTIC_TRIG_APPROX
+// cos(x) minimax approx for x in [-pi/2, pi/2] ("cos_52"): https://www.ganssle.com/approx.htm
+static double cosLatitudeApprox(double latRad)
+{
+    constexpr double c1 = 0.9999932946, c2 = -0.4999124376, c3 = 0.0414877472, c4 = -0.0012712095;
+    double x2 = latRad * latRad;
+    return c1 + x2 * (c2 + x2 * (c3 + c4 * x2));
+}
+
+/// Approximate distance in meters via equirectangular projection (not exact spherical trig).
+/// <1% error to ~500km, degrading near the poles at long range (see test_geocoord_distance).
+float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
+{
+    // Don't do math if the points are the same
+    if (lat_a == lat_b && lng_a == lng_b)
+        return 0.0;
+
+    double a1 = lat_a / DEG_CONVERT;
+    double a2 = lng_a / DEG_CONVERT;
+    double b1 = lat_b / DEG_CONVERT;
+    double b2 = lng_b / DEG_CONVERT;
+
+    double meanLat = (a1 + b1) / 2;
+    double dLng = b2 - a2;
+    // Wrap to [-PI, PI]: unlike cos()/sin(), a raw longitude difference doesn't handle points that
+    // straddle the antimeridian (e.g. 179.9 and -179.9 are ~0.2 degrees apart, not ~360).
+    if (dLng > PI)
+        dLng -= 2 * PI;
+    else if (dLng < -PI)
+        dLng += 2 * PI;
+    double x = dLng * cosLatitudeApprox(meanLat);
+    double y = b1 - a1;
+    double tt = sqrt(x * x + y * y);
+
+    return (float)(6366000 * tt);
+}
+#else
 /// Ported from my old java code, returns distance in meters along the globe
 /// surface (by Haversine formula)
 float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b)
@@ -423,6 +494,7 @@ float GeoCoord::latLongToMeter(double lat_a, double lng_a, double lat_b, double 
 
     return (float)(6366000 * tt);
 }
+#endif
 
 /**
  * Computes the bearing in degrees between two points on Earth.  Ported from my
@@ -461,34 +533,6 @@ float GeoCoord::rangeMetersToRadians(double range_meters)
     // 1 nm is 1852 meters
     double distance_nm = range_meters * 1852;
     return (PI / (180 * 60)) * distance_nm;
-}
-
-/**
- * Ported from http://www.edwilliams.org/avform147.htm#Intro
- * @brief Convert from radians to range in meters on a great circle
- * @param range_radians
- * The range in radians
- * @return Range in meters on a great circle
- */
-float GeoCoord::rangeRadiansToMeters(double range_radians)
-{
-    double distance_nm = ((180 * 60) / PI) * range_radians;
-    // 1 meter is 0.000539957 nm
-    return distance_nm * 0.000539957;
-}
-
-// Find distance from point to passed in point
-int32_t GeoCoord::distanceTo(const GeoCoord &pointB)
-{
-    return latLongToMeter(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                          pointB.getLongitude() * 1e-7);
-}
-
-// Find bearing from point to passed in point
-int32_t GeoCoord::bearingTo(const GeoCoord &pointB)
-{
-    return bearing(this->getLatitude() * 1e-7, this->getLongitude() * 1e-7, pointB.getLatitude() * 1e-7,
-                   pointB.getLongitude() * 1e-7);
 }
 
 /**

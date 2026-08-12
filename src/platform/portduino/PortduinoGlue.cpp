@@ -6,6 +6,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#include "ConfigCheck.h"
 #include "PortduinoGlue.h"
 #include "SHA256.h"
 #include "api/ServerAPI.h"
@@ -21,8 +22,12 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
-#include <sys/ioctl.h>
 #include <unistd.h>
+#ifndef _WIN32
+// Only the PORTDUINO_LINUX_HARDWARE block below calls ioctl() (HCIGETDEVINFO,
+// for the BlueZ-derived MAC address); Windows has no <sys/ioctl.h>.
+#include <sys/ioctl.h>
+#endif
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -32,6 +37,13 @@
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
+#endif
+
+#ifdef _WIN32
+// Defined in WindowsMacAddr.cpp, which keeps <iphlpapi.h> out of this TU: it
+// pulls in RPC/OLE headers that collide with the Arduino API.
+bool portduinoWindowsPrimaryMac(uint8_t *dmac);
+#include "windows/WindowsService.h"
 #endif
 
 #ifdef __APPLE__
@@ -55,6 +67,9 @@ char *configPath = nullptr;
 char *optionMac = nullptr;
 bool verboseEnabled = false;
 bool yamlOnly = false;
+bool configCheck = false;
+// Every config file we attempted to load, in load order, for --check to report on.
+std::vector<std::string> attemptedConfigFiles;
 
 const char *argp_program_version = optstr(APP_VERSION);
 
@@ -76,9 +91,19 @@ void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 int TCPPort = SERVER_API_DEFAULT_PORT;
 bool checkConfigPort = true;
 
+// Long-only option: argp treats any key above the printable ASCII range as having no
+// single-character equivalent.
+#define OPT_CONFIG_CHECK 1001
+#ifdef _WIN32
+#define OPT_SERVICE 1002
+#endif
+
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     switch (key) {
+    case OPT_CONFIG_CHECK:
+        configCheck = true;
+        break;
     case 'p':
         if (sscanf(arg, "%d", &TCPPort) < 1) {
             return ARGP_ERR_UNKNOWN;
@@ -102,6 +127,11 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     case 'y':
         yamlOnly = true;
         break;
+#ifdef _WIN32
+    case OPT_SERVICE:
+        windowsServiceInit();
+        break;
+#endif
     case ARGP_KEY_ARG:
         return 0;
     default:
@@ -110,15 +140,58 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     return 0;
 }
 
+// A kernel SPI transfer is capped by the spidev module's `bufsiz` parameter (4096 by default).
+// LovyanGFX pushes the framebuffer in large chunks, so a display bigger than that budget fails
+// deep inside the driver with a bare -EMSGSIZE. Check up front so the user gets told what to fix.
+static void checkSpidevBufsiz()
+{
+    if (portduino_config.display_spi_dev == "" || portduino_config.displayWidth == 0 || portduino_config.displayHeight == 0) {
+        return;
+    }
+    switch (portduino_config.displayPanel) {
+    case no_screen:
+    case x11:
+    case fb:
+    case hub75:
+        return; // not driven over spidev
+    default:
+        break;
+    }
+
+    const long required = (long)portduino_config.displayWidth * portduino_config.displayHeight / 2 * 3;
+
+    std::ifstream bufsizFile("/sys/module/spidev/parameters/bufsiz");
+    long bufsiz = 0;
+    if (!bufsizFile.is_open() || !(bufsizFile >> bufsiz)) {
+        // spidev may be built into the kernel without exposing the parameter; nothing to check.
+        return;
+    }
+
+    if (bufsiz < required) {
+        std::cerr << "SPI display " << portduino_config.displayWidth << "x" << portduino_config.displayHeight
+                  << " needs a spidev buffer of at least " << required << " bytes, but "
+                  << "/sys/module/spidev/parameters/bufsiz is " << bufsiz << "." << std::endl;
+        std::cerr << "Add 'spidev.bufsiz=" << required << "' to your kernel command line "
+                  << "(/boot/firmware/cmdline.txt on Raspberry Pi OS) and reboot." << std::endl;
+        std::cerr << "Or echo that value into /etc/modprobe.d/spidev.conf and reload the spidev module" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
 void portduinoCustomInit()
 {
-    static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."},
-                                           {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
-                                           {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
-                                           {"sim", 's', 0, 0, "Run in Simulated radio mode"},
-                                           {"verbose", 'v', 0, 0, "Set log level to full debug"},
-                                           {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
-                                           {0}};
+    static struct argp_option options[] = {
+        {"port", 'p', "PORT", 0, "The TCP port to use."},
+        {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
+        {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
+        {"sim", 's', 0, 0, "Run in Simulated radio mode"},
+        {"verbose", 'v', 0, 0, "Set log level to full debug"},
+        {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
+        {"check", OPT_CONFIG_CHECK, 0, 0, "Check the configuration for problems, print a report, and exit"},
+#ifdef _WIN32
+        {"service", OPT_SERVICE, 0, 0, "Run as a Windows service"},
+#endif
+        {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
     static char args_doc[] = "...";
@@ -193,12 +266,26 @@ void getMacAddr(uint8_t *dmac)
             }
             freeifaddrs(ifap);
         }
+#elif defined(_WIN32)
+        // No BlueZ on Windows; the host's primary adapter MAC is the equivalent
+        // stable identifier. On failure dmac is untouched and the blank-MAC check fires.
+        portduinoWindowsPrimaryMac(dmac);
 #else
         // No platform-specific MAC source; leave dmac at its default. Caller
         // can override via the --hwid CLI flag or the YAML config.
         (void)dmac;
 #endif
     }
+}
+
+bool getDeviceId(uint8_t *deviceId)
+{
+    if (portduino_config.has_device_id) {
+        memcpy(deviceId, portduino_config.device_id, sizeof(portduino_config.device_id));
+        return true;
+    }
+    // Config-supplied id stays preferred: host NIC/BT MACs can be unstable (docker, multi-NIC).
+    return getMacAddrDeviceId(deviceId);
 }
 
 std::string cleanupNameForAutoconf(std::string name)
@@ -248,46 +335,67 @@ void portduinoSetup()
         portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using " << configPath << " as config file" << std::endl;
-        } else {
+        } else if (!configCheck) {
+            // In check mode the path is already in attemptedConfigFiles, so fall through
+            // to runConfigCheck() and let it report the parse error with a file and line.
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else if (access("config.yaml", R_OK) == 0) {
         if (loadConfig("config.yaml")) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using local config.yaml as config file" << std::endl;
-        } else {
+        } else if (!configCheck) {
             std::cout << "Unable to use local config.yaml as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
         if (loadConfig("/etc/meshtasticd/config.yaml")) {
-            if (!yamlOnly)
+            if (!yamlOnly && !configCheck)
                 std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
-        } else {
+        } else if (!configCheck) {
             std::cout << "Unable to use /etc/meshtasticd/config.yaml as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else {
-        if (!yamlOnly)
+        if (!yamlOnly && !configCheck)
             std::cout << "No 'config.yaml' found..." << std::endl;
         portduino_config.lora_module = use_simradio;
     }
 
     if (portduino_config.config_directory != "") {
-        std::string filetype = ".yaml";
-        for (const std::filesystem::directory_entry &entry :
-             std::filesystem::directory_iterator{portduino_config.config_directory}) {
+        // The throwing form of directory_iterator turns an unreadable ConfigDirectory into an
+        // uncaught filesystem_error and a SIGABRT, so take the error_code overload instead.
+        std::error_code dirError;
+        std::filesystem::directory_iterator entries{portduino_config.config_directory, dirError};
+        if (dirError) {
+            // Half a configuration is worse than none. --check continues so the report can say
+            // so with the rest of the findings.
+            if (!configCheck) {
+                std::cout << "Unable to read ConfigDirectory " << portduino_config.config_directory << ": " << dirError.message()
+                          << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        for (const std::filesystem::directory_entry &entry : entries) {
             if (ends_with(entry.path().string(), ".yaml")) {
-                std::cout << "Also using " << entry << " as additional config file" << std::endl;
-                loadConfig(entry.path().c_str());
+                if (!configCheck)
+                    std::cout << "Also using " << entry << " as additional config file" << std::endl;
+                // .string() rather than .c_str(): path::value_type is wchar_t on
+                // Windows, and loadConfig() takes a const char *.
+                loadConfig(entry.path().string().c_str());
             }
         }
     }
 
 #ifndef ARCH_PORTDUINO_WASM
+    // --check wins over --output-yaml: asking for validation and getting a config dump
+    // with no report at all would be the more surprising of the two outcomes.
+    if (configCheck)
+        exit(runConfigCheck(attemptedConfigFiles));
+
     if (yamlOnly) {
         std::cout << portduino_config.emit_yaml() << std::endl;
         exit(EXIT_SUCCESS);
@@ -533,6 +641,11 @@ void portduinoSetup()
         }
     }
 
+    // if we have s SPI display, check /sys/module/spidev/parameters/bufsiz
+    // It needs to be at least width * height / 2 * 3
+    // fail with a more useful error message.
+    checkSpidevBufsiz();
+
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};
     if (portduino_config.lora_spi_dev == "ch341") {
@@ -759,6 +872,10 @@ bool loadConfig(const char *configPath)
 #else
 bool loadConfig(const char *configPath)
 {
+    // Recorded even when the load below fails: an unparseable config.d entry is skipped and its
+    // return value discarded by the caller, so --check needs to know it was attempted.
+    attemptedConfigFiles.push_back(configPath);
+
     YAML::Node yamlConfig;
     try {
         yamlConfig = YAML::LoadFile(configPath);
@@ -817,7 +934,9 @@ bool loadConfig(const char *configPath)
                         break;
                     }
                 }
-                if (!found) {
+                if (!found && !configCheck) {
+                    // --check names the valid modules in its report; exiting here would
+                    // replace that with a bare one-liner.
                     std::cerr << "Unknown Lora.Module: " << moduleName << std::endl;
                     exit(EXIT_FAILURE);
                 }
@@ -830,6 +949,10 @@ bool loadConfig(const char *configPath)
                 portduino_config.lr1110_max_power = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
             if (yamlConfig["Lora"]["LR1120_MAX_POWER"])
                 portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+            if (yamlConfig["Lora"]["LR2021_MAX_POWER"])
+                portduino_config.lr2021_max_power = yamlConfig["Lora"]["LR2021_MAX_POWER"].as<int>(22);
+            if (yamlConfig["Lora"]["LR2021_MAX_POWER_HF"])
+                portduino_config.lr2021_max_power_hf = yamlConfig["Lora"]["LR2021_MAX_POWER_HF"].as<int>(12);
             if (yamlConfig["Lora"]["RF95_MAX_POWER"])
                 portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
@@ -1007,6 +1130,41 @@ bool loadConfig(const char *configPath)
                     }
                 }
             }
+#if !defined(HAS_HUB75_NATIVE)
+            if (portduino_config.displayPanel == hub75 && !configCheck) {
+                // --check still validates the rest of the file and reports this as a
+                // finding, so it must not exit from inside the load.
+                std::cerr << "HUB75 display panel selected, but this build does not support HUB75" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+#endif
+            // HUB75 RGB matrix (Raspberry Pi). Options map onto rgb_matrix::RGBMatrix::Options +
+            // RuntimeOptions; the library owns its GPIO pins so nothing is read via readGPIOFromYaml.
+            if (portduino_config.displayPanel == hub75 && yamlConfig["Display"]["HUB75"]) {
+                YAML::Node hub75 = yamlConfig["Display"]["HUB75"];
+                portduino_config.hub75_hardware_mapping = hub75["HardwareMapping"].as<std::string>("regular");
+                portduino_config.hub75_rows = hub75["Rows"].as<int>(64);
+                portduino_config.hub75_cols = hub75["Cols"].as<int>(64);
+                portduino_config.hub75_chain_length = hub75["ChainLength"].as<int>(1);
+                portduino_config.hub75_parallel = hub75["Parallel"].as<int>(1);
+                portduino_config.hub75_pwm_bits = hub75["PWMBits"].as<int>(11);
+                portduino_config.hub75_pwm_lsb_nanoseconds = hub75["PWMLSBNanoseconds"].as<int>(130);
+                portduino_config.hub75_brightness = hub75["Brightness"].as<int>(100);
+                portduino_config.hub75_scan_mode = hub75["ScanMode"].as<int>(0);
+                portduino_config.hub75_row_address_type = hub75["RowAddressType"].as<int>(0);
+                portduino_config.hub75_multiplexing = hub75["Multiplexing"].as<int>(0);
+                portduino_config.hub75_disable_hardware_pulsing = hub75["DisableHardwarePulsing"].as<bool>(false);
+                portduino_config.hub75_show_refresh_rate = hub75["ShowRefreshRate"].as<bool>(false);
+                portduino_config.hub75_inverse_colors = hub75["InverseColors"].as<bool>(false);
+                portduino_config.hub75_led_rgb_sequence = hub75["RGBSequence"].as<std::string>("RGB");
+                portduino_config.hub75_pixel_mapper_config = hub75["PixelMapper"].as<std::string>("");
+                portduino_config.hub75_panel_type = hub75["PanelType"].as<std::string>("");
+                portduino_config.hub75_limit_refresh_rate_hz = hub75["LimitRefreshRateHz"].as<int>(0);
+                portduino_config.hub75_gpio_slowdown = hub75["GPIOSlowdown"].as<int>(1);
+                // The BaseUI framebuffer geometry is the full panel size in pixels.
+                portduino_config.displayWidth = portduino_config.hub75_cols * portduino_config.hub75_chain_length;
+                portduino_config.displayHeight = portduino_config.hub75_rows * portduino_config.hub75_parallel;
+            }
         }
         if (yamlConfig["Touchscreen"]) {
             if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "XPT2046")
@@ -1038,6 +1196,25 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Input"]) {
             portduino_config.keyboardDevice = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
+            portduino_config.joystickDevice = (yamlConfig["Input"]["JoystickDevice"]).as<std::string>("");
+            if (yamlConfig["Input"]["JoystickButtons"]) {
+                // action name -> evdev button code (hex like 0x122 or decimal); stored inverted
+                // as code -> lowercase action name for the driver to look up per keypress.
+                for (const auto &button : yamlConfig["Input"]["JoystickButtons"]) {
+                    std::string action = button.first.as<std::string>("");
+                    for (auto &c : action)
+                        c = tolower(c);
+                    int code = 0;
+                    try {
+                        // base 0 accepts hex (0x122) or decimal; a malformed value just skips this entry.
+                        code = std::stoi(button.second.as<std::string>(""), nullptr, 0);
+                    } catch (const std::exception &) {
+                        code = 0;
+                    }
+                    if (code != 0 && action != "")
+                        portduino_config.joystickButtons[code] = action;
+                }
+            }
 
             readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.userButtonPin);
             readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.tbUpPin);
@@ -1100,8 +1277,12 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["General"]["AvailableDirectory"]).as<std::string>("/etc/meshtasticd/available.d/");
             if ((yamlConfig["General"]["MACAddress"]).as<std::string>("") != "" &&
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
-                std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
-                exit(EXIT_FAILURE);
+                // --check reports this as a finding against the file it came from, so
+                // exiting here would kill the report before it is printed.
+                if (!configCheck) {
+                    std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
             }
             if (checkConfigPort) {
                 portduino_config.api_port = (yamlConfig["General"]["APIPort"]).as<int>(-1);
@@ -1124,7 +1305,10 @@ bool loadConfig(const char *configPath)
                 portduino_config.mac_address.end());
         }
     } catch (YAML::Exception &e) {
-        std::cout << "*** Exception " << e.what() << std::endl;
+        // The check report repeats this against the file it came from, so printing it
+        // here too would only put a stray line above the report.
+        if (!configCheck)
+            std::cout << "*** Exception " << e.what() << std::endl;
         return false;
     }
     return true;

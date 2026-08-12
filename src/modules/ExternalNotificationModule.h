@@ -23,7 +23,7 @@ extern AmbientLightingThread *ambientLightingThread;
 #endif
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include <NonBlockingRtttl.h>
 #else
 // Noop class for portduino.
@@ -41,6 +41,15 @@ class rtttl
 #include <Arduino.h>
 #include <functional>
 
+#if HAS_LIBNOTIFY
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <utility>
+#endif
+
 /*
  * Radio interface for ExternalNotificationModule
  *
@@ -57,6 +66,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
   public:
     ExternalNotificationModule();
+#if HAS_LIBNOTIFY
+    ~ExternalNotificationModule();
+#endif
 
     int handleInputEvent(const InputEvent *arg);
 
@@ -97,7 +109,19 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
                                                                  meshtastic_AdminMessage *response) override;
 
 #if HAS_LIBNOTIFY
+    /// Resolve the sender/body on the caller's thread and hand the notification to notifyWorker().
     void portduinoNotify(const meshtastic_MeshPacket &mp);
+
+    /// Drains notifyQueue. Owns every libnotify call: notify_notification_show() is a synchronous
+    /// DBus round trip, and meshtasticd's packet path is single-threaded, so a slow or wedged
+    /// notification daemon would otherwise stall packet handling.
+    void notifyWorker();
+
+    std::thread notifyThread;
+    std::mutex notifyLock;
+    std::condition_variable notifyWake;
+    std::deque<std::pair<std::string, std::string>> notifyQueue; // <summary, body>, guarded by notifyLock
+    bool notifyDisabled = false;                                 // latched once libnotify looks unusable
 #endif
 };
 

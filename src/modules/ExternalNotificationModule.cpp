@@ -16,10 +16,10 @@
 #include "ExternalNotificationModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
@@ -42,6 +42,10 @@ bool ascending = true;
 
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
+#endif
+
+#if defined(HAS_I2S_SPEAKER_NRF52)
+#include "platform/nrf52/NRF52RtttlPlayer.h"
 #endif
 
 /*
@@ -81,6 +85,9 @@ int32_t ExternalNotificationModule::runOnce()
 #ifdef HAS_I2S
         // audioThread->isPlaying() also handles actually playing the RTTTL, needs to be called in loop
         isRtttlPlaying = isRtttlPlaying || audioThread->isPlaying();
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
         if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
@@ -147,6 +154,17 @@ int32_t ExternalNotificationModule::runOnce()
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
+            delay = EXT_NOTIFICATION_FAST_THREAD_MS;
+        }
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+        // Play RTTTL over the I2S speaker (no piezo on this board).
+        if (canBuzz() && buzzerShouldAlert) {
+            if (nrf52RtttlPlayer.isPlaying()) {
+                nrf52RtttlPlayer.play();
+            } else if (isNagging && (nagCycleCutoff >= millis())) {
+                nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
+            }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
         }
 #endif
@@ -268,6 +286,9 @@ void ExternalNotificationModule::stopNow()
 #ifdef HAS_I2S
     LOG_INFO("Stop audioThread playback");
     audioThread->stop();
+#endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+    nrf52RtttlPlayer.stop();
 #endif
     // Turn off all outputs
     LOG_INFO("Turning off setExternalStates");
@@ -462,7 +483,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (buzzerShouldAlert) {
                 LOG_INFO("externalNotificationModule - Buzzer alert");
                 if (buzzerModeIsDirectOnly && !isDmToUs && !containsBell) {
-                    LOG_INFO("Message buzzer was suppressed because buzzer mode DIRECT_MSG_ONLY");
+                    LOG_INFO("Buzzer suppressed: mode DIRECT_MSG_ONLY");
                 } else {
                     // Buzz if buzzer mode is not in DIRECT_MSG_ONLY or is DM to us
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
@@ -555,6 +576,13 @@ int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 }
 
 #if HAS_LIBNOTIFY
+/// Cap on undelivered notifications. A burst of traffic shouldn't grow the queue without bound while
+/// the notification daemon is slow; the oldest entries are the ones worth keeping.
+static constexpr size_t maxQueuedNotifications = 16;
+/// Consecutive show() failures before we stop trying. One failure can be a daemon restart; a run of
+/// them means there is nothing listening, and retrying per message just burns work and spams the log.
+static constexpr int maxNotifyFailures = 3;
+
 void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp)
 {
     std::string senderName;
@@ -568,25 +596,86 @@ void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp
     } else {
         senderName = std::to_string(mp.from);
     }
-    std::string notificationSummary = "From: " + senderName;
-    std::string notificationBody = std::string((char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
 
-    if (!notify_is_initted()) {
-        if (!notify_init("Meshtasticd")) {
-            LOG_WARN("Failed to initialize libnotify");
+    // nodeDB is only safe to touch on this thread, so the strings are resolved here and the worker
+    // gets owned copies.
+    std::string notificationSummary = "From: " + senderName;
+    std::string notificationBody((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
+
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        if (notifyDisabled)
+            return;
+        if (notifyQueue.size() >= maxQueuedNotifications) {
+            LOG_WARN("Desktop notification queue full, dropping notification");
+            return;
+        }
+        notifyQueue.emplace_back(std::move(notificationSummary), std::move(notificationBody));
+        if (!notifyThread.joinable())
+            notifyThread = std::thread([this] { notifyWorker(); });
+    }
+    notifyWake.notify_one();
+}
+
+void ExternalNotificationModule::notifyWorker()
+{
+    if (!notify_is_initted() && !notify_init("Meshtasticd")) {
+        LOG_WARN("Failed to initialize libnotify, disabling desktop notifications");
+        std::lock_guard<std::mutex> lock(notifyLock);
+        notifyDisabled = true;
+        notifyQueue.clear();
+        return;
+    }
+
+    int consecutiveFailures = 0;
+    std::unique_lock<std::mutex> lock(notifyLock);
+    while (true) {
+        notifyWake.wait(lock, [this] { return notifyDisabled || !notifyQueue.empty(); });
+        if (notifyDisabled)
+            return;
+
+        std::pair<std::string, std::string> entry = std::move(notifyQueue.front());
+        notifyQueue.pop_front();
+
+        // Unlocked for the DBus round trip so handleReceived() never blocks behind the daemon.
+        lock.unlock();
+        bool failed = true;
+        NotifyNotification *notification =
+            notify_notification_new(entry.first.c_str(), entry.second.c_str(), "org.meshtastic.meshtasticd");
+        if (notification) {
+            GError *error = nullptr;
+            if (notify_notification_show(notification, &error)) {
+                failed = false;
+            } else {
+                LOG_WARN("Failed to show notification: %s", error ? error->message : "unknown error");
+                if (error)
+                    g_error_free(error);
+            }
+            g_object_unref(G_OBJECT(notification));
+        } else {
+            LOG_WARN("Failed to create notification");
+        }
+        lock.lock();
+
+        consecutiveFailures = failed ? consecutiveFailures + 1 : 0;
+        if (consecutiveFailures >= maxNotifyFailures) {
+            LOG_WARN("Disabling desktop notifications after %d consecutive failures", consecutiveFailures);
+            notifyDisabled = true;
+            notifyQueue.clear();
             return;
         }
     }
-    NotifyNotification *notification =
-        notify_notification_new(notificationSummary.c_str(), notificationBody.c_str(), "org.meshtastic.meshtasticd");
-    if (notification) {
-        GError *error = nullptr;
-        if (!notify_notification_show(notification, &error)) {
-            LOG_WARN("Failed to show notification: %s", error ? error->message : "unknown error");
-            if (error)
-                g_error_free(error);
-        }
-        g_object_unref(G_OBJECT(notification));
+}
+
+ExternalNotificationModule::~ExternalNotificationModule()
+{
+    {
+        std::lock_guard<std::mutex> lock(notifyLock);
+        notifyDisabled = true;
+        notifyQueue.clear();
     }
+    notifyWake.notify_one();
+    if (notifyThread.joinable())
+        notifyThread.join();
 }
 #endif

@@ -1,5 +1,6 @@
 .pio
 pio
+.pio-docker
 pio.tar
 web
 web.tar

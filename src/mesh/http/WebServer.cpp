@@ -96,21 +96,13 @@ static void taskCreateCert(void *parameter)
 {
     prefs.begin("MeshtasticHTTPS", false);
 
-#if 0
-    // Delete the saved certs (used in debugging)
-    LOG_DEBUG("Delete any saved SSL keys");
-    // prefs.clear();
-    prefs.remove("PK");
-    prefs.remove("cert");
-#endif
-
     LOG_INFO("Checking if we have a saved SSL Certificate");
 
     size_t pkLen = prefs.getBytesLength("PK");
     size_t certLen = prefs.getBytesLength("cert");
 
     if (pkLen && certLen) {
-        LOG_INFO("Existing SSL Certificate found!");
+        LOG_INFO("Existing SSL Certificate found");
 
         uint8_t *pkBuffer = new uint8_t[pkLen];
         prefs.getBytes("PK", pkBuffer, pkLen);
@@ -188,7 +180,7 @@ void createSSLCert()
                 runLoop = true;
             }
         }
-        LOG_INFO("SSL Cert Ready!");
+        LOG_INFO("SSL Cert Ready");
     }
 }
 

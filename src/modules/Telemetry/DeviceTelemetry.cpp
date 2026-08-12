@@ -4,11 +4,11 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "RadioLibInterface.h"
 #include "Router.h"
 #include "TransmitHistory.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "memGet.h"
 #include <OLEDDisplay.h>
@@ -76,7 +76,7 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding DeviceTelemetry module!");
+            LOG_ERROR("Error decoding DeviceTelemetry module");
             return NULL;
         }
         // Check for a request for device metrics
@@ -172,6 +172,8 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
 void DeviceTelemetryModule::sendLocalStatsToPhone()
 {
     meshtastic_MeshPacket *p = allocDataProtobuf(getLocalStatsTelemetry());
+    if (!p)
+        return;
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -191,6 +193,8 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     DEBUG_HEAP_AFTER("DeviceTelemetryModule::sendTelemetry", p);
 
+    if (!p)
+        return false;
     p->to = dest;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;

@@ -297,6 +297,7 @@ class Print
     }
 
     virtual void flush() {}
+    virtual int availableForWrite() { return 0; }
 };
 
 // ── Stream base class ────────────────────────────────────────────────────────
