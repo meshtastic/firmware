@@ -28,8 +28,6 @@ bool ADS1X15Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef ADS1X15_I2C_CLOCK_SPEED
     reClockI2C.restoreClock();
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
-
-    status = 1;
     initI2CSensor();
 
     return true;
