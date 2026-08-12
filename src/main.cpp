@@ -287,7 +287,7 @@ const char *firmware_version = optstr(APP_VERSION_SHORT);
 
 const char *getDeviceName()
 {
-    uint8_t dmac[6];
+    uint8_t dmac[6] = {0};
 
     getMacAddr(dmac);
 

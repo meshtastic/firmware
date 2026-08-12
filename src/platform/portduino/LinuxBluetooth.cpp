@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -146,6 +147,17 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
     bool readPending = false;
     sdbus::Result<std::vector<uint8_t>> readResult;
     std::vector<uint8_t> lastFromRadio; // last packet served at offset 0, for blob-read tails
+    // Packets prefetched by the main loop during the config phase, so ReadValue can be
+    // answered immediately on the event-loop thread instead of paying a main-loop
+    // round trip per packet (NimBLE's preloading; see runOnceToPhoneCanPreloadNextPacket
+    // there for why this must not happen in STATE_SEND_PACKETS). Guarded by readMutex.
+    std::deque<std::vector<uint8_t>> prefetched;
+    static constexpr size_t kPrefetchDepth = 3;
+
+    // Snapshot of getDeviceName() taken on the main thread in doSetup(): the
+    // advertisement's LocalName getter runs on the event-loop thread, and
+    // getDeviceName() returns a static buffer that is not thread-safe.
+    std::string deviceName;
 
     // Notify state for fromNum and logRadio
     std::atomic<bool> fromNumNotifying{false};
@@ -183,16 +195,44 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
     {
         if (disconnectCleanupPending.exchange(false)) {
             close(); // reset the PhoneAPI session state on the main thread
-            std::lock_guard<std::mutex> guard(fromPhoneMutex);
-            fromPhoneQueueSize = 0;
+            {
+                std::lock_guard<std::mutex> guard(fromPhoneMutex);
+                fromPhoneQueueSize = 0;
+            }
+            std::lock_guard<std::mutex> guard(readMutex);
+            prefetched.clear();
         }
 
         // Writes before reads: clients send a ToRadio write and immediately read
         // the response, so the parked read must observe the write's effect.
         drainFromPhoneQueue();
         completeParkedRead();
+        refillPrefetch();
 
         return INT32_MAX; // woken explicitly by the event-loop thread
+    }
+
+    void refillPrefetch()
+    {
+        // Only outside STATE_SEND_PACKETS: during config the client will definitely
+        // read every packet (and re-reads nothing on reconnect), while in
+        // STATE_SEND_PACKETS a packet fetched early would be lost if the phone
+        // disconnects before reading it.
+        while (PhoneAPI::isConnected() && !isSendingPackets()) {
+            {
+                std::lock_guard<std::mutex> guard(readMutex);
+                if (prefetched.size() >= kPrefetchDepth)
+                    return;
+            }
+            // LOCK ORDER: getFromRadio() may emit a fromNum notify (a D-Bus call), so
+            // it must not run under readMutex (see completeParkedRead).
+            uint8_t buf[meshtastic_FromRadio_size] = {0};
+            size_t numBytes = getFromRadio(buf);
+            if (numBytes == 0)
+                return;
+            std::lock_guard<std::mutex> guard(readMutex);
+            prefetched.emplace_back(buf, buf + numBytes);
+        }
     }
 
     void drainFromPhoneQueue()
@@ -219,9 +259,21 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
     void completeParkedRead()
     {
         {
-            std::lock_guard<std::mutex> lk(readMutex);
+            // A prefetched packet must be served before anything newly fetched, or
+            // the stream reorders.
+            std::unique_lock<std::mutex> lk(readMutex);
             if (!readPending)
                 return;
+            if (!prefetched.empty()) {
+                std::vector<uint8_t> packet = std::move(prefetched.front());
+                prefetched.pop_front();
+                lastFromRadio = packet;
+                auto result = std::move(readResult);
+                readPending = false;
+                lk.unlock();
+                result.returnResults(packet);
+                return;
+            }
         }
 
         // LOCK ORDER: getFromRadio() can emit a fromNum notify (a D-Bus call), and
@@ -304,6 +356,18 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
             auto stale = std::move(readResult);
             readPending = false;
             stale.returnError(sdbuscompat::dbusError("org.bluez.Error.Failed", "superseded by a newer read"));
+        }
+        if (!prefetched.empty() && fromPhoneQueueSize == 0) {
+            // Answer straight from the config-phase prefetch queue - no main-loop
+            // round trip. Skipped when a write is still queued, so a
+            // write-then-read client never reads past its own write.
+            std::vector<uint8_t> packet = std::move(prefetched.front());
+            prefetched.pop_front();
+            lastFromRadio = packet;
+            lk.unlock();
+            result.returnResults(packet);
+            wakeMainLoop(); // top the prefetch queue back up
+            return;
         }
         readResult = std::move(result);
         readPending = true;
@@ -467,11 +531,13 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
                 return;
             }
 
+            deviceName = getDeviceName();
+
             adapterProxy = sdbuscompat::makeProxy(*conn, kBluezService, adapterPath);
             sdbuscompat::finishProxy(*adapterProxy);
             adapterProxy->setProperty("Powered").onInterface(kIfaceAdapter).toValue(true);
             try {
-                adapterProxy->setProperty("Alias").onInterface(kIfaceAdapter).toValue(std::string(getDeviceName()));
+                adapterProxy->setProperty("Alias").onInterface(kIfaceAdapter).toValue(deviceName);
                 adapterProxy->setProperty("Pairable").onInterface(kIfaceAdapter).toValue(true);
             } catch (const sdbus::Error &e) {
                 LOG_WARN("BLE could not set adapter alias/pairable: %s", e.what());
@@ -504,7 +570,7 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
 
             enabled = true;
             registerAdvertisement();
-            LOG_INFO("BLE ready on %s as '%s' (%s pairing)", adapterId.c_str(), getDeviceName(),
+            LOG_INFO("BLE ready on %s as '%s' (%s pairing)", adapterId.c_str(), deviceName.c_str(),
                      pinPairing() ? "passkey" : "just-works");
         } catch (const sdbus::Error &e) {
             LOG_ERROR("BLE setup failed (%s: %s); Bluetooth stays off", e.getName().c_str(), e.getMessage().c_str());
@@ -613,8 +679,17 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
         sdbuscompat::addVTable(*advert, kIfaceAdvert, sdbuscompat::method("Release", [] {}),
                                sdbuscompat::property("Type", [] { return std::string("peripheral"); }),
                                sdbuscompat::property("ServiceUUIDs", [] { return std::vector<std::string>{MESH_SERVICE_UUID}; }),
-                               sdbuscompat::property("LocalName", [] { return std::string(getDeviceName()); }),
-                               sdbuscompat::property("Discoverable", [] { return true; }));
+                               sdbuscompat::property("LocalName", [this] { return deviceName; }),
+                               sdbuscompat::property("Discoverable", [] { return true; }),
+                               // Without these, the kernel default advertising interval of
+                               // 1.28s applies and a central can take many seconds just to
+                               // establish a link. Milliseconds. 20ms matches NimBLE's floor
+                               // on ESP32: Android's background connects listen in sparse
+                               // scan windows, and only an aggressive advertiser lands in
+                               // them quickly. Power cost is irrelevant on a mains-powered
+                               // host. Ignored by BlueZ < 5.71.
+                               sdbuscompat::property("MinInterval", [] { return static_cast<uint32_t>(20); }),
+                               sdbuscompat::property("MaxInterval", [] { return static_cast<uint32_t>(100); }));
     }
 
     void registerApplication()
@@ -670,7 +745,7 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
                     advertising = false;
                     LOG_ERROR("BLE could not start advertising: %s", sdbuscompat::asyncErrorMessage(error).c_str());
                 } else {
-                    LOG_INFO("BLE advertising as '%s'", getDeviceName());
+                    LOG_INFO("BLE advertising as '%s'", deviceName.c_str());
                 }
             });
     }

@@ -246,9 +246,17 @@ void getMacAddr(uint8_t *dmac)
         return;
     } else {
 #ifdef PORTDUINO_LINUX_HARDWARE
+        // Cache after the first successful read. The adapter address can't change at
+        // runtime, this now gets called from BLE property getters on every bluetoothd
+        // read (not just at startup), and the socket used to leak one fd per call.
+        static uint8_t cachedMac[6];
+        static bool macCached = false;
+        if (macCached) {
+            memcpy(dmac, cachedMac, 6);
+            return;
+        }
         struct hci_dev_info di = {0};
         di.dev_id = 0;
-        bdaddr_t bdaddr;
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value
@@ -256,8 +264,10 @@ void getMacAddr(uint8_t *dmac)
         }
 
         if (ioctl(btsock, HCIGETDEVINFO, (void *)&di)) {
+            close(btsock);
             return;
         }
+        close(btsock);
 
         dmac[0] = di.bdaddr.b[5];
         dmac[1] = di.bdaddr.b[4];
@@ -265,6 +275,8 @@ void getMacAddr(uint8_t *dmac)
         dmac[3] = di.bdaddr.b[2];
         dmac[4] = di.bdaddr.b[1];
         dmac[5] = di.bdaddr.b[0];
+        memcpy(cachedMac, dmac, 6);
+        macCached = true;
 #elif defined(__APPLE__)
         // No BlueZ on macOS, but we can fall back to the host's primary
         // network interface MAC. `en0` is Wi-Fi on every shipping Mac
