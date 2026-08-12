@@ -2445,11 +2445,8 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Devicestate %d is old or invalid, discard", devicestate.version);
         installDefaultDeviceState();
 
-        // Recovery of the owner fields from our own NodeDB entry is deferred until config
-        // has been loaded below. installDefaultDeviceState() -> pickNewNodeNum() can only
-        // offer a macaddr-derived provisional NodeNum at this point: loadProto() zeroed
-        // devicestate (and with it myNodeInfo.my_node_num), while our real row is stored
-        // under crc32(security.public_key) - which lives in config, still unread here.
+        // Deferred until config is loaded: our real NodeNum comes from
+        // config.security.public_key, which is still unread here.
         ownerRecoveryPending = true;
     } else {
         LOG_INFO("Loaded saved devicestate v%d", devicestate.version);
@@ -2563,11 +2560,8 @@ void NodeDB::loadFromDisk()
         saveToDisk(SEGMENT_CONFIG);
     }
 
-    // Deferred from the discarded devicestate above: config.security is final only now, so
-    // our real NodeNum - crc32(public_key) - is finally derivable and our own row can be
-    // found. Matching on identity rather than on the file's row order keeps a nodes.proto
-    // that does not contain us (foreign image, fixture) a clean miss instead of pasting
-    // another node's name onto our owner. getMeshNode() returns NULL on an empty DB.
+    // config.security is final now, so the key-derived NodeNum is derivable. Matching on
+    // identity means a nodes.proto without us is a clean miss, not a wrong-owner restore.
     if (ownerRecoveryPending) {
         // Pre-PKI / keyless builds keep the old behaviour: probe the provisional number.
         const NodeNum selfNum = (config.has_security && config.security.public_key.size == 32)
