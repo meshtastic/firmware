@@ -127,7 +127,8 @@ meshes, efficiency _is_ reliability.
 ### Note: pubkey-derived node numbers (develop / 2.8) - does not change the plan
 
 develop derives the node number from the public key:
-`my_node_num = crc32Buffer(public_key)`, set in `NodeDB::createNewIdentity()`
+`my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size)`,
+set in `NodeDB::createNewIdentity()`
 (`src/mesh/NodeDB.cpp`) and re-derived there on every key change. This **reinforces** the
 plan rather than changing it:
 
@@ -137,8 +138,9 @@ plan rather than changing it:
   renumber a node to dodge a conflict; now the number is fixed by the key, so a last-byte
   collision **cannot be resolved operationally by renumbering** → M1/M2/M3 become _more_
   necessary.
-- **Resolver gets cleaner inputs.** Stable node numbers keep a learned byte bound to one
-  identity (good for M3 freshness). `NodeDB::createNewIdentity()` retires the old entry by
+- **Resolver gets cleaner inputs.** A learned byte stays associated with the same identity
+  over time (good for M3 freshness) - it does not identify that identity uniquely, since
+  256 node numbers share each byte. `NodeDB::createNewIdentity()` retires the old entry by
   calling `removeNodeByNum()` on it outright. (The earlier "flag it **ignored**, clear its
   pubkey" approach was dropped: it left a keyless ghost of our own former identity that
   survived cleanup/eviction, was still streamed to clients, and made any DM/admin aimed at
