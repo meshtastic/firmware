@@ -985,7 +985,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
-        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+        // Never log the key bytes: debug logs get pasted into public bug reports.
+        LOG_DEBUG("Restored preserved private key");
     } else {
         config.security.private_key.size = 0;
     }
@@ -3482,7 +3483,16 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         }
     }
     info->num = contact.node_num;
+    // CopyUserToNodeInfoLite assigns public_key unconditionally, and clients send add_contact before every
+    // DM - often from an entry that carries no key at all. A contact may still supply or update a full
+    // 32-byte key (that's what add_contact is for), but it must never *erase* a key we already hold, which
+    // would be persisted below and break subsequent DMs with PKI_SEND_FAIL_PUBLIC_KEY.
+    const meshtastic_NodeInfoLite_public_key_t storedKey = info->public_key;
     TypeConversions::CopyUserToNodeInfoLite(info, contact.user);
+    if (storedKey.size == 32 && info->public_key.size != 32) {
+        LOG_INFO("Contact 0x%08x has no key, keep the stored one", contact.node_num);
+        info->public_key = storedKey;
+    }
     if (contact.should_ignore) {
         // Block the contact and drop its rich satellite data, but keep the
         // public key copied above - an ignored peer keeps a usable identity
