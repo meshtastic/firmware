@@ -17,7 +17,12 @@
 class ADS1X15Sensor : public TelemetrySensor
 {
   private:
-    Adafruit_ADS1X15 ads1x15{};
+#if MESHTASTIC_ADC_ADS1115
+    Adafruit_ADS1115 ads1x15{};
+#else
+    Adafruit_ADS1015 ads1x15{};
+#endif
+
 #ifdef ADS1X15_I2C_CLOCK_SPEED
     ReClockI2C reClockI2C;
 #endif

@@ -107,17 +107,6 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
     reClockI2C.setClock(ADS1X15_I2C_CLOCK_SPEED);
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
 
-#ifdef MESHTASTIC_ADC_ADS1115
-#if MESHTASTIC_ADC_ADS1115
-    ads1x15.setDataRate(RATE_ADS1115_128SPS);
-#else
-    ads1x15.setDataRate(RATE_ADS1015_128SPS);
-#endif
-#else
-    // Assume ADS1115 is connected
-    ads1x15.setDataRate(RATE_ADS1115_128SPS);
-#endif
-
     struct _ADS1X15Measurements m = getMeasurements();
 
 #ifdef ADS1X15_I2C_CLOCK_SPEED
