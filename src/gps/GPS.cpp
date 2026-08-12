@@ -828,6 +828,9 @@ bool GPS::setup()
                 if (gnssModel != GNSS_MODEL_UNKNOWN) {
                     detectedBaud = rareSerialSpeeds[speedSelect];
                 } else if (currentStep == 0 && ++speedSelect == array_count(rareSerialSpeeds)) {
+                    // Reset so a runtime GPS re-enable does not index
+                    // rareSerialSpeeds[speedSelect] out of bounds.
+                    speedSelect = 0;
                     LOG_WARN("Give up GPS probe, set to %d", GPS_BAUDRATE);
                     return true;
                 }
