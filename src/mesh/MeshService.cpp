@@ -495,8 +495,12 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
-        if (isDecoded && (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-                          p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP)) {
+        // ROUTING_APP carries the delivery verdict for a message the phone is already tracking - an
+        // ACK or a MAX_RETRANSMIT NAK. Dropping it strands that message in "sending" forever, since
+        // a client cannot infer anything from a NAK that never arrives.
+        if (isDecoded &&
+            (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP || p->decoded.portnum == meshtastic_PortNum_ROUTING_APP)) {
             LOG_WARN("ToPhone queue full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
