@@ -100,7 +100,11 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
                !nodeInfoLiteHasUser(nodeDB->getMeshNode(mp->from)) && nodeInfoModule && !isPreferredRebroadcaster &&
                !nodeDB->isFull()) {
-        if (airTime->isTxAllowedChannelUtil(true)) {
+        if (nodeDB->isNodeDbRolling()) {
+            // Nodes are already rolling off the database faster than we can hold them, so greeting
+            // every unknown one just evicts another. Our scheduled broadcast still announces us.
+            LOG_DEBUG("Skip NodeInfo to new node 0x%08x: node database rolling", mp->from);
+        } else if (airTime->isTxAllowedChannelUtil(true)) {
             const int8_t hopsUsed = getHopsAway(*mp, config.lora.hop_limit);
             if (hopsUsed > (int32_t)(config.lora.hop_limit + 2)) {
                 LOG_DEBUG("Skip send NodeInfo: %d hops too far", hopsUsed);

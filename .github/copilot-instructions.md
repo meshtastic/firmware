@@ -211,6 +211,10 @@ Writers go through `setNodeStatus`, `updatePosition`, `updateTelemetry` (which d
 
 Every code path that drops a node from the header table must also evict the satellites. The single chokepoint is `eraseNodeSatellites(NodeNum)`; it's already called from `getOrCreateMeshNode`'s oldest-boring eviction, `demoteOldestHotNodesToWarm` (the over-cap warm-tier migration), `removeNodeByNum`, both branches of `resetNodes`, `cleanupMeshDB`, `addFromContact`'s ignored-branch, and `AdminModule`'s `set_ignored_node`. Add new eviction sites here, not by calling `.erase()` directly. (Note: `enforceSatelliteCaps`/`evictSatelliteOverCap` call `.erase()` directly on purpose - that's a satellite-only cap trim where the node _stays_ in the header, a different operation from this chokepoint.)
 
+### Churn detection (`isNodeDbRolling`)
+
+`getOrCreateMeshNode`'s eviction feeds `noteNodeEvicted()`, which keeps a ring of the last `NODEDB_ROLL_SAMPLES` millis stamps for evictions of nodes we had heard within `NODEDB_ROLL_FRESH_SECS`. Once the ring is full and its oldest stamp still falls inside `NODEDB_ROLL_WINDOW_MS`, `NodeDB::isNodeDbRolling()` returns true: the mesh is bigger than `MAX_NUM_NODES` and nodes are rolling straight back in rather than aging out. Constants live next to `SINCE_UNKNOWN` in `src/mesh/NodeDB.h`. Evictions of long-silent nodes deliberately don't count - that is ordinary pruning, and counting it would leave a small, healthy mesh permanently "rolling". The flag self-clears once evictions stop. It gates optional NodeInfo traffic only (see **NodeInfo storm suppression** below); nothing about storage or PKI depends on it.
+
 ### Warm tier (long-tail identity)
 
 On every arch except STM32WL and bare nRF52832 (`WARM_NODE_COUNT > 0`), a node evicted from the header table is not forgotten outright: `WarmNodeStore` (`src/mesh/WarmNodeStore.{h,cpp}`) keeps a 40 B `{num, last_heard, public_key}` record per evicted node - primarily so PKI DMs to/from a long-tail node keep decrypting without re-running a NodeInfo exchange (the rest of `NodeInfoLite` rebuilds from traffic in seconds).
@@ -585,6 +589,17 @@ The mesh network has limited bandwidth. When modifying broadcast intervals:
 - Use `Default::getConfiguredOrMinimumValue()` to enforce minimums
 - Consider `numOnlineNodes` scaling for congestion control
 
+### NodeInfo storm suppression
+
+A NodeInfo exchange is cheap for the sender and expensive for the mesh, so `NodeInfoModule::allocReply()` refuses two classes of request outright. Both set `ignoreRequest`, which also stops `MeshModule::callModules` from sending a `NO_RESPONSE` NAK - a refusal is silent, not an error.
+
+1. **Broadcast requests are never answered.** A `want_response` NodeInfo addressed to `NODENUM_BROADCAST` asks every node in earshot to answer one packet; that is amplification, and it is how NodeInfo storms start. Senders still set the bit (`runOnce` on a channel change, the phone/TCP heartbeat), and older firmware still answers it, so don't read the bit as dead - just don't answer it here.
+2. **While `nodeDB->isNodeDbRolling()`, unicast requests are deferred too**, along with `MeshService::handleFromRadio`'s greeting of a newly-heard node and the `wantReplies` bit on our own scheduled broadcast. On a mesh that already outgrew the database, an exchange only evicts a node we can still hear.
+
+What deliberately survives both: our scheduled `runOnce` broadcast, and the handshakes driven by traffic we could not otherwise handle - `ReliableRouter`'s `PKI_UNKNOWN_PUBKEY` response to an undecryptable DM, `KeyVerificationModule`, and the phone-triggered sends. Those call `sendOurNodeInfo()` directly while `currentRequest` points at a non-NodeInfo packet (or nothing), so `isReplyingToExternalRequest` is false and no suppression applies. Keep new urgent paths on `sendOurNodeInfo()` rather than routing them through the reply machinery.
+
+Discovery still converges without broadcast replies: a node that hears an unknown peer unicasts it a NodeInfo with `want_response`, and that unicast is answered. Covered by `test/test_nodeinfo_storm/`.
+
 ### Power Management
 
 Many devices are battery-powered:
@@ -678,6 +693,7 @@ Unit tests in `test/` directory. The canonical suite count is detected on the fl
 - `test_mqtt/` - MQTT integration
 - `test_nexthop_routing/` - Next-hop routing logic
 - `test_nodedb_blocked/` - NodeDB blocked-node handling
+- `test_nodeinfo_storm/` - NodeDB churn detection and the NodeInfo reply-refusal policy
 - `test_packet_history/` - Packet history tracking
 - `test_packet_signing/` - Packet signing
 - `test_position_module/` - Position module behaviour
@@ -926,7 +942,7 @@ House rules for agents running these prompts:
 Two firmware changes exist specifically so the test harness works reliably. **Keep these in mind when touching related code.**
 
 - **`src/mesh/StreamAPI.cpp` + `StreamAPI.h`** - `emitLogRecord` uses a dedicated `fromRadioScratchLog` + `txBufLog` pair and a `concurrency::Lock streamLock`. Before this fix, `debug_log_api_enabled=true` would tear `FromRadio` protobufs on the serial transport because `emitTxBuffer` and `emitLogRecord` shared a single scratch buffer. The conftest enables the log stream session-wide; without this fix the device would corrupt its own FromRadio replies mid-session.
-- **`src/mesh/PhoneAPI.cpp`** - `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion.
+- **`src/mesh/PhoneAPI.cpp`** - `ToRadio` `Heartbeat(nonce=1)` triggers `nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true)` for serial clients, mirroring the pre-existing behavior for TCP/UDP clients in `PacketAPI.cpp`. The mesh tests rely on this to force a NodeInfo broadcast right after connect so the peer discovers them before the test's first assertion. The `wantReplies` argument no longer earns a reply from current firmware (see **NodeInfo storm suppression**); the peer learns us from the broadcast itself and then unicasts its own NodeInfo back through the unknown-node path, so discovery still completes.
 
 If you're modifying `StreamAPI`, `PhoneAPI`, `NodeInfoModule`, or `userPrefs` flow, run `./run-tests.sh` (from a meshtastic-mcp checkout, with `MESHTASTIC_FIRMWARE_ROOT` pointed here) at minimum before asking for review.
 

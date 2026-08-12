@@ -49,6 +49,7 @@ test_mesh_module	writes=config.proto,module.proto,device.proto,channels.proto,no
 test_mqtt	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB for node lookups in the MQTT paths
 test_nexthop_routing	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	next-hop selection reads and updates the node DB
 test_nodedb_blocked	state=per-suite writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	saturates the DB with MAX_NUM_NODES-2 favourited nodes to test the protected cap; a later test's removeNodeByNum() persists that state, and the cap test depends on the fill from the test before it
+test_nodeinfo_storm	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	saturates a real NodeDB and drives evictions through it to exercise the churn detector, which demotes each victim into the warm tier
 test_packet_signing	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	needs a NodeDB holding both peers' keys for the PKI encode/decode paths
 test_pki_admin_fallback	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	needs a NodeDB holding admin keys for the fallback paths
 test_stream_api	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	drives real PhoneAPI handshakes, which read and persist config and the node DB
