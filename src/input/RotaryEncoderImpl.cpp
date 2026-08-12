@@ -66,7 +66,7 @@ void RotaryEncoderImpl::pollOnce()
 
     static uint32_t lastPressed = millis();
     if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
-        if (lastPressed + 200 < millis()) {
+        if (lastPressed + 50 < millis()) {
             LOG_DEBUG("Rotary event Press");
             lastPressed = millis();
             e.inputEvent = this->eventPressed;
@@ -113,7 +113,7 @@ void RotaryEncoderImpl::attachRotaryEncoderInterrupts()
         auto interruptHandler = []() { inputBroker->requestPollSoon(interruptInstance); };
         attachInterrupt(moduleConfig.canned_message.inputbroker_pin_a, interruptHandler, CHANGE);
         attachInterrupt(moduleConfig.canned_message.inputbroker_pin_b, interruptHandler, CHANGE);
-        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, CHANGE);
+        attachInterrupt(moduleConfig.canned_message.inputbroker_pin_press, interruptHandler, FALLING);
     } else {
         LOG_WARN("RotaryEncoderImpl: interrupts already attached");
     }
