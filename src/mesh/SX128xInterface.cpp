@@ -153,10 +153,10 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 
     startReceive(); // restart receiving
 
-    return RADIOLIB_ERR_NONE;
+    return true;
 }
 
-template <typename T> void SX128xInterface<T>::disableInterrupt()
+template <typename T> void SX128xInterface<T>::clearRadioIsr()
 {
     lora.clearDio1Action();
 }
@@ -205,6 +205,7 @@ template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_Mes
     // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    mp->has_rx_rssi = true; // rx_rssi has explicit presence - a genuine reading must be marked present to survive encoding
     LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
@@ -324,5 +325,11 @@ template <typename T> bool SX128xInterface<T>::sleep()
 #endif
 
     return true;
+}
+
+template <typename T> int16_t SX128xInterface<T>::getCurrentRSSI()
+{
+    float rssi = lora.getRSSI(false);
+    return (int16_t)round(rssi);
 }
 #endif

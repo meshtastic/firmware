@@ -13,7 +13,6 @@ static size_t encode_user_info(uint8_t *buffer, size_t buffer_size)
     return stream.bytes_written;
 }
 
-// Test NODEINFO_APP port
 void test_nodeinfo_serialization()
 {
     uint8_t buffer[256];
@@ -24,28 +23,20 @@ void test_nodeinfo_serialization()
     std::string json = MeshPacketSerializer::JsonSerialize(&packet, false);
     TEST_ASSERT_TRUE(json.length() > 0);
 
-    JSONValue *root = JSON::Parse(json.c_str());
-    TEST_ASSERT_NOT_NULL(root);
-    TEST_ASSERT_TRUE(root->IsObject());
+    Json::Value root = parse_json(json);
+    TEST_ASSERT_TRUE(root.isObject());
 
-    JSONObject jsonObj = root->AsObject();
+    TEST_ASSERT_TRUE(root.isMember("type"));
+    TEST_ASSERT_EQUAL_STRING("nodeinfo", root["type"].asString().c_str());
 
-    // Check message type
-    TEST_ASSERT_TRUE(jsonObj.find("type") != jsonObj.end());
-    TEST_ASSERT_EQUAL_STRING("nodeinfo", jsonObj["type"]->AsString().c_str());
+    TEST_ASSERT_TRUE(root.isMember("payload"));
+    TEST_ASSERT_TRUE(root["payload"].isObject());
 
-    // Check payload
-    TEST_ASSERT_TRUE(jsonObj.find("payload") != jsonObj.end());
-    TEST_ASSERT_TRUE(jsonObj["payload"]->IsObject());
+    const Json::Value &payload = root["payload"];
 
-    JSONObject payload = jsonObj["payload"]->AsObject();
+    TEST_ASSERT_TRUE(payload.isMember("shortname"));
+    TEST_ASSERT_EQUAL_STRING("TEST", payload["shortname"].asString().c_str());
 
-    // Verify user data
-    TEST_ASSERT_TRUE(payload.find("shortname") != payload.end());
-    TEST_ASSERT_EQUAL_STRING("TEST", payload["shortname"]->AsString().c_str());
-
-    TEST_ASSERT_TRUE(payload.find("longname") != payload.end());
-    TEST_ASSERT_EQUAL_STRING("Test User", payload["longname"]->AsString().c_str());
-
-    delete root;
+    TEST_ASSERT_TRUE(payload.isMember("longname"));
+    TEST_ASSERT_EQUAL_STRING("Test User", payload["longname"].asString().c_str());
 }

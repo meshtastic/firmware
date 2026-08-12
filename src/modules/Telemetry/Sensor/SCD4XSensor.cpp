@@ -2,7 +2,6 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR && __has_include(<SensirionI2cScd4x.h>)
 
-#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SCD4XSensor.h"
 
@@ -18,14 +17,9 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _address = dev->address.address;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    _port = dev->address.port;
+    reClockI2C.setup(_bus, _port);
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     scd4x.begin(*_bus, _address);
@@ -35,9 +29,9 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
     // Stop periodic measurement
     if (!stopMeasurement()) {
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
@@ -47,34 +41,34 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (sensorVariant == SCD4X_SENSOR_VARIANT_SCD41) {
         LOG_INFO("%s: Found SCD41", sensorName);
         if (!powerUp()) {
-            LOG_ERROR("%s: Error trying to execute powerUp()", sensorName);
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-            reClockI2C(currentClock, _bus, false);
-#endif
+            LOG_ERROR("%s: powerUp() failed", sensorName);
+#ifdef SCD4X_I2C_CLOCK_SPEED
+            reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
             return false;
         }
     }
 
     if (!getASC(ascActive)) {
-        LOG_ERROR("%s: Unable to check if ASC is enabled", sensorName);
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+        LOG_ERROR("%s: Can't check if ASC enabled", sensorName);
+#ifdef SCD4X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
     // Start measurement in selected power mode (low power by default)
     if (!startMeasurement()) {
-        LOG_ERROR("%s: Couldn't start measurement", sensorName);
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+        LOG_ERROR("%s: Can't start measurement", sensorName);
+#ifdef SCD4X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (state == SCD4X_MEASUREMENT) {
         status = 1;
@@ -99,37 +93,40 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature, humidity;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
-    bool dataReady;
-    error = scd4x.getDataReadyStatus(dataReady);
+    bool dataReady = false;
+    uint8_t dataReadyTries = 0;
+
+    while (!dataReady && (dataReadyTries < SCD4X_MAX_RETRIES)) {
+        error = scd4x.getDataReadyStatus(dataReady);
+        if (error != SCD4X_NO_ERROR || !dataReady) {
+            LOG_WARN("%s: Error collecting data. Retrying", sensorName);
+            delay(100);
+            dataReadyTries++;
+        }
+    }
+
     if (error != SCD4X_NO_ERROR || !dataReady) {
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
         LOG_ERROR("SCD4X: Data is not ready");
         return false;
     }
 
     error = scd4x.readMeasurement(co2, temperature, humidity);
 
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     LOG_DEBUG("Got %s readings: co2=%u, co2_temp=%.2f, co2_hum%.2f", sensorName, co2, temperature, humidity);
     if (error != SCD4X_NO_ERROR) {
-        LOG_DEBUG("%s: Error while getting measurements: %u", sensorName, error);
+        LOG_DEBUG("%s: Error getting measurements: %u", sensorName, error);
         if (co2 == 0) {
-            LOG_ERROR("%s: Skipping invalid measurement.", sensorName);
+            LOG_ERROR("%s: Skipping invalid measurement", sensorName);
         }
         return false;
     } else {
@@ -160,7 +157,7 @@ bool SCD4XSensor::performFRC(uint32_t targetCO2)
 {
     uint16_t error, frcCorr;
 
-    LOG_INFO("%s: Issuing FRC. Ensure device has been working at least 3 minutes in stable target environment", sensorName);
+    LOG_INFO("%s: Issuing FRC. Needs 3+ min in stable target environment", sensorName);
 
     if (!stopMeasurement()) {
         return false;
@@ -173,16 +170,16 @@ bool SCD4XSensor::performFRC(uint32_t targetCO2)
     delay(400);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to perform forced recalibration.", sensorName);
+        LOG_ERROR("%s: Can't perform FRC", sensorName);
         return false;
     }
 
     if (frcCorr == 0xFFFF) {
-        LOG_ERROR("%s: Error while performing forced recalibration.", sensorName);
+        LOG_ERROR("%s: FRC failed", sensorName);
         return false;
     }
 
-    LOG_INFO("%s: FRC Correction successful. Correction output: %u", sensorName, (uint16_t)(frcCorr - 0x8000));
+    LOG_INFO("%s: FRC done. Correction output: %u", sensorName, (uint16_t)(frcCorr - 0x8000));
 
     return true;
 }
@@ -217,7 +214,7 @@ bool SCD4XSensor::startMeasurement()
         state = SCD4X_MEASUREMENT;
         return true;
     } else {
-        LOG_ERROR("%s: Unable to start measurement mode", sensorName);
+        LOG_ERROR("%s: Can't start measurement mode", sensorName);
         return false;
     }
 }
@@ -232,7 +229,7 @@ bool SCD4XSensor::stopMeasurement()
 
     error = scd4x.stopPeriodicMeasurement();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to stop measurement.", sensorName);
+        LOG_ERROR("%s: Can't stop measurement", sensorName);
         return false;
     }
 
@@ -279,11 +276,11 @@ bool SCD4XSensor::getASC(uint16_t &_ascActive)
     error = scd4x.getAutomaticSelfCalibrationEnabled(_ascActive);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Can't send command", sensorName);
         return false;
     }
 
-    LOG_INFO("%s ASC is %s", sensorName, _ascActive ? "enabled" : "disabled");
+    LOG_INFO("%s: ASC is %s", sensorName, _ascActive ? "enabled" : "disabled");
 
     return true;
 }
@@ -301,7 +298,7 @@ bool SCD4XSensor::setASC(bool ascEnabled)
 {
     uint16_t error;
 
-    LOG_INFO("%s %s ASC", sensorName, ascEnabled ? "Enabling" : "Disabling");
+    LOG_INFO("%s: %s ASC", sensorName, ascEnabled ? "Enabling" : "Disabling");
 
     if (!stopMeasurement()) {
         return false;
@@ -310,18 +307,18 @@ bool SCD4XSensor::setASC(bool ascEnabled)
     error = scd4x.setAutomaticSelfCalibrationEnabled((uint16_t)ascEnabled);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Can't send command", sensorName);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to make settings persistent.", sensorName);
+        LOG_ERROR("%s: Can't persist settings", sensorName);
         return false;
     }
 
     if (!getASC(ascActive)) {
-        LOG_ERROR("%s: Unable to check if ASC is enabled", sensorName);
+        LOG_ERROR("%s: Can't check if ASC enabled", sensorName);
         return false;
     }
 
@@ -349,7 +346,7 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2)
 
     getASC(ascActive);
     if (!ascActive) {
-        LOG_ERROR("%s: Can't set ASC baseline. ASC is not active", sensorName);
+        LOG_ERROR("%s: Can't set ASC baseline, ASC not active", sensorName);
         return false;
     }
 
@@ -360,17 +357,17 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2)
     error = scd4x.setAutomaticSelfCalibrationTarget((uint16_t)targetCO2);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to send command.", sensorName);
+        LOG_ERROR("%s: Can't send command", sensorName);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to make settings persistent.", sensorName);
+        LOG_ERROR("%s: Can't persist settings", sensorName);
         return false;
     }
 
-    LOG_INFO("%s: Setting ASC baseline successful", sensorName);
+    LOG_INFO("%s: ASC baseline set", sensorName);
 
     return true;
 }
@@ -407,7 +404,7 @@ bool SCD4XSensor::setTemperature(float tempReference)
     float temperature;
     float humidity;
 
-    LOG_INFO("%s: Setting reference temperature at: %.2f", sensorName, tempReference);
+    LOG_INFO("%s: Setting reference temp at: %.2f", sensorName, tempReference);
 
     error = scd4x.getDataReadyStatus(dataReady);
     if (error != SCD4X_NO_ERROR || !dataReady) {
@@ -417,11 +414,11 @@ bool SCD4XSensor::setTemperature(float tempReference)
 
     error = scd4x.readMeasurement(co2, temperature, humidity);
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to read current temperature. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't read current temp, rc=%u", sensorName, error);
         return false;
     }
 
-    LOG_INFO("%s: Current sensor temperature: %.2f", sensorName, temperature);
+    LOG_INFO("%s: Current sensor temp: %.2f", sensorName, temperature);
 
     if (!stopMeasurement()) {
         return false;
@@ -430,28 +427,28 @@ bool SCD4XSensor::setTemperature(float tempReference)
     error = scd4x.getTemperatureOffset(prevTempOffset);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to get temperature offset. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get temp offset, rc=%u", sensorName, error);
         return false;
     }
-    LOG_INFO("%s: Current sensor temperature offset: %.2f", sensorName, prevTempOffset);
+    LOG_INFO("%s: Current sensor temp offset: %.2f", sensorName, prevTempOffset);
 
     tempOffset = temperature - tempReference + prevTempOffset;
 
-    LOG_INFO("%s: Setting temperature offset: %.2f", sensorName, tempOffset);
+    LOG_INFO("%s: Setting temp offset: %.2f", sensorName, tempOffset);
     error = scd4x.setTemperatureOffset(tempOffset);
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to set temperature offset. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set temp offset, rc=%u", sensorName, error);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to make settings persistent. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't persist settings, rc=%u", sensorName, error);
         return false;
     }
 
     scd4x.getTemperatureOffset(updatedTempOffset);
-    LOG_INFO("%s: Updated sensor temperature offset: %.2f", sensorName, updatedTempOffset);
+    LOG_INFO("%s: Updated sensor temp offset: %.2f", sensorName, updatedTempOffset);
 
     return true;
 }
@@ -477,7 +474,7 @@ bool SCD4XSensor::getAltitude(uint16_t &altitude)
     error = scd4x.getSensorAltitude(altitude);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to get altitude. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get altitude, rc=%u", sensorName, error);
         return false;
     }
     LOG_INFO("%s: Sensor altitude: %u", sensorName, altitude);
@@ -501,7 +498,7 @@ bool SCD4XSensor::getAmbientPressure(uint32_t &ambientPressure)
     error = scd4x.getAmbientPressure(ambientPressure);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to get altitude. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't get ambient pressure, rc=%u", sensorName, error);
         return false;
     }
     LOG_INFO("%s: Sensor ambient pressure: %u", sensorName, ambientPressure);
@@ -530,7 +527,7 @@ bool SCD4XSensor::setAltitude(uint32_t altitude)
     error = scd4x.setSensorAltitude(altitude);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to set altitude. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set altitude, rc=%u", sensorName, error);
         return false;
     }
 
@@ -538,7 +535,7 @@ bool SCD4XSensor::setAltitude(uint32_t altitude)
     // doesn't indicate it's needed.
     // error = scd4x.persistSettings();
     // if (error != SCD4X_NO_ERROR) {
-    //     LOG_ERROR("%s: Unable to make settings persistent. Error code: %u", sensorName, error);
+    //     LOG_ERROR("%s: Can't make settings persistent. Error code: %u", sensorName, error);
     //     return false;
     // }
 
@@ -570,18 +567,18 @@ bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure)
     error = scd4x.setAmbientPressure(ambientPressure);
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to set altitude. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't set ambient pressure, rc=%u", sensorName, error);
         return false;
     }
 
     // Sensirion doesn't indicate if this is necessary. We send it anyway
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to make settings persistent. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't persist settings, rc=%u", sensorName, error);
         return false;
     }
 
-    LOG_INFO("%s: ambient pressure set set", sensorName);
+    LOG_INFO("%s: ambient pressure set", sensorName);
 
     return true;
 }
@@ -608,11 +605,11 @@ bool SCD4XSensor::factoryReset()
     error = scd4x.performFactoryReset();
 
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Unable to do factory reset. Error code: %u", sensorName, error);
+        LOG_ERROR("%s: Can't factory reset, rc=%u", sensorName, error);
         return false;
     }
 
-    LOG_INFO("%s: Factory reset successful", sensorName);
+    LOG_INFO("%s: Factory reset done", sensorName);
 
     return true;
 }
@@ -629,42 +626,35 @@ bool SCD4XSensor::factoryReset()
  */
 bool SCD4XSensor::powerDown()
 {
-    LOG_INFO("%s: Trying to send sensor to sleep", sensorName);
+    LOG_INFO("%s: Sending sensor to sleep", sensorName);
 
     if (sensorVariant != SCD4X_SENSOR_VARIANT_SCD41) {
-        LOG_WARN("SCD4X: Can't send sensor to sleep. Incorrect variant. Ignoring");
+        LOG_WARN("SCD4X: Can't sleep: wrong variant, ignoring");
         return true;
     }
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (!stopMeasurement()) {
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
     if (scd4x.powerDown() != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Error trying to execute sleep()", sensorName);
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+        LOG_ERROR("%s: sleep() failed", sensorName);
+#ifdef SCD4X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
         return false;
     }
 
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     state = SCD4X_OFF;
     return true;
@@ -683,10 +673,10 @@ bool SCD4XSensor::powerDown()
  */
 bool SCD4XSensor::powerUp()
 {
-    LOG_INFO("%s: Waking up", sensorName);
+    LOG_INFO("%s Waking", sensorName);
 
     if (scd4x.wakeUp() != SCD4X_NO_ERROR) {
-        LOG_ERROR("%s: Error trying to execute wakeUp()", sensorName);
+        LOG_ERROR("%s: wakeUp() failed", sensorName);
         return false;
     }
 
@@ -711,27 +701,20 @@ uint32_t SCD4XSensor::wakeUp()
 {
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return 0;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     if (startMeasurement()) {
         co2MeasureStarted = getTime();
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-        reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
         return SCD4X_WARMUP_MS;
     }
 
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     return 0;
 }
@@ -743,21 +726,14 @@ uint32_t SCD4XSensor::wakeUp()
 void SCD4XSensor::sleep()
 {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     stopMeasurement();
 
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
 }
 
 /**
@@ -785,7 +761,7 @@ int32_t SCD4XSensor::pendingForReadyMs()
     LOG_DEBUG("%s: Since measure started: %ums", sensorName, sinceCO2MeasureStarted);
 
     if (sinceCO2MeasureStarted < SCD4X_WARMUP_MS) {
-        LOG_INFO("%s: not enough time passed since starting measurement", sensorName);
+        LOG_INFO("%s: not enough time since measurement start", sensorName);
         return SCD4X_WARMUP_MS - sinceCO2MeasureStarted;
     }
     return 0;
@@ -797,14 +773,7 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
     AdminMessageHandleResult result;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SCD4X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return AdminMessageHandleResult::NOT_HANDLED;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
     // TODO: potentially add selftest command?
@@ -907,9 +876,9 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
     // Start measurement mode
     this->startMeasurement();
 
-#if defined(SCD4X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SCD4X_I2C_CLOCK_SPEED */
 
     return result;
 }

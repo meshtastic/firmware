@@ -19,6 +19,9 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     virtual bool wideLora() override;
 
+    /// SX128x is a 2.4 GHz-only chip; it cannot tune sub-GHz regions
+    virtual bool supportsSubGhz() override { return false; }
+
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
@@ -35,15 +38,17 @@ template <class T> class SX128xInterface : public RadioLibInterface
      */
     T lora;
 
+    int16_t getCurrentRSSI() override;
+
     /**
      * Glue functions called from ISR land
      */
-    virtual void disableInterrupt() override;
+    virtual void clearRadioIsr() override;
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora.setDio1Action(callback); }
+    virtual void setRadioIsr(void (*callback)()) override { lora.setDio1Action(callback); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;

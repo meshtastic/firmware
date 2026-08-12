@@ -2,7 +2,6 @@
 
 #if !MESHTASTIC_EXCLUDE_AIR_QUALITY_SENSOR
 
-#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "FSCommon.h"
 #include "SEN5XSensor.h"
@@ -18,25 +17,27 @@ SEN5XSensor::SEN5XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5
 bool SEN5XSensor::getVersion()
 {
     if (!sendCommand(SEN5X_GET_FIRMWARE_VERSION)) {
-        LOG_ERROR("SEN5X: Error sending version command");
+        LOG_ERROR("%s: Error sending version command", sensorName);
         return false;
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t versionBuffer[12]{};
-    size_t charNumber = readBuffer(&versionBuffer[0], 3);
-    if (charNumber == 0) {
-        LOG_ERROR("SEN5X: Error getting data ready flag value");
+    // Version reply layout: fw major/minor, fw debug, hw major/minor,
+    // protocol major/minor, padding
+    uint8_t versionBuffer[SEN5X_VERSION_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&versionBuffer[0], SEN5X_VERSION_BUFFER_SIZE + (SEN5X_VERSION_BUFFER_SIZE / 2));
+    if (charNumber < SEN5X_VERSION_BUFFER_SIZE) {
+        LOG_ERROR("%s: Error getting device version value", sensorName);
         return false;
     }
 
-    firmwareVer = versionBuffer[0] + (versionBuffer[1] / 10);
-    hardwareVer = versionBuffer[3] + (versionBuffer[4] / 10);
-    protocolVer = versionBuffer[5] + (versionBuffer[6] / 10);
+    firmwareVer = versionBuffer[0] + (versionBuffer[1] / 10.0f);
+    hardwareVer = versionBuffer[3] + (versionBuffer[4] / 10.0f);
+    protocolVer = versionBuffer[5] + (versionBuffer[6] / 10.0f);
 
-    LOG_INFO("SEN5X Firmware Version: %0.2f", firmwareVer);
-    LOG_INFO("SEN5X Hardware Version: %0.2f", hardwareVer);
-    LOG_INFO("SEN5X Protocol Version: %0.2f", protocolVer);
+    LOG_INFO("%s: Firmware Version: %0.2f", sensorName, firmwareVer);
+    LOG_INFO("%s: Hardware Version: %0.2f", sensorName, hardwareVer);
+    LOG_INFO("%s: Protocol Version: %0.2f", sensorName, protocolVer);
 
     return true;
 }
@@ -44,33 +45,57 @@ bool SEN5XSensor::getVersion()
 bool SEN5XSensor::findModel()
 {
     if (!sendCommand(SEN5X_GET_PRODUCT_NAME)) {
-        LOG_ERROR("SEN5X: Error asking for product name");
+        LOG_ERROR("%s: Error asking for product name", sensorName);
         return false;
     }
     delay(50); // From Sensirion Datasheet
 
-    const uint8_t nameSize = 48;
-    uint8_t name[nameSize];
-    size_t charNumber = readBuffer(&name[0], nameSize);
-    if (charNumber == 0) {
-        LOG_ERROR("SEN5X: Error getting device name");
-        return false;
+    uint8_t name[SEN5X_PRODUCT_NAME_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&name[0], SEN5X_PRODUCT_NAME_BUFFER_SIZE + (SEN5X_PRODUCT_NAME_BUFFER_SIZE / 2));
+    bool foundModel = false;
+
+    if (charNumber < SEN5X_PRODUCT_NAME_BUFFER_SIZE) {
+        LOG_ERROR("%s: Error getting device name", sensorName);
+        return foundModel;
     }
 
     // We only check the last character that defines the model SEN5X
     switch (name[4]) {
     case 48:
         model = SEN50;
-        LOG_INFO("SEN5X: found sensor model SEN50");
+        LOG_INFO("%s: found sensor model SEN50", sensorName);
+        foundModel = true;
         break;
     case 52:
         model = SEN54;
-        LOG_INFO("SEN5X: found sensor model SEN54");
+        LOG_INFO("%s: found sensor model SEN54", sensorName);
+        foundModel = true;
         break;
     case 53:
         model = SEN55;
-        LOG_INFO("SEN5X: found sensor model SEN55");
+        LOG_INFO("%s: found sensor model SEN55", sensorName);
+        foundModel = true;
         break;
+    }
+
+    return foundModel;
+}
+
+bool SEN5XSensor::probe(TwoWire *bus, uint8_t address, ScanI2C::I2CPort port)
+{
+    LOG_INFO("SEN5X: probing sensor");
+
+    _bus = bus;
+    _address = address;
+
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    _port = port;
+    reClockI2C.setup(_bus, _port);
+#endif /* SEN5X_I2C_CLOCK_SPEED */
+
+    if (!findModel()) {
+        LOG_DEBUG("SEN5X: can't find SEN5X model");
+        return false;
     }
 
     return true;
@@ -108,14 +133,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
     }
 
 #ifdef SEN5X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(SEN5X_I2C_CLOCK_SPEED);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
     // Transmit the data
@@ -126,17 +144,17 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
     size_t writtenBytes = _bus->write(toSend, bufferSize);
     uint8_t i2c_error = _bus->endTransmission();
 
-#if defined(SEN5X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SEN5X_I2C_CLOCK_SPEED */
 
     if (writtenBytes != bufferSize) {
-        LOG_ERROR("SEN5X: Error writting on I2C bus");
+        LOG_ERROR("%s: Error writing on I2C bus", sensorName);
         return false;
     }
 
     if (i2c_error != 0) {
-        LOG_ERROR("SEN5X: Error on I2C communication: %x", i2c_error);
+        LOG_ERROR("%s: Error on I2C communication: %x", sensorName, i2c_error);
         return false;
     }
     return true;
@@ -145,19 +163,15 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNum
 uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
 {
 #ifdef SEN5X_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(SEN5X_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(SEN5X_I2C_CLOCK_SPEED);
 #endif /* SEN5X_I2C_CLOCK_SPEED */
 
     size_t readBytes = _bus->requestFrom(_address, byteNumber);
     if (readBytes != byteNumber) {
-        LOG_ERROR("SEN5X: Error reading I2C bus");
+        LOG_ERROR("%s: Error reading I2C bus", sensorName);
+#ifdef SEN5X_I2C_CLOCK_SPEED
+        reClockI2C.restoreClock();
+#endif /* SEN5X_I2C_CLOCK_SPEED */
         return 0;
     }
 
@@ -169,15 +183,19 @@ uint8_t SEN5XSensor::readBuffer(uint8_t *buffer, uint8_t byteNumber)
         uint8_t recvCRC = _bus->read();
         uint8_t calcCRC = sen5xCRC(&buffer[i - 2]);
         if (recvCRC != calcCRC) {
-            LOG_ERROR("SEN5X: Checksum error while receiving msg");
+            LOG_ERROR("%s: Checksum error receiving msg", sensorName);
+#ifdef SEN5X_I2C_CLOCK_SPEED
+            reClockI2C.restoreClock();
+#endif /* SEN5X_I2C_CLOCK_SPEED */
             return 0;
         }
         readBytes -= 3;
         receivedBytes += 2;
     }
-#if defined(SEN5X_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* SEN5X_I2C_CLOCK_SPEED */
 
     return receivedBytes;
 }
@@ -236,7 +254,7 @@ bool SEN5XSensor::idle(bool checkState)
             }
 
             if (!(vocStateStable() && vocValid)) {
-                LOG_INFO("%s: Not stopping measurement, vocState is not stable yet!", sensorName);
+                LOG_INFO("%s: Not stopping measurement, vocState not stable yet", sensorName);
                 return true;
             }
         }
@@ -245,7 +263,7 @@ bool SEN5XSensor::idle(bool checkState)
     }
 
     if (!oneShotMode) {
-        LOG_INFO("%s: Not stopping measurement, continuous mode!", sensorName);
+        LOG_INFO("%s: Not stopping measurement, continuous mode", sensorName);
         return true;
     } else {
         LOG_INFO("%s: One shot mode enabled", sensorName);
@@ -305,24 +323,24 @@ bool SEN5XSensor::vocStateToSensor()
     }
 
     if (!vocStateValid()) {
-        LOG_INFO("SEN5X: VOC state is invalid, not sending");
+        LOG_INFO("%s: VOC state is invalid, not sending", sensorName);
         return true;
     }
 
     if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
-        LOG_ERROR("SEN5X: Error stoping measurement");
+        LOG_ERROR("%s: Error stopping measurement", sensorName);
         return false;
     }
     delay(200); // From Sensirion Datasheet
 
-    LOG_DEBUG("SEN5X: Sending VOC state to sensor");
+    LOG_DEBUG("%s: Sending VOC state to sensor", sensorName);
     LOG_DEBUG("[%u, %u, %u, %u, %u, %u, %u, %u]", vocState[0], vocState[1], vocState[2], vocState[3], vocState[4], vocState[5],
               vocState[6], vocState[7]);
 
     // Note: send command already takes into account the CRC
     // buffer size increment needed
     if (!sendCommand(SEN5X_RW_VOCS_STATE, vocState, SEN5X_VOC_STATE_BUFFER_SIZE)) {
-        LOG_ERROR("SEN5X: Error sending VOC's state command'");
+        LOG_ERROR("%s: Error sending VOC's state command", sensorName);
         return false;
     }
 
@@ -335,27 +353,30 @@ bool SEN5XSensor::vocStateFromSensor()
         return true;
     }
 
-    LOG_INFO("SEN5X: Getting VOC state from sensor");
+    LOG_INFO("%s: Getting VOC state from sensor", sensorName);
     //  Ask VOCs state from the sensor
     if (!sendCommand(SEN5X_RW_VOCS_STATE)) {
-        LOG_ERROR("SEN5X: Error sending VOC's state command'");
+        LOG_ERROR("%s: Error sending VOC's state command", sensorName);
         return false;
     }
 
     delay(20); // From Sensirion Datasheet
 
-    // Retrieve the data
-    // Allocate buffer to account for CRC
-    size_t receivedNumber = readBuffer(&vocState[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
+    // Retrieve the data into a staging buffer so a partial read (e.g. a CRC
+    // failure halfway through) cannot corrupt the current vocState.
+    // The requested size accounts for the CRC bytes
+    uint8_t stateBuffer[SEN5X_VOC_STATE_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&stateBuffer[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
     delay(20); // From Sensirion Datasheet
 
-    if (receivedNumber == 0) {
-        LOG_DEBUG("SEN5X: Error getting VOC's state");
+    if (receivedNumber < SEN5X_VOC_STATE_BUFFER_SIZE) {
+        LOG_DEBUG("%s: Error getting VOC's state", sensorName);
         return false;
     }
+    memcpy(vocState, stateBuffer, SEN5X_VOC_STATE_BUFFER_SIZE);
 
     // Print the state (if debug is on)
-    LOG_DEBUG("SEN5X: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", vocState[0], vocState[1], vocState[2],
+    LOG_DEBUG("%s: VOC state from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]", sensorName, vocState[0], vocState[1], vocState[2],
               vocState[3], vocState[4], vocState[5], vocState[6], vocState[7]);
 
     return true;
@@ -368,11 +389,11 @@ bool SEN5XSensor::loadState()
     auto file = FSCom.open(sen5XStateFileName, FILE_O_READ);
     bool okay = false;
     if (file) {
-        LOG_INFO("%s state read from %s", sensorName, sen5XStateFileName);
+        LOG_INFO("%s: state read from %s", sensorName, sen5XStateFileName);
         pb_istream_t stream = {&readcb, &file, meshtastic_SEN5XState_size};
 
         if (!pb_decode(&stream, &meshtastic_SEN5XState_msg, &sen5xstate)) {
-            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+            LOG_ERROR("%s: can't decode protobuf %s", sensorName, PB_GET_ERROR(&stream));
         } else {
             lastCleaning = sen5xstate.last_cleaning_time;
             lastCleaningValid = sen5xstate.last_cleaning_valid;
@@ -404,12 +425,13 @@ bool SEN5XSensor::loadState()
         }
         file.close();
     } else {
-        LOG_INFO("No %s state found (File: %s)", sensorName, sen5XStateFileName);
+        LOG_INFO("%s: No state found (File: %s)", sensorName, sen5XStateFileName);
     }
     spiLock->unlock();
     return okay;
 #else
-    LOG_ERROR("SEN5X: ERROR - Filesystem not implemented");
+    LOG_ERROR("%s: Filesystem not implemented", sensorName);
+    return false;
 #endif
 }
 
@@ -442,7 +464,7 @@ bool SEN5XSensor::saveState()
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_SEN5XState_size};
 
     if (!pb_encode(&stream, &meshtastic_SEN5XState_msg, &sen5xstate)) {
-        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
+        LOG_ERROR("%s: can't encode protobuf %s", sensorName, PB_GET_ERROR(&stream));
     } else {
         okay = true;
     }
@@ -450,11 +472,12 @@ bool SEN5XSensor::saveState()
     okay &= file.close();
 
     if (okay)
-        LOG_INFO("%s: state write to %s successful", sensorName, sen5XStateFileName);
+        LOG_INFO("%s: state write to %s OK", sensorName, sen5XStateFileName);
 
     return okay;
 #else
-    LOG_ERROR("%s: ERROR - Filesystem not implemented", sensorName);
+    LOG_ERROR("%s: Filesystem not implemented", sensorName);
+    return false;
 #endif
 }
 
@@ -466,10 +489,10 @@ bool SEN5XSensor::isActive()
 uint32_t SEN5XSensor::wakeUp()
 {
 
-    LOG_DEBUG("SEN5X: Waking up sensor");
+    LOG_TRACE("%s Waking", sensorName);
 
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
-        LOG_ERROR("SEN5X: Error starting measurement");
+        LOG_ERROR("%s: Error starting measurement", sensorName);
         // TODO - what should this return?? Something actually on the default interval?
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -480,8 +503,7 @@ uint32_t SEN5XSensor::wakeUp()
     // keep track of how long it has passed
     pmMeasureStarted = getTime();
     state = SEN5X_MEASUREMENT;
-    if (state == SEN5X_MEASUREMENT)
-        LOG_INFO("SEN5X: Started measurement mode");
+    LOG_INFO("%s: Started measurement mode", sensorName);
     return SEN5X_WARMUP_MS_1;
 }
 
@@ -490,7 +512,7 @@ bool SEN5XSensor::vocStateStable()
     uint32_t now;
     now = getTime();
     uint32_t sinceFirstMeasureStarted = (now - rhtGasMeasureStarted);
-    LOG_DEBUG("sinceFirstMeasureStarted: %us", sinceFirstMeasureStarted);
+    LOG_TRACE("%s: sinceFirstMeasureStarted: %us", sensorName, sinceFirstMeasureStarted);
     return sinceFirstMeasureStarted > SEN5X_VOC_STATE_WARMUP_S;
 }
 
@@ -502,25 +524,25 @@ bool SEN5XSensor::startCleaning()
 
     // Note that cleaning command can only be run when the sensor is in measurement mode
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
-        LOG_ERROR("SEN5X: Error starting measurment mode");
+        LOG_ERROR("%s: Error starting measurement mode", sensorName);
         return false;
     }
     delay(50); // From Sensirion Datasheet
 
     if (!sendCommand(SEN5X_START_FAN_CLEANING)) {
-        LOG_ERROR("SEN5X: Error starting fan cleaning");
+        LOG_ERROR("%s: Error starting fan cleaning", sensorName);
         return false;
     }
     delay(20); // From Sensirion Datasheet
 
     // This message will be always printed so the user knows the device it's not hung
-    LOG_INFO("SEN5X: Started fan cleaning it will take 10 seconds...");
+    LOG_INFO("%s: Started fan cleaning (10 sec)", sensorName);
 
-    uint16_t started = millis();
+    uint32_t started = millis();
     while (millis() - started < 10500) {
         delay(500);
     }
-    LOG_INFO("SEN5X: Cleaning done!!");
+    LOG_INFO("%s: Cleaning done", sensorName);
 
     // Save timestamp in flash so we know when a week has passed
     uint32_t now;
@@ -537,21 +559,25 @@ bool SEN5XSensor::startCleaning()
 bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
     state = SEN5X_NOT_DETECTED;
-    LOG_INFO("Init sensor: %s", sensorName);
+    LOG_INFO("%s: Init sensor", sensorName);
 
     _bus = bus;
     _address = dev->address.address;
+#ifdef SEN5X_I2C_CLOCK_SPEED
+    _port = dev->address.port;
+    reClockI2C.setup(_bus, _port);
+#endif /* SEN5X_I2C_CLOCK_SPEED */
 
     delay(50); // without this there is an error on the deviceReset function
 
     if (!sendCommand(SEN5X_RESET)) {
-        LOG_ERROR("SEN5X: Error reseting device");
+        LOG_ERROR("%s: error resetting device", sensorName);
         return false;
     }
     delay(200); // From Sensirion Datasheet
 
     if (!findModel()) {
-        LOG_ERROR("SEN5X: error finding sensor model");
+        LOG_ERROR("%s: error finding sensor model", sensorName);
         return false;
     }
 
@@ -559,7 +585,7 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (!getVersion())
         return false;
     if (firmwareVer < 2) {
-        LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
+        LOG_ERROR("%s: firmware too old, unsupported", sensorName);
         return false;
     }
     delay(200); // From Sensirion Datasheet
@@ -584,11 +610,10 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
             if (passed > ONE_WEEK_IN_SECONDS && (now > SEN5X_VOC_VALID_DATE)) {
                 // If current date greater than 01/01/2018 (validity check)
-                LOG_INFO("SEN5X: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", passed,
-                         lastCleaning);
+                LOG_INFO("%s: Over a week (%us) since last cleaning (%us), trigger cleaning", sensorName, passed, lastCleaning);
                 startCleaning();
             } else {
-                LOG_INFO("SEN5X: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", passed, lastCleaning);
+                LOG_INFO("%s: Cleaning not needed (%ds passed), last cleaning: %us", sensorName, passed, lastCleaning);
             }
         } else {
             // We assume the device has just been updated or it is new,
@@ -597,29 +622,29 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
             // Otherwise, we will never trigger cleaning in some cases
             lastCleaning = now;
             lastCleaningValid = true;
-            LOG_INFO("SEN5X: No valid last cleaning date found, saving it now: %us", lastCleaning);
+            LOG_INFO("%s: No valid last cleaning date, saving now: %us", sensorName, lastCleaning);
             saveState();
         }
 
         if (model != SEN50) {
             if (!vocValid) {
-                LOG_INFO("SEN5X: No valid VOC's state found");
+                LOG_INFO("%s: No valid VOC's state found", sensorName);
             } else {
                 // Check if state is recent
                 if (vocStateRecent(now)) {
                     // If current date greater than 01/01/2018 (validity check)
                     // Send it to the sensor
-                    LOG_INFO("SEN5X: VOC state is valid and recent");
+                    LOG_INFO("%s: VOC state is valid and recent", sensorName);
                     vocStateToSensor();
                 } else {
-                    LOG_INFO("SEN5X: VOC state is too old or date is invalid");
-                    LOG_DEBUG("SEN5X: vocTime %u, Passed %u, and now %u", vocTime, passed, now);
+                    LOG_INFO("%s: VOC state too old or date invalid", sensorName);
+                    LOG_DEBUG("%s: vocTime %u, Passed %u, and now %u", sensorName, vocTime, passed, now);
                 }
             }
         }
     } else {
         // TODO - Should this actually ignore? We could end up never cleaning...
-        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring saved cleaning and VOC state");
+        LOG_INFO("%s: Not enough RTCQuality, ignoring saved cleaning and VOC state", sensorName);
     }
 
     idle(false);
@@ -632,16 +657,16 @@ bool SEN5XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 bool SEN5XSensor::readValues()
 {
     if (!sendCommand(SEN5X_READ_VALUES)) {
-        LOG_ERROR("SEN5X: Error sending read command");
+        LOG_ERROR("%s: Error sending read command", sensorName);
         return false;
     }
-    LOG_DEBUG("SEN5X: Reading PM Values");
+    LOG_TRACE("%s: Reading PM Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[16]{};
-    size_t receivedNumber = readBuffer(&dataBuffer[0], 24);
-    if (receivedNumber == 0) {
-        LOG_ERROR("SEN5X: Error getting values");
+    uint8_t dataBuffer[SEN5X_READ_VALUES_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&dataBuffer[0], SEN5X_READ_VALUES_BUFFER_SIZE + (SEN5X_READ_VALUES_BUFFER_SIZE / 2));
+    if (receivedNumber < SEN5X_READ_VALUES_BUFFER_SIZE) {
+        LOG_ERROR("%s: Error getting values", sensorName);
         return false;
     }
 
@@ -656,26 +681,28 @@ bool SEN5XSensor::readValues()
     int16_t int_vocIndex = static_cast<int16_t>((dataBuffer[12] << 8) | dataBuffer[13]);
     int16_t int_noxIndex = static_cast<int16_t>((dataBuffer[14] << 8) | dataBuffer[15]);
 
-    // Convert values based on Sensirion Arduino lib
-    sen5xmeasurement.pM1p0 = !isnan(uint_pM1p0) ? uint_pM1p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM2p5 = !isnan(uint_pM2p5) ? uint_pM2p5 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM4p0 = !isnan(uint_pM4p0) ? uint_pM4p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.pM10p0 = !isnan(uint_pM10p0) ? uint_pM10p0 / 10 : UINT16_MAX;
-    sen5xmeasurement.humidity = !isnan(int_humidity) ? int_humidity / 100.0f : FLT_MAX;
-    sen5xmeasurement.temperature = !isnan(int_temperature) ? int_temperature / 200.0f : FLT_MAX;
-    sen5xmeasurement.vocIndex = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
-    sen5xmeasurement.noxIndex = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
+    // Convert values based on Sensirion Arduino lib.
+    // Map values the sensor reports as unavailable (SEN5X_UINT_INVALID /
+    // SEN5X_INT_INVALID) to the sentinels getMetrics() checks for
+    sen5xmeasurement.pM1p0 = (uint_pM1p0 != SEN5X_UINT_INVALID) ? (uint_pM1p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM2p5 = (uint_pM2p5 != SEN5X_UINT_INVALID) ? (uint_pM2p5 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM4p0 = (uint_pM4p0 != SEN5X_UINT_INVALID) ? (uint_pM4p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.pM10p0 = (uint_pM10p0 != SEN5X_UINT_INVALID) ? (uint_pM10p0 / 10) : UINT16_MAX;
+    sen5xmeasurement.humidity = (int_humidity != SEN5X_INT_INVALID) ? (int_humidity / 100.0f) : FLT_MAX;
+    sen5xmeasurement.temperature = (int_temperature != SEN5X_INT_INVALID) ? (int_temperature / 200.0f) : FLT_MAX;
+    sen5xmeasurement.vocIndex = (int_vocIndex != SEN5X_INT_INVALID) ? (int_vocIndex / 10.0f) : FLT_MAX;
+    sen5xmeasurement.noxIndex = (int_noxIndex != SEN5X_INT_INVALID) ? (int_noxIndex / 10.0f) : FLT_MAX;
 
-    LOG_DEBUG("Got %s readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
+    LOG_TRACE("%s: Got readings: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u", sensorName, sen5xmeasurement.pM1p0,
               sen5xmeasurement.pM2p5, sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
     if (model != SEN50) {
-        LOG_DEBUG("Got %s readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, sen5xmeasurement.humidity,
+        LOG_TRACE("%s: Got readings: humidity=%.2f, temperature=%.2f, vocIndex=%.2f", sensorName, sen5xmeasurement.humidity,
                   sen5xmeasurement.temperature, sen5xmeasurement.vocIndex);
     }
 
     if (model == SEN55) {
-        LOG_DEBUG("Got %s readings: noxIndex=%.2f", sensorName, sen5xmeasurement.noxIndex);
+        LOG_TRACE("%s: Got readings: noxIndex=%.2f", sensorName, sen5xmeasurement.noxIndex);
     }
 
     return true;
@@ -684,17 +711,17 @@ bool SEN5XSensor::readValues()
 bool SEN5XSensor::readPNValues(bool cumulative)
 {
     if (!sendCommand(SEN5X_READ_PM_VALUES)) {
-        LOG_ERROR("SEN5X: Error sending read command");
+        LOG_ERROR("%s: Error sending read command", sensorName);
         return false;
     }
 
-    LOG_DEBUG("SEN5X: Reading PN Values");
+    LOG_TRACE("%s: Reading PN Values", sensorName);
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataBuffer[20]{};
-    size_t receivedNumber = readBuffer(&dataBuffer[0], 30);
-    if (receivedNumber == 0) {
-        LOG_ERROR("SEN5X: Error getting PN values");
+    uint8_t dataBuffer[SEN5X_READ_PM_BUFFER_SIZE]{};
+    size_t receivedNumber = readBuffer(&dataBuffer[0], SEN5X_READ_PM_BUFFER_SIZE + (SEN5X_READ_PM_BUFFER_SIZE / 2));
+    if (receivedNumber < SEN5X_READ_PM_BUFFER_SIZE) {
+        LOG_ERROR("%s: Error getting PN values", sensorName);
         return false;
     }
 
@@ -710,25 +737,32 @@ bool SEN5XSensor::readPNValues(bool cumulative)
     uint16_t uint_pN10p0 = static_cast<uint16_t>((dataBuffer[16] << 8) | dataBuffer[17]);
     uint16_t uint_tSize = static_cast<uint16_t>((dataBuffer[18] << 8) | dataBuffer[19]);
 
-    // Convert values based on Sensirion Arduino lib
-    // Multiply by 100 for converting from #/cm3 to #/0.1l for PN values
-    sen5xmeasurement.pN0p5 = !isnan(uint_pN0p5) ? uint_pN0p5 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN1p0 = !isnan(uint_pN1p0) ? uint_pN1p0 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN2p5 = !isnan(uint_pN2p5) ? uint_pN2p5 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN4p0 = !isnan(uint_pN4p0) ? uint_pN4p0 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.pN10p0 = !isnan(uint_pN10p0) ? uint_pN10p0 / 10 * 100 : UINT32_MAX;
-    sen5xmeasurement.tSize = !isnan(uint_tSize) ? uint_tSize / 1000.0f : FLT_MAX;
+    // Convert values based on Sensirion Arduino lib.
+    // Raw PN values are #/cm3 with 0.1 resolution; multiplying by 10
+    // converts to #/0.1l without the truncation of dividing first.
+    // Map values the sensor reports as unavailable (SEN5X_UINT_INVALID) to the
+    // sentinels getMetrics() checks for
+    sen5xmeasurement.pN0p5 = (uint_pN0p5 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN0p5 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN1p0 = (uint_pN1p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN1p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN2p5 = (uint_pN2p5 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN2p5 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN4p0 = (uint_pN4p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN4p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.pN10p0 = (uint_pN10p0 != SEN5X_UINT_INVALID) ? ((uint32_t)uint_pN10p0 * 10) : UINT32_MAX;
+    sen5xmeasurement.tSize = (uint_tSize != SEN5X_UINT_INVALID) ? (uint_tSize / 1000.0f) : FLT_MAX;
 
     // Remove accumuluative values:
     // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
     if (!cumulative) {
-        sen5xmeasurement.pN10p0 -= sen5xmeasurement.pN4p0;
-        sen5xmeasurement.pN4p0 -= sen5xmeasurement.pN2p5;
-        sen5xmeasurement.pN2p5 -= sen5xmeasurement.pN1p0;
-        sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
+        if (sen5xmeasurement.pN10p0 != UINT32_MAX && sen5xmeasurement.pN4p0 != UINT32_MAX)
+            sen5xmeasurement.pN10p0 -= sen5xmeasurement.pN4p0;
+        if (sen5xmeasurement.pN4p0 != UINT32_MAX && sen5xmeasurement.pN2p5 != UINT32_MAX)
+            sen5xmeasurement.pN4p0 -= sen5xmeasurement.pN2p5;
+        if (sen5xmeasurement.pN2p5 != UINT32_MAX && sen5xmeasurement.pN1p0 != UINT32_MAX)
+            sen5xmeasurement.pN2p5 -= sen5xmeasurement.pN1p0;
+        if (sen5xmeasurement.pN1p0 != UINT32_MAX && sen5xmeasurement.pN0p5 != UINT32_MAX)
+            sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
     }
 
-    LOG_DEBUG("Got %s readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
+    LOG_TRACE("%s: Got readings: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f", sensorName,
               sen5xmeasurement.pN0p5, sen5xmeasurement.pN1p0, sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0,
               sen5xmeasurement.pN10p0, sen5xmeasurement.tSize);
 
@@ -742,15 +776,15 @@ uint8_t SEN5XSensor::getMeasurements()
 
     // Try to get new data
     if (!sendCommand(SEN5X_READ_DATA_READY)) {
-        LOG_ERROR("SEN5X: Error sending command data ready flag");
+        LOG_ERROR("%s: Error sending command data ready flag", sensorName);
         return 2;
     }
     delay(20); // From Sensirion Datasheet
 
-    uint8_t dataReadyBuffer[3];
-    size_t charNumber = readBuffer(&dataReadyBuffer[0], 3);
-    if (charNumber == 0) {
-        LOG_ERROR("SEN5X: Error getting device version value");
+    uint8_t dataReadyBuffer[SEN5X_DATA_READY_BUFFER_SIZE]{};
+    size_t charNumber = readBuffer(&dataReadyBuffer[0], SEN5X_DATA_READY_BUFFER_SIZE + (SEN5X_DATA_READY_BUFFER_SIZE / 2));
+    if (charNumber < SEN5X_DATA_READY_BUFFER_SIZE) {
+        LOG_ERROR("%s: Error getting data ready flag value", sensorName);
         return 2;
     }
 
@@ -758,17 +792,17 @@ uint8_t SEN5XSensor::getMeasurements()
     uint32_t sinceLastDataPollMs = (now - lastDataPoll) * 1000;
     // Check if data is ready, and if since last time we requested is less than SEN5X_POLL_INTERVAL
     if (!dataReady && (sinceLastDataPollMs > SEN5X_POLL_INTERVAL)) {
-        LOG_INFO("SEN5X: Data is not ready");
+        LOG_INFO("%s: Data is not ready", sensorName);
         return 1;
     }
 
     if (!readValues()) {
-        LOG_ERROR("SEN5X: Error getting readings");
+        LOG_ERROR("%s: Error getting readings", sensorName);
         return 2;
     }
 
     if (!readPNValues(false)) {
-        LOG_ERROR("SEN5X: Error getting PN readings");
+        LOG_ERROR("%s: Error getting PN readings", sensorName);
         return 2;
     }
 
@@ -787,13 +821,13 @@ int32_t SEN5XSensor::pendingForReadyMs()
     uint32_t now;
     now = getTime();
     uint32_t sincePmMeasureStarted = (now - pmMeasureStarted) * 1000;
-    LOG_DEBUG("SEN5X: Since measure started: %ums", sincePmMeasureStarted);
+    LOG_TRACE("%s: Since measure started: %ums", sensorName, sincePmMeasureStarted);
 
     switch (state) {
     case SEN5X_MEASUREMENT: {
 
         if (sincePmMeasureStarted < SEN5X_WARMUP_MS_1) {
-            LOG_INFO("SEN5X: not enough time passed since starting measurement");
+            LOG_INFO("%s: not enough time since measurement start", sensorName);
             return SEN5X_WARMUP_MS_1 - sincePmMeasureStarted;
         }
 
@@ -807,7 +841,7 @@ int32_t SEN5XSensor::pendingForReadyMs()
 
         // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
         if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sincePmMeasureStarted < SEN5X_WARMUP_MS_2) {
-            LOG_INFO("SEN5X: Concentration is low, we will ask again in the second warm up period");
+            LOG_INFO("%s: Concentration low, will ask again in second warm up period", sensorName);
             state = SEN5X_MEASUREMENT_2;
             // Report how many seconds are pending to cover the first warm up period
             return SEN5X_WARMUP_MS_2 - sincePmMeasureStarted;
@@ -829,9 +863,9 @@ int32_t SEN5XSensor::pendingForReadyMs()
 
 bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_INFO("SEN5X: Attempting to get metrics");
+    LOG_INFO("%s: Get metrics", sensorName);
     if (!isActive()) {
-        LOG_INFO("SEN5X: not in measurement mode");
+        LOG_INFO("%s: Not in measurement mode", sensorName);
         return false;
     }
 
@@ -889,7 +923,7 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
                 measurement->variant.air_quality_metrics.has_pm_temperature = true;
                 measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
             }
-            if (sen5xmeasurement.noxIndex != FLT_MAX) {
+            if (sen5xmeasurement.vocIndex != FLT_MAX) {
                 measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
                 measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
             }
@@ -921,9 +955,9 @@ void SEN5XSensor::setMode(bool setOneShot)
 {
     oneShotMode = setOneShot;
     if (oneShotMode) {
-        LOG_INFO("%s setting mode to one shot mode", sensorName);
+        LOG_INFO("%s: set one shot mode", sensorName);
     } else {
-        LOG_INFO("%s setting mode to continuous mode", sensorName);
+        LOG_INFO("%s: set continuous mode", sensorName);
     }
 }
 

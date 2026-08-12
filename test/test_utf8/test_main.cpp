@@ -16,7 +16,7 @@ void test_ascii_unchanged()
 
 void test_valid_2byte_unchanged()
 {
-    // "café" — é is C3 A9
+    // "café" - é is C3 A9
     char buf[16] = "caf\xC3\xA9";
     TEST_ASSERT_FALSE(sanitizeUtf8(buf, sizeof(buf)));
     TEST_ASSERT_EQUAL_STRING("caf\xC3\xA9", buf);
@@ -40,7 +40,7 @@ void test_valid_4byte_emoji_unchanged()
 
 void test_valid_mixed_unchanged()
 {
-    // "Hi 🌙!" — mix of ASCII and 4-byte
+    // "Hi 🌙!" - mix of ASCII and 4-byte
     char buf[16] = "Hi \xF0\x9F\x8C\x99!";
     TEST_ASSERT_FALSE(sanitizeUtf8(buf, sizeof(buf)));
     TEST_ASSERT_EQUAL_STRING("Hi \xF0\x9F\x8C\x99!", buf);
@@ -98,7 +98,7 @@ void test_overlong_2byte()
 
 void test_surrogate_half()
 {
-    // ED A0 80 encodes U+D800 (surrogate half — invalid in UTF-8)
+    // ED A0 80 encodes U+D800 (surrogate half - invalid in UTF-8)
     char buf[8] = "\xED\xA0\x80";
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
     TEST_ASSERT_EQUAL_STRING("???", buf);
@@ -106,7 +106,7 @@ void test_surrogate_half()
 
 void test_5byte_sequence_rejected()
 {
-    // F8 80 80 80 80 — 5-byte sequence, not valid UTF-8
+    // F8 80 80 80 80 - 5-byte sequence, not valid UTF-8
     char buf[8] = "\xF8\x80\x80\x80\x80";
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
     // F8 is invalid lead (>= 0xF8), each 0x80 is bare continuation
@@ -163,6 +163,47 @@ void test_above_max_codepoint()
     TEST_ASSERT_TRUE(sanitizeUtf8(buf, sizeof(buf)));
 }
 
+// --- clampLongName: local 24-byte cap over wider wire buffers ---
+
+void test_clamp_long_name_short_unchanged()
+{
+    char buf[40] = "Kevin Hester";
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_STRING("Kevin Hester", buf);
+}
+
+void test_clamp_long_name_exact_cap_unchanged()
+{
+    char buf[40] = "abcdefghijklmnopqrstuvwx"; // exactly 24 bytes
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_STRING("abcdefghijklmnopqrstuvwx", buf);
+}
+
+void test_clamp_long_name_truncates_39_bytes()
+{
+    char buf[40];
+    memset(buf, 'a', 39);
+    buf[39] = '\0';
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_INT(MAX_LONG_NAME_BYTES, (int)strlen(buf));
+}
+
+void test_clamp_long_name_fixes_partial_rune_at_cut()
+{
+    // 22 ASCII then a 4-byte emoji straddling the 24-byte boundary
+    char buf[40];
+    memset(buf, 'a', 22);
+    buf[22] = '\xF0';
+    buf[23] = '\x9F';
+    buf[24] = '\x8C';
+    buf[25] = '\x99';
+    buf[26] = '\0';
+    clampLongName(buf);
+    TEST_ASSERT_EQUAL_INT(24, (int)strlen(buf));
+    TEST_ASSERT_EQUAL_INT('?', buf[22]);
+    TEST_ASSERT_EQUAL_INT('?', buf[23]);
+}
+
 void setup()
 {
     UNITY_BEGIN();
@@ -190,6 +231,12 @@ void setup()
     RUN_TEST(test_zero_size);
     RUN_TEST(test_valid_max_codepoint);
     RUN_TEST(test_above_max_codepoint);
+
+    // clampLongName
+    RUN_TEST(test_clamp_long_name_short_unchanged);
+    RUN_TEST(test_clamp_long_name_exact_cap_unchanged);
+    RUN_TEST(test_clamp_long_name_truncates_39_bytes);
+    RUN_TEST(test_clamp_long_name_fixes_partial_rune_at_cut);
 
     exit(UNITY_END());
 }

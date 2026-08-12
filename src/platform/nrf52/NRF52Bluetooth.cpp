@@ -4,8 +4,10 @@
 #include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "error.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
+#include "mesh/Throttle.h"
 #include "mesh/mesh-pb-constants.h"
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -15,8 +17,9 @@ static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
 static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16));
 
-static BLEDis bledis; // DIS (Device Information Service) helper class instance
-static BLEBas blebas; // BAS (Battery Service) helper class instance
+static BLEDis bledis;             // DIS (Device Information Service) helper class instance
+static BLEBas blebas;             // BAS (Battery Service) helper class instance
+static int lastBatteryLevel = -1; // last value written to BAS, to skip redundant writes/notifies
 #ifndef BLE_DFU_SECURE
 static BLEDfu bledfu; // DFU software update helper service
 #else
@@ -65,6 +68,16 @@ void onConnect(uint16_t conn_handle)
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
     LOG_INFO("BLE Connected to %s", central_name);
+
+    // A new physical link must start unauthenticated. The auth slot is keyed by
+    // the (single, reused) bluetoothPhoneAPI instance, so a prior session's
+    // authorization can otherwise survive a quick reconnect. handleStartConfig()
+    // re-locks on every want_config too; this closes the window before that.
+#ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->setAdminAuthorized(false);
+    }
+#endif
 
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
@@ -242,7 +255,7 @@ void NRF52Bluetooth::startDisabled()
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
-    LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
+    LOG_INFO("Disable NRF52 BT (tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
 {
@@ -264,7 +277,16 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-    Bluefruit.begin();
+    if (!Bluefruit.begin()) {
+        // sd_ble_enable() rejected our RAM base: the linker RAM ORIGIN
+        // (src/platform/nrf52/nrf52840_s140_v*.ld) is below what the SoftDevice needs for the
+        // current Bluefruit config. Without this check the node would silently run without BLE.
+        // Rebuild with -DCFG_DEBUG=1 to get "SoftDevice's RAM requires: 0x..." in the log, then
+        // raise the ORIGIN accordingly.
+        LOG_ERROR("Bluefruit.begin failed: SoftDevice RAM too small");
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_UNSPECIFIED);
+        return;
+    }
     // Clear existing data.
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
@@ -336,6 +358,7 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Init the Battery Service");
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
+    lastBatteryLevel = 0;
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
     LOG_INFO("Init the Mesh bluetooth service");
@@ -347,6 +370,15 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    // shutdown() latches onUnwantedPairing to actively refuse pairing (used on the factory-reset /
+    // BT-disable teardown path). The real pairing passkey callback is installed only in setup(), but a
+    // shutdown()->resumeAdvertising() re-enable cycle skips setup() entirely (see setBluetoothEnable() in
+    // main-nrf52.cpp), so restore the correct callback here - otherwise the device silently refuses all
+    // pairing until the next reboot. Mirror the mode check in setup(): only PIN modes drive a passkey-
+    // display callback, so NO_PIN (Just Works) needs no restore.
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN)
+        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
@@ -355,11 +387,19 @@ void NRF52Bluetooth::resumeAdvertising()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
+    if (!nrf52Bluetooth) // skip until the Battery Service has been begun in setup()
+        return;
+
+    if (level > 100) // BAS battery level must stay within 0-100
+        level = 100;
+    if (level == lastBatteryLevel)
+        return;
+    lastBatteryLevel = level;
     blebas.write(level);
 }
 void NRF52Bluetooth::clearBonds()
 {
-    LOG_INFO("Clear bluetooth bonds!");
+    LOG_INFO("Clear bluetooth bonds");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -386,34 +426,20 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     meshtastic::BluetoothStatus newStatus(textkey);
     bluetoothStatus->updateStatus(&newStatus);
 
-#if HAS_SCREEN &&                                                                                                                \
-    !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+#if HAS_SCREEN && !defined(MESHTASTIC_EXCLUDE_SCREEN)
     if (screen) {
-        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-            char btPIN[16] = "888888";
-            snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
-            int x_offset = display->width() / 2;
-            int y_offset = display->height() <= 80 ? 0 : 12;
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->setFont(FONT_MEDIUM);
-            display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-
-            display->setFont(FONT_SMALL);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-            display->drawString(x_offset + x, y_offset + y, "Enter this code");
-
-            display->setFont(FONT_LARGE);
-            String displayPin(btPIN);
-            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-            display->drawString(x_offset + x, y_offset + y, pin);
-
-            display->setFont(FONT_SMALL);
-            String deviceName = "Name: ";
-            deviceName.concat(getDeviceName());
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-            display->drawString(x_offset + x, y_offset + y, deviceName);
-        });
+        std::string configuredPasskeyText = std::to_string(configuredPasskey);
+        std::string ble_message =
+            "Bluetooth\nPIN\n[M]" + configuredPasskeyText.substr(0, 3) + " " + configuredPasskeyText.substr(3, 6);
+        // Use the pairing_pin notification type so the lockdown UI short-
+        // circuit (Screen.cpp updateUiFrame) allows the overlay through
+        // even on a locked device - see H13 audit fix. The banner content
+        // is the per-attempt ephemeral pair PIN, not operator content.
+        graphics::BannerOverlayOptions opts;
+        opts.message = ble_message.c_str();
+        opts.durationMs = 30000;
+        opts.notificationType = graphics::notificationTypeEnum::pairing_pin;
+        screen->showOverlayBanner(opts);
     }
 #endif
     passkeyShowing = true;
@@ -441,17 +467,23 @@ bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passk
 // Disconnect any BLE connections
 void NRF52Bluetooth::disconnect()
 {
+    static constexpr uint32_t DISCONNECT_TIMEOUT_MSEC = 1000;
     uint8_t connection_num = Bluefruit.connected();
     if (connection_num) {
         // Close all connections. We're only expecting one.
         for (uint8_t i = 0; i < connection_num; i++)
             Bluefruit.disconnect(i);
 
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
+        // Best-effort wait: on Bluefruit's BLE event task the DISCONNECTED event can't be processed
+        // until this callback returns, so an unbounded wait would deadlock until the watchdog fires.
+        uint32_t start = millis();
+        while (Bluefruit.connected() && Throttle::isWithinTimespanMs(start, DISCONNECT_TIMEOUT_MSEC))
+            delay(1);
 
-        LOG_INFO("Ended BLE connection");
+        if (Bluefruit.connected())
+            LOG_WARN("BLE disconnect unconfirmed after %ums, shutdown anyway", millis() - start);
+        else
+            LOG_INFO("Ended BLE connection");
     }
 }
 

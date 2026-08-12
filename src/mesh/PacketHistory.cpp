@@ -1,5 +1,6 @@
 #include "PacketHistory.h"
 #include "configuration.h"
+#include "memory/MemAudit.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 
@@ -8,16 +9,12 @@
 #endif
 #include "Throttle.h"
 
-#define PACKETHISTORY_MAX                                                                                                        \
-    max((u_int32_t)(MAX_NUM_NODES * 2.0),                                                                                        \
-        (u_int32_t)100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
-
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
 #define VERBOSE_PACKET_HISTORY 0     // Set to 1 for verbose logging, 2 for heavy debugging
 #define PACKET_HISTORY_TRACE_AGING 1 // Set to 1 to enable logging of the age of re/used history slots
 
-PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
+PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0) // Initialize members
 {
     if (size < 4 || size > PACKETHISTORY_MAX) { // Copilot suggested - makes sense
         LOG_WARN("Packet History - Invalid size %d, using default %d", size, PACKETHISTORY_MAX);
@@ -34,7 +31,7 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPa
 
     // Allocate memory for the recent packets array
     recentPacketsCapacity = size;
-    recentPackets = new PacketRecord[recentPacketsCapacity];
+    recentPackets.reset(new PacketRecord[recentPacketsCapacity]);
     if (!recentPackets) { // No logging here, console/log probably uninitialized yet.
         LOG_ERROR("Packet History - Memory allocation failed for size=%d entries / %d Bytes", size,
                   sizeof(PacketRecord) * recentPacketsCapacity);
@@ -43,33 +40,22 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPa
     }
 
     // Initialize the recent packets array to zero
-    memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
+    memset(recentPackets.get(), 0, sizeof(PacketRecord) * recentPacketsCapacity);
+    memaudit::set("pkthist", sizeof(PacketRecord) * recentPacketsCapacity);
 
 #if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
     // Allocate hash index with load factor <= 0.5 for short probe chains
     hashCapacity = nextPowerOf2(recentPacketsCapacity * 2);
     hashMask = hashCapacity - 1;
-    hashIndex = new uint16_t[hashCapacity];
+    hashIndex.reset(new uint16_t[hashCapacity]);
     if (!hashIndex) {
         LOG_ERROR("Packet History - Hash index allocation failed for %d entries", hashCapacity);
         hashCapacity = 0;
         hashMask = 0;
         return;
     }
-    memset(hashIndex, 0xFF, sizeof(uint16_t) * hashCapacity); // Fill with HASH_EMPTY (0xFFFF)
-#endif
-}
-
-PacketHistory::~PacketHistory()
-{
-    recentPacketsCapacity = 0;
-    delete[] recentPackets;
-    recentPackets = NULL;
-#if !MESHTASTIC_EXCLUDE_PKT_HISTORY_HASH
-    delete[] hashIndex;
-    hashIndex = NULL;
-    hashCapacity = 0;
-    hashMask = 0;
+    memset(hashIndex.get(), 0xFF, sizeof(uint16_t) * hashCapacity); // Fill with HASH_EMPTY (0xFFFF)
+    memaudit::set("pkthist", sizeof(PacketRecord) * recentPacketsCapacity + sizeof(uint16_t) * hashCapacity);
 #endif
 }
 
@@ -78,13 +64,13 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                                     bool *wasUpgraded)
 {
     if (!initOk()) {
-        LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED!");
+        LOG_ERROR("Packet History - Was Seen Recently: NOT INITIALIZED");
         return false;
     }
 
     if (p->id == 0) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_DEBUG("Packet History - Was Seen Recently: ID is 0, not a floodable message");
+        LOG_DEBUG("Packet History - Was Seen Recently: ID 0, not floodable");
 #endif
         return false; // Not a floodable message ID, so we don't care
     }
@@ -110,9 +96,10 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         r.rxTimeMsec = 1;
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - Was Seen Recently: @start s=%08x id=%08x / to=%08x nh=%02x rn=%02x / wUpd=%s / wasFb?%d wWNH?%d",
-              r.sender, r.id, p->to, p->next_hop, p->relay_node, withUpdate ? "YES" : "NO", wasFallback ? *wasFallback : -1,
-              weWereNextHop ? *weWereNextHop : -1);
+    LOG_DEBUG(
+        "Packet History - Was Seen Recently: @start s=0x%08x id=0x%08x / to=0x%08x nh=%02x rn=%02x / wUpd=%s / wasFb?%d wWNH?%d",
+        r.sender, r.id, p->to, p->next_hop, p->relay_node, withUpdate ? "YES" : "NO", wasFallback ? *wasFallback : -1,
+        weWereNextHop ? *weWereNextHop : -1);
 #endif
 
     PacketRecord *found = find(r.sender, r.id); // Find the packet record in the recentPackets array
@@ -120,8 +107,8 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     // Check for hop_limit upgrade scenario
     if (seenRecently && wasUpgraded && getHighestHopLimit(*found) < p->hop_limit) {
-        LOG_DEBUG("Packet History - Hop limit upgrade: packet 0x%08x from hop_limit=%d to hop_limit=%d", p->id,
-                  getHighestHopLimit(*found), p->hop_limit);
+        LOG_TRACE("Packet History - Hop limit upgrade: packet 0x%08x hop_limit=%d -> %d", p->id, getHighestHopLimit(*found),
+                  p->hop_limit);
         *wasUpgraded = true;
     } else if (wasUpgraded) {
         *wasUpgraded = false; // Initialize to false if not an upgrade
@@ -139,14 +126,14 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
                     found->next_hop,
                     *found)) { // If we were not the next hop and the next hop is not us, and we are not relaying this packet
 #if VERBOSE_PACKET_HISTORY
-                LOG_DEBUG("Packet History - Was Seen Recently: f=%08x id=%08x nh=%02x rn=%02x oID=%02x, wasFbk=%d-set TRUE",
+                LOG_DEBUG("Packet History - Was Seen Recently: f=0x%08x id=0x%08x nh=%02x rn=%02x oID=%02x, wasFbk=%d-set TRUE",
                           p->from, p->id, p->next_hop, p->relay_node, ourRelayID, wasFallback ? *wasFallback : -1);
 #endif
                 *wasFallback = true;
             } else {
                 // debug log only
 #if VERBOSE_PACKET_HISTORY
-                LOG_DEBUG("Packet History - Was Seen Recently: f=%08x id=%08x nh=%02x rn=%02x oID=%02x, wasFbk=%d-no change",
+                LOG_DEBUG("Packet History - Was Seen Recently: f=0x%08x id=0x%08x nh=%02x rn=%02x oID=%02x, wasFbk=%d-no change",
                           p->from, p->id, p->next_hop, p->relay_node, ourRelayID, wasFallback ? *wasFallback : -1);
 #endif
             }
@@ -156,7 +143,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         if (weWereNextHop) {
             *weWereNextHop = (found->next_hop == ourRelayID);
 #if VERBOSE_PACKET_HISTORY
-            LOG_DEBUG("Packet History - Was Seen Recently: f=%08x id=%08x nh=%02x rn=%02x foundnh=%02x oID=%02x -> wWNH=%s",
+            LOG_DEBUG("Packet History - Was Seen Recently: f=0x%08x id=0x%08x nh=%02x rn=%02x foundnh=%02x oID=%02x -> wWNH=%s",
                       p->from, p->id, p->next_hop, p->relay_node, found->next_hop, ourRelayID, (*weWereNextHop) ? "YES" : "NO");
 #endif
         }
@@ -165,7 +152,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     if (withUpdate) {
         if (found != NULL) {
 #if VERBOSE_PACKET_HISTORY
-            LOG_DEBUG("Packet History - Was Seen Recently: s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d wUpd BEFORE",
+            LOG_DEBUG("Packet History - Was Seen Recently: s=0x%08x id=0x%08x nh=%02x rby=%02x %02x %02x age=%d wUpd BEFORE",
                       found->sender, found->id, found->next_hop, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2],
                       millis() - found->rxTimeMsec);
 #endif
@@ -206,15 +193,15 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
             }
             r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
 #if VERBOSE_PACKET_HISTORY
-            LOG_DEBUG("Packet History - Was Seen Recently: s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d wUpd AFTER", r.sender,
-                      r.id, r.next_hop, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], millis() - r.rxTimeMsec);
+            LOG_DEBUG("Packet History - Was Seen Recently: s=0x%08x id=0x%08x nh=%02x rby=%02x %02x %02x age=%d wUpd AFTER",
+                      r.sender, r.id, r.next_hop, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], millis() - r.rxTimeMsec);
 #endif
             // TODO: have direct *found entry - can modify directly without local copy _vs_ not convolute the code by this
         }
         insert(r); // Insert or update the packet record in the history
     }
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - Was Seen Recently: @exit s=%08x id=%08x (to=%08x) relby=%02x %02x %02x nxthop=%02x rxT=%d "
+    LOG_DEBUG("Packet History - Was Seen Recently: @exit s=0x%08x id=0x%08x (to=0x%08x) relby=%02x %02x %02x nxthop=%02x rxT=%d "
               "found?%s seenRecently?%s wUpd?%s",
               r.sender, r.id, p->to, r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], r.next_hop, r.rxTimeMsec,
               found ? "YES" : "NO ", seenRecently ? "YES" : "NO ", withUpdate ? "YES" : "NO ");
@@ -247,7 +234,7 @@ void PacketHistory::hashInsert(NodeNum sender, PacketId id, uint16_t slotIdx)
         }
         bucket = (bucket + 1) & hashMask;
     }
-    LOG_ERROR("Packet History - hashInsert: table full or corrupted, rebuilding");
+    LOG_ERROR("Packet History - hashInsert: table full or corrupt, rebuild");
     hashRebuild();
 }
 
@@ -261,7 +248,7 @@ void PacketHistory::hashRemove(NodeNum sender, PacketId id)
             return;
         uint16_t idx = hashIndex[bucket];
         if (idx < recentPacketsCapacity && recentPackets[idx].sender == sender && recentPackets[idx].id == id) {
-            // Found it — delete and re-insert subsequent entries to maintain probe chain integrity
+            // Found it - delete and re-insert subsequent entries to maintain probe chain integrity
             hashIndex[bucket] = HASH_EMPTY;
             uint32_t next = (bucket + 1) & hashMask;
             for (uint32_t j = 0; j < hashCapacity; j++) {
@@ -285,7 +272,7 @@ void PacketHistory::hashRebuild()
 {
     if (!hashIndex)
         return;
-    memset(hashIndex, 0xFF, sizeof(uint16_t) * hashCapacity);
+    memset(hashIndex.get(), 0xFF, sizeof(uint16_t) * hashCapacity);
     for (uint32_t i = 0; i < recentPacketsCapacity; i++) {
         if (recentPackets[i].rxTimeMsec != 0)
             hashInsert(recentPackets[i].sender, recentPackets[i].id, (uint16_t)i);
@@ -300,7 +287,7 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
 {
     if (sender == 0 || id == 0) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_DEBUG("Packet History - find: s=%08x id=%08x sender/id=0->NOT FOUND", sender, id);
+        LOG_DEBUG("Packet History - find: s=0x%08x id=0x%08x sender/id=0->NOT FOUND", sender, id);
 #endif
         return NULL;
     }
@@ -315,7 +302,7 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
             uint16_t idx = hashIndex[bucket];
             if (idx < recentPacketsCapacity && recentPackets[idx].id == id && recentPackets[idx].sender == sender) {
 #if VERBOSE_PACKET_HISTORY
-                LOG_DEBUG("Packet History - find: s=%08x id=%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d",
+                LOG_DEBUG("Packet History - find: s=0x%08x id=0x%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d",
                           recentPackets[idx].sender, recentPackets[idx].id, recentPackets[idx].next_hop,
                           recentPackets[idx].relayed_by[0], recentPackets[idx].relayed_by[1], recentPackets[idx].relayed_by[2],
                           millis() - (recentPackets[idx].rxTimeMsec), idx, recentPacketsCapacity);
@@ -325,14 +312,15 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
             bucket = (bucket + 1) & hashMask;
         }
 #if VERBOSE_PACKET_HISTORY
-        LOG_DEBUG("Packet History - find: s=%08x id=%08x NOT FOUND", sender, id);
+        LOG_DEBUG("Packet History - find: s=0x%08x id=0x%08x NOT FOUND", sender, id);
 #endif
         return NULL;
     }
 #endif
 
     // Linear scan (sole path when hash excluded, fallback when hash allocation failed)
-    for (PacketRecord *it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
+    PacketRecord *base = recentPackets.get();
+    for (PacketRecord *it = base; it < (base + recentPacketsCapacity); ++it) {
         if (it->id == id && it->sender == sender) {
             return it;
         }
@@ -346,39 +334,37 @@ void PacketHistory::insert(const PacketRecord &r)
 {
     uint32_t now_millis = millis(); // Should not jump with time changes
     uint32_t OldtrxTimeMsec = 0;
+    PacketRecord *base = recentPackets.get();
     PacketRecord *tu = NULL; // Will insert here.
     PacketRecord *it = NULL;
 
     // Find a free, matching or oldest used slot in the recentPackets array
-    for (it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
+    for (it = base; it < (base + recentPacketsCapacity); ++it) {
         if (it->id == 0 && it->sender == 0 /*&& rxTimeMsec == 0*/) { // Record is empty
             tu = it;                                                 // Remember the free slot
 #if VERBOSE_PACKET_HISTORY >= 2
-            LOG_DEBUG("Packet History - insert: Free slot@ %d/%d", tu - recentPackets, recentPacketsCapacity);
+            LOG_DEBUG("Packet History - insert: Free slot@ %d/%d", tu - base, recentPacketsCapacity);
 #endif
             // We have that, Exit the loop
-            it = (recentPackets + recentPacketsCapacity);
+            it = (base + recentPacketsCapacity);
         } else if (it->id == r.id && it->sender == r.sender) { // Record matches the packet we want to insert
             tu = it;                                           // Remember the matching slot
             OldtrxTimeMsec = now_millis - it->rxTimeMsec;      // ..and save current entry's age
 #if VERBOSE_PACKET_HISTORY >= 2
-            LOG_DEBUG("Packet History - insert: Matched slot@ %d/%d age=%d", tu - recentPackets, recentPacketsCapacity,
-                      OldtrxTimeMsec);
+            LOG_DEBUG("Packet History - insert: Matched slot@ %d/%d age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
 #endif
             // We have that, Exit the loop
-            it = (recentPackets + recentPacketsCapacity);
+            it = (base + recentPacketsCapacity);
         } else {
             if (it->rxTimeMsec == 0) {
-                LOG_WARN(
-                    "Packet History - insert: Found packet s=%08x id=%08x with rxTimeMsec = 0, slot %d/%d. Should never happen!",
-                    it->sender, it->id, it - recentPackets, recentPacketsCapacity);
+                LOG_WARN("Packet History - insert: Found s=0x%08x id=0x%08x rxTimeMsec = 0, slot %d/%d. Should never happen",
+                         it->sender, it->id, it - base, recentPacketsCapacity);
             }
             if ((now_millis - it->rxTimeMsec) > OldtrxTimeMsec) { // 49.7 days rollover friendly
                 OldtrxTimeMsec = now_millis - it->rxTimeMsec;
                 tu = it; // remember the oldest packet
 #if VERBOSE_PACKET_HISTORY >= 2
-                LOG_DEBUG("Packet History - insert: Older slot@ %d/%d age=%d", tu - recentPackets, recentPacketsCapacity,
-                          OldtrxTimeMsec);
+                LOG_DEBUG("Packet History - insert: Older slot@ %d/%d age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
 #endif
             }
             // keep looking for oldest till entire array is checked
@@ -386,20 +372,18 @@ void PacketHistory::insert(const PacketRecord &r)
     }
 
     if (tu == NULL) {
-        LOG_ERROR("Packet History - insert: No free slot, no matched packet, no oldest to reuse. Something leaked."); // mx
+        LOG_ERROR("Packet History - insert: No free/matched/oldest slot. Something leaked"); // mx
         // assert(false); // This should never happen, we should always have at least one packet to clear
         return; // Return early if we can't update the history
     }
 
 #if VERBOSE_PACKET_HISTORY
     if (tu->id == 0 && tu->sender == 0) {
-        LOG_DEBUG("Packet History - insert: slot@ %d/%d is NEW", tu - recentPackets, recentPacketsCapacity);
+        LOG_DEBUG("Packet History - insert: slot@ %d/%d is NEW", tu - base, recentPacketsCapacity);
     } else if (tu->id == r.id && tu->sender == r.sender) {
-        LOG_DEBUG("Packet History - insert: slot@ %d/%d MATCHED, age=%d", tu - recentPackets, recentPacketsCapacity,
-                  OldtrxTimeMsec);
+        LOG_DEBUG("Packet History - insert: slot@ %d/%d MATCHED, age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
     } else {
-        LOG_DEBUG("Packet History - insert: slot@ %d/%d REUSE OLDEST, age=%d", tu - recentPackets, recentPacketsCapacity,
-                  OldtrxTimeMsec);
+        LOG_DEBUG("Packet History - insert: slot@ %d/%d REUSE OLDEST, age=%d", tu - base, recentPacketsCapacity, OldtrxTimeMsec);
     }
 #endif
 
@@ -414,7 +398,7 @@ void PacketHistory::insert(const PacketRecord &r)
         } else {
             // debug only
 #if VERBOSE_PACKET_HISTORY
-            LOG_WARN("Packet History - insert: Reusing slot aged %.3fs < %ds with MATCHED PACKET - this is normal",
+            LOG_WARN("Packet History - insert: Reusing slot aged %.3fs < %ds with MATCHED PACKET - normal",
                      OldtrxTimeMsec / 1000., RECENT_WARN_AGE / 1000);
 #endif
         }
@@ -432,14 +416,14 @@ void PacketHistory::insert(const PacketRecord &r)
 #endif
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d BEFORE",
-              tu - recentPackets, recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1],
-              tu->relayed_by[2], tu->rxTimeMsec);
+    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=0x%08x id=0x%08x nh=%02x rby=%02x %02x %02x rxT=%d BEFORE", tu - base,
+              recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1], tu->relayed_by[2],
+              tu->rxTimeMsec);
 #endif
 
     if (r.rxTimeMsec == 0) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_WARN("Packet History - insert: I will not store packet with rxTimeMsec = 0.");
+        LOG_WARN("Packet History - insert: Won't store packet with rxTimeMsec = 0");
 #endif
         return; // Return early if we can't update the history
     }
@@ -454,16 +438,16 @@ void PacketHistory::insert(const PacketRecord &r)
     *tu = r; // store the packet
 
     if (!isMatchingSlot) {
-        hashInsert(r.sender, r.id, (uint16_t)(tu - recentPackets));
+        hashInsert(r.sender, r.id, (uint16_t)(tu - base));
     }
 #else
     *tu = r; // store the packet
 #endif
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=%08x id=%08x nh=%02x rby=%02x %02x %02x rxT=%d AFTER",
-              tu - recentPackets, recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1],
-              tu->relayed_by[2], tu->rxTimeMsec);
+    LOG_DEBUG("Packet History - insert: Store slot@ %d/%d s=0x%08x id=0x%08x nh=%02x rby=%02x %02x %02x rxT=%d AFTER", tu - base,
+              recentPacketsCapacity, tu->sender, tu->id, tu->next_hop, tu->relayed_by[0], tu->relayed_by[1], tu->relayed_by[2],
+              tu->rxTimeMsec);
 #endif
 }
 
@@ -472,13 +456,13 @@ void PacketHistory::insert(const PacketRecord &r)
 bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender, bool *wasSole)
 {
     if (!initOk()) {
-        LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED!");
+        LOG_ERROR("PacketHistory - wasRelayer: NOT INITIALIZED");
         return false;
     }
 
     if (relayer == 0) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_DEBUG("Packet History - was relayer: s=%08x id=%08x / rl=%02x=zero. NO", sender, id, relayer);
+        LOG_DEBUG("Packet History - was relayer: s=0x%08x id=0x%08x / rl=%02x=zero. NO", sender, id, relayer);
 #endif
         return false;
     }
@@ -487,13 +471,13 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
 
     if (found == NULL) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_DEBUG("Packet History - was relayer: s=%08x id=%08x / rl=%02x / PR not found. NO", sender, id, relayer);
+        LOG_DEBUG("Packet History - was relayer: s=0x%08x id=0x%08x / rl=%02x / PR not found. NO", sender, id, relayer);
 #endif
         return false;
     }
 
 #if VERBOSE_PACKET_HISTORY >= 2
-    LOG_DEBUG("Packet History - was relayer: s=%08x id=%08x nh=%02x age=%d rls=%02x %02x %02x InHistory,check:%02x",
+    LOG_DEBUG("Packet History - was relayer: s=0x%08x id=0x%08x nh=%02x age=%d rls=%02x %02x %02x InHistory,check:%02x",
               found->sender, found->id, found->next_hop, millis() - found->rxTimeMsec, found->relayed_by[0], found->relayed_by[1],
               found->relayed_by[2], relayer);
 #endif
@@ -501,7 +485,11 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
 }
 
 /* Check if a certain node was a relayer of a packet in the history given iterator
- * @return true if node was indeed a relayer, false if not */
+ * @return true if node was indeed a relayer, false if not
+ * NOTE: intentionally byte-domain. Both `relayer` and relayed_by[] are on-wire last bytes, so this
+ * answers "did a relayer with this byte touch the packet" - correct without resolving to a NodeNum.
+ * The collision risk is neutralized where the result is consumed (route learning in
+ * NextHopRouter::sniffReceived now gates the write through NodeDB::resolveUniqueLastByte). */
 bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, bool *wasSole)
 {
     bool found = false;
@@ -520,8 +508,8 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r, boo
     }
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - was rel.PR.: s=%08x id=%08x rls=%02x %02x %02x / rl=%02x? NO", r.sender, r.id, r.relayed_by[0],
-              r.relayed_by[1], r.relayed_by[2], relayer);
+    LOG_DEBUG("Packet History - was rel.PR.: s=0x%08x id=0x%08x rls=%02x %02x %02x / rl=%02x? NO", r.sender, r.id,
+              r.relayed_by[0], r.relayed_by[1], r.relayed_by[2], relayer);
 #endif
 
     return found;
@@ -538,7 +526,7 @@ void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t i
         *r2WasSole = false;
 
     if (!initOk()) {
-        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED!");
+        LOG_ERROR("PacketHistory - checkRelayers: NOT INITIALIZED");
         return;
     }
 
@@ -556,20 +544,20 @@ void PacketHistory::checkRelayers(uint8_t relayer1, uint8_t relayer2, uint32_t i
 void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {
     if (!initOk()) {
-        LOG_ERROR("Packet History - remove Relayer: NOT INITIALIZED!");
+        LOG_ERROR("Packet History - remove Relayer: NOT INITIALIZED");
         return;
     }
 
     PacketRecord *found = find(sender, id);
     if (found == NULL) {
 #if VERBOSE_PACKET_HISTORY
-        LOG_DEBUG("Packet History - remove Relayer s=%08x id=%08x (rl=%02x) NOT FOUND", sender, id, relayer);
+        LOG_DEBUG("Packet History - remove Relayer s=0x%08x id=0x%08x (rl=%02x) NOT FOUND", sender, id, relayer);
 #endif
         return; // Nothing to remove
     }
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - remove Relayer s=%08x id=%08x rby=%02x %02x %02x, rl:%02x BEFORE", found->sender, found->id,
+    LOG_DEBUG("Packet History - remove Relayer s=0x%08x id=0x%08x rby=%02x %02x %02x, rl:%02x BEFORE", found->sender, found->id,
               found->relayed_by[0], found->relayed_by[1], found->relayed_by[2], relayer);
 #endif
 
@@ -589,7 +577,7 @@ void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, cons
     }
 
 #if VERBOSE_PACKET_HISTORY
-    LOG_DEBUG("Packet History - remove Relayer s=%08x id=%08x rby=%02x %02x %02x  rl:%02x AFTER - removed?%d", found->sender,
+    LOG_DEBUG("Packet History - remove Relayer s=0x%08x id=0x%08x rby=%02x %02x %02x  rl:%02x AFTER - removed?%d", found->sender,
               found->id, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2], relayer, i != j);
 #endif
 }

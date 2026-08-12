@@ -198,7 +198,9 @@ typedef enum _meshtastic_Config_DisplayConfig_OledType {
     /* Can not be auto detected but set by proto. Used for 128x64 screens */
     meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3,
     /* Can not be auto detected but set by proto. Used for 128x128 screens */
-    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128 = 4
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128 = 4,
+    /* Can not be auto detected but set by proto. Used for 64x128 rotated screens */
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_ROTATED = 5
 } meshtastic_Config_DisplayConfig_OledType;
 
 typedef enum _meshtastic_Config_DisplayConfig_DisplayMode {
@@ -288,15 +290,30 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_BR_902 = 26,
     /* ITU Region 1 Amateur Radio 2m band (144-146 MHz) */
     meshtastic_Config_LoRaConfig_RegionCode_ITU1_2M = 27,
-    /* ITU Region 2 / 3 Amateur Radio 2m band (144-148 MHz) */
-    meshtastic_Config_LoRaConfig_RegionCode_ITU23_2M = 28,
+    /* ITU Region 2 Amateur Radio 2m band (144-148 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU2_2M = 28,
     /* EU 866MHz band (Band no. 47b of 2006/771/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_866 = 29,
     /* EU 874MHz and 917MHz bands (Band no. 1 and 4 of 2022/172/EC and subsequent amendments) for Non-specific short-range devices (SRD) */
     meshtastic_Config_LoRaConfig_RegionCode_EU_874 = 30,
     meshtastic_Config_LoRaConfig_RegionCode_EU_917 = 31,
     /* EU 868MHz band, with narrow presets */
-    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868 = 32
+    meshtastic_Config_LoRaConfig_RegionCode_EU_N_868 = 32,
+    /* ITU Region 3 Amateur Radio 2m band (144-148 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU3_2M = 33,
+    /* ITU Region 1 Amateur Radio 70cm band (430-440 MHz) */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU1_70CM = 34,
+    /* ITU Region 2 Amateur Radio 70cm band (420-450 MHz)
+ Note: Some countries do not allocate 420-430 MHz or 440-450 MHz.
+ Check local law! */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU2_70CM = 35,
+    /* ITU Region 3 Amateur Radio 70cm band (430-450 MHz)
+ Note: Some countries do not allocate 440-450 MHz. Check local law! */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU3_70CM = 36,
+    /* ITU Region 2 Amateur Radio 1.25m '125cm' band (220-225 MHz)
+ Note: Some countries do not allocate 220-222 MHz (Ex: USA/Canada).
+ Check local law! */
+    meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM = 37
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -343,7 +360,25 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Narrow Slow
  Moderate range preset optimized for EU 868MHz band with 62.5kHz bandwidth.
  Comparable link budget and data rate to LONG_FAST. */
-    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13
+    meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW = 13,
+    /* Tiny Fast
+ Preset optimized for compliance with Amateur Radio restrictions with 20kHz bandwidth.
+ Many regions limit data transmission bandwidth in lower amateur bands (2 Meter).
+ Note: TCXO with tight tolerances (±5 ppm or better) is *absolutely required* at these narrow bandwidths.
+ Only compatible with SX127x and SX126x chipsets.
+ Comparable link budget and data rate to LONG_FAST. */
+    meshtastic_Config_LoRaConfig_ModemPreset_TINY_FAST = 14,
+    /* Tiny Slow
+ Preset optimized for compliance with Amateur Radio restrictions with 20kHz bandwidth.
+ Many regions limit data transmission bandwidth in lower amateur bands (2 Meter).
+ Note: TCXO with tight tolerances (±5 ppm or better) is *absolutely required* at these narrow bandwidths.
+ Only compatible with SX127x and SX126x chipsets.
+ Comparable link budget and data rate to LONG_MODERATE. */
+    meshtastic_Config_LoRaConfig_ModemPreset_TINY_SLOW = 15,
+    /* Medium Range - Turbo
+ This preset performs similarly to MEDIUM_FAST, but with 500kHz bandwidth.
+ It is not legal to use in all regions due to this wider bandwidth. */
+    meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO = 16
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_LoRaConfig_FEM_LNA_Mode {
@@ -363,6 +398,19 @@ typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
     /* Device requires no PIN for pairing */
     meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN = 2
 } meshtastic_Config_BluetoothConfig_PairingMode;
+
+/* Controls how the device authenticates remotely received mesh packets. */
+typedef enum _meshtastic_Config_SecurityConfig_PacketSignaturePolicy {
+    /* Accept unsigned packets for maximum compatibility while still rejecting malformed or invalid signatures.
+ This is the default to avoid legacy nodes dropping signed packets during rebroadcast. */
+    meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE = 0,
+    /* Prefer authenticated packets while retaining compatibility with unsigned packets from nodes not known to sign.
+ Rejects unsigned, signable broadcasts from nodes that have previously signed. */
+    meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED = 1,
+    /* Accept only packets authenticated by a verified XEdDSA signature or successful PKI decryption.
+ Unsigned, malformed, invalid, or unverifiable packets are ignored. */
+    meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT = 2
+} meshtastic_Config_SecurityConfig_PacketSignaturePolicy;
 
 /* Struct definitions */
 /* Configuration */
@@ -654,6 +702,8 @@ typedef struct _meshtastic_Config_SecurityConfig {
     bool debug_log_api_enabled;
     /* Allow incoming device control over the insecure legacy admin channel. */
     bool admin_channel_enabled;
+    /* Determines the packet signature policy applied to remotely received mesh packets. */
+    meshtastic_Config_SecurityConfig_PacketSignaturePolicy packet_signature_policy;
 } meshtastic_Config_SecurityConfig;
 
 /* Blank config request, strictly for getting the session key */
@@ -720,8 +770,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayUnits)(meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
 
 #define _meshtastic_Config_DisplayConfig_OledType_MIN meshtastic_Config_DisplayConfig_OledType_OLED_AUTO
-#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128
-#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128+1))
+#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_ROTATED
+#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_ROTATED+1))
 
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MIN meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MAX meshtastic_Config_DisplayConfig_DisplayMode_COLOR
@@ -732,12 +782,12 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_EU_N_868
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_EU_N_868+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ITU2_125CM+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_NARROW_SLOW+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_TURBO+1))
 
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN meshtastic_Config_LoRaConfig_FEM_LNA_Mode_DISABLED
 #define _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MAX meshtastic_Config_LoRaConfig_FEM_LNA_Mode_NOT_PRESENT
@@ -746,6 +796,10 @@ extern "C" {
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_ARRAYSIZE ((meshtastic_Config_BluetoothConfig_PairingMode)(meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN+1))
+
+#define _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MIN meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE
+#define _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MAX meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT
+#define _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_ARRAYSIZE ((meshtastic_Config_SecurityConfig_PacketSignaturePolicy)(meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT+1))
 
 
 #define meshtastic_Config_DeviceConfig_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
@@ -770,6 +824,7 @@ extern "C" {
 
 #define meshtastic_Config_BluetoothConfig_mode_ENUMTYPE meshtastic_Config_BluetoothConfig_PairingMode
 
+#define meshtastic_Config_SecurityConfig_packet_signature_policy_ENUMTYPE meshtastic_Config_SecurityConfig_PacketSignaturePolicy
 
 
 
@@ -783,7 +838,7 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
-#define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
+#define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0, _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MIN}
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
@@ -794,7 +849,7 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_DeprecatedGpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN, 0, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0, _meshtastic_Config_LoRaConfig_FEM_LNA_Mode_MIN, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
-#define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
+#define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0, _meshtastic_Config_SecurityConfig_PacketSignaturePolicy_MIN}
 #define meshtastic_Config_SessionkeyConfig_init_zero {0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -890,6 +945,7 @@ extern "C" {
 #define meshtastic_Config_SecurityConfig_serial_enabled_tag 5
 #define meshtastic_Config_SecurityConfig_debug_log_api_enabled_tag 6
 #define meshtastic_Config_SecurityConfig_admin_channel_enabled_tag 8
+#define meshtastic_Config_SecurityConfig_packet_signature_policy_tag 9
 #define meshtastic_Config_device_tag             1
 #define meshtastic_Config_position_tag           2
 #define meshtastic_Config_power_tag              3
@@ -1051,7 +1107,8 @@ X(a, STATIC,   REPEATED, BYTES,    admin_key,         3) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        4) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_enabled,    5) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_api_enabled,   6) \
-X(a, STATIC,   SINGULAR, BOOL,     admin_channel_enabled,   8)
+X(a, STATIC,   SINGULAR, BOOL,     admin_channel_enabled,   8) \
+X(a, STATIC,   SINGULAR, UENUM,    packet_signature_policy,   9)
 #define meshtastic_Config_SecurityConfig_CALLBACK NULL
 #define meshtastic_Config_SecurityConfig_DEFAULT NULL
 
@@ -1095,7 +1152,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 #define meshtastic_Config_NetworkConfig_size     204
 #define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       52
-#define meshtastic_Config_SecurityConfig_size    178
+#define meshtastic_Config_SecurityConfig_size    180
 #define meshtastic_Config_SessionkeyConfig_size  0
 #define meshtastic_Config_size                   207
 

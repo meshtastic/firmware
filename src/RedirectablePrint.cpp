@@ -1,8 +1,8 @@
 #include "RedirectablePrint.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
@@ -48,10 +48,10 @@ size_t RedirectablePrint::write(uint8_t c)
               // serial port said (which could be zero)
 }
 
-size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
+size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg, const char *threadName)
 {
     va_list copy;
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#if ARCH_PORTDUINO
     static char printBuf[512];
 #else
     static char printBuf[160];
@@ -78,6 +78,21 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         if (!std::isprint(static_cast<unsigned char>(printBuf[f])) && printBuf[f] != '\n')
             printBuf[f] = '#';
     }
+    // A message with its own "[Tag] " (the device-ui task has no OSThread)
+    // uses it instead of the thread name, printed uncolored like a real one.
+    size_t tagLen = 0;
+    if (printBuf[0] == '[') {
+        const char *end = (const char *)memchr(printBuf, ']', len < 24 ? len : 24);
+        if (end && (size_t)(end - printBuf) + 1 < len && end[1] == ' ')
+            tagLen = end - printBuf + 2;
+    }
+    if (tagLen)
+        Print::write(printBuf, tagLen);
+    else if (threadName) {
+        Print::write("[", 1);
+        Print::write(threadName, strlen(threadName));
+        Print::write("] ", 2);
+    }
     if (color && logLevel != nullptr) {
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
             Print::write("\u001b[34m", 5);
@@ -88,7 +103,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
             Print::write("\u001b[31m", 5);
     }
-    len = Print::write(printBuf, len);
+    len = tagLen + Print::write(printBuf + tagLen, len - tagLen);
     if (color && logLevel != nullptr) {
         Print::write("\u001b[0m", 4);
     }
@@ -161,13 +176,8 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 #endif
     }
     auto thread = concurrency::OSThread::currentThread;
-    if (thread) {
-        print("[");
-        // printf("%p ", thread);
-        // assert(thread->ThreadName.length());
-        print(thread->ThreadName);
-        print("] ");
-    }
+    // the tag is printed by vprintf, which knows whether the formatted
+    // message already carries one of its own
 
 #ifdef DEBUG_HEAP
     // Add heap free space bytes prefix before every log message
@@ -178,7 +188,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 #endif
 #endif // DEBUG_HEAP
 
-    r += vprintf(logLevel, format, arg);
+    r += vprintf(logLevel, format, arg, thread ? thread->ThreadName.c_str() : nullptr);
 }
 
 void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, va_list arg)
@@ -225,14 +235,16 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#elif defined(ARCH_NRF54L15)
+        isBleConnected = nrf54l15Bluetooth != nullptr && nrf54l15Bluetooth->isConnected();
 #endif
         if (isBleConnected) {
             auto thread = concurrency::OSThread::currentThread;
             meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
             logRecord.level = getLogLevel(logLevel);
-            vsprintf(logRecord.message, format, arg);
+            vsnprintf(logRecord.message, sizeof(logRecord.message), format, arg);
             if (thread)
-                strcpy(logRecord.source, thread->ThreadName.c_str());
+                strlcpy(logRecord.source, thread->ThreadName.c_str(), sizeof(logRecord.source));
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
             auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[meshtastic_LogRecord_size]);
@@ -241,6 +253,8 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nimbleBluetooth->sendLog(buffer.get(), size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(buffer.get(), size);
+#elif defined(ARCH_NRF54L15)
+            nrf54l15Bluetooth->sendLog(buffer.get(), size);
 #endif
         }
     }
@@ -382,7 +396,6 @@ std::string RedirectablePrint::mt_sprintf(const std::string fmt_str, ...)
     va_list ap;
     while (1) {
         formatted.reset(new char[n]); /* Wrap the plain char array into the unique_ptr */
-        strcpy(&formatted[0], fmt_str.c_str());
         va_start(ap, fmt_str);
         int final_n = vsnprintf(&formatted[0], n, fmt_str.c_str(), ap);
         va_end(ap);

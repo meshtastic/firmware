@@ -325,7 +325,15 @@ typedef enum _meshtastic_CotType {
     meshtastic_CotType_CotType_b_a_o_c = 123,
     /* t-s: Task / engage request. Structured payload carried via the new
  TaskRequest typed variant. */
-    meshtastic_CotType_CotType_t_s = 124
+    meshtastic_CotType_CotType_t_s = 124,
+    /* m-t-t: TAKTALK voice/text chat message. Payload carried via the
+ TakTalkMessage typed variant (text, chatroom_id, lang, from_voice). */
+    meshtastic_CotType_CotType_m_t_t = 125,
+    /* y-: TAKTALK room/membership broadcast. Payload carried via the
+ TakTalkRoomData typed variant (sender_callsign, room_id, room_name,
+ participants). The CoT type literally has a trailing dash and no
+ second atom — not a typo. */
+    meshtastic_CotType_CotType_y = 126
 } meshtastic_CotType;
 
 /* Geopoint and altitude source */
@@ -553,6 +561,18 @@ typedef struct _meshtastic_GeoChat {
     /* Receipt kind discriminator. See ReceiptType doc. Default ReceiptType_None
  means this is a regular chat message, not a receipt. */
     meshtastic_GeoChat_ReceiptType receipt_type;
+    /* BCP-47-ish language tag or human-readable name (e.g. "en", "English")
+ that the originator's TAKTALK plugin recorded for the message. */
+    pb_callback_t lang;
+    /* TAKTALK chatroom UUID (e.g. "30b2755c-c547-44ef-a0cc-cdbd8a15616f") that
+ the receiver's TAKTALK plugin uses to thread the message under the
+ right room. Resolved to a friendly name via TakTalkRoomData broadcasts. */
+    pb_callback_t room_id;
+    /* TAKTALK voice profile pointer. Often empty in practice (the empty
+ marker `<voice_profile_id/>` still signals TAKTALK origination), so
+ receivers should treat empty-but-present as the equivalent of the
+ marker rather than a missing field. */
+    pb_callback_t voice_profile_id;
 } meshtastic_GeoChat;
 
 /* ATAK Group
@@ -715,12 +735,7 @@ typedef struct _meshtastic_DrawnShape {
     uint32_t fill_argb;
     /* Whether labels are rendered on this shape. */
     bool labels_on;
-    /* Vertex list for polyline/polygon/rectangle shapes. Capped at 32 by
- the nanopb pool; senders MUST truncate longer inputs and set
- `truncated = true`. */
-    pb_size_t vertices_count;
-    meshtastic_CotGeoPoint vertices[32];
-    /* True if the sender truncated `vertices` to fit the pool. */
+    /* True if the sender truncated the vertex columns to fit the pool. */
     bool truncated; /* --- Bullseye-only fields. All ignored unless kind == Kind_Bullseye. --- */
     /* Bullseye distance in meters * 10 (e.g. 3285 = 328.5 m). 0 = unset. */
     uint32_t bullseye_distance_dm;
@@ -734,6 +749,8 @@ typedef struct _meshtastic_DrawnShape {
     uint8_t bullseye_flags;
     /* Bullseye reference UID (anchor marker). Empty = anchor is self. */
     char bullseye_uid_ref[48];
+    pb_callback_t vertex_lat_deltas;
+    pb_callback_t vertex_lon_deltas;
 } meshtastic_DrawnShape;
 
 /* Fixed point of interest: spot marker, waypoint, checkpoint, 2525 symbol,
@@ -1068,6 +1085,87 @@ typedef struct _meshtastic_SensorFov {
     pb_callback_t model;
 } meshtastic_SensorFov;
 
+/* TAKTALK chat message payload (CoT type m-t-t).
+
+ TAKTALK is an ATAK plugin for voice + text team messaging. The voice
+ audio stream goes over UDP/RTP and is NOT carried by the mesh — only
+ the text envelope (this message) is. `from_voice` marks messages sent
+ via push-to-talk speech-to-text so receivers can render a mic icon
+ next to the text.
+
+ Wire shape inside <event type="m-t-t">/<detail>:
+   <callsign>...</callsign>        - mapped to TAKPacketV2.callsign
+   <lang>English</lang>            - lang
+   <text>...</text>                - text
+   <chatroom-id>1</chatroom-id>    - chatroom_id
+   <voice/>                        - presence sets from_voice = true */
+typedef struct _meshtastic_TakTalkMessage {
+    /* The text body of the TAKTALK message (speech-to-text transcript when
+ from_voice = true, typed message otherwise). */
+    pb_callback_t text;
+    /* TAKTALK chatroom identifier. May be a short id like "1" for the
+ default room or a UUID like "30b2755c-c547-44ef-a0cc-cdbd8a15616f"
+ for custom rooms (resolved by TakTalkRoomData broadcasts).
+ Empty = broadcast room. */
+    pb_callback_t chatroom_id;
+    /* BCP-47-ish language tag or human-readable name (e.g. "en", "English").
+ Empty = unspecified. */
+    pb_callback_t lang;
+    /* True when the source CoT carried a <voice/> marker, i.e. the message
+ originated as push-to-talk speech-to-text. Lets receivers show a mic
+ icon. Proto3 only encodes when true so empty payload cost is 0 bytes. */
+    bool from_voice;
+} meshtastic_TakTalkMessage;
+
+/* TAKTALK room/membership broadcast (CoT type y-).
+
+ Announces a TAKTALK chatroom's friendly name and roster so peers can
+ resolve room UUIDs (used in TakTalkMessage.chatroom_id and
+ GeoChat.room_id) to a display name and participant list. Not a chat
+ message itself — these events are emitted by TAKTALK when rooms are
+ created or memberships change. */
+typedef struct _meshtastic_TakTalkRoomData {
+    /* Callsign of the device broadcasting the room state (typically the
+ room owner / latest writer).
+
+ DEPRECATED in v0.3.2: always equals TAKPacketV2.callsign, so the wire
+ byte was redundant. Builders stop emitting this field in v0.3.2;
+ parsers still read it for one release so v0.3.1-encoded packets decode
+ cleanly. To be removed entirely in v0.4.x. */
+    pb_callback_t sender_callsign;
+    /* Room UUID, matches TakTalkMessage.chatroom_id / GeoChat.room_id on
+ messages routed into this room. */
+    pb_callback_t room_id;
+    /* Friendly display name for the room (e.g. "test", "Alpha Team"). */
+    pb_callback_t room_name;
+    /* Member callsigns. Wire-encoded as repeated strings; the underlying
+ CoT carries them as a single <chatroom-participants>A,B,C</> element
+ which parsers split / builders join on ','. */
+    pb_callback_t participants;
+} meshtastic_TakTalkRoomData;
+
+/* ATAK directed-routing recipient list (CoT <marti><dest callsign='X'/>…</marti>).
+
+ Present when an event is addressed to specific TAK users rather than the
+ broadcast group. TAKTALK gates voice TTS on this element matching the
+ receiver's callsign; directed b-t-f chats use it for the same purpose. A
+ missing <marti> means "broadcast to all peers", which is the default for
+ PLI, alerts, drawings, and most situational-awareness events.
+
+ Carried as repeated strings (not indexes into a per-packet table) because
+ the typical event has 1-2 destinations and table overhead would erase the
+ savings. Receivers that need the original XML element rebuild it from
+ dest_callsign on emit. */
+typedef struct _meshtastic_Marti {
+    /* Recipient callsigns. Order is preserved end-to-end so receivers can show
+ primary-vs-cc distinction the same way ATAK does.
+
+ If dest_callsign is [TAKPacketV2.callsign] (self-addressed, unusual but
+ legal — e.g. ATAK echoing back to its own room), the builder still emits
+ the element so loopback shapes round-trip cleanly. */
+    pb_callback_t dest_callsign;
+} meshtastic_Marti;
+
 typedef PB_BYTES_ARRAY_T(220) meshtastic_TAKPacketV2_raw_detail_t;
 /* ATAK v2 packet with expanded CoT field support and zstd dictionary compression.
  Sent on ATAK_PLUGIN_V2 port. The wire payload is:
@@ -1089,7 +1187,14 @@ typedef struct _meshtastic_TAKPacketV2 {
     int32_t latitude_i;
     /* Longitude, multiply by 1e-7 to get degrees in floating point */
     int32_t longitude_i;
-    /* Altitude in meters (HAE) */
+    /* Altitude in meters (HAE). ATAK's "no altitude" sentinel is hae=9999999.0.
+
+ NOTE: an earlier v0.4.0 attempt made this `optional` to omit the 9999999
+ sentinel from the wire, but measurement showed it was net-negative: the
+ zstd dictionary already compresses the literal 9999999 to ~nothing, while
+ proto3 `optional` forces a genuine 0 m HAE (common on routes/drawings that
+ carry hae="0.0" or omit hae → parsed as 0) to encode explicitly (+2 bytes),
+ which REGRESSED the worst-case route fixture. Kept as a plain field. */
     int32_t altitude;
     /* Speed in cm/s */
     uint32_t speed;
@@ -1135,10 +1240,18 @@ typedef struct _meshtastic_TAKPacketV2 {
     /* Sensor field-of-view cone (camera, FLIR, laser, etc.). From <sensor>. */
     bool has_sensor_fov;
     meshtastic_SensorFov sensor_fov;
+    /* Directed-routing recipient list (CoT <marti><dest callsign='X'/>…</marti>).
+ Empty / unset = broadcast to all peers (the default for situational-awareness
+ events). Populated for TAKTALK m-t-t, directed b-t-f DMs, and any other CoT
+ shape that ATAK addresses to specific recipients. TAKTALK gates voice TTS
+ playback on this element matching the receiver's callsign, so dropping it
+ silently breaks voice messaging end-to-end.
+
+ See Marti. */
+    bool has_marti;
+    meshtastic_Marti marti;
     pb_size_t which_payload_variant;
     union {
-        /* Position report (true = PLI, no extra fields beyond the common ones above) */
-        bool pli;
         /* ATAK GeoChat message */
         meshtastic_GeoChat chat;
         /* Aircraft track data (ADS-B, military air) */
@@ -1163,6 +1276,14 @@ typedef struct _meshtastic_TAKPacketV2 {
         meshtastic_EmergencyAlert emergency;
         /* Task / engage request. See TaskRequest. */
         meshtastic_TaskRequest task;
+        /* TAKTALK chat message (CoT type m-t-t). See TakTalkMessage.
+     Voice audio itself rides UDP/RTP outside the mesh; this carries the
+     text envelope plus a from_voice marker for receiver UX. */
+        meshtastic_TakTalkMessage taktalk;
+        /* TAKTALK room/membership broadcast (CoT type y-). See TakTalkRoomData.
+     Resolves room UUIDs (used in TakTalkMessage.chatroom_id and
+     GeoChat.room_id) to display name + roster on receivers. */
+        meshtastic_TakTalkRoomData taktalk_room;
     } payload_variant;
 } meshtastic_TAKPacketV2;
 
@@ -1185,8 +1306,8 @@ extern "C" {
 #define _meshtastic_CotHow_ARRAYSIZE ((meshtastic_CotHow)(meshtastic_CotHow_CotHow_m_s+1))
 
 #define _meshtastic_CotType_MIN meshtastic_CotType_CotType_Other
-#define _meshtastic_CotType_MAX meshtastic_CotType_CotType_t_s
-#define _meshtastic_CotType_ARRAYSIZE ((meshtastic_CotType)(meshtastic_CotType_CotType_t_s+1))
+#define _meshtastic_CotType_MAX meshtastic_CotType_CotType_y
+#define _meshtastic_CotType_ARRAYSIZE ((meshtastic_CotType)(meshtastic_CotType_CotType_y+1))
 
 #define _meshtastic_GeoPointSource_MIN meshtastic_GeoPointSource_GeoPointSource_Unspecified
 #define _meshtastic_GeoPointSource_MAX meshtastic_GeoPointSource_GeoPointSource_NETWORK
@@ -1282,6 +1403,9 @@ extern "C" {
 
 #define meshtastic_SensorFov_type_ENUMTYPE meshtastic_SensorFov_SensorType
 
+
+
+
 #define meshtastic_TAKPacketV2_cot_type_id_ENUMTYPE meshtastic_CotType
 #define meshtastic_TAKPacketV2_how_ENUMTYPE meshtastic_CotHow
 #define meshtastic_TAKPacketV2_team_ENUMTYPE meshtastic_Team
@@ -1292,14 +1416,14 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_TAKPacket_init_default        {0, false, meshtastic_Contact_init_default, false, meshtastic_Group_init_default, false, meshtastic_Status_init_default, 0, {meshtastic_PLI_init_default}}
-#define meshtastic_GeoChat_init_default          {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN}
+#define meshtastic_GeoChat_init_default          {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_Group_init_default            {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_default           {0}
 #define meshtastic_Contact_init_default          {"", ""}
 #define meshtastic_PLI_init_default              {0, 0, 0, 0, 0}
 #define meshtastic_AircraftTrack_init_default    {"", "", "", "", 0, "", 0, 0, ""}
 #define meshtastic_CotGeoPoint_init_default      {0, 0}
-#define meshtastic_DrawnShape_init_default       {_meshtastic_DrawnShape_Kind_MIN, _meshtastic_DrawnShape_StyleMode_MIN, 0, 0, 0, _meshtastic_Team_MIN, 0, 0, _meshtastic_Team_MIN, 0, 0, 0, {meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default, meshtastic_CotGeoPoint_init_default}, 0, 0, 0, 0, ""}
+#define meshtastic_DrawnShape_init_default       {_meshtastic_DrawnShape_Kind_MIN, _meshtastic_DrawnShape_StyleMode_MIN, 0, 0, 0, _meshtastic_Team_MIN, 0, 0, _meshtastic_Team_MIN, 0, 0, 0, 0, 0, 0, "", {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_Marker_init_default           {_meshtastic_Marker_Kind_MIN, _meshtastic_Team_MIN, 0, 0, "", "", "", ""}
 #define meshtastic_RangeAndBearing_init_default  {false, meshtastic_CotGeoPoint_init_default, "", 0, 0, _meshtastic_Team_MIN, 0, 0}
 #define meshtastic_Route_init_default            {_meshtastic_Route_Method_MIN, _meshtastic_Route_Direction_MIN, "", 0, 0, {meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default, meshtastic_Route_Link_init_default}, 0}
@@ -1310,16 +1434,19 @@ extern "C" {
 #define meshtastic_TaskRequest_init_default      {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
 #define meshtastic_TAKEnvironment_init_default   {0, 0, 0}
 #define meshtastic_SensorFov_init_default        {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
-#define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_default, false, meshtastic_SensorFov_init_default, 0, {0}}
+#define meshtastic_TakTalkMessage_init_default   {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
+#define meshtastic_TakTalkRoomData_init_default  {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_Marti_init_default            {{{NULL}, NULL}}
+#define meshtastic_TAKPacketV2_init_default      {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_default, false, meshtastic_SensorFov_init_default, false, meshtastic_Marti_init_default, 0, {meshtastic_GeoChat_init_default}}
 #define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
-#define meshtastic_GeoChat_init_zero             {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN}
+#define meshtastic_GeoChat_init_zero             {"", false, "", false, "", "", _meshtastic_GeoChat_ReceiptType_MIN, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_zero              {0}
 #define meshtastic_Contact_init_zero             {"", ""}
 #define meshtastic_PLI_init_zero                 {0, 0, 0, 0, 0}
 #define meshtastic_AircraftTrack_init_zero       {"", "", "", "", 0, "", 0, 0, ""}
 #define meshtastic_CotGeoPoint_init_zero         {0, 0}
-#define meshtastic_DrawnShape_init_zero          {_meshtastic_DrawnShape_Kind_MIN, _meshtastic_DrawnShape_StyleMode_MIN, 0, 0, 0, _meshtastic_Team_MIN, 0, 0, _meshtastic_Team_MIN, 0, 0, 0, {meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero, meshtastic_CotGeoPoint_init_zero}, 0, 0, 0, 0, ""}
+#define meshtastic_DrawnShape_init_zero          {_meshtastic_DrawnShape_Kind_MIN, _meshtastic_DrawnShape_StyleMode_MIN, 0, 0, 0, _meshtastic_Team_MIN, 0, 0, _meshtastic_Team_MIN, 0, 0, 0, 0, 0, 0, "", {{NULL}, NULL}, {{NULL}, NULL}}
 #define meshtastic_Marker_init_zero              {_meshtastic_Marker_Kind_MIN, _meshtastic_Team_MIN, 0, 0, "", "", "", ""}
 #define meshtastic_RangeAndBearing_init_zero     {false, meshtastic_CotGeoPoint_init_zero, "", 0, 0, _meshtastic_Team_MIN, 0, 0}
 #define meshtastic_Route_init_zero               {_meshtastic_Route_Method_MIN, _meshtastic_Route_Direction_MIN, "", 0, 0, {meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero, meshtastic_Route_Link_init_zero}, 0}
@@ -1330,7 +1457,10 @@ extern "C" {
 #define meshtastic_TaskRequest_init_zero         {"", "", "", _meshtastic_TaskRequest_Priority_MIN, _meshtastic_TaskRequest_Status_MIN, ""}
 #define meshtastic_TAKEnvironment_init_zero      {0, 0, 0}
 #define meshtastic_SensorFov_init_zero           {_meshtastic_SensorFov_SensorType_MIN, 0, false, 0, 0, 0, 0, 0, {{NULL}, NULL}}
-#define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_zero, false, meshtastic_SensorFov_init_zero, 0, {0}}
+#define meshtastic_TakTalkMessage_init_zero      {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, 0}
+#define meshtastic_TakTalkRoomData_init_zero     {{{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
+#define meshtastic_Marti_init_zero               {{{NULL}, NULL}}
+#define meshtastic_TAKPacketV2_init_zero         {_meshtastic_CotType_MIN, _meshtastic_CotHow_MIN, "", _meshtastic_Team_MIN, _meshtastic_MemberRole_MIN, 0, 0, 0, 0, 0, 0, _meshtastic_GeoPointSource_MIN, _meshtastic_GeoPointSource_MIN, "", "", 0, "", "", "", "", "", "", "", {{NULL}, NULL}, false, meshtastic_TAKEnvironment_init_zero, false, meshtastic_SensorFov_init_zero, false, meshtastic_Marti_init_zero, 0, {meshtastic_GeoChat_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_GeoChat_message_tag           1
@@ -1338,6 +1468,9 @@ extern "C" {
 #define meshtastic_GeoChat_to_callsign_tag       3
 #define meshtastic_GeoChat_receipt_for_uid_tag   4
 #define meshtastic_GeoChat_receipt_type_tag      5
+#define meshtastic_GeoChat_lang_tag              6
+#define meshtastic_GeoChat_room_id_tag           7
+#define meshtastic_GeoChat_voice_profile_id_tag  8
 #define meshtastic_Group_role_tag                1
 #define meshtastic_Group_team_tag                2
 #define meshtastic_Status_battery_tag            1
@@ -1377,12 +1510,13 @@ extern "C" {
 #define meshtastic_DrawnShape_fill_color_tag     9
 #define meshtastic_DrawnShape_fill_argb_tag      10
 #define meshtastic_DrawnShape_labels_on_tag      11
-#define meshtastic_DrawnShape_vertices_tag       12
 #define meshtastic_DrawnShape_truncated_tag      13
 #define meshtastic_DrawnShape_bullseye_distance_dm_tag 14
 #define meshtastic_DrawnShape_bullseye_bearing_ref_tag 15
 #define meshtastic_DrawnShape_bullseye_flags_tag 16
 #define meshtastic_DrawnShape_bullseye_uid_ref_tag 17
+#define meshtastic_DrawnShape_vertex_lat_deltas_tag 18
+#define meshtastic_DrawnShape_vertex_lon_deltas_tag 19
 #define meshtastic_Marker_kind_tag               1
 #define meshtastic_Marker_color_tag              2
 #define meshtastic_Marker_color_argb_tag         3
@@ -1467,6 +1601,15 @@ extern "C" {
 #define meshtastic_SensorFov_elevation_deg_tag   6
 #define meshtastic_SensorFov_roll_deg_tag        7
 #define meshtastic_SensorFov_model_tag           8
+#define meshtastic_TakTalkMessage_text_tag       1
+#define meshtastic_TakTalkMessage_chatroom_id_tag 2
+#define meshtastic_TakTalkMessage_lang_tag       3
+#define meshtastic_TakTalkMessage_from_voice_tag 4
+#define meshtastic_TakTalkRoomData_sender_callsign_tag 1
+#define meshtastic_TakTalkRoomData_room_id_tag   2
+#define meshtastic_TakTalkRoomData_room_name_tag 3
+#define meshtastic_TakTalkRoomData_participants_tag 4
+#define meshtastic_Marti_dest_callsign_tag       1
 #define meshtastic_TAKPacketV2_cot_type_id_tag   1
 #define meshtastic_TAKPacketV2_how_tag           2
 #define meshtastic_TAKPacketV2_callsign_tag      3
@@ -1493,7 +1636,7 @@ extern "C" {
 #define meshtastic_TAKPacketV2_remarks_tag       24
 #define meshtastic_TAKPacketV2_environment_tag   25
 #define meshtastic_TAKPacketV2_sensor_fov_tag    26
-#define meshtastic_TAKPacketV2_pli_tag           30
+#define meshtastic_TAKPacketV2_marti_tag         29
 #define meshtastic_TAKPacketV2_chat_tag          31
 #define meshtastic_TAKPacketV2_aircraft_tag      32
 #define meshtastic_TAKPacketV2_raw_detail_tag    33
@@ -1504,6 +1647,8 @@ extern "C" {
 #define meshtastic_TAKPacketV2_casevac_tag       38
 #define meshtastic_TAKPacketV2_emergency_tag     39
 #define meshtastic_TAKPacketV2_task_tag          40
+#define meshtastic_TAKPacketV2_taktalk_tag       41
+#define meshtastic_TAKPacketV2_taktalk_room_tag  42
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_TAKPacket_FIELDLIST(X, a) \
@@ -1527,8 +1672,11 @@ X(a, STATIC,   SINGULAR, STRING,   message,           1) \
 X(a, STATIC,   OPTIONAL, STRING,   to,                2) \
 X(a, STATIC,   OPTIONAL, STRING,   to_callsign,       3) \
 X(a, STATIC,   SINGULAR, STRING,   receipt_for_uid,   4) \
-X(a, STATIC,   SINGULAR, UENUM,    receipt_type,      5)
-#define meshtastic_GeoChat_CALLBACK NULL
+X(a, STATIC,   SINGULAR, UENUM,    receipt_type,      5) \
+X(a, CALLBACK, OPTIONAL, STRING,   lang,              6) \
+X(a, CALLBACK, OPTIONAL, STRING,   room_id,           7) \
+X(a, CALLBACK, OPTIONAL, STRING,   voice_profile_id,   8)
+#define meshtastic_GeoChat_CALLBACK pb_default_field_callback
 #define meshtastic_GeoChat_DEFAULT NULL
 
 #define meshtastic_Group_FIELDLIST(X, a) \
@@ -1588,15 +1736,15 @@ X(a, STATIC,   SINGULAR, UINT32,   stroke_weight_x10,   8) \
 X(a, STATIC,   SINGULAR, UENUM,    fill_color,        9) \
 X(a, STATIC,   SINGULAR, FIXED32,  fill_argb,        10) \
 X(a, STATIC,   SINGULAR, BOOL,     labels_on,        11) \
-X(a, STATIC,   REPEATED, MESSAGE,  vertices,         12) \
 X(a, STATIC,   SINGULAR, BOOL,     truncated,        13) \
 X(a, STATIC,   SINGULAR, UINT32,   bullseye_distance_dm,  14) \
 X(a, STATIC,   SINGULAR, UINT32,   bullseye_bearing_ref,  15) \
 X(a, STATIC,   SINGULAR, UINT32,   bullseye_flags,   16) \
-X(a, STATIC,   SINGULAR, STRING,   bullseye_uid_ref,  17)
-#define meshtastic_DrawnShape_CALLBACK NULL
+X(a, STATIC,   SINGULAR, STRING,   bullseye_uid_ref,  17) \
+X(a, CALLBACK, REPEATED, SINT32,   vertex_lat_deltas,  18) \
+X(a, CALLBACK, REPEATED, SINT32,   vertex_lon_deltas,  19)
+#define meshtastic_DrawnShape_CALLBACK pb_default_field_callback
 #define meshtastic_DrawnShape_DEFAULT NULL
-#define meshtastic_DrawnShape_vertices_MSGTYPE meshtastic_CotGeoPoint
 
 #define meshtastic_Marker_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    kind,              1) \
@@ -1726,6 +1874,27 @@ X(a, CALLBACK, SINGULAR, STRING,   model,             8)
 #define meshtastic_SensorFov_CALLBACK pb_default_field_callback
 #define meshtastic_SensorFov_DEFAULT NULL
 
+#define meshtastic_TakTalkMessage_FIELDLIST(X, a) \
+X(a, CALLBACK, SINGULAR, STRING,   text,              1) \
+X(a, CALLBACK, SINGULAR, STRING,   chatroom_id,       2) \
+X(a, CALLBACK, SINGULAR, STRING,   lang,              3) \
+X(a, STATIC,   SINGULAR, BOOL,     from_voice,        4)
+#define meshtastic_TakTalkMessage_CALLBACK pb_default_field_callback
+#define meshtastic_TakTalkMessage_DEFAULT NULL
+
+#define meshtastic_TakTalkRoomData_FIELDLIST(X, a) \
+X(a, CALLBACK, SINGULAR, STRING,   sender_callsign,   1) \
+X(a, CALLBACK, SINGULAR, STRING,   room_id,           2) \
+X(a, CALLBACK, SINGULAR, STRING,   room_name,         3) \
+X(a, CALLBACK, REPEATED, STRING,   participants,      4)
+#define meshtastic_TakTalkRoomData_CALLBACK pb_default_field_callback
+#define meshtastic_TakTalkRoomData_DEFAULT NULL
+
+#define meshtastic_Marti_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, STRING,   dest_callsign,     1)
+#define meshtastic_Marti_CALLBACK pb_default_field_callback
+#define meshtastic_Marti_DEFAULT NULL
+
 #define meshtastic_TAKPacketV2_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    cot_type_id,       1) \
 X(a, STATIC,   SINGULAR, UENUM,    how,               2) \
@@ -1753,7 +1922,7 @@ X(a, STATIC,   SINGULAR, STRING,   cot_type_str,     23) \
 X(a, CALLBACK, SINGULAR, STRING,   remarks,          24) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  environment,      25) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  sensor_fov,       26) \
-X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,pli,payload_variant.pli),  30) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  marti,            29) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat),  31) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,aircraft,payload_variant.aircraft),  32) \
 X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,raw_detail,payload_variant.raw_detail),  33) \
@@ -1763,11 +1932,14 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,rab,payload_variant.rab),  3
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,route,payload_variant.route),  37) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,casevac,payload_variant.casevac),  38) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,emergency,payload_variant.emergency),  39) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,task,payload_variant.task),  40)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,task,payload_variant.task),  40) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk,payload_variant.taktalk),  41) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,taktalk_room,payload_variant.taktalk_room),  42)
 #define meshtastic_TAKPacketV2_CALLBACK pb_default_field_callback
 #define meshtastic_TAKPacketV2_DEFAULT NULL
 #define meshtastic_TAKPacketV2_environment_MSGTYPE meshtastic_TAKEnvironment
 #define meshtastic_TAKPacketV2_sensor_fov_MSGTYPE meshtastic_SensorFov
+#define meshtastic_TAKPacketV2_marti_MSGTYPE meshtastic_Marti
 #define meshtastic_TAKPacketV2_payload_variant_chat_MSGTYPE meshtastic_GeoChat
 #define meshtastic_TAKPacketV2_payload_variant_aircraft_MSGTYPE meshtastic_AircraftTrack
 #define meshtastic_TAKPacketV2_payload_variant_shape_MSGTYPE meshtastic_DrawnShape
@@ -1777,6 +1949,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,task,payload_variant.task), 
 #define meshtastic_TAKPacketV2_payload_variant_casevac_MSGTYPE meshtastic_CasevacReport
 #define meshtastic_TAKPacketV2_payload_variant_emergency_MSGTYPE meshtastic_EmergencyAlert
 #define meshtastic_TAKPacketV2_payload_variant_task_MSGTYPE meshtastic_TaskRequest
+#define meshtastic_TAKPacketV2_payload_variant_taktalk_MSGTYPE meshtastic_TakTalkMessage
+#define meshtastic_TAKPacketV2_payload_variant_taktalk_room_MSGTYPE meshtastic_TakTalkRoomData
 
 extern const pb_msgdesc_t meshtastic_TAKPacket_msg;
 extern const pb_msgdesc_t meshtastic_GeoChat_msg;
@@ -1797,6 +1971,9 @@ extern const pb_msgdesc_t meshtastic_EmergencyAlert_msg;
 extern const pb_msgdesc_t meshtastic_TaskRequest_msg;
 extern const pb_msgdesc_t meshtastic_TAKEnvironment_msg;
 extern const pb_msgdesc_t meshtastic_SensorFov_msg;
+extern const pb_msgdesc_t meshtastic_TakTalkMessage_msg;
+extern const pb_msgdesc_t meshtastic_TakTalkRoomData_msg;
+extern const pb_msgdesc_t meshtastic_Marti_msg;
 extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -1819,20 +1996,27 @@ extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 #define meshtastic_TaskRequest_fields &meshtastic_TaskRequest_msg
 #define meshtastic_TAKEnvironment_fields &meshtastic_TAKEnvironment_msg
 #define meshtastic_SensorFov_fields &meshtastic_SensorFov_msg
+#define meshtastic_TakTalkMessage_fields &meshtastic_TakTalkMessage_msg
+#define meshtastic_TakTalkRoomData_fields &meshtastic_TakTalkRoomData_msg
+#define meshtastic_Marti_fields &meshtastic_Marti_msg
 #define meshtastic_TAKPacketV2_fields &meshtastic_TAKPacketV2_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_TAKPacket_size depends on runtime parameters */
+/* meshtastic_GeoChat_size depends on runtime parameters */
+/* meshtastic_DrawnShape_size depends on runtime parameters */
 /* meshtastic_CasevacReport_size depends on runtime parameters */
 /* meshtastic_ZMistEntry_size depends on runtime parameters */
 /* meshtastic_SensorFov_size depends on runtime parameters */
+/* meshtastic_TakTalkMessage_size depends on runtime parameters */
+/* meshtastic_TakTalkRoomData_size depends on runtime parameters */
+/* meshtastic_Marti_size depends on runtime parameters */
 /* meshtastic_TAKPacketV2_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_ATAK_PB_H_MAX_SIZE meshtastic_Route_size
 #define meshtastic_AircraftTrack_size            134
 #define meshtastic_Contact_size                  242
 #define meshtastic_CotGeoPoint_size              12
-#define meshtastic_DrawnShape_size               553
 #define meshtastic_EmergencyAlert_size           100
-#define meshtastic_GeoChat_size                  495
 #define meshtastic_Group_size                    4
 #define meshtastic_Marker_size                   191
 #define meshtastic_PLI_size                      31
@@ -1841,7 +2025,6 @@ extern const pb_msgdesc_t meshtastic_TAKPacketV2_msg;
 #define meshtastic_Route_size                    1379
 #define meshtastic_Status_size                   3
 #define meshtastic_TAKEnvironment_size           18
-#define meshtastic_TAKPacket_size                756
 #define meshtastic_TaskRequest_size              132
 
 #ifdef __cplusplus

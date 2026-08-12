@@ -2,6 +2,7 @@
 
 #include "StatusMessageModule.h"
 #include "MeshService.h"
+#include "NodeDB.h"
 #include "ProtobufModule.h"
 
 StatusMessageModule *statusMessageModule;
@@ -14,6 +15,8 @@ int32_t StatusMessageModule::runOnce()
         strncpy(ourStatus.status, moduleConfig.statusmessage.node_status, sizeof(ourStatus.status));
         ourStatus.status[sizeof(ourStatus.status) - 1] = '\0'; // ensure null termination
         meshtastic_MeshPacket *p = allocDataPacket();
+        if (!p)
+            return 1000 * 12 * 60 * 60;
         p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                      meshtastic_StatusMessage_fields, &ourStatus);
         p->to = NODENUM_BROADCAST;
@@ -36,16 +39,8 @@ ProcessMessage StatusMessageModule::handleReceived(const meshtastic_MeshPacket &
 
             LOG_INFO("Received a NodeStatus message %s", incomingMessage.status);
 
-            RecentStatus entry;
-            entry.fromNodeId = mp.from;
-            entry.statusText = incomingMessage.status;
-
-            recentReceived.push_back(std::move(entry));
-
-            // Keep only last MAX_RECENT_STATUSMESSAGES
-            if (recentReceived.size() > MAX_RECENT_STATUSMESSAGES) {
-                recentReceived.erase(recentReceived.begin()); // drop oldest
-            }
+            if (nodeDB)
+                nodeDB->setNodeStatus(mp.from, incomingMessage);
         }
     }
     return ProcessMessage::CONTINUE;

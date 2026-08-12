@@ -7,10 +7,12 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 
 struct PacketHistoryStruct {
     uint32_t time;
+    bool has_rx_time; // whether `time` was a trustworthy epoch when captured, not a getTime() boot-relative fallback
     uint32_t to;
     uint32_t from;
     uint32_t id;
@@ -20,6 +22,7 @@ struct PacketHistoryStruct {
     uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
     int32_t rx_rssi;
+    bool has_rx_rssi; // whether rx_rssi was a genuine measurement (e.g. not MQTT-relayed) when captured
     float rx_snr;
     uint8_t hop_start;
     uint8_t hop_limit;
@@ -29,11 +32,17 @@ struct PacketHistoryStruct {
 
 class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<meshtastic_StoreAndForward>
 {
+    // packetHistory is allocated with ps_calloc / calloc, so it must be released with free(),
+    // not delete[].
+    struct CFreeDeleter {
+        void operator()(PacketHistoryStruct *p) const noexcept { free(p); }
+    };
+
     bool busy = 0;
     uint32_t busyTo = 0;
     char routerMessage[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
 
-    PacketHistoryStruct *packetHistory = 0;
+    std::unique_ptr<PacketHistoryStruct[], CFreeDeleter> packetHistory;
     uint32_t packetHistoryTotalCount = 0;
     uint32_t last_time = 0;
     uint32_t requestCount = 0;

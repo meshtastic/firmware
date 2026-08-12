@@ -220,7 +220,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Testing USB detection
 #define NRF_APM
 // If using a power chip like the INA3221 you can override the default battery voltage channel below
-// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging
+// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging.
+// INA3221Sensor.h provides compatibility aliases such as INA3221_CH1/INA3221_CH2/INA3221_CH3,
+// so board variants can continue to use the channel names below.
 // #define INA3221_BAT_CH INA3221_CH2
 // #define INA3221_ENV_CH INA3221_CH1
 
@@ -228,6 +230,12 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Do not toggle this for GPS power savings
 #define PIN_3V3_EN (34)
 #define WB_IO2 PIN_3V3_EN
+
+// GPS EN only for finished products that accept cutting 3V3_S with GPS off.
+// Generic rak4631 / sensor bases keep this undefined so sensors on 3V3_S stay powered.
+#if defined(WISMESH_POCKET) || defined(WISMESH_REPEATER_MINI)
+#define PIN_GPS_EN PIN_3V3_EN
+#endif
 
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base
@@ -251,9 +259,11 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define PIN_BUZZER 21 // IO3 is PWM2
 // NEW: set this via protobuf instead!
 
-// RAK4631 custom ringtone
+// RAK4631 custom ringtone (but not for Pocket - it uses the default ringtone)
+#ifndef WISMESH_POCKET
 #undef USERPREFS_RINGTONE_RTTTL
 #define USERPREFS_RINGTONE_RTTTL "Rak:d=32,o=5,b=200:b7,p,b7,4p,p"
+#endif
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
@@ -280,7 +290,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
 #define BATTERY_LPCOMP_THRESHOLD NRF_LPCOMP_REF_SUPPLY_11_16
 
-#define HAS_ETHERNET 1
+// General-purpose RAK4631 builds disable Ethernet; use env:rak4631_eth_gw for RAK13800 W5100S.
+#define HAS_ETHERNET 0
 
 #define RAK_4631 1
 

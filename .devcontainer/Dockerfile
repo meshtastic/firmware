@@ -1,4 +1,3 @@
-# trunk-ignore-all(terrascan/AC_DOCKER_0002): Known terrascan issue
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 FROM mcr.microsoft.com/devcontainers/cpp:2-debian-13
@@ -16,6 +15,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libssl-dev \
     libulfius-dev \
     libyaml-cpp-dev \
+    libjsoncpp-dev \
     pipx \
     pkg-config \
     python3 \

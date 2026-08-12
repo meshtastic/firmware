@@ -2,8 +2,9 @@
 #if HAS_SCREEN
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
+#include "Power.h"
 #include "draw/NodeListRenderer.h"
+#include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/TFTColorRegions.h"
@@ -12,7 +13,6 @@
 #include "main.h"
 #include "meshtastic/config.pb.h"
 #include "modules/ExternalNotificationModule.h"
-#include "power.h"
 #include <OLEDDisplay.h>
 #include <cctype>
 #include <graphics/images.h>
@@ -30,6 +30,12 @@ ScreenResolution determineScreenResolution(int16_t screenheight, int16_t screenw
     if (screenwidth <= 64 || screenheight <= 48) {
         return ScreenResolution::UltraLow;
     }
+
+#ifdef DISPLAY_FORCE_SMALL_FONTS
+    if (screenwidth <= 160 && screenheight <= 80) {
+        return ScreenResolution::Low;
+    }
+#endif
 
     // Standard OLED screens
     if (screenwidth > 128 && screenheight <= 64) {
@@ -111,12 +117,17 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
+    // Compact panels: no persistent header, see UIRenderer::drawNavigationBar instead.
+    if (isCompactPanel(display)) {
+        display->setColor(WHITE); // Reset for other UI - normally done at the end of this function
+        return;
+    }
     const int headerHeight = highlightHeight + 2;
-    const uint16_t headerColorForRoles = getThemeHeaderBg();
     // Color TFT headers use a fixed dark background + white glyphs.
     // Keep legacy inverted bitmap behavior only for monochrome displays.
     const bool useInvertedHeaderStyle = (isInverted && !force_no_invert && !isTFTColoringEnabled() && !transparent_background);
 #if GRAPHICS_TFT_COLORING_ENABLED
+    const uint16_t headerColorForRoles = getThemeHeaderBg();
     int statusLeftEndX = 0;
     int statusRightStartX = screenW;
     const bool isClockHeader = transparent_background && show_date && (!titleStr || titleStr[0] == '\0');
@@ -125,11 +136,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 #endif
 
     {
+#if GRAPHICS_TFT_COLORING_ENABLED
         const uint16_t headerColor = getThemeHeaderBg();
         const uint16_t headerTextColor = getThemeHeaderText();
         const uint16_t headerTitleColorForRole = use_title_color_override ? title_color_override : headerTextColor;
         uint16_t headerStatusColor = getThemeHeaderStatus();
-#if GRAPHICS_TFT_COLORING_ENABLED
+
         // Clock frame uses transparent header + date + empty title.
         // For accent clock themes (Pink/Creamsicle + classic monochrome), tint
         // status items (battery outline, %, date, mail icon) to the header accent.
@@ -141,8 +153,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             // Transparent clock headers should inherit whatever body off-color is
             // already active under the header (important for light/inverted themes).
             const uint16_t transparentBgColor = resolveTFTOffColorAt(0, headerHeight + 1, getThemeBodyBg());
-            setAndRegisterTFTColorRole(TFTColorRole::HeaderBackground, transparentBgColor, transparentBgColor, 0, 0, screenW,
-                                       headerHeight);
+            // Intentionally skip the HeaderBackground region, as small screens draw the clock in the unused space in this region,
+            // and the transparent call was erasing segments from the clock
             setTFTColorRole(TFTColorRole::HeaderTitle, headerTitleColorForRole, transparentBgColor);
             setTFTColorRole(TFTColorRole::HeaderStatus, headerStatusColor, transparentBgColor);
         } else if (useInvertedHeaderStyle) {
@@ -226,12 +238,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     bool useHorizontalBattery = (currentResolution == ScreenResolution::High && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+#if GRAPHICS_TFT_COLORING_ENABLED
     bool hasBatteryFillRegion = false;
     int16_t batteryFillRegionX = 0;
     int16_t batteryFillRegionY = 0;
     int16_t batteryFillRegionW = 0;
     int16_t batteryFillRegionH = 0;
-#if GRAPHICS_TFT_COLORING_ENABLED
     uint16_t batteryFillColor = getThemeBatteryFillColor(chargePercent);
     if (useClockHeaderAccent) {
         batteryFillColor = getThemeHeaderBg();
@@ -240,7 +252,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     int batteryX = 1;
     int batteryY = HEADER_OFFSET_Y + 1;
-#if !defined(M5STACK_UNITC6L)
+#if !defined(OLED_TINY)
     // === Battery Icons ===
     if (usbPowered && !isCharging) { // This is a basic check to determine USB Powered is flagged but not charging
         batteryX += 1;
@@ -310,11 +322,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         char chargeStr[4];
         snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
         int chargeNumWidth = display->getStringWidth(chargeStr);
-        const int percentWidth = display->getStringWidth("%");
         const int percentX = batteryX + chargeNumWidth - 1;
         display->drawString(batteryX, textY, chargeStr);
         display->drawString(percentX, textY, "%");
 #if GRAPHICS_TFT_COLORING_ENABLED
+        const int percentWidth = display->getStringWidth("%");
         statusLeftEndX = percentX + percentWidth + 2;
 #endif
         if (isBold) {
@@ -530,7 +542,13 @@ const int *getTextPositions(OLEDDisplay *display)
 {
     static int textPositions[7]; // Static array that persists beyond function scope
 
-    if (currentResolution == ScreenResolution::High) {
+    if (isCompactPanel(display)) {
+        // No header on compact panels - pack rows as tight as the font allows.
+        for (int i = 0; i < 7; ++i) {
+            const int bodyLine = (i > 0) ? i - 1 : 0;
+            textPositions[i] = bodyLine * (FONT_HEIGHT_SMALL - 6);
+        }
+    } else if (currentResolution == ScreenResolution::High) {
         textPositions[0] = textZeroLine;
         textPositions[1] = textFirstLine_medium;
         textPositions[2] = textSecondLine_medium;
@@ -555,6 +573,11 @@ const int *getTextPositions(OLEDDisplay *display)
 // *************************
 void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
 {
+    if (isCompactPanel(display)) {
+        display->setColor(WHITE); // Reset for other UI - normally done at the end of this function
+        return;
+    }
+
     if (!isAPIConnected(service->api_state))
         return;
 
@@ -563,16 +586,20 @@ void drawCommonFooter(OLEDDisplay *display, int16_t x, int16_t y)
     const int footerH = (connection_icon_height * scale) + (2 * scale);
     const int iconX = 0;
     const int iconY = SCREEN_HEIGHT - (connection_icon_height * scale);
-    const int iconW = connection_icon_width * scale;
-    const int iconH = connection_icon_height * scale;
 
 #if GRAPHICS_TFT_COLORING_ENABLED
+    const int iconW = connection_icon_width * scale;
+    const int iconH = connection_icon_height * scale;
     // Only tint the link glyph itself on TFT; keep the footer background black.
     setAndRegisterTFTColorRole(TFTColorRole::ConnectionIcon, TFTPalette::Blue, TFTPalette::Black, iconX, iconY, iconW, iconH);
 #endif
 
     display->setColor(BLACK);
+#if GRAPHICS_TFT_COLORING_ENABLED
     display->fillRect(0, footerY, SCREEN_WIDTH, footerH);
+#else
+    display->fillRect(0, footerY, connection_icon_width + 1, footerH);
+#endif
     display->setColor(WHITE);
     if (currentResolution == ScreenResolution::High) {
         const int bytesPerRow = (connection_icon_width + 7) / 8;
