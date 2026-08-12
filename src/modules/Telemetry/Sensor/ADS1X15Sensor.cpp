@@ -107,6 +107,8 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
     reClockI2C.setClock(ADS1X15_I2C_CLOCK_SPEED);
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
 
+    ads1x15.setDataRate(0x0080);
+
     struct _ADS1X15Measurements m = getMeasurements();
 
 #ifdef ADS1X15_I2C_CLOCK_SPEED
