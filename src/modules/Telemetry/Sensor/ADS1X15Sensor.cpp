@@ -14,6 +14,7 @@ bool ADS1X15Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     LOG_INFO("Init sensor: %s (address: 0x%x)", sensorName, dev->address.address);
 
     _bus = bus;
+    _port = dev->address.port;
     _address = dev->address.address;
     _deviceType = dev->type;
 
