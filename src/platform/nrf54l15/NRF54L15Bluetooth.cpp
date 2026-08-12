@@ -604,6 +604,20 @@ class BleDeferredThread : public concurrency::OSThread
         k_mutex_unlock(&pendingToRadioMutex);
         if (have_pending && phoneAPI) {
             phoneAPI->handleToRadio(buf, n);
+            // The phone reads fromRadio immediately after writing ToRadio.
+            // Because handleToRadio ran up to a poll interval later on this
+            // thread, that eager read raced ahead and saw an empty queue; the
+            // iOS app then waits for a fromNum notification before reading
+            // again and gives up ~30 s after its config request. Now that any
+            // responses are queued, kick the subscribed client so it re-reads
+            // right away.
+            if (fromnum_ccc_val & BT_GATT_CCC_NOTIFY) {
+                struct bt_conn *kick = acquire_active_conn();
+                if (kick) {
+                    bt_gatt_notify(kick, &mesh_svc.attrs[FROMNUM_ATTR_IDX], &fromNumValue, sizeof(fromNumValue));
+                    bt_conn_unref(kick);
+                }
+            }
         }
 
         // Take a reference to active_conn so it can't be freed underneath us
