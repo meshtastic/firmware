@@ -138,7 +138,7 @@ void BME680Sensor::loadState()
         file.read((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
         file.close();
         bme680.setState(bsecState);
-        LOG_INFO("%s state read from %s", sensorName, bsecConfigFileName);
+        LOG_INFO("%s: state read from %s", sensorName, bsecConfigFileName);
     } else {
         LOG_INFO("No %s state found (File: %s)", sensorName, bsecConfigFileName);
     }
@@ -180,7 +180,7 @@ void BME680Sensor::updateState()
         }
         auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
         if (file) {
-            LOG_INFO("%s state write to %s", sensorName, bsecConfigFileName);
+            LOG_INFO("%s: state write to %s", sensorName, bsecConfigFileName);
             file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
             file.flush();
             file.close();
