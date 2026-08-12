@@ -226,7 +226,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // === Fifth Row: Channel Utilization ===
     if (!config.lora.tx_enabled) {
         const char *txdisabled = "Transmit Disabled";
-        int textWidth = display->getStringWidth(txdisabled);
+        textWidth = display->getStringWidth(txdisabled);
         display->drawString((SCREEN_WIDTH - textWidth) / 2, getTextPositions(display)[line], txdisabled);
     } else {
 
