@@ -3021,6 +3021,10 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     if (!okay || !writeSucceeded) {
         LOG_ERROR("Can't write prefs");
     }
+
+    // pb_encode() only sees the byte stream, not the readback hash check, the tmp reopen or the
+    // rename - all of which SafeFile::close() reports. Propagate it so saveToDisk() can recover.
+    okay = okay && writeSucceeded;
 #else
     LOG_ERROR("Filesystem not implemented");
 #endif
