@@ -766,7 +766,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m.time = getTime();
 
-    if (getEnvironmentTelemetry(&m)) {
+    bool validTelemetry = getEnvironmentTelemetry(&m);
+
+    if (validTelemetry) {
         if (m.variant.environment_metrics.has_temperature || m.variant.environment_metrics.has_relative_humidity ||
             m.variant.environment_metrics.has_barometric_pressure)
             LOG_INFO("Send: barometric_pressure=%fkPa, relative_humidity=%f%RH, temperature=%fdegC",
