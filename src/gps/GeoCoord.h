@@ -113,7 +113,7 @@ class GeoCoord
     static double toDegrees(double r);
 
     // Point to point conversions
-    std::shared_ptr<GeoCoord> pointAtDistance(double bearing, double range);
+    GeoCoord pointAtDistance(double bearing, double range) const;
 
     // Lat lon alt getters
     int32_t getLatitude() const { return _latitude; }

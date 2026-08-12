@@ -544,7 +544,7 @@ float GeoCoord::rangeMetersToRadians(double range_meters)
  * range in meters
  * @return GeoCoord object of point at bearing and range from initial point
  */
-std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range_meters)
+GeoCoord GeoCoord::pointAtDistance(double bearing, double range_meters) const
 {
     double range_radians = rangeMetersToRadians(range_meters);
     double lat1 = this->getLatitude() * 1e-7;
@@ -553,7 +553,7 @@ std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range
     double dlon = atan2(sin(bearing) * sin(range_radians) * cos(lat1), cos(range_radians) - sin(lat1) * sin(lat));
     double lon = fmod(lon1 - dlon + PI, 2 * PI) - PI;
 
-    return std::make_shared<GeoCoord>(double(lat), double(lon), this->getAltitude());
+    return GeoCoord(double(lat), double(lon), this->getAltitude());
 }
 
 /**
