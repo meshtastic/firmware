@@ -587,11 +587,11 @@ void ExternalNotificationModule::portduinoNotify(const meshtastic_MeshPacket &mp
 {
     std::string senderName;
     const meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(mp.from);
-    if (sender && sender->has_user) {
-        if (sender->user.long_name[0] != '\0') {
-            senderName = sender->user.long_name;
+    if (nodeInfoLiteHasUser(sender)) {
+        if (sender->long_name[0] != '\0') {
+            senderName = sender->long_name;
         } else {
-            senderName = sender->user.short_name;
+            senderName = sender->short_name;
         }
     } else {
         senderName = std::to_string(mp.from);
