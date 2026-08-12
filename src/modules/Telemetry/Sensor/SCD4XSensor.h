@@ -39,7 +39,10 @@ class SCD4XSensor : public TelemetrySensor, public CO2CalibrationSensor
     // CO2CalibrationSensor overrides - thin wrappers around the methods above,
     // shared with SCD30Sensor and the CO2-capable SEN6X variants via
     // CO2CalibrationSensor::handleCo2AdminRequest().
-    bool co2PerformFRC(uint32_t targetCO2ppm) override { return performFRC(targetCO2ppm); }
+    bool co2PerformFRC(uint32_t targetCO2ppm) override
+    {
+        return targetCO2ppm <= UINT16_MAX && performFRC(static_cast<uint16_t>(targetCO2ppm));
+    }
     bool co2GetASC(bool &ascEnabled) override
     {
         uint16_t v = 0;
@@ -48,9 +51,22 @@ class SCD4XSensor : public TelemetrySensor, public CO2CalibrationSensor
         return ok;
     }
     bool co2SetASC(bool ascEnabled) override { return setASC(ascEnabled); }
-    bool co2SetASCBaseline(uint32_t targetCO2ppm) override { return setASCBaseline(targetCO2ppm); }
-    bool co2SetAltitude(uint32_t altitude) override { return setAltitude(altitude); }
-    bool co2SetAmbientPressure(uint32_t ambientPressurePa) override { return setAmbientPressure(ambientPressurePa); }
+    bool co2SetASCBaseline(uint32_t targetCO2ppm) override
+    {
+        return targetCO2ppm <= UINT16_MAX && setASCBaseline(static_cast<uint16_t>(targetCO2ppm));
+    }
+    bool co2SetAltitude(uint32_t altitude) override
+    {
+        if (altitude > 3000)
+            return false;
+        return altitude <= UINT16_MAX && setAltitude(static_cast<uint16_t>(altitude));
+    }
+    bool co2SetAmbientPressure(uint32_t ambientPressurePa) override
+    {
+        if (ambientPressurePa < 70000 || ambientPressurePa > 120000)
+            return false;
+        return setAmbientPressure(ambientPressurePa);
+    }
     bool co2FactoryReset() override { return factoryReset(); }
 
     uint16_t ascActive = 1;
