@@ -476,9 +476,16 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         return;
     }
 
+    // `decoded` and `encrypted` are a union, and meshtastic_Data::portnum overlays the encrypted
+    // arm's `size` field. perhapsDecode() above deliberately lets undecryptable packets through, so
+    // reading decoded.portnum on one of those returns the ciphertext length - and TEXT_MESSAGE_APP
+    // (1) and RANGE_TEST_APP (66) are both ordinary payload sizes. Only trust portnum once the
+    // packet has actually decoded.
+    const bool isDecoded = p->which_payload_variant == meshtastic_MeshPacket_decoded_tag;
+
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-    if (moduleConfig.store_forward.enabled && storeForwardModule->isServer() &&
+    if (moduleConfig.store_forward.enabled && storeForwardModule->isServer() && isDecoded &&
         p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
         releaseToPool(p); // Copy is already stored in StoreForward history
         fromNum++;        // Notify observers for packet from radio
@@ -488,8 +495,8 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
-        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
+        if (isDecoded && (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+                          p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP)) {
             LOG_WARN("ToPhone queue full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
