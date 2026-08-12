@@ -49,7 +49,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     if (p.is_licensed != owner.is_licensed) {
-        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
+        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch");
         return true;
     }
     NodeNum sourceNum = getFrom(&mp);

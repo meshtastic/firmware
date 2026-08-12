@@ -168,7 +168,7 @@ void BME680Sensor::loadState()
         LOG_INFO("%s IAQ state in %s rejected (stale or invalid), starting fresh", sensorName, stateFileName);
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
 }
 
@@ -224,7 +224,7 @@ void BME680Sensor::saveState()
         LOG_WARN("Can't write %s state (File: %s)", sensorName, stateFileName);
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("Filesystem not implemented");
 #endif
 }
 

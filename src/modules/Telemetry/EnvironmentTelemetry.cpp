@@ -257,7 +257,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
         return;
     }
-    LOG_INFO("Environment Telemetry adding I2C devices...");
+    LOG_INFO("Environment Telemetry adding I2C devices");
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -366,7 +366,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
+        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
         doDeepSleep(nightyNightMs, true, false);
     }
 
@@ -736,7 +736,7 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding EnvironmentTelemetry module!");
+            LOG_ERROR("Error decoding EnvironmentTelemetry module");
             return NULL;
         }
         // Check for a request for environment metrics
@@ -814,7 +814,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     // otherwise it stays awake until the next telemetry interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)
-            LOG_WARN("Environment telemetry unavailable this cycle, sleep without sending");
+            LOG_WARN("Env telemetry unavailable, sleep without send");
         sleepOnNextExecution = true;
         preflightSleepDeferrals = 0;
         LOG_DEBUG("Start next execution in 5s, then sleep");

@@ -99,6 +99,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
 
+    /// has the radio IRQ ever been armed? latches true and is never cleared, so ISR context only reads it
+    volatile bool isrEverArmed = false;
+
   protected:
     // Noise floor tracking - rolling window of samples.
     static const uint8_t NOISE_FLOOR_SAMPLES = 20;
@@ -144,13 +147,26 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /**
      * Glue functions called from ISR land
+     *
+     * Skip the detach until the IRQ has been armed once: the first setStandby() runs before any
+     * enableInterrupt(), and ESP-IDF logs "GPIO isr service is not installed" for that call.
      */
-    virtual void disableInterrupt() = 0;
+    void disableInterrupt()
+    {
+        if (!isrEverArmed)
+            return;
+        clearRadioIsr();
+    }
 
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*)()) = 0;
+    void enableInterrupt(void (*callback)())
+    {
+        // Latch before arming: the ISR can fire the moment the handler is installed.
+        isrEverArmed = true;
+        setRadioIsr(callback);
+    }
 
     /**
      * Poll as a backup to catch missed edge-triggered interrupts.
@@ -300,6 +316,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
+    /** Chip specific arm/disarm of the radio IRQ; call enableInterrupt()/disableInterrupt() instead */
+    virtual void setRadioIsr(void (*callback)()) = 0;
+    virtual void clearRadioIsr() = 0;
+
     /**
      * Subclasses must override, implement and then call into this base class implementation
      */
@@ -311,23 +331,29 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     template <typename T> uint32_t computePacketTime(T &lora, uint32_t pl, bool received)
     {
         if (received) {
-            // First get the actual coding rate and CRC status from the received packet
-            uint8_t rxCR;
-            bool hasCRC;
-            lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC);
-            // Go from raw header value to denominator
-            if (rxCR < 5) {
-                rxCR += 4;
-            } else if (rxCR == 7) {
-                rxCR = 8;
-            }
-
             // Received packet configuration must be the same as configured, except for coding rate and CRC
             DataRate_t dr = getDataRate();
-            dr.lora.codingRate = rxCR;
-
             PacketConfig_t pc = getPacketConfig();
-            pc.lora.crcEnabled = hasCRC;
+
+            uint8_t rxCR = 0;
+            bool hasCRC = true;
+            if (lora.getLoRaRxHeaderInfo(&rxCR, &hasCRC) == RADIOLIB_ERR_NONE) {
+                // Raw 0 is reserved and >7 is either undefined or an LR2021-only convolutional rate no
+                // Meshtastic peer can send. calculateTimeOnAir() would multiply by it unchecked.
+                if (rxCR < 1 || rxCR > 7) {
+                    LOG_WARN("Bogus RX coding rate %d from radio, use configured %d", rxCR, dr.lora.codingRate);
+                } else {
+                    // Go from raw header value to denominator
+                    if (rxCR < 5) {
+                        rxCR += 4;
+                    } else if (rxCR == 7) {
+                        rxCR = 8;
+                    }
+
+                    dr.lora.codingRate = rxCR;
+                    pc.lora.crcEnabled = hasCRC;
+                }
+            }
 
             return lora.calculateTimeOnAir(modemType, dr, pc, pl) / 1000;
         }
