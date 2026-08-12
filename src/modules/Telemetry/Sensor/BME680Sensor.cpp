@@ -8,8 +8,9 @@
 #include "SPILock.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
-#include "Throttle.h"
+#include "UptimeClock.h"
 #include "gps/RTC.h"
+#include "mesh/Throttle.h"
 
 #include <math.h>
 
@@ -44,12 +45,11 @@ bool BME680Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 int32_t BME680Sensor::runOnce()
 {
-    uint32_t now = millis();
+    uint32_t now = Time::getMillis();
 
     if (readingInFlight) {
-        int32_t remaining = (int32_t)(readingDoneAtMs - now);
-        if (remaining > 0)
-            return remaining;
+        if (!Throttle::deadlinePassedAt(now, readingDoneAtMs))
+            return readingDoneAtMs - now;
         captureSample();
         return SAMPLE_INTERVAL_MS;
     }
@@ -64,8 +64,7 @@ int32_t BME680Sensor::runOnce()
     }
     readingInFlight = true;
     readingDoneAtMs = doneAt;
-    int32_t duration = (int32_t)(doneAt - now);
-    return duration > 0 ? duration : 1;
+    return Throttle::deadlinePassedAt(now, doneAt) ? 1 : (int32_t)(doneAt - now);
 }
 
 /// Complete the reading (in flight or synchronous), feed the estimator, refresh the cache
@@ -87,7 +86,7 @@ void BME680Sensor::captureSample()
     lastPressureHPa = bme680->pressure / 100.0F;
     lastGasOhms = (float)bme680->gas_resistance;
     haveSample = true;
-    lastSampleMs = millis();
+    lastSampleMs = Time::getMillis();
 
     uint16_t iaq;
     if (iaqEstimator.update(lastGasOhms, lastHumidity, &iaq)) {
@@ -195,7 +194,7 @@ void BME680Sensor::maybeSaveState()
         // ~STATE_SAVE_PERIOD_MS worth of samples) with an uptime cadence as a
         // secondary trigger for always-on nodes
         if (iaqEstimator.samplesFed() - lastPersistedSampleCount < STATE_SAVE_PERIOD_MS / SAMPLE_INTERVAL_MS &&
-            Throttle::isWithinTimespanMs(lastStateSaveMs, STATE_SAVE_PERIOD_MS))
+            !Throttle::hasElapsed(lastStateSaveMs, STATE_SAVE_PERIOD_MS))
             return;
     }
     saveState();
@@ -218,7 +217,7 @@ void BME680Sensor::saveState()
         lastPersistedSampleCount = iaqEstimator.samplesFed();
         lastPersistedWarmup = iaqEstimator.warmupLeft();
         lastSaveEpochSecs = nowSecs;
-        lastStateSaveMs = millis();
+        lastStateSaveMs = Time::getMillis();
         LOG_DEBUG("%s state write to %s", sensorName, stateFileName);
     } else {
         LOG_WARN("Can't write %s state (File: %s)", sensorName, stateFileName);
