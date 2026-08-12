@@ -33,6 +33,14 @@ static double referenceSphericalLawOfCosines(double lat_a, double lng_a, double 
 // assert an absolute bound instead (still catches a badly-broken implementation).
 static constexpr double kNearZeroAbsoluteToleranceMeters = 0.5;
 
+// An order of magnitude above what the implementation currently produces per group - tight enough to
+// catch a regression, loose enough not to track float rounding. Groups differ because
+// equirectangular error grows with both separation and latitude.
+static constexpr double kLocalTolerancePercent = 0.01;
+static constexpr double kRegionalTolerancePercent = 0.1;
+static constexpr double kHighLatitudeTolerancePercent = 0.2;
+static constexpr double kAntimeridianTolerancePercent = 0.01;
+
 static void assertWithinPercent(double expected, double actual, double pct, const char *msg)
 {
     if (expected < 1.0) {
@@ -57,7 +65,7 @@ static void test_identical_points_is_zero(void)
     TEST_ASSERT_EQUAL_FLOAT(0.0f, GeoCoord::latLongToMeter(51.5, -0.1, 51.5, -0.1));
 }
 
-static void test_local_distances_within_1_percent(void)
+static void test_local_distances(void)
 {
     // Movement-threshold scale (meters to a few km) - the most common real usage.
     struct {
@@ -72,13 +80,13 @@ static void test_local_distances_within_1_percent(void)
     for (auto &c : cases) {
         double expected = referenceSphericalLawOfCosines(c.la, c.lo, c.lb, c.lob);
         double actual = GeoCoord::latLongToMeter(c.la, c.lo, c.lb, c.lob);
-        assertWithinPercent(expected, actual, 1.0, "local distance");
+        assertWithinPercent(expected, actual, kLocalTolerancePercent, "local distance");
     }
 }
 
-static void test_regional_distances_within_4_percent(void)
+static void test_regional_distances(void)
 {
-    // City-to-city scale (tens to ~500km), non-extreme latitudes
+    // City-to-city scale (tens to ~500km) below 60 degrees; see test_high_latitude_distances.
     struct {
         double la, lo, lb, lob;
     } cases[] = {
@@ -90,7 +98,25 @@ static void test_regional_distances_within_4_percent(void)
     for (auto &c : cases) {
         double expected = referenceSphericalLawOfCosines(c.la, c.lo, c.lb, c.lob);
         double actual = GeoCoord::latLongToMeter(c.la, c.lo, c.lb, c.lob);
-        assertWithinPercent(expected, actual, 4.0, "regional distance");
+        assertWithinPercent(expected, actual, kRegionalTolerancePercent, "regional distance");
+    }
+}
+
+static void test_high_latitude_distances(void)
+{
+    // Regional scale above 60 degrees, where equirectangular error grows fastest - a 500km pair at
+    // 80 degrees already exceeds 1%.
+    struct {
+        double la, lo, lb, lob;
+    } cases[] = {
+        {69.6492, 18.9553, 67.2804, 14.4049},     // Tromso to Bodo, ~322km
+        {64.8378, -147.7164, 61.2181, -149.9003}, // Fairbanks to Anchorage, ~417km
+        {78.2232, 15.6469, 78.9230, 11.9219},     // Longyearbyen to Ny-Alesund, ~113km
+    };
+    for (auto &c : cases) {
+        double expected = referenceSphericalLawOfCosines(c.la, c.lo, c.lb, c.lob);
+        double actual = GeoCoord::latLongToMeter(c.la, c.lo, c.lb, c.lob);
+        assertWithinPercent(expected, actual, kHighLatitudeTolerancePercent, "high-latitude distance");
     }
 }
 
@@ -100,7 +126,7 @@ static void test_antimeridian_wraparound(void)
     // wraparound fix (a naive b2-a2 would compute this as ~40,000km).
     double expected = referenceSphericalLawOfCosines(0.0, 179.9, 0.0, -179.9);
     double actual = GeoCoord::latLongToMeter(0.0, 179.9, 0.0, -179.9);
-    TEST_ASSERT_FLOAT_WITHIN(expected * 0.05f, expected, actual);
+    assertWithinPercent(expected, actual, kAntimeridianTolerancePercent, "antimeridian distance");
     TEST_ASSERT_LESS_THAN_FLOAT(1000000.0f, actual); // sanity: nowhere near the naive-bug's ~40,000km
 }
 
@@ -127,8 +153,9 @@ void setup()
 {
     UNITY_BEGIN();
     RUN_TEST(test_identical_points_is_zero);
-    RUN_TEST(test_local_distances_within_1_percent);
-    RUN_TEST(test_regional_distances_within_4_percent);
+    RUN_TEST(test_local_distances);
+    RUN_TEST(test_regional_distances);
+    RUN_TEST(test_high_latitude_distances);
     RUN_TEST(test_antimeridian_wraparound);
     RUN_TEST(test_symmetry);
     RUN_TEST(test_no_nan_at_extreme_latitudes);
