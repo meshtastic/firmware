@@ -61,10 +61,8 @@ static mbedtls_ssl_config sslConf;
 static mbedtls_ssl_context ssl;
 static bool tlsReady = false;
 
-// Free all four contexts together. Safe to call on init-but-unpopulated contexts, which is
-// what makes it usable from initTlsContext's failure paths: without this, a parse/setup
-// failure strands the already-parsed cert/key material forever, because deInit's cleanup is
-// guarded by tlsReady, which is only set after full success.
+// Free all TLS contexts, including partially initialized ones - initTlsContext's failure
+// paths must use this, because deInit's cleanup only runs once tlsReady is set.
 static void freeTlsContexts()
 {
     mbedtls_ssl_free(&ssl);
