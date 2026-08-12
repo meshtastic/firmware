@@ -601,6 +601,8 @@ class String
     {
         // reserve() keeps the old (smaller) buffer on OOM, so a failed grow must abort the
         // write: memcpy'ing n >= _cap bytes would overflow into adjacent heap.
+        if (n + 1 == 0)
+            return; // n + 1 would wrap
         if (n >= _cap && !reserve(n + 1))
             return;
         if (_buf) {
@@ -614,6 +616,8 @@ class String
         if (!s || n == 0)
             return;
         unsigned newlen = _len + n;
+        if (newlen < _len || newlen + 1 == 0)
+            return; // length arithmetic wrapped
         if (newlen >= _cap && !reserve(newlen + 1))
             return; // OOM: keep the existing content intact instead of writing past the buffer
         if (_buf) {
@@ -624,6 +628,8 @@ class String
     }
     bool reserve(unsigned int n)
     {
+        if (n == 0)
+            return false;
         char *b = (char *)realloc(_buf, n);
         if (b) {
             _buf = b;
