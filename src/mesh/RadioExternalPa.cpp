@@ -4,9 +4,9 @@
 // provides strong overrides (see e.g.
 // src/platform/extra_variants/radiomaster_nomad_gemini/variant.cpp).
 
-int8_t __attribute__((weak)) radioExternalPaMapPower(int8_t requestedTotalDbm, float freqHz)
+int8_t __attribute__((weak)) radioExternalPaMapPower(int8_t requestedTotalDbm, float freqMhz)
 {
-    (void)freqHz;
+    (void)freqMhz;
     (void)requestedTotalDbm;
     return RADIO_EXTERNAL_PA_NO_MAP;
 }

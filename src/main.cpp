@@ -1187,16 +1187,16 @@ void setup()
     // Make sure LoRa has been started before disabling FAN.
 #ifdef RADIO_FAN_PWM
 #if defined(ARCH_ESP32)
-    // Set up PWM at Channel 1 at 25KHz, using 8-bit resolution
-    // Turn ON/OFF fan to the specified value if enabled by config.
-    // code by https://github.com/gjelsoe/
+    // PWM channel 1 at 25 kHz, 8-bit; duty from pa_fan_percentage unless disabled by config
     if (ledcSetup(1, 25000, 8)) {
         ledcAttachPin(RADIO_FAN_EN, 1);
         LOG_INFO("PWM init C1 P%d\n", RADIO_FAN_EN);
-        // Set PWM duty cycle based on fan disabled state
         ledcWrite(1, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
     } else {
-        LOG_WARN("PWM init fail P%d\n", RADIO_FAN_EN);
+        // PWM unavailable: drive the pin as plain GPIO so the PA is never left uncooled
+        LOG_WARN("PWM init fail P%d, using on/off fan\n", RADIO_FAN_EN);
+        pinMode(RADIO_FAN_EN, OUTPUT);
+        digitalWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? LOW : HIGH);
     }
 #elif defined(ARCH_NRF52)
     pinMode(RADIO_FAN_EN, OUTPUT);

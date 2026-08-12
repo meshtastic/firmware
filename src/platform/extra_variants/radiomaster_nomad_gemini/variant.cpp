@@ -21,7 +21,7 @@
  * for PA safety and for regulatory compliance.
  *
  * TODO: dual-band (Gemini) operation uses ELRS power_values_dual and a second radio;
- * once JANUS_RADIO is implemented, branch on freqHz / active radio here.
+ * once JANUS_RADIO is implemented, branch on freqMhz / active radio here.
  */
 
 // total dBm corresponds to the ELRS power presets 10/25/50/100/250/500/1000 mW.
@@ -51,9 +51,9 @@ void earlyInitVariant()
     nomadApc2Level = 0;
 }
 
-int8_t radioExternalPaMapPower(int8_t requestedTotalDbm, float freqHz)
+int8_t radioExternalPaMapPower(int8_t requestedTotalDbm, float freqMhz)
 {
-    (void)freqHz; // single-band for now (see dual-band TODO above)
+    (void)freqMhz; // single-band for now (see dual-band TODO above)
 
     if (requestedTotalDbm <= NOMAD_PA_CAL[0].totalDbm) {
         nomadApc2Level = NOMAD_PA_CAL[0].apc2;
