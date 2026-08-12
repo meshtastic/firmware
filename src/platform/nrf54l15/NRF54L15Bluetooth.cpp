@@ -316,6 +316,19 @@ BT_GATT_SERVICE_DEFINE(mesh_svc, BT_GATT_PRIMARY_SERVICE(&mesh_svc_uuid.uuid),
 
 static void start_advertising()
 {
+    // MAX_CONN=1: while a central is connected there is no free connection
+    // object for a new connectable advertiser, and issuing the
+    // SET_ADV_PARAM/adv-data HCI sequence mid-connection (e.g. from a
+    // PowerFSM state re-enter) needlessly pokes the controller. Advertising
+    // restarts via adv_restart_work after the disconnect callback.
+    {
+        struct bt_conn *conn = acquire_active_conn();
+        if (conn) {
+            bt_conn_unref(conn);
+            return;
+        }
+    }
+
     // IMPORTANT: BT_DATA_BYTES() uses C99 compound literals that GCC C++ treats
     // as temporaries; with -Os the compiler may elide writes, leaving stack
     // uninitialized.  Use static const arrays for stable data (flags, UUID)
@@ -765,7 +778,12 @@ void NRF54L15Bluetooth::startDisabled()
 void NRF54L15Bluetooth::resumeAdvertising()
 {
     ble_enabled = true;
-    start_advertising();
+    // PowerFSM transitions can land here from BT stack callback context
+    // (e.g. EVENT_BLUETOOTH_PAIR is fired inside auth_passkey_display on the
+    // BT RX thread) and while a central is connected. Never issue synchronous
+    // HCI advertising commands from that context - defer to the system
+    // workqueue exactly like the disconnect path does.
+    k_work_submit(&adv_restart_work);
 }
 
 void NRF54L15Bluetooth::clearBonds()
