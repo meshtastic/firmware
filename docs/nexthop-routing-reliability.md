@@ -127,8 +127,8 @@ meshes, efficiency _is_ reliability.
 ### Note: pubkey-derived node numbers (develop / 2.8) - does not change the plan
 
 develop derives the node number from the public key:
-`my_node_num = crc32Buffer(public_key)` (`src/mesh/NodeDB.cpp:481`), re-derived on key
-change in `createNewIdentity()` (`src/mesh/NodeDB.cpp:3113`). This **reinforces** the
+`my_node_num = crc32Buffer(public_key)`, set in `NodeDB::createNewIdentity()`
+(`src/mesh/NodeDB.cpp`) and re-derived there on every key change. This **reinforces** the
 plan rather than changing it:
 
 - **Birthday problem unchanged and now textbook-exact.** CRC32 mixes well → the last
@@ -138,9 +138,14 @@ plan rather than changing it:
   collision **cannot be resolved operationally by renumbering** → M1/M2/M3 become _more_
   necessary.
 - **Resolver gets cleaner inputs.** Stable node numbers keep a learned byte bound to one
-  identity (good for M3 freshness). `createNewIdentity()` retires the old entry by marking
-  it **ignored** and clearing its pubkey (`src/mesh/NodeDB.cpp:3123-3125`), which M1's
-  candidate gate already skips - so key rotation can't pollute resolution.
+  identity (good for M3 freshness). `NodeDB::createNewIdentity()` retires the old entry by
+  calling `removeNodeByNum()` on it outright. (The earlier "flag it **ignored**, clear its
+  pubkey" approach was dropped: it left a keyless ghost of our own former identity that
+  survived cleanup/eviction, was still streamed to clients, and made any DM/admin aimed at
+  it fail forever with `PKI_SEND_FAIL_PUBLIC_KEY`.) Removal is **stronger** than the
+  ignored-flag behavior this bullet used to rely on: the row is gone from `meshNodes`
+  entirely, so M1's linear pass never sees it as a candidate at all and does not depend on
+  the `nodeInfoLiteIsIgnored` gate firing - key rotation still can't pollute resolution.
 - **No wire-free disambiguation unlocked.** A receiver still gets only 1 byte and cannot
   recover which full node number a colliding value meant - so "detect ambiguity → flood"
   remains the correct strategy.
