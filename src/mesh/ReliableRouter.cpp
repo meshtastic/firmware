@@ -16,6 +16,12 @@
  */
 ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
 {
+    if (isBlockedEventCoordinatePacket(p)) {
+        LOG_DEBUG("Suppress reliable coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
     const GlobalPacketId key(p);
     const bool retransmitting = p->want_ack;
 

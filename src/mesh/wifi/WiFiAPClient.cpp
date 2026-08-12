@@ -98,21 +98,40 @@ static int32_t ethNetworkConnectedPoll()
 }
 #endif
 
+#if defined(USE_WS5500) || defined(USE_CH390D)
+// Needs the netif, so only valid after ETH.begin(). Failures fall back to DHCP
+static void applyEthStaticIp()
+{
+    if (config.network.address_mode != meshtastic_Config_NetworkConfig_AddressMode_STATIC)
+        return;
+
+    if (config.network.ipv4_config.ip == 0)
+        LOG_WARN("Static address mode but no IP configured, using DHCP");
+    else if (!ETH.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
+                         config.network.ipv4_config.dns))
+        LOG_ERROR("Failed to apply static IP to Ethernet, using DHCP");
+}
+#endif
+
 #ifdef USE_WS5500
 // Startup Ethernet
 bool initEthernet()
 {
-    if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
-                                                   ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
-        WiFi.onEvent(WiFiEvent);
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
-#endif
-        new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
-        return true;
-    }
+    if (!config.network.eth_enabled)
+        return false;
 
-    return false;
+    // Register before begin(): static config can fire ETH_GOT_IP immediately
+    WiFi.onEvent(WiFiEvent);
+
+    if (!ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST, ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))
+        return false;
+
+    applyEthStaticIp();
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+    createSSLCert(); // For WebServer
+#endif
+    new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
+    return true;
 }
 #endif
 
@@ -120,6 +139,9 @@ bool initEthernet()
 // Startup Ethernet
 bool initEthernet()
 {
+    if (!config.network.eth_enabled)
+        return false;
+
     // Configure CH390
     ch390_config_t ch390_conf = CH390_DEFAULT_CONFIG();
     ch390_conf.spi_host = SPI3_HOST;
@@ -134,16 +156,19 @@ bool initEthernet()
     ch390_conf.reset_gpio = -1;
 #endif
     ch390_conf.spi_clock_mhz = 20;
-    if ((config.network.eth_enabled) && (ETH.begin(ch390_conf))) {
-        WiFi.onEvent(WiFiEvent);
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
-        createSSLCert(); // For WebServer
-#endif
-        new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
-        return true;
-    }
 
-    return false;
+    // Register before begin(): static config can fire ETH_GOT_IP immediately
+    WiFi.onEvent(WiFiEvent);
+
+    if (!ETH.begin(ch390_conf))
+        return false;
+
+    applyEthStaticIp();
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+    createSSLCert(); // For WebServer
+#endif
+    new concurrency::Periodic("EthConnect", ethNetworkConnectedPoll);
+    return true;
 }
 #endif
 
