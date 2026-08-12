@@ -542,7 +542,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
-        disableBluetooth();
+        // No unconditional disableBluetooth() here: this branch narrows it to the commits that
+        // actually reboot, a few lines below. Keeping develop's eager call as well would disable
+        // the radio on every commit and double-count it.
         LOG_INFO("Commit settings edit transaction");
         hasOpenEditTransaction = false;
         deferredEditSegments = 0;
@@ -1384,12 +1386,13 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     case meshtastic_ModuleConfig_serial_tag:
         LOG_INFO("Set module config: Serial");
         // No architecture guard: the check and the store below must agree on every platform.
-        // disableBluetooth() self-guards on HAS_BLUETOOTH, so it is empty where there is no radio.
         if (!serialConfigIsValid(c.payload_variant.serial)) {
             LOG_ERROR("Invalid serial config");
             return false;
         }
-        disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
+        // No disableBluetooth() here. It is driven by shouldReboot at the end of this function, so
+        // a real serial change still disables the radio while a no-op write leaves it alone -
+        // calling it eagerly here would disable Bluetooth even when nothing changed.
         moduleConfig.has_serial = true;
         shouldReboot = !protobufsEqual<meshtastic_ModuleConfig_SerialConfig_size>(
             &meshtastic_ModuleConfig_SerialConfig_msg, &moduleConfig.serial, &c.payload_variant.serial);
