@@ -62,6 +62,8 @@ BuildRequires: pkgconfig(libbsd-overlay)
 %endif
 
 Requires:      systemd-udev
+# bluetoothd and the 'bluetooth' group, needed for BLE peripheral support
+Recommends:    bluez
 
 # Declare that this package provides the user/group it creates in %pre
 # Required for Fedora 43+ which tracks users/groups as RPM dependencies

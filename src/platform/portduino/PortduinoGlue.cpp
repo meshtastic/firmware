@@ -85,23 +85,27 @@ char stdoutBuffer[512];
 void setBluetoothEnable(bool enable)
 {
 #ifdef MESHTASTIC_LINUX_BLE
+    // Disable is not gated on the config flags: if BLE is running it must always be
+    // stoppable, even after the device config was switched off underneath it.
+    if (!enable) {
+        if (linuxBluetooth) {
+            // Stop advertising only; a live phone connection survives PowerFSM state
+            // dips.
+            linuxBluetooth->shutdown();
+        }
+        return;
+    }
     // Opt-in twice: the config.yaml Bluetooth section must enable BLE on this
     // host, and the regular device config (like every other platform) must have
     // Bluetooth on.
     if (!portduino_config.bluetooth_enabled || !config.bluetooth.enabled)
         return;
-    if (enable) {
-        if (!linuxBluetooth) {
-            LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
-            linuxBluetooth = new LinuxBluetooth();
-            linuxBluetooth->setup();
-        } else {
-            linuxBluetooth->resumeAdvertising();
-        }
-    } else if (linuxBluetooth) {
-        // Stop advertising only; a live phone connection survives PowerFSM state
-        // dips.
-        linuxBluetooth->shutdown();
+    if (!linuxBluetooth) {
+        LOG_INFO("Init LinuxBluetooth (adapter %s)", portduino_config.bluetooth_adapter.c_str());
+        linuxBluetooth = new LinuxBluetooth();
+        linuxBluetooth->setup();
+    } else {
+        linuxBluetooth->resumeAdvertising();
     }
 #endif
 }
@@ -256,7 +260,13 @@ void getMacAddr(uint8_t *dmac)
             return;
         }
         struct hci_dev_info di = {0};
-        di.dev_id = 0;
+        // Read the adapter configured for BLE (Bluetooth.AdapterId) so the node
+        // identity matches the advertised adapter; a name that doesn't parse as
+        // hci<N> falls back to hci0, preserving the pre-BLE behavior.
+        unsigned adapterIndex = 0;
+        if (sscanf(portduino_config.bluetooth_adapter.c_str(), "hci%u", &adapterIndex) != 1)
+            adapterIndex = 0;
+        di.dev_id = adapterIndex;
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value
