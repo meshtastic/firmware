@@ -131,14 +131,14 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, unsigned long syncWordHead
             if (!(irq & syncWordHeaderValidFlag)) {
                 // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
                 activeReceiveStart = 0;
-                LOG_DEBUG("Ignore false preamble detection");
+                LOG_TRACE("Ignore false preamble detection");
                 return false;
             } else {
                 uint32_t maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
                 if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
                     // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
                     activeReceiveStart = 0;
-                    LOG_DEBUG("Ignore false header detection");
+                    LOG_TRACE("Ignore false header detection");
                     return false;
                 }
             }
@@ -187,7 +187,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueue for send", p);
 
-    LOG_DEBUG("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d", txGood, txRelay, rxGood, rxBad);
+    LOG_TRACE("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d", txGood, txRelay, rxGood, rxBad);
     bool dropped = false;
     ErrorCode res = txQueue.enqueue(p, &dropped) ? ERRNO_OK : ERRNO_UNKNOWN;
 
@@ -290,7 +290,7 @@ void RadioLibInterface::updateNoiseFloor()
 
     currentNoiseFloor = getAverageNoiseFloorInternal();
 
-    LOG_DEBUG("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
+    LOG_TRACE("Noise floor: %d dBm (samples: %d, latest: %d dBm)", currentNoiseFloor, getNoiseFloorSampleCountInternal(), rssi);
 }
 
 uint8_t RadioLibInterface::getNoiseFloorSampleCountInternal() const
@@ -468,7 +468,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         txp = txQueue.dequeue();
                         assert(txp);
                         startSend(txp);
-                        LOG_DEBUG("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
+                        LOG_TRACE("%d packets in TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }
             }
@@ -505,7 +505,7 @@ void RadioLibInterface::setTransmitDelay()
         startTransmitTimer(true);
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
-        LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
+        LOG_TRACE("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
         startTransmitTimerRebroadcast(p);
     }
 }
@@ -539,7 +539,7 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
         p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
         bool dropped = false;
         if (txQueue.enqueue(p, &dropped)) {
-            LOG_DEBUG("Move queued packet to late rebroadcast window %dms from now", p->tx_after - millis());
+            LOG_TRACE("Move queued packet to late rebroadcast window %ums from now", (uint32_t)(p->tx_after - millis()));
         } else {
             packetPool.release(p);
         }
