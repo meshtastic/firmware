@@ -128,11 +128,13 @@ bool Channels::ensureLicensedOperation()
         }
         auto &channelSettings = channel.settings;
         if (strcasecmp(channelSettings.name, Channels::adminChannel) == 0) {
-            channel.role = meshtastic_Channel_Role_DISABLED;
-            channelSettings.psk.bytes[0] = 0;
-            channelSettings.psk.size = 0;
-            hasEncryptionOrAdmin = true;
-            channels.setChannel(channel);
+            if (channel.role != meshtastic_Channel_Role_DISABLED || channelSettings.psk.size > 0) {
+                channel.role = meshtastic_Channel_Role_DISABLED;
+                channelSettings.psk.bytes[0] = 0;
+                channelSettings.psk.size = 0;
+                hasEncryptionOrAdmin = true;
+                channels.setChannel(channel);
+            }
 
         } else if (channelSettings.psk.size > 0) {
             channelSettings.psk.bytes[0] = 0;
@@ -156,7 +158,9 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
     strncpy(channelSettings.name, "", sizeof(channelSettings.name));
-    channelSettings.module_settings.position_precision = 13; // default to sending location on the primary channel
+    // Position sharing is OPT-IN: precision 0 means "do not broadcast location". A user (or the phone app)
+    // must explicitly raise precision to start sharing. See the one-time opt-in migration in NodeDB.cpp.
+    channelSettings.module_settings.position_precision = 0;
     channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
@@ -436,9 +440,11 @@ bool cryptoKeyIsPublic(const CryptoKey &key)
     return false;
 }
 
-bool Channels::usesPublicKey(ChannelIndex chIndex)
+bool channelFileUsesPublicKey(const meshtastic_ChannelFile &cf, ChannelIndex chIndex)
 {
-    const meshtastic_Channel &ch = getByIndex(chIndex);
+    if (chIndex >= cf.channels_count)
+        return false;
+    const meshtastic_Channel &ch = cf.channels[chIndex];
     if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED)
         return false;
 
@@ -446,10 +452,14 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     if (psk.size == 0) {
         // Secondary channels inherit the primary key when unset; primary size==0 means encryption disabled.
         if (ch.role == meshtastic_Channel_Role_SECONDARY) {
-            // Guard against malformed configs with no PRIMARY channel (primaryIndex could point back to us).
-            if (primaryIndex == chIndex)
-                return true; // fail closed: treat as public
-            return usesPublicKey(primaryIndex);
+            // Resolve against the PRIMARY channel's key. The singleton's primaryIndex isn't available in
+            // the raw-struct path (this runs during boot migration before initDefaults), so scan by role.
+            // Fail closed to "public" if no distinct PRIMARY is found (malformed config).
+            for (pb_size_t p = 0; p < cf.channels_count; p++) {
+                if (cf.channels[p].role == meshtastic_Channel_Role_PRIMARY)
+                    return (p == chIndex) ? true : channelFileUsesPublicKey(cf, (ChannelIndex)p);
+            }
+            return true;
         }
         return true;
     }
@@ -460,6 +470,13 @@ bool Channels::usesPublicKey(ChannelIndex chIndex)
     }
 
     return (psk.size == sizeof(defaultpsk) && memcmp(psk.bytes, defaultpsk, sizeof(defaultpsk) - 1) == 0);
+}
+
+bool Channels::usesPublicKey(ChannelIndex chIndex)
+{
+    // Delegates to the pure, on-disk-struct variant so the two can't drift. getByIndex() reads the same
+    // global channelFile, so this is behavior-preserving for the position-precision clamp callers.
+    return channelFileUsesPublicKey(channelFile, chIndex);
 }
 
 bool Channels::isWellKnownChannel(ChannelIndex chIndex)
@@ -478,6 +495,21 @@ bool Channels::isWellKnownChannel(ChannelIndex chIndex)
             return true;
     }
     return false;
+}
+
+bool Channels::isEventChannel(ChannelIndex chIndex)
+{
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    static_assert(sizeof(configuredEventPsk) == 16 || sizeof(configuredEventPsk) == 32,
+                  "USERPREFS_CHANNEL_0_PSK must be an AES-128 or AES-256 key");
+    CryptoKey effectiveKey = getKey(chIndex);
+    return effectiveKey.length == sizeof(configuredEventPsk) &&
+           memcmp(effectiveKey.bytes, configuredEventPsk, sizeof(configuredEventPsk)) == 0;
+#else
+    (void)chIndex;
+    return false;
+#endif
 }
 
 bool Channels::hasDefaultChannel()
@@ -501,7 +533,7 @@ bool Channels::hasDefaultChannel()
  */
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
-    if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
+    if (chIndex >= getNumChannels() || getHash(chIndex) != channelHash) {
         // LOG_DEBUG("Skip channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;

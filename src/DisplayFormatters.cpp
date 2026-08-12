@@ -27,6 +27,9 @@ const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaC
     case PRESET(MEDIUM_FAST):
         return useShortName ? "MedF" : "MediumFast";
         break;
+    case PRESET(MEDIUM_TURBO):
+        return useShortName ? "MedT" : "MediumTurbo";
+        break;
     case PRESET(LONG_SLOW):
         return useShortName ? "LongS" : "LongSlow";
         break;

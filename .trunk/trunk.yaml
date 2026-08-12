@@ -4,7 +4,7 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.10.0
+      ref: v1.10.2
       uri: https://github.com/trunk-io/plugins
 lint:
   # Custom file set + formatter that rewrites Unicode em-dash (U+2014, UTF-8
@@ -66,22 +66,50 @@ lint:
           run: ${workspace}/bin/lint-ifdef-complexity.sh ${target}
           success_codes: [0]
           read_output_from: stdout
+    # Flags node/packet IDs logged as bare %08x instead of the 0x%08x convention in
+    # src/mesh/RadioInterface.cpp. Emits "note", trunk's only non-blocking level, so it
+    # advises without gating - including on the known pre-existing sites, which are left
+    # unlisted so they get cleaned up by whoever next edits those files.
+    - name: node-id-format
+      files: [cpp-sources]
+      commands:
+        - name: lint
+          output: regex
+          parse_regex: (?P<path>.+):(?P<line>\d+):(?P<col>\d+):(?P<severity>\w+):(?P<message>.+):(?P<code>[a-z-]+)
+          run: ${workspace}/bin/lint-node-id-format.sh ${target}
+          success_codes: [0]
+          read_output_from: stdout
+    # Flags a UNITY_END() not wrapped in exit(). A bare one ends the reporting, not the suite:
+    # the runtime keeps calling loop(), so the process never exits, its sandbox is deleted
+    # underneath it, and its .gcda and LeakSanitizer report never flush. Emits "note" because the
+    # enforcing half is bin/pio-test-isolate.sh, which catches an actual survivor at run time.
+    - name: unity-exit
+      files: [cpp-sources]
+      commands:
+        - name: lint
+          output: regex
+          parse_regex: (?P<path>.+):(?P<line>\d+):(?P<col>\d+):(?P<severity>\w+):(?P<message>.+):(?P<code>[a-z-]+)
+          run: ${workspace}/bin/lint-unity-exit.sh ${target}
+          success_codes: [0]
+          read_output_from: stdout
   enabled:
     - ascii-dash@SYSTEM
     - too-many-defined@SYSTEM
-    - checkov@3.2.529
-    - renovate@43.150.0
-    - prettier@3.8.3
-    - trufflehog@3.95.3
+    - node-id-format@SYSTEM
+    - unity-exit@SYSTEM
+    - checkov@3.3.8
+    - renovate@44.2.3
+    - prettier@3.9.6
+    - trufflehog@3.96.0
     - yamllint@1.38.0
     - bandit@1.9.4
-    - trivy@0.70.0
+    - trivy@0.72.0
     - taplo@0.10.0
-    - ruff@0.15.13
+    - ruff@0.16.0
     - isort@8.0.1
-    - markdownlint@0.48.0
+    - markdownlint@0.49.1
     - oxipng@10.1.1
-    - svgo@4.0.1
+    - svgo@4.0.2
     - actionlint@1.7.12
     - flake8@7.3.0
     - hadolint@2.14.0
@@ -102,6 +130,21 @@ lint:
     - linters: [gitleaks]
       paths:
         - test/fixtures/nodedb/seed_v25_*.jsonl
+    # Deliberately broken YAML: these are the inputs to bin/test-config-check.sh,
+    # which asserts that `meshtasticd --check` reports each planted fault. Prettier
+    # rejects the duplicate keys and bad indentation that are the whole point of
+    # them, so the directory is exempt. The README there is normal prose and stays
+    # linted.
+    - linters: [ALL]
+      paths:
+        - test/fixtures/portduino-config/**/*.yaml
+    # checkov/CKV_SECRET_6 flags the commented-out "large4cats" example,
+    # which is the public default credential for the meshtastic.org MQTT
+    # broker rather than a real secret. Ignore the whole file so the
+    # example config stays free of lint-suppression comments.
+    - linters: [ALL]
+      paths:
+        - userPrefs.jsonc
     # The UA font's em/en dashes live only in trailing comments documenting
     # each glyph's codepoint (e.g. "8212=:2549"); rewriting them would make
     # those docs inaccurate. Glyph byte data is unaffected either way.

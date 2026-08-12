@@ -38,6 +38,8 @@ class menuHandler
         RemoveFavorite,
         TestMenu,
         NumberTest,
+        EnvironmentTelemetryMenu,
+        EnvironmentTelemetrySourceMenu,
         WifiToggleMenu,
         BluetoothToggleMenu,
         ScreenOptionsMenu,
@@ -57,7 +59,10 @@ class menuHandler
         MessageBubblesMenu,
         ThemeMenu,
         HamModeConfirm,
-        LicensedToNormalConfirm
+        LicensedToNormalConfirm,
+#if HAS_LORA_FEM
+        LoraFemLnaToggleMenu
+#endif
     };
     static screenMenus menuQueue;
     static uint32_t pickedNodeNum; // node selected by NodePicker for ManageNodeMenu
@@ -104,6 +109,8 @@ class menuHandler
     static void traceRouteMenu();
     static void testMenu();
     static void numberTest();
+    static void environmentTelemetryMenu();
+    static void environmentTelemetrySourceMenu();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
     static void screenOptionsMenu();
@@ -116,6 +123,13 @@ class menuHandler
     static void textMessageMenu();
     static void hamModeConfirmMenu();
     static void licensedToNormalConfirmMenu();
+#if HAS_LORA_FEM
+    static void LoRaFEMLNAToggleMenu();
+#endif
+
+    // Lifted out of its banner-callback lambda so it is reachable without a Screen. The lambda only
+    // ever runs via screen->showOverlayBanner(), which is why nothing here was unit-testable.
+    static void toggleNodeMuted(uint32_t nodeNum); // uint32_t, matching pickedNodeNum above
 
   private:
     static void saveUIConfig();
@@ -151,6 +165,9 @@ using NodeNameOption = MenuOption<bool>;
 using PositionMenuOption = MenuOption<int>;
 using ManageNodeOption = MenuOption<int>;
 using ClockFaceOption = MenuOption<bool>;
+#if HAS_LORA_FEM
+using LoRaFEMLNAToggleOption = MenuOption<meshtastic_Config_LoRaConfig_FEM_LNA_Mode>;
+#endif
 
 } // namespace graphics
 #endif
