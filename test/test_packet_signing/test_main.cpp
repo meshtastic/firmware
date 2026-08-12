@@ -109,6 +109,27 @@ class MockNodeDB : public NodeDB
         return n->long_name;
     }
 
+    const char *shortName(NodeNum num)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        return n->short_name;
+    }
+
+    meshtastic_Config_DeviceConfig_Role roleOf(NodeNum num)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        return n->role;
+    }
+
+    void setRole(NodeNum num, meshtastic_Config_DeviceConfig_Role role)
+    {
+        meshtastic_NodeInfoLite *n = getMeshNode(num);
+        TEST_ASSERT_NOT_NULL(n);
+        n->role = role;
+    }
+
     std::vector<meshtastic_NodeInfoLite> testNodes;
 };
 
@@ -1569,6 +1590,212 @@ void test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name(void)
                                      "non-signer identity learning must be unaffected");
 }
 
+// ===========================================================================
+// Group K - identity pinning for nodes we hold a public key for
+//
+// The N group above pins the *signer* case: a node that has proven it signs. Holding a public key
+// is the wider condition, and the one that matters in practice - a node's key is public, so an
+// impersonator can replay it and sail through updateUser's key pin while rewriting every other
+// identity field behind that key. Once we hold a key, only a verified signature may move the
+// identity, whatever config.security.packet_signature_policy says.
+// ===========================================================================
+
+// Seed a keyed remote node and return the User payload an impersonator would craft: the genuine
+// (public!) key, so the key pin cannot be what refuses it, plus fresh identity fields.
+static meshtastic_User seedKeyedNodeAndForgeUser(bool signerBit = false)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE);
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+    if (signerBit)
+        mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+    mockNodeDB->setRole(REMOTE_NODE, meshtastic_Config_DeviceConfig_Role_CLIENT);
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.is_licensed = owner.is_licensed;
+    strcpy(user.long_name, "Spoofed");
+    strcpy(user.short_name, "SPF");
+    user.role = meshtastic_Config_DeviceConfig_Role_ROUTER;
+    user.public_key.size = 32;
+    memcpy(user.public_key.bytes, pub, 32);
+    return user;
+}
+
+// K1: the core invariant. Key known, signer bit clear (never seen it sign), matching key replayed -
+// the identity write must still be refused.
+void test_K1_unsigned_update_for_keyed_nonsigner_refused(void)
+{
+    meshtastic_User user = seedKeyedNodeAndForgeUser();
+
+    TEST_ASSERT_FALSE_MESSAGE(mockNodeDB->updateUser(REMOTE_NODE, user, 0, /*xeddsaSigned=*/false),
+                              "unsigned identity update must be refused once we hold a key");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Genuine", mockNodeDB->longName(REMOTE_NODE), "stored long name must not move");
+}
+
+// K2: every identity field the refusal has to cover, not just the long name - short name and role
+// are equally spoofable and equally user-visible.
+void test_K2_unsigned_update_moves_no_identity_field(void)
+{
+    meshtastic_User user = seedKeyedNodeAndForgeUser();
+    mockNodeDB->setLongName(REMOTE_NODE, "Genuine");
+
+    TEST_ASSERT_FALSE(mockNodeDB->updateUser(REMOTE_NODE, user, 3, /*xeddsaSigned=*/false));
+    TEST_ASSERT_EQUAL_STRING("Genuine", mockNodeDB->longName(REMOTE_NODE));
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("", mockNodeDB->shortName(REMOTE_NODE), "short name must not move");
+    TEST_ASSERT_EQUAL_MESSAGE(meshtastic_Config_DeviceConfig_Role_CLIENT, mockNodeDB->roleOf(REMOTE_NODE), "role must not move");
+}
+
+// K3: the refusal is targeted, not a blanket freeze - the same update signed still lands, and does
+// so without the node ever having been marked a signer.
+void test_K3_signed_update_for_keyed_nonsigner_accepted(void)
+{
+    meshtastic_User user = seedKeyedNodeAndForgeUser();
+
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->updateUser(REMOTE_NODE, user, 0, /*xeddsaSigned=*/true),
+                             "a verified-signed update must still be learned");
+    TEST_ASSERT_EQUAL_STRING("Spoofed", mockNodeDB->longName(REMOTE_NODE));
+    TEST_ASSERT_EQUAL(meshtastic_Config_DeviceConfig_Role_ROUTER, mockNodeDB->roleOf(REMOTE_NODE));
+}
+
+// K4: first contact is unaffected - with no key on file there is nothing to pin, so TOFU learning
+// (the ordinary way a mesh populates) still works unsigned.
+void test_K4_unsigned_first_contact_still_learns_identity(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(REMOTE_NODE); // no key, no signer bit
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    strcpy(user.long_name, "FirstContact");
+    user.public_key.size = 32;
+    memcpy(user.public_key.bytes, pub, 32);
+
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->updateUser(REMOTE_NODE, user, 0, /*xeddsaSigned=*/false),
+                             "TOFU first contact must still be learned");
+    TEST_ASSERT_EQUAL_STRING("FirstContact", mockNodeDB->longName(REMOTE_NODE));
+
+    // ...and the very next unsigned update is already pinned by the key we just learned.
+    strcpy(user.long_name, "Spoofed");
+    TEST_ASSERT_FALSE_MESSAGE(mockNodeDB->updateUser(REMOTE_NODE, user, 0, /*xeddsaSigned=*/false),
+                              "the key learned on first contact must immediately pin the identity");
+    TEST_ASSERT_EQUAL_STRING("FirstContact", mockNodeDB->longName(REMOTE_NODE));
+}
+
+// K5: policy independence. Compatible is the production default and is the mode where the router
+// hands unsigned traffic straight through, so it is exactly where this guard has to hold.
+void test_K5_refusal_holds_under_every_signature_policy(void)
+{
+    const meshtastic_Config_SecurityConfig_PacketSignaturePolicy policies[] = {
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE,
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED,
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT,
+    };
+    for (const auto policy : policies) {
+        mockNodeDB->clearTestNodes();
+        setPolicy(policy);
+        meshtastic_User user = seedKeyedNodeAndForgeUser();
+
+        TEST_ASSERT_FALSE_MESSAGE(mockNodeDB->updateUser(REMOTE_NODE, user, 0, /*xeddsaSigned=*/false),
+                                  "identity pinning must not depend on the signature policy");
+        TEST_ASSERT_EQUAL_STRING("Genuine", mockNodeDB->longName(REMOTE_NODE));
+    }
+}
+
+// K6: our own record is exempt - MeshService republishes owner through updateUser unsigned, and
+// freezing that would stop the device learning its own name.
+void test_K6_own_identity_update_is_exempt(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    mockNodeDB->addNode(LOCAL_NODE);
+    mockNodeDB->setPublicKey(LOCAL_NODE, pub);
+    mockNodeDB->setLongName(LOCAL_NODE, "Old");
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    strcpy(user.long_name, "New");
+    user.public_key.size = 32;
+    memcpy(user.public_key.bytes, pub, 32);
+
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->updateUser(mockNodeDB->getNodeNum(), user, 0, /*xeddsaSigned=*/false),
+                             "our own unsigned identity update must still land");
+    TEST_ASSERT_EQUAL_STRING("New", mockNodeDB->longName(LOCAL_NODE));
+}
+
+// K7: the module boundary. An unsigned NodeInfo *broadcast* from a keyed non-signer is legitimate
+// traffic (the node may predate signing), so NodeInfoModule must not drop the packet - dropping it
+// would kill the want_response exchange. The identity claim inside it is still refused one layer
+// down, which is what actually protects the stored name.
+void test_K7_unsigned_broadcast_from_keyed_nonsigner_survives_but_cannot_rename(void)
+{
+    meshtastic_User user = seedKeyedNodeAndForgeUser();
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeNodeInfoPacket(false);
+
+    TEST_ASSERT_FALSE_MESSAGE(shim.handleReceivedProtobuf(mp, &user),
+                              "a keyed non-signer's unsigned NodeInfo broadcast must not be dropped outright");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("Genuine", mockNodeDB->longName(REMOTE_NODE),
+                                     "...but it must not rewrite the stored identity");
+}
+
+// K8: same through the unicast path, which is never signed off ham - the case a NodeInfo request
+// exchange actually produces.
+void test_K8_unsigned_unicast_nodeinfo_from_keyed_nonsigner_cannot_rename(void)
+{
+    meshtastic_User user = seedKeyedNodeAndForgeUser();
+
+    NodeInfoTestShim shim;
+    meshtastic_MeshPacket mp = makeDecoded(REMOTE_NODE, LOCAL_NODE, meshtastic_PortNum_NODEINFO_APP, SMALL_PAYLOAD);
+    mp.xeddsa_signed = false;
+
+    TEST_ASSERT_FALSE(shim.handleReceivedProtobuf(mp, &user));
+    TEST_ASSERT_EQUAL_STRING("Genuine", mockNodeDB->longName(REMOTE_NODE));
+}
+
+// K9: the predicate itself, across the states that drive it.
+void test_K9_requires_signed_identity_update_matrix(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+
+    TEST_ASSERT_FALSE_MESSAGE(mockNodeDB->requiresSignedIdentityUpdate(REMOTE_NODE), "unknown node: nothing to pin");
+
+    mockNodeDB->addNode(REMOTE_NODE);
+    TEST_ASSERT_FALSE_MESSAGE(mockNodeDB->requiresSignedIdentityUpdate(REMOTE_NODE), "known but keyless node: nothing to pin");
+
+    mockNodeDB->setPublicKey(REMOTE_NODE, pub);
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->requiresSignedIdentityUpdate(REMOTE_NODE), "a stored key alone must pin the identity");
+
+    mockNodeDB->setSignerBit(REMOTE_NODE, true);
+    TEST_ASSERT_TRUE(mockNodeDB->requiresSignedIdentityUpdate(REMOTE_NODE));
+}
+
+#if WARM_NODE_COUNT > 0
+// K10: hot-store eviction must not forget the pin. The warm tier keeps the key, so an attacker
+// cannot wait a node out of the hot store and then rename it with a replayed key.
+void test_K10_warm_tier_key_still_pins_identity(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    TEST_ASSERT_TRUE(mockNodeDB->warmStore.absorb(REMOTE_NODE, 1, pub));
+    TEST_ASSERT_NULL(mockNodeDB->getMeshNode(REMOTE_NODE));
+    TEST_ASSERT_TRUE_MESSAGE(mockNodeDB->requiresSignedIdentityUpdate(REMOTE_NODE),
+                             "a warm-tier key must pin the identity just like a hot one");
+
+    meshtastic_User user = meshtastic_User_init_zero;
+    strcpy(user.long_name, "Spoofed");
+    user.public_key.size = 32;
+    memcpy(user.public_key.bytes, pub, 32);
+
+    TEST_ASSERT_FALSE_MESSAGE(mockNodeDB->updateUser(REMOTE_NODE, user, 0, /*xeddsaSigned=*/false),
+                              "warm-evicted keyed node must not be renameable by an unsigned update");
+    TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(REMOTE_NODE),
+                             "a refused update must not re-admit the node to the hot store");
+}
+#endif
+
 void test_L1_licensed_nodeinfo_publishes_public_key(void)
 {
     owner.is_licensed = true;
@@ -1984,6 +2211,20 @@ void setup()
     RUN_TEST(test_N5_unsigned_unicast_nodeinfo_from_signer_does_not_change_name);
     RUN_TEST(test_N6_signed_unicast_nodeinfo_from_signer_changes_name);
     RUN_TEST(test_N7_unsigned_unicast_nodeinfo_from_nonsigner_changes_name);
+
+    printf("\n=== Group K: identity pinning for keyed nodes ===\n");
+    RUN_TEST(test_K1_unsigned_update_for_keyed_nonsigner_refused);
+    RUN_TEST(test_K2_unsigned_update_moves_no_identity_field);
+    RUN_TEST(test_K3_signed_update_for_keyed_nonsigner_accepted);
+    RUN_TEST(test_K4_unsigned_first_contact_still_learns_identity);
+    RUN_TEST(test_K5_refusal_holds_under_every_signature_policy);
+    RUN_TEST(test_K6_own_identity_update_is_exempt);
+    RUN_TEST(test_K7_unsigned_broadcast_from_keyed_nonsigner_survives_but_cannot_rename);
+    RUN_TEST(test_K8_unsigned_unicast_nodeinfo_from_keyed_nonsigner_cannot_rename);
+    RUN_TEST(test_K9_requires_signed_identity_update_matrix);
+#if WARM_NODE_COUNT > 0
+    RUN_TEST(test_K10_warm_tier_key_still_pins_identity);
+#endif
 
     printf("\n=== Group L: licensed identity and plaintext signing ===\n");
     RUN_TEST(test_L1_licensed_nodeinfo_publishes_public_key);

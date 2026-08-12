@@ -3535,10 +3535,14 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex, bool xeddsaSigned)
 {
-    // Only a signed update may change the identity of a proven signer; our own record is exempt.
-    // Checked before getOrCreateMeshNode so a refusal cannot evict; isKnownXeddsaSigner covers the warm tier.
-    if (nodeId != getNodeNum() && isKnownXeddsaSigner(nodeId) && !xeddsaSigned) {
-        LOG_WARN("Refuse unsigned identity update for 0x%08x that previously signed", nodeId);
+    // Once we hold a public key for a node - or have seen it sign - only a verified signature may
+    // move its identity; our own record is exempt. Note this is strictly wider than the key pin
+    // below: that pin refuses a *different* key, but a node's key is public, so an impersonator
+    // can replay the genuine key and rewrite everything around it (name, short name, role,
+    // hw_model, bitfield, channel). Policy-independent by design - see
+    // requiresSignedIdentityUpdate(). Checked before getOrCreateMeshNode so a refusal cannot evict.
+    if (nodeId != getNodeNum() && !xeddsaSigned && requiresSignedIdentityUpdate(nodeId)) {
+        LOG_WARN("Refuse unsigned identity update for 0x%08x, key/signature already known", nodeId);
         return false;
     }
 
@@ -4040,6 +4044,25 @@ bool NodeDB::isKnownXeddsaSigner(NodeNum n)
 #if WARM_NODE_COUNT > 0
     return warmStore.hasXeddsaSigned(n);
 #else
+    return false;
+#endif
+}
+
+bool NodeDB::requiresSignedIdentityUpdate(NodeNum n)
+{
+    // Kept unconditional: the signed bit can outlive the key (warm re-admission restores the bit
+    // even when the key slot came back empty), and this is the pre-existing guard.
+    if (isKnownXeddsaSigner(n))
+        return true;
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_XEDDSA)
+    // Delegated rather than reimplemented so the tiers checked here stay in lockstep with the key
+    // pin itself (hot store, then warm; never an opportunistic cache key, which an attacker can
+    // seed - the trust loop #11116 closed on the decrypt path).
+    meshtastic_NodeInfoLite_public_key_t key = {0, {0}};
+    return copyPublicKeyAuthoritative(n, key);
+#else
+    // No signature can ever be verified on this build, so demanding one would freeze every keyed
+    // node's identity forever. Leave those builds on the signer-bit-only behavior.
     return false;
 #endif
 }

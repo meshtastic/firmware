@@ -437,6 +437,16 @@ class NodeDB
     /// xeddsa-signed bit - hot-only gates would let a warm-evicted signer be impersonated with unsigned frames.
     bool isKnownXeddsaSigner(NodeNum n);
 
+    /// True when an identity (NodeInfo/User) write for n must carry a verified XEdDSA signature:
+    /// we hold an authoritative public key for n, or n has proven it signs. Holding a key is the
+    /// wider of the two - a key is an identity claim we have already pinned, and the key pin in
+    /// updateUser() only stops the key itself from moving, not the name/role/bitfield behind it
+    /// (anyone can replay a node's public key). Deliberately independent of
+    /// config.security.packet_signature_policy: Compatible, Balanced and Strict all pin a keyed
+    /// node's identity. Always false where no frame can be signed (PKI or XEdDSA compiled out),
+    /// so those builds keep learning identities as before.
+    bool requiresSignedIdentityUpdate(NodeNum n);
+
     /// Provenance of a bare-key commit that deliberately bypasses updateUser()'s
     /// User-payload / TOFU-pin path. Maps to the TrafficManagement cache's `proven` flag:
     /// only ManuallyVerified vouches for possession of exactly this key.

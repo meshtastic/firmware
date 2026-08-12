@@ -1098,15 +1098,19 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
         return ProcessMessage::CONTINUE;
     }
 
-    // A known signer's NodeInfo arriving unsigned is unauthenticated and must not drive any
-    // cache or identity write below. isKnownXeddsaSigner covers the warm tier too - a forged
-    // unsigned NodeInfo carrying a warm-evicted signer's real (public!) key passes the key pin.
+    // Unsigned NodeInfo for a node whose key we hold (or that has proven it signs) is
+    // unauthenticated and must not drive any cache or identity write below - the same bar
+    // NodeDB::updateUser applies, kept in lockstep on purpose: this cache is served back as
+    // spoofed replies and rehydrates re-admitted nodes' names, so a name updateUser refused must
+    // not survive here. requiresSignedIdentityUpdate covers the warm tier too - a forged unsigned
+    // NodeInfo carrying a warm-evicted node's real (public!) key passes the key pin.
     const bool isNodeInfo = mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP;
-    const bool unauthenticatedSigner = isNodeInfo && !mp.xeddsa_signed && nodeDB && nodeDB->isKnownXeddsaSigner(getFrom(&mp));
+    const bool unauthenticatedIdentity =
+        isNodeInfo && !mp.xeddsa_signed && nodeDB && nodeDB->requiresSignedIdentityUpdate(getFrom(&mp));
 
     // Learn NodeInfo payloads into the dedicated NodeInfo cache, and refresh the tier-3
     // role cache for any node we already track (keeps the dedup role exception current).
-    if (isNodeInfo && !unauthenticatedSigner) {
+    if (isNodeInfo && !unauthenticatedIdentity) {
         cacheNodeInfoPacket(mp);
         updateCachedRoleFromNodeInfo(mp);
     }
@@ -1120,10 +1124,10 @@ ProcessMessage TrafficManagementModule::handleReceived(const meshtastic_MeshPack
     if (cfg.nodeinfo_direct_response_max_hops > 0 && mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
         mp.decoded.want_response && !isBroadcast(mp.to) && !isToUs(&mp) && !isFromUs(&mp)) {
         if (shouldRespondToNodeInfo(&mp, true)) {
-            // Unicast NodeInfo is never signed, so a known signer's identity claim here is
+            // Unicast NodeInfo is never signed off ham, so a keyed node's identity claim here is
             // unauthenticated: don't overwrite its stored name. The cached response is unaffected.
             meshtastic_User requester = meshtastic_User_init_zero;
-            if (!unauthenticatedSigner &&
+            if (!unauthenticatedIdentity &&
                 pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &requester)) {
                 // Re-enters this module: updateUser's write-through hook calls back into
                 // onNodeIdentityCommitted, which takes cacheLock - safe here because this

@@ -1020,8 +1020,16 @@ static void test_tm_nodeinfo_cache_pinsAgainstWarmTierKey(void)
     uint8_t out[32] = {0};
     TEST_ASSERT_FALSE(module.copyPublicKey(kTargetNode, out, nullptr));
 
-    // The genuine key (matching the warm tier) is accepted.
-    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x55));
+    // Matching key but unsigned: holding a key for the node means only a signature-verified
+    // frame may drive an identity write, so the pin is not enough on its own.
+    module.handleReceived(makeNodeInfoPacketWithKey(kTargetNode, "unsigned", 0x55));
+    TEST_ASSERT_FALSE_MESSAGE(module.copyPublicKey(kTargetNode, out, nullptr),
+                              "unsigned identity for a keyed node must not be cached");
+
+    // The genuine key (matching the warm tier), signature-verified, is accepted.
+    meshtastic_MeshPacket genuine = makeNodeInfoPacketWithKey(kTargetNode, "genuine", 0x55);
+    genuine.xeddsa_signed = true;
+    module.handleReceived(genuine);
     TEST_ASSERT_TRUE(module.copyPublicKey(kTargetNode, out, nullptr));
     TEST_ASSERT_EQUAL_UINT8(0x55, out[0]);
     TEST_ASSERT_EQUAL_UINT8(0x55, out[31]);

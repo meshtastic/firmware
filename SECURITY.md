@@ -37,6 +37,8 @@ There is no central authority to sign node keys. The first public key a node hea
 
 Firmware 2.8.X adds XEdDSA packet signing to further secure node identity claims and the authenticity of subsequent messages. It reuses each node's existing x25519 key pair to produce signatures, so a receiver can verify that a packet came from the holder of the bound key. Once a node has been seen signing, unsigned packets claiming that identity can be rejected.
 
+Binding a key also freezes the identity around it. Once a node has bound a public key for a peer, only a signature-verified update may change that peer's stored name, short name, role, hardware model, or flags; unsigned NodeInfo for that peer is refused. This holds regardless of the configured packet signature policy, because a node's public key is public: without it, an impersonator could replay the genuine key past the key check and rewrite everything around it. The trade-off is that a peer whose firmware predates signing cannot change its advertised name on nodes that already hold its key — the key must be re-established (manual verification or remote admin) or the peer must upgrade to signing firmware.
+
 ### Known limitations
 
 - No perfect forward secrecy. Traffic captured today can be decrypted later if a key is compromised, for example through a lost node or a mishandled channel key.

@@ -54,7 +54,11 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
     NodeNum sourceNum = getFrom(&mp);
     // Broadcasts only: unicast NodeInfo is unsigned off ham, so updateUser refuses the identity
-    // write instead. isKnownXeddsaSigner also covers the warm tier.
+    // write instead. isKnownXeddsaSigner also covers the warm tier. Deliberately signer-only and
+    // NOT widened to requiresSignedIdentityUpdate(): a proven signer always signs broadcasts, so
+    // an unsigned one is forged and the whole packet is dropped, but a merely-keyed node may
+    // legitimately predate signing - dropping its broadcast outright would also kill the
+    // want_response exchange. Its identity claim is still refused, one layer down in updateUser.
     if (nodeDB->isKnownXeddsaSigner(sourceNum) && !mp.xeddsa_signed && isBroadcast(mp.to)) {
         LOG_WARN("Dropping unsigned NodeInfo broadcast from node 0x%08x that previously signed", sourceNum);
         return true;
@@ -63,8 +67,9 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
 
-    // updateUser() refuses the identity write for a known signer sending unsigned (all unicast
-    // NodeInfo), so the exchange above still proceeds but cannot spoof the stored name.
+    // updateUser() refuses the identity write whenever we already hold a key for the sender (or
+    // it has signed before) and this frame is unsigned - which is every unicast NodeInfo off ham.
+    // So the exchange above still proceeds but cannot spoof the stored name.
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel, mp.xeddsa_signed);
 
     bool wasBroadcast = isBroadcast(mp.to);

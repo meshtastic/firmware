@@ -57,6 +57,13 @@ part is deliberately class-deviant and the reason is given under the table.
   - `isKnownXeddsaSigner(n)` - key-agnostic "should this node's signable traffic arrive
     signed", across hot + warm. Gates that check only the hot store would let a
     warm-evicted signer be impersonated with unsigned frames.
+  - `requiresSignedIdentityUpdate(n)` - "must an identity write for n be signature-verified":
+    true once we hold an authoritative key for `n` (hot or warm) **or** `n` has signed before.
+    Wider than the key pin, which only refuses a _different_ key: a node's key is public, so an
+    impersonator can replay it and rewrite the name/role/bitfield around it. Independent of
+    `config.security.packet_signature_policy` - Compatible, Balanced and Strict all pin a keyed
+    node's identity. False where PKI or XEdDSA is compiled out (no frame can be signed there,
+    so demanding a signature would freeze every keyed identity permanently).
   - `getNodeRole(n)` - hot store, then the role cached in the warm tier, else `CLIENT`.
 
 **Capacity** - `MAX_NUM_NODES`:
@@ -190,12 +197,15 @@ paths run in CI. Linear scan in every build - NodeInfo traffic is low-rate.
   hot store's `is_key_manually_verified` bit at reconcile. Either bit makes `keyProven()` true -
   the predicate the replay gate, eviction tiering, and pubkey-pool callers use. Both are monotonic
   per slot; a changed key resets both.
-- **Unsigned-identity gate:** a NodeInfo arriving _unsigned_ from a node we have ever
-  verified as a signer - per `NodeDB::isKnownXeddsaSigner()`, which covers hot **and
-  warm** tiers - drives no cache, role, or `updateUser()` write. (Warm coverage matters: a
-  signer evicted to the warm tier would otherwise be forgeable with its own public key
-  until re-heard. The same rule guards `Router::checkXeddsaReceivePolicy`'s
-  unsigned-broadcast drop.)
+- **Unsigned-identity gate:** a NodeInfo arriving _unsigned_ from a node we hold a public key
+  for, or have ever verified as a signer - per `NodeDB::requiresSignedIdentityUpdate()`, which
+  covers hot **and warm** tiers - drives no cache, role, or `updateUser()` write. Kept in
+  lockstep with `updateUser()` on purpose: this cache is served back as spoofed replies and
+  rehydrates a re-admitted node's name, so an identity `updateUser()` refused must not survive
+  here. (Warm coverage matters: a node evicted to the warm tier would otherwise be forgeable
+  with its own public key until re-heard. `Router::checkXeddsaReceivePolicy`'s
+  unsigned-broadcast _packet_ drop stays on the narrower `isKnownXeddsaSigner()` - a signer
+  always signs broadcasts, but a merely-keyed node may predate signing.)
 - **Serve gate honesty:** only a genuinely _heard_ NODEINFO frame stamps
   `obsTick`/`hasObserved` - seeding and write-through don't, so a silent node never looks alive
   to the replay path. The sweep clears `hasObserved` to enforce the 6 h serve window. The
