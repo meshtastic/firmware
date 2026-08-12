@@ -67,7 +67,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
     p->next_hop = getNextHop(p->to, p->relay_node).value_or(NO_NEXT_HOP_PREFERENCE); // set the next hop
-    LOG_DEBUG("Set next hop for dest 0x%08x to 0x%x", p->to, p->next_hop);
+    LOG_TRACE("Set next hop for dest 0x%08x to 0x%x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions if want_ack is set. If a next hop is set and hop limit is
     // not 0 or want_ack is set, start retransmissions
@@ -113,7 +113,8 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id)) {
-                    if (reprocessPacket(p) && !perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
+                    if (reprocessPacket(p) && !isBlockedEventCoordinatePacket(p) && !perhapsRebroadcast(p) && isToUs(p) &&
+                        p->want_ack) {
                         sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
                     }
                 }
@@ -190,6 +191,14 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 /* Check if we should be rebroadcasting this packet if so, do so. */
 bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL
+    // Never relay coordinate-bearing packets on the event ("everyone") channel.
+    // Closes the reliable-retransmit-dupe path that runs before handleReceived().
+    if (isBlockedEventCoordinatePacket(p)) {
+        return false;
+    }
+#endif
+
     // Check if traffic management wants to exhaust this packet's hops
     bool exhaustHops = false;
 #if HAS_TRAFFIC_MANAGEMENT
@@ -305,7 +314,7 @@ std::optional<uint8_t> NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
             }
             ResolvedNode r = nodeDB->resolveLastByte(hint, /*requireDirectNeighbor=*/true);
             if (r.status == LastByteResolution::Unique) {
-                LOG_DEBUG("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
+                LOG_TRACE("Next hop for 0x%08x is 0x%x (TMM cache)", to, hint);
                 return hint;
             }
             LOG_WARN("TMM next hop 0x%x for 0x%08x %s; set no pref", hint, to,
@@ -503,7 +512,7 @@ void NextHopRouter::setNextTx(PendingPacket *pending)
     assert(iface);
     auto d = iface->getRetransmissionMsec(pending->packet);
     pending->nextTxMsec = millis() + d;
-    LOG_DEBUG("Next retransmission in %u msecs", d);
+    LOG_TRACE("Next retransmission in %u msecs", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
 }

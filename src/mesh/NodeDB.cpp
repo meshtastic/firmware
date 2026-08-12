@@ -98,11 +98,13 @@ static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-void variantDefaultConfig() __attribute__((weak));
-void variantDefaultConfig() {}
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. Same guard as earlyInitVariant() in main.cpp.
+__attribute__((noinline)) void variantDefaultConfig() __attribute__((weak));
+__attribute__((noinline)) void variantDefaultConfig() {}
 
-void variantDefaultModuleConfig() __attribute__((weak));
-void variantDefaultModuleConfig() {}
+__attribute__((noinline)) void variantDefaultModuleConfig() __attribute__((weak));
+__attribute__((noinline)) void variantDefaultModuleConfig() {}
 
 #ifdef HELTEC_MESH_NODE_T114
 
@@ -3432,9 +3434,9 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
     if (t.which_variant == meshtastic_Telemetry_device_metrics_tag) {
         if (src == RX_SRC_LOCAL) {
-            LOG_DEBUG("updateTelemetry LOCAL device");
+            LOG_TRACE("updateTelemetry LOCAL device");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE device node=0x%08x", nodeId);
+            LOG_TRACE("updateTelemetry REMOTE device node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_TELEMETRYDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3444,9 +3446,9 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
     } else if (t.which_variant == meshtastic_Telemetry_environment_metrics_tag) {
         if (src == RX_SRC_LOCAL) {
-            LOG_DEBUG("updateTelemetry LOCAL env");
+            LOG_TRACE("updateTelemetry LOCAL env");
         } else {
-            LOG_DEBUG("updateTelemetry REMOTE env node=0x%08x", nodeId);
+            LOG_TRACE("updateTelemetry REMOTE env node=0x%08x", nodeId);
         }
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTDB
         concurrency::LockGuard guard(&satelliteMutex);
@@ -3647,7 +3649,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         return;
     }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
+        LOG_TRACE("Update DB node 0x%08x, rx_time=%u", mp.from, mp.rx_time);
 
         // mp.from is unauthenticated, so rate-limit admission once the database is full: otherwise
         // invented node numbers churn it at packet rate and push real neighbours out.

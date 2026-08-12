@@ -11,6 +11,15 @@
 #include "concurrency/OSThread.h"
 #include <memory>
 
+inline bool isCoordinatePortnum(meshtastic_PortNum portnum)
+{
+    return portnum == meshtastic_PortNum_POSITION_APP || portnum == meshtastic_PortNum_WAYPOINT_APP ||
+           portnum == meshtastic_PortNum_MAP_REPORT_APP;
+}
+
+bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p);
+bool willUsePki(const meshtastic_MeshPacket *p);
+
 /// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
 /// Time::getMillis() placeholder with valid=false.
 struct RxTimeStamp {
