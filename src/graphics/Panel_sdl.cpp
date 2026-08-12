@@ -360,7 +360,10 @@ Panel_sdl::Panel_sdl(void) : Panel_FrameBufferBase()
 
 bool Panel_sdl::init(bool use_reset)
 {
-    initFrameBuffer(_cfg.panel_width * 4, _cfg.panel_height);
+    // Bail before registering the monitor: continuing with a failed framebuffer allocation
+    // would leave sdl_update() reading garbage line pointers.
+    if (!initFrameBuffer(_cfg.panel_width * 4, _cfg.panel_height))
+        return false;
     bool res = Panel_FrameBufferBase::init(use_reset);
 
     _list_monitor.push_back(&monitor);
