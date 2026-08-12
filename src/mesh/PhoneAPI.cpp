@@ -579,6 +579,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+        // strncpy does not terminate when the source fills the buffer; a 40+ char
+        // APP_ENV would make nanopb reject the MyInfo encode ("unterminated string").
+        myNodeInfo.pio_env[sizeof(myNodeInfo.pio_env) - 1] = '\0';
         myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
         fromRadioScratch.my_info = myNodeInfo;
 #ifdef MESHTASTIC_PHONEAPI_ACCESS_CONTROL
