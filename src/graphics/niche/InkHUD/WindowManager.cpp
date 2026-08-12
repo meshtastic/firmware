@@ -539,7 +539,7 @@ std::vector<InkHUD::Tile *> InkHUD::WindowManager::getEmptyTiles()
     for (auto &t : userTiles) {
         Applet *a = t->getAssignedApplet();
         if (!a || !a->isActive())
-            empty.push_back(t);
+            empty.push_back(t.get());
     }
 
     return empty;
