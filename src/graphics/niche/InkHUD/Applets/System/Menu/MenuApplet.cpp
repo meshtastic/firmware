@@ -324,8 +324,11 @@ static void applyLoRaRegion(meshtastic_Config_LoRaConfig_RegionCode region)
     auto changes = SEGMENT_CONFIG;
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    if (crypto) {
-        crypto->ensurePkiKeys(config.security, owner);
+    // Minting the key moves our node num with it (my_node_num == crc32(public_key)), so persist
+    // devicestate + the node DB too. The reboot below would re-derive it anyway, but only after the
+    // save - leaving the invariant to be repaired rather than simply never broken.
+    if (nodeDB->ensurePkiIdentity()) {
+        changes |= SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
     }
 #endif
 

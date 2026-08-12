@@ -4349,6 +4349,24 @@ bool NodeDB::createNewIdentity()
     return true;
 }
 
+bool NodeDB::ensurePkiIdentity()
+{
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    // ensurePkiKeys() declines licensed operation (that path goes through generateCryptoKeyPair()), and a
+    // failed keygen leaves the existing key - and therefore the existing node num - untouched.
+    if (!crypto || !crypto->ensurePkiKeys(config.security, owner))
+        return false;
+
+    // ensurePkiKeys() writes key material only. Boot-time keygen is suppressed until a LoRa region is set,
+    // so at first region set my_node_num is still the MAC-derived value from pickNewNodeNum(). Re-derive it
+    // here, or the node signs broadcasts that every receiver drops (crc32(user.public_key) != from).
+    // createNewIdentity() early-returns when the key, and so the node num, did not actually change.
+    return createNewIdentity();
+#else
+    return false;
+#endif
+}
+
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
     bool success = false;
