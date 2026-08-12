@@ -159,7 +159,7 @@ void setup()
     RUN_TEST(test_antimeridian_wraparound);
     RUN_TEST(test_symmetry);
     RUN_TEST(test_no_nan_at_extreme_latitudes);
-    UNITY_END();
+    exit(UNITY_END());
 }
 
 void loop() {}
