@@ -3341,6 +3341,34 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 #include "MeshModule.h"
 #include "Throttle.h"
 
+void NodeDB::noteNodeEvicted(const meshtastic_NodeInfoLite &evicted)
+{
+    // Only nodes we can still hear count as churn; evicting long-silent entries is what the hot
+    // store is supposed to do. A never-heard entry (added by ID, or admitted but not yet stamped)
+    // carries no age we can judge.
+    if (!evicted.last_heard || sinceLastSeen(&evicted) >= NODEDB_ROLL_FRESH_SECS)
+        return;
+
+    const bool wasRolling = isNodeDbRolling();
+
+    freshEvictions[freshEvictionHead] = millis();
+    freshEvictionHead = (freshEvictionHead + 1) % NODEDB_ROLL_SAMPLES;
+    if (freshEvictionHead == 0)
+        freshEvictionsWrapped = true;
+
+    if (!wasRolling && isNodeDbRolling())
+        LOG_INFO("Node database rolling: %u nodes heard <%us ago evicted within %us, back off optional NodeInfo",
+                 (unsigned)NODEDB_ROLL_SAMPLES, NODEDB_ROLL_FRESH_SECS, NODEDB_ROLL_WINDOW_MS / 1000);
+}
+
+bool NodeDB::isNodeDbRolling() const
+{
+    if (!freshEvictionsWrapped)
+        return false; // fewer fresh evictions than the ring holds - not enough evidence yet
+    // Head indexes the sample we would overwrite next, i.e. the oldest one we still hold.
+    return Throttle::isWithinTimespanMs(freshEvictions[freshEvictionHead], NODEDB_ROLL_WINDOW_MS);
+}
+
 // Minimum spacing between evictions once the node database is full.
 #define NODEDB_FULL_EVICTION_INTERVAL_MS (2 * 1000UL)
 
@@ -4132,6 +4160,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
             if (oldestIndex != -1) {
                 const meshtastic_NodeInfoLite &evicted = meshNodes->at(oldestIndex);
+                noteNodeEvicted(evicted);
 #if WARM_NODE_COUNT > 0
                 // Demote to the warm tier so the identity (and crucially the
                 // PKI key) outlives the hot-store slot.

@@ -31,8 +31,10 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     auto p = *pptr;
 
-    // Suppress replies to senders we've replied to recently (12H window)
-    if (mp.decoded.want_response && !isFromUs(&mp)) {
+    // Suppress replies to senders we've replied to recently (12H window). Broadcast requests are
+    // refused outright in allocReply(), so recording them here would only suppress a later
+    // unicast request from the same node - the one exchange we do still want to answer.
+    if (mp.decoded.want_response && !isFromUs(&mp) && !isBroadcast(mp.to)) {
         const NodeNum sender = getFrom(&mp);
         // A local dedup window, not a wall-clock reading - uptime avoids RTC-quality jumps and
         // replayed packets' stale rx_time perturbing it.
@@ -145,11 +147,34 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
                                              currentRequest->decoded.portnum == meshtastic_PortNum_NODEINFO_APP &&
                                              currentRequest->decoded.want_response && !isFromUs(currentRequest);
 
-    if (suppressReplyForCurrentRequest && isReplyingToExternalRequest) {
-        LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
-        ignoreRequest = true;
-        suppressReplyForCurrentRequest = false;
-        return NULL;
+    if (isReplyingToExternalRequest) {
+        // A want_response NodeInfo sent to the broadcast address asks every node that hears it to
+        // answer a single packet - amplification, and the seed of a NodeInfo storm. Our scheduled
+        // broadcast already carries the same information. Unicast requests are still answered, so
+        // the targeted handshakes (unknown node, PKI decrypt failure, key verification) still work.
+        if (isBroadcast(currentRequest->to)) {
+            LOG_DEBUG("Skip send NodeInfo: broadcast request from 0x%08x would amplify", getFrom(currentRequest));
+            ignoreRequest = true;
+            suppressReplyForCurrentRequest = false;
+            return NULL;
+        }
+
+        if (suppressReplyForCurrentRequest) {
+            LOG_DEBUG("Skip send NodeInfo since we heard the requester <12h ago");
+            ignoreRequest = true;
+            suppressReplyForCurrentRequest = false;
+            return NULL;
+        }
+
+        // Our database is rolling, so the mesh is already bigger than we can track and this
+        // exchange would only evict someone we can still hear. Wait for our scheduled broadcast.
+        // Handshakes triggered by traffic we couldn't handle (PKI decrypt failure, key
+        // verification) call sendOurNodeInfo() directly and never land here.
+        if (nodeDB->isNodeDbRolling()) {
+            LOG_DEBUG("Skip send NodeInfo reply to 0x%08x: node database rolling", getFrom(currentRequest));
+            ignoreRequest = true;
+            return NULL;
+        }
     }
 
     if (!airTime->isTxAllowedChannelUtil(false)) {
@@ -224,6 +249,13 @@ int32_t NodeInfoModule::runOnce()
     // If we changed channels, ask everyone else for their latest info
     bool requestReplies = currentGeneration != radioGeneration;
     currentGeneration = radioGeneration;
+
+    // Nodes running this firmware ignore a broadcast want_response, but older ones answer it, and
+    // on a mesh already churning our database that is a storm we would be starting.
+    if (requestReplies && nodeDB->isNodeDbRolling()) {
+        LOG_DEBUG("Node database rolling, broadcast NodeInfo without requesting replies");
+        requestReplies = false;
+    }
 
     if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);

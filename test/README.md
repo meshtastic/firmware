@@ -495,6 +495,7 @@ do not infer completeness from the row count.
 | `test_mesh_module`           | Module framework              |
 | `test_meshpacket_serializer` | Packet serialization          |
 | `test_mqtt`                  | MQTT integration              |
+| `test_nodeinfo_storm`        | NodeInfo storm suppression    |
 | `test_packet_history`        | Packet history tracking       |
 | `test_position_precision`    | Position precision helpers    |
 | `test_radio`                 | Radio interface               |
