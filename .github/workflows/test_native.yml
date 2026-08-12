@@ -79,6 +79,72 @@ jobs:
           done <<<"$removed"
           exit $fail
 
+  # Reject naive deadline comparisons against the 32-bit uptime clocks. `millis() > deadline` and
+  # `deadline < millis()` invert while the deadline sits on the far side of the 32-bit wrap: the
+  # action fires immediately, or blocks for about the interval it should have waited. The correct
+  # forms are
+  # Throttle::isWithinTimespanMs / hasElapsed (elapsed since a stored event) and
+  # Throttle::deadlinePassed (an absolute deadline). See .github/copilot-instructions.md.
+  millis-deadline-check:
+    # Name is load-bearing: upstream branch protection matches the check by name. Widen the guard,
+    # not this string.
+    name: Naive millis() Deadline Compare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Reject 32-bit uptime clocks used directly in a deadline comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          allowlist=".github/millis-deadline-allowlist.txt"
+
+          # Flag millis() or its Time::getMillis() wrapper directly adjacent to a comparison
+          # operator, in either order. The correct idioms subtract first, so they are not matched.
+          #
+          # Line comments are stripped before matching, so prose may name the broken idiom (this
+          # guard's own documentation does). Block comments are not stripped; keep `millis() >` out
+          # of /* */ blocks. mawk-compatible - ubuntu-latest has no gawk.
+          find src -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.ino' \) \
+               ! -path 'src/mesh/generated/*' -print0 |
+            xargs -0 awk '
+              {
+                line = $0
+                sub(/\/\/.*/, "", line)
+                if (line ~ /((millis|getMillis)\(\)[ \t]*[<>]=?)|([<>]=?[ \t]*(millis|getMillis)\(\))/) {
+                  code = line
+                  sub(/^[ \t]+/, "", code); sub(/[ \t]+$/, "", code)
+                  printf "%s\t%s\t%s\n", FILENAME, FNR, code
+                }
+              }' > /tmp/millis-hits.tsv
+
+          # Allowlisted entries are keyed on file + exact source text, deliberately without a line
+          # number, so unrelated edits above them do not invalidate the entry.
+          : > /tmp/millis-allowed.tsv
+          if [[ -f $allowlist ]]; then
+            grep -vE '^[[:space:]]*(#|$)' "$allowlist" > /tmp/millis-allowed.tsv || true
+          fi
+
+          violations=0
+          while IFS=$'\t' read -r file line code; do
+            [[ -n ${file:-} ]] || continue
+            if grep -qxF "$(printf '%s\t%s' "$file" "$code")" /tmp/millis-allowed.tsv; then
+              continue
+            fi
+            echo "$file:$line: $code"
+            violations=$((violations + 1))
+          done < /tmp/millis-hits.tsv
+
+          if [[ $violations -gt 0 ]]; then
+            echo "::error title=Naive uptime deadline compare::$violations line(s) compare a 32-bit uptime clock directly, which inverts while the deadline is on the far side of the 32-bit wrap - the action fires immediately, or blocks for about the interval it should have waited. Use Throttle::deadlinePassed(deadline) for a stored absolute deadline, or Throttle::hasElapsed(lastEvent, intervalMs) for an interval. If a match genuinely is not a deadline test (an uptime threshold, say), add it to $allowlist with a reason."
+            exit 1
+          fi
+          echo "No naive 32-bit uptime deadline comparisons in src/ (allowlist: $(wc -l < /tmp/millis-allowed.tsv) entr(y/ies))."
+
   simulator-tests:
     name: Native Simulator Tests
     runs-on: ubuntu-24.04-arm

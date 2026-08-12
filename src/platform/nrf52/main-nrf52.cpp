@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "mesh/Throttle.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <InternalFileSystem.h>
@@ -270,12 +271,17 @@ namespace
 {
 constexpr uint8_t NRF52_MAGIC_LFS_IS_CORRUPT = 0xF5;
 constexpr uint32_t MULTIPLE_CORRUPTION_DELAY_MILLIS = 20 * 60 * 1000;
-static unsigned long millis_until_formatting_again = 0;
+// When the last format happened, not when the next one is due: measuring forward from the event
+// bounds the pause below by the constant, where a stored deadline could hand delay() any value.
+// Armed separately because preFSBegin() runs in the first millisecond of boot, so a zero timestamp
+// is a legitimate value here, not an "unset" marker.
+static uint32_t last_format_ms = 0;
+static bool formatted_this_boot = false;
 
 // Report the critical error from loop(), giving a chance for the screen to be initialized first.
 inline void reportLittleFSCorruptionOnce()
 {
-    static bool report_corruption = !!millis_until_formatting_again;
+    static bool report_corruption = formatted_this_boot;
     if (report_corruption) {
         report_corruption = false;
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
@@ -290,7 +296,8 @@ void preFSBegin()
     if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
         return;
     NRF_POWER->GPREGRET = 0;
-    millis_until_formatting_again = millis() + MULTIPLE_CORRUPTION_DELAY_MILLIS;
+    last_format_ms = millis();
+    formatted_this_boot = true;
     InternalFS.format();
     LOG_INFO("LittleFS format complete; restoring default settings");
 }
@@ -298,9 +305,11 @@ void preFSBegin()
 extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LittleFS corruption detected: %s", reason);
-    if (millis_until_formatting_again > millis()) {
+    // Test the armed flag first, since elapsed-since-0 is inside the backoff for the first 20
+    // minutes after each wrap.
+    if (formatted_this_boot && Throttle::isWithinTimespanMs(last_format_ms, MULTIPLE_CORRUPTION_DELAY_MILLIS)) {
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
-        const long millis_remain = millis_until_formatting_again - millis();
+        const long millis_remain = MULTIPLE_CORRUPTION_DELAY_MILLIS - (millis() - last_format_ms);
         LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);
         delay(millis_remain);
     }

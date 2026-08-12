@@ -6,7 +6,9 @@
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "Router.h"
+#include "Throttle.h"
 #include "TransmitHistory.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
@@ -21,13 +23,12 @@ static constexpr uint16_t TX_HISTORY_KEY_DEVICE_TELEMETRY = 0x8001;
 int32_t DeviceTelemetryModule::runOnce()
 {
 
-    refreshUptime();
     uint32_t lastTelemetry = transmitHistory ? transmitHistory->getLastSentToMeshMillis(TX_HISTORY_KEY_DEVICE_TELEMETRY) : 0;
     bool isImpoliteRole = isSensorOrRouterRole();
-    if (((lastTelemetry == 0) ||
-         ((uptimeLastMs - lastTelemetry) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
-                                                                                    default_telemetry_broadcast_interval_secs,
-                                                                                    numOnlineNodes, TrafficType::TELEMETRY))) &&
+    if (((lastTelemetry == 0) || Throttle::hasElapsed(lastTelemetry, Default::getConfiguredOrDefaultMsScaled(
+                                                                         moduleConfig.telemetry.device_update_interval,
+                                                                         default_telemetry_broadcast_interval_secs,
+                                                                         numOnlineNodes, TrafficType::TELEMETRY))) &&
         airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN &&
         moduleConfig.telemetry.device_telemetry_enabled) {
@@ -38,9 +39,9 @@ int32_t DeviceTelemetryModule::runOnce()
         // Just send to phone when it's not our time to send to mesh yet
         // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
-        if (lastSentStatsToPhone == 0 || (uptimeLastMs - lastSentStatsToPhone) >= sendStatsToPhoneIntervalMs) {
+        if (lastSentStatsToPhone == 0 || Throttle::hasElapsed(lastSentStatsToPhone, sendStatsToPhoneIntervalMs)) {
             sendLocalStatsToPhone();
-            lastSentStatsToPhone = uptimeLastMs;
+            lastSentStatsToPhone = Time::getMillis();
         }
     }
     return sendToPhoneIntervalMs;
@@ -114,7 +115,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
         t.variant.device_metrics.has_voltage = true;
         t.variant.device_metrics.voltage = batteryMv / 1000.0f;
     }
-    t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
+    t.variant.device_metrics.uptime_seconds = Time::getUptimeSecs();
     return t;
 }
 
@@ -124,7 +125,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
     telemetry.which_variant = meshtastic_Telemetry_local_stats_tag;
     telemetry.variant.local_stats = meshtastic_LocalStats_init_zero;
     telemetry.time = getTime();
-    telemetry.variant.local_stats.uptime_seconds = getUptimeSeconds();
+    telemetry.variant.local_stats.uptime_seconds = Time::getUptimeSecs();
     telemetry.variant.local_stats.channel_utilization = airTime->channelUtilizationPercent();
     telemetry.variant.local_stats.air_util_tx = airTime->utilizationTXPercent();
     telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
