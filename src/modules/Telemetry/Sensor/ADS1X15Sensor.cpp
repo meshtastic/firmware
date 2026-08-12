@@ -28,9 +28,10 @@ bool ADS1X15Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef ADS1X15_I2C_CLOCK_SPEED
     reClockI2C.restoreClock();
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
+
     initI2CSensor();
 
-    return true;
+    return status;
 }
 
 struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(uint8_t ch)
