@@ -70,7 +70,7 @@ bool SafeFile::close()
     String filenameTmp = filename;
     filenameTmp += ".tmp";
     if (!renameFile(filenameTmp.c_str(), filename.c_str())) {
-        LOG_ERROR("Error: can't rename new pref file");
+        LOG_ERROR("Can't rename new pref file");
         return false;
     }
 

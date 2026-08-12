@@ -51,12 +51,14 @@ uint16_t getVDDVoltage();
 
 // Weak empty variant shutdown prep function.
 // May be redefined by variant files.
-void variant_shutdown() __attribute__((weak));
-void variant_shutdown() {}
+// noinline: same reason as variant_enableBatteryLpcompWake() below -- weak default and call
+// site are in this file, so LTO would inline the empty body and drop the variant's override.
+__attribute__((noinline)) void variant_shutdown() __attribute__((weak));
+__attribute__((noinline)) void variant_shutdown() {}
 
 // Optional variant hook called each nrf52Loop(); e.g. for low-VDD System OFF.
-void variant_nrf52LoopHook(void) __attribute__((weak));
-void variant_nrf52LoopHook(void) {}
+__attribute__((noinline)) void variant_nrf52LoopHook(void) __attribute__((weak));
+__attribute__((noinline)) void variant_nrf52LoopHook(void) {}
 
 // Return false to skip LPCOMP wake when entering System OFF (e.g. user CLI shutdown).
 // noinline: weak default and call site are in this file; without it GCC may inline the
@@ -419,7 +421,7 @@ void nrf52Setup()
 #ifdef BQ25703A_ADDR
     auto *bq = new BQ25713();
     if (!bq->setup())
-        LOG_ERROR("ERROR! Charge controller init failed");
+        LOG_ERROR("Charge controller init failed");
 #endif
 
     // Init random seed
@@ -526,7 +528,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
-            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");
+            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off");
             NRF_POWER->SYSTEMOFF = 1;
         }
     }

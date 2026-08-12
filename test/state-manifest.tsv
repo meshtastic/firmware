@@ -1,0 +1,58 @@
+# Shared-state manifest for the native test suites.
+#
+# Every suite runs inside its own scratch $HOME (bin/pio-test-isolate.sh), so leftovers cannot reach
+# the next suite. This file is not what makes that safe - it is what makes each suite's intent
+# reviewable. A suite listed here is declaring "I mutate persisted state on purpose, and here is
+# why"; a suite that is not listed is expected to leave the sandbox as it found it.
+#
+# The invariant behind the flags: mutation *inside* a suite is free, carrying state *across* a suite
+# boundary is never permitted. No flag grants cross-suite carry - a suite that needs another suite's
+# output needs an explicit fixture, not inheritance. That is the whole bug, and per-suite isolation
+# keeps it impossible by construction rather than by policy.
+#
+# Format - three tab-separated columns, the same shape as an allowlist entry:
+#
+#   <suite>	<flags>	<reason>
+#
+# The reason column is mandatory and is reviewed on change. One central file rather than a file per
+# suite, so every opt-out is visible in one diffable list and attracts review pressure; per-suite
+# files hide growth. bin/run-tests.sh prints how many suites declare non-default handling, so the
+# number creeping upward is visible without anyone auditing this file.
+#
+# Flags (space separated; the default is no entry at all):
+#
+#   writes=<a,b>      files this suite mutates inside its sandbox. Matched against the path relative
+#                     to the scratch $HOME or just the basename, so `nodes.proto` is enough. A
+#                     declared write makes the change CLEAN instead of DIRTY - the list is the
+#                     documentation. A declared file that does NOT change is reported as MISSING,
+#                     which catches silently-broken persistence.
+#   state=per-suite   state persists across this suite's own test cases; the default is per-test.
+#                     Use for persistence round-trips, migration ladders, anything where test N must
+#                     observe test N-1's write. With this set, only the suite boundary is checked -
+#                     per-test checking would flag every test by design.
+#
+# state=per-suite is the one to watch. It is legitimate, and it is also the pattern that let
+# test_nodedb_blocked accumulate 198 protected nodes across its test cases. Requiring the flag makes
+# that an explicit, defended choice instead of an accident of setUp().
+#
+# To propose entries from a real run: ./bin/run-tests.sh --write-manifest prints the lines it would
+# add, for a human to paste and justify. It never applies them itself, and CI never applies them at
+# all - an auto-accepted baseline is the same rot as an auto-updated snapshot.
+#
+# suite	flags	reason
+test_admin_radio	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs	per-test NodeDB fixture, and the admin handlers under test persist config, channels and node metadata
+test_admin_session_repro	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB, whose constructor persists a default set when the prefs directory is empty
+test_fuzz_packets	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat,Messages_default.msgs	drives decode of fuzzed packets through the real NodeDB and message store
+test_hop_scaling	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB to hold the hop-distance fixtures
+test_mesh_beacon	writes=module.proto	exercises the beacon's module-config save path
+test_mesh_module	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	module framework tests construct a NodeDB
+test_mqtt	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	constructs a NodeDB for node lookups in the MQTT paths
+test_nexthop_routing	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	next-hop selection reads and updates the node DB
+test_nodedb_blocked	state=per-suite writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	saturates the DB with MAX_NUM_NODES-2 favourited nodes to test the protected cap; a later test's removeNodeByNum() persists that state, and the cap test depends on the fill from the test before it
+test_packet_signing	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	needs a NodeDB holding both peers' keys for the PKI encode/decode paths
+test_pki_admin_fallback	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	needs a NodeDB holding admin keys for the fallback paths
+test_stream_api	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	drives real PhoneAPI handshakes, which read and persist config and the node DB
+test_traceroute_nexthop	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto	traceroute route selection reads the node DB
+test_traffic_management	writes=config.proto,module.proto,device.proto,channels.proto,nodes.proto,warm.dat	constructs a NodeDB for the per-node rate-limit and dedup state
+test_transmit_history	writes=transmit_history.dat	persistence round-trip: what it asserts is that retransmission state survives a save/load
+test_warm_store	writes=warm.dat	persistence round-trip of the warm-tier snapshot, which is the tier's whole contract

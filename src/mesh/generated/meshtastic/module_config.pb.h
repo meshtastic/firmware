@@ -497,7 +497,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
     /* Single-target TX channel: channel settings (name + PSK) to send beacons on.
  If unset, beacons go out on the primary channel. Used only when broadcast_targets is empty.
  NOTE: the single-target path embeds the ChannelSettings inline here, whereas a
- broadcast_targets entry references a channel-table slot by channel_index instead - see
+ broadcast_targets entry references a channel-table slot by channel_index instead — see
  BroadcastTarget. The two paths are equal, first-class options; only this representation differs. */
     bool has_broadcast_on_channel;
     meshtastic_ChannelSettings broadcast_on_channel;
@@ -514,7 +514,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
  each temporarily switching the radio to that entry's preset/region/channel.
  When empty, the broadcaster uses the scalar broadcast_on_preset / broadcast_on_region /
  broadcast_on_channel fields instead (the single-target path).
- Single- and multi-target are equal, first-class options - neither is preferred or
+ Single- and multi-target are equal, first-class options — neither is preferred or
  deprecated. They differ only in how the TX channel is named: broadcast_on_channel embeds a
  ChannelSettings inline, while a target references an existing channel-table slot by
  channel_index (see BroadcastTarget). */
