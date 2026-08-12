@@ -14,10 +14,14 @@ static File openFile(const char *filename, bool fullAtomic)
     String filenameTmp = filename;
     filenameTmp += ".tmp";
 
-    // FIXME: If we are doing a full atomic write, we may need to remove the old tmp file now
-    // if (fullAtomic) {
-    //     FSCom.remove(filename);
-    // }
+    // FILE_O_WRITE appends rather than truncates on Adafruit_LittleFS (nRF52) and STM32 LittleFS, so a tmp
+    // file left behind by an interrupted write must go before we open. Otherwise we append to the stale
+    // bytes, and because the hash only covers what we write, the readback in close() mismatches on this and
+    // every later save. Guard with exists() - a bare remove() logs on Portduino when there is nothing there.
+    if (FSCom.exists(filenameTmp.c_str())) {
+        LOG_WARN("Remove stale %s", filenameTmp.c_str());
+        FSCom.remove(filenameTmp.c_str());
+    }
 
     // clear any previous LFS errors
     return FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
