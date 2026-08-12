@@ -985,7 +985,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
-        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+        // Never log the key bytes: debug logs get pasted into public bug reports.
+        LOG_DEBUG("Restored preserved private key");
     } else {
         config.security.private_key.size = 0;
     }
