@@ -151,7 +151,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             LOG_INFO("Ignore admin response from 0x%08x, no outstanding request", mp.from);
             return handled;
         }
-        LOG_DEBUG("Allow admin response message");
+        LOG_TRACE("Allow admin response message");
     } else if (mp.from == 0) {
         // Local admin from a BLE/USB/TCP client. from == 0 cannot arrive from the
         // mesh: RF drops packets without a sender (RadioLibInterface) and MQTT treats
@@ -2168,7 +2168,7 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
 
 void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent)
 {
-    LOG_DEBUG("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
+    LOG_TRACE("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
               inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y);
 
     // Create InputEvent for injection.

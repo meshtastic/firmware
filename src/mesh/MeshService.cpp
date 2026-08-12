@@ -13,6 +13,7 @@
 #include "PowerFSM.h"
 #include "TypeConversions.h"
 #include "UptimeClock.h"
+#include "gps/GPSLog.h"
 #include "gps/RTC.h"
 #include "graphics/draw/MessageRenderer.h"
 #include "main.h"
@@ -600,9 +601,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         pos = gps->p;
     } else {
         // The GPS has lost lock
-#ifdef GPS_DEBUG
-        LOG_DEBUG("onGPSchanged() - lost validLocation");
-#endif
+        LOG_DEBUG_GPS("onGPSchanged() - lost validLocation");
     }
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
