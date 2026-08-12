@@ -22,6 +22,7 @@
 #include "mesh/api/WiFiServerAPI.h"
 
 #include <Arduino.h>
+#include <dhcpserver/dhcpserver.h> // dhcps_lease_t for the ESP_NETIF_REQUESTED_IP_ADDRESS option
 #include <esp_event.h>
 #include <esp_mac.h>
 #include <esp_netif.h>
@@ -199,6 +200,8 @@ bool usbNetBringUpNetwork()
     usbDriver.base.post_attach = usbNetPostAttach;
     if (esp_netif_attach(usbNetif, &usbDriver) != ESP_OK) {
         LOG_ERROR("USBNet: esp_netif_attach failed");
+        esp_netif_destroy(usbNetif);
+        usbNetif = nullptr;
         return false;
     }
 
@@ -207,18 +210,41 @@ bool usbNetBringUpNetwork()
     esp_netif_dhcps_stop(usbNetif);
     if (esp_netif_set_ip_info(usbNetif, &ipInfo) != ESP_OK) {
         LOG_ERROR("USBNet: set_ip_info failed");
+        esp_netif_destroy(usbNetif);
+        usbNetif = nullptr;
         return false;
     }
 
-    // Belt and braces alongside the zero gateway: clear the router offer flag so
-    // option 3 cannot be emitted even if the gateway is ever set by accident.
-    // Option 6 (DNS) is suppressed at build time - see CONFIG_LWIP_DHCPS_ADD_DNS
-    // in the variant ini, which would otherwise vend our own address as a DNS
-    // server that answers nothing.
-    // Must be set before action_start: dhcps reads its offer options when it is
+    // Make USBNetPolicy.h authoritative for what dhcps hands out - pool range,
+    // lease time and the router-offer flag all come from the policy header, so
+    // the native unit tests and the device cannot drift apart. All three are
+    // deliberately non-fatal: dhcps defaults still produce a working (if less
+    // tidy) server, and aborting here would mean no USB device at all with no
+    // console to explain why.
+    // Must be set before action_start: dhcps reads its options when it is
     // started, not per-request.
-    uint8_t offerRouter = 0;
-    esp_netif_dhcps_option(usbNetif, ESP_NETIF_OP_SET, ESP_NETIF_ROUTER_SOLICITATION_ADDRESS, &offerRouter, sizeof(offerRouter));
+    dhcps_lease_t pool = {};
+    pool.enable = true;
+    IP4_ADDR(&pool.start_ip, usbnet::POOL_FIRST.o[0], usbnet::POOL_FIRST.o[1], usbnet::POOL_FIRST.o[2], usbnet::POOL_FIRST.o[3]);
+    IP4_ADDR(&pool.end_ip, usbnet::POOL_FIRST.o[0], usbnet::POOL_FIRST.o[1], usbnet::POOL_FIRST.o[2],
+             usbnet::POOL_FIRST.o[3] + usbnet::POOL_SIZE - 1);
+    if (esp_netif_dhcps_option(usbNetif, ESP_NETIF_OP_SET, ESP_NETIF_REQUESTED_IP_ADDRESS, &pool, sizeof(pool)) != ESP_OK)
+        LOG_WARN("USBNet: could not set DHCP pool - dhcps defaults apply");
+
+    uint32_t leaseMinutes = usbnet::LEASE_SECONDS / 60;
+    if (esp_netif_dhcps_option(usbNetif, ESP_NETIF_OP_SET, ESP_NETIF_IP_ADDRESS_LEASE_TIME, &leaseMinutes,
+                               sizeof(leaseMinutes)) != ESP_OK)
+        LOG_WARN("USBNet: could not set DHCP lease time - dhcps default applies");
+
+    // Belt and braces alongside the zero gateway: keep the router offer flag in
+    // sync with the policy (false) so option 3 cannot be emitted even if the
+    // gateway is ever set by accident. Option 6 (DNS) is suppressed at build
+    // time - see CONFIG_LWIP_DHCPS_ADD_DNS in variants/esp32/usbnet.ini, which
+    // would otherwise vend our own address as a DNS server that answers nothing.
+    uint8_t offerRouter = usbnet::DHCP_OFFER_POLICY.vendRouter ? 1 : 0;
+    if (esp_netif_dhcps_option(usbNetif, ESP_NETIF_OP_SET, ESP_NETIF_ROUTER_SOLICITATION_ADDRESS, &offerRouter,
+                               sizeof(offerRouter)) != ESP_OK)
+        LOG_WARN("USBNet: could not clear the router-offer flag (gateway stays 0.0.0.0, so option 3 is still not emitted)");
 
     // Creating and attaching a netif is not enough - the underlying lwIP netif
     // stays down until esp_netif_start() runs, and a down netif silently answers

@@ -6,7 +6,7 @@ Branch `feat/usb-ncm-phone-api` (base commit `8f1d253b3`). Pilot env `meshnology
 
 Present the node to a USB host as a standard USB Ethernet adaptor, so the Meshtastic iOS app can reach the existing TCP phone API (port 4403) over a plain USB-C cable - including in airplane mode, since the link is not a radio.
 
-USB _serial_ is permanently closed on iPadOS: Apple's own dexts win IOKit matching and expose no user client (`meshtastic-usbdriverkit-spike`, FINDINGS.md). USB-Ethernet is the only wired route, and Apple DTS recommends exactly this shape for an ESP32-S3 ([forums 772812](https://developer.apple.com/forums/thread/772812)); network adaptors are generally not MFi-licensed.
+USB _serial_ is effectively closed for this app on iPadOS: generic USB-serial devices are not exposed to apps, and the sanctioned route - a custom USBDriverKit dext (M-series iPads only, entitlement-gated) or MFi - died in our spike because Apple's own dexts win IOKit matching and expose no user client (`meshtastic-usbdriverkit-spike`, FINDINGS.md). USB-Ethernet is the only wired route that needs neither, and Apple DTS recommends exactly this shape for an ESP32-S3 ([forums 772812](https://developer.apple.com/forums/thread/772812)); network adaptors are generally not MFi-licensed.
 
 ## Status
 
@@ -45,7 +45,7 @@ session on 4403. Bare TCP connects and garbage bytes were harmless; a valid
 
 **Coredump verdict** (loopTask, core 1):
 
-```
+```text
 operator new (sz=14848) → std::bad_alloc → std::terminate → abort()
   std::vector<meshtastic_FileInfo>::reserve(64)
   getFiles()                    src/FSCommon.cpp:275
@@ -96,14 +96,15 @@ platform** on sight (needs >= 6.1.19):
 Then reset, wait ~30 s for the gadget, and run the gate:
 
 ```bash
-ifconfig | grep -B5 192.168.7.          # expect 192.168.7.2 on a new enN
-ipconfig getpacket enN                  # expect NO router, NO domain_name_server
-netstat -rn -f inet | grep default      # must NOT be enN
+ifconfig | grep -B5 192.168.7.                # expect 192.168.7.2 on a new enN
+USBIF=$(route -n get 192.168.7.1 2>/dev/null | awk '/interface:/{print $2}')
+ipconfig getpacket "$USBIF"                   # expect NO router, NO domain_name_server
+netstat -rn -f inet | grep default            # must NOT be $USBIF
 ping -c3 192.168.7.1
-python3 -c "import meshtastic.tcp_interface,time; i=meshtastic.tcp_interface.TCPInterface('192.168.7.1'); time.sleep(3); print(i.getMyNodeInfo()); i.close()"
+~/.local/pipx/venvs/meshtastic/bin/python -c "import meshtastic.tcp_interface,time; i=meshtastic.tcp_interface.TCPInterface('192.168.7.1'); time.sleep(3); print(i.getMyNodeInfo()); i.close()"
 ```
 
-(The `meshtastic` python package lives in `~/.local/pipx/venvs/meshtastic/bin/python`.)
+(Any python with the `meshtastic` package works for the last line; the pipx venv path is where it lives on the dev machine.)
 
 ## Reading a coredump (the recipe that actually worked)
 
@@ -145,7 +146,7 @@ race: park the chip whenever convenient and read at leisure.
 - **Vend no gateway and no DNS.** `gw = 0.0.0.0`, router offer flag cleared, and `CONFIG_LWIP_DHCPS_ADD_DNS=n`. Apple DTS ([forums 779796](https://developer.apple.com/forums/thread/779796)): an accessory DHCP server must not vend a gateway, or the interface becomes the default route. Without the `ADD_DNS` line, `dhcpserver.c`'s else-branch vends the node's own address as a DNS server that answers nothing. This is what stops iOS electing the link, failing its captive probe, and killing it. **Deliberately not warthog's NAT gateway model.**
 - **Bring-up order is the correctness argument.** netif + DHCP + API listener all come up in `setup()`; only then does the USB device start and the NCM link get raised. iOS runs DHCP exactly once on link-up and never retries.
 - **`tud_network_default_link_state_cb()` is overridden to start the link DOWN**, for the same reason.
-- **TinyUSB must resolve to ≥ 0.21.0** (pinned explicitly in the env). PR #3630 is what makes NCM work on iOS/iPadOS 26; without it DHCP succeeds only ~30% of the time. `esp_tinyusb` alone only requires `>= 0.17.0~2`, so the good resolve was luck.
+- **TinyUSB must resolve to ≥ 0.21.0** (constrained in the shared fragment via `espressif/tinyusb@^0.21.0` - a caret range, not an exact pin; the hardware-verified resolve is `0.21.0~1`). PR #3630 is what makes NCM work on iOS/iPadOS 26; without it DHCP succeeds only ~30% of the time. `esp_tinyusb` alone only requires `>= 0.17.0~2`, so the good resolve was luck.
 - **The USB task is pinned to core 0** via `TINYUSB_TASK_CUSTOM(6144, 5, 0)`. esp_tinyusb 2.x moved task config out of Kconfig - `CONFIG_TINYUSB_TASK_STACK_SIZE` and `CONFIG_TINYUSB_TASK_AFFINITY_CPU0` **do not exist** and are silently ignored. Default is core 1 at priority 5, the same core as the Arduino loop task at priority 1.
 - **`usbNetTransmit` refuses early and waits only 20 ms.** With `CONFIG_LWIP_TCPIP_CORE_LOCKING=y` it runs inline on the caller under the lwIP core lock, and `tinyusb_net_send_sync` enqueues with an infinite wait. Dropping a frame is free (TCP retransmits); blocking the loop task is not. _But see the backlog item about `tud_network_can_xmit()` below._
 - **Never route USB bring-up through `onNetworkConnected()`** - its `displaymode != COLOR` guard would silently kill the feature on exactly the colour-TFT boards someone cables to an iPad.

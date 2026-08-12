@@ -20,6 +20,15 @@ YML="$PKG/idf_component.yml"
 ORIG="$YML.orig"
 
 if [ ! -f "$ORIG" ]; then
+	# No backup to restore from. That is fine when the manifest is pristine
+	# (framework not yet built, or already restored) - but if a tinyusb
+	# dependency is present, the shared framework is contaminated and we have
+	# nothing to restore it from: fail loudly instead of reporting success.
+	if [ -f "$YML" ] && grep -qE 'espressif/(esp_)?tinyusb' "$YML"; then
+		echo "Cannot restore $YML: it contains a tinyusb dependency but the pristine backup $ORIG is missing." >&2
+		echo "Reinstall the framework package (or delete it and rebuild any non-usbnet env) to regenerate a clean manifest." >&2
+		exit 1
+	fi
 	echo "No $ORIG - nothing to restore (framework not yet built?)." >&2
 	exit 0
 fi
