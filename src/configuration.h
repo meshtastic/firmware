@@ -88,6 +88,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_PREHOP_DROP 1
 #endif
 
+// Use polynomial approximations for trigonometric functions to save flash.
+// Override with -D MESHTASTIC_TRIG_APPROX=0 for exact trig for special use cases e.g. close to Earth's poles.
+#ifndef MESHTASTIC_TRIG_APPROX
+#define MESHTASTIC_TRIG_APPROX 1
+#endif
+
 // Debug/test only: let a wired client (serial/TCP) inject frames into the RX pipeline as if they had
 // arrived over LoRa - a SIMULATOR_APP ToRadio packet is delivered through the real receive path on real
 // hardware (see MeshService::injectAsReceived). This forges over-the-air traffic, so it MUST stay 0 in
