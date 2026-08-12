@@ -26,6 +26,17 @@ Verified on hardware:
 | Board stays flashable                              | ✅ many flash cycles                                                 |
 | **Real API session completes**                     | ✅ `TCPInterface` + `getMyNodeInfo()`, twice in a row, node stays up |
 
+## Enabling on other boards
+
+The enablement is a reusable fragment: `[usbnet]` in `variants/esp32/usbnet.ini`
+carries the build flags, managed components, and sdkconfig any adopter needs,
+and documents the adoption recipe (a `<board>_usbnet` env that splices the
+fragments in). `[env:meshnology_w12_usbnet]` is the reference consumer.
+Eligibility - a native USB-OTG SoC (ESP32-S2/S3/P4) and PSRAM
+(`-D BOARD_HAS_PSRAM`) - is enforced at compile time by `#error` guards in
+`USBNetEsp32.cpp`, so an ineligible variant fails the build with an
+explanation instead of misbehaving on hardware.
+
 ## The crash that blocked this branch - root cause and fix
 
 **Symptom:** the node rebooted within seconds whenever a client opened a real

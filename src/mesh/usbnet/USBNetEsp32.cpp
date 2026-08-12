@@ -2,6 +2,21 @@
 
 #if HAS_USB_NET && defined(ARCH_ESP32)
 
+#include <soc/soc_caps.h>
+
+// Hardware eligibility, enforced here so a variant that sets HAS_USB_NET=1
+// without the prerequisites fails at compile time with an explanation instead
+// of misbehaving on hardware (see variants/esp32/usbnet.ini for the adoption
+// recipe).
+#if !SOC_USB_OTG_SUPPORTED
+#error                                                                                                                           \
+    "HAS_USB_NET requires a native USB-OTG SoC (ESP32-S2/S3/P4). C3/C6/H2 only have USB-Serial-JTAG and cannot present a USB device."
+#endif
+#ifndef BOARD_HAS_PSRAM
+#error                                                                                                                           \
+    "HAS_USB_NET requires PSRAM (-D BOARD_HAS_PSRAM). Without PSRAM in the heap the first phone-API session's ~15KB contiguous allocation aborts the node with std::bad_alloc."
+#endif
+
 #include "USBNetPolicy.h"
 #include "configuration.h"
 #include "mesh/api/WiFiServerAPI.h"
