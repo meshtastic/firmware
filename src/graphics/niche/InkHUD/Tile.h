@@ -25,6 +25,7 @@ class Tile
   public:
     Tile();
     Tile(int16_t left, int16_t top, uint16_t width, uint16_t height);
+    ~Tile();
 
     void setRegion(uint8_t layoutSize, uint8_t tileIndex);                      // Assign region automatically, based on layout
     void setRegion(int16_t left, int16_t top, uint16_t width, uint16_t height); // Assign region manually
