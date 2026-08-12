@@ -2,11 +2,9 @@
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_ADS1X15.h>)
 
-#include "../detect/reClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "ADS1X15Sensor.h"
 #include "TelemetrySensor.h"
-#include "detect/ScanI2C.h"
 #include <Adafruit_ADS1X15.h>
 
 ADS1X15Sensor::ADS1X15Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_ADS1X15, "ADS1X15") {}
@@ -20,21 +18,15 @@ bool ADS1X15Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _deviceType = dev->type;
 
 #ifdef ADS1X15_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setup(_bus, _port);
+    reClockI2C.setClock(ADS1X15_I2C_CLOCK_SPEED);
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     status = ads1x15.begin(_address, _bus);
 
-#if defined(ADS1X15_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     status = 1;
     initI2CSensor();
@@ -112,21 +104,14 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     // Done here and not in getMeasurements to avoid the back-and-forth 4-8 times one after the other
 #ifdef ADS1X15_I2C_CLOCK_SPEED
-#ifdef CAN_RECLOCK_I2C
-    uint32_t currentClock = reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, false);
-#elif !HAS_SCREEN
-    reClockI2C(ADS1X15_I2C_CLOCK_SPEED, _bus, true);
-#else
-    LOG_WARN("%s can't be used at this clock speed, with a screen", sensorName);
-    return false;
-#endif /* CAN_RECLOCK_I2C */
+    reClockI2C.setClock(ADS1X15_I2C_CLOCK_SPEED);
 #endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     struct _ADS1X15Measurements m = getMeasurements();
 
-#if defined(ADS1X15_I2C_CLOCK_SPEED) && defined(CAN_RECLOCK_I2C)
-    reClockI2C(currentClock, _bus, false);
-#endif
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    reClockI2C.restoreClock();
+#endif /* ADS1X15_I2C_CLOCK_SPEED */
 
     switch (_deviceType) {
     case ScanI2C::DeviceType::ADS1X15: {

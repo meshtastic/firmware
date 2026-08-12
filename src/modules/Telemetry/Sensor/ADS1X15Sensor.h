@@ -2,9 +2,9 @@
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_ADS1X15.h>)
 
+#include "../detect/ReClockI2C.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include "detect/ScanI2C.h"
 #include <Adafruit_ADS1X15.h>
 
 #define ADS1X15_I2C_CLOCK_SPEED 100000
@@ -13,8 +13,9 @@ class ADS1X15Sensor : public TelemetrySensor
 {
   private:
     Adafruit_ADS1X15 ads1x15{};
-    TwoWire *_bus{};
-    uint8_t _address{};
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    ReClockI2C reClockI2C;
+#endif
     ScanI2C::DeviceType _deviceType{};
 
     // get a single measurement for a channel
