@@ -99,7 +99,6 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     // End the update process
     endUpdate();
 
-    LOG_DEBUG("done");
     return true;
 }
 
