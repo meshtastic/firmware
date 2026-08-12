@@ -8,9 +8,9 @@
 # before-empty assertion fires, because an after-diff measured against a dirty baseline reports
 # green while meaning nothing.
 #
-# Not a Unity suite and not counted in test/native-suite-count - the same arrangement as
-# bin/test-config-check.sh, and for the same reason: what it asserts is the behaviour of a process,
-# not of a linkable function.
+# Not a Unity suite and not a test_* directory, so outside the suite count run-tests.sh derives
+# from test/ - the same arrangement as bin/test-config-check.sh, and for the same reason: what it
+# asserts is the behaviour of a process, not of a linkable function.
 #
 # Usage: ./bin/test-state-check.sh   (exit 0 = all fixtures behaved)
 

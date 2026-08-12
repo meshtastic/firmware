@@ -99,7 +99,7 @@ int32_t RangeTestModule::runOnce()
             }
         }
     } else {
-        LOG_INFO("Range Test Module - Disabled");
+        LOG_INFO("Range Test Module Disabled");
     }
 
 #endif

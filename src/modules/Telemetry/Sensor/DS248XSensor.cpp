@@ -63,8 +63,6 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 #ifdef DS248X_I2C_CLOCK_SPEED
     reClockI2C.setup(_bus, _port);
-
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
@@ -176,7 +174,6 @@ bool DS248XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     }
 
 #ifdef DS248X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
@@ -193,7 +190,6 @@ bool DS248XSensor::isValidROM(const uint8_t *rom)
 float DS248XSensor::readTemperatureROM(const uint8_t *rom)
 {
 #ifdef DS248X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, DS248X_I2C_CLOCK_SPEED);
     reClockI2C.setClock(DS248X_I2C_CLOCK_SPEED);
 #endif /* DS248X_I2C_CLOCK_SPEED */
 
@@ -224,7 +220,6 @@ float DS248XSensor::readTemperatureROM(const uint8_t *rom)
     }
 
 #ifdef DS248X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: restoring clock speed", sensorName);
     reClockI2C.restoreClock();
 #endif /* DS248X_I2C_CLOCK_SPEED */
 

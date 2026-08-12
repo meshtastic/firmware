@@ -68,9 +68,11 @@ class MagnetometerThread : public concurrency::OSThread
         }
 
         switch (device.type) {
+#if __has_include(<SparkFun_MMC5983MA_Arduino_Library.h>)
         case ScanI2C::DeviceType::MMC5983MA:
             sensor = new MMC5983MASensor(device);
             break;
+#endif
 #if __has_include(<SensorQMC6309.hpp>)
         case ScanI2C::DeviceType::QMC6309:
             sensor = new QMC6309Sensor(device);

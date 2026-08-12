@@ -316,11 +316,13 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 
 // Weak empty variant initialization function.
 // May be redefined by variant files.
-void lateInitVariant() __attribute__((weak));
-void lateInitVariant() {}
+// noinline: weak default and call site share this TU, so LTO would inline the empty body and
+// never link the variant's strong override. nrf52_lto.py's _VARIANT_OVERRIDES guards this.
+__attribute__((noinline)) void lateInitVariant() __attribute__((weak));
+__attribute__((noinline)) void lateInitVariant() {}
 
-void earlyInitVariant() __attribute__((weak));
-void earlyInitVariant() {}
+__attribute__((noinline)) void earlyInitVariant() __attribute__((weak));
+__attribute__((noinline)) void earlyInitVariant() {}
 
 // NRF52 (and probably other platforms) can report when system is in power failure mode
 // (eg. too low battery voltage) and operating it is unsafe (data corruption, bootloops, etc).
