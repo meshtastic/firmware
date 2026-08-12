@@ -1898,6 +1898,65 @@ void test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped(void)
     TEST_ASSERT_FALSE(p.xeddsa_signed);
 }
 
+// E14: a first-contact NodeInfo claiming a reserved nodenum is dropped and creates no NodeDB entry.
+// 1 (NODENUM_BROADCAST_NO_LORA) is the damaging admit - isBroadcast() is true for it.
+void test_E14_reserved_sender_first_contact_nodeinfo_dropped(void)
+{
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    meshtastic_User user = meshtastic_User_init_zero;
+    user.public_key.size = sizeof(pub);
+    memcpy(user.public_key.bytes, pub, sizeof(pub));
+
+    const NodeNum reserved[] = {0, NODENUM_BROADCAST_NO_LORA, NUM_RESERVED - 1, NODENUM_BROADCAST};
+    for (const auto from : reserved) {
+        meshtastic_MeshPacket p = makeDecoded(from, NODENUM_BROADCAST, meshtastic_PortNum_NODEINFO_APP, 0);
+        p.decoded.payload.size =
+            pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_User_msg, &user);
+        signWithCurrentKey(&p);
+
+        char msg[48];
+        snprintf(msg, sizeof(msg), "reserved sender 0x%08x", (unsigned)from);
+        TEST_ASSERT_FALSE_MESSAGE(checkXeddsaReceivePolicy(&p), msg);
+        TEST_ASSERT_FALSE(p.xeddsa_signed);
+        TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(from), msg);
+    }
+}
+
+// E15: the reserved range excludes NUM_RESERVED itself. Pinned on the predicate the guard calls: the
+// policy layer cannot tell 3 from 4, as neither can present a key that CRC32s to its own nodenum.
+void test_E15_reserved_nodenum_boundary_excludes_num_reserved(void)
+{
+    TEST_ASSERT_TRUE(isReservedNodeNum(0));
+    TEST_ASSERT_TRUE(isReservedNodeNum(NODENUM_BROADCAST_NO_LORA));
+    TEST_ASSERT_TRUE(isReservedNodeNum(NUM_RESERVED - 1));
+    TEST_ASSERT_TRUE(isReservedNodeNum(NODENUM_BROADCAST));
+    TEST_ASSERT_FALSE_MESSAGE(isReservedNodeNum(NUM_RESERVED), "NUM_RESERVED itself must stay a usable nodenum");
+    TEST_ASSERT_FALSE(isReservedNodeNum(REMOTE_NODE));
+}
+
+// E16: the guard sits after the portnum check, so a reserved sender on any other port stays
+// NOT_APPLICABLE. test_mqtt's decoded downlink fixtures are TEXT_MESSAGE_APP with from == 1.
+void test_E16_reserved_sender_non_nodeinfo_still_accepted(void)
+{
+    meshtastic_MeshPacket unsignedText =
+        makeDecoded(NODENUM_BROADCAST_NO_LORA, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    TEST_ASSERT_TRUE_MESSAGE(checkXeddsaReceivePolicy(&unsignedText), "test_mqtt's from==1 text downlink must still pass");
+
+    // Only the signed variant reaches the first-contact path, so it is what pins the guard's
+    // placement: it must come back NOT_APPLICABLE, not INVALID.
+    uint8_t pub[32], priv[32];
+    crypto->generateKeyPair(pub, priv);
+    meshtastic_MeshPacket signedText =
+        makeDecoded(NODENUM_BROADCAST_NO_LORA, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    signWithCurrentKey(&signedText);
+
+    TEST_ASSERT_TRUE_MESSAGE(checkXeddsaReceivePolicy(&signedText),
+                             "signed text from an unknown reserved sender must not be dropped");
+    TEST_ASSERT_NULL_MESSAGE(mockNodeDB->getMeshNode(NODENUM_BROADCAST_NO_LORA),
+                             "a non-NodeInfo packet must not create a NodeDB entry");
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -2007,6 +2066,9 @@ void setup()
     RUN_TEST(test_E11_decoded_unsigned_oversized_telemetry_from_signer_accepted);
     RUN_TEST(test_E12_decoded_unsigned_waypoint_padded_inside_payload_dropped);
     RUN_TEST(test_E13_decoded_unsigned_nodeinfo_padded_inside_payload_dropped);
+    RUN_TEST(test_E14_reserved_sender_first_contact_nodeinfo_dropped);
+    RUN_TEST(test_E15_reserved_nodenum_boundary_excludes_num_reserved);
+    RUN_TEST(test_E16_reserved_sender_non_nodeinfo_still_accepted);
 
     const int result = UNITY_END();
     airTime = savedAirTime;
