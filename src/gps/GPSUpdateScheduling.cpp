@@ -2,11 +2,13 @@
 
 #include "Default.h"
 
-// Sampled from the original `2750 * seconds^1.22` curve. Interpolation tracks it within ~0.5%
-// for inputs >=10s and ~1.6% below that, negligible next to update intervals of tens of seconds+.
-static constexpr uint32_t kThresholdCurveSecs[] = {0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 450, 600, 900};
-static constexpr uint32_t kThresholdCurveMs[] = {0,      19592,  45639,   74845,   106314,  174350,  285925,  406141,
-                                                 666053, 946093, 1551548, 2203893, 2893481, 4745172, 6740269, 11053722};
+// Sampled from the original `2750 * seconds^1.22` curve. Interpolation tracks it within 0.6% for
+// inputs >=10s and 1.7% below that; the 1s/2s/3s points keep the convex first segment from
+// overshooting (a 0s-to-5s chord reads 42% high at 1s).
+static constexpr uint32_t kThresholdCurveSecs[] = {0, 1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 450, 600, 900};
+static constexpr uint32_t kThresholdCurveMs[] = {0,       2750,    6406,    10506,   19592,   45639,  74845,
+                                                 106314,  174350,  285925,  406141,  666053,  946093, 1551548,
+                                                 2203893, 2893481, 4745172, 6740269, 11053722};
 static constexpr size_t kThresholdCurvePoints = sizeof(kThresholdCurveSecs) / sizeof(kThresholdCurveSecs[0]);
 
 // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
