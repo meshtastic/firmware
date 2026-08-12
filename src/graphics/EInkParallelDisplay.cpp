@@ -22,7 +22,7 @@
 #define EPD_RESPONSIVE_MIN_MS 1000 // simple rate-limit (ms) for responsive updates
 #endif
 
-EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rot) : epaper(nullptr), rotation(rot)
+EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRotation rot) : rotation(rot)
 {
     LOG_INFO("init EInkParallelDisplay");
     // Set dimensions in OLEDDisplay base class
@@ -42,19 +42,13 @@ EInkParallelDisplay::EInkParallelDisplay(uint16_t width, uint16_t height, EpdRot
     // allocate dirty pixel buffer same size as epaper buffers (rowBytes * height)
     size_t rowBytes = (this->displayWidth + 7) / 8;
     dirtyPixelsSize = rowBytes * this->displayHeight;
-    dirtyPixels = (uint8_t *)calloc(dirtyPixelsSize, 1);
+    dirtyPixels = std::make_unique<uint8_t[]>(dirtyPixelsSize);
     ghostPixelCount = 0;
 #endif
 }
 
 EInkParallelDisplay::~EInkParallelDisplay()
 {
-#ifdef EINK_LIMIT_GHOSTING_PX
-    if (dirtyPixels) {
-        free(dirtyPixels);
-        dirtyPixels = nullptr;
-    }
-#endif
     // If an async full update is running, wait for it to finish
     if (asyncFullRunning.load()) {
         // wait a short while for task to finish
@@ -67,8 +61,6 @@ EInkParallelDisplay::~EInkParallelDisplay()
             asyncTaskHandle = nullptr;
         }
     }
-
-    delete epaper;
 }
 
 /*
@@ -79,7 +71,7 @@ bool EInkParallelDisplay::connect()
     LOG_INFO("Do EPD init");
     int initRc = BBEP_SUCCESS;
     if (!epaper) {
-        epaper = new FASTEPD;
+        epaper.reset(new FASTEPD);
 #if defined(T5_S3_EPAPER_PRO_V1)
         initRc = epaper->initPanel(BB_PANEL_LILYGO_T5PRO, 28000000);
 #elif defined(T5_S3_EPAPER_PRO_V2)
@@ -407,7 +399,7 @@ void EInkParallelDisplay::resetGhostPixelTracking()
 {
     if (!dirtyPixels)
         return;
-    memset(dirtyPixels, 0, dirtyPixelsSize);
+    memset(dirtyPixels.get(), 0, dirtyPixelsSize);
     ghostPixelCount = 0;
 }
 #endif

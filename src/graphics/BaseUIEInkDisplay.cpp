@@ -22,13 +22,8 @@ BaseUIEInkDisplay::BaseUIEInkDisplay(Drivers::EInk *driver, uint8_t rotation) : 
     // Panel-native row-major buffer
     panelRowBytes = ((driver->width - 1) / 8) + 1;
     panelBufferSize = panelRowBytes * driver->height;
-    panelBuffer = new uint8_t[panelBufferSize];
-    memset(panelBuffer, 0xFF, panelBufferSize); // All white
-}
-
-BaseUIEInkDisplay::~BaseUIEInkDisplay()
-{
-    delete[] panelBuffer;
+    panelBuffer = std::make_unique<uint8_t[]>(panelBufferSize);
+    memset(panelBuffer.get(), 0xFF, panelBufferSize); // All white
 }
 
 bool BaseUIEInkDisplay::connect()
@@ -106,7 +101,7 @@ bool BaseUIEInkDisplay::commit(Drivers::EInk::UpdateTypes type, bool blocking)
     if (type == Drivers::EInk::UpdateTypes::FAST && !driver->supports(Drivers::EInk::UpdateTypes::FAST))
         type = Drivers::EInk::UpdateTypes::FULL;
 
-    driver->update(panelBuffer, type);
+    driver->update(panelBuffer.get(), type);
 
     if (blocking)
         driver->await();
@@ -151,7 +146,7 @@ Drivers::EInk::UpdateTypes BaseUIEInkDisplay::decide()
 
 uint32_t BaseUIEInkDisplay::repack()
 {
-    memset(panelBuffer, 0xFF, panelBufferSize); // start all-white
+    memset(panelBuffer.get(), 0xFF, panelBufferSize); // start all-white
 
     const uint16_t pw = driver->width;
     const uint16_t ph = driver->height;
