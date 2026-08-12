@@ -397,11 +397,22 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
 
-    // nRF54L15-DK has no screen - cannot display a PIN to the user.
-    // Requesting BT_SECURITY_L2 causes the OS to show a pairing dialog that
-    // the user dismisses, triggering disconnect + advertising restart failure.
-    // Skip security negotiation; the Meshtastic app works over plain GATT.
-    // (Security can be re-enabled once a display or NFC OOB path is available.)
+#if defined(CONFIG_BT_SMP)
+    // Every characteristic and CCC in mesh_svc carries BT_GATT_PERM_*_AUTHEN, so
+    // nothing works until the link is encrypted AND authenticated (level 4 here:
+    // LE Secure Connections + the fixed passkey).  We used to leave the escalation
+    // to the central, relying on it reacting to the "Insufficient Authentication"
+    // ATT error - iOS CoreBluetooth and BlueZ do, but Chrome's Web Bluetooth on
+    // Windows does not: it forwards the error to JS, the client never subscribes to
+    // fromNum, never sends want_config, and hangs on "loading" until the BLE zombie
+    // watchdog reboots us.  Send a Security Request instead so the peer either
+    // encrypts with its existing LTK or starts pairing.  If it holds a stale bond,
+    // security_changed_cb below unpairs it so the next attempt is clean.
+    int sec_err = bt_conn_set_security(conn, BT_SECURITY_L4);
+    if (sec_err) {
+        LOG_WARN("BLE security request failed: %d", sec_err);
+    }
+#endif
 }
 
 static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
