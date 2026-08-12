@@ -8,6 +8,11 @@
 #include <Adafruit_ADS1X15.h>
 
 #define ADS1X15_I2C_CLOCK_SPEED 100000
+// ADS1X15 has no practical way to be detected. Use this to toggle
+// between ADS1015 (0) or ADS1115 (1)
+#ifndef MESHTASTIC_ADC_ADS1115
+#define MESHTASTIC_ADC_ADS1115 1
+#endif
 
 class ADS1X15Sensor : public TelemetrySensor
 {
