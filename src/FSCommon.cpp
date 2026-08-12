@@ -340,7 +340,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)", filepath, file.size());
+                LOG_TRACE(" %s (%i Bytes)", filepath, file.size());
                 file.close();
             }
         }
@@ -394,7 +394,7 @@ void fsInit()
 #if defined(ARCH_ESP32)
     LOG_DEBUG("Filesystem files (%d/%d Bytes):", FSCom.usedBytes(), FSCom.totalBytes());
 #else
-    LOG_DEBUG("Filesystem files:");
+    LOG_TRACE("Filesystem files:");
 #endif
     listDir("/", 10);
 #endif

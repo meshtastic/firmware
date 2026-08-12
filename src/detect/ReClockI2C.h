@@ -35,20 +35,20 @@ class ReClockI2C
         uint32_t currentClock = this->getClock();
 
         if (currentClock) {
-            LOG_DEBUG("Current I2C frequency: %uHz", currentClock);
+            LOG_TRACE("Current I2C frequency: %uHz", currentClock);
         }
 
         if (currentClock != desiredClock) {
-            LOG_DEBUG("Changing I2C clock to %uHz", desiredClock);
+            LOG_TRACE("Changing I2C clock to %uHz", desiredClock);
             this->i2cBus->setClock(desiredClock);
             // If the clock is 0Hz, we still store it
             // We'll check in restoreClock function
             setPreviousClock(currentClock);
-            LOG_DEBUG("Stored previous clock I2C clock: %uHz", this->previousClock);
+            LOG_TRACE("Stored previous clock I2C clock: %uHz", this->previousClock);
             return true;
         }
 
-        LOG_DEBUG("I2C clock was already %uHz. Skipping", desiredClock);
+        LOG_TRACE("I2C clock was already %uHz. Skipping", desiredClock);
         setPreviousClock(0);
         return false;
     }
@@ -56,12 +56,12 @@ class ReClockI2C
     bool restoreClock()
     {
         if (this->previousClock) {
-            LOG_DEBUG("Restoring I2C clock to %uHz", this->previousClock);
+            LOG_TRACE("Restoring I2C clock to %uHz", this->previousClock);
             i2cBus->setClock(this->previousClock);
             setPreviousClock(0);
             return true;
         }
-        LOG_DEBUG("I2C clock was unknown. Not restored");
+        LOG_TRACE("I2C clock was unknown. Not restored");
         return false;
     }
 

@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
+#include "gps/GPSLog.h"
 #include "main.h"
 #include "mesh/MeshService.h"
 #include "modules/NodeInfoModule.h"
@@ -127,8 +128,8 @@ RTCSetResult readFromRTC()
         }
 #endif
 
-        LOG_DEBUG("RTC time from RV3028 getTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-                  t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+        LOG_DEBUG_GPS("RTC time from RV3028 getTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
+                      t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
@@ -173,8 +174,8 @@ RTCSetResult readFromRTC()
         }
 #endif
 
-        LOG_DEBUG("RTC time from %s getDateTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900,
-                  t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+        LOG_DEBUG_GPS("RTC time from %s getDateTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t.tm_year + 1900,
+                      t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         if (currentQuality == RTCQualityNone) {
             RTCQuality oldQuality = currentQuality;
             timeStartMsec = now;
@@ -200,8 +201,8 @@ RTCSetResult readFromRTC()
             tv.tv_usec = 0;
 
             uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
-            LOG_DEBUG("RTC time from RX8130CE getDateTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
-                      t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+            LOG_DEBUG_GPS("RTC time from RX8130CE getDateTime: %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900,
+                          t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
 #ifdef BUILD_EPOCH
             if (tv.tv_sec < BUILD_EPOCH) {
                 if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
@@ -294,14 +295,14 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
         LOG_DEBUG("Upgrade time to quality %s", RtcName(q));
     } else if (q == RTCQualityGPS) {
         shouldSet = true;
-        LOG_DEBUG("Reapply GPS time: %ld secs", printableEpoch);
+        LOG_DEBUG_GPS("Reapply GPS time: %ld secs", printableEpoch);
     } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (30 * 60 * 1000UL))) {
         // Every 30 minutes we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
-        LOG_DEBUG("Reapply external time to fix clock drift %ld secs", printableEpoch);
+        LOG_DEBUG_GPS("Reapply external time to fix clock drift %ld secs", printableEpoch);
     } else {
         shouldSet = false;
-        LOG_DEBUG("RTC quality: %s. Ignore time of quality %s", RtcName(currentQuality), RtcName(q));
+        LOG_DEBUG_GPS("RTC quality: %s. Ignore time of quality %s", RtcName(currentQuality), RtcName(q));
     }
 
     if (shouldSet) {
@@ -327,10 +328,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // tv_sec is a long, which is not time_t everywhere: on Windows
             // time_t is 64-bit while long is 32-bit. Copy before taking &.
             time_t setSecs = tv->tv_sec;
-            tm *t = gmtime(&setSecs);
+            const tm *t = gmtime(&setSecs);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            LOG_DEBUG_GPS("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                          t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
         } else {
             LOG_WARN("RTC set: not found (addr 0x%02X)", rtc_found.address);
         }
@@ -352,10 +353,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // tv_sec is a long, which is not time_t everywhere: on Windows
             // time_t is 64-bit while long is 32-bit. Copy before taking &.
             time_t setSecs = tv->tv_sec;
-            tm *t = gmtime(&setSecs);
+            const tm *t = gmtime(&setSecs);
             rtc.setDateTime(*t);
-            LOG_DEBUG("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900, t->tm_mon + 1,
-                      t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            LOG_DEBUG_GPS("%s setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", rtc.getChipName(), t->tm_year + 1900,
+                          t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
         } else {
             LOG_WARN("RTC set: not found (addr 0x%02X)", rtc_found.address);
         }
@@ -369,10 +370,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             // tv_sec is a long, which is not time_t everywhere: on Windows
             // time_t is 64-bit while long is 32-bit. Copy before taking &.
             time_t setSecs = tv->tv_sec;
-            tm *t = gmtime(&setSecs);
+            const tm *t = gmtime(&setSecs);
             if (rtc.setTime(*t)) {
-                LOG_DEBUG("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
-                          t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+                LOG_DEBUG_GPS("RX8130CE setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1,
+                              t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
             } else {
                 LOG_WARN("RX8130CE set time failed");
             }

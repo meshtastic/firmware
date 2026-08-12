@@ -467,8 +467,8 @@ Unity suite, because what it asserts - the exit status and printed report of
 `meshtasticd --check`, and the fact that a normal run still refuses a bad config - are
 properties of the process, not of a linkable function. Fixtures live in
 `test/fixtures/portduino-config/` (see the README there); CI runs it in
-`test_native.yml`. It is not counted in `native-suite-count`, which only tracks `test_*`
-directories.
+`test_native.yml`. It is not a `test_*` directory, so it sits outside the suite count the
+harness derives from `test/`.
 
 ```bash
 pio run -e native && ./bin/test-config-check.sh
@@ -476,10 +476,11 @@ pio run -e native && ./bin/test-config-check.sh
 
 ## Existing Test Suites
 
-**This table is a description, not an inventory.** The canonical suite total lives in
-`test/native-suite-count`, is machine-checked against `test/test_*` on every full run and in CI
-(`test_native.yml`), and is the only number that should be trusted or quoted. Entries below carry
-per-suite descriptions the count cannot; do not infer completeness from the row count.
+**This table is a description, not an inventory.** The canonical suite total is the number of
+`test_*` directories under `test/`, detected on the fly by `bin/run-tests.sh` on every full run
+and cross-checked against the suites that actually ran. That derived count is the only number
+that should be trusted or quoted. Entries below carry per-suite descriptions the count cannot;
+do not infer completeness from the row count.
 
 | Suite                        | Module Under Test             |
 | ---------------------------- | ----------------------------- |
