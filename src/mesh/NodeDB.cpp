@@ -2012,9 +2012,6 @@ void NodeDB::installDefaultDeviceState()
 #endif
 }
 
-// We reserve a few nodenums for future use
-#define NUM_RESERVED 4
-
 /**
  * get our starting (provisional) nodenum from flash.
  */
@@ -2038,8 +2035,7 @@ void NodeDB::pickNewNodeNum()
     };
 
     meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && !isOurOwnEntry(found)) ||
-           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
+    while (((found = getMeshNode(nodeNum)) && !isOurOwnEntry(found)) || isReservedNodeNum(nodeNum)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         if (found)
             LOG_WARN("NOTE! Desired nodenum 0x%08x invalid or in use, picking 0x%08x", nodeNum, candidate);

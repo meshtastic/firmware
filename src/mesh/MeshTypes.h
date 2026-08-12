@@ -12,6 +12,17 @@ typedef uint32_t PacketId; // A packet sequence number
 #define NODENUM_BROADCAST UINT32_MAX
 #define NODENUM_BROADCAST_NO_LORA                                                                                                \
     1 // Reserved to only deliver packets over high speed (non-lora) transports, such as MQTT or BLE mesh (not yet implemented)
+// We reserve a few nodenums for future use
+#define NUM_RESERVED 4
+
+/// True if this nodenum can never belong to a real peer: the reserved low range (which contains
+/// NODENUM_BROADCAST_NO_LORA) plus the broadcast address. Mirrors the guard NodeDB::pickNewNodeNum()
+/// applies to our own number, so the same rule can be enforced on numbers claimed off the wire.
+inline bool isReservedNodeNum(NodeNum n)
+{
+    return n == NODENUM_BROADCAST || n < NUM_RESERVED;
+}
+
 #define ERRNO_OK 0
 #define ERRNO_NO_INTERFACES 33
 #define ERRNO_UNKNOWN 32                   // pick something that doesn't conflict with RH_ROUTER_ERROR_UNABLE_TO_DELIVER

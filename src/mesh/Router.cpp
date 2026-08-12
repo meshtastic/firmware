@@ -656,6 +656,14 @@ static NodeInfoBootstrapResult verifyFirstContactNodeInfo(meshtastic_MeshPacket 
     if (p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP)
         return NodeInfoBootstrapResult::NOT_APPLICABLE;
 
+    // A reserved nodenum is never a legitimate peer - pickNewNodeNum() refuses to hand one out - and
+    // identity binding alone does not exclude it, because an attacker can grind a keypair whose
+    // public key CRC32s to a reserved value. Admitting one matters: isBroadcast() is true for
+    // NODENUM_BROADCAST_NO_LORA, so a DM to that contact would skip PKI and fall back to the shared
+    // channel PSK, then be dropped before LoRa TX. Reject here, before any NodeDB entry exists.
+    if (isReservedNodeNum(p->from))
+        return NodeInfoBootstrapResult::INVALID;
+
     meshtastic_User user = meshtastic_User_init_zero;
     if (!pb_decode_from_bytes(p->decoded.payload.bytes, p->decoded.payload.size, &meshtastic_User_msg, &user) ||
         user.public_key.size != 32 || crc32Buffer(user.public_key.bytes, user.public_key.size) != p->from ||
