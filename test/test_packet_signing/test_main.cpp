@@ -1129,8 +1129,7 @@ void test_B14_strict_signs_explicit_acks(void)
     TEST_ASSERT_TRUE_MESSAGE(signedEncodingFits(&p.decoded), "an ack plus signature must always fit a frame");
 
     TEST_ASSERT_EQUAL(DECODE_SUCCESS, roundTrip(&p));
-    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, p.decoded.xeddsa_signature.size,
-                              "Strict must sign the explicit ack");
+    TEST_ASSERT_EQUAL_MESSAGE(XEDDSA_SIGNATURE_SIZE, p.decoded.xeddsa_signature.size, "Strict must sign the explicit ack");
     TEST_ASSERT_TRUE(p.xeddsa_signed);
 
     const meshtastic_PortNum nonAckPorts[] = {

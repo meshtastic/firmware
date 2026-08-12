@@ -805,10 +805,9 @@ void test_receiveVerifiesSignedAckAndDropsRetargeted(void)
     meshtastic_MeshPacket retargeted = p;
     retargeted.id++; // dodge any dedup by id; the signature binds the original id too, but the
                      // point pinned here is the request_id binding
-    TEST_ASSERT_TRUE(crypto->xeddsa_sign(retargeted.from, retargeted.id, retargeted.decoded.portnum,
-                                         retargeted.decoded.request_id, retargeted.decoded.reply_id,
-                                         retargeted.decoded.payload.bytes, retargeted.decoded.payload.size,
-                                         retargeted.decoded.xeddsa_signature.bytes));
+    TEST_ASSERT_TRUE(crypto->xeddsa_sign(
+        retargeted.from, retargeted.id, retargeted.decoded.portnum, retargeted.decoded.request_id, retargeted.decoded.reply_id,
+        retargeted.decoded.payload.bytes, retargeted.decoded.payload.size, retargeted.decoded.xeddsa_signature.bytes));
     retargeted.decoded.request_id = 0x5A5A5A5A; // retarget after signing
     unitTest->publish(&retargeted);
 

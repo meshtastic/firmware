@@ -131,7 +131,8 @@ bool CryptoEngine::xeddsa_sign(uint32_t fromNode, uint32_t packetId, uint32_t po
     if (memfll(xeddsa_private_key, 0, sizeof(xeddsa_private_key)))
         return false;
     uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
+    size_t sigLen =
+        buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
     if (sigLen == 0)
         return false;
     // XEdDSA::sign mixes signature[0..31] into the nonce as the spec's random Z (meshtastic/Crypto#3)
@@ -153,7 +154,8 @@ bool CryptoEngine::xeddsa_verify(const uint8_t *pubKey, uint32_t fromNode, uint3
         memcpy(cached_curve_pubkey, pubKey, 32);
     }
     uint8_t sigBuf[MAX_BLOCKSIZE];
-    size_t sigLen = buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
+    size_t sigLen =
+        buildSigningBuffer(sigBuf, sizeof(sigBuf), fromNode, packetId, portnum, requestId, replyId, payload, payloadLen);
     if (sigLen == 0)
         return false;
     return XEdDSA::verify(signature, cached_ed_pubkey, sigBuf, sigLen);

@@ -639,10 +639,9 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // Authoritative keys only: verifying against an opportunistic cache key would let a planted
         // key mark its own node a signer, the trust loop #11116 closed on the decrypt path.
         if (nodeDB->copyPublicKeyAuthoritative(p->from, senderKey)) {
-            p->xeddsa_signed =
-                crypto->xeddsa_verify(senderKey.bytes, p->from, p->id, p->decoded.portnum, p->decoded.request_id,
-                                      p->decoded.reply_id, p->decoded.payload.bytes, p->decoded.payload.size,
-                                      p->decoded.xeddsa_signature.bytes);
+            p->xeddsa_signed = crypto->xeddsa_verify(senderKey.bytes, p->from, p->id, p->decoded.portnum, p->decoded.request_id,
+                                                     p->decoded.reply_id, p->decoded.payload.bytes, p->decoded.payload.size,
+                                                     p->decoded.xeddsa_signature.bytes);
             if (p->xeddsa_signed) {
                 // Learn this node as a signer, so a later unsigned signable broadcast from it is dropped
                 // A warm-tier key must be re-admitted before setting the signer bit; otherwise Balanced
@@ -691,7 +690,7 @@ bool checkXeddsaReceivePolicy(meshtastic_MeshPacket *p)
         // would have fit, plus unicasts on ham where licensed senders sign too. Mirrors perhapsEncode
         // EXCEPT for its Strict-signs-acks clause, which is deliberately not mirrored: a receiver
         // cannot know the sender's policy, so an unsigned unicast ack must never be treated as a
-        // downgrade — "fixing" that asymmetry here would drop every ack from Balanced/Compatible
+        // downgrade - "fixing" that asymmetry here would drop every ack from Balanced/Compatible
         // senders the moment they are known signers.
         if (nodeDB->isKnownXeddsaSigner(p->from) && (isBroadcast(p->to) || owner.is_licensed)) {
             size_t canonicalSize;
@@ -1101,11 +1100,9 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 config.security.packet_signature_policy ==
                     meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT &&
                 p->decoded.portnum == meshtastic_PortNum_ROUTING_APP && !isBroadcast(p->to);
-            if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to) || strictSignsAck) &&
-                signedDataFits(&p->decoded)) {
+            if (!p->pki_encrypted && (owner.is_licensed || isBroadcast(p->to) || strictSignsAck) && signedDataFits(&p->decoded)) {
                 if (crypto->xeddsa_sign(p->from, p->id, p->decoded.portnum, p->decoded.request_id, p->decoded.reply_id,
-                                        p->decoded.payload.bytes, p->decoded.payload.size,
-                                        p->decoded.xeddsa_signature.bytes)) {
+                                        p->decoded.payload.bytes, p->decoded.payload.size, p->decoded.xeddsa_signature.bytes)) {
                     p->decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
                     LOG_DEBUG("XEdDSA signed packet 0x%08x", p->id);
                 }

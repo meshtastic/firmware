@@ -190,8 +190,8 @@ void test_XEdDSA(void)
 
         // Sign and verify with metadata
         TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), signature));
-        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, requestId, replyId, message,
-                                          sizeof(message), signature));
+        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message),
+                                          signature));
 
         // Different payload fails
         TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, fromNode, packetId, portnum, requestId, replyId, message2,
@@ -266,9 +266,12 @@ void test_XEdDSA_curve_to_ed_cache(void)
     TEST_ASSERT(crypto->xeddsa_sign(fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigB));
 
     // Interleave keys to exercise both cache hits and cache invalidation.
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigA));
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pubB, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigB));
-    TEST_ASSERT_TRUE(crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigA));
+    TEST_ASSERT_TRUE(
+        crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigA));
+    TEST_ASSERT_TRUE(
+        crypto->xeddsa_verify(pubB, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigB));
+    TEST_ASSERT_TRUE(
+        crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigA));
     TEST_ASSERT_FALSE(
         crypto->xeddsa_verify(pubA, fromNode, packetId, portnum, requestId, replyId, message, sizeof(message), sigB));
 }
@@ -316,7 +319,7 @@ void test_XEdDSA_repeated_sign_is_randomized(void)
 // pre-request_id-binding format: a signature built by hand over [from|id|portnum|payload] - what
 // an existing 2.8 draft signer emits - must verify through the current engine with 0/0 fields,
 // and must NOT verify when reinterpreted with nonzero request/reply fields (or vice versa).
-void test_XEdDSA_base_format_backwards_compat(void)
+void test_XEdDSA_legacy_layout_compat(void)
 {
     uint8_t pub[32], priv[32], ed_priv[32], ed_pub[32];
     uint8_t message[] = "legacy signer";
@@ -432,7 +435,7 @@ void setup()
     RUN_TEST(test_XEdDSA_curve_to_ed_cache);
     RUN_TEST(test_XEdDSA_max_payload);
     RUN_TEST(test_XEdDSA_repeated_sign_is_randomized);
-    RUN_TEST(test_XEdDSA_base_format_backwards_compat);
+    RUN_TEST(test_XEdDSA_legacy_layout_compat);
     exit(UNITY_END()); // stop unit testing
 }
 
