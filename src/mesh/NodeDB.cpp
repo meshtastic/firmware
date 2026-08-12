@@ -4401,8 +4401,9 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             spiLock->unlock();
         }
         meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
-                            &meshtastic_BackupPreferences_msg, &backup);
+        const LoadFileResult state = loadProto(backupFileName, meshtastic_BackupPreferences_size,
+                                               sizeof(meshtastic_BackupPreferences), &meshtastic_BackupPreferences_msg, &backup);
+        success = (state == LoadFileResult::LOAD_SUCCESS);
         if (success) {
             if (restoreWhat & SEGMENT_CONFIG) {
                 config = backup.config;
