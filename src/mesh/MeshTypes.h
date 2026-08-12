@@ -15,9 +15,7 @@ typedef uint32_t PacketId; // A packet sequence number
 // We reserve a few nodenums for future use
 #define NUM_RESERVED 4
 
-/// True if this nodenum can never belong to a real peer: the reserved low range (which contains
-/// NODENUM_BROADCAST_NO_LORA) plus the broadcast address. Mirrors the guard NodeDB::pickNewNodeNum()
-/// applies to our own number, so the same rule can be enforced on numbers claimed off the wire.
+/// True for nodenums no real peer can hold: the reserved low range and the broadcast address.
 inline bool isReservedNodeNum(NodeNum n)
 {
     return n == NODENUM_BROADCAST || n < NUM_RESERVED;
