@@ -736,17 +736,20 @@ bool SENXXSensor::startCleaning()
 {
     // Note: we only should enter here if we have a valid RTC with at least
     // RTCQuality::RTCQualityDevice
+    SENXXState previousState = state;
     state = SENXX_CLEANING;
 
     // Note that cleaning command can only be run when the sensor is in measurement mode
     if (!sendCommand(SENXX_START_MEASUREMENT)) {
         LOG_ERROR("%s: Error starting measurement mode", sensorName);
+        state = previousState;
         return false;
     }
     delay(50); // From Sensirion Datasheet
 
     if (!sendCommand(SENXX_START_FAN_CLEANING)) {
         LOG_ERROR("%s: Error starting fan cleaning", sensorName);
+        state = previousState;
         return false;
     }
     delay(20); // From Sensirion Datasheet
@@ -1111,7 +1114,7 @@ uint8_t SENXXSensor::getMeasurements()
     bool dataReady = dataReadyBuffer[1];
     uint32_t sinceLastDataPollMs = now - lastDataPoll;
     // Check if data is ready, and if since last time we requested is less than SENXX_POLL_INTERVAL
-    if (!dataReady && (sinceLastDataPollMs < SENXX_POLL_INTERVAL)) {
+    if (!dataReady || (sinceLastDataPollMs < SENXX_POLL_INTERVAL)) {
         LOG_INFO("%s: Data is not ready", sensorName);
         return 1;
     }
