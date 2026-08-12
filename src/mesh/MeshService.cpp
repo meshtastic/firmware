@@ -353,6 +353,8 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     lastQueueStatus = *copied;
 
     res = toPhoneQueueStatusQueue.enqueue(copied, 0);
+    if (!res)
+        releaseQueueStatusToPool(copied);
     fromNum++;
 
     return res ? ERRNO_OK : ERRNO_UNKNOWN;
