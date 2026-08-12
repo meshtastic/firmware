@@ -1,5 +1,5 @@
-// Tests for the NodeDB hot-store migration and favourite/ignored (blocked)
-// retention paths - src/mesh/NodeDB.cpp.
+// Tests for the NodeDB hot-store migration, favourite/ignored (blocked)
+// retention, and addFromContact() public-key retention paths - src/mesh/NodeDB.cpp.
 #include "MeshTypes.h" // BEFORE TestUtil.h - provides WARM_NODE_COUNT / MAX_NUM_NODES via mesh-pb-constants.h
 #include "TestUtil.h"
 #include <unity.h>
@@ -14,6 +14,7 @@
 #if WARM_NODE_COUNT > 0
 
 #include "mesh/NodeDB.h"
+#include "mesh/generated/meshtastic/admin.pb.h" // meshtastic_SharedContact
 #include <cstring>
 
 // Subclass shim: exposes the private maintenance paths (via the friend
@@ -70,6 +71,30 @@ bool warmHasKey(NodeNum n)
 {
     meshtastic_NodeInfoLite_public_key_t k = {0, {0}};
     return db->copyPublicKey(n, k) && k.size == 32;
+}
+
+// Seed a hot-store node holding a full 32-byte key of repeated `fill`, copied out to `out`.
+void seedKeyedNode(NodeNum num, uint8_t fill, uint8_t out[32])
+{
+    db->push(num, /*last_heard=*/100, /*favorite=*/false, /*ignored=*/false, /*withUser=*/true, /*withKey=*/false);
+    meshtastic_NodeInfoLite *n = db->getMeshNode(num);
+    TEST_ASSERT_NOT_NULL(n);
+    n->public_key.size = 32;
+    memset(n->public_key.bytes, fill, 32);
+    memcpy(out, n->public_key.bytes, 32);
+}
+
+// An add_contact payload for `num` whose key is `size` bytes of repeated `fill`.
+meshtastic_SharedContact makeContact(NodeNum num, pb_size_t size, uint8_t fill)
+{
+    meshtastic_SharedContact c = meshtastic_SharedContact_init_zero;
+    c.node_num = num;
+    c.has_user = true;
+    strncpy(c.user.long_name, "Contact", sizeof(c.user.long_name) - 1);
+    strncpy(c.user.short_name, "ct", sizeof(c.user.short_name) - 1);
+    c.user.public_key.size = size;
+    memset(c.user.public_key.bytes, fill, size);
+    return c;
 }
 
 } // namespace
@@ -258,6 +283,75 @@ static void test_removeNodeByNum_presentNodeOnFullDb(void)
     TEST_ASSERT_NOT_NULL(db->getMeshNode(8000 + MAX_NUM_NODES - 1)); // survivors kept
 }
 
+// addFromContact() runs CopyUserToNodeInfoLite, which assigns public_key unconditionally.
+// A keyless contact (clients send add_contact before every DM) must not erase a stored key.
+static void test_addFromContact_emptyKeyKeepsStoredKey(void)
+{
+    db->seedSelf();
+    const NodeNum num = 0xC0FFEE01;
+    uint8_t stored[32];
+    seedKeyedNode(num, 0xA5, stored);
+
+    db->addFromContact(makeContact(num, /*size=*/0, /*fill=*/0x00));
+
+    const meshtastic_NodeInfoLite *n = db->getMeshNode(num);
+    TEST_ASSERT_NOT_NULL(n);
+    TEST_ASSERT_EQUAL_UINT(32, n->public_key.size);
+    TEST_ASSERT_EQUAL_MEMORY(stored, n->public_key.bytes, 32);
+}
+
+// Same guard for a truncated key: anything short of 32 bytes is unusable for PKI,
+// so it must not displace a full stored key either.
+static void test_addFromContact_shortKeyKeepsStoredKey(void)
+{
+    db->seedSelf();
+    const NodeNum num = 0xC0FFEE02;
+    uint8_t stored[32];
+    seedKeyedNode(num, 0x5A, stored);
+
+    db->addFromContact(makeContact(num, /*size=*/4, /*fill=*/0x11));
+
+    const meshtastic_NodeInfoLite *n = db->getMeshNode(num);
+    TEST_ASSERT_NOT_NULL(n);
+    TEST_ASSERT_EQUAL_UINT(32, n->public_key.size);
+    TEST_ASSERT_EQUAL_MEMORY(stored, n->public_key.bytes, 32);
+}
+
+// Regression guard on the guard: a well-formed 32-byte contact key still replaces the
+// stored one. Refusing erasure must not harden into a blanket first-key-wins pin.
+static void test_addFromContact_fullKeyReplacesStoredKey(void)
+{
+    db->seedSelf();
+    const NodeNum num = 0xC0FFEE03;
+    uint8_t stored[32];
+    seedKeyedNode(num, 0x11, stored);
+    uint8_t incoming[32];
+    memset(incoming, 0x22, sizeof(incoming));
+
+    db->addFromContact(makeContact(num, /*size=*/32, /*fill=*/0x22));
+
+    const meshtastic_NodeInfoLite *n = db->getMeshNode(num);
+    TEST_ASSERT_NOT_NULL(n);
+    TEST_ASSERT_EQUAL_UINT(32, n->public_key.size);
+    TEST_ASSERT_EQUAL_MEMORY(incoming, n->public_key.bytes, 32);
+}
+
+// The ordinary add_contact case: a full key is stored on an entry that held none.
+static void test_addFromContact_fullKeyStoredWhenNoneHeld(void)
+{
+    db->seedSelf();
+    const NodeNum num = 0xC0FFEE04;
+    uint8_t incoming[32];
+    memset(incoming, 0x33, sizeof(incoming));
+
+    db->addFromContact(makeContact(num, /*size=*/32, /*fill=*/0x33));
+
+    const meshtastic_NodeInfoLite *n = db->getMeshNode(num);
+    TEST_ASSERT_NOT_NULL(n);
+    TEST_ASSERT_EQUAL_UINT(32, n->public_key.size);
+    TEST_ASSERT_EQUAL_MEMORY(incoming, n->public_key.bytes, 32);
+}
+
 NDB_TEST_ENTRY void setup()
 {
     initializeTestEnvironment();
@@ -273,6 +367,10 @@ NDB_TEST_ENTRY void setup()
     RUN_TEST(test_protectedCap_refusesBeyondLimit);
     RUN_TEST(test_removeNodeByNum_absentNodeOnFullDb);
     RUN_TEST(test_removeNodeByNum_presentNodeOnFullDb);
+    RUN_TEST(test_addFromContact_emptyKeyKeepsStoredKey);
+    RUN_TEST(test_addFromContact_shortKeyKeepsStoredKey);
+    RUN_TEST(test_addFromContact_fullKeyReplacesStoredKey);
+    RUN_TEST(test_addFromContact_fullKeyStoredWhenNoneHeld);
     exit(UNITY_END());
 }
 NDB_TEST_ENTRY void loop() {}
