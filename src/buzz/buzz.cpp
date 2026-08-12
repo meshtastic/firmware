@@ -11,6 +11,10 @@
 #include <unordered_map>
 #endif
 
+#if defined(HAS_I2S_SPEAKER_NRF52)
+#include "platform/nrf52/NRF52I2SOutput.h"
+#endif
+
 #if !defined(ARCH_PORTDUINO)
 extern "C" void delay(uint32_t dwMs);
 #endif
@@ -112,6 +116,32 @@ void playTones(const ToneDuration *tone_durations, int size)
         return;
     }
 #endif
+#if defined(HAS_I2S_SPEAKER_NRF52)
+    // Native I2S speaker path (no ESP AudioThread/RTTTL needed here).
+    pinMode(SPEAKER_EN, OUTPUT);
+    digitalWrite(SPEAKER_EN, HIGH);
+#if defined(SPEAKER_EN_2)
+    pinMode(SPEAKER_EN_2, OUTPUT);
+    digitalWrite(SPEAKER_EN_2, HIGH);
+#endif
+    if (!nrf52I2SOutput.begin(SPEAKER_BCLK, SPEAKER_WS_LRCK, SPEAKER_DATA)) {
+        digitalWrite(SPEAKER_EN, LOW);
+#if defined(SPEAKER_EN_2)
+        digitalWrite(SPEAKER_EN_2, LOW);
+#endif
+        return;
+    }
+    for (int i = 0; i < size; i++) {
+        const auto &tone_duration = tone_durations[i];
+        nrf52I2SOutput.playTone(tone_duration.frequency_khz, tone_duration.duration_ms);
+    }
+    nrf52I2SOutput.end();
+    digitalWrite(SPEAKER_EN, LOW);
+#if defined(SPEAKER_EN_2)
+    digitalWrite(SPEAKER_EN_2, LOW);
+#endif
+    return;
+#endif
 #if defined(PIN_BUZZER)
     if (!config.device.buzzer_gpio)
         config.device.buzzer_gpio = PIN_BUZZER;
@@ -191,18 +221,6 @@ void playBoop()
 {
     // A short, friendly "boop" sound for button presses
     ToneDuration melody[] = {{NOTE_A3, 50}}; // Very short A3 note
-    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
-}
-
-void playLongPressLeadUp()
-{
-    // An ascending lead-up sequence for long press - builds anticipation
-    ToneDuration melody[] = {
-        {NOTE_C3, 100}, // Start low
-        {NOTE_E3, 100}, // Step up
-        {NOTE_G3, 100}, // Keep climbing
-        {NOTE_B3, 150}  // Peak with longer note for emphasis
-    };
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 

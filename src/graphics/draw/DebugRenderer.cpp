@@ -5,7 +5,6 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
 #include "gps/RTC.h"
@@ -16,9 +15,6 @@
 #include "graphics/TimeFormatters.h"
 #include "graphics/images.h"
 #include "main.h"
-#include "mesh/Channels.h"
-#include "mesh/generated/meshtastic/deviceonly.pb.h"
-#include "sleep.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -28,9 +24,6 @@
 #endif
 #endif
 
-#ifdef ARCH_ESP32
-#include "modules/StoreForwardModule.h"
-#endif
 #include <DisplayFormatters.h>
 #include <RadioLibInterface.h>
 #include <target_specific.h>
@@ -38,111 +31,17 @@
 using namespace meshtastic;
 
 // External variables
-extern graphics::Screen *screen;
-extern PowerStatus *powerStatus;
+extern std::unique_ptr<graphics::Screen> screen;
 extern NodeStatus *nodeStatus;
-extern GPSStatus *gpsStatus;
-extern Channels channels;
 extern AirTime *airTime;
 
 // External functions from Screen.cpp
 extern bool heartbeat;
 
-#ifdef ARCH_ESP32
-extern StoreForwardModule *storeForwardModule;
-#endif
-
 namespace graphics
 {
 namespace DebugRenderer
 {
-
-void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    char channelStr[20];
-    snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    // Display nodes status
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        UIRenderer::drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
-    } else {
-        UIRenderer::drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
-    }
-#if HAS_GPS
-    // Display GPS status
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        UIRenderer::drawGpsPowerStatus(display, x, y + 2, gpsStatus);
-    } else {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
-        } else {
-            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
-        }
-    }
-#endif
-    display->setColor(WHITE);
-    // Draw the channel name
-    display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
-    // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
-    if (moduleConfig.store_forward.enabled) {
-#ifdef ARCH_ESP32
-        if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
-                                          (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12,
-                                   8, imgQuestionL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12,
-                                   8, imgQuestionL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 8,
-                                   8, imgQuestion);
-#endif
-        } else {
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT)) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 16,
-                                   8, imgSFL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 16,
-                                   8, imgSFL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 13 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 11,
-                                   8, imgSF);
-#endif
-        }
-#endif
-    } else {
-        // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(HAS_SPI_TFT) || ARCH_PORTDUINO) && !defined(DISPLAY_FORCE_SMALL_FONTS)
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL1);
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(screen->ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL2);
-#else
-        display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(screen->ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8,
-                               imgInfo);
-#endif
-    }
-
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(screen->ourId), y + FONT_HEIGHT_SMALL, screen->ourId);
-
-    // Draw any log messages
-    display->drawLogBuffer(x, y + (FONT_HEIGHT_SMALL * 2));
-
-    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
-}
 
 // ****************************
 // * WiFi Screen              *
@@ -230,136 +129,6 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 #endif
 }
 
-void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    char batStr[20];
-    if (powerStatus->getHasBattery()) {
-        int batV = powerStatus->getBatteryVoltageMv() / 1000;
-        int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
-
-        snprintf(batStr, sizeof(batStr), "B %01d.%02dV %3d%% %c%c", batV, batCv, powerStatus->getBatteryChargePercent(),
-                 powerStatus->getIsCharging() ? '+' : ' ', powerStatus->getHasUSB() ? 'U' : ' ');
-
-        // Line 1
-        display->drawString(x, y, batStr);
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, batStr);
-    } else {
-        // Line 1
-        display->drawString(x, y, "USB");
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, "USB");
-    }
-
-    uint32_t currentMillis = millis();
-    uint32_t seconds = currentMillis / 1000;
-    uint32_t minutes = seconds / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
-    // currentMillis %= 1000;
-    // seconds %= 60;
-    // minutes %= 60;
-    // hours %= 24;
-
-    // Show uptime as days, hours, minutes OR seconds
-    std::string uptime = UIRenderer::drawTimeDelta(days, hours, minutes, seconds);
-
-    // Line 1 (Still)
-    if (currentResolution != graphics::ScreenResolution::UltraLow) {
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-        if (config.display.heading_bold)
-            display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-
-        display->setColor(WHITE);
-    }
-    // Setup string to assemble analogClock string
-    std::string analogClock = "";
-
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
-    if (rtc_sec > 0) {
-        long hms = rtc_sec % SEC_PER_DAY;
-        // hms += tz.tz_dsttime * SEC_PER_HOUR;
-        // hms -= tz.tz_minuteswest * SEC_PER_MIN;
-        // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
-        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
-
-        // Tear apart hms into h:m:s
-        int hour, min, sec;
-        graphics::decomposeTime(rtc_sec, hour, min, sec);
-
-        char timebuf[12];
-
-        if (config.display.use_12h_clock) {
-            std::string meridiem = "am";
-            if (hour >= 12) {
-                if (hour > 12)
-                    hour -= 12;
-                meridiem = "pm";
-            }
-            if (hour == 00) {
-                hour = 12;
-            }
-            snprintf(timebuf, sizeof(timebuf), "%d:%02d:%02d%s", hour, min, sec, meridiem.c_str());
-        } else {
-            snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
-        }
-        analogClock += timebuf;
-    }
-
-    // Line 2
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
-
-    // Display Channel Utilization
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-
-#if HAS_GPS
-    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // Line 3
-        if (uiconfig.gps_format != meshtastic_DeviceUIConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
-            UIRenderer::drawGpsAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-
-        // Line 4
-        UIRenderer::drawGpsCoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
-    } else {
-        UIRenderer::drawGpsPowerStatus(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-    }
-#endif
-/* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
-}
-
-// Trampoline functions for DebugInfo class access
-void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrame(display, state, x, y);
-}
-
-void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrameSettings(display, state, x, y);
-}
-
-void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    drawFrameWiFi(display, state, x, y);
-}
-
 // ****************************
 // * LoRa Focused Screen      *
 // ****************************
@@ -392,13 +161,15 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int nameX = (SCREEN_WIDTH - textWidth);
     display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
 
-    // === Second Row: Role ===
-    auto role = DisplayFormatters::getDeviceRole(config.device.role);
-    char device_role[25];
-    snprintf(device_role, sizeof(device_role), "Role: %s", role);
-    textWidth = display->getStringWidth(device_role);
-    nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, getTextPositions(display)[line++], device_role);
+    if (!graphics::isCompactPanel(display)) {
+        // === Second Row: Role ===
+        auto role = DisplayFormatters::getDeviceRole(config.device.role);
+        char device_role[25];
+        snprintf(device_role, sizeof(device_role), "Role: %s", role);
+        textWidth = display->getStringWidth(device_role);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, getTextPositions(display)[line++], device_role);
+    }
 
     // === Third Row: Radio Preset ===
     // For custom modem settings show the actual parameters; for presets use the preset name.
@@ -654,10 +425,14 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // System Uptime
-    if (line < 2) {
+    if (graphics::isCompactPanel(display)) {
+        line += 1;
+    } else {
+        if (line < 2) {
+            line += 1;
+        }
         line += 1;
     }
-    line += 1;
 
     char appversionstr[35];
     char appversionstr_formatted[40];
@@ -692,7 +467,8 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     display->drawString(nameX, getTextPositions(display)[line++], appversionstr);
 
-    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show uptime if the screen can show it
+    if (!graphics::isCompactPanel(display) &&
+        (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5))) { // Only show uptime if the screen can show it
         char uptimeStr[32] = "";
         getUptimeStr(millis(), "Up: ", uptimeStr, sizeof(uptimeStr));
         textWidth = display->getStringWidth(uptimeStr);
@@ -702,6 +478,23 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
 
     if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line <= 5)) { // Only show API state if the screen can show it
         char api_state[32] = "";
+#if defined(OLED_COMPACT_UI)
+        const char *connection = "None";
+        if (service->api_state == service->STATE_BLE) {
+            connection = "BLE";
+        } else if (service->api_state == service->STATE_WIFI) {
+            connection = "WiFi";
+        } else if (service->api_state == service->STATE_SERIAL) {
+            connection = "USB";
+        } else if (service->api_state == service->STATE_PACKET) {
+            connection = "Local";
+        } else if (service->api_state == service->STATE_HTTP) {
+            connection = "HTTP";
+        } else if (service->api_state == service->STATE_ETH) {
+            connection = "Eth";
+        }
+        snprintf(api_state, sizeof(api_state), "App: %s", connection);
+#else
         const char *clientWord = nullptr;
 
         // Determine if narrow or wide screen
@@ -725,6 +518,7 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         } else if (service->api_state == service->STATE_ETH) {
             snprintf(api_state, sizeof(api_state), "%s Connected (Ethernet)", clientWord);
         }
+#endif
         if (api_state[0] != '\0') {
             display->drawString((SCREEN_WIDTH - display->getStringWidth(api_state)) / 2, getTextPositions(display)[line++],
                                 api_state);
@@ -743,17 +537,18 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     int line = 1;
+    int scale = 1;
     int iconX = SCREEN_WIDTH - chirpy_width - (chirpy_width / 3);
     int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
     int textX_offset = 10;
     if (currentResolution == ScreenResolution::High) {
         textX_offset = textX_offset * 4;
-        const int scale = 2;
+        scale = 2;
+        iconX = SCREEN_WIDTH - (chirpy_width * 2) - ((chirpy_width * 2) / 3);
+        iconY = (SCREEN_HEIGHT - (chirpy_height * 2)) / 2;
         const int bytesPerRow = (chirpy_width + 7) / 8;
 
         for (int yy = 0; yy < chirpy_height; ++yy) {
-            iconX = SCREEN_WIDTH - (chirpy_width * 2) - ((chirpy_width * 2) / 3);
-            iconY = (SCREEN_HEIGHT - (chirpy_height * 2)) / 2;
             const uint8_t *rowPtr = chirpy + yy * bytesPerRow;
             for (int xx = 0; xx < chirpy_width; ++xx) {
                 const uint8_t byteVal = pgm_read_byte(rowPtr + (xx >> 3));
@@ -766,6 +561,19 @@ void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int1
     } else {
         display->drawXbm(iconX, iconY, chirpy_width, chirpy_height, chirpy);
     }
+
+#if GRAPHICS_TFT_COLORING_ENABLED
+    // Colour Chirpy on colour displays. The glyph is a filled head silhouette whose eyes are holes
+    // (off pixels), so two stacked regions render the proper mascot without a second bitmap:
+    //   A) whole glyph -> green body / frame / legs
+    //   B) the eye band -> black face, with the eye holes turning white via the region's off-colour
+    // Start the face band one column in from the head's left edge (col 6) so that edge stays green,
+    // matching the green column already left on the right edge (col 31).
+    graphics::registerTFTColorRegionDirect(iconX, iconY, chirpy_width * scale, chirpy_height * scale,
+                                           graphics::TFTPalette::MeshtasticGreen, graphics::getThemeBodyBg());
+    graphics::registerTFTColorRegionDirect(iconX + 7 * scale, iconY + 12 * scale, 24 * scale, 16 * scale,
+                                           graphics::TFTPalette::Black, graphics::TFTPalette::White);
+#endif
 
     int textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("Hello") / 2);
     display->drawString(textX, getTextPositions(display)[line++], "Hello");

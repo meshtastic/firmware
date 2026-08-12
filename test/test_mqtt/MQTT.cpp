@@ -53,6 +53,15 @@ class MockRouter : public Router
 class MockMeshService : public MeshService
 {
   public:
+    // No PhoneAPI reader exists in these tests, so packets the receive pipeline forwards to the phone
+    // (MeshService::sendToPhone enqueues pooled copies into toPhoneQueue) would leak at teardown. Drain
+    // the queue like the phone would. This surfaced once sendLocal() began dispatching local packets
+    // through handleReceived() directly rather than via the (mock-overridden) enqueueReceivedMessage().
+    ~MockMeshService()
+    {
+        while (meshtastic_MeshPacket *p = getForPhone())
+            releaseToPool(p);
+    }
     void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m) override
     {
         messages_.emplace_back(*m);
@@ -329,15 +338,64 @@ const meshtastic_MeshPacket encrypted = {
     .encrypted = {.size = 0},
     .id = 3,
 };
+
+void configureCoordinatePolicyChannels(bool eventChannelIsPrimary = true)
+{
+    memset(&channelFile, 0, sizeof(channelFile));
+    channelFile.channels_count = 2;
+
+    auto &eventChannel = channelFile.channels[0];
+    eventChannel.index = 0;
+    eventChannel.has_settings = true;
+    strncpy(eventChannel.settings.name, "everyone", sizeof(eventChannel.settings.name) - 1);
+    eventChannel.settings.uplink_enabled = true;
+    eventChannel.settings.downlink_enabled = true;
+    eventChannel.role = eventChannelIsPrimary ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
+#ifdef USERPREFS_CHANNEL_0_PSK
+    static const uint8_t configuredEventPsk[] = USERPREFS_CHANNEL_0_PSK;
+    eventChannel.settings.psk.size = sizeof(configuredEventPsk);
+    memcpy(eventChannel.settings.psk.bytes, configuredEventPsk, sizeof(configuredEventPsk));
+#endif
+
+    auto &privateChannel = channelFile.channels[1];
+    privateChannel.index = 1;
+    privateChannel.has_settings = true;
+    strncpy(privateChannel.settings.name, "private", sizeof(privateChannel.settings.name) - 1);
+    privateChannel.settings.psk.size = 32;
+    memset(privateChannel.settings.psk.bytes, 0xab, privateChannel.settings.psk.size);
+    privateChannel.settings.uplink_enabled = true;
+    privateChannel.settings.downlink_enabled = true;
+    privateChannel.role = eventChannelIsPrimary ? meshtastic_Channel_Role_SECONDARY : meshtastic_Channel_Role_PRIMARY;
+
+    channels.onConfigChanged();
+}
+
+meshtastic_MeshPacket makePositionPacket(ChannelIndex channel)
+{
+    meshtastic_MeshPacket packet = decoded;
+    packet.to = NODENUM_BROADCAST;
+    packet.channel = channel;
+    packet.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    return packet;
+}
+
+void clearPublicationState()
+{
+    TEST_ASSERT_EQUAL(0, unitTest->queueSize());
+    pubsub->published_.clear();
+    mockMeshService->messages_.clear();
+}
 } // namespace
 
 // Initialize mocks and configuration before running each test.
 void setUp(void)
 {
+    memset(&config, 0, sizeof(config));
     moduleConfig.mqtt =
         meshtastic_ModuleConfig_MQTTConfig{.enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true};
     moduleConfig.mqtt.map_report_settings = meshtastic_ModuleConfig_MapReportSettings{
         .publish_interval_secs = 0, .position_precision = 14, .should_report_location = true};
+    memset(&channelFile, 0, sizeof(channelFile));
     channelFile.channels[0] = meshtastic_Channel{
         .index = 0,
         .has_settings = true,
@@ -345,6 +403,7 @@ void setUp(void)
         .role = meshtastic_Channel_Role_PRIMARY,
     };
     channelFile.channels_count = 1;
+    channels.onConfigChanged();
     owner = meshtastic_User{.id = "!12345678"};
     myNodeInfo = meshtastic_MyNodeInfo{.my_node_num = 0x12345678}; // Match the expected gateway ID in topic
     localPosition =
@@ -400,6 +459,50 @@ void test_sendDirectlyConnectedEncrypted(void)
     TEST_ASSERT_EQUAL_STRING("msh/2/e/test/!12345678", topic.c_str());
     TEST_ASSERT_TRUE(env.validDecode);
     TEST_ASSERT_EQUAL(encrypted.id, env.packet->id);
+}
+
+void test_eventPositionPublicationFollowsCompileTimePolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+    const meshtastic_MeshPacket position = makePositionPacket(0);
+
+    mqtt->onSend(encrypted, position, 0);
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+    TEST_ASSERT_EQUAL(0, unitTest->queueSize());
+#else
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+#endif
+}
+
+void test_privatePositionStillPublishesWithEventPolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+    const meshtastic_MeshPacket position = makePositionPacket(1);
+
+    mqtt->onSend(encrypted, position, 1);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/private/!12345678", pubsub->published_.front().first.c_str());
+}
+
+void test_explicitPkiPositionStillPublishesWithEventPolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+    meshtastic_MeshPacket position = makePositionPacket(0);
+    meshtastic_MeshPacket encryptedPki = encrypted;
+    position.to = 2;
+    position.pki_encrypted = true;
+    encryptedPki.pki_encrypted = true;
+
+    mqtt->onSend(encryptedPki, position, 0);
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    TEST_ASSERT_EQUAL_STRING("msh/2/e/PKI/!12345678", pubsub->published_.front().first.c_str());
 }
 
 // Verify that the decoded MeshPacket is proxied through the MeshService when encryption_enabled = false.
@@ -583,6 +686,37 @@ void test_receiveEmptyDataFromProxy(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+// Text must be read as text: data.size aliases the string's first bytes, so reading it regardless
+// of the variant let a client name a length of up to PB_SIZE_MAX. There is no delivery control for
+// this variant: an encoded ServiceEnvelope always contains NUL, so text can never carry one.
+void test_receiveTextVariantFromProxyIsNotReadAsBytes(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
+    message.which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
+    // data.size would read these as the largest length a pb_size_t can name.
+    memset(message.payload_variant.text, 0xFF, sizeof(message.payload_variant.text) - 1);
+    message.payload_variant.text[sizeof(message.payload_variant.text) - 1] = '\0';
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A proxy message with no payload variant set must be ignored rather than read as bytes.
+void test_receiveNoVariantFromProxyIsIgnored(void)
+{
+    meshtastic_MqttClientProxyMessage message = meshtastic_MqttClientProxyMessage_init_default;
+    snprintf(message.topic, sizeof(message.topic), "msh/2/e/test/!87654321");
+    message.which_payload_variant = 0;
+    memset(message.payload_variant.data.bytes, 0xFF, sizeof(message.payload_variant.data.bytes));
+    message.payload_variant.data.size = sizeof(message.payload_variant.data.bytes);
+
+    mqtt->onClientProxyReceive(message);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
 // Packets should be ignored if downlink is not enabled.
 void test_receiveWithoutChannelDownlink(void)
 {
@@ -596,6 +730,8 @@ void test_receiveWithoutChannelDownlink(void)
 // Test receiving an encrypted MeshPacket on the PKI topic.
 void test_receiveEncryptedPKITopicToUs(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
     meshtastic_MeshPacket e = encrypted;
     e.to = myNodeInfo.my_node_num;
 
@@ -687,6 +823,8 @@ static meshtastic_MeshPacket makeDecodedBroadcast()
 // signing node (audit F3).
 void test_receiveDropsUnsignedBroadcastFromSigner(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
@@ -698,6 +836,8 @@ void test_receiveDropsUnsignedBroadcastFromSigner(void)
 // The same unsigned broadcast from a node never seen signing is accepted.
 void test_receiveAcceptsUnsignedBroadcastFromNonSigner(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_BALANCED;
     const meshtastic_MeshPacket p = makeDecodedBroadcast();
     unitTest->publish(&p);
 
@@ -729,6 +869,8 @@ void test_receiveVerifiesSignedDecodedDownlink(void)
 // A decoded downlink carrying a signature that fails verification is dropped.
 void test_receiveDropsBadSignatureOnDecodedDownlink(void)
 {
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
     uint8_t pub[32], priv[32];
     crypto->generateKeyPair(pub, priv);
     mockNodeDB->emptyNode.public_key.size = 32;
@@ -740,6 +882,53 @@ void test_receiveDropsBadSignatureOnDecodedDownlink(void)
     p.decoded.xeddsa_signature.size = XEDDSA_SIGNATURE_SIZE;
     p.decoded.xeddsa_signature.bytes[0] ^= 0xFF;
 
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+void test_receiveCompatibleAcceptsUnsignedBroadcastFromSigner(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_COMPATIBLE;
+    mockNodeDB->emptyNode.bitfield |= NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
+
+    const meshtastic_MeshPacket p = makeDecodedBroadcast();
+    unitTest->publish(&p);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+}
+
+void test_receiveStrictDropsUnsignedPortnumsAndUnicast(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_NODEINFO_APP,     meshtastic_PortNum_WAYPOINT_APP,
+    };
+    for (const auto port : ports) {
+        meshtastic_MeshPacket p = makeDecodedBroadcast();
+        p.decoded.portnum = port;
+        unitTest->publish(&p);
+    }
+
+    meshtastic_MeshPacket unicast = makeDecodedBroadcast();
+    unicast.to = myNodeInfo.my_node_num;
+    unicast.decoded.portnum = meshtastic_PortNum_POSITION_APP;
+    unitTest->publish(&unicast);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
+// A plaintext broker assertion is not evidence that AES-CCM authentication succeeded locally.
+void test_receiveStrictDoesNotTrustDecodedPkiFlag(void)
+{
+    config.security.packet_signature_policy =
+        meshtastic_Config_SecurityConfig_PacketSignaturePolicy_PACKET_SIGNATURE_POLICY_STRICT;
+    meshtastic_MeshPacket p = makeDecodedBroadcast();
+    p.to = myNodeInfo.my_node_num;
+    p.pki_encrypted = true;
     unitTest->publish(&p);
 
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
@@ -820,6 +1009,32 @@ void test_reportToMapDefaultImprecise(void)
     TEST_ASSERT_EQUAL(1, pubsub->published_.size());
     const auto &[topic, payload] = pubsub->published_.front();
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", topic.c_str());
+}
+
+void test_eventPrimaryMapReportFollowsCompileTimePolicy(void)
+{
+    configureCoordinatePolicyChannels();
+    clearPublicationState();
+
+    unitTest->reportToMap();
+
+#if USERPREFS_BLOCK_POSITION_ON_EVENT_CHANNEL && defined(USERPREFS_CHANNEL_0_PSK)
+    TEST_ASSERT_TRUE(pubsub->published_.empty());
+    TEST_ASSERT_EQUAL(0, unitTest->queueSize());
+#else
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+#endif
+}
+
+void test_privatePrimaryMapReportStillPublishesWithEventPolicy(void)
+{
+    configureCoordinatePolicyChannels(false);
+    clearPublicationState();
+
+    unitTest->reportToMap();
+
+    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
+    TEST_ASSERT_EQUAL_STRING("msh/2/map/", pubsub->published_.front().first.c_str());
 }
 
 // Location is sent over the phone proxy.
@@ -1039,6 +1254,9 @@ void setup()
     UNITY_BEGIN();
     RUN_TEST(test_sendDirectlyConnectedDecoded);
     RUN_TEST(test_sendDirectlyConnectedEncrypted);
+    RUN_TEST(test_eventPositionPublicationFollowsCompileTimePolicy);
+    RUN_TEST(test_privatePositionStillPublishesWithEventPolicy);
+    RUN_TEST(test_explicitPkiPositionStillPublishesWithEventPolicy);
     RUN_TEST(test_proxyToMeshServiceDecoded);
     RUN_TEST(test_proxyToMeshServiceEncrypted);
     RUN_TEST(test_dontMqttMeOnPublicServer);
@@ -1051,6 +1269,8 @@ void setup()
     RUN_TEST(test_receiveDecodedProto);
     RUN_TEST(test_receiveDecodedProtoFromProxy);
     RUN_TEST(test_receiveEmptyDataFromProxy);
+    RUN_TEST(test_receiveTextVariantFromProxyIsNotReadAsBytes);
+    RUN_TEST(test_receiveNoVariantFromProxyIsIgnored);
     RUN_TEST(test_receiveWithoutChannelDownlink);
     RUN_TEST(test_receiveEncryptedPKITopicToUs);
     RUN_TEST(test_receiveIgnoresOwnPublishedMessages);
@@ -1063,6 +1283,9 @@ void setup()
     RUN_TEST(test_receiveAcceptsUnsignedBroadcastFromNonSigner);
     RUN_TEST(test_receiveVerifiesSignedDecodedDownlink);
     RUN_TEST(test_receiveDropsBadSignatureOnDecodedDownlink);
+    RUN_TEST(test_receiveCompatibleAcceptsUnsignedBroadcastFromSigner);
+    RUN_TEST(test_receiveStrictDropsUnsignedPortnumsAndUnicast);
+    RUN_TEST(test_receiveStrictDoesNotTrustDecodedPkiFlag);
 #endif
     RUN_TEST(test_receiveIgnoresUnexpectedFields);
     RUN_TEST(test_receiveIgnoresInvalidHopLimit);
@@ -1070,6 +1293,8 @@ void setup()
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
+    RUN_TEST(test_eventPrimaryMapReportFollowsCompileTimePolicy);
+    RUN_TEST(test_privatePrimaryMapReportStillPublishesWithEventPolicy);
     RUN_TEST(test_reportToMapImpreciseProxied);
     RUN_TEST(test_usingDefaultServer);
     RUN_TEST(test_usingDefaultServerWithPort);
@@ -1094,7 +1319,7 @@ void setup()
     initializeTestEnvironment();
     LOG_WARN("This test requires the ARCH_PORTDUINO variant of WiFiClient");
     UNITY_BEGIN();
-    UNITY_END();
+    exit(UNITY_END());
 }
 #endif
 void loop() {}

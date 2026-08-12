@@ -51,12 +51,23 @@ uint16_t getVDDVoltage();
 
 // Weak empty variant shutdown prep function.
 // May be redefined by variant files.
-void variant_shutdown() __attribute__((weak));
-void variant_shutdown() {}
+// noinline: same reason as variant_enableBatteryLpcompWake() below -- weak default and call
+// site are in this file, so LTO would inline the empty body and drop the variant's override.
+__attribute__((noinline)) void variant_shutdown() __attribute__((weak));
+__attribute__((noinline)) void variant_shutdown() {}
 
 // Optional variant hook called each nrf52Loop(); e.g. for low-VDD System OFF.
-void variant_nrf52LoopHook(void) __attribute__((weak));
-void variant_nrf52LoopHook(void) {}
+__attribute__((noinline)) void variant_nrf52LoopHook(void) __attribute__((weak));
+__attribute__((noinline)) void variant_nrf52LoopHook(void) {}
+
+// Return false to skip LPCOMP wake when entering System OFF (e.g. user CLI shutdown).
+// noinline: weak default and call site are in this file; without it GCC may inline the
+// weak body and never link the strong override from variant.cpp.
+__attribute__((noinline)) bool variant_enableBatteryLpcompWake() __attribute__((weak));
+__attribute__((noinline)) bool variant_enableBatteryLpcompWake()
+{
+    return true;
+}
 
 static nrfx_wdt_t nrfx_wdt = NRFX_WDT_INSTANCE(0);
 static nrfx_wdt_channel_id nrfx_wdt_channel_id_nrf52_main;
@@ -410,7 +421,7 @@ void nrf52Setup()
 #ifdef BQ25703A_ADDR
     auto *bq = new BQ25713();
     if (!bq->setup())
-        LOG_ERROR("ERROR! Charge controller init failed");
+        LOG_ERROR("Charge controller init failed");
 #endif
 
     // Init random seed
@@ -496,25 +507,28 @@ void cpuDeepSleep(uint32_t msecToWake)
         // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
 
 #ifdef BATTERY_LPCOMP_INPUT
-        // Wake up if power rises again
-        nrf_lpcomp_config_t c;
-        c.reference = BATTERY_LPCOMP_THRESHOLD;
-        c.detection = NRF_LPCOMP_DETECT_UP;
-        c.hyst = NRF_LPCOMP_HYST_NOHYST;
-        nrf_lpcomp_configure(NRF_LPCOMP, &c);
-        nrf_lpcomp_input_select(NRF_LPCOMP, BATTERY_LPCOMP_INPUT);
-        nrf_lpcomp_enable(NRF_LPCOMP);
+        // Only enable LPCOMP wake if the variant allows it
+        if (variant_enableBatteryLpcompWake()) {
+            // Wake up if power rises again
+            nrf_lpcomp_config_t c;
+            c.reference = BATTERY_LPCOMP_THRESHOLD;
+            c.detection = NRF_LPCOMP_DETECT_UP;
+            c.hyst = NRF_LPCOMP_HYST_NOHYST;
+            nrf_lpcomp_configure(NRF_LPCOMP, &c);
+            nrf_lpcomp_input_select(NRF_LPCOMP, BATTERY_LPCOMP_INPUT);
+            nrf_lpcomp_enable(NRF_LPCOMP);
 
-        battery_adcEnable();
+            battery_adcEnable();
 
-        nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
-        while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
-            ;
+            nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
+            while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
+                ;
+        }
 #endif
 
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
-            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");
+            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off");
             NRF_POWER->SYSTEMOFF = 1;
         }
     }

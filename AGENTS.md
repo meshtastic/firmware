@@ -50,6 +50,7 @@ The [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) server expose
 - **Serial sessions**: `serial_open`, `serial_read`, `serial_list`, `serial_close`
 - **Device reads**: `device_info`, `list_nodes`
 - **Device writes** (require `confirm=True`): `set_owner`, `get_config`, `set_config`, `get_channel_url`, `set_channel_url`, `send_text`, `reboot`, `shutdown`, `factory_reset`, `set_debug_log_api`
+- **Frame injection**: `inject_frame` - deliver a crafted frame into a board's real RX pipeline as if received off LoRa (reaches `from != 0` / decrypt / remote-admin paths the `toRadio` API can't). Needs firmware built with `-D MESHTASTIC_ENABLE_FRAME_INJECTION=1` (`MeshService::injectAsReceived`); sim nodes always. See the copilot-instructions **Frame injection** section.
 - **userPrefs admin**: `userprefs_get`, `userprefs_set`, `userprefs_reset`, `userprefs_manifest`, `userprefs_testing_profile`
 - **Vendor escape hatches**: `esptool_*`, `nrfutil_*`, `picotool_*`
 
@@ -106,7 +107,16 @@ Sequence these; don't parallelize on the same port.
 4. On failure, open the run's `tests/report.html` → `Meshtastic debug` section for the firmware log tail + device state dump
 5. Iterate
 
-### Debugging a flaky test
+### Debugging a native unit-test failure
+
+1. **Run the full suite before believing a filtered one.** `-f` is not a gate: it removes the suites that _create_ the shared state a later suite trips over.
+2. **A signal name is not a crash.** `exit(UNITY_END())` returns the failure count and PlatformIO renders it as a signal (4 -> `SIGILL`, 5 -> `SIGTRAP`), reporting `[ERRORED]`. Match it against the failure count first.
+3. **Check the CLEAN/DIRTY axis.** Each suite runs in its own scratch `$HOME`; deliberate writes are declared in `test/state-manifest.tsv`. A DIRTY verdict names the suite and the undeclared path, and the kept sandbox under `.pio/test-state/<suite>/` is a replayable reproduction.
+4. **Sanitizers are per env** - `coverage` has ASan/LSan, `native` has none. Don't reason from ASan on a `-e native` run.
+5. **Reproduce a shuffled order.** `--shuffle` prints its seed and puts it on the `RESULT:` line; `--seed <n>` replays that exact order. One green seed proves nothing about order independence.
+6. **Exit 2 with "Linux-only" is the host, not the tests.** The harness needs bash 4+ and GNU coreutils/find and rejects any other `uname` rather than degrade quietly. `native-macos` is a build target, not a test host; elsewhere use `./bin/test-native-docker.sh`.
+
+### Debugging a flaky hardware test
 
 1. `/repro <test-node-id> [count]` - re-runs the test N times, diffs firmware logs between passes and failures
 2. If the first attempt always fails and the rest pass, that's a state-leak pattern → suggest `--force-bake` or a clean device state, don't chase the first failure
@@ -121,7 +131,7 @@ Sequence these; don't parallelize on the same port.
 | `src/modules/`                                                 | Feature modules; `Telemetry/Sensor/` has 50+ I2C sensor drivers                                                                                                                                |
 | `variants/`                                                    | 200+ hardware variant definitions (`variant.h` + `platformio.ini` per board)                                                                                                                   |
 | `protobufs/`                                                   | `.proto` definitions; regenerate with `bin/regen-protos.sh`                                                                                                                                    |
-| `test/`                                                        | Firmware unit tests (19 suites; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                                                                                            |
+| `test/`                                                        | Firmware unit tests (count = the `test_*` dirs, detected on the fly; `./bin/run-tests.sh` preferred, falls back to `pio test -e native`)                                                       |
 | [meshtastic-mcp](https://github.com/meshtastic/meshtastic-mcp) | Standalone MCP server + tiered pytest hardware harness (`unit/`, `mesh/`, `telemetry/`, `monitor/`, `recovery/`, `ui/`, `fleet/`, `admin/`, `provisioning/`) - registered here via `.mcp.json` |
 | `.github/prompts/`                                             | Copilot prompt bodies (firmware scaffolding: new module / sensor / variant)                                                                                                                    |
 | `.github/copilot-instructions.md`                              | **Primary agent instructions - read this**                                                                                                                                                     |

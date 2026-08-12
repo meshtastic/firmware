@@ -7,7 +7,6 @@ class UnitConversions
   public:
     static float CelsiusToFahrenheit(float celsius);
     static float MetersPerSecondToKnots(float metersPerSecond);
-    static float MetersPerSecondToMilesPerHour(float metersPerSecond);
     static float HectoPascalToInchesOfMercury(float hectoPascal);
 
     // Bound a float before Arduino String(float) renders it: its fixed char[33] + dtostrf overflow

@@ -1,9 +1,12 @@
-#include "StreamAPI.h"
+// First, in its own block so the include sorter keeps it there: configuration.h supplies the
+// variant defines mesh-pb-constants.h needs (portduino resolves MAX_NUM_NODES at runtime).
+#include "configuration.h"
+
 #include "PowerFSM.h"
-#include "RTC.h"
+#include "StreamAPI.h"
 #include "Throttle.h"
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
+#include "gps/RTC.h"
 
 #define START1 0x94
 #define START2 0xc3
@@ -13,7 +16,9 @@
 int32_t StreamAPI::runOncePart()
 {
     auto result = readStream();
-    writeStream();
+    // More to send: come straight back instead of sleeping out readStream's idle delay.
+    if (writeStream())
+        result = 0;
     checkConnectionTimeout();
     return result;
 }
@@ -22,7 +27,8 @@ int32_t StreamAPI::runOncePart()
 int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 {
     auto result = readStream(buf, bufLen);
-    writeStream();
+    if (writeStream())
+        result = 0;
     checkConnectionTimeout();
     return result;
 }
@@ -44,25 +50,29 @@ int32_t StreamAPI::readStream(const char *buf, uint16_t bufLen)
     }
 }
 
-/**
- * call getFromRadio() and deliver encapsulated packets to the Stream
- */
-void StreamAPI::writeStream()
+/// Emit a slice of pending output. True means "more to send, come straight back"; false covers
+/// both a drained queue and backpressure, where retrying at once would only spin.
+bool StreamAPI::writeStream()
 {
-    if (canWrite) {
-        // A transport that retained a short frame must complete it before
-        // getFromRadio() advances the PhoneAPI state to the next packet.
-        if (!finishPendingFrame())
-            return;
+    if (!canWrite)
+        return false;
 
-        uint32_t len;
-        do {
-            // Send every packet we can
-            len = getFromRadio(txBuf + HEADER_LEN);
-            if (len != 0 && !emitTxBuffer(len))
-                break;
-        } while (len);
-    }
+    // A retained short frame must complete before getFromRadio() advances the PhoneAPI state.
+    if (!finishPendingFrame())
+        return false;
+
+    // Draining a full dump in one call never returns to loop(), so the 8s hardware watchdog
+    // fires mid-dump. PhoneAPI is resumable, so stop at the budget and continue next dispatch.
+    uint32_t len;
+    uint32_t started = millis();
+    do {
+        // Send every packet we can, up to this slice's budget
+        len = getFromRadio(txBuf + HEADER_LEN);
+        if (len != 0 && !emitTxBuffer(len))
+            return false;
+    } while (len && Throttle::isWithinTimespanMs(started, STREAM_WRITE_BUDGET_MSEC));
+
+    return len != 0;
 }
 
 /// Parse supplied bytes through the framed ToRadio receive state machine.
