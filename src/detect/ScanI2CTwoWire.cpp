@@ -743,7 +743,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("DS2482-800", (uint8_t)addr.address);
                     break;
                 }
-
                 type = HMC5883L;
                 logFoundDevice("HMC5883L", (uint8_t)addr.address);
                 break;
