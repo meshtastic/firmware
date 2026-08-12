@@ -403,11 +403,23 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    std::unique_ptr<CTRCommon> ctr;
-    if (_key.length == 16)
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES128>());
-    else
-        ctr = std::unique_ptr<CTRCommon>(new CTR<AES256>());
+    // Allocated once on first use instead of per packet: this runs for every encrypted send and
+    // every channel decrypt attempt, and the churn fragments small heaps. Reuse is safe for the
+    // same reason the static scratch buffer below is - all callers serialize under cryptLock -
+    // and setKey/setIV reinitialize the full cipher state each call. Lazy heap singletons (not
+    // static objects) so platforms that override this method never reserve the RAM.
+    static CTR<AES128> *ctr128 = nullptr;
+    static CTR<AES256> *ctr256 = nullptr;
+    CTRCommon *ctr;
+    if (_key.length == 16) {
+        if (!ctr128)
+            ctr128 = new CTR<AES128>();
+        ctr = ctr128;
+    } else {
+        if (!ctr256)
+            ctr256 = new CTR<AES256>();
+        ctr = ctr256;
+    }
     ctr->setKey(_key.bytes, _key.length);
     static uint8_t scratch[MAX_BLOCKSIZE];
     memcpy(scratch, bytes, numBytes);
