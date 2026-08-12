@@ -336,7 +336,7 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     // Calculate the shared secret with the specified node's public key and our private key
     // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
     if (!Curve25519::dh2(shared_key, local_priv)) {
-        LOG_WARN("Curve25519DH step 2 failed!");
+        LOG_WARN("Curve25519DH step 2 failed");
         return false;
     }
     return true;
@@ -373,7 +373,7 @@ concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {
-    LOG_DEBUG("Use AES%d key!", k.length * 8);
+    LOG_DEBUG("Use AES%d key", k.length * 8);
     key = k;
 }
 
@@ -389,7 +389,7 @@ void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t nu
         if (numBytes <= MAX_BLOCKSIZE) {
             encryptAESCtr(key, nonce, numBytes, bytes);
         } else {
-            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
+            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption", numBytes);
         }
     }
 }

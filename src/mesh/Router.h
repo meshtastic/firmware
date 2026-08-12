@@ -11,8 +11,18 @@
 #include "concurrency/OSThread.h"
 #include <memory>
 
+inline bool isCoordinatePortnum(meshtastic_PortNum portnum)
+{
+    return portnum == meshtastic_PortNum_POSITION_APP || portnum == meshtastic_PortNum_WAYPOINT_APP ||
+           portnum == meshtastic_PortNum_MAP_REPORT_APP;
+}
+
+bool isBlockedEventCoordinatePacket(const meshtastic_MeshPacket *p);
+bool willUsePki(const meshtastic_MeshPacket *p);
+
 /// rx_time/has_rx_time for "now": a real epoch when the clock is trustworthy, else a
-/// Time::getMillis() placeholder with valid=false.
+/// Time::getUptimeSecs() placeholder with valid=false. Uptime seconds are monotonic, so
+/// reconciliation against a later epoch is exact at any age.
 struct RxTimeStamp {
     uint32_t time;
     bool valid;

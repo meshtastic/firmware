@@ -121,6 +121,8 @@ class Power : public concurrency::OSThread
     bool max17048Init();
     /// Setup a Lipo charger
     bool lipoChargerInit();
+    /// Retry a fuel gauge that did not come up during setup
+    void lipoChargerRetry();
     /// Setup a meshSolar battery sensor
     bool meshSolarInit();
     /// Setup a serial battery sensor

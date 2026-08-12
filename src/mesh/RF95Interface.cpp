@@ -201,7 +201,7 @@ bool RF95Interface::init()
     return res == RADIOLIB_ERR_NONE;
 }
 
-void RF95Interface::disableInterrupt()
+void RF95Interface::clearRadioIsr()
 {
     lora->clearDio0Action();
 }
@@ -318,14 +318,14 @@ bool RF95Interface::isChannelActive()
     result = lora->scanChannel();
 
     if (result == RADIOLIB_PREAMBLE_DETECTED) {
-        // LOG_DEBUG("Channel is busy!");
+        // LOG_DEBUG("Channel is busy");
         return true;
     }
     if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("RF95 isChannelActive %s%d", radioLibErr, result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
-    // LOG_DEBUG("Channel is free!");
+    // LOG_DEBUG("Channel is free");
     return false;
 }
 

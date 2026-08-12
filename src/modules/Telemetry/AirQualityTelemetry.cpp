@@ -46,7 +46,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
         return;
     }
 
-    LOG_INFO("Air Quality Telemetry adding I2C devices...");
+    LOG_INFO("Air Quality Telemetry adding I2C devices");
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -81,7 +81,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 
     if (!firstTime) {
         // Re-scan for late comming sensors
-        LOG_INFO("Re-scanning supported sensors...");
+        LOG_INFO("Re-scanning supported sensors");
 
         for (const auto &[address, type] : supportedSensors) {
 
@@ -130,7 +130,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
+        LOG_DEBUG("Sleep %ims until next send", nightyNightMs);
         doDeepSleep(nightyNightMs, true, false);
     }
 
@@ -187,10 +187,10 @@ int32_t AirQualityTelemetryModule::runOnce()
         // - We can publish the data on the mesh shortly
         // - Or we can send it to the phone
         // TODO: This will need to be refurbished once we implement separate intervals
-        LOG_INFO("Waking up sensors...");
+        LOG_INFO("Waking sensors");
         for (TelemetrySensor *sensor : sensors) {
             if (!sensor->canSleep()) {
-                LOG_DEBUG("%s sensor doesn't have sleep feature. Skipping", sensor->sensorName);
+                LOG_DEBUG("%s: no sleep support, skip", sensor->sensorName);
                 continue;
             }
 
@@ -207,7 +207,11 @@ int32_t AirQualityTelemetryModule::runOnce()
             }
 
             if (!sensor->isActive()) {
-                LOG_DEBUG("Waking up: %s", sensor->sensorName);
+                LOG_DEBUG("Waking %s", sensor->sensorName);
+                if (awakeAheadOfTimeMs == 0)
+                    startAirQualityTelemetryCycle = millis();
+                awakeAheadOfTimeMs = max(awakeAheadOfTimeMs, sensor->wakeUpTimeMs());
+                // TODO multiple sensors with different wake up times collide
                 return sensor->wakeUp();
             }
 
@@ -219,19 +223,35 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         bool telemetryDue = (lastTelemetry == 0) || !Throttle::isWithinTimespanMs(lastTelemetry, telemetryIntervalMs);
-
         bool phoneDue = (lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs);
 
         if (telemetryDue && telemetryAllowed) {
-            sendTelemetry();
-
-            if (transmitHistory) {
-                transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
+            if (sendTelemetry()) {
+                if (transmitHistory) {
+                    transmitHistory->setLastSentToMesh(TX_HISTORY_KEY_AIR_QUALITY_TELEMETRY);
+                }
+                // Correct the awake time, trimming to 0
+                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
+                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
+                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
+            } else {
+                awakeAheadOfTimeMs = 0;
             }
         } else if (phoneDue && phoneAllowed) {
             // Mesh transmission isn't due yet, but we can still update the phone.
-            sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+            if (sendTelemetry(NODENUM_BROADCAST, true)) {
+                lastSentToPhone = millis();
+                // Correct the awake time, trimming to 0
+                const unsigned long elapsed = millis() - startAirQualityTelemetryCycle;
+                awakeAheadOfTimeMs = elapsed >= awakeAheadOfTimeMs ? 0 : awakeAheadOfTimeMs - elapsed;
+                // LOG_DEBUG("Time to publish. Correcting ahead of time by: %d", awakeAheadOfTimeMs);
+            } else {
+                awakeAheadOfTimeMs = 0;
+            }
+        } else {
+            // if for some reason we end up here after waking up, but not able to send, then reset
+            // the counter
+            awakeAheadOfTimeMs = 0;
         }
 
         // Send to sleep sensors that can be to save power
@@ -253,7 +273,13 @@ int32_t AirQualityTelemetryModule::runOnce()
         // mistime the pending deep sleep
         return FIVE_SECONDS_MS;
     }
-    return min(sendToPhoneIntervalMs, result);
+
+    // Update next interval if we were ahead
+    uint32_t correctedIntervalMs = sendToPhoneIntervalMs + awakeAheadOfTimeMs;
+    awakeAheadOfTimeMs = 0;
+    startAirQualityTelemetryCycle = 0;
+    LOG_DEBUG("Corrected interval in ms: %u", correctedIntervalMs);
+    return min(correctedIntervalMs, result);
 }
 
 bool AirQualityTelemetryModule::wantUIFrame()
@@ -429,7 +455,7 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding AirQualityTelemetry module!");
+            LOG_ERROR("Error decoding AirQualityTelemetry module");
             return NULL;
         }
         // Check for a request for air quality metrics
@@ -529,7 +555,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     // until the next telemetry interval and drains its battery
     if (!phoneOnly && isPowerSavingSensor()) {
         if (!validTelemetry)
-            LOG_WARN("Air quality telemetry unavailable this cycle, sleep without sending");
+            LOG_WARN("AQ telemetry unavailable, sleep without send");
         sleepOnNextExecution = true;
         preflightSleepDeferrals = 0;
         LOG_DEBUG("Start next execution in 5s, then sleep");
