@@ -86,6 +86,18 @@ class SEN5XSensor : public TelemetrySensor
 #define SEN5X_READ_RAW_VALUES 0x03D2
 #define SEN5X_READ_PM_VALUES 0x0413
 
+// Values the sensor reports when a reading is unavailable
+#define SEN5X_UINT_INVALID 0xFFFF
+#define SEN5X_INT_INVALID 0x7FFF
+
+// Reply payload sizes in data bytes; the raw I2C transfer adds one CRC byte
+// per 2-byte group, so requests are <size> + <size> / 2 raw bytes
+#define SEN5X_VERSION_BUFFER_SIZE 8
+#define SEN5X_PRODUCT_NAME_BUFFER_SIZE 32
+#define SEN5X_DATA_READY_BUFFER_SIZE 2
+#define SEN5X_READ_VALUES_BUFFER_SIZE 16
+#define SEN5X_READ_PM_BUFFER_SIZE 20
+
 #define SEN5X_VOC_VALID_TIME 600
 #define SEN5X_VOC_VALID_DATE 1514764800
 
@@ -114,8 +126,23 @@ See: https://sensirion.com/resource/application_note/low_power_mode/sen5x
 #define SEN5X_PN4P0_CONC_THD 100
 
     bool sendCommand(uint16_t command);
+    /**
+     * @brief Send a command word followed by a data payload; a CRC byte is
+     *        computed and inserted on the wire after every 2-byte pair.
+     * @param command 16-bit command code, sent big-endian
+     * @param buffer payload data bytes, without CRCs
+     * @param byteNumber payload size in data bytes; must be even
+     * @return true when the full transfer is written and acknowledged
+     */
     bool sendCommand(uint16_t command, uint8_t *buffer, uint8_t byteNumber = 0);
-    uint8_t readBuffer(uint8_t *buffer, uint8_t byteNumber); // Return number of bytes received
+    /**
+     * @brief Read a reply, verifying and stripping the interleaved CRC bytes.
+     * @param buffer destination for the data bytes (byteNumber * 2 / 3 of them)
+     * @param byteNumber raw transfer size including CRCs; must be a multiple
+     *        of 3 (2 data bytes + 1 CRC per group)
+     * @return the number of data bytes written to buffer, or 0 on any error
+     */
+    uint8_t readBuffer(uint8_t *buffer, uint8_t byteNumber);
     uint8_t sen5xCRC(const uint8_t *buffer);
     bool startCleaning();
     uint8_t getMeasurements();
