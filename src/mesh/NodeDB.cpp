@@ -2425,6 +2425,10 @@ void NodeDB::loadFromDisk()
     warmStore.load();
 #endif
 
+    // Set when devicestate is discarded below; consumed after config is loaded (see the
+    // deferred owner recovery further down).
+    bool ownerRecoveryPending = false;
+
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
                       &meshtastic_DeviceState_msg, &devicestate);
@@ -2441,23 +2445,12 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Devicestate %d is old or invalid, discard", devicestate.version);
         installDefaultDeviceState();
 
-        // Attempt recovery of owner fields from our own NodeDB entry if available.
-        const meshtastic_NodeInfoLite *us = getMeshNode(getNodeNum());
-        if (nodeInfoLiteHasUser(us)) {
-            LOG_WARN("Restore owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for node 0x%08x",
-                     us->num);
-            // owner.long_name (40) is wider than the lite source (25); bound by the source
-            memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
-            owner.long_name[sizeof(us->long_name) - 1] = '\0';
-            memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
-            owner.short_name[sizeof(owner.short_name) - 1] = '\0';
-            owner.is_licensed = nodeInfoLiteIsLicensed(us);
-            owner.has_is_unmessagable = nodeInfoLiteHasIsUnmessagable(us);
-            owner.is_unmessagable = nodeInfoLiteIsUnmessagable(us);
-
-            // Save the recovered owner to device state on disk
-            saveToDisk(SEGMENT_DEVICESTATE);
-        }
+        // Recovery of the owner fields from our own NodeDB entry is deferred until config
+        // has been loaded below. installDefaultDeviceState() -> pickNewNodeNum() can only
+        // offer a macaddr-derived provisional NodeNum at this point: loadProto() zeroed
+        // devicestate (and with it myNodeInfo.my_node_num), while our real row is stored
+        // under crc32(security.public_key) - which lives in config, still unread here.
+        ownerRecoveryPending = true;
     } else {
         LOG_INFO("Loaded saved devicestate v%d", devicestate.version);
     }
@@ -2568,6 +2561,35 @@ void NodeDB::loadFromDisk()
         LOG_DEBUG("Restore security config backup");
         config.security = backupSecurity;
         saveToDisk(SEGMENT_CONFIG);
+    }
+
+    // Deferred from the discarded devicestate above: config.security is final only now, so
+    // our real NodeNum - crc32(public_key) - is finally derivable and our own row can be
+    // found. Matching on identity rather than on the file's row order keeps a nodes.proto
+    // that does not contain us (foreign image, fixture) a clean miss instead of pasting
+    // another node's name onto our owner. getMeshNode() returns NULL on an empty DB.
+    if (ownerRecoveryPending) {
+        // Pre-PKI / keyless builds keep the old behaviour: probe the provisional number.
+        const NodeNum selfNum = (config.has_security && config.security.public_key.size == 32)
+                                    ? crc32Buffer(config.security.public_key.bytes, config.security.public_key.size)
+                                    : getNodeNum();
+        const meshtastic_NodeInfoLite *us = getMeshNode(selfNum);
+        if (nodeInfoLiteHasUser(us)) {
+            LOG_WARN("Restore owner fields (long_name/short_name/is_licensed/is_unmessagable) from NodeDB for node 0x%08x",
+                     us->num);
+            // owner.long_name (40) is wider than the lite source (25); bound by the source
+            memcpy(owner.long_name, us->long_name, sizeof(us->long_name));
+            owner.long_name[sizeof(us->long_name) - 1] = '\0';
+            clampLongName(owner.long_name); // recovery now runs past the clamp above; keep the cap invariant
+            memcpy(owner.short_name, us->short_name, sizeof(owner.short_name));
+            owner.short_name[sizeof(owner.short_name) - 1] = '\0';
+            owner.is_licensed = nodeInfoLiteIsLicensed(us);
+            owner.has_is_unmessagable = nodeInfoLiteHasIsUnmessagable(us);
+            owner.is_unmessagable = nodeInfoLiteIsUnmessagable(us);
+
+            // Save the recovered owner to device state on disk
+            saveToDisk(SEGMENT_DEVICESTATE);
+        }
     }
 
     // Make sure we load hard coded admin keys even when the configuration file has none.
