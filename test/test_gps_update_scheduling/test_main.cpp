@@ -1,3 +1,5 @@
+#include "Arduino.h"
+#include "TestUtil.h"
 #include "gps/GPSUpdateScheduling.h"
 #include <cmath>
 #include <unity.h>
@@ -49,12 +51,16 @@ static void test_clamps_above_table_range(void)
     TEST_ASSERT_EQUAL_UINT32(atMax, gpsHardsleepThresholdMs(UINT32_MAX));
 }
 
-int main(int argc, char **argv)
+void setup()
 {
+    delay(10);
+    initializeTestEnvironment();
     UNITY_BEGIN();
     RUN_TEST(test_matches_original_formula_at_sampled_points);
     RUN_TEST(test_zero_seconds_is_zero);
     RUN_TEST(test_monotonically_nondecreasing);
     RUN_TEST(test_clamps_above_table_range);
-    return UNITY_END();
+    exit(UNITY_END());
 }
+
+void loop() {}
