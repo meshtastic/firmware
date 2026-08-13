@@ -606,6 +606,51 @@ static void test_localReplyToSelf_isDeliveredToPhone()
     TEST_ASSERT_EQUAL_UINT32(0, mockRouter->sentPackets.size()); // nothing went toward the radio
 }
 
+// handleFromRadio() is private to RoutingModule; MeshService befriends this under PIO_UNIT_TESTING.
+class MeshServicePhoneDeliveryTest
+{
+  public:
+    static void deliver(const meshtastic_MeshPacket &p) { service->handleFromRadio(&p); }
+};
+
+static void test_handleFromRadio_remotePacketReachesPhone()
+{
+    meshtastic_MeshPacket rx = meshtastic_MeshPacket_init_zero;
+    rx.from = REMOTE_NODE;
+    rx.to = NODENUM_BROADCAST;
+    rx.id = 0x0BADF00D;
+    rx.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    rx.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    MeshServicePhoneDeliveryTest::deliver(rx);
+
+    meshtastic_MeshPacket *toPhone = mockService->getForPhone();
+    TEST_ASSERT_NOT_NULL(toPhone);
+    TEST_ASSERT_EQUAL_UINT32(0x0BADF00D, toPhone->id);
+    mockService->releaseToPool(toPhone);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
+// A packet we originated, coming back around, must not be echoed to the client that sent it.
+static void test_handleFromRadio_ownPacketIsNotEchoedToPhone()
+{
+    meshtastic_MeshPacket ours = meshtastic_MeshPacket_init_zero;
+    ours.from = LOCAL_NODE;
+    ours.to = NODENUM_BROADCAST;
+    ours.id = 0x5E1F0001;
+    ours.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    ours.decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    MeshServicePhoneDeliveryTest::deliver(ours);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+
+    // Same for the from==0 spelling handleToRadio stamps on phone-originated packets.
+    ours.from = 0;
+    ours.id = 0x5E1F0002;
+    MeshServicePhoneDeliveryTest::deliver(ours);
+    TEST_ASSERT_NULL(mockService->getForPhone());
+}
+
 // Full loop: a phone-originated want_response request (from == 0, RX_SRC_USER) dispatched
 // through the real router must produce a module reply that reaches the phone queue.
 static void test_phoneRequest_replyReachesPhone()
@@ -736,6 +781,8 @@ void setup()
     RUN_TEST(test_dispatch_ignoreRequestIsClearedPerPacket);
     RUN_TEST(test_dispatch_realNeighborInfoCannotShadowTelemetryOwner);
     RUN_TEST(test_localReplyToSelf_isDeliveredToPhone);
+    RUN_TEST(test_handleFromRadio_remotePacketReachesPhone);
+    RUN_TEST(test_handleFromRadio_ownPacketIsNotEchoedToPhone);
     RUN_TEST(test_phoneRequest_replyReachesPhone);
     RUN_TEST(test_nestedLocalSend_isDeferred_notReentrant);
     RUN_TEST(test_deferredChain_drainsBreadthFirst);
