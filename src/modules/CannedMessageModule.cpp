@@ -2169,9 +2169,14 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
                 this->ack = isAck;
                 waitingForAck = false;
             } else if (isAck) {
-                // Relay ACK → mark as RELAYED, still no final ACK
+                // Relay ACK: someone forwarded it, the recipient has not confirmed anything yet. Show
+                // RELAYED but keep listening. Clearing waitingForAck here would make the guard at the
+                // top of this function reject the destination's own ACK when it arrives, leaving a
+                // delivered message showing RELAYED for good.
+                //
+                // This always resolves: either the destination ACKs and isFromDest takes it above, or
+                // our own router gives up and NAKs MAX_RETRANSMIT, which lands in the else below.
                 this->ack = false;
-                waitingForAck = false;
             } else {
                 // Explicit failure
                 this->ack = false;
