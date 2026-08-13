@@ -21,6 +21,7 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
@@ -85,7 +86,10 @@ int32_t ExternalNotificationModule::runOnce()
 #if defined(HAS_I2S_SPEAKER_NRF52)
         isRtttlPlaying = isRtttlPlaying || nrf52RtttlPlayer.isPlaying();
 #endif
-        if ((nagCycleCutoff < millis()) && !isRtttlPlaying) {
+        // isNagging is the armed flag; nagCycleCutoff holds a real deadline only while it is set
+        // (UINT32_MAX once stopped, 1 at boot), so short-circuit before the comparison.
+        const bool nagWindowExpired = !isNagging || Throttle::deadlinePassed(nagCycleCutoff);
+        if (nagWindowExpired && !isRtttlPlaying) {
             // Turn off external notification immediately when timeout is reached, regardless of song state
             nagCycleCutoff = UINT32_MAX;
             ExternalNotificationModule::stopNow();
@@ -97,14 +101,15 @@ int32_t ExternalNotificationModule::runOnce()
         if (isNagging) {
             delay = (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                   : EXT_NOTIFICATION_MODULE_OUTPUT_MS);
-            if (externalTurnedOn[0] + delay < millis()) {
+            // externalTurnedOn[] is when each output was last toggled, so these are intervals.
+            if (Throttle::hasElapsed(externalTurnedOn[0], delay)) {
                 setExternalState(0, !getExternal(0));
             }
-            if (externalTurnedOn[1] + delay < millis()) {
+            if (Throttle::hasElapsed(externalTurnedOn[1], delay)) {
                 setExternalState(1, !getExternal(1));
             }
             // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
-            if (!moduleConfig.external_notification.use_pwm && externalTurnedOn[2] + delay < millis()) {
+            if (!moduleConfig.external_notification.use_pwm && Throttle::hasElapsed(externalTurnedOn[2], delay)) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
                 setExternalState(2, !getExternal(2));
@@ -146,7 +151,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
             // we need fast updates to play the RTTTL
@@ -158,7 +163,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (canBuzz() && buzzerShouldAlert) {
             if (nrf52RtttlPlayer.isPlaying()) {
                 nrf52RtttlPlayer.play();
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
                 nrf52RtttlPlayer.begin(rtttlConfig.ringtone);
             }
             delay = EXT_NOTIFICATION_FAST_THREAD_MS;
@@ -168,7 +173,7 @@ int32_t ExternalNotificationModule::runOnce()
         if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz() && buzzerShouldAlert) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && !Throttle::deadlinePassed(nagCycleCutoff)) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }

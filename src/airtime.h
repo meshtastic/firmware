@@ -39,6 +39,12 @@ void logAirtime(reportTypes reportType, uint32_t airtime_ms);
 
 uint32_t *airtimeReport(reportTypes reportType);
 
+// Not thread-safe: everything but getPeriodsToLog()/getSecondsPerPeriod() either rotates the
+// windows via syncNow() or reads the buckets. Current callers are all on the OSThread scheduler -
+// RadioLibInterface/SimRadio, RadioInterface, Router, DeviceTelemetry, ContentHandler, and the
+// screen renderers. New callers must be on that thread too, or this needs a lock.
+// TODO: airtime lock-guarding - serialise the above behind a lock so the contract is enforced
+// rather than documented. Kept out of this PR: it is a separate concern from millis() rollover.
 class AirTime : private concurrency::OSThread
 {
 
@@ -66,6 +72,8 @@ class AirTime : private concurrency::OSThread
     bool firstTime = true;
     uint8_t lastUtilPeriod = 0;
     uint8_t lastUtilPeriodTX = 0;
+    // Time::getUptimeSecs() as of the last syncNow(); the gap since is what the windows rotate by,
+    // so they stay correct even if the scheduler was paused by light sleep.
     uint32_t secSinceBoot = 0;
     uint8_t max_channel_util_percent = 40;
     uint8_t polite_channel_util_percent = 25;
@@ -81,6 +89,8 @@ class AirTime : private concurrency::OSThread
     uint8_t getPeriodUtilMinute();
     uint8_t getPeriodUtilHour();
     uint8_t currentPeriodIndex();
+    // Advance rolling airtime windows from monotonic uptime, not from runOnce() calls.
+    void syncNow();
 
   protected:
     virtual int32_t runOnce() override;
