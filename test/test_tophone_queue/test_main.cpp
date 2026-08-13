@@ -81,7 +81,7 @@ static void test_routing_response_admitted_when_queue_full(void)
     assertIds({2, 3, 4, 100}, "oldest telemetry should have been evicted for the routing response");
 }
 
-static void test_text_still_admitted_when_queue_full(void)
+static void test_text_evicts_oldest_when_full(void)
 {
     fillWith(meshtastic_PortNum_TELEMETRY_APP, 1);
     send(200, meshtastic_PortNum_TEXT_MESSAGE_APP);
@@ -141,7 +141,7 @@ void setup()
     printf("\n=== toPhoneQueue overflow policy ===\n");
 
     RUN_TEST(test_routing_response_admitted_when_queue_full);
-    RUN_TEST(test_text_still_admitted_when_queue_full);
+    RUN_TEST(test_text_evicts_oldest_when_full);
     RUN_TEST(test_low_priority_packet_still_dropped_when_full);
     RUN_TEST(test_encrypted_packet_is_not_classified_by_portnum);
 
