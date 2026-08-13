@@ -671,29 +671,43 @@ inline String Stream::readStringUntil(char)
 }
 
 // ── HardwareSerial ───────────────────────────────────────────────────────────
+//
+// A HardwareSerial constructed without a device stays a console shim:
+// write() goes to printk (RTT/console) and reads return nothing. When
+// constructed with a Zephyr UART device pointer (see Serial1 in
+// nrf54l15_arduino.cpp, bound to uart21 = XIAO D6/D7), begin() configures the
+// UART at the requested baud rate and starts interrupt-driven reception into
+// a ring buffer, which is what Meshtastic's GPS baud-probing state machine
+// needs.
 class HardwareSerial : public Stream
 {
   public:
-    void begin(unsigned long) {}
-    void begin(unsigned long, uint16_t) {}
-    void end() {}
+    HardwareSerial() {}
+    explicit HardwareSerial(const void *zephyr_uart_dev) : _udev(zephyr_uart_dev) {}
+    void begin(unsigned long baud);
+    void begin(unsigned long baud, uint16_t) { begin(baud); }
+    void end();
     void setPins(int rx, int tx) {}
     void setPinout(int tx, int rx) {}
     void setFIFOSize(size_t) {}
     void setRxBufferSize(size_t) {}
-    void begin(unsigned long baud, uint32_t config, int8_t rx = -1, int8_t tx = -1, bool invert = false) {}
-    int available() override { return 0; }
-    int read() override { return -1; }
-    int peek() override { return -1; }
+    void begin(unsigned long baud, uint32_t config, int8_t rx = -1, int8_t tx = -1, bool invert = false) { begin(baud); }
+    int available() override;
+    int read() override;
+    int peek() override;
     size_t write(uint8_t c) override;
     size_t write(const uint8_t *buf, size_t n) override;
     using Print::write; // un-hide base class write(const char*)
-    size_t readBytes(uint8_t *buf, size_t len) { return 0; }
-    size_t readBytes(char *buf, size_t len) { return 0; }
+    size_t readBytes(uint8_t *buf, size_t len);
+    size_t readBytes(char *buf, size_t len) { return readBytes((uint8_t *)buf, len); }
     operator bool() const { return true; }
     void flush() override {}
     String readString() { return String(); }
     String readStringUntil(char) { return String(); }
+
+  private:
+    const void *_udev = nullptr; // const struct device * (Zephyr UART), or nullptr for the console shim
+    void *_rx = nullptr;         // interrupt-driven RX ring-buffer state, allocated on first begin()
 };
 
 // Uart - nRF52 BSP alias for HardwareSerial (used by GPS.h when ARCH_NRF52)
