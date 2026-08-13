@@ -17,8 +17,7 @@ bool SFA30Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef SFA30_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-
-    LOG_INFO("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
@@ -58,7 +57,7 @@ bool SFA30Sensor::isError(uint16_t response)
 void SFA30Sensor::sleep()
 {
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
@@ -75,7 +74,7 @@ void SFA30Sensor::sleep()
 uint32_t SFA30Sensor::wakeUp()
 {
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 
@@ -125,7 +124,7 @@ bool SFA30Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature = 0.0;
 
 #ifdef SFA30_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s attempting to reclock speed to %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SFA30_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SFA30_I2C_CLOCK_SPEED);
 #endif /* SFA30_I2C_CLOCK_SPEED */
 

@@ -19,8 +19,7 @@ bool SCD4XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef SCD4X_I2C_CLOCK_SPEED
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
-
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
@@ -79,7 +78,7 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
     float temperature, humidity;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
@@ -614,7 +613,7 @@ bool SCD4XSensor::powerDown()
     }
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
@@ -672,7 +671,7 @@ uint32_t SCD4XSensor::wakeUp()
 {
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
@@ -691,7 +690,7 @@ uint32_t SCD4XSensor::wakeUp()
 void SCD4XSensor::sleep()
 {
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 
@@ -733,7 +732,7 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
     AdminMessageHandleResult result;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, SCD4X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, SCD4X_I2C_CLOCK_SPEED);
 #endif /* SCD4X_I2C_CLOCK_SPEED */
 

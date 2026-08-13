@@ -18,7 +18,7 @@ bool HM330XSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     _port = dev->address.port;
     reClockI2C.setup(_bus, _port);
 
-    LOG_INFO("%s: attempting to reclock speed to %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
+    LOG_INFO("%s: reclock speed %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, HM330X_I2C_CLOCK_SPEED);
 #endif /* HM330X_I2C_CLOCK_SPEED */
 
@@ -72,7 +72,7 @@ int32_t HM330XSensor::pendingForReadyMs()
 bool HM330XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
 #ifdef HM330X_I2C_CLOCK_SPEED
-    LOG_DEBUG("%s: attempting to reclock speed to %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
+    LOG_DEBUG("%s: reclock speed %uHz", sensorName, HM330X_I2C_CLOCK_SPEED);
     ReClockI2CGuard clockGuard(reClockI2C, HM330X_I2C_CLOCK_SPEED);
 #endif /* HM330X_I2C_CLOCK_SPEED */
 
