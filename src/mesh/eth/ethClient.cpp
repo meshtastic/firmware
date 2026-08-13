@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
+#include "mesh/Throttle.h"
 #include "mesh/api/ethServerAPI.h"
 #include "target_specific.h"
 #if HAS_ETHERNET && defined(HAS_ETHERNET_OTA)
@@ -196,7 +197,9 @@ static int32_t reconnectETH()
     }
 
 #ifndef DISABLE_NTP
-    if (isEthernetAvailable() && (ntp_renew < millis())) {
+    // 0 here means "renew now" (forced at link-up). deadlinePassed(0) only reads as passed for the
+    // first half of each wrap cycle, so treat 0 as always-due rather than relying on that.
+    if (isEthernetAvailable() && (ntp_renew == 0 || Throttle::deadlinePassed(ntp_renew))) {
 
         LOG_INFO("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {

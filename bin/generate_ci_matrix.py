@@ -60,31 +60,21 @@ for pio_env in pio_envs:
   env = {
     "ci": {"board": pio_env, "platform": env_platform},
     "board_level": board_level,
-    "board_check": cfg.get(f"env:{pio_env}", "board_check", default="false").strip().lower() == "true",
   }
   all_envs.append(env)
 
-# Filter outputs based on options
-# Check is mutually exclusive with other options (except 'pr')
-if "check" in args.platform:
-  for env in all_envs:
-    if env["board_check"]:
-      # '--level pr' narrows to the PR subset; otherwise check every level
-      if "pr" not in args.level or env["board_level"] == "pr":
-        outlist.append(env["ci"])
-# Filter (non-check) builds by platform
-else:
-  for env in all_envs:
-    if args.platform == env["ci"]["platform"] or args.platform == "all":
-      # Always include board_level = 'pr'
-      if env["board_level"] == "pr":
-        outlist.append(env["ci"])
-      # Include board_level = 'extra' when requested
-      elif "extra" in args.level and env["board_level"] == "extra":
-        outlist.append(env["ci"])
-      # Include board_level = 'release' unless narrowed to the PR subset
-      elif "pr" not in args.level and env["board_level"] == "release":
-        outlist.append(env["ci"])
+# Filter builds by platform
+for env in all_envs:
+  if args.platform == env["ci"]["platform"] or args.platform == "all":
+    # Always include board_level = 'pr'
+    if env["board_level"] == "pr":
+      outlist.append(env["ci"])
+    # Include board_level = 'extra' when requested
+    elif "extra" in args.level and env["board_level"] == "extra":
+      outlist.append(env["ci"])
+    # Include board_level = 'release' unless narrowed to the PR subset
+    elif "pr" not in args.level and env["board_level"] == "release":
+      outlist.append(env["ci"])
 
 # Return as a JSON list
 print(json.dumps(outlist))

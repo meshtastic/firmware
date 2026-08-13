@@ -39,6 +39,7 @@ class BME680Sensor : public TelemetrySensor
     uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
     uint8_t accuracy = 0;
     uint16_t stateUpdateCounter = 0;
+    uint32_t lastStateSaveMs = 0; // when the state blob was last written, for the save interval
     bsecSensor sensorList[9] = {BSEC_OUTPUT_IAQ,
                                 BSEC_OUTPUT_RAW_TEMPERATURE,
                                 BSEC_OUTPUT_RAW_PRESSURE,
