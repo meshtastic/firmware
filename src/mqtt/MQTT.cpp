@@ -116,19 +116,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     // Generate node ID from nodenum for comparison
     std::string nodeId = nodeDB->getNodeId();
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
-        // Our own packet, echoed back off our own gateway topic. That round trip proves the broker
-        // received and returned it. It does not show that any node on the mesh heard it, which is
-        // what an ACK delivered to the phone says.
-        //
-        // This used to synthesise a local ROUTING ACK here, on the reasoning that getting our own
-        // packet back means at least one node received it, "then we'll stop our retransmissions".
-        // Those retransmissions are not in fact stopped: ReliableRouter::sniffReceived() exempts
-        // MQTT-sourced implicit ACKs from stopRetransmission() precisely because the echo is not
-        // delivery evidence. So the ACK reached the phone as a delivery confirmation while the radio
-        // carried on retrying, and if the message really was undeliverable the phone was told
-        // "delivered" and then, one full retry ladder later, MAX_RETRANSMIT.
-        //
-        // Drop the ACK rather than the exemption. See the PR discussion for the other direction.
+        // Our own packet back off our own gateway proves the broker returned it, not that the mesh
+        // heard it, so no ACK is minted here. See the commit message.
         if (!isFromUs(e.packet)) {
             LOG_INFO("Ignore downlink msg we sent");
         }
