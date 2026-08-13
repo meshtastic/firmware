@@ -250,12 +250,26 @@ static void test_event_position_ingress_does_not_poison_retry_state()
 #endif
 }
 
+// A client must not be able to name the transport its packet arrived on. Several routing decisions
+// read transport_mechanism as evidence of how a packet reached us, so an unscrubbed value is trusted.
+static void test_toradio_transport_mechanism_is_not_client_settable()
+{
+    auto forged = makePositionToRadio(FOLLOWUP_PACKET_ID, PRIVATE_CHANNEL);
+    forged.packet.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
+
+    TEST_ASSERT_TRUE(sendToRadio(forged));
+    TEST_ASSERT_EQUAL(1, mockRouter->sentPackets.size());
+    TEST_ASSERT_EQUAL(meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL,
+                      mockRouter->sentPackets[0].transport_mechanism);
+}
+
 extern "C" {
 void setup()
 {
     initializeTestEnvironment();
     UNITY_BEGIN();
     RUN_TEST(test_event_position_ingress_does_not_poison_retry_state);
+    RUN_TEST(test_toradio_transport_mechanism_is_not_client_settable);
     exit(UNITY_END());
 }
 

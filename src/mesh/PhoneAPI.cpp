@@ -1766,6 +1766,10 @@ PhoneAPI::LocalAdminGate PhoneAPI::classifyLocalAdminPacket(const meshtastic_Mes
  */
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
+    // Clients don't get to name the transport they arrived on, the same way they don't get to assign
+    // `from`. PacketAPI already stamps its own ingress; this is the path that did not.
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_INTERNAL;
+
     printPacket("PACKET FROM PHONE", &p);
 
 #if defined(MESHTASTIC_ENCRYPTED_STORAGE) && defined(MESHTASTIC_PHONEAPI_ACCESS_CONTROL)
