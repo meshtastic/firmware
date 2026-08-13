@@ -19,4 +19,9 @@ Do not expect a working Meshtastic device with this target.
 
 #define WIO_E5
 
+// From Seeed reference firmware:
+// https://github.com/Seeed-Studio/LoRaWan-E5-Node/blob/main/Projects/Applications/LoRaWAN/LoRaWAN_End_Node/Core/Src/main.c
+#define HAS_LSE 1
+#define STM32WL_LSE_DRIVE RCC_LSEDRIVE_LOW
+
 #endif
