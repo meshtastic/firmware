@@ -116,17 +116,20 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     // Generate node ID from nodenum for comparison
     std::string nodeId = nodeDB->getNodeId();
     if (strcmp(e.gateway_id, nodeId.c_str()) == 0) {
-        // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
-        // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
-        // receives it when we get our own packet back. Then we'll stop our retransmissions.
-        if (isFromUs(e.packet)) {
-            auto pAck = routingModule->allocAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
-            if (!pAck)
-                return;
-            pAck->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
-            if (router->sendLocal(pAck) == ERRNO_SHOULD_RELEASE)
-                packetPool.release(pAck);
-        } else {
+        // Our own packet, echoed back off our own gateway topic. That round trip proves the broker
+        // received and returned it. It does not show that any node on the mesh heard it, which is
+        // what an ACK delivered to the phone says.
+        //
+        // This used to synthesise a local ROUTING ACK here, on the reasoning that getting our own
+        // packet back means at least one node received it, "then we'll stop our retransmissions".
+        // Those retransmissions are not in fact stopped: ReliableRouter::sniffReceived() exempts
+        // MQTT-sourced implicit ACKs from stopRetransmission() precisely because the echo is not
+        // delivery evidence. So the ACK reached the phone as a delivery confirmation while the radio
+        // carried on retrying, and if the message really was undeliverable the phone was told
+        // "delivered" and then, one full retry ladder later, MAX_RETRANSMIT.
+        //
+        // Drop the ACK rather than the exemption. See the PR discussion for the other direction.
+        if (!isFromUs(e.packet)) {
             LOG_INFO("Ignore downlink msg we sent");
         }
         return;
