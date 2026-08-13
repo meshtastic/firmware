@@ -4,6 +4,7 @@
 #include "PowerMon.h"
 #include "SPILock.h"
 #include "Throttle.h"
+#include "UptimeClock.h"
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
@@ -436,10 +437,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
             } else {
                 meshtastic_MeshPacket *txp = txQueue.getFront();
                 assert(txp);
-                long delay_remaining = txp->tx_after ? txp->tx_after - millis() : 0;
-                if (delay_remaining > 0) {
+                const uint32_t now = Time::getMillis();
+                // Not `long remaining = tx_after - millis()`: that uint32_t subtraction widens to
+                // ~4.29e9 where long is 64-bit (portduino), rescheduling a due packet ~49.7 days out.
+                if (txp->tx_after && !Throttle::deadlinePassedAt(now, txp->tx_after)) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
-                    notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
+                    notifyLater(txp->tx_after - now, TRANSMIT_DELAY_COMPLETED, txTimerOverwrite);
 #if !MESHTASTIC_EXCLUDE_BEACON
                 } else if (MeshBeaconModule::beaconTxConfigInvalid(txp)) {
                     // The beacon's target radio config is invalid (bad preset/region, or an
