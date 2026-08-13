@@ -113,9 +113,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     if (strcmp(e.channel_id, "PKI") == 0 && !anyChannelHasDownlink) {
         return;
     }
-    // ignore_mqtt lives in shouldDropMqttDownlink(), which is only reached further down. The
-    // self-gateway branch below returns before that, so check it here or a user who has opted out of
-    // MQTT-sourced traffic still gets MQTT-driven ACKs for their own messages.
+    // The self-gateway branch below returns before shouldDropMqttDownlink() ever runs, so check
+    // ignore_mqtt here or a user who opted out of MQTT still gets MQTT-driven ACKs.
     if (config.lora.ignore_mqtt) {
         LOG_INFO("Drop MQTT ignore_mqtt");
         return;
