@@ -3,6 +3,7 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+#include "FSCommon.h" // FSCom, for the per-test nodes.proto drop in setUp
 #include "configuration.h"
 #include "mesh/CryptoEngine.h"
 #include "mesh/MeshService.h"
@@ -328,6 +329,9 @@ void setUp(void)
     owner = meshtastic_User_init_zero;
     myNodeInfo.my_node_num = LOCAL_NODE;
 
+    // MockNodeDB is an empty subclass, so this suite drives the real node store. Drop the file the
+    // constructor loads, or each test starts from whatever the previous test's saves left on disk.
+    FSCom.remove(nodeDatabaseFileName);
     mockNodeDB = new MockNodeDB();
     nodeDB = mockNodeDB;
     myNodeInfo.my_node_num = LOCAL_NODE;

@@ -2369,6 +2369,12 @@ void NodeDB::loadFromDisk()
         ~Disarm() { self.disarmNodeDatabaseDecodeTargets(); }
     } disarm{*this};
 
+    // loadProto() skips its destination memset for this struct (std::vector members), so reset it
+    // here: the nodes callback only push_back()s and nodeDatabase is a global, so a second load
+    // appended to the first, and a stale version skipped installDefaultNodeDatabase().
+    nodeDatabase.nodes.clear();
+    numMeshNodes = 0;
+    nodeDatabase.version = 0;
     // Avoid push_back's power-of-2 capacity growth wasting RAM at small N.
     nodeDatabase.nodes.reserve(MAX_NUM_NODES);
 

@@ -1011,6 +1011,10 @@ static void replaceAdminRadioGlobals()
     savedOwner = owner;
     savedConfig = config;
     savedChannelFile = channelFile;
+    // A "fresh" NodeDB is only fresh if the file its constructor loads is gone: the admin handlers
+    // under test persist node metadata, so without this each test starts from the previous test's
+    // saved store rather than an empty one, and the suite drifts into testing something else.
+    FSCom.remove(nodeDatabaseFileName);
     replacementNodeDB = new NodeDB();
     nodeDB = replacementNodeDB;
 }
