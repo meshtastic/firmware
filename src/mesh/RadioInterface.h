@@ -157,6 +157,11 @@ class RadioInterface
     /// Whether this radio accepts the exact bandwidth for the requested band.
     virtual bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) { return true; }
 
+    /// Whether this radio can tune the requested center frequency.
+    virtual bool supportsFrequency(float frequencyMHz) { return true; }
+
+    bool usesWideLoRaParameters(float frequencyMHz) { return wideLora() && (!supportsSubGhz() || frequencyMHz > 1000.0f); }
+
     void setConfigErrorReporting(bool enabled) { reportConfigErrors = enabled; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
@@ -288,6 +293,7 @@ class RadioInterface
     int8_t power = 17; // Set by applyModemConfig()
 
     bool shouldReportConfigErrors() const { return reportConfigErrors; }
+    void reportConfigFailure(const char *operation, int16_t radioLibError);
 
     float savedFreq;
     uint32_t savedChannelNum;

@@ -257,7 +257,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int wasm_set_region(int region)
 
     meshtastic_Config_LoRaConfig validated = config.lora;
     validated.region = newRegion;
-    if (!(RadioInterface::validateConfigRegion(validated) && RadioInterface::validateConfigLora(validated)))
+    if (!(RadioInterface::validateConfigRegion(validated) && RadioInterface::validateConfigLora(validated, nullptr, false)))
         return -1;
 
     bool wasUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);

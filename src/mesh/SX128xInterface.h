@@ -21,6 +21,7 @@ template <class T> class SX128xInterface : public RadioLibInterface
 
     /// SX128x is a 2.4 GHz-only chip; it cannot tune sub-GHz regions
     virtual bool supportsSubGhz() override { return false; }
+    bool supportsFrequency(float frequencyMHz) override { return frequencyMHz >= 2400.0f && frequencyMHz <= 2500.0f; }
 
     bool supportsLoRaBandwidth(float bandwidthKHz, bool wideBand) override
     {

@@ -361,6 +361,62 @@ static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 // Global LoRa radio type
 LoRaRadioType radioType = NO_RADIO;
 
+static const char *radioTypeName(LoRaRadioType type)
+{
+    switch (type) {
+    case STM32WLx_RADIO:
+        return "STM32WL";
+    case SIM_RADIO:
+        return "SimRadio";
+    case RF95_RADIO:
+        return "RF95";
+    case SX1262_RADIO:
+        return "SX1262";
+    case SX1268_RADIO:
+        return "SX1268";
+    case LLCC68_RADIO:
+        return "LLCC68";
+    case SX1280_RADIO:
+        return "SX1280";
+    case LR1110_RADIO:
+        return "LR1110";
+    case LR1120_RADIO:
+        return "LR1120";
+    case LR1121_RADIO:
+        return "LR1121";
+    case LR2021_RADIO:
+        return "LR2021";
+    case NO_RADIO:
+    default:
+        return "unknown";
+    }
+}
+
+static std::unique_ptr<RadioInterface> probeRadio(std::unique_ptr<RadioInterface> candidate, LoRaRadioType type,
+                                                  const meshtastic_Config_LoRaConfig &originalConfig)
+{
+    candidate->setConfigErrorReporting(false);
+    const bool initialized = candidate->init();
+    config.lora = originalConfig;
+    candidate->setConfigErrorReporting(true);
+
+    if (!initialized) {
+        LOG_WARN("No %s radio", radioTypeName(type));
+        return nullptr;
+    }
+
+    if (!candidate->reconfigure()) {
+        LOG_WARN("%s reconfigure failed after probe", radioTypeName(type));
+        candidate->disable();
+        config.lora = originalConfig;
+        return nullptr;
+    }
+
+    LOG_INFO("%s init success", radioTypeName(type));
+    radioType = type;
+    return candidate;
+}
+
 extern RadioLibHal *RadioLibHAL;
 #if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
 #if defined(HAS_SDCARD) && defined(SDCARD_USE_SPI1)
@@ -382,6 +438,33 @@ std::unique_ptr<RadioInterface> initLoRa()
 #endif
 
 #ifdef ARCH_PORTDUINO
+    auto selectedRadioType = []() {
+        switch (portduino_config.lora_module) {
+        case use_rf95:
+            return RF95_RADIO;
+        case use_sx1262:
+            return SX1262_RADIO;
+        case use_sx1268:
+            return SX1268_RADIO;
+        case use_sx1280:
+            return SX1280_RADIO;
+        case use_lr1110:
+            return LR1110_RADIO;
+        case use_lr1120:
+            return LR1120_RADIO;
+        case use_lr1121:
+            return LR1121_RADIO;
+        case use_llcc68:
+            return LLCC68_RADIO;
+        case use_lr2021:
+            return LR2021_RADIO;
+        case use_simradio:
+            return SIM_RADIO;
+        default:
+            return NO_RADIO;
+        }
+    };
+
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                   RADIOLIB_PIN_TYPE busy) {
@@ -427,12 +510,9 @@ std::unique_ptr<RadioInterface> initLoRa()
         loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin, portduino_config.lora_irq_pin.pin,
                             portduino_config.lora_reset_pin.pin, portduino_config.lora_busy_pin.pin);
 
-    if (!rIf->init()) {
-        LOG_WARN("No %s radio", portduino_config.loraModules[portduino_config.lora_module].c_str());
-        rIf = nullptr;
+    rIf = probeRadio(std::move(rIf), selectedRadioType(), loraConfigBeforeProbe);
+    if (!rIf) {
         exit(EXIT_FAILURE);
-    } else {
-        LOG_INFO("%s init success", portduino_config.loraModules[portduino_config.lora_module].c_str());
     }
 
 #elif defined(HW_SPI1_DEVICE)
@@ -580,76 +660,25 @@ std::unique_ptr<RadioInterface> initLoRa()
 
 #if defined(USE_LR1120) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
-        rIf = std::unique_ptr<LR1120Interface>(
+        auto candidate = std::unique_ptr<LR1120Interface>(
             new LR1120Interface(loraHal, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN));
-        rIf->setConfigErrorReporting(false);
-        if (!rIf->init()) {
-            LOG_WARN("No LR1120 radio");
-            config.lora = loraConfigBeforeProbe;
-            rIf = nullptr;
-        } else {
-            config.lora = loraConfigBeforeProbe;
-            rIf->setConfigErrorReporting(true);
-            if (!rIf->reconfigure()) {
-                LOG_WARN("LR1120 reconfigure failed after probe");
-                rIf->disable();
-                config.lora = loraConfigBeforeProbe;
-                rIf = nullptr;
-            } else {
-                LOG_INFO("LR1120 init success");
-                radioType = LR1120_RADIO;
-            }
-        }
+        rIf = probeRadio(std::move(candidate), LR1120_RADIO, loraConfigBeforeProbe);
     }
 #endif
 
 #if defined(USE_LR1121) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
-        rIf = std::unique_ptr<LR1121Interface>(
+        auto candidate = std::unique_ptr<LR1121Interface>(
             new LR1121Interface(loraHal, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN));
-        rIf->setConfigErrorReporting(false);
-        if (!rIf->init()) {
-            LOG_WARN("No LR1121 radio");
-            config.lora = loraConfigBeforeProbe;
-            rIf = nullptr;
-        } else {
-            config.lora = loraConfigBeforeProbe;
-            rIf->setConfigErrorReporting(true);
-            if (!rIf->reconfigure()) {
-                LOG_WARN("LR1121 reconfigure failed after probe");
-                rIf->disable();
-                config.lora = loraConfigBeforeProbe;
-                rIf = nullptr;
-            } else {
-                LOG_INFO("LR1121 init success");
-                radioType = LR1121_RADIO;
-            }
-        }
+        rIf = probeRadio(std::move(candidate), LR1121_RADIO, loraConfigBeforeProbe);
     }
 #endif
 
 #if defined(USE_LR2021) && RADIOLIB_EXCLUDE_LR2021 != 1
     if (!rIf) {
-        rIf = std::unique_ptr<LR2021Interface>(
+        auto candidate = std::unique_ptr<LR2021Interface>(
             new LR2021Interface(loraHal, LR2021_SPI_NSS_PIN, LR2021_IRQ_PIN, LR2021_NRESET_PIN, LR2021_BUSY_PIN));
-        rIf->setConfigErrorReporting(false);
-        if (!rIf->init()) {
-            LOG_WARN("No LR2021 radio");
-            config.lora = loraConfigBeforeProbe;
-            rIf = nullptr;
-        } else {
-            config.lora = loraConfigBeforeProbe;
-            rIf->setConfigErrorReporting(true);
-            if (!rIf->reconfigure()) {
-                LOG_WARN("LR2021 reconfigure failed after probe");
-                rIf->disable();
-                config.lora = loraConfigBeforeProbe;
-                rIf = nullptr;
-            } else {
-                LOG_INFO("LR2021 init success");
-                radioType = LR2021_RADIO;
-            }
-        }
+        rIf = probeRadio(std::move(candidate), LR2021_RADIO, loraConfigBeforeProbe);
     }
 #endif
 
@@ -1032,6 +1061,27 @@ static void sendErrorNotification(const char *msg, meshtastic_LogRecord_Level le
     service->sendClientNotification(cn);
 }
 
+void RadioInterface::reportConfigFailure(const char *operation, int16_t radioLibError)
+{
+    if (!shouldReportConfigErrors()) {
+        LOG_DEBUG("Radio config %s failed (%d) during probe", operation, radioLibError);
+        return;
+    }
+
+    char message[96];
+    snprintf(message, sizeof(message), "Radio config %s failed (%d)", operation, radioLibError);
+    LOG_ERROR("%s", message);
+    RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+    sendErrorNotification(message);
+}
+
+static bool useWideLoRaParameters(const RegionInfo *region, RadioInterface *radio, float overrideFrequency = 0.0f)
+{
+    if (radio && overrideFrequency > 0.0f)
+        return radio->usesWideLoRaParameters(overrideFrequency);
+    return region->wideLora || (radio && !radio->supportsSubGhz());
+}
+
 /**
  * If currentRegion is one of the swappable EU regions and preset belongs to a sibling in
  * that trio, return the sibling region that owns the preset. Returns nullptr otherwise.
@@ -1127,7 +1177,22 @@ bool RadioInterface::checkOrClampConfigLora(meshtastic_Config_LoRaConfig &loraCo
 
     const RegionInfo *newRegion = getRegion(loraConfig.region);
     RadioInterface *candidateRadio = radio ? radio : RadioLibInterface::instance;
-    auto useWideModemParameters = [&]() { return newRegion->wideLora || (candidateRadio && !candidateRadio->supportsSubGhz()); };
+    auto useWideModemParameters = [&]() {
+        return useWideLoRaParameters(newRegion, candidateRadio, loraConfig.override_frequency);
+    };
+
+    if (candidateRadio && loraConfig.override_frequency > 0.0f &&
+        !candidateRadio->supportsFrequency(loraConfig.override_frequency)) {
+        snprintf(err_string, sizeof(err_string), "Frequency %.3fMHz invalid for this radio", loraConfig.override_frequency);
+        if (reportErrors) {
+            LOG_ERROR("%s", err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+            sendErrorNotification(err_string);
+        }
+        if (!clamp)
+            return false;
+        loraConfig.override_frequency = 0.0f;
+    }
 
     const char *presetName = DisplayFormatters::getModemPresetDisplayName(loraConfig.modem_preset, false, loraConfig.use_preset);
 
@@ -1317,13 +1382,17 @@ void RadioInterface::applyModemConfig()
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
     const RegionInfo *newRegion = getRegion(loraConfig.region);
-    const bool useWideModemParameters = newRegion->wideLora || !supportsSubGhz();
+    if (!validateConfigLora(loraConfig, this, false)) {
+        if (reportConfigErrors)
+            LOG_WARN("Invalid LoRa config settings, falling back to compatible %s defaults", newRegion->name);
+        clampConfigLora(loraConfig, this, reportConfigErrors);
+        newRegion = getRegion(loraConfig.region);
+    }
+
+    const bool useWideModemParameters = useWideLoRaParameters(newRegion, this, loraConfig.override_frequency);
     myRegion = newRegion;
 
     if (loraConfig.use_preset) {
-        if (!validateConfigLora(loraConfig, this, reportConfigErrors)) {
-            loraConfig.modem_preset = newRegion->getDefaultPreset();
-        }
         uint8_t newcr;
         modemPresetToParams(loraConfig.modem_preset, useWideModemParameters, bw, sf, newcr);
         // If custom CR is being used already, check if the new preset is higher
@@ -1340,13 +1409,6 @@ void RadioInterface::applyModemConfig()
         }
 
     } else { // if not using preset, then just use the custom settings
-        if (validateConfigLora(loraConfig, this, reportConfigErrors)) {
-        } else {
-            if (reportConfigErrors)
-                LOG_WARN("Invalid LoRa config settings, cannot apply requested modem config - falling back to %s defaults",
-                         newRegion->name);
-            clampConfigLora(loraConfig, this, reportConfigErrors);
-        }
         // Clamp at the source so numFreqSlots below can never be 0 (a bandwidth-0 config may already be persisted)
         bw = clampBandwidthKHz(bwCodeToKHz(loraConfig.bandwidth));
         if (!supportsLoRaBandwidth(bw, useWideModemParameters)) {
@@ -1425,7 +1487,8 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
 
-    if (useWideModemParameters) {                       // clamp if wide freq range
+    const bool appliedWideParameters = usesWideLoRaParameters(getFreq());
+    if (appliedWideParameters) {                        // clamp if wide freq range
         preambleLength = wideLoraPreambleLengthDefault; // 12 is the default for operation above 2GHz
     } else {
         preambleLength =
@@ -1461,7 +1524,7 @@ uint32_t RadioInterface::computeSlotTimeMsec()
     float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
     float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
-    if (myRegion->wideLora) {
+    if (usesWideLoRaParameters(getFreq())) {
         // CAD duration derived from AN1200.22 of SX1280
         return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
     } else {

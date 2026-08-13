@@ -5,6 +5,7 @@
 #include "PointerQueue.h"
 #include "configuration.h"
 #include "detect/LoRaRadioType.h"
+#include <array>
 
 // Sentinel marking the end of a modem preset array. Declared `const` rather
 // than `constexpr` because the cast from 0xFF to the enum is out-of-range and
@@ -200,25 +201,38 @@ static inline uint16_t clampBandwidthCode(uint16_t bwCode)
     return bwCode;
 }
 
+template <size_t N> static constexpr bool containsBandwidth(const std::array<float, N> &bandwidths, float bandwidthKHz)
+{
+    for (const float supported : bandwidths) {
+        if (supported == bandwidthKHz)
+            return true;
+    }
+    return false;
+}
+
+static constexpr std::array<float, 4> SX128X_LORA_BANDWIDTHS = {203.125f, 406.25f, 812.5f, 1625.0f};
+static constexpr std::array<float, 3> LR11X0_WIDE_LORA_BANDWIDTHS = {203.125f, 406.25f, 812.5f};
+static constexpr std::array<float, 4> LR11X0_SUB_GHZ_LORA_BANDWIDTHS = {62.5f, 125.0f, 250.0f, 500.0f};
+static constexpr std::array<float, 12> LR20X0_LORA_BANDWIDTHS = {31.25f,   41.7f,  62.5f,   83.0f,  101.0f, 125.0f,
+                                                                 203.125f, 250.0f, 406.25f, 500.0f, 812.5f, 1000.0f};
+
 static inline bool supportsSx128xLoRaBandwidth(float bandwidthKHz, bool wideBand)
 {
-    return wideBand && (bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f || bandwidthKHz == 1625.0f);
+    return wideBand && containsBandwidth(SX128X_LORA_BANDWIDTHS, bandwidthKHz);
 }
 
 static inline bool supportsLr11x0LoRaBandwidth(float bandwidthKHz, bool wideBand)
 {
     if (wideBand)
-        return bandwidthKHz == 203.125f || bandwidthKHz == 406.25f || bandwidthKHz == 812.5f;
-
-    return bandwidthKHz == 62.5f || bandwidthKHz == 125.0f || bandwidthKHz == 250.0f || bandwidthKHz == 500.0f;
+        return containsBandwidth(LR11X0_WIDE_LORA_BANDWIDTHS, bandwidthKHz);
+    return containsBandwidth(LR11X0_SUB_GHZ_LORA_BANDWIDTHS, bandwidthKHz);
 }
 
 static inline bool supportsLr20x0LoRaBandwidth(float bandwidthKHz, bool wideBand)
 {
+    // LR2021 exposes the same LoRa bandwidth enum in both RF bands.
     (void)wideBand;
-    return bandwidthKHz == 31.25f || bandwidthKHz == 41.7f || bandwidthKHz == 62.5f || bandwidthKHz == 83.0f ||
-           bandwidthKHz == 101.0f || bandwidthKHz == 125.0f || bandwidthKHz == 203.125f || bandwidthKHz == 250.0f ||
-           bandwidthKHz == 406.25f || bandwidthKHz == 500.0f || bandwidthKHz == 812.5f || bandwidthKHz == 1000.0f;
+    return containsBandwidth(LR20X0_LORA_BANDWIDTHS, bandwidthKHz);
 }
 
 static inline void modemPresetToParams(meshtastic_Config_LoRaConfig_ModemPreset preset, bool wideLora, float &bwKHz, uint8_t &sf,
