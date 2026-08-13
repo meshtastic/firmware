@@ -422,15 +422,8 @@ int32_t NextHopRouter::doRetransmissions()
     for (auto it = pending.begin(), nextIt = it; it != pending.end(); it = nextIt) {
         ++nextIt; // we use this odd pattern because we might be deleting it...
 
-        // Copy the key rather than reading it->first later. Both sendAckNak() below and the sends
-        // further down can re-enter this router synchronously: they reach Router::send(), whose
-        // duty-cycle and encode-failure paths call abortSendAndNak() -> sendLocal() ->
-        // deliverLocal(), and deliverLocal() only defers when handleDepth > 0. We are called from
-        // runOnce(), not from inside handleReceived(), so handleDepth is 0 and the loopback runs
-        // inline. The NAK it delivers is addressed to us with request_id set to this packet's id,
-        // so ReliableRouter::sniffReceived() calls stopRetransmission() on exactly this key, which
-        // erases the map node and releases p.packet. Anything still pointing at it->second after
-        // that is dangling.
+        // Every send below can loop an ACK/NAK back inline and erase this record, so keep a copy of
+        // the key and stop trusting `p` afterwards. See the commit message for the reentrancy path.
         const GlobalPacketId key = it->first;
         auto &p = it->second;
 
@@ -513,8 +506,7 @@ int32_t NextHopRouter::doRetransmissions()
                     }
                 }
 
-                // Queue again. Re-look the record up rather than reusing `p`: any of the sends above
-                // can have erased it, see the note where `key` is taken.
+                // Queue again, via a fresh lookup rather than `p`, which the sends above may have freed.
                 PendingPacket *rec = findPendingPacket(key);
                 if (!rec) {
                     stillValid = false;
