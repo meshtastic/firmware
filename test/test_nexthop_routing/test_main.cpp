@@ -287,6 +287,45 @@ class MockRoutingModule : public RoutingModule
     std::list<std::tuple<meshtastic_Routing_Error, NodeNum, PacketId, ChannelIndex, uint8_t, bool>> ackNaks;
 };
 
+// MockRoutingModule records sendAckNak() and stops. In the firmware the call does not stop there:
+// Router::sendAckNak() -> RoutingModule::sendAckNak() -> router->sendLocal(), and for a NAK addressed
+// to ourselves sendLocal() reaches deliverLocal(), which only defers when handleDepth > 0.
+// doRetransmissions() runs from runOnce() rather than from inside handleReceived(), so handleDepth is
+// 0 and the delivery happens inline, on this stack. ReliableRouter::sniffReceived() then calls
+// stopRetransmission() for the NAK's request_id, which erases the record doRetransmissions() is in
+// the middle of using.
+//
+// This module reproduces that re-entrancy so the lifetime bug is reachable from a native test.
+class LoopbackRoutingModule : public RoutingModule
+{
+  public:
+    ReliableRouterTestShim *target = nullptr;
+    bool enabled = false;
+    size_t loopbacks = 0;
+
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0,
+                    bool ackWantsAck = false) override
+    {
+        if (!enabled || target == nullptr)
+            return;
+
+        loopbacks++;
+        meshtastic_MeshPacket nak = meshtastic_MeshPacket_init_zero;
+        nak.from = to; // a self-addressed NAK, exactly what abortSendAndNak()/MAX_RETRANSMIT produce
+        nak.to = to;
+        nak.id = idFrom ^ 0x5A5A5A5A; // any id distinct from the packet being NAKed
+        nak.channel = chIndex;
+        nak.which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        nak.decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+        nak.decoded.request_id = idFrom;
+
+        meshtastic_Routing routing = meshtastic_Routing_init_zero;
+        routing.error_reason = err;
+
+        target->sniffForTest(&nak, &routing);
+    }
+};
+
 class ScopedAirTimeFixture
 {
   public:
@@ -905,6 +944,33 @@ void test_early_flood_preserves_fresh_verified_route(void)
     TEST_ASSERT_TRUE(shim->stopForTest(p.from, p.id));
 }
 
+// doRetransmissions() must survive its own sendAckNak() re-entering the router and erasing the
+// record it is working on. Seeded with one attempt the record sits at numRetransmissions == 0, so the
+// first due pass takes the MAX_RETRANSMIT branch, emits a NAK, and the loopback deletes the entry
+// before control returns. Reading the map node afterwards is a use-after-free, which ASAN reports on
+// the native-macos-debug / coverage environments.
+void test_retransmissionSurvivesLoopbackErasingItsOwnRecord(void)
+{
+    LoopbackRoutingModule loopback;
+    loopback.target = reliableShim;
+    loopback.enabled = true;
+
+    RoutingModule *previous = routingModule;
+    routingModule = &loopback;
+
+    auto original = makeBehaviorPacket(meshtastic_PortNum_TEXT_MESSAGE_APP, kLocalNode, kRemoteNode, 1, /*wantAck=*/true);
+    reliableShim->seedRetry(original, /*attempts=*/1);
+    reliableShim->makeRetryDue(kLocalNode, original.id);
+    TEST_ASSERT_EQUAL_UINT32(1, reliableShim->pendingCount());
+
+    reliableShim->runDueRetries();
+
+    routingModule = previous;
+
+    TEST_ASSERT_EQUAL_MESSAGE(1, loopback.loopbacks, "the NAK must have re-entered the router");
+    TEST_ASSERT_EQUAL_MESSAGE(0, reliableShim->pendingCount(), "the record must be gone exactly once");
+}
+
 // Control: proves the NO_LORA case below turns on the `to` field alone.
 void test_rebroadcast_normal_broadcast_is_relayed(void)
 {
@@ -1047,6 +1113,7 @@ void setup()
     RUN_TEST(test_eventPolicy_repeatedLocalPacketSuppressesCoordinateAckButKeepsTextAck);
     RUN_TEST(test_eventPolicy_seededRetrySuppressesTxUntilGateOff);
     RUN_TEST(test_reliableAckStopsNormalPendingTransmission);
+    RUN_TEST(test_retransmissionSurvivesLoopbackErasingItsOwnRecord);
 
     printf("\n=== pending retransmission bookkeeping ===\n");
     RUN_TEST(test_pending_does_not_cancel_radio_queue_before_first_retry);
