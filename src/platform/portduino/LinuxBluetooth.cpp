@@ -169,6 +169,14 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
     std::atomic<bool> disconnectCleanupPending{false};
     std::atomic<bool> fixedPinWarned{false};
 
+    // Pairing-code alert. The agent callbacks run on the event-loop thread, but the
+    // screen is owned by the main thread, so the passkey is handed over as a pending
+    // flag and drawn from runOnce() -- same pattern as disconnectCleanupPending.
+    std::atomic<bool> passkeyShowPending{false};
+    std::atomic<bool> passkeyHidePending{false};
+    std::atomic<uint32_t> pendingPasskey{0};
+    bool passkeyShowing = false; // main thread only
+
     // ---------------------------------------------------------------- PhoneAPI
     // glue
 
@@ -203,6 +211,8 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
             prefetched.clear();
         }
 
+        updatePasskeyAlert();
+
         // Writes before reads: clients send a ToRadio write and immediately read
         // the response, so the parked read must observe the write's effect.
         drainFromPhoneQueue();
@@ -210,6 +220,64 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
         refillPrefetch();
 
         return INT32_MAX; // woken explicitly by the event-loop thread
+    }
+
+    /// Put the pairing code on screen, or take it back down. Main thread only.
+    /// Hide is applied before show so a code that arrives in the same pass as a
+    /// stale dismissal still ends up visible.
+    void updatePasskeyAlert()
+    {
+#if HAS_SCREEN
+        const bool hide = passkeyHidePending.exchange(false);
+        const bool show = passkeyShowPending.exchange(false);
+        if (!hide && !show)
+            return;
+        if (!screen) {
+            passkeyShowing = false;
+            return;
+        }
+        if (hide && passkeyShowing && !show) {
+            screen->endAlert();
+            passkeyShowing = false;
+        }
+        if (show) {
+            const uint32_t passkey = pendingPasskey.load();
+            screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+                char btPIN[16] = "888888";
+                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
+                int x_offset = display->width() / 2;
+                int y_offset = display->height() <= 80 ? 0 : 12;
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->setFont(FONT_MEDIUM);
+                display->drawString(x_offset + x, y_offset + y, "Bluetooth");
+
+                display->setFont(FONT_SMALL);
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+                display->drawString(x_offset + x, y_offset + y, "Enter this code");
+
+                display->setFont(FONT_LARGE);
+                char pin[8];
+                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+                display->drawString(x_offset + x, y_offset + y, pin);
+
+                display->setFont(FONT_SMALL);
+                char deviceName[64];
+                snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+                display->drawString(x_offset + x, y_offset + y, deviceName);
+            });
+            passkeyShowing = true;
+        }
+#endif
+    }
+
+    /// Called from the event-loop thread when the pairing code should come down
+    /// (pairing finished, canceled, or the peer went away).
+    void dismissPasskey()
+    {
+        passkeyHidePending = true;
+        wakeMainLoop();
     }
 
     void refillPrefetch()
@@ -414,6 +482,12 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
             .call([this, path](const std::string &iface, const PropertyMap &changed, const std::vector<std::string> &) {
                 if (iface != kIfaceDevice)
                     return;
+                // Pairing succeeded -- the code has served its purpose. Handled before
+                // Connected so a bond that completes without a state change still
+                // clears the alert.
+                auto paired = changed.find("Paired");
+                if (paired != changed.end() && paired->second.get<bool>())
+                    dismissPasskey();
                 auto it = changed.find("Connected");
                 if (it != changed.end())
                     onDeviceConnectedChanged(path, it->second.get<bool>());
@@ -439,12 +513,16 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
 
         if (connected) {
             publishStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
-        } else if (lastGone) {
-            publishStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
-            lastToRadioLen = 0; // event-loop thread owns this buffer
-            failParkedRead();
-            disconnectCleanupPending = true;
-            wakeMainLoop();
+        } else {
+            // The peer left mid-pairing; the code on screen is dead either way.
+            dismissPasskey();
+            if (lastGone) {
+                publishStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+                lastToRadioLen = 0; // event-loop thread owns this buffer
+                failParkedRead();
+                disconnectCleanupPending = true;
+                wakeMainLoop();
+            }
         }
     }
 
@@ -500,6 +578,9 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
             meshtastic::BluetoothStatus newStatus{std::string(formatted)};
             bluetoothStatus->updateStatus(&newStatus);
         }
+        pendingPasskey = passkey;
+        passkeyShowPending = true;
+        wakeMainLoop();
     }
 
     // ----------------------------------------------------------------- lifecycle
@@ -668,6 +749,7 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
             sdbuscompat::method("RequestAuthorization", [](sdbus::ObjectPath) {}),
             sdbuscompat::method("AuthorizeService", [](sdbus::ObjectPath, std::string) {}), sdbuscompat::method("Cancel", [this] {
                 LOG_INFO("BLE pairing canceled");
+                dismissPasskey();
                 if (!checkIsConnected())
                     publishStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
             }));
@@ -770,6 +852,10 @@ struct LinuxBluetooth::Impl final : public PhoneAPI, public concurrency::OSThrea
         if (!conn)
             return;
         draining = true;
+        // Runs on the main thread (setBluetoothEnable / AdminModule), so the alert can
+        // be torn down inline -- runOnce() may never be scheduled again after this.
+        passkeyHidePending = true;
+        updatePasskeyAlert();
         failParkedRead();
         unregisterAdvertisement();
         if (agentRegistered.exchange(false)) {
